@@ -122,7 +122,10 @@ export function readiness(i: ReadinessInput): Check[] {
   const link = sig('core-link');
   if (!i.profile)
     out.push(
-      NOT_READ('core', 'Core', { page: 'systeme', label: 'Profil (Système)' }),
+      NOT_READ('core', 'Serveur', {
+        page: 'systeme',
+        label: 'Profil (Système)',
+      }),
     );
   else if (!prod) {
     const local = i.runtime?.find((s) => s.id === 'labcore');
@@ -130,29 +133,29 @@ export function readiness(i: ReadinessInput): Check[] {
       local && local.state !== 'ready'
         ? c(
             'core',
-            'Core local',
+            'Serveur local',
             'error',
             'Arrêté',
-            `${local.detail || 'Le Core du Lab ne répond plus.'} Studio le relance seul.`,
+            `${local.detail || 'Le serveur du Lab ne répond plus.'} Studio le relance seul.`,
             'Dans le Lab, l’extension et les simulations attendent.',
             { page: 'systeme', label: 'Système' },
           )
         : local
           ? c(
               'core',
-              'Core local',
+              'Serveur local',
               'ok',
               'Prêt',
-              'Le Core du Lab répond.',
+              'Le serveur du Lab répond.',
               null,
               null,
             )
           : c(
               'core',
-              'Core',
+              'Serveur',
               'warn',
               'Profil Lab',
-              'Studio est sur le Core local du Lab : cette liste ne vérifie pas ton stream.',
+              'Studio est sur le serveur local du Lab : cette liste ne vérifie pas ton stream.',
               'Rien de ce qui est vérifié ici ne concerne les viewers.',
               { page: 'systeme', label: 'Profil (Système)' },
             ),
@@ -161,7 +164,7 @@ export function readiness(i: ReadinessInput): Check[] {
     out.push(
       c(
         'core',
-        'Core Production',
+        'Serveur Production',
         'error',
         'Démarrage impossible',
         i.profile.production.detail ?? 'Le profil Production n’a pas démarré.',
@@ -173,10 +176,10 @@ export function readiness(i: ReadinessInput): Check[] {
     out.push(
       c(
         'core',
-        'Core Production',
+        'Serveur Production',
         link.level,
         link.value,
-        link.hint ?? 'Studio est relié au Core Production.',
+        link.hint ?? 'Studio est relié au serveur Production.',
         link.level === 'ok'
           ? null
           : 'Les demandes des viewers servies par Studio sont refusées en attendant.',
@@ -187,7 +190,7 @@ export function readiness(i: ReadinessInput): Check[] {
     );
   else
     out.push(
-      NOT_READ('core', 'Core Production', {
+      NOT_READ('core', 'Serveur Production', {
         page: 'systeme',
         label: 'Profil (Système)',
       }),
@@ -454,7 +457,7 @@ export function readiness(i: ReadinessInput): Check[] {
               'Dons StreamElements',
               'off',
               'Coupé',
-              'Mode OFF choisi : les dons ne sont pas affichés.',
+              'Fermé dans les réglages : les dons ne sont pas affichés.',
               null,
               null,
             )
@@ -540,8 +543,8 @@ export function readiness(i: ReadinessInput): Check[] {
             'wheel',
             'Roue du Sub',
             'off',
-            'Désactivée',
-            'Roue coupée : rien n’est tiré, aucun tour n’est perdu.',
+            'Fermé',
+            'Roue fermée : rien n’est tiré, aucun tour n’est perdu.',
             null,
             null,
           )
@@ -560,7 +563,7 @@ export function readiness(i: ReadinessInput): Check[] {
               'Roue du Sub',
               'ok',
               'Prête',
-              'Activée, lecteur prêt.',
+              'Ouverte, lecteur prêt.',
               null,
               null,
             ),
@@ -582,7 +585,7 @@ export function readiness(i: ReadinessInput): Check[] {
             'Mini-jeux (Roulette, Slot, Duel)',
             'off',
             'Coupés',
-            'Interrupteur des mini-jeux sur OFF.',
+            'Mini-jeux fermés aux viewers.',
             null,
             null,
           )
@@ -592,7 +595,7 @@ export function readiness(i: ReadinessInput): Check[] {
               'Mini-jeux (Roulette, Slot, Duel)',
               'error',
               'Bloqués par le serveur',
-              'Activés, mais le bot n’a pas les jeux chat (CHAT_GAMES).',
+              'Ouverts, mais le bot n’a pas les jeux du chat.',
               '!roulette, !slots et !duel ne répondent pas.',
               { page: 'systeme', label: 'Système (bot)' },
             )
@@ -601,8 +604,8 @@ export function readiness(i: ReadinessInput): Check[] {
                 'games',
                 'Mini-jeux (Roulette, Slot, Duel)',
                 'unknown',
-                'Activés, bot non vérifié',
-                'Activés ; Studio ne lit pas les fonctions du bot.',
+                'Ouverts, bot non vérifié',
+                'Ouverts ; Studio ne lit pas les fonctions du bot.',
                 null,
                 null,
               )
@@ -610,7 +613,7 @@ export function readiness(i: ReadinessInput): Check[] {
                 'games',
                 'Mini-jeux (Roulette, Slot, Duel)',
                 'ok',
-                'Activés',
+                'Ouverts',
                 'Pendant un live, !roulette, !slots et !duel répondent.',
                 null,
                 null,
@@ -663,8 +666,8 @@ export function readiness(i: ReadinessInput): Check[] {
             'word-game',
             'Jeu des mots',
             'off',
-            'Désactivé',
-            'Désactivé dans ses réglages : aucun mot automatique.',
+            'Fermé',
+            'Fermé dans ses réglages : aucun mot automatique.',
             null,
             null,
           )
@@ -672,7 +675,7 @@ export function readiness(i: ReadinessInput): Check[] {
             'word-game',
             'Jeu des mots',
             'ok',
-            'Activé',
+            'Ouvert',
             `Un mot toutes les ${Math.round((wg.interval?.min_s ?? 300) / 60)} à ${Math.round((wg.interval?.max_s ?? 900) / 60)} min pendant le live.`,
             null,
             null,
@@ -710,7 +713,7 @@ export function readiness(i: ReadinessInput): Check[] {
               'Spotify',
               'error',
               'Refusé',
-              `Le Core refuse les demandes : ${sp.admission}.`,
+              `Le serveur refuse les demandes : ${sp.admission}.`,
               'Les demandes sont refusées et remboursées quand c’est possible.',
               { page: 'spotify', label: 'Spotify' },
             ),
@@ -753,10 +756,10 @@ export function summary(checks: Check[]) {
           ? 'unknown'
           : 'ok') as Level,
     text: bad
-      ? `${bad} point(s) à corriger · ${n('unknown')} non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`
+      ? `${bad} point(s) à corriger · ${n('unknown')} non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} fermé(s) volontairement`
       : n('unknown')
-        ? `Aucun problème détecté, mais ${n('unknown')} point(s) non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`
-        : `Tout est prêt · ${n('ok')} prêt(s) · ${n('off')} coupé(s) volontairement`,
+        ? `Aucun problème détecté, mais ${n('unknown')} point(s) non vérifié(s) · ${n('ok')} prêt(s) · ${n('off')} fermé(s) volontairement`
+        : `Tout est prêt · ${n('ok')} prêt(s) · ${n('off')} fermé(s) volontairement`,
   };
 }
 

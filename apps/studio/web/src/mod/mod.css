@@ -19,7 +19,7 @@
 }
 .m-viewer b {
   flex: 1;
-  font-weight: 550;
+  font-weight: 600;
 }
 .m-viewer .d-ic {
   color: var(--ink3);
@@ -36,7 +36,7 @@
 }
 .m-card small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .m-wallet {
   display: grid;
@@ -52,7 +52,7 @@
 }
 .m-wallet small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .m-h {
   margin: 16px 0 6px;
@@ -74,7 +74,7 @@
 .m-line small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .m-cut {
   overflow: hidden;
@@ -93,7 +93,7 @@
   color: var(--ink2);
 }
 .m-rowbtn:hover {
-  background: rgb(160 220 230 / 0.05);
+  background: var(--fill0);
   color: var(--ink);
 }
 .m-note {
@@ -135,7 +135,7 @@
 }
 .m-sees small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .m-res {
   max-height: 210px;
@@ -147,7 +147,7 @@
   border: 0;
   background: none;
   color: var(--ink2);
-  font: 500 12px var(--text);
+  font: 500 12.5px var(--text);
   letter-spacing: 0;
   text-transform: none;
   cursor: pointer;
@@ -158,11 +158,11 @@
 .m-note small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .m-big {
   margin-bottom: 10px;
-  font: 600 22px var(--num);
+  font: 600 19px var(--num);
   color: var(--red);
 }
 .m-big.m-plus {

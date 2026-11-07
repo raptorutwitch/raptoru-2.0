@@ -85,7 +85,7 @@ export function mountOthers(ctx: Ctx): View {
     }
     patch(
       head,
-      `<h2>${esc(m.label)}${m.enabled ? '' : ' <span class="d-tag off">Coupé</span>'}</h2><p class="d-note">${esc(m.moderation?.note ?? '')}</p>`,
+      `<h2>${esc(m.label)}${m.enabled ? '' : ' <span class="d-tag off">Fermé</span>'}</h2><p class="d-note">${esc(m.moderation?.note ?? '')}</p>`,
     );
     const canRefund = m.moderation?.refund === 'moderator';
     keyed(
@@ -220,8 +220,8 @@ export function mountLabWallet(): View {
         <button type="button" class="d-btn" data-op="adjust" data-k="credits_tts" data-n="1">+ 1 crédit TTS</button>
         <button type="button" class="d-btn" data-op="adjust" data-k="credits_soundboard" data-n="1">+ 1 crédit Sons</button>
         <span class="d-sp"></span><button type="button" class="d-btn bad" data-op="reset">Remettre à zéro…</button></div>
-      <h2 class="d-lb" style="margin-top:20px">Cooldown TTS</h2>
-      <div class="ml-cd"><span>${until && Date.parse(until) > Date.now() ? `Actif jusqu’à ${hhmm(until)}` : 'Aucun cooldown TTS.'}</span><button type="button" class="d-btn ghost sm" data-clear ${until && Date.parse(until) > Date.now() ? '' : 'disabled'}>Effacer</button></div>`,
+      <h2 class="d-lb" style="margin-top:20px">Délai TTS</h2>
+      <div class="ml-cd"><span>${until && Date.parse(until) > Date.now() ? `Actif jusqu’à ${hhmm(until)}` : 'Aucun délai TTS.'}</span><button type="button" class="d-btn ghost sm" data-clear ${until && Date.parse(until) > Date.now() ? '' : 'disabled'}>Effacer</button></div>`,
     );
   }
   async function wallet(b: HTMLElement) {
@@ -260,7 +260,7 @@ export function mountLabWallet(): View {
       void act(
         b,
         { action: 'clear_cooldown', viewer_id: who.value, module: 'tts' },
-        'Cooldown TTS effacé',
+        'Délai TTS effacé',
       ).then(read);
   });
   who.addEventListener('change', () => {

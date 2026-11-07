@@ -29,7 +29,7 @@ export function mountSoundLab(root: HTMLElement) {
         ? 'Non lancé. Utilise npm run bonk:lab depuis le dépôt.'
         : (statusErrorOf(s.error) ??
           (s.ready
-            ? 'Prêt · les sons passent par Core et sont joués ici'
+            ? 'Prêt · les sons passent par le serveur et sont joués ici'
             : 'Lecteur en attente : active le son ci-dessous'));
       const frame = el<HTMLIFrameElement>('player');
       // Loaded once: reloading would drop the audio permission and the playing sound.

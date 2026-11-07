@@ -15,7 +15,7 @@ const LEVEL = {
   warn: ['w', 'À corriger'],
   unknown: ['w', 'À vérifier'],
   ok: ['', 'Prêt'],
-  off: ['off', 'Coupé volontairement'],
+  off: ['off', 'Fermé volontairement'],
 } as const;
 
 export function mountCentre(root: HTMLElement, ctx: HubCtx): HubView {

@@ -82,7 +82,7 @@ export function headHtml(c: EditCtx) {
       ${
         base
           ? `<button type="button" class="d-ib cdx-star ${c.fav ? 'on' : ''}" data-fav="${base.command_id}" aria-label="${c.fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}" aria-pressed="${c.fav}">${ic('star')}</button>
-      <span title="${base.config.enabled ? 'Active' : 'Désactivée'}">${sw(base.config.enabled, `data-toggle="${base.command_id}"`, `Activer !${d.name}`, { disabled: isLocked(c, 'enabled') })}</span>
+      <span title="${base.config.enabled ? 'Activée' : 'Coupée'}">${sw(base.config.enabled, `data-toggle="${base.command_id}"`, `Activer !${d.name}`, { disabled: isLocked(c, 'enabled') })}</span>
       <button type="button" class="d-ib" data-more aria-label="Autres actions">${ic('more')}</button>`
           : ''
       }
@@ -234,7 +234,7 @@ export function rulesHtml(c: EditCtx) {
   const q = d.quota;
   return `<div class="cdx-sech"><span class="d-lb">Règles</span></div><div class="cdx-rules">
     ${rule('who', 'users', 'Qui', whoShort(d.audience))}
-    ${rule('cooldown', 'clock', 'Cooldown', cd.enabled ? `${dur(cd.seconds)} ${cd.scope === 'viewer' ? 'par personne' : 'pour tout le chat'}` : 'Aucun')}
+    ${rule('cooldown', 'clock', 'Délai', cd.enabled ? `${dur(cd.seconds)} ${cd.scope === 'viewer' ? 'par personne' : 'pour tout le chat'}` : 'Aucun')}
     ${rule('quota', 'repeat', 'Utilisations', q.enabled ? quotaText(q).replace('Utilisations : ', '') : 'Illimitées')}
     ${rule('when', 'live', 'Quand', WHEN[d.when])}
     ${rule('listed', 'eye', 'Liste publique', d.listed ? 'Visible' : 'Cachée')}
@@ -276,14 +276,14 @@ const scope = (attr: string, v: string) =>
 function cooldownPop(c: EditCtx) {
   const cd = c.d.cooldown;
   if (isLocked(c, 'cooldown'))
-    return `<h3>Cooldown</h3>${lockRo(c, cooldownText(cd))}`;
+    return `<h3>Délai</h3>${lockRo(c, cooldownText(cd))}`;
   const head = `<div class="d-row"><span>Limiter la fréquence</span>${sw(cd.enabled, 'data-cdon', 'Limiter la fréquence')}</div>`;
   if (!cd.enabled)
-    return `<h3>Cooldown</h3>${head}${sentence('La commande peut être relancée tout de suite.')}`;
+    return `<h3>Délai</h3>${head}${sentence('La commande peut être relancée tout de suite.')}`;
   const preset = COOLDOWN_PRESETS.some(([x]) => x === cd.seconds);
   const custom = c.cdCustom || !preset;
   const unit = { s: 1, min: 60, h: 3600 }[cd.unit];
-  return `<h3>Cooldown</h3>${head}
+  return `<h3>Délai</h3>${head}
     ${seg(
       'data-cdpreset',
       [
@@ -322,7 +322,7 @@ function quotaPop(c: EditCtx) {
     <div class="cdx-inline"><span>Maximum</span>${fld('data-mxcount aria-label="Nombre maximum" min="1" max="10000"', q.max)}<label class="d-fld"><select data-mxper aria-label="Période">${WINDOWS.map(([v, t]) => `<option value="${v}" ${q.window === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label></div>
     ${scope('data-mxscope', q.scope)}
     ${sentence(quotaText(q))}
-    <p class="d-note">Indépendant du cooldown : les deux peuvent se combiner.</p>`;
+    <p class="d-note">Indépendant du délai : les deux peuvent se combiner.</p>`;
 }
 
 const whenPop = (c: EditCtx) =>

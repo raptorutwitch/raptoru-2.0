@@ -24,7 +24,7 @@ export function mountBonkLab(root: HTMLElement) {
     <p class="d-note">Dans une scène de test, une source navigateur nommée exactement <strong>Raptoru Bonk Lab</strong>, 1920 × 1080. Elle doit rester active ; ne l’ajoute pas à la scène diffusée. Sélectionne 😀 dans Bonk, dans l’extension.</p>
     <p class="xl-copy"><input data-bonk="url" readonly aria-label="URL de la source OBS Bonk"> <button type="button" data-bonk="copy">Copier</button></p>
     <h4>Tester le rendu</h4>
-    <p class="d-note">Aperçu local : ni Core, ni paiement, ni historique.</p>
+    <p class="d-note">Aperçu local : sans serveur, sans paiement, sans historique.</p>
     <div class="xl-fields"><button type="button" data-bonk-test="1">1 Bonk</button> <button type="button" data-bonk-test="5">Rafale de 5</button> <button type="button" data-bonk-test="10">Salve de 10</button></div>
     </div><ol data-bonk="history"></ol>`;
   root.prepend(panel);
@@ -127,7 +127,7 @@ export function mountBonkLab(root: HTMLElement) {
         ? 'Non lancé. Utilise npm run bonk:lab depuis le dépôt.'
         : ((s.error ? statusError(s.error) : null) ??
             (s.ready
-              ? 'Prêt · les clics Bonk passent par Core et OBS'
+              ? 'Prêt · les clics Bonk passent par le serveur et OBS'
               : s.obs
                 ? 'OBS connecté · en attente de la source et du renderer'
                 : s.obs_reconnecting

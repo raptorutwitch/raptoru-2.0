@@ -5,7 +5,6 @@
   grid-template-areas: 'ext ext' 'bench more';
   gap: 18px 28px;
   align-content: start;
-  padding-top: 4px;
 }
 .lb h2 {
   margin: 0 0 8px;
@@ -38,7 +37,7 @@
     color 0.14s;
 }
 .lb-surfaces a:hover {
-  background: rgb(244 126 152 / 0.07);
+  background: var(--rose-a);
   color: var(--ink);
 }
 .lb-surfaces span {
@@ -54,7 +53,7 @@
   display: block;
   border-radius: 3px;
   box-shadow: inset 0 0 0 1.5px var(--rose);
-  background: rgb(244 126 152 / 0.1);
+  background: var(--rose-a);
   transition: transform 0.2s var(--spring);
 }
 a:hover > span > .lb-sil,
@@ -92,7 +91,7 @@ button:hover > .lb-sil {
 }
 .lb-more b {
   display: block;
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
 }
 .lb-more small {
   color: var(--ink3);
@@ -115,7 +114,7 @@ button:hover > .lb-sil {
   margin-bottom: 4px;
 }
 .sim-head b {
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
 }
 .sim-row {
   display: grid;
@@ -131,7 +130,7 @@ button:hover > .lb-sil {
 }
 .sim-what b {
   display: block;
-  font-weight: 550;
+  font-weight: 600;
 }
 .sim-what span {
   display: block;
@@ -141,7 +140,7 @@ button:hover > .lb-sil {
 .sim-what small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .sim-dot {
   display: inline-block;
@@ -198,7 +197,7 @@ button:hover > .lb-sil {
 }
 
 /* Page Simulation */
-.sm {
+.sm-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(280px, 30%, 360px);
   gap: 20px;
@@ -242,7 +241,7 @@ button:hover > .lb-sil {
   background: var(--fill);
 }
 .sc-msg--bot {
-  background: rgb(47 216 196 / 0.05);
+  background: var(--teal-a);
 }
 .sc-line {
   display: flex;
@@ -251,7 +250,7 @@ button:hover > .lb-sil {
   gap: 2px 7px;
 }
 .sc-line time {
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   color: var(--ink3);
 }
 .sc-who {
@@ -285,7 +284,7 @@ button:hover > .lb-sil {
   gap: 2px 8px;
   padding: 1px 0 1px 54px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .sc-res--bad,
 .sc-state--bad {
@@ -329,7 +328,7 @@ button:hover > .lb-sil {
   border-radius: 8px;
   background: var(--void);
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: pre-wrap;
 }
 @media (max-width: 1180px) {
@@ -366,7 +365,7 @@ button:hover > .lb-sil {
   align-items: center;
   gap: 7px;
   margin: 0;
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
 }
 .tl-a {
   display: flex;
@@ -381,7 +380,7 @@ button:hover > .lb-sil {
   border-radius: 8px;
   background: var(--void);
   color: var(--ink2);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: pre-wrap;
   overflow: auto;
 }
@@ -416,7 +415,6 @@ button:hover > .lb-sil {
 .mh {
   display: grid;
   gap: 10px;
-  padding-top: 2px;
 }
 .mh-wall {
   display: grid;
@@ -434,7 +432,7 @@ button:hover > .lb-sil {
   text-decoration: none;
 }
 .mh-t b {
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
 }
 .mh-t p {
   grid-column: 1 / -1;
@@ -488,7 +486,7 @@ button:hover > .lb-sil {
 .mh-log small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .mh-claimed {
   display: flex;
@@ -504,7 +502,7 @@ button:hover > .lb-sil {
 }
 .ms-panel h3 {
   margin: 0 0 2px;
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
 }
 .ms-row {
   display: grid;
@@ -524,7 +522,7 @@ button:hover > .lb-sil {
 .ms-row small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .ms-row small b {
   color: var(--amber);

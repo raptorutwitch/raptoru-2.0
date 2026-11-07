@@ -29,7 +29,7 @@
 .pg-inline .d-fld input[type='text'],
 .pg-inline .d-fld input[type='search'] {
   text-align: left;
-  font: 400 13px var(--text);
+  font: 400 13.5px var(--text);
 }
 .pg-acts,
 .pg-wrap {
@@ -45,7 +45,7 @@
 }
 .pg-none {
   margin: 2px 0 10px;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .pg-q {
   flex: 1;
@@ -131,7 +131,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 550;
+  font-weight: 600;
 }
 .pg-who small,
 .pg-val small {
@@ -149,11 +149,11 @@
 .pg-val {
   display: grid;
   justify-items: end;
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   font-variant-numeric: tabular-nums;
 }
 .pg-val b {
-  font-weight: 550;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -203,7 +203,7 @@
 .pg-dial small {
   margin-top: 2px;
   color: #a9b8c2;
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 .pg-stats {
   display: grid;
@@ -246,7 +246,7 @@
   display: block;
   margin-bottom: 2px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .pg-it {
   display: flex;
@@ -268,10 +268,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .pg-it__n {
-  font-weight: 550;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -368,7 +368,7 @@
 .pg-opt small {
   margin-left: auto;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .pg-journal {
   display: grid;
@@ -388,10 +388,10 @@
 }
 .pg-mv time {
   color: var(--ink3);
-  font: 400 12px var(--num);
+  font: 400 12.5px var(--num);
 }
 .pg-mv b {
-  font: 600 13px var(--num);
+  font: 600 13.5px var(--num);
   color: var(--teal);
   white-space: nowrap;
 }
@@ -412,7 +412,7 @@
 .pg-wait small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 /* --- XP et Daily --------------------------------------------------------------------------------------------------------- */
@@ -445,7 +445,7 @@
 }
 .pg-chart .lb {
   fill: var(--ink3);
-  font: 500 11px var(--num);
+  font: 500 11.5px var(--num);
 }
 .pg-chart .area {
   fill: color-mix(in srgb, var(--mod) 9%, transparent);
@@ -476,7 +476,7 @@
 }
 .pg-chart .me text {
   fill: var(--ink);
-  font: 500 12px var(--text);
+  font: 500 12.5px var(--text);
 }
 .pg-chart .hov line {
   stroke: var(--hair2);
@@ -504,7 +504,7 @@
 }
 .pg-chart .grip text {
   fill: var(--ink);
-  font: 600 12px var(--num);
+  font: 600 12.5px var(--num);
 }
 .pg-tip {
   position: absolute;
@@ -578,7 +578,7 @@
 }
 .pg-step small {
   color: var(--ink3);
-  font: 500 11px var(--num);
+  font: 500 11.5px var(--num);
   text-align: center;
 }
 .pg-grip {
@@ -642,7 +642,7 @@
 .pg-g {
   padding: 8px 0 2px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .pg-reward {
   display: flex;
@@ -683,7 +683,7 @@
 }
 .pg-reward__m small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
 }
 .pg-rform {
@@ -715,10 +715,10 @@
 }
 .pg-rprev .d-faint {
   width: 100%;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .pg-rp-n {
-  font: 700 16px var(--num);
+  font: 700 15px var(--num);
 }
 .pg-fl {
   display: grid;

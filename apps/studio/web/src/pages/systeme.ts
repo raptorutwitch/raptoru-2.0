@@ -71,12 +71,12 @@ const SERVICE: Record<Service['state'], ['' | 'w' | 'r' | 'off', string]> = {
   error: ['r', 'Erreur'],
   stopped: ['off', 'Arrêté'],
 };
-const TABS: [string, string, IcName][] = [
-  ['profile', 'Profil', 'user'],
-  ['links', 'Connexions', 'link'],
-  ['services', 'Services', 'pulse'],
-  ['log', 'Journal', 'note'],
-  ['dev', 'Outils', 'terminal'],
+const TABS: [string, string][] = [
+  ['profile', 'Profil'],
+  ['links', 'Connexions'],
+  ['services', 'Services'],
+  ['log', 'Journal'],
+  ['dev', 'Outils'],
 ];
 const TAB_KEY = 'raptoru-studio-tab-systeme';
 const line = (icon: IcName, title: string, detail: string, state: string) =>
@@ -93,9 +93,9 @@ export function mountSysteme(root: HTMLElement) {
     /* private mode: the first tab */
   }
   p.body.innerHTML = `<div class="sy">
-    <div class="sy-tabs" role="tablist" aria-label="Système" aria-orientation="vertical">${TABS.map(
-      ([id, label, icon]) =>
-        `<button type="button" role="tab" id="sy-t-${id}" data-tab="${id}" aria-controls="sy-p-${id}" aria-selected="${id === tab}" tabindex="${id === tab ? 0 : -1}"${id === 'dev' ? ' hidden' : ''}>${ic(icon)}${label}</button>`,
+    <div class="d-seg sy-tabs" role="tablist" aria-label="Système">${TABS.map(
+      ([id, label]) =>
+        `<button type="button" role="tab" id="sy-t-${id}" data-tab="${id}" aria-controls="sy-p-${id}" aria-selected="${id === tab}" tabindex="${id === tab ? 0 : -1}"${id === 'dev' ? ' hidden' : ''}>${label}</button>`,
     ).join('')}</div>
     <div class="sy-panels">
       <section role="tabpanel" id="sy-p-profile" aria-labelledby="sy-t-profile" data-slot="profile"></section>
@@ -119,14 +119,31 @@ export function mountSysteme(root: HTMLElement) {
   const tabs = () => [
     ...root.querySelectorAll<HTMLButtonElement>('.sy-tabs [role="tab"]'),
   ];
+  // Le curseur du segment suit l'onglet choisi parmi ceux qui se voient (Outils n'existe qu'au Lab).
+  function paintBar() {
+    const shown = tabs().filter((b) => !b.hidden);
+    const bar = root.querySelector<HTMLElement>('.sy-tabs')!;
+    bar.style.setProperty('--n', String(shown.length));
+    bar.style.setProperty(
+      '--i',
+      String(
+        Math.max(
+          0,
+          shown.findIndex((b) => b.dataset.tab === tab),
+        ),
+      ),
+    );
+  }
   function select(id: string, focus = false) {
     tab = id;
     for (const b of tabs()) {
       const on = b.dataset.tab === id;
       b.setAttribute('aria-selected', String(on));
       b.tabIndex = on ? 0 : -1;
+      b.classList.toggle('on', on);
       if (on && focus) b.focus();
     }
+    paintBar();
     for (const [t] of TABS)
       root.querySelector<HTMLElement>(`#sy-p-${t}`)!.hidden = t !== id;
     try {
@@ -191,6 +208,7 @@ export function mountSysteme(root: HTMLElement) {
     // The Lab's tools (Extension Lab, prototypes) only where they exist: a confirmed Lab profile.
     const lab = profile?.effective === 'lab';
     root.querySelector<HTMLElement>('#sy-t-dev')!.hidden = !lab;
+    paintBar();
     if (!lab && tab === 'dev') select('profile');
     const [rt, bonk, sound, tts, logs] = await Promise.all([
       tryGetJson<RuntimeStatus>('/api/runtime/status'),
@@ -240,7 +258,7 @@ export function mountSysteme(root: HTMLElement) {
         : ['w', 'Absent (source OBS non chargée)']
       : ['off', 'Indisponible'];
     const ttsState =
-      { active: 'actif', paused: 'en pause', disabled: 'désactivé' }[
+      { active: 'ouvert', paused: 'pause', disabled: 'fermé' }[
         tts?.module_state ?? ''
       ] ?? 'inconnu';
     const ttsQueue = tts?.queue

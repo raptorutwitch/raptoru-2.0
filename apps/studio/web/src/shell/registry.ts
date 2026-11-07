@@ -375,7 +375,7 @@ export const PAGES: Page[] = [
     section: 'systeme',
     icon: 'settings',
     view: 'studio',
-    desc: 'Profil Lab/Production, Core, bot, comptes Twitch, OBS, lecteurs, runtime.',
+    desc: 'Profil Lab ou Production, serveur, bot, comptes Twitch, OBS, lecteurs.',
     keywords: 'profil production lab connexions obs twitch runtime appairage',
   },
   // --- Laboratoire -----------------------------------------------------------------------------------------------

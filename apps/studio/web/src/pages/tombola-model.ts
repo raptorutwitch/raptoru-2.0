@@ -176,7 +176,7 @@ export const ERRORS: Record<string, string> = {
   already_joined: 'Déjà inscrit.',
   not_a_participant: 'Ce viewer ne participe pas.',
   global_pause: 'Raptoru est en pause globale.',
-  module_disabled: 'La Tombola est désactivée.',
+  module_disabled: 'La Tombola est fermée.',
   currency_unavailable: 'Monnaie indisponible.',
   scheduler_not_paused: 'La Tombola automatique n’est pas en pause.',
   scheduler_not_running:

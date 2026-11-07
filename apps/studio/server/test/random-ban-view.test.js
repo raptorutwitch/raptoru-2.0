@@ -103,9 +103,9 @@ describe('Random Ban view', () => {
     expect(html).toContain('aucun follower éligible');
     expect(html).toContain('(à blanc)');
     expect(html).toContain('À blanc');
-    expect(rbError('executor_absent')).toContain('exécuteur Twitch absent');
+    expect(rbError('executor_absent')).toContain('bot Twitch absent');
     expect(randomBanView({ ...base, executor: null })).toContain(
-      'Exécuteur Twitch : absent',
+      'Bot Twitch : absent',
     );
   });
 });

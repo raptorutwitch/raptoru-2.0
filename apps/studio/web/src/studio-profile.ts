@@ -114,7 +114,7 @@ export function mountStudioProfile(
     // Dérivé du profil EFFECTIF confirmé par le serveur : en Production le serveur paie réellement.
     if (topbar) {
       topbar.textContent = prod
-        ? `Production${p.label && p.label !== 'Production' ? ` ${p.label}` : ''} · actions réelles`
+        ? `Production${p.label && p.label !== 'Production' ? ` ${p.label}` : ''}${p.state === 'connected' ? '' : ` · ${label}`} · actions réelles`
         : 'Lab · Jetons fictifs';
       topbar.title = `${build}${prod ? ` · ${host} · ${label} · les Jetons, achats et récompenses sont réels` : ' · aucun Jeton réel ; Twitch et OBS peuvent rester connectés'}`;
       topbar.dataset.profile = prod ? 'production' : 'lab';
@@ -139,7 +139,7 @@ export function mountStudioProfile(
           <h3>${ic('live')}Production${p.label && p.label !== 'Production' ? ` · ${esc(p.label)}` : ''}${stateChip(dot, label)}</h3>
           <p>Le vrai stream : vrais viewers, vrais Jetons. Studio agit réellement sur la chaîne.</p>
           ${p.detail ? `<p class="d-note">${esc(p.detail)}</p>` : ''}
-          ${prod ? '' : `<button type="button" class="d-btn pri" data-act="production" ${p.configured ? '' : 'disabled'}>Passer en Production…</button>`}
+          ${prod ? '' : `<button type="button" class="d-btn danger" data-act="production" ${p.configured ? '' : 'disabled'}>Passer en Production…</button>`}
         </article>
       </div>
       <h2 class="d-lb">Appairage</h2>
@@ -147,7 +147,7 @@ export function mountStudioProfile(
       <p class="d-note">Le code d’appairage se donne à l’opérateur du serveur ; il ne permet pas de se connecter. Les adresses OBS des lecteurs changent avec le profil.</p>
       <details class="d-acc"><summary>Détails techniques</summary><dl class="d-kv">
         <dt>Version</dt><dd>${esc(b?.version ?? '?')}${b?.sha ? ` · source ${esc(b.sha)}` : ''}${b && !b.packaged ? ' · développement' : ''}</dd>
-        <dt>Core de production</dt><dd>${p.core_origin ? `${esc(p.core_origin)}${p.label ? ` · ${esc(p.label)}` : ''}${p.channel_id ? ` · chaîne ${esc(p.channel_id)}` : ''}${p.custom_ca ? ' · certificat de test approuvé' : ''}` : esc(p.config_error ?? 'Non configuré')}</dd>
+        <dt>Serveur de production</dt><dd>${p.core_origin ? `${esc(p.core_origin)}${p.label ? ` · ${esc(p.label)}` : ''}${p.channel_id ? ` · chaîne ${esc(p.channel_id)}` : ''}${p.custom_ca ? ' · certificat de test approuvé' : ''}` : esc(p.config_error ?? 'Non configuré')}</dd>
         <dt>Installation</dt><dd>${p.installation_id ? esc(p.installation_id) : p.identity === 'corrupt' ? 'Identité illisible (régénération explicite requise)' : 'Aucune'}</dd>
       </dl></details>`,
     );

@@ -35,8 +35,8 @@
   padding: 8px 6px 6px;
   border: 1px solid var(--hair3);
   border-radius: 12px;
-  background: #182332;
-  box-shadow: 0 18px 48px rgb(0 0 0 / 0.45);
+  background: var(--pop);
+  box-shadow: 0 18px 48px var(--shade);
 }
 .md-drop > .d-lb {
   display: block;
@@ -69,7 +69,7 @@
 }
 .md-hit small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .md-pause {
   display: flex;
@@ -79,7 +79,7 @@
   padding: 7px 8px 7px 12px;
   margin-bottom: 8px;
   border-radius: 10px;
-  background: rgb(255 179 92 / 0.1);
+  background: var(--amber-a);
   color: var(--amber);
 }
 .md-pause[hidden] {
@@ -98,42 +98,13 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
-.md-tab {
-  position: relative;
+.md-seg button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--ink2);
-  font: 500 13.5px var(--text);
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    color 0.12s,
-    background 0.12s;
 }
-.md-tab:hover {
-  background: var(--fill);
-  color: var(--ink);
-}
-.md-tab.on {
-  color: var(--ink);
-}
-.md-tab.on::after {
-  content: '';
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 1px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--teal);
-}
-.md-tab em {
+.md-seg em {
   min-width: 17px;
   padding: 0 5px;
   border-radius: 9px;
@@ -143,8 +114,8 @@
   font-style: normal;
   text-align: center;
 }
-.md-tab em.warn {
-  background: rgb(255 179 92 / 0.16);
+.md-seg em.warn {
+  background: var(--amber-b);
   color: var(--amber);
 }
 .md-keys {
@@ -158,7 +129,7 @@
   color: var(--ink2);
 }
 .md-keys kbd {
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   color: var(--ink);
 }
 
@@ -222,8 +193,8 @@
   overflow: auto;
   padding: 8px 10px;
   border-radius: 12px;
-  background: rgb(255 179 92 / 0.06);
-  box-shadow: inset 0 0 0 1px rgb(255 179 92 / 0.22);
+  background: var(--amber-a);
+  box-shadow: inset 0 0 0 1px var(--amber-b);
   scrollbar-width: thin;
 }
 .mv-review[hidden] {
@@ -258,12 +229,12 @@
   background: var(--fill);
 }
 .mv-rv__m b {
-  font-weight: 550;
+  font-weight: 600;
   white-space: nowrap;
 }
 .mv-rv__m small {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   white-space: nowrap;
 }
 .mv-rv__m p {
@@ -331,7 +302,7 @@
   font-size: 15px;
 }
 .ms-t b {
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
 }
 .ms-n {
   padding: 0 6px;
@@ -344,7 +315,7 @@
 }
 .ms-s {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   white-space: nowrap;
 }
 .ms-seg button {
@@ -458,15 +429,15 @@
   cursor: pointer;
 }
 .ms-r__m b {
-  font-weight: 550;
-  font-size: 13px;
+  font-weight: 600;
+  font-size: 13.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .ms-r__m small {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   white-space: nowrap;
 }
 .ms-r.watch .ms-r__m small {
@@ -528,14 +499,14 @@
 .ms-win b {
   flex: 1;
   min-width: 0;
-  font-weight: 550;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ms-win small {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   white-space: nowrap;
 }
 .ms-round {
@@ -686,7 +657,7 @@ button.mj-r:hover {
 .mj-r b {
   flex: none;
   width: 150px;
-  font-weight: 550;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -758,7 +729,7 @@ button.mj-r:hover {
 }
 .mr-who b {
   min-width: 0;
-  font-weight: 550;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -774,11 +745,11 @@ button.mj-r:hover {
   align-items: center;
   height: 30px;
   border-radius: 8px;
-  background: rgb(255 125 125 / 0.09);
+  background: var(--red-a);
   color: var(--red);
 }
 .mr-chip.cd {
-  background: rgb(255 179 92 / 0.09);
+  background: var(--amber-a);
   color: var(--amber);
 }
 .mr-chip button {
@@ -795,7 +766,7 @@ button.mj-r:hover {
 }
 .mr-chip b {
   color: var(--ink);
-  font-weight: 550;
+  font-weight: 600;
 }
 .mr-chip time {
   color: var(--ink);
@@ -815,10 +786,9 @@ button.mj-r:hover {
 }
 .mt {
   display: grid;
-  grid-template-columns: minmax(170px, 1.4fr) repeat(
-      var(--cols),
-      minmax(62px, 1fr)
-    ) 130px;
+  grid-template-columns:
+    minmax(170px, 1.4fr) repeat(var(--cols), minmax(62px, 1fr))
+    130px;
   min-width: 860px;
 }
 .mt-r {
@@ -836,7 +806,7 @@ button.mj-r:hover {
 .mt-p {
   padding: 0 4px;
   color: var(--ink2);
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.2;
   text-align: center;
 }
@@ -848,11 +818,11 @@ button.mj-r:hover {
 }
 .mt-who b {
   display: block;
-  font-weight: 550;
+  font-weight: 600;
 }
 .mt-who small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .mt-c {
   display: grid;
@@ -907,12 +877,12 @@ button.mj-r:hover {
 }
 .mo-m b {
   display: block;
-  font-weight: 550;
+  font-weight: 600;
 }
 .mo-m small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -925,7 +895,7 @@ button.mj-r:hover {
 }
 .mo-h h2 {
   margin: 0;
-  font: 600 16px var(--num);
+  font: 600 15px var(--num);
 }
 .mo-r {
   cursor: default;

@@ -164,8 +164,8 @@ export function rbError(e: string | null) {
     return `droits Twitch insuffisants pour chercher une cible (${e.split(': ')[1] ?? ''})`;
   return (
     {
-      executor_absent: 'exécuteur Twitch absent : rien n’a été fait',
-      executor_lost: 'exécuteur Twitch perdu avant tout timeout',
+      executor_absent: 'bot Twitch absent : rien n’a été fait',
+      executor_lost: 'bot Twitch perdu avant tout timeout',
       no_answer_after_timeout_request:
         'pas de réponse après la demande de timeout : vérifier sur Twitch',
       verified_after_ambiguous_answer:
@@ -235,7 +235,7 @@ export function rbLocks(s: RbState) {
     !e
       ? lock(
           'r',
-          'Exécuteur Twitch : absent',
+          'Bot Twitch : absent',
           'Le bot ne répond pas : aucun timeout possible.',
         )
       : `${lock(e.can_search ? '' : 'w', `Recherche : ${e.can_search ? 'prête' : 'impossible'}`)}${lock(e.can_timeout ? '' : 'r', `Timeouts par ${e.login} : ${e.can_timeout ? 'autorisés' : 'droit manquant'}`, e.missing.length ? `Droits Twitch manquants : ${e.missing.join(', ')}` : '')}`,
@@ -273,7 +273,7 @@ export function rbLocks(s: RbState) {
             )
           : lock('', `Mute du streamer : prêt (« ${s.mic.input} »)`),
     s.animations_error
-      ? lock('w', 'Animations : Core injoignable', s.animations_error)
+      ? lock('w', 'Animations : serveur injoignable', s.animations_error)
       : '',
     s.mute_error ? lock('w', 'Mute du streamer : erreur', s.mute_error) : '',
   ].join('');
@@ -414,8 +414,8 @@ const CT_REASON: Record<string, string> = {
   now_permanent: 'devenu un ban permanent',
   extended: 'timeout prolongé : nouveau devis demandé',
   twitch_unreadable: 'Twitch illisible',
-  executor_absent: 'exécuteur Twitch absent',
-  executor_lost: 'exécuteur Twitch perdu (avant tout paiement)',
+  executor_absent: 'bot Twitch absent',
+  executor_lost: 'bot Twitch perdu (avant tout paiement)',
   missing_scope_read: 'droit Twitch manquant (lecture des bannis)',
   missing_scope_release: 'droit Twitch manquant (levée)',
   not_applied: 'levée refusée par Twitch',
@@ -438,7 +438,7 @@ export function cautionLocks(s: CautionState) {
   return !e
     ? lock(
         'r',
-        'Exécuteur Twitch : absent',
+        'Bot Twitch : absent',
         'Une caution est refusée, aucun jeton débité.',
       )
     : silent
@@ -574,7 +574,7 @@ export const VOTEKICK_ERRORS: Record<string, string> = {
   invalid_body: 'Réglage refusé : vérifie la durée.',
   core_outdated:
     'Réglage pas encore disponible sur ce serveur : durée fixe de 60 s.',
-  core_unavailable: 'Core indisponible : rien n’a été enregistré.',
+  core_unavailable: 'Serveur indisponible : rien n’a été enregistré.',
   launch_sound_unavailable: 'Son de lancement indisponible dans ce Studio.',
   effects_unavailable: 'Lecteur d’effets absent : import impossible.',
   uploads_unavailable: 'Import de sons indisponible dans ce Studio.',
@@ -695,7 +695,7 @@ const VOTE_REASON: Record<string, string> = {
   already_muted: 'streamer déjà en sourdine',
   mods_unreadable: 'modérateurs illisibles sur Twitch',
   twitch_unreadable: 'Twitch illisible',
-  executor_absent: 'exécuteur Twitch absent',
+  executor_absent: 'bot Twitch absent',
   read_lost: 'lecture Twitch perdue',
 };
 
@@ -737,15 +737,15 @@ export function voteLocks(v: VotekickLive | null, error?: string | null) {
   const m = v.core.mute;
   const r = v.last_restore;
   return [
-    err ? lock('r', 'Core injoignable', err) : '',
+    err ? lock('r', 'Serveur injoignable', err) : '',
     !e
       ? lock(
           'r',
-          'Exécuteur Twitch : absent',
+          'Bot Twitch : absent',
           'Un vote réel ne s’ouvre pas sans lui.',
         )
       : !e.ready
-        ? lock('r', 'Exécuteur Twitch : aucun signal récent')
+        ? lock('r', 'Bot Twitch : aucun signal récent')
         : `${lock(e.can_read ? '' : 'w', `Lecture des modérateurs : ${e.can_read ? 'prête' : 'impossible'}`)}${lock(e.can_timeout ? '' : 'r', `Timeouts par ${e.login} : ${e.can_timeout ? 'autorisés' : 'droit manquant'}`, e.missing.length ? `Droits Twitch manquants : ${e.missing.join(', ')}` : '')}`,
     !m
       ? lock('off', 'Tâche de mute : aucune')

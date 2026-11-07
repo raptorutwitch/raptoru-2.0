@@ -12,6 +12,7 @@ import {
   run,
   scrub,
   seg,
+  viewersSeg,
   stateChip,
   toast,
   esc,
@@ -132,11 +133,11 @@ export function mountSubWheelPage(root: HTMLElement) {
     );
     patch(
       p.actions,
-      `<span class="d-lb" style="margin-right:-4px">Roue</span>${seg(
+      `${viewersSeg(
         'data-on',
         [
-          ['on', 'Active'],
-          ['off', 'Coupée'],
+          ['on', 'Ouvert'],
+          ['off', 'Fermé'],
         ],
         state?.settings.enabled ? 'on' : 'off',
       )}${panelBtn(p.panel.isOpen())}`,
@@ -194,7 +195,7 @@ export function mountSubWheelPage(root: HTMLElement) {
       !s
         ? ''
         : disabled
-          ? '<div class="whl-line"><span>Roue désactivée : les tirages sont en pause, aucun tour n’est perdu.</span><button type="button" class="d-btn pri sm" data-enable>Activer la roue</button></div>'
+          ? '<div class="whl-line"><span>Roue fermée : les tirages attendent, aucun tour n’est perdu.</span><button type="button" class="d-btn pri sm" data-enable>Activer la roue</button></div>'
           : next
             ? `<div class="whl-up">${pp(next.viewer.name, 30)}<span><small>${next.status === 'requested' ? 'Tirage demandé' : 'Prochain tour'}</small><b>${esc(next.viewer.name)}</b> <span class="whl-m">T${next.tier} · ${monthLabel(next.right, next.months)}</span></span>${next.status === 'owed' ? `<button type="button" class="d-btn sm" data-act="sw-draw" data-spin="${esc(next.spin_id)}" data-name="${esc(next.viewer.name)}">Tirer</button>` : ''}</div>`
             : '<p class="d-note">Aucun tour en attente.</p>',
@@ -314,7 +315,7 @@ export function mountSubWheelPage(root: HTMLElement) {
       on &&
       !(await confirmBox({
         title: 'Activer la Roue du Sub ?',
-        body: 'Les vrais subs, resubs et Prime lanceront la roue selon le mode choisi. Le Core décide chaque gain une seule fois.',
+        body: 'Les vrais subs, resubs et Prime lanceront la roue selon le mode choisi. Le serveur décide chaque gain une seule fois.',
         yes: 'Activer la roue',
         no: 'Annuler',
         danger: false,
@@ -326,8 +327,8 @@ export function mountSubWheelPage(root: HTMLElement) {
       '/settings',
       { enabled: on },
       on
-        ? 'Roue activée'
-        : 'Roue désactivée (tirages en pause, aucun tour perdu)',
+        ? 'Roue ouverte'
+        : 'Roue fermée (les tirages attendent, aucun tour perdu)',
     );
   }
 

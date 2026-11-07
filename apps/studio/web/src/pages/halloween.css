@@ -92,13 +92,13 @@
   color: var(--amber);
 }
 .d-btn.hw-stop {
-  background: #ff8a8a;
-  color: #2c0707;
+  background: var(--danger);
+  color: var(--danger-ink);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 .d-btn.hw-stop:hover {
-  background: #ffa3a3;
+  background: var(--danger-hi);
 }
 
 /* --- Scène ----------------------------------------------------------------------------------------------------------------- */
@@ -213,7 +213,7 @@
   min-height: 30px;
 }
 .hw-now b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .hw-tests {
   display: grid;
@@ -231,14 +231,14 @@
   display: flex;
   gap: 8px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .hw-log > div.bad {
   color: var(--red);
 }
 .hw-log time,
 .hw-e time {
-  font: 400 12px var(--num);
+  font: 400 12.5px var(--num);
   color: var(--ink3);
   white-space: nowrap;
 }
@@ -256,7 +256,7 @@
 }
 .hw-chaos .d-seg button {
   padding: 0 3px;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .hw-chaos .d-fld {
   padding: 0 6px;
@@ -308,7 +308,7 @@
 }
 .hw-sign small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .hw-cat {
   flex: 1;
@@ -334,7 +334,7 @@
   display: block;
   padding: 8px 0 3px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .hw-it {
   min-height: 34px;
@@ -348,7 +348,7 @@
 }
 .hw-it input[type='text'] {
   text-align: left;
-  font: 400 13px var(--text);
+  font: 400 13.5px var(--text);
 }
 .hw-it__a {
   display: inline-flex;
@@ -365,7 +365,7 @@
 .hw-title small {
   margin-left: auto;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
 }
 .hw-thumb {
@@ -420,11 +420,11 @@
 }
 .hw-bg > b {
   justify-self: start;
-  font-weight: 550;
+  font-weight: 600;
 }
 .hw-bg > small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 /* --- Viewers ------------------------------------------------------------------------------------------------------------------ */
@@ -440,7 +440,7 @@
 .hw-find input {
   margin-left: 6px;
   text-align: left !important;
-  font: 400 13px var(--text) !important;
+  font: 400 13.5px var(--text) !important;
 }
 .hw-hits {
   display: grid;
@@ -451,7 +451,7 @@
 }
 .hw-hits p {
   margin: 2px 0;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .hw-hit {
   display: grid;
@@ -473,14 +473,14 @@
   background: var(--raise);
 }
 .hw-hit b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .hw-hit small {
   color: var(--ink3);
   font-size: 11.5px;
 }
 .hw-n {
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
   color: var(--mod);
 }
 .hw-pick {
@@ -502,11 +502,11 @@
   min-width: 0;
 }
 .hw-vh > div b {
-  font: 600 16px var(--num);
+  font: 600 15px var(--num);
 }
 .hw-vh small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .hw-bal {
   display: grid;
@@ -514,7 +514,7 @@
   line-height: 1.1;
 }
 .hw-balance {
-  font: 700 22px var(--num);
+  font: 700 19px var(--num);
   color: var(--mod);
   font-variant-numeric: tabular-nums;
 }
@@ -532,11 +532,11 @@
   font-size: 12.5px;
 }
 .hw-e b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .hw-e small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .hw-e .pos {
   color: var(--teal);
@@ -555,7 +555,7 @@
 }
 .hw-grant input {
   text-align: left !important;
-  font: 400 13px var(--text) !important;
+  font: 400 13.5px var(--text) !important;
 }
 .hw-gr2 {
   display: grid;

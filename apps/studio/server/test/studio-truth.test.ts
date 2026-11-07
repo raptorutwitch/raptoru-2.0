@@ -68,7 +68,7 @@ describe('Régie: intention ≠ constat', () => {
       href,
     );
     expect(html).not.toContain('data-tone="ok"');
-    expect(html).toContain('Activé, lecteur absent');
+    expect(html).toContain('Ouvert, lecteur absent');
     expect(html).toContain('File non lisible ici.');
     expect(html).toContain('Demandes refusées : Spotify non connecté à Studio');
   });

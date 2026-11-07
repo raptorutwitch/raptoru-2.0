@@ -1,5 +1,4 @@
-/* La coque « Coulisses » : barre latérale sur le fond nuit, feuille principale arrondie. Chargée après shell.css, qu'elle remplace
-   pour la structure. */
+/* La coque « Coulisses » : barre latérale sur le fond nuit, feuille principale arrondie. */
 html,
 body {
   height: 100%;
@@ -17,27 +16,19 @@ body {
   color: var(--ink);
 }
 .rs-side {
-  position: static;
-  inset: auto;
-  width: auto;
-  height: auto;
   display: flex;
   flex-direction: column;
-  gap: 0;
   padding: 8px 10px 4px 12px;
   min-height: 0;
   overflow: auto;
-  border: 0;
-  background: none;
   scrollbar-width: none;
-  transform: none;
 }
 .rs-brand {
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 4px 6px 12px;
-  font: 600 16px var(--num);
+  font: 600 15px var(--num);
   letter-spacing: 0.01em;
   color: var(--ink);
   text-decoration: none;
@@ -67,7 +58,7 @@ body {
 }
 .rs-search-btn kbd {
   margin-left: auto;
-  font: 500 11px var(--num);
+  font: 500 11.5px var(--num);
   color: var(--ink3);
   background: none;
   border: 0;
@@ -88,15 +79,12 @@ body {
   border-radius: 8px;
   color: var(--ink2);
   text-decoration: none;
-  font-weight: 450;
+  font-weight: 400;
   font-size: 13.5px;
   background: none;
   transition:
     color 0.12s,
     background 0.12s;
-}
-.rs-nav::before {
-  display: none;
 }
 .rs-nav .rs-ic {
   color: color-mix(in srgb, var(--tint, var(--ink3)) 72%, var(--ink3));
@@ -104,7 +92,7 @@ body {
 }
 .rs-nav:hover {
   color: var(--ink);
-  background: rgb(160 220 230 / 0.05);
+  background: var(--fill0);
 }
 .rs-nav:hover .rs-ic {
   color: var(--tint, var(--ink2));
@@ -124,7 +112,7 @@ body {
 }
 .rs-nav em {
   margin-left: auto;
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   font-style: normal;
   color: var(--tint, var(--ink2));
 }
@@ -201,16 +189,16 @@ body {
   border: 1px dashed var(--hair2);
   background: none;
   color: var(--ink2);
-  font: 400 12px/1.3 var(--text);
+  font: 400 12.5px/1.3 var(--text);
 }
 .rs-profile[data-profile='production'] {
-  border: 1px solid rgb(255 125 125 / 0.5);
-  background: rgb(255 125 125 / 0.1);
+  border: 1px solid var(--red-l);
+  background: var(--red-a);
   color: var(--red);
   font-weight: 500;
 }
 .rs-profile[data-profile='unknown'] {
-  border-color: rgb(255 179 92 / 0.5);
+  border-color: var(--amber-l);
   color: var(--amber);
 }
 
@@ -239,22 +227,6 @@ body {
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
-}
-.rs-hub {
-  overflow: auto;
-  padding: 0 0 20px;
-}
-.rs-hub-lead {
-  font-size: 13px;
-}
-.rs-fav-mark {
-  font-style: normal;
-}
-.rs-fav-mark[aria-pressed='true'] {
-  color: var(--gold);
-}
-.rs-fav-mark[aria-pressed='true'] .rs-ic {
-  fill: currentColor;
 }
 .sim-widget:empty {
   display: none;
@@ -292,7 +264,7 @@ body {
     border-radius: 7px;
     background: var(--raise3);
     color: var(--tint, var(--ink));
-    font-size: 10.5px;
+    font-size: 11.5px;
     line-height: 14px;
     text-align: center;
   }
@@ -318,7 +290,7 @@ body {
   }
   .rs-profile::before {
     content: attr(data-short);
-    font: 600 10.5px var(--num);
+    font: 600 11.5px var(--num);
     letter-spacing: 0.04em;
   }
   .sim-toggle {
@@ -336,7 +308,6 @@ body {
 
 /* Les pages de pilotage (Centre, Régie, Modules…) : montées par la coque dans #rs-hub. */
 .rs-hub {
-  padding: 0;
   overflow: hidden;
 }
 .rs-hubpage {
@@ -344,10 +315,6 @@ body {
 }
 .rs-hubpage[hidden] {
   display: none;
-}
-.rs-content > main.d-host,
-.rs-content > main:has(> .d-page) {
-  padding: 0;
 }
 .rs-nav em {
   animation: rs-pop 0.22s var(--spring);
@@ -388,7 +355,7 @@ body {
   border-radius: 50%;
   flex: none;
   background: var(--red);
-  box-shadow: 0 0 0 0 rgb(255 125 125 / 0.5);
+  box-shadow: 0 0 0 0 var(--red-l);
   animation: rs-ping 2s var(--e) infinite;
 }
 @keyframes rs-ping {
@@ -442,7 +409,7 @@ body {
 }
 .sup-item b {
   color: var(--ink);
-  font-weight: 550;
+  font-weight: 600;
 }
 .sup-item p {
   flex-basis: 100%;
@@ -472,7 +439,7 @@ body {
   padding: 0;
   border: 1px solid var(--hair3);
   border-radius: 14px;
-  background: #182332;
+  background: var(--pop);
   color: var(--ink);
   font: 400 13.5px/1.4 var(--text);
   overflow: hidden;
@@ -482,7 +449,7 @@ body {
   flex-direction: column;
 }
 .rs-palette::backdrop {
-  background: rgb(4 7 11 / 0.55);
+  background: var(--back);
 }
 .rs-pal-in {
   display: flex;
@@ -527,11 +494,11 @@ body {
 }
 .rs-pal-list b {
   display: block;
-  font-weight: 550;
+  font-weight: 600;
 }
 .rs-pal-list small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .rs-palette .rs-ic {
   width: 16px;
@@ -557,7 +524,7 @@ body {
   border-radius: 8px;
   background: none;
   color: var(--ink3);
-  font: 400 12px var(--text);
+  font: 400 12.5px var(--text);
   cursor: pointer;
 }
 .up-check:hover {
@@ -565,7 +532,7 @@ body {
   color: var(--ink);
 }
 .up-check strong {
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 .up-check i {
   width: 7px;
@@ -588,7 +555,7 @@ body {
   gap: 4px;
   padding: 0 8px 2px;
   color: var(--ink2);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .up-status[hidden] {
   display: none;

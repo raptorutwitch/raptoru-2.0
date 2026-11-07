@@ -10,6 +10,7 @@ import {
   run,
   scrub,
   seg,
+  viewersSeg,
   stateChip,
   esc,
 } from '../ds/ds.js';
@@ -90,11 +91,11 @@ export function mountSpotifyPage(root: HTMLElement) {
     );
     patch(
       p.actions,
-      `<span class="d-lb" style="margin-right:-4px">Demandes</span>${seg(
+      `${viewersSeg(
         'data-switch',
         [
-          ['on', 'Ouvertes'],
-          ['off', 'Fermées'],
+          ['on', 'Ouvert'],
+          ['off', 'Fermé'],
         ],
         state?.settings.enabled ? 'on' : 'off',
       )}${panelBtn(p.panel.isOpen())}`,

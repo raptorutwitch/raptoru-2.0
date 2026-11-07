@@ -420,7 +420,7 @@ export function mountDesk(ctx: Ctx): View {
     if (!id) return;
     void saveSetting(`${id}.enabled`, t.checked ? 1 : 0).then(
       () => {
-        toast(t.checked ? 'Ouvert aux viewers' : 'Coupé');
+        toast(t.checked ? 'Ouvert aux viewers' : 'Fermé aux viewers');
         modChanged();
       },
       (err: Error) => {

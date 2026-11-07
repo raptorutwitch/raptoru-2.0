@@ -74,7 +74,7 @@
   }
 }
 .rg-t__l b {
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
   transition: color 0.12s;
 }
 .rg-t__l small {
@@ -83,7 +83,7 @@
   gap: 5px;
   min-width: 0;
   color: var(--ink2);
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.25;
 }
 .rg-t__l small i {
@@ -134,14 +134,14 @@
 .rg-idle {
   margin: 0;
   color: var(--ink3);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .rg-note {
   margin-left: auto;
   flex: 0 1 auto;
   min-width: 0;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -348,7 +348,7 @@
   margin-top: 2px;
   overflow: hidden;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .rg-d__a {
   display: flex;

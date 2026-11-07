@@ -69,6 +69,13 @@ export const seg = (
     .join('')}</span>`;
 };
 
+/** L'état d'un module face aux viewers, à droite de l'en-tête : toujours Ouvert, Pause, Fermé. */
+export const viewersSeg = (
+  attr: string,
+  opts: readonly (readonly [string, string])[],
+  cur: string,
+) => `<span class="d-lb d-head-lb">Viewers</span>${seg(attr, opts, cur)}`;
+
 export const fld = (
   attr: string,
   v: unknown,
@@ -351,9 +358,9 @@ export function toast(
 /** Les refus du Core dits dans les mots du streamer ; un code inconnu reste lisible tel quel. */
 const REFUS: Record<string, string> = {
   forbidden: 'Action non autorisée.',
-  core_unavailable: 'Core injoignable. Réessaie dans un instant.',
-  lab_core_unavailable: 'Core injoignable. Réessaie dans un instant.',
-  invalid_rules: 'Configuration refusée par le Core.',
+  core_unavailable: 'Serveur injoignable. Réessaie dans un instant.',
+  lab_core_unavailable: 'Serveur injoignable. Réessaie dans un instant.',
+  invalid_rules: 'Réglage refusé par le serveur.',
   network_error: 'Connexion perdue : réessaie.',
 };
 export function errText(e: unknown, more: Record<string, string> = {}) {

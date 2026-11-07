@@ -45,7 +45,7 @@
   white-space: nowrap;
 }
 .tts-who b {
-  font-weight: 550;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -66,7 +66,7 @@
   color: var(--ink);
 }
 .tts-time {
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   color: var(--ink2);
   white-space: nowrap;
 }
@@ -106,7 +106,7 @@
   transition: background 0.12s;
 }
 .tts-r:hover {
-  background: rgb(160 220 230 / 0.05);
+  background: var(--fill0);
 }
 .tts-r__m {
   display: grid;
@@ -126,7 +126,7 @@
   grid-row: span 2;
 }
 .tts-r__m b {
-  font-weight: 550;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -260,7 +260,7 @@
 }
 .tts-seg span {
   color: var(--ink2);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
 }
 .tts-lim {
@@ -295,7 +295,7 @@
   left: 50%;
   bottom: -19px;
   translate: -50% 0;
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   color: var(--ink3);
 }
 .tts-lim.drag span,

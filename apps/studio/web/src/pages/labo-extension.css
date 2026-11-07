@@ -80,7 +80,7 @@ main.tab-full {
   color: var(--ink);
 }
 .xl-surfaces button.on {
-  background: rgb(244 126 152 / 0.12);
+  background: var(--rose-a);
   color: var(--ink);
 }
 .xl-main {
@@ -347,8 +347,8 @@ main.tab-full {
   place-items: center;
   border-radius: 6px;
   overflow: hidden;
-  background: repeating-conic-gradient(#121a25 0 25%, #0e151f 0 50%) 0 0 / 22px
-    22px;
+  background: repeating-conic-gradient(var(--check) 0 25%, var(--check2) 0 50%)
+    0 0 / 22px 22px;
 }
 .xl-idle {
   padding: 12px;
@@ -361,7 +361,7 @@ main.tab-full {
   inset: auto 8px 8px;
   padding: 7px 10px;
   border-radius: 8px;
-  background: rgb(7 11 17 / 0.82);
+  background: var(--back);
   font-weight: 500;
   overflow-wrap: anywhere;
   animation: d-rise 0.22s var(--e);

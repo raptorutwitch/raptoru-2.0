@@ -28,7 +28,7 @@
 }
 .wg-next-t {
   color: var(--ink2);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .wg-count {
   color: var(--ink);
@@ -88,8 +88,8 @@
   }
 }
 .wg-w.gold .wg-tiles span {
-  background: rgb(233 196 106 / 0.13);
-  box-shadow: inset 0 0 0 1px rgb(233 196 106 / 0.5);
+  background: var(--gold-a);
+  box-shadow: inset 0 0 0 1px var(--gold-l);
   color: var(--gold);
 }
 .wg-w footer {
@@ -101,12 +101,12 @@
   color: var(--ink3);
 }
 .wg-w time {
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   font-variant-numeric: tabular-nums;
 }
 .wg-answer {
   color: var(--teal);
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
   animation: d-rise 0.2s var(--e);
 }
 .wg-iv {
@@ -153,7 +153,7 @@
   bottom: -19px;
   translate: -50% 0;
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 .wg-tick::before {
   content: '';
@@ -196,7 +196,7 @@
   border-radius: 4px;
   background: var(--teal);
   color: var(--teal-ink);
-  font: 600 12px/16px var(--num);
+  font: 600 12.5px/16px var(--num);
 }
 .wg-next {
   position: absolute;
@@ -265,7 +265,7 @@
 .wg-win time {
   margin-left: 6px;
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 .wg-found {
   display: block;
@@ -286,7 +286,7 @@
   display: inline-block;
   margin-right: 8px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .wg-win strong {
   color: var(--teal);
@@ -310,7 +310,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .wg-l {
   padding: 3px 0;
@@ -318,14 +318,14 @@
 }
 .wg-l b {
   color: var(--teal);
-  font-weight: 650;
+  font-weight: 600;
 }
 .wg-l.ann {
   margin: 3px 0;
   padding: 5px 8px;
   border-left: 3px solid var(--teal);
   border-radius: 3px 8px 8px 3px;
-  background: rgb(47 216 196 / 0.08);
+  background: var(--teal-a);
 }
 .wg-l small {
   height: 18px;
@@ -342,7 +342,7 @@
   flex: none;
   width: 46px;
   color: var(--ink);
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   text-align: right;
 }
 
@@ -354,6 +354,6 @@
   .wg-tiles span {
     width: 32px;
     height: 40px;
-    font-size: 21px;
+    font-size: 19px;
   }
 }

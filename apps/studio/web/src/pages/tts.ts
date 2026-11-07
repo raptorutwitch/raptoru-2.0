@@ -20,6 +20,7 @@ import {
   run,
   scrub,
   seg,
+  viewersSeg,
   stateChip,
   toast,
   copy,
@@ -244,7 +245,7 @@ export function mountTtsPage(root: HTMLElement) {
         : !up
           ? stateChip('w', seen ? 'Lecteur sans voix' : 'Lecteur OBS absent')
           : st === 'paused'
-            ? stateChip('w', 'En pause')
+            ? stateChip('w', 'Pause')
             : st === 'disabled'
               ? stateChip('off', 'Fermé aux viewers')
               : q.current
@@ -253,7 +254,7 @@ export function mountTtsPage(root: HTMLElement) {
     patch(p.state, chip);
     patch(
       p.actions,
-      `<span class="d-lb" style="margin-right:-4px">Viewers</span>${seg('data-state', STATES, st)}${panelBtn(p.panel.isOpen())}`,
+      `${viewersSeg('data-state', STATES, st)}${panelBtn(p.panel.isOpen())}`,
     );
   }
   function paintHint() {
@@ -407,7 +408,7 @@ export function mountTtsPage(root: HTMLElement) {
          ],
          wordKind,
        )}<button class="d-ib" aria-label="Ajouter le mot">${ic('plus')}</button></form>
-       <small>À vérifier : le message attend ta décision. Bloqué : le Core le refuse.</small></div>`,
+       <small>À vérifier : le message attend ta décision. Bloqué : Raptoru le refuse.</small></div>`,
       'mots',
     )}
     ${grp('Valeurs', 'hist', `<div class="d-row" data-k="restaurer défaut origine"><span>${customized ? 'Valeurs personnalisées' : 'Valeurs d’origine'}</span><button type="button" class="d-btn sm" data-reset ${customized ? '' : 'disabled'}>Restaurer</button></div>`)}`);

@@ -86,7 +86,7 @@ export function gainsView(months: number, tier: Tier) {
           `<button type="button" class="whl-g ${seg.val * seg.mult >= 10000 ? 'top' : ''}" data-part-btn="${i}" style="--c:${wheelColor(seg.val)}" aria-label="Montrer la part de ${fmt(amount)} jetons"><i></i><b>${fmt(amount)}</b>${seg.mult > 1 ? `<small style="color:${multColor(seg.mult)}">×${seg.mult}</small>` : ''}</button>`,
       )
       .join('')}</div>
-    <p class="d-note">${layout.length} parts, chacune a la même chance. Gains et chances sont fixes : le Core tire une seule fois, avant l’animation.${tier > 1 ? ` Tier ${tier} : gains × ${SUB_WHEEL.tierCoef[tier]}.` : ''}</p>`;
+    <p class="d-note">${layout.length} parts, chacune a la même chance. Gains et chances sont fixes : le serveur tire une seule fois, avant l’animation.${tier > 1 ? ` Tier ${tier} : gains × ${SUB_WHEEL.tierCoef[tier]}.` : ''}</p>`;
 }
 
 /** La tranche de la roue dans l'adresse des tiers : la table change à 4, 12 et 20 mois. */

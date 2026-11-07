@@ -418,7 +418,7 @@ export function spotifyAdmission(a: string) {
   return a === 'ready'
     ? 'Demandes ouvertes'
     : a === 'MODULE_DISABLED'
-      ? 'Demandes fermées (module coupé)'
+      ? 'Demandes fermées'
       : `Demandes refusées : ${SPOTIFY_REFUSAL[a] ?? a}`;
 }
 const SPOTIFY_REFUSAL: Record<string, string> = {
@@ -535,7 +535,7 @@ export const LIVE_ACTIONS: Record<
 const TOMBOLA_FR: Record<string, string> = {
   opening: 'Ouverture',
   open: 'Inscriptions ouvertes',
-  paused: 'En pause',
+  paused: 'Pause',
   drawing: 'Tirage',
   revealing: 'Révélation',
   revealed: 'Terminée',
@@ -608,8 +608,8 @@ function ttsTrack(live: LiveState, lab: boolean, href: (p: string) => string) {
     return track({
       ...base,
       tone: 'off',
-      state: 'Coupé',
-      lane: idle('Module TTS coupé sur ce profil.'),
+      state: 'Fermé',
+      lane: idle('TTS fermé sur ce profil.'),
     });
   const tone: Tone =
     v.state !== 'active'
@@ -621,14 +621,14 @@ function ttsTrack(live: LiveState, lab: boolean, href: (p: string) => string) {
           : 'unknown';
   const state =
     v.state === 'paused'
-      ? 'En pause'
+      ? 'Pause'
       : v.state === 'disabled'
-        ? 'Désactivé'
+        ? 'Fermé'
         : v.ready === false
-          ? 'Activé, lecteur absent'
+          ? 'Ouvert, lecteur absent'
           : v.ready === true
-            ? 'Actif'
-            : 'Activé (lecteur non vérifié)';
+            ? 'Ouvert'
+            : 'Ouvert, lecteur non vérifié';
   const i = v.playing;
   const now = i
     ? `<div class="rg-now" data-item="${esc(i.interaction_id)}">${pp(i.viewer_display_name, 28)}<div><b>${esc(i.viewer_display_name)}</b><p>${esc(i.message ?? i.detail ?? '')}</p><span class="d-prog"><i data-start="${esc(i.delivery?.started_at ?? '')}" data-dur="${i.estimated_duration_ms ?? 0}" style="width:0"></i></span></div></div>`
@@ -682,12 +682,12 @@ function soundTrack(live: LiveState, href: (p: string) => string) {
     tone: s.state === 'active' ? 'ok' : 'off',
     state:
       s.state === 'paused'
-        ? 'En pause'
+        ? 'Pause'
         : s.state === 'disabled'
-          ? 'Désactivé'
+          ? 'Fermé'
           : s.waiting.length
             ? `${n(s.waiting.length, 'son')} en attente`
-            : 'Actif',
+            : 'Ouvert',
     busy: !!now,
     lane:
       `${now}${s.waiting.map((i) => clip(i, label(i))).join('')}` ||
@@ -804,7 +804,7 @@ function tombolaTrack(live: LiveState, href: (p: string) => string) {
     return track({
       ...base,
       tone: 'off',
-      state: 'Fermée',
+      state: 'Fermé',
       lane: idle('Aucune Tombola en cours.'),
     });
   const running = RUNNING.includes(t.status);

@@ -46,7 +46,7 @@ Toute évolution passe par une nouvelle migration additive, classée `lab` dans 
 ## Dette connue (ne pas corriger sans décision)
 
 - Catégories : pas de version (dernier écrit gagne) et pas d'entrée dans l'historique.
-- `apps/studio/web/src/commands.css` et `apps/twitch-extension/extension/commands-v2.css` ont été générés une fois depuis le prototype `prototypes/commands-v6/` (non versionné) : ce sont désormais les sources.
+- `apps/studio/web/src/pages/commands.css` et `apps/twitch-extension/extension/commands-v2.css` ont été générés une fois depuis le prototype `prototypes/commands-v6/` (non versionné) : ce sont désormais les sources.
 - Extension : `cmdV2Post` est réessayé sur 5xx sans clé d'idempotence. Sans risque pour les données (`expected_version` sur update/delete, nom unique à la création), mais une création dont la réponse s'est perdue peut afficher une erreur alors que la commande existe.
 - Libellés du modèle de vue dupliqués entre `apps/studio/web/src/commands-model.ts` et `apps/twitch-extension/extension/shared/commands-v2-model.js` (pas de partage de code entre TS Studio et JS Extension).
 - Studio et Extension n'ont pas de rafraîchissement automatique pendant l'édition (rechargement à l'ouverture et après chaque action).

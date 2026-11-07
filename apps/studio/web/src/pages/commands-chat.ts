@@ -153,7 +153,7 @@ export function previewItems(d: CmdConfig, t: Tester) {
   if (!d.enabled)
     lines.push({
       key: 'off',
-      html: '<p class="cdx-lnote d-in">Désactivée : elle ne répond pas tant qu’elle est coupée.</p>',
+      html: '<p class="cdx-lnote d-in">Coupée : elle ne répond pas.</p>',
     });
   return [...items, ...lines];
 }
@@ -227,7 +227,7 @@ export function verdictHtml(t: Tester) {
     <header>${ic(ok ? 'check' : 'warn')}<b>${ok ? `Acceptée pour ${esc(t.ranBy)}` : `Refusée : ${esc(REASON[d.reason ?? ''] ?? d.reason)}`}</b></header>
     <p>${esc(d.message)}</p>
     ${lines.length ? `<div class="cdx-real"><span class="d-lb">Serait envoyé</span>${lines.map((l) => line(l.mode ?? 'normal', esc(l.text), t.ranBy)).join('')}</div>` : ok ? '<p class="d-faint">Aucun message (le bot n’écrit rien).</p>' : ''}
-    <details class="d-acc"><summary>Contrôles du Core</summary>
+    <details class="d-acc"><summary>Contrôles du serveur</summary>
       <ol class="cdx-checks">${d.checks.map((x) => `<li class="${x.ok ? '' : 'no'}">${ic(x.ok ? 'check' : 'x')}<span>${esc(CHECK[x.check] ?? x.check)}${!x.ok && extra.length ? `<small>${extra.map(esc).join(' · ')}</small>` : ''}</span></li>`).join('')}</ol>
       <dl class="d-kv"><dt>Message testé</dt><dd>${esc(t.ran)}</dd><dt>Groupes vus</dt><dd>${esc(d.viewer.groups.join(', ') || 'aucun')}</dd><dt>Stream</dt><dd>${d.live ? 'en live' : 'hors live'}</dd>${Object.entries(
         d.args,

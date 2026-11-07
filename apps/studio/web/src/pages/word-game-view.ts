@@ -111,7 +111,7 @@ export function wgZones(
       error: error ? `<p class="d-note bad">${esc(error)}</p>` : '',
       board: [] as { key: string; html: string }[],
       boardEmpty: s
-        ? '<div class="d-empty">Indisponible : Core injoignable, ou profil Production non connecté.</div>'
+        ? '<div class="d-empty">Indisponible : serveur injoignable, ou profil Production non connecté.</div>'
         : '<div class="d-skel" style="height:180px"></div>',
       count: '',
       interval: '',
@@ -124,14 +124,11 @@ export function wgZones(
   // Un Core sans interrupteur durable : traité comme allumé, le comportement historique.
   const enabled = live.enabled !== false;
   const state = !enabled
-    ? stateChip(
-        'off',
-        live.live ? 'Désactivé (réglage) · En live' : 'Désactivé (réglage)',
-      )
+    ? stateChip('off', live.live ? 'Fermé · En live' : 'Fermé')
     : live.live
       ? live.stopped
         ? stateChip('w', 'En live · Arrêté pour ce live')
-        : stateChip('live', 'En live · Actif')
+        : stateChip('live', 'En live · Ouvert')
       : stateChip('off', 'Hors live · Jeu à l’arrêt');
   const seenIn =
     live.next_word_at && enabled && live.live
@@ -139,7 +136,7 @@ export function wgZones(
       : null;
   return {
     state,
-    env: `<span class="d-tag ${live.environment === 'production' ? 'warn' : 'off'}">${live.environment === 'production' ? 'Vrais Jetons' : 'Portefeuille de test'}</span>`,
+    env: `<span class="d-tag ${live.environment === 'production' ? 'warn' : 'off'}">${live.environment === 'production' ? 'Vrais Jetons' : 'Jetons de test'}</span>`,
     transport: `<button type="button" class="d-btn" data-action="${live.stopped ? 'start' : 'stop'}" ${off ? 'disabled' : ''}>${live.stopped ? 'Reprendre' : 'Arrêter'}</button>
       <button type="button" class="d-btn pri" data-action="new_word" ${off ? 'disabled' : ''}>Nouveau mot</button>`,
     next:
@@ -171,7 +168,7 @@ function panelHtml(s: Live, enabled: boolean, busy: boolean) {
     ? grp(
         'Le jeu',
         'puzzle',
-        `<div class="d-row col" data-k="activer désactiver interrupteur durable jeu"><span>${enabled ? 'Activé : un mot apparaît tout seul pendant chaque live.' : 'Désactivé : aucun mot automatique, même après un redémarrage ou un nouveau live. Les mots déjà affichés restent trouvables jusqu’à la fin du live.'}</span><button type="button" class="d-btn ${enabled ? '' : 'pri'} sm" data-action="${enabled ? 'disable' : 'enable'}" ${busy ? 'disabled' : ''}>${enabled ? 'Désactiver le jeu' : 'Activer le jeu'}</button></div>
+        `<div class="d-row col" data-k="activer désactiver interrupteur durable jeu"><span>${enabled ? 'Ouvert : un mot apparaît tout seul pendant chaque live.' : 'Fermé : aucun mot automatique, même après un redémarrage ou un nouveau live. Les mots déjà affichés restent trouvables jusqu’à la fin du live.'}</span><button type="button" class="d-btn ${enabled ? '' : 'pri'} sm" data-action="${enabled ? 'disable' : 'enable'}" ${busy ? 'disabled' : ''}>${enabled ? 'Fermer le jeu' : 'Ouvrir le jeu'}</button></div>
          <p class="d-note" data-k="arrêter live">« Arrêter » ne vaut que pour le live en cours.</p>`,
         'jeu',
       )

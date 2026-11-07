@@ -403,7 +403,7 @@ export function mountHalloweenPage(root: HTMLElement) {
     );
     patch(
       p.actions,
-      `${seg('data-scene', SCENES, scene)}${panelBtn(p.panel.isOpen())}<button type="button" class="d-btn hw-stop" data-act="stop" title="Arrête aussitôt tout effet (Ctrl+Maj+F12)">${ic('stop')}STOP ALL</button>`,
+      `${seg('data-scene', SCENES, scene)}${panelBtn(p.panel.isOpen())}<button type="button" class="d-btn danger hw-stop" data-act="stop" title="Arrête aussitôt tout effet (Ctrl+Maj+F12)">${ic('stop')}STOP ALL</button>`,
     );
   }
   function paintStage() {

@@ -253,7 +253,7 @@ describe('Roue du Sub — Studio section (pure view)', () => {
     const html = subWheelView(state as never, null, {
       tab: 'history',
     });
-    expect(stateView(state as never)).toContain('Roue désactivée');
+    expect(stateView(state as never)).toContain('Roue fermée');
     expect(settingsPanel(state as never)).toContain('Tester l’animation');
     expect(html).toContain('1 gain à attribuer : 18');
     expect(html).toContain('Médias non importés : Roue du Sub — fin casino');

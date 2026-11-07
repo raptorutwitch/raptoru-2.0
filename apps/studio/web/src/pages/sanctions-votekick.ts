@@ -202,7 +202,7 @@ export function mountVotekickPage(root: HTMLElement) {
           : m?.status === 'active'
             ? stateChip('r', 'Streamer en sourdine')
             : live.core.error
-              ? stateChip('w', 'Core injoignable')
+              ? stateChip('w', 'Serveur injoignable')
               : !live.core.executor?.ready
                 ? stateChip('r', 'Exécuteur Twitch absent')
                 : stateChip('', 'Prêt'),

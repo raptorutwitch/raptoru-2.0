@@ -46,9 +46,9 @@ const secs = (ms: number) => {
     : `${s} s`;
 };
 const STATE: Record<string, string> = {
-  active: 'Actif',
-  paused: 'En pause',
-  disabled: 'Désactivé',
+  active: 'Ouvert',
+  paused: 'Pause',
+  disabled: 'Fermé',
 };
 
 /** The TTS card of the Extension Lab: state, player, queue and the streamer's moderation primitives. */

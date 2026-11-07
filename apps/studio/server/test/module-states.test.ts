@@ -29,7 +29,7 @@ describe('the state of a module page', () => {
     expect(s.get('channel-points')?.level).toBe('off');
     expect(s.get('random-ban')?.level).toBe('warn');
     // OFF on purpose is never read as ready, whatever the module observes.
-    expect(s.get('coffre-mystere')).toEqual({ level: 'off', text: 'Coupé' });
+    expect(s.get('coffre-mystere')).toEqual({ level: 'off', text: 'Fermé' });
   });
 
   it('a module nothing reads has no state: never an invented one', () => {

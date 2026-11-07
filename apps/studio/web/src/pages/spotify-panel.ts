@@ -182,7 +182,7 @@ function technical(s: SpState, ui: SpUi) {
     'Détails techniques',
     'terminal',
     `<div class="d-row col" data-k="diagnostic détails techniques appels appareil lecture erreur limite"><dl class="spo-facts">
-      ${fact('Studio vu par le Core', s.studio?.fresh ? 'oui' : '<b>non</b> : les demandes sont refusées (« Studio absent »)')}
+      ${fact('Studio vu par le serveur', s.studio?.fresh ? 'oui' : '<b>non</b> : les demandes sont refusées (« Studio absent »)')}
       ${fact('Appareil Spotify', esc(s.studio?.status.device ? `${s.studio.status.device.name} (${s.studio.status.device.type})` : 'inconnu (aucune lecture récente)'))}
       ${fact('Limitation Spotify', a.limited_until ? `<b>${a.quota_exceeded ? 'quota dépassé' : 'appels suspendus'}</b> jusqu’à ${esc(hhmm(a.limited_until))}` : 'aucune')}
       ${fact('Erreurs réseau', a.backoff_until ? `pause jusqu’à ${esc(hhmm(a.backoff_until))}` : 'aucune')}

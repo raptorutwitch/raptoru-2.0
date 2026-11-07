@@ -43,7 +43,7 @@
   display: grid;
   place-items: center;
   color: var(--mod);
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   background: color-mix(in srgb, var(--mod) 8%, transparent);
 }
 
@@ -83,7 +83,7 @@
   position: absolute;
   left: 6px;
   bottom: 4px;
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   color: var(--ink);
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
   pointer-events: none;
@@ -150,7 +150,7 @@
   position: absolute;
   left: 6px;
   top: 4px;
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   color: var(--ink);
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
 }
@@ -248,7 +248,7 @@
   transition: background 0.12s;
 }
 .bk-r:hover {
-  background: rgb(160 220 230 / 0.05);
+  background: var(--fill0);
 }
 .bk-r__m {
   display: grid;
@@ -268,7 +268,7 @@
   grid-row: span 2;
 }
 .bk-r__m b {
-  font-weight: 550;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -276,7 +276,7 @@
 .bk-r__m small {
   grid-column: 2 / -1;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -346,7 +346,7 @@
 .bk-trow small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .bk-trow .d-fld {
   width: 92px;
@@ -356,7 +356,7 @@
   grid-column: 1 / -1;
   margin: 2px 0 0;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 /* --- Panneau ---------------------------------------------------------------------------------------------------------- */

@@ -1,4 +1,14 @@
-import { esc, ic, page, patch, poller, pop, pp, stateChip } from '../ds/ds.js';
+import {
+  esc,
+  ic,
+  page,
+  patch,
+  poller,
+  pop,
+  pp,
+  seg,
+  stateChip,
+} from '../ds/ds.js';
 import { tryGetJson } from '../http.js';
 import {
   globalPause,
@@ -99,15 +109,19 @@ export function mountModeration(root: HTMLElement) {
     const rev = reviews();
     patch(
       z('tabs'),
-      `${tabs()
-        .map((t) => {
+      `${seg(
+        'data-tab',
+        tabs().map((t) => {
           const n =
             t.id === 'desk' ? rev : t.id === 'restrictions' ? restrCount : 0;
-          return `<button type="button" class="md-tab ${t.id === tab ? 'on' : ''}" data-tab="${t.id}" aria-current="${t.id === tab ? 'page' : 'false'}">${t.label}${n ? `<em class="${t.id === 'desk' ? 'warn' : ''}">${n}</em>` : ''}</button>`;
-        })
-        .join(
-          '',
-        )}<span class="d-sp"></span><button type="button" class="d-ib" data-keys aria-label="Raccourcis clavier" title="Raccourcis clavier">?</button>`,
+          return [
+            t.id,
+            `${t.label}${n ? `<em class="${t.id === 'desk' ? 'warn' : ''}">${n}</em>` : ''}`,
+          ] as const;
+        }),
+        tab,
+        'md-seg',
+      )}<span class="d-sp"></span><button type="button" class="d-ib" data-keys aria-label="Raccourcis clavier" title="Raccourcis clavier">?</button>`,
     );
   }
   const reviews = () =>

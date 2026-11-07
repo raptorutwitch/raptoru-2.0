@@ -252,7 +252,7 @@ const ERRORS: Record<string, string> = {
   soundboard_paused: 'Soundboard en pause',
   module_disabled: 'Soundboard désactivé',
   sound_disabled: 'son désactivé',
-  sound_cooldown: 'son en cooldown',
+  sound_cooldown: 'son en attente de son délai',
   queue_full: 'file du Soundboard pleine',
   studio_absent: 'Studio absent',
   execution_unknown: 'exécution non confirmée',
@@ -446,8 +446,8 @@ export function statusView(s: CpState | null, error: string | null) {
           ? fact('', 'Twitch : réception active')
           : fact(
               'w',
-              'Twitch : ingestion chat arrêtée',
-              'Laboratoire, Simulation, Ingestion chat Twitch.',
+              'Twitch : lecture du chat arrêtée',
+              'Laboratoire, Simulation, Lecture du chat Twitch.',
             );
   const fx = effectsFact(s.effects);
   return [
@@ -468,7 +468,7 @@ export function statusView(s: CpState | null, error: string | null) {
       ? fact('w', `${s.obs.pending_reverts} effet(s) temporaire(s) en cours`)
       : '',
     s.executor_error
-      ? fact('w', 'Exécution : Core injoignable', s.executor_error)
+      ? fact('w', 'Exécution : serveur injoignable', s.executor_error)
       : '',
   ].join('');
 }

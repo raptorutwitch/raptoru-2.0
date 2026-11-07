@@ -55,7 +55,7 @@ test('a module of the host appears everywhere from its own file, and its rules a
   // Catalogue: there by itself, with its real state (off on purpose).
   await page.goto('/?p=modules');
   const row = page.locator('a.cat-m', { hasText: 'Coffre mystère' });
-  await expect(row).toContainText('Coupé', { timeout: 15_000 });
+  await expect(row).toContainText('Fermé', { timeout: 15_000 });
   await row.click();
   await expect(page).toHaveURL(/p=coffre-mystere/);
   await expect(

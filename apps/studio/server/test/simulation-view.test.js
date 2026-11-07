@@ -58,11 +58,11 @@ describe('states', () => {
     expect(simStates(s).map((x) => x.tone)).toEqual(['on', 'on', 'warn', 'on']);
     const html = simPanel(s);
     expect(html).toContain('En direct (simulation) depuis');
-    expect(html).toContain('ON · connectée (lecroupier_)');
-    expect(html).toContain('ON · écrit dans le vrai chat');
+    expect(html).toContain('Activée · connectée (lecroupier_)');
+    expect(html).toContain('Activée · écrit dans le vrai chat');
     expect(html).toContain('Écrit dans le vrai chat');
     expect(html).toContain(
-      'ON · !roulette, !slots et !duel répondent pendant un live',
+      'Ouverts · !roulette, !slots et !duel répondent pendant un live',
     );
     expect(button(html, 'stream_end')).toBe('Terminer');
     expect(button(html, 'ingress_off')).toBe('Désactiver');
@@ -83,7 +83,7 @@ describe('states', () => {
     });
     expect(html).toContain('En direct (Twitch)');
     expect(button(html, 'stream_end')).toBeUndefined();
-    expect(html).toContain('ON · démarrage…');
+    expect(html).toContain('Activée · démarrage…');
   });
 
   it('unavailable services (Production profile / no Lab Core) show as such, without buttons', () => {

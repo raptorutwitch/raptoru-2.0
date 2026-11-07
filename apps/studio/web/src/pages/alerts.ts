@@ -498,7 +498,7 @@ export function mountAlerts(root: HTMLElement) {
     ).replaceAll('<button', managed ? '<button disabled' : '<button');
     patch(
       p.actions,
-      `<span class="alr-lab">Événements Twitch</span>${segment}<button type="button" class="d-btn" data-a="send" ${v ? '' : 'disabled'}>${prod ? 'Jouer sur le stream' : 'Envoyer en file'}</button><button type="button" class="d-btn pri" data-a="play" ${v && !v.missing.length ? '' : 'disabled'}>${ic(playing ? 'stop' : 'play')}${playing ? 'Arrêter' : 'Jouer'}</button>${panelBtn(p.panel.isOpen(), 'Sources')}`,
+      `<span class="alr-lab">Événements Twitch</span>${segment}<button type="button" class="d-btn" data-a="send" ${v ? '' : 'disabled'}>${prod ? 'Jouer sur le stream' : 'Envoyer en file'}</button><button type="button" class="d-btn pri" data-a="play" ${v && !v.missing.length ? '' : 'disabled'}>${ic(playing ? 'stop' : 'play')}${playing ? 'Arrêter' : 'Jouer'}</button>${panelBtn(p.panel.isOpen())}`,
     );
   };
   const paintFams = () => {
@@ -1152,6 +1152,8 @@ export function mountAlerts(root: HTMLElement) {
       drag = { kind: 'scrub', rect };
       seek(timeAt(e, rect));
       hold();
+      // `hold` empêche le focus par défaut : les flèches (une image, 0,01 s avec Maj) doivent marcher après un clic.
+      rul!.focus();
     }
   });
   tracks.addEventListener('pointermove', (e) => {

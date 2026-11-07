@@ -853,7 +853,7 @@ describe('Roue du Sub V2 — R4, the Studio section (pure view)', () => {
     const v1 = { ...base, settings: { enabled: true, mode: 'v1' as const } };
     expect(subWheelView(v1, null)).toContain('la V2 ne tire pas encore');
     const html = settingsPanel(v1);
-    expect(stateView(v1)).toContain('Roue active');
+    expect(stateView(v1)).toContain('Roue ouverte');
     expect(html.match(/data-act="sw-mode"/g)).toHaveLength(3);
     expect(html).toContain(
       'data-act="sw-mode" data-mode="v1" aria-pressed="true"',

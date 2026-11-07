@@ -102,7 +102,7 @@ export function mountRandomBanPage(root: HTMLElement) {
         : error
           ? stateChip('w', error)
           : !e
-            ? stateChip('r', 'Exécuteur Twitch absent')
+            ? stateChip('r', 'Bot Twitch absent')
             : !e.can_timeout
               ? stateChip('r', 'Droit de timeout manquant')
               : !e.can_search

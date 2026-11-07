@@ -12,7 +12,7 @@ fictifs (« fictif », « Exemple fictif »).
 Code :
 
 - Core : `apps/core-api/src/challenges/` (`metrics.ts`, `service.ts`) et `src/http/challenges-routes.ts`.
-- Studio : `apps/studio/web/src/challenges*.ts` et `server/src/challenges/relay.ts`.
+- Studio : `apps/studio/web/src/pages/challenges*.ts` et `server/src/challenges/relay.ts`.
 - Site : `lb-app/api/challenges.js` et `public/app/defis.js`.
 
 Tests :

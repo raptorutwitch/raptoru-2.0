@@ -15,7 +15,7 @@ import {
   run,
   scrub,
   stateChip,
-  sw,
+  viewersSeg,
   toast,
 } from '../ds/ds.js';
 import { getJson, postJson, tryGetJson } from '../http.js';
@@ -160,7 +160,14 @@ export function mountMiniGamesPage(root: HTMLElement) {
     patch(
       p.actions,
       `${production ? '<span class="d-tag warn">Vrais Jetons</span>' : '<span class="d-tag off">Jetons de test</span>'}<a class="d-btn ghost" href="?p=simulation">${ic('chat')}Essayer dans Simulation</a>
-       <label class="mg-open">Ouverts ${sw(!!state?.enabled, 'data-open', 'Ouvrir les mini-jeux aux viewers', { disabled: !state })}</label>`,
+       ${viewersSeg(
+         'data-open',
+         [
+           ['on', 'Ouvert'],
+           ['off', 'Fermé'],
+         ],
+         state?.enabled ? 'on' : 'off',
+       ).replaceAll('<button', state ? '<button' : '<button disabled')}`,
     );
   }
   function paintSettings() {
@@ -275,8 +282,8 @@ export function mountMiniGamesPage(root: HTMLElement) {
   p.root.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
     const b = t.closest<HTMLElement>('button');
-    if (t.matches('[data-open]'))
-      return void setOpen((t as HTMLInputElement).checked, null);
+    if (b?.dataset.open && (b.dataset.open === 'on') !== !!state?.enabled)
+      return void setOpen(b.dataset.open === 'on', null);
     if (b?.dataset.viewer) return openViewer(b.dataset.viewer);
     if (b?.matches('[data-apply]')) return void apply(b);
     if (b?.matches('[data-revert]')) {

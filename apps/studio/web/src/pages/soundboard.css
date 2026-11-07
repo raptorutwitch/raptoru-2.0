@@ -140,7 +140,7 @@
   position: absolute;
   top: 5px;
   left: 3px;
-  font: 500 11px var(--num);
+  font: 500 11.5px var(--num);
   color: var(--ink3);
 }
 .sb-ctl {
@@ -237,10 +237,9 @@
 .sb-cols,
 .sb-row {
   display: grid;
-  grid-template-columns: 30px minmax(110px, 1fr) minmax(
-      90px,
-      1.1fr
-    ) 44px 92px 56px 76px 32px;
+  grid-template-columns:
+    30px minmax(110px, 1fr) minmax(90px, 1.1fr)
+    44px 92px 56px 76px 32px;
   gap: 0 10px;
   align-items: center;
 }
@@ -312,7 +311,7 @@
   --vf-o: 1px;
 }
 .sb-row:hover {
-  background: rgb(160 220 230 / 0.05);
+  background: var(--fill0);
 }
 .sb-row.sel {
   background: color-mix(in srgb, var(--mod) 7%, transparent);
@@ -369,7 +368,7 @@
   cursor: pointer;
 }
 .sb-n b {
-  font-weight: 550;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -377,7 +376,7 @@
 .sb-n small {
   grid-column: 1 / -1;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -413,7 +412,7 @@
 }
 .sb-v {
   color: var(--ink2);
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   white-space: nowrap;
   text-align: right;
 }
@@ -429,7 +428,7 @@
   margin-left: 6px;
   font-style: normal;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .sb-v.is-vol {
   display: flex;
@@ -525,7 +524,7 @@
   transition: background 0.12s;
 }
 .sb-r:hover {
-  background: rgb(160 220 230 / 0.05);
+  background: var(--fill0);
 }
 .sb-r__m {
   display: grid;
@@ -545,7 +544,7 @@
   grid-row: span 2;
 }
 .sb-r__m b {
-  font-weight: 550;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -588,10 +587,9 @@
 @container sbbank (max-width: 640px) {
   .sb-cols,
   .sb-row {
-    grid-template-columns: 30px minmax(100px, 1fr) minmax(
-        60px,
-        0.8fr
-      ) 40px 62px 32px;
+    grid-template-columns:
+      30px minmax(100px, 1fr) minmax(60px, 0.8fr)
+      40px 62px 32px;
   }
   .sb-v.is-delay,
   .sb-v.is-vol,

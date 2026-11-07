@@ -31,8 +31,8 @@ export type RightsDraft = Record<Role, CmdTeamRights>;
 export function outputGrp(r: Runtime | null) {
   const body = !r
     ? '<p class="d-note">État de la sortie chat illisible.</p>'
-    : `${row('Sortie chat réelle', stateChip(r.enabled ? (r.executor_absent ? 'w' : '') : 'off', r.enabled ? 'Allumée' : 'Coupée'), 'envoi twitch bot lecroupier')}
-       ${row('Lecture du chat', stateChip(r.ingress_running ? '' : 'off', r.ingress_running ? 'Active' : 'Inactive'), 'ingestion')}
+    : `${row('Sortie chat réelle', stateChip(r.enabled ? (r.executor_absent ? 'w' : '') : 'off', r.enabled ? 'Activée' : 'Coupée'), 'envoi twitch bot lecroupier')}
+       ${row('Lecture du chat', stateChip(r.ingress_running ? '' : 'off', r.ingress_running ? 'Activée' : 'Coupée'), 'ingestion')}
        ${r.enabled ? row('Bot qui envoie', stateChip(r.executor_absent ? 'r' : '', r.executor_absent ? 'Absent' : 'Présent'), 'exécuteur') : ''}
        ${r.enabled && r.write_scope === false ? '<p class="d-note bad">Autorisation d’écriture manquante pour LeCroupier_.</p>' : ''}
        <p class="d-note">${r.enabled ? (r.executor_absent ? 'Les réponses attendent puis expirent : allume la lecture du chat dans la simulation.' : 'Les réponses partent dans le vrai chat Twitch.') : 'Les commandes sont décidées et enregistrées, rien n’est envoyé dans le chat.'}</p>`;
@@ -116,7 +116,7 @@ export const helpGrp = () =>
      ${help('S’adresser à quelqu’un', '<p class="d-note">Ajoute « @pseudo » au début du message : celui qui tape la commande, la personne qu’il a mentionnée (il faut alors un @pseudo dans « Après la commande »), ou toujours le même pseudo. En Réponse Twitch, pas besoin : Twitch montre déjà à qui le bot répond.</p>')}
      ${help('Variables', VARIABLES.map(([v, name, desc, ex]) => `<p class="d-note"><b>${esc(name)}</b> <code>${esc(v)}</code> : ${esc(desc)}, par exemple ${esc(ex)}.</p>`).join(''))}
      ${help('Qui peut l’utiliser', '<p class="d-note">Les groupes s’additionnent. Tout le monde remplace tous les autres. Les personnes ajoutées à la main passent en plus, ou seules si aucun groupe n’est actif. Une personne exclue ne passe jamais. Personne n’a de passe-droit : le streamer et l’équipe suivent les mêmes règles.</p>')}
-     ${help('Cooldown et utilisations', '<p class="d-note">Le cooldown est un temps minimum entre deux utilisations. Les utilisations sont un plafond sur une période. Les alias partagent les compteurs de leur commande, et les deux peuvent se combiner.</p>')}
-     ${help('Tester', '<p class="d-note">Le faux chat montre un exemple pendant que tu écris. Tester pose la question au Core avec la version enregistrée : même décision qu’un vrai message, rien n’est écrit ni envoyé.</p>')}`,
+     ${help('Délai et utilisations', '<p class="d-note">Le délai est un temps minimum entre deux utilisations. Les utilisations sont un plafond sur une période. Les alias partagent les compteurs de leur commande, et les deux peuvent se combiner.</p>')}
+     ${help('Tester', '<p class="d-note">Le faux chat montre un exemple pendant que tu écris. Tester pose la question au serveur avec la version enregistrée : même décision qu’un vrai message, rien n’est écrit ni envoyé.</p>')}`,
     'aide',
   );

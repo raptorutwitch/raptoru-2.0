@@ -87,8 +87,8 @@ export function statusHtml(m: CatalogModule) {
   const text = off
     ? // Its own switch is a setting here (the host's); a historical one says where its switch is (reasons).
       m.has_switch
-      ? 'Coupé (réglage) : invisible pour les viewers.'
-      : 'Coupé.'
+      ? 'Fermé dans les réglages : invisible pour les viewers.'
+      : 'Fermé.'
     : s.summary;
   return `<p class="mh-state"><span class="d-dot ${off ? 'off' : (STATE_DOT[s.observed] ?? 'w')}" style="display:inline-block;margin-right:7px"></span>${esc(text)}</p>${
     // Off too: a historical module says where its own switch is.

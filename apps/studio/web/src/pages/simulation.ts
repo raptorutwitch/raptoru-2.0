@@ -43,7 +43,7 @@ export function mountSimulationPage(root: HTMLElement) {
     /* storage unavailable: nothing hidden */
   }
 
-  p.body.innerHTML = `<div class="sm">
+  p.body.innerHTML = `<div class="sm-page">
     <section class="sm-chat">
       <div class="sc-head"><span class="d-note" data-id="lead"></span><span class="d-sp"></span><button type="button" class="d-btn ghost sm" data-chat="clear" title="Masque les messages affichés ; ne supprime rien">Vider l’affichage</button></div>
       <div class="sc-list" data-id="list" aria-live="polite"></div>

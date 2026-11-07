@@ -670,7 +670,7 @@ export function cooldownForm(
     const t = span();
     return `Attente de <b>${dur(delay())}</b> entre ${u} <b>${t === 'stream' ? 'jusqu’à la fin du stream' : `pendant ${dur(t)}`}</b>.`;
   };
-  const body = () => `<h3>Cooldown de ${esc(name)}</h3>
+  const body = () => `<h3>Délai de ${esc(name)}</h3>
     <div class="d-lb">Module</div>${seg('data-cm', SEG_MOD, s.module, 'block')}
     <div class="d-lb">Délai imposé</div>${seg(
       'data-cd',

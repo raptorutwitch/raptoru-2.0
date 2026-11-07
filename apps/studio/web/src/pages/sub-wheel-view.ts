@@ -171,7 +171,7 @@ const tag = (cls: string, text: string) =>
   `<span class="d-tag ${cls}">${esc(text)}</span>`;
 
 export const STATUS: Record<SwStatus, string> = {
-  ignored: 'Roue désactivée (rien tiré)',
+  ignored: 'Roue fermée (rien tiré)',
   queued: 'Tirée, en attente d’affichage',
   playing: 'En cours',
   shown: 'Affichée',
@@ -286,7 +286,7 @@ const playerReady = (s: SwState) =>
   !!s.effects?.connected && s.effects.audio !== false && s.effects.current;
 
 export const stateView = (s: SwState) =>
-  `${s.settings.enabled ? stateChip('live', `Roue active · ${MODE[s.settings.mode ?? 'v1'][0]}`) : stateChip('off', 'Roue désactivée')}${playerReady(s) ? player(s) : ''}`;
+  `${s.settings.enabled ? stateChip('live', `Roue ouverte · ${MODE[s.settings.mode ?? 'v1'][0]}`) : stateChip('off', 'Roue fermée')}${playerReady(s) ? player(s) : ''}`;
 
 /** Tout ce qui attend un regard, chaque alerte mène à sa liste. */
 export function alertsView(s: SwState) {
@@ -335,7 +335,7 @@ export function alertsView(s: SwState) {
     s.pending_awards.count
       ? `<button type="button" class="d-tag warn" data-tab="history" data-pending>${esc(`${pl(s.pending_awards.count, 'gain', 'gains')} à attribuer : ${n(s.pending_awards.total)} jetons`)}</button>`
       : '',
-    s.animations_error ? tag('bad', 'Animations : Core injoignable') : '',
+    s.animations_error ? tag('bad', 'Animations : serveur injoignable') : '',
     s.animations_waiting === 'effect_media_missing'
       ? tag(
           'warn',
@@ -399,7 +399,7 @@ const block = (
   }</section>`;
 
 const V2_UNAVAILABLE =
-  '<p class="whl-line">Le Core connecté ne gère pas encore la Roue du Sub V2 : seule la V1 est disponible (historique, activation et tests).</p>';
+  '<p class="whl-line">Le serveur connecté ne gère pas encore la Roue du Sub V2 : seule la V1 est disponible (historique, activation et tests).</p>';
 
 function waitingTab(s: SwState) {
   if (s.v2_unavailable) return V2_UNAVAILABLE;

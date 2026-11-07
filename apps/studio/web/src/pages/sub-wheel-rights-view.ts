@@ -53,7 +53,7 @@ const plural = (k: number, one: string, many: string) =>
 /** L'onglet Droits : la recherche par pseudo, le viewer s'ouvre dans le tiroir. */
 export function rightsSearch(ui: SwRightsUi, v2Available: boolean) {
   if (!v2Available)
-    return '<p class="whl-line">Le Core connecté ne gère pas encore les droits de la Roue du Sub V2.</p>';
+    return '<p class="whl-line">Le serveur connecté ne gère pas encore les droits de la Roue du Sub V2.</p>';
   const hits =
     ui.hits === null
       ? '<p class="d-note">Cherche un viewer pour voir ses tours, ses tirages et ses gains, lui accorder une roue ou le rattraper.</p>'
@@ -139,6 +139,7 @@ export function viewerCard(v: SwViewerAdmin, ui: SwRightsUi) {
     <div class="whl-acts">
       ${c.available ? `<button type="button" class="d-btn pri sm" data-act="swr-catchup">Rattraper : lancer ${plural(c.available, 'tour', 'tours')}</button>` : ''}
       <button type="button" class="d-btn sm" data-act="swr-grant-open"${v.can_grant && !ui.grantOpen ? '' : ' disabled'}>Accorder une roue</button>
+      <button type="button" class="d-btn ghost sm" data-act="swr-refresh">Actualiser</button>
     </div>
     ${v.can_grant ? '' : `<p class="d-note">${plural(usable, 'tour', 'tours')} à utiliser d’abord : aucun nouveau droit tant qu’il en a.</p>`}
     ${ui.grantOpen && v.can_grant ? grantForm(v) : ''}

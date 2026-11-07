@@ -1,50 +1,16 @@
-/* Système : le profil, puis des onglets verticaux. */
+/* Système : le profil, puis les onglets. */
 .sy {
-  display: grid;
-  grid-template-columns: 156px minmax(0, 1fr);
-  gap: 24px;
-  min-height: 100%;
-}
-.sy-tabs {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  align-self: start;
-  position: sticky;
-  top: 0;
-}
-.sy-tabs button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: 32px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--ink2);
-  font: 450 13.5px var(--text);
-  text-align: left;
-  cursor: pointer;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 100%;
 }
 .sy-tabs button[hidden] {
   display: none;
 }
-.sy-tabs button:hover {
-  background: var(--fill);
-  color: var(--ink);
-}
-.sy-tabs button[aria-selected='true'] {
-  background: var(--raise);
-  color: var(--ink);
-}
-.sy-tabs .d-ic {
-  color: var(--ink3);
-}
-.sy-tabs [aria-selected='true'] .d-ic {
-  color: var(--teal);
-}
 .sy-panels {
+  width: 100%;
   min-width: 0;
   max-width: 880px;
 }
@@ -71,7 +37,7 @@
   font-size: 15px;
 }
 .sy-r b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .sy-r p {
   margin: 0;
@@ -92,7 +58,7 @@
   border-radius: 10px;
   background: var(--void);
   color: var(--ink2);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: pre-wrap;
   scrollbar-width: thin;
 }
@@ -106,7 +72,7 @@
   border-radius: 7px;
   background: var(--fill);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 13.5px;
   text-decoration: none;
 }
 .sy-links a:hover {
@@ -130,7 +96,7 @@
 }
 .sy-st h3 {
   margin: 0;
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
 }
 .sy-st > p {
   margin: 2px 0 0;
@@ -169,7 +135,7 @@
   --vf: var(--red);
 }
 .sy-plug--prod.on {
-  background: rgb(255 125 125 / 0.08);
+  background: var(--red-a);
 }
 .sy-plug h3 {
   display: flex;
@@ -187,8 +153,8 @@
   margin-top: auto;
 }
 .sy-plug--prod .d-btn.pri {
-  background: #ff8a8a;
-  color: #2c0707;
+  background: var(--danger);
+  color: var(--danger-ink);
 }
 .sy-pair {
   display: flex;
@@ -218,7 +184,7 @@
 }
 .sy-tw h3 {
   margin: 0;
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
 }
 .sy-tw p {
   margin: 2px 0;
@@ -236,11 +202,4 @@
 }
 .sy-tw-note a {
   color: var(--teal);
-}
-
-@media (max-width: 1180px) {
-  .sy {
-    grid-template-columns: 136px minmax(0, 1fr);
-    gap: 14px;
-  }
 }

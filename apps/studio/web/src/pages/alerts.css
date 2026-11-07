@@ -81,7 +81,7 @@
   place-items: center;
   border-radius: 7px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 11.5px;
 }
 .alr-fm:hover .t,
 .alr-fm:focus-visible .t {
@@ -185,7 +185,7 @@
   border-radius: 5px 5px 5px 0;
   background: var(--teal);
   color: var(--teal-ink);
-  font: 600 11px var(--num);
+  font: 600 11.5px var(--num);
   white-space: nowrap;
 }
 .alr-box.on .alr-box__l {
@@ -242,7 +242,7 @@
   place-items: center;
   text-align: center;
   padding: 16px;
-  background: rgb(7 11 17 / 0.5);
+  background: var(--back);
 }
 .alr-miss[hidden] {
   display: none;
@@ -278,7 +278,7 @@
 }
 .alr-tc {
   flex: none;
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   font-variant-numeric: tabular-nums;
   color: var(--ink2);
   white-space: nowrap;
@@ -309,7 +309,7 @@
   align-items: center;
   height: 27px;
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 .alr-tn.r {
   height: 18px;
@@ -341,7 +341,7 @@
   position: absolute;
   left: 3px;
   top: -5px;
-  font: 500 11px var(--num);
+  font: 500 11.5px var(--num);
   font-style: normal;
   color: var(--ink3);
 }
@@ -363,7 +363,7 @@
   display: block;
   padding-left: 8px;
   color: var(--ink3);
-  font: 500 12px/26px var(--num);
+  font: 500 12.5px/26px var(--num);
 }
 .alr-clip {
   position: absolute;
@@ -380,7 +380,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font: 500 12px/22px var(--num);
+  font: 500 12.5px/22px var(--num);
   pointer-events: none;
 }
 .alr-clip.v {
@@ -407,14 +407,14 @@
   display: block;
   width: 100%;
   height: 100%;
-  fill: rgb(160 220 230 / 0.45);
+  fill: var(--hair3);
 }
 .alr-clip.sel {
   box-shadow: inset 0 0 0 1.5px var(--teal);
 }
 .alr-clip.t {
   background: color-mix(in srgb, var(--teal) 22%, transparent);
-  box-shadow: inset 0 0 0 1px rgb(47 216 196 / 0.6);
+  box-shadow: inset 0 0 0 1px var(--teal-l);
   color: var(--teal);
   cursor: grab;
 }
@@ -570,7 +570,7 @@
 }
 .alr-var__b small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .alr-thumb {
   grid-row: span 2;
@@ -581,8 +581,8 @@
   border-radius: 5px;
   overflow: hidden;
   cursor: pointer;
-  background: repeating-conic-gradient(#121a25 0 25%, #0e151f 0 50%) 0 0 / 10px
-    10px;
+  background: repeating-conic-gradient(var(--check) 0 25%, var(--check2) 0 50%)
+    0 0 / 10px 10px;
 }
 .alr-thumb img {
   display: block;
@@ -704,7 +704,7 @@
 .alr-lab {
   color: var(--ink2);
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 /* Panneau Sources */
@@ -719,7 +719,7 @@
 }
 .alr-url .d-fld input {
   text-align: left;
-  font: 400 12px var(--text);
+  font: 400 12.5px var(--text);
 }
 .alr-miss-l {
   margin: 0;
@@ -786,7 +786,7 @@
 }
 .alr-h-r small {
   color: var(--amber);
-  font-size: 12px;
+  font-size: 12.5px;
   overflow-wrap: anywhere;
 }
 .alr-h-r .d-btn {

@@ -108,7 +108,7 @@ describe('Votekick follow-up', () => {
   };
   it('the executor and the mute task: absent, silent or failed is never ready', () => {
     expect(voteLocks(live({ executor: null }))).toContain(
-      'Exécuteur Twitch : absent',
+      'Bot Twitch : absent',
     );
     expect(
       voteLocks(

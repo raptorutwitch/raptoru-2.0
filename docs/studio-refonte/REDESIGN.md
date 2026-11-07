@@ -7,7 +7,7 @@ fondation technique (Core, Lab, modularité) reste la base.
 Les interfaces historiques ne sont plus des modèles : elles servent uniquement à retrouver les fonctions et les réglages.
 Toutes les fonctions métier, permissions et interactions Core sont conservées. Le Core reste l'unique autorité.
 
-## Phase 1 : direction artistique (en cours)
+## Phase 1 : direction artistique (terminée)
 
 Galerie locale : `prototypes/studio-redesign/index.html`, ou `dev/apercu-directions.cmd` (dossier `prototypes/` ignoré par
 Git, comme les autres prototypes : il reste dans ce worktree). Fichiers statiques, données fictives, aucune connexion, aucune
@@ -40,7 +40,7 @@ essayé dans Electron.
 **Phase 1 terminée le 06/11 : D validée.** Consigne de chaque page : [BRIEF_PAGES.md](BRIEF_PAGES.md). Règles :
 [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).
 
-## Phase 2 : exécution autonome (en cours)
+## Phase 2 : exécution autonome (terminée le 07/11, recette d'Antoni en attente)
 
 Ordre prévu, ajustable selon les dépendances :
 

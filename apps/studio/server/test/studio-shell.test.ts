@@ -156,7 +156,7 @@ describe('Régie live queues', () => {
     expect(lab).toContain('data-live="tombola-cancel"');
     expect(lab).toContain('1 en lecture · 2 en attente');
     expect(lab).toContain('data-live="tts-stop"');
-    expect(lab).toContain('Demandes fermées (module coupé)');
+    expect(lab).toContain('Demandes fermées');
   });
   it('Production: TTS actions go through the moderation door, as in the Modération page', async () => {
     const prod = liveHtml(live, 'production', href);

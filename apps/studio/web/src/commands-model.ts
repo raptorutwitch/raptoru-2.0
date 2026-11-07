@@ -194,7 +194,7 @@ export const cooldownShort = (c: CmdConfig['cooldown']) =>
 export const cooldownText = (c: CmdConfig['cooldown']) =>
   c.enabled
     ? `Cooldown : ${dur(c.seconds)} ${c.scope === 'viewer' ? 'par personne' : 'pour tout le chat'}`
-    : 'Aucun cooldown';
+    : 'Aucun délai';
 const WIN_SHORT = {
   hour: 'heure',
   live: 'live',
@@ -346,7 +346,7 @@ const SEND: Record<string, string> = {
 export function stateOf(c: CommandItem): State {
   const issue = c.issues?.[0];
   if (!c.config.enabled && !issue)
-    return { key: 'off', label: 'Désactivée', tone: 'off', why: 'Désactivée' };
+    return { key: 'off', label: 'Coupée', tone: 'off', why: 'Coupée' };
   if (issue?.code === 'word_reserved')
     return {
       key: 'reserved',
@@ -374,8 +374,8 @@ export function stateOf(c: CommandItem): State {
       why: 'Un message en /me n’est pas envoyé aujourd’hui (Twitch : /me indisponible par l’API utilisée).',
     };
   return c.config.enabled
-    ? { key: 'ok', label: 'Active', tone: 'ok', why: 'Fonctionne normalement' }
-    : { key: 'off', label: 'Désactivée', tone: 'off', why: 'Désactivée' };
+    ? { key: 'ok', label: 'Activée', tone: 'ok', why: 'Fonctionne normalement' }
+    : { key: 'off', label: 'Coupée', tone: 'off', why: 'Coupée' };
 }
 export const needsCheck = (c: CommandItem) => (c.issues?.length ?? 0) > 0;
 
@@ -548,7 +548,7 @@ export const FIELD: Record<string, string> = {
   'audience.groups': 'Groupes',
   'audience.allow': 'Personnes autorisées',
   'audience.deny': 'Personnes exclues',
-  cooldown: 'Cooldown',
+  cooldown: 'Délai',
   quota: 'Utilisations',
   reply: 'Réponse',
   args: 'Arguments',
@@ -566,7 +566,7 @@ export const CHECK: Record<string, string> = {
   audience: 'Accès autorisé',
   arguments: 'Arguments',
   variables: 'Variables',
-  cooldown: 'Cooldown',
+  cooldown: 'Délai',
   quota: 'Utilisations',
   reserved: 'Mot réservé à un module',
   not_found: 'Commande trouvée',
@@ -588,7 +588,7 @@ export const REASON: Record<string, string> = {
   access_denied: 'Pas autorisé',
   follower_status_unknown: 'Follow inconnu',
   invalid_arguments: 'Arguments manquants ou invalides',
-  cooldown: 'Cooldown en cours',
+  cooldown: 'Délai en cours',
   quota: 'Maximum atteint',
   duplicate_message: 'Message déjà traité',
 };

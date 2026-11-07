@@ -168,6 +168,7 @@ export function mountRights(onChange: () => void) {
     if (busy || !act?.startsWith('swr-')) return;
     const spin = t.dataset.spin;
     if (act === 'swr-pick' && t.dataset.id) openViewer(t.dataset.id);
+    else if (act === 'swr-refresh') void go(async () => '');
     else if (act === 'swr-grant-open' || act === 'swr-grant-close') {
       ui.grantOpen = act === 'swr-grant-open';
       paintBox();

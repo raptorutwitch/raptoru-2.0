@@ -184,7 +184,7 @@ const actionText = (a: string) => {
 const STATES: Record<string, string> = {
   opening: 'Ouverture',
   open: 'Ouverte',
-  paused: 'En pause',
+  paused: 'Pause',
   drawing: 'Tirage en cours',
   revealing: 'Révélation',
   revealed: 'Résultat à l’écran',

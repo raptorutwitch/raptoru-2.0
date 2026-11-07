@@ -269,12 +269,12 @@ export function mountTombolaPage(root: HTMLElement) {
       chip = snap?.round
         ? stateChip('', 'Résultat à l’écran')
         : m === 'disabled'
-          ? stateChip('off', 'Désactivée')
+          ? stateChip('off', 'Fermé')
           : m === 'paused'
             ? stateChip('w', 'Inscriptions en pause')
             : stateChip('', 'Prête');
     else if (r.status === 'paused')
-      chip = stateChip('w', roundTitle(r, 'paused') || 'En pause');
+      chip = stateChip('w', roundTitle(r, 'paused') || 'Pause');
     else if (on)
       chip =
         leftMs(r) <= 10_000

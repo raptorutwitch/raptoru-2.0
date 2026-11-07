@@ -73,7 +73,7 @@ vente, événement fermé.
   public `/v1/cosmetics/catalog | images/<sha256> | style.css | style.json` ; Studio `/v1/{studio|lab}/cosmetics/...` ;
   site `/v1/site/cosmetics/viewers/:id` et `/purchase` (jeton `SITE_TOKEN`, déjà utilisé pour l'équipement).
 - Studio : relais `src/cosmetics/relay.ts` (`/api/cosmetics/*`, aperçu `/cosmetics/style.css` et
-  `/cosmetics/images/<id>`), onglet `web/src/cosmetics.ts`.
+  `/cosmetics/images/<id>`), page `web/src/pages/shop*.ts`.
 - Site : `api/shop.js` (`/api/shop`, `/api/shop/images/:id`, `/cosmetics.css`), `public/shop.js`, page « Boutique »,
   apparences dessinées dans les classements et « Ma collection ».
 

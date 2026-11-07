@@ -52,7 +52,7 @@
 }
 .ch-fl input[type='datetime-local'] {
   text-align: left;
-  font: 400 13px var(--text);
+  font: 400 13.5px var(--text);
   color-scheme: dark;
 }
 
@@ -114,7 +114,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 550;
+  font-weight: 600;
 }
 .ch-r small {
   overflow: hidden;
@@ -145,7 +145,7 @@
   padding: 30px 8px;
 }
 .ch-none b {
-  font: 600 16px var(--num);
+  font: 600 15px var(--num);
 }
 .ch-none p {
   margin: 0;
@@ -174,7 +174,7 @@
 .ch-eng p {
   margin: 0 0 4px;
   color: var(--ink2);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .ch-eng p.ok {
   color: var(--teal);
@@ -208,7 +208,7 @@
   outline: 0;
   background: none;
   color: var(--ink);
-  font: 600 24px var(--num);
+  font: 600 25px var(--num);
 }
 .ch-desc {
   width: 100%;
@@ -249,7 +249,7 @@
   border-radius: 8px;
   background: var(--raise);
   color: var(--ink);
-  font: 600 16px var(--num);
+  font: 600 15px var(--num);
   cursor: pointer;
   transition: background 0.12s;
   --vf-o: -3px;
@@ -333,7 +333,7 @@
   display: flex;
   justify-content: space-between;
   color: var(--ink3);
-  font: 500 11px var(--num);
+  font: 500 11.5px var(--num);
 }
 .ch-pin {
   position: absolute;
@@ -372,7 +372,7 @@
   box-shadow: inset 0 0 0 1px var(--mod);
 }
 .ch-per b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .ch-per small {
   color: var(--ink3);
@@ -535,7 +535,7 @@
 .ch-card header p {
   margin: 0;
   color: #7f93a1;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .ch-cic {
   display: grid;
@@ -553,7 +553,7 @@
 }
 .ch-cdesc {
   color: #a9b8c2;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .ch-cgoal {
   display: flex;
@@ -580,7 +580,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .ch-crw .d-ic {
   color: #f3bb4f;
@@ -597,7 +597,7 @@
 }
 .ch-vis small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .ch-check {
   display: grid;
@@ -607,13 +607,13 @@
 }
 .ch-prev p {
   margin: 0 0 4px;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .ch-prev ul {
   margin: 0 0 6px 16px;
   padding: 0;
   color: var(--red);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .ch-prev .ok {
   color: var(--teal);
@@ -644,7 +644,7 @@
 }
 .ch-fh h2 {
   margin: 0;
-  font: 600 20px var(--num);
+  font: 600 19px var(--num);
 }
 .ch-fh h2 .d-tag {
   vertical-align: 2px;
@@ -688,7 +688,7 @@
   min-width: 0;
 }
 .ch-pr__n b {
-  font-weight: 550;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -717,7 +717,7 @@
   min-width: 0;
 }
 .ch-aw b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .ch-awe {
   grid-column: 1 / -1;
@@ -737,10 +737,10 @@
 }
 .ch-log time {
   color: var(--ink3);
-  font: 400 12px var(--num);
+  font: 400 12.5px var(--num);
 }
 .ch-log b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .ch-log span {
   color: var(--ink2);
@@ -750,7 +750,7 @@
 }
 .ch-log small {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 
 @media (max-width: 1180px) {
@@ -774,7 +774,7 @@
   }
   .ch-tok {
     height: 30px;
-    font-size: 14.5px;
+    font-size: 15px;
   }
   .ch-fcols {
     gap: 14px;

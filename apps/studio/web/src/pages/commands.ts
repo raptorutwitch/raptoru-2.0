@@ -86,14 +86,14 @@ type Sort = 'name' | 'who' | 'limit' | 'uses';
 const SORTS: [Sort, string][] = [
   ['name', 'Par nom'],
   ['who', 'Par accès'],
-  ['limit', 'Par cooldown'],
+  ['limit', 'Par délai'],
   ['uses', 'Les plus utilisées'],
 ];
 const FILTERS: [ListUi['side'], string][] = [
   ['all', 'Toutes'],
   ['fav', 'Favoris'],
   ['check', 'À vérifier'],
-  ['off', 'Désactivées'],
+  ['off', 'Coupées'],
   ['hidden', 'Cachées'],
 ];
 
@@ -331,7 +331,7 @@ export function mountCommandsPage(root: HTMLElement) {
       <small class="cdx-li__m" title="${esc(`${whoShort(cfg.audience)} · ${cooldownShort(cfg.cooldown)}${q.enabled ? ` · max ${quotaShort(q)}` : ''}`)}">${esc(whoShort(cfg.audience))} · ${esc(cooldownShort(cfg.cooldown))}${c.uses_30d ? ` · ${fmt(c.uses_30d)} ×` : ''}</small>
       <span class="cdx-li__e">${c.kind === 'system' ? flag('layers', `Commande du module ${modName(c.owner_module ?? '')}`) : ''}${cfg.team_lock ? flag('lock', 'Verrouillée pour l’équipe') : ''}${cfg.listed ? '' : flag('eye', 'Cachée de la liste publique')}
         <button type="button" class="d-ib cdx-star ${fav.has(c.command_id) ? 'on' : ''}" data-fav="${c.command_id}" aria-label="${fav.has(c.command_id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${ic('star')}</button>
-        <span class="d-sw" title="${cfg.enabled ? 'Active' : 'Désactivée'}"><input type="checkbox" role="switch" data-toggle="${c.command_id}" ${cfg.enabled ? 'checked' : ''} ${c.locked_fields.includes('enabled') ? 'disabled' : ''} aria-label="Activer !${esc(cfg.name)}"><i></i></span></span></div>`;
+        <span class="d-sw" title="${cfg.enabled ? 'Activée' : 'Coupée'}"><input type="checkbox" role="switch" data-toggle="${c.command_id}" ${cfg.enabled ? 'checked' : ''} ${c.locked_fields.includes('enabled') ? 'disabled' : ''} aria-label="Activer !${esc(cfg.name)}"><i></i></span></span></div>`;
   };
   function paintLib() {
     const n = counts(all(), cats(), listUi(), fav);
@@ -504,7 +504,7 @@ export function mountCommandsPage(root: HTMLElement) {
     patch(
       z('note'),
       S.isNew
-        ? 'Enregistre la commande pour que le Core la teste.'
+        ? 'Enregistre la commande pour pouvoir la tester.'
         : dirty()
           ? 'Tester utilise la version enregistrée.'
           : r?.enabled
@@ -648,7 +648,7 @@ export function mountCommandsPage(root: HTMLElement) {
       await loadList();
       S.saving = false;
       open(out.command_id);
-      toast(`!${out.config.name} créée${enabled ? '' : ' (désactivée)'}`);
+      toast(`!${out.config.name} créée${enabled ? '' : ' (coupée)'}`);
     } catch (e) {
       S.saving = false;
       S.error = saveErr(e);

@@ -11,7 +11,7 @@ test('Progression: on, an event badge created, a viewer found, granted, then rev
   const tab = page.locator('#tab-progression');
   const toasts = page.locator('.d-toasts');
   await tab.getByRole('button', { name: 'Activer' }).click();
-  await expect(tab.locator('.d-state')).toContainText('Active');
+  await expect(tab.locator('.d-state')).toContainText('Activée');
 
   await tab.getByRole('button', { name: 'Titres et badges' }).click();
   const form = tab.locator('[data-role="reward-form"]');

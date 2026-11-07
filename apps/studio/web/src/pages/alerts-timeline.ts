@@ -79,8 +79,8 @@ export const transportHtml = (
 ) =>
   `<button type="button" class="d-play ${playing ? '' : 'go'}" data-a="play" aria-label="${playing ? 'Arrêter' : 'Jouer l’aperçu'}" ${disabled ? 'disabled' : ''}>${ic(playing ? 'stop' : 'play')}</button>
   <span class="alr-tc" data-tc></span>
-  <button type="button" class="d-ib" data-step="-1" aria-label="Image précédente">${ic('back')}</button>
-  <button type="button" class="d-ib" data-step="1" aria-label="Image suivante">${ic('chev')}</button>
+  <button type="button" class="d-ib" data-step="-1" aria-label="Image précédente" title="Image précédente. Sur la timeline : flèches, Maj pour 0,01 s">${ic('back')}</button>
+  <button type="button" class="d-ib" data-step="1" aria-label="Image suivante" title="Image suivante. Sur la timeline : flèches, Maj pour 0,01 s">${ic('chev')}</button>
   <button type="button" class="d-btn ghost sm" data-a="overlap" ${disabled ? 'disabled' : ''}>${ic('layers')}Superposer</button>
   <span class="d-sp"></span>
   ${o.dirty ? `<span class="alr-dirty"><i class="d-dot w"></i>Non enregistré</span><button type="button" class="d-btn ghost sm" data-a="revert">Annuler</button><button type="button" class="d-btn sm pri" data-a="save">Enregistrer</button>` : o.others ? `<span class="alr-dirty"><i class="d-dot w"></i>${o.others} variante${o.others > 1 ? 's' : ''} non enregistrée${o.others > 1 ? 's' : ''}</span>` : ''}

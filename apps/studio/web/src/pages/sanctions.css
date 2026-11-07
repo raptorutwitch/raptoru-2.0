@@ -68,16 +68,16 @@
   border-top: 1px solid var(--hair);
 }
 .sx-lane b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .sx-lane small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .sx-lane > span {
   color: var(--ink);
-  font: 500 13px/1.35 var(--num);
+  font: 500 13.5px/1.35 var(--num);
   text-align: right;
 }
 
@@ -101,17 +101,17 @@
   border-bottom: 1px solid var(--hair);
   background: none;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 13.5px;
   text-align: left;
   cursor: pointer;
   transition: background 0.12s;
 }
 .sx-l:hover {
-  background: rgb(160 220 230 / 0.04);
+  background: var(--fill0);
 }
 .sx-l time {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
   font-variant-numeric: tabular-nums;
 }
 .sx-who {
@@ -128,7 +128,7 @@
 .sx-what small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .sx-what small.sx-due {
   color: var(--amber);
@@ -149,7 +149,7 @@
 }
 .sx-test {
   font-style: normal;
-  font: 500 11px var(--num);
+  font: 500 11.5px var(--num);
   letter-spacing: 0.04em;
   color: var(--ink3);
   text-transform: uppercase;
@@ -165,7 +165,7 @@
   grid-template-columns: 7px minmax(0, 1fr);
   gap: 9px;
   align-items: baseline;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .sx-lock .d-dot {
   transform: translateY(-1px);
@@ -173,7 +173,7 @@
 .sx-lock small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   overflow-wrap: anywhere;
 }
 
@@ -216,7 +216,7 @@
 .sr > span:first-child small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 /* Caution : le devis. */
@@ -227,9 +227,9 @@
   margin: 0 0 8px;
   padding: 8px 10px;
   border-left: 2px solid var(--amber);
-  background: rgb(255 179 92 / 0.08);
+  background: var(--amber-a);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .sx-open {
   margin: 0 0 8px;
@@ -250,7 +250,7 @@
 .sx-q small {
   grid-column: 1 / -1;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .sx-qs {
   grid-column: 1 / -1;
@@ -261,7 +261,7 @@
   color: var(--ink2);
 }
 .sx-ql b {
-  font: 500 14px var(--num);
+  font: 500 13.5px var(--num);
   color: var(--ink);
 }
 .sx-rule,
@@ -282,7 +282,7 @@
   color: var(--ink3);
 }
 .sx-qp b {
-  font-size: 30px;
+  font-size: 25px;
   font-weight: 600;
   color: var(--ink);
   line-height: 1;
@@ -307,7 +307,7 @@
   display: grid;
   place-content: center;
   color: var(--ink3);
-  font-size: 13px;
+  font-size: 13.5px;
   pointer-events: none;
 }
 .vk-idle b {
@@ -323,7 +323,7 @@
   flex-wrap: wrap;
 }
 .vk-live small {
-  font-size: 12px;
+  font-size: 12.5px;
   min-width: 0;
 }
 .vk-ring {
@@ -338,7 +338,7 @@
   inset: 0;
 }
 .vk-ring b {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 500;
 }
 .vk-q {
@@ -354,11 +354,11 @@
 }
 .vk-t {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 .vk-t b {
   color: var(--ink);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
 }
 .vk-form {
@@ -381,7 +381,7 @@
 }
 .vk-form small {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .vk-len {
   display: grid;
@@ -413,7 +413,7 @@
   align-items: center;
   gap: 6px;
   width: 150px;
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   color: var(--ink2);
 }
 .vk-save {

@@ -16,6 +16,7 @@ import {
   row,
   scrub,
   seg,
+  viewersSeg,
   stateChip,
   sw,
   toast,
@@ -412,7 +413,7 @@ export function mountSoundboardPage(root: HTMLElement) {
             : !status.ready
               ? stateChip('r', 'Achats refusés : pas de lecteur')
               : st === 'paused'
-                ? stateChip('w', 'En pause')
+                ? stateChip('w', 'Pause')
                 : st === 'disabled'
                   ? stateChip('off', 'Fermé aux viewers')
                   : n
@@ -424,7 +425,7 @@ export function mountSoundboardPage(root: HTMLElement) {
     patch(p.state, chip);
     patch(
       p.actions,
-      `<span class="d-lb" style="margin-right:-4px">Viewers</span>${seg('data-state', STATES, st)}${panelBtn(p.panel.isOpen())}`,
+      `${viewersSeg('data-state', STATES, st)}${panelBtn(p.panel.isOpen())}`,
     );
   }
   function paintTools() {
@@ -436,13 +437,13 @@ export function mountSoundboardPage(root: HTMLElement) {
         'data-view',
         [
           ['all', 'Tous'],
-          ['on', 'Actifs'],
+          ['on', 'Proposés'],
           ['off', 'Coupés'],
         ],
         view,
       ),
     );
-    patch(z('count'), cfg ? `<b>${on}</b> actifs sur ${all.length}` : '');
+    patch(z('count'), cfg ? `<b>${on}</b> proposés sur ${all.length}` : '');
     const names = cats();
     const none = all.filter((s) => !library?.[s.id]).length;
     patch(

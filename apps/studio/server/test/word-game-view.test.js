@@ -83,10 +83,10 @@ describe('panel view', () => {
     expect(html).toContain('le jeu ne tourne que pendant un live');
   });
 
-  it('live and active: « En live » + « Actif », Arrêter and Nouveau mot enabled, next word', () => {
+  it('live and open: « En live » + « Ouvert », Arrêter and Nouveau mot enabled, next word', () => {
     const html = wordGameView(state(), NOW);
     expect(html).toContain('En live');
-    expect(html).toContain('Actif');
+    expect(html).toContain('Ouvert');
     expect(button(html, 'stop')).toMatchObject({ 1: ' ', 2: 'Arrêter' });
     expect(button(html, 'new_word')[1]).not.toContain('disabled');
     expect(html).toContain('Prochain mot dans ~2:05');
@@ -261,7 +261,7 @@ describe('panel view: durable switch and interval (refonte H8)', () => {
       state({ enabled: true, interval: { min_s: 300, max_s: 900 } }),
       NOW,
     );
-    expect(button(html, 'disable')[2]).toBe('Désactiver le jeu');
+    expect(button(html, 'disable')[2]).toBe('Fermer le jeu');
     expect(
       wgZones(state({ interval: { min_s: 300, max_s: 900 } }), NOW).interval,
     ).toBe('on');
@@ -282,9 +282,9 @@ describe('panel view: durable switch and interval (refonte H8)', () => {
       }),
       NOW,
     );
-    expect(html).toContain('Désactivé (réglage)');
+    expect(html).toContain('Fermé : aucun mot automatique');
     expect(html).not.toContain('Prochain mot');
-    expect(button(html, 'enable')[2]).toBe('Activer le jeu');
+    expect(button(html, 'enable')[2]).toBe('Ouvrir le jeu');
   });
   it('an older Core without the setting: no settings block, historical behaviour', () => {
     expect(wordGameView(state(), NOW)).not.toContain('data-action="disable"');

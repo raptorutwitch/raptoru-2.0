@@ -128,13 +128,13 @@ export function simPanel(
           );
   const i = s.ingress;
   const ingress = !i
-    ? row('Ingestion chat Twitch', 'Indisponible', 'na', '')
+    ? row('Lecture du chat Twitch', 'Indisponible', 'na', '')
     : row(
-        'Ingestion chat Twitch',
+        'Lecture du chat Twitch',
         i.enabled
           ? i.running
-            ? `ON · connectée${i.token_login ? ` (${esc(i.token_login)})` : ''}`
-            : 'ON · démarrage…'
+            ? `Activée · connectée${i.token_login ? ` (${esc(i.token_login)})` : ''}`
+            : 'Activée · démarrage…'
           : 'OFF',
         i.enabled ? (i.running ? 'on' : 'warn') : 'off',
         i.blocked && !i.enabled
@@ -152,7 +152,7 @@ export function simPanel(
     : row(
         'Sortie réelle LeCroupier_',
         o.enabled
-          ? `ON · écrit dans le vrai chat${o.executor_absent ? ' (exécuteur absent : ingestion coupée ?)' : ''}`
+          ? `Activée · écrit dans le vrai chat${o.executor_absent ? ' (bot absent : lecture du chat coupée ?)' : ''}`
           : 'OFF',
         o.enabled ? 'warn' : 'off',
         btn(
@@ -174,7 +174,7 @@ export function simPanel(
     : row(
         gamesLabel,
         g.enabled
-          ? 'ON · !roulette, !slots et !duel répondent pendant un live'
+          ? 'Ouverts · !roulette, !slots et !duel répondent pendant un live'
           : 'OFF',
         g.enabled ? 'on' : 'off',
         btn(

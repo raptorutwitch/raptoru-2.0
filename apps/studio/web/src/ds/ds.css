@@ -21,7 +21,13 @@
   --hair2: rgb(160 220 230 / 0.18);
   --hair3: rgb(160 220 230 / 0.32);
   --fill: rgb(160 220 230 / 0.07);
+  --fill0: rgb(160 220 230 / 0.05);
   --fill2: rgb(160 220 230 / 0.13);
+  --pop: #182332;
+  --check: #121a25;
+  --check2: #0e151f;
+  --shade: rgb(0 0 0 / 0.45);
+  --back: rgb(4 7 11 / 0.6);
   --ink: #e9f0f4;
   --ink2: #a3b5c2;
   --ink3: #7a8e9d;
@@ -35,6 +41,26 @@
   --violet: #b9a0ff;
   --green: #9be8a0;
   --orange: #ff9f6b;
+  /* Les couleurs d'état en voile (-a, fond léger), en voile fort (-b) et en filet (-l). */
+  --teal-a: rgb(47 216 196 / 0.1);
+  --teal-b: rgb(47 216 196 / 0.16);
+  --teal-l: rgb(47 216 196 / 0.5);
+  --teal-hi: #55e6d4;
+  --rose-a: rgb(244 126 152 / 0.1);
+  --rose-b: rgb(244 126 152 / 0.16);
+  --rose-l: rgb(244 126 152 / 0.5);
+  --gold-a: rgb(233 196 106 / 0.1);
+  --gold-b: rgb(233 196 106 / 0.16);
+  --gold-l: rgb(233 196 106 / 0.5);
+  --amber-a: rgb(255 179 92 / 0.1);
+  --amber-b: rgb(255 179 92 / 0.16);
+  --amber-l: rgb(255 179 92 / 0.5);
+  --red-a: rgb(255 125 125 / 0.1);
+  --red-b: rgb(255 125 125 / 0.16);
+  --red-l: rgb(255 125 125 / 0.5);
+  --danger: #ff8a8a;
+  --danger-hi: #ffa3a3;
+  --danger-ink: #2c0707;
   --mod: var(--teal);
   --e: cubic-bezier(0.2, 0.8, 0.2, 1);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -165,6 +191,9 @@
   letter-spacing: 0.005em;
   white-space: nowrap;
 }
+.d-head-lb {
+  margin-right: -4px;
+}
 .d-work {
   position: relative;
   display: grid;
@@ -223,7 +252,7 @@
   height: 24px;
   padding: 0 10px;
   border-radius: 99px;
-  background: rgb(160 220 230 / 0.06);
+  background: var(--fill);
   color: var(--ink2);
   font-size: 12.5px;
   white-space: nowrap;
@@ -245,7 +274,7 @@
   background: var(--red);
 }
 .d-dot.live {
-  box-shadow: 0 0 0 0 rgb(47 216 196 / 0.5);
+  box-shadow: 0 0 0 0 var(--teal-l);
   animation: d-ping 1.8s var(--e) infinite;
 }
 @keyframes d-ping {
@@ -264,7 +293,7 @@
   padding: 0 12px;
   border: 0;
   border-radius: 9px;
-  background: rgb(160 220 230 / 0.08);
+  background: var(--fill);
   color: var(--ink);
   font: 500 13.5px var(--text);
   white-space: nowrap;
@@ -278,7 +307,7 @@ a.d-btn {
   text-decoration: none;
 }
 .d-btn:hover {
-  background: rgb(160 220 230 / 0.14);
+  background: var(--fill2);
 }
 .d-btn:active {
   transform: scale(0.97);
@@ -295,29 +324,29 @@ a.d-btn {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.28);
 }
 .d-btn.pri:hover {
-  background: #55e6d4;
+  background: var(--teal-hi);
 }
 .d-btn.gold {
   background: none;
-  box-shadow: inset 0 0 0 1px rgb(233 196 106 / 0.45);
+  box-shadow: inset 0 0 0 1px var(--gold-l);
   color: var(--gold);
 }
 .d-btn.gold:hover {
-  background: rgb(233 196 106 / 0.1);
+  background: var(--gold-a);
 }
 .d-btn.bad {
   background: none;
   color: var(--red);
 }
 .d-btn.bad:hover {
-  background: rgb(255 125 125 / 0.1);
+  background: var(--red-a);
 }
 .d-btn.ghost {
   background: none;
   color: var(--ink2);
 }
 .d-btn.ghost:hover {
-  background: rgb(160 220 230 / 0.08);
+  background: var(--fill);
   color: var(--ink);
 }
 .d-btn.on {
@@ -325,10 +354,7 @@ a.d-btn {
   color: var(--ink);
 }
 .d-btn.sm {
-  display: inline-flex;
-  gap: 7px;
   height: 27px;
-  min-height: 0;
   padding: 0 9px;
   border-radius: 8px;
   font-size: 12.5px;
@@ -353,7 +379,7 @@ a.d-btn {
     color 0.12s;
 }
 .d-ib:hover {
-  background: rgb(160 220 230 / 0.1);
+  background: var(--fill2);
   color: var(--ink);
 }
 .d-ib:disabled {
@@ -399,12 +425,13 @@ a.d-btn {
   height: 18px;
   flex: none;
 }
+/* La zone de clic déborde du dessin : 24 px de haut, pour un interrupteur de 18. */
 .d-sw input {
   position: absolute;
   z-index: 1;
-  inset: 0;
+  inset: -3px 0;
   width: 100%;
-  height: 100%;
+  height: 24px;
   margin: 0;
   opacity: 0;
   cursor: pointer;
@@ -458,7 +485,7 @@ a.d-btn {
   grid-auto-columns: 1fr;
   padding: 2px;
   border-radius: 9px;
-  background: rgb(160 220 230 / 0.07);
+  background: var(--fill);
   isolation: isolate;
 }
 .d-seg::before {
@@ -504,14 +531,14 @@ a.d-btn {
   height: 28px;
   padding: 0 8px;
   border-radius: 8px;
-  background: rgb(160 220 230 / 0.06);
+  background: var(--fill);
   box-shadow: inset 0 0 0 1px transparent;
   transition:
     box-shadow 0.12s,
     background 0.12s;
 }
 .d-fld:hover {
-  background: rgb(160 220 230 / 0.09);
+  background: var(--fill);
 }
 .d-fld:focus-within {
   box-shadow: inset 0 0 0 1px var(--teal);
@@ -526,7 +553,7 @@ a.d-btn {
   background: none;
   color: var(--ink);
   text-align: right;
-  font: 500 14px var(--num);
+  font: 500 13.5px var(--num);
   appearance: textfield;
 }
 .d-fld input::-webkit-inner-spin-button {
@@ -537,7 +564,7 @@ a.d-btn {
 .d-fld input[type='url'],
 .d-fld select {
   text-align: left;
-  font: 400 13px var(--text);
+  font: 400 13.5px var(--text);
   appearance: auto;
 }
 .d-fld select option {
@@ -546,7 +573,7 @@ a.d-btn {
 .d-fld span {
   margin-left: 5px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
 }
 .d-fld.is-bad {
@@ -561,9 +588,9 @@ a.d-btn {
   outline: 0;
   border-radius: 8px;
   resize: vertical;
-  background: rgb(160 220 230 / 0.06);
+  background: var(--fill);
   color: var(--ink);
-  font: 400 13px/1.45 var(--text);
+  font: 400 13.5px/1.45 var(--text);
   box-shadow: inset 0 0 0 1px transparent;
   box-sizing: border-box;
 }
@@ -578,7 +605,7 @@ a.d-btn {
   padding: 0 8px;
   border: 0;
   border-radius: 7px;
-  background: rgb(160 220 230 / 0.07);
+  background: var(--fill);
   color: var(--ink);
   font: 500 12.5px var(--num);
   gap: 5px;
@@ -595,23 +622,23 @@ a.d-btn {
 }
 .d-tag.gold {
   color: var(--gold);
-  background: rgb(233 196 106 / 0.1);
+  background: var(--gold-a);
 }
 .d-tag.warn {
   color: var(--amber);
-  background: rgb(255 179 92 / 0.1);
+  background: var(--amber-a);
 }
 .d-tag.bad {
   color: var(--red);
-  background: rgb(255 125 125 / 0.1);
+  background: var(--red-a);
 }
 .d-tag.ok {
   color: var(--teal);
-  background: rgb(47 216 196 / 0.1);
+  background: var(--teal-a);
 }
 .d-tag.ext {
   color: var(--rose);
-  background: rgb(244 126 152 / 0.1);
+  background: var(--rose-a);
 }
 .d-tag.off {
   color: var(--ink3);
@@ -632,15 +659,15 @@ button.d-tag:hover {
 .d-range {
   appearance: none;
   width: 100%;
-  height: 16px;
-  margin: 0;
+  height: 24px;
+  margin: -4px 0;
   background: none;
   accent-color: var(--teal);
 }
 .d-range::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: 2px;
-  background: rgb(160 220 230 / 0.18);
+  background: var(--hair2);
 }
 .d-range::-webkit-slider-thumb {
   appearance: none;
@@ -659,7 +686,7 @@ button.d-tag:hover {
   min-width: 0;
   height: 4px;
   border-radius: 2px;
-  background: rgb(160 220 230 / 0.12);
+  background: var(--fill2);
   overflow: hidden;
 }
 .d-prog i {
@@ -671,7 +698,7 @@ button.d-tag:hover {
 }
 .d-ring-bg {
   fill: none;
-  stroke: rgb(160 220 230 / 0.13);
+  stroke: var(--fill2);
 }
 .d-ring-fg {
   fill: none;
@@ -717,8 +744,8 @@ button.d-tag:hover {
   overflow: hidden;
   border-radius: 6px;
   container-type: inline-size;
-  background: repeating-conic-gradient(#121a25 0 25%, #0e151f 0 50%) 0 0 / 28px
-    28px;
+  background: repeating-conic-gradient(var(--check) 0 25%, var(--check2) 0 50%)
+    0 0 / 28px 28px;
 }
 .d-scn__tag {
   position: absolute;
@@ -787,7 +814,7 @@ button.d-tag:hover {
 .d-row small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .d-empty {
   padding: 26px 8px;
@@ -853,9 +880,9 @@ button.d-tag:hover {
   padding: 0;
   border: 1px solid var(--hair3);
   border-radius: 12px;
-  background: #182332;
+  background: var(--pop);
   color: var(--ink);
-  box-shadow: 0 18px 48px rgb(0 0 0 / 0.45);
+  box-shadow: 0 18px 48px var(--shade);
   max-height: calc(100vh - 24px);
   overflow: auto;
   font: 400 13.5px/1.4 var(--text);
@@ -880,7 +907,7 @@ button.d-tag:hover {
 }
 .d-menu h3 {
   margin: 4px 8px 6px;
-  font: 600 13px var(--num);
+  font: 600 13.5px var(--num);
   color: var(--ink2);
 }
 .d-menu button {
@@ -923,7 +950,7 @@ button.d-tag:hover {
 .d-menu button small {
   margin-left: auto;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .d-menu hr {
   margin: 4px 2px;
@@ -938,7 +965,7 @@ button.d-tag:hover {
 }
 .d-form h3 {
   margin: 0;
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
 }
 
 .d-dlg {
@@ -946,7 +973,7 @@ button.d-tag:hover {
   padding: 0;
   border: 1px solid var(--hair3);
   border-radius: 14px;
-  background: #182332;
+  background: var(--pop);
   color: var(--ink);
   font: 400 13.5px/1.45 var(--text);
   opacity: 0;
@@ -965,7 +992,7 @@ button.d-tag:hover {
   }
 }
 .d-dlg::backdrop {
-  background: rgb(4 7 11 / 0.6);
+  background: var(--back);
 }
 .d-dlg__b {
   padding: 20px 22px 6px;
@@ -1000,7 +1027,7 @@ button.d-tag:hover {
 .d-dlg__c small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .d-dlg__c input {
   accent-color: var(--teal);
@@ -1012,13 +1039,13 @@ button.d-tag:hover {
   gap: 8px;
   padding: 16px 22px 18px;
 }
-.d-dlg__a .d-btn.danger {
-  background: #ff8a8a;
-  color: #2c0707;
+.d-btn.danger {
+  background: var(--danger);
+  color: var(--danger-ink);
   font-weight: 600;
 }
-.d-dlg__a .d-btn.danger:hover {
-  background: #ffa3a3;
+.d-btn.danger:hover {
+  background: var(--danger-hi);
 }
 
 /* Tiroir : le détail d'un objet, sans quitter la page. */
@@ -1037,7 +1064,7 @@ button.d-tag:hover {
   background: var(--sheet2);
   color: var(--ink);
   font: 400 13.5px/1.45 var(--text);
-  box-shadow: -20px 0 60px rgb(0 0 0 / 0.45);
+  box-shadow: -20px 0 60px var(--shade);
   translate: 16px 0;
   opacity: 0;
   transition-property: translate, opacity, display, overlay;
@@ -1072,11 +1099,11 @@ button.d-tag:hover {
 .d-drawer__h small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .d-drawer__h h2 {
   margin: 0;
-  font: 600 16px var(--num);
+  font: 600 15px var(--num);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1100,14 +1127,14 @@ button.d-tag:hover {
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--raise);
-  font: 400 14.5px/1.5 var(--text);
+  font: 400 15px/1.5 var(--text);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 .d-quote mark {
   padding: 0 2px;
   border-radius: 3px;
-  background: rgb(255 179 92 / 0.25);
+  background: var(--amber-b);
   color: var(--amber);
 }
 
@@ -1140,11 +1167,11 @@ button.d-tag:hover {
   background: var(--raise2);
   color: var(--ink);
   font: 400 13.5px var(--text);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.4);
+  box-shadow: 0 12px 32px var(--shade);
   animation: d-up 0.18s var(--e);
 }
 .d-toast.bad {
-  border-color: rgb(255 125 125 / 0.5);
+  border-color: var(--red-l);
 }
 .d-toast button {
   border: 0;
@@ -1190,7 +1217,7 @@ button.d-tag:hover {
     bottom: 0;
     width: 316px;
     z-index: 6;
-    box-shadow: -14px 0 40px rgb(0 0 0 / 0.4);
+    box-shadow: -14px 0 40px var(--shade);
   }
 }
 @media (prefers-reduced-motion: reduce) {

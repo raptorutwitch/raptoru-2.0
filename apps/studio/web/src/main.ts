@@ -1,8 +1,6 @@
 import './style.css';
 import { mountModuleHost } from './module-host.js';
-import './shell/shell.css';
 import './bonk-target.css';
-import './studio-theme.css';
 import './shell/frame.css';
 import './ds/ds.css';
 import './mod/mod.css';

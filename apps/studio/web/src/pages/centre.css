@@ -18,7 +18,7 @@
 }
 .ce-v h2 {
   margin: 0;
-  font: 600 25px/1.15 var(--num);
+  font: 600 19px/1.2 var(--num);
   letter-spacing: 0.002em;
 }
 .ce-v__t p {
@@ -63,7 +63,7 @@
   grid-column: 1 / -1;
   display: flex;
   gap: 3px;
-  height: 12px;
+  height: 6px;
 }
 .ce-rule i {
   flex: 1;
@@ -151,14 +151,14 @@
   background: var(--teal);
 }
 .ce-n[data-l='error'] {
-  background: rgb(255 125 125 / 0.14);
+  background: var(--red-a);
   color: var(--red);
 }
 .ce-n[data-l='error'] i {
   background: var(--red);
 }
 .ce-n[data-l='warn'] {
-  background: rgb(255 179 92 / 0.12);
+  background: var(--amber-a);
   color: var(--amber);
 }
 .ce-n[data-l='warn'] i {
@@ -216,12 +216,12 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: rgb(255 125 125 / 0.14);
+  background: var(--red-b);
   color: var(--red);
-  font: 600 13px var(--num);
+  font: 600 13.5px var(--num);
 }
 .ce-s[data-l='warn'] .ce-s__n {
-  background: rgb(255 179 92 / 0.13);
+  background: var(--amber-a);
   color: var(--amber);
 }
 .ce-s h3 {
@@ -230,7 +230,7 @@
   align-items: baseline;
   gap: 2px 8px;
   margin: 0;
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
 }
 .ce-s h3 em {
   font: 400 12.5px var(--text);
@@ -301,7 +301,7 @@
 .ce-inc small {
   grid-column: 1 / -1;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .ce-side .d-note a {
   color: var(--ink2);

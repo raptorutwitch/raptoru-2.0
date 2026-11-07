@@ -214,13 +214,15 @@ export function twitchStatusView(s: TwitchState | null, error: string | null) {
       : '',
     s.ingestion_enabled
       ? s.ingestion_running
-        ? note(`Ingestion Twitch active (compte ${esc(s.token_login ?? '?')}).`)
+        ? note(
+            `Lecture de Twitch activée (compte ${esc(s.token_login ?? '?')}).`,
+          )
         : note(
-            'Ingestion Twitch activée mais arrêtée : voir la page Simulation.',
+            'Lecture de Twitch activée mais arrêtée : voir la page Simulation.',
             true,
           )
       : note(
-          'Ingestion Twitch coupée (page Simulation) : aucun événement réel n’arrive, quel que soit le mode.',
+          'Lecture de Twitch coupée (page Simulation) : aucun événement réel n’arrive, quel que soit le mode.',
         ),
     s.follow_scope
       ? note('Follows : reçus.')
@@ -281,7 +283,7 @@ export function seStatusView(s: SeStatus | null, error: string | null) {
   return [
     s.resumed_from_active
       ? note(
-          'Profil Lab : Actif n’est pas repris au démarrage de Studio, mode Test (observation). Choisis Actif à nouveau pour jouer les vrais événements. En profil Production, Actif est repris.',
+          'Profil Lab : Actif n’est pas repris au démarrage de Studio, mode Test (observation). Choisis Actif à nouveau pour jouer les vrais événements. En profil Production, Ouvert est repris.',
           true,
         )
       : '',

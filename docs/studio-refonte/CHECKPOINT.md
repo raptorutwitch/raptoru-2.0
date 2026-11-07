@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 06/11/2026 — Direction D « Coulisses » validée par Antoni. Refonte complète en cours, en autonomie : [REDESIGN.md](REDESIGN.md), [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), [BRIEF_PAGES.md](BRIEF_PAGES.md).**
+**Mis à jour : 07/11/2026 — Refonte complète en direction D « Coulisses » livrée dans le Lab, en attente de la recette d'Antoni : [RECETTE_REDESIGN.md](RECETTE_REDESIGN.md), [PARITE.md](PARITE.md). Rien n'est validé tant qu'il n'a pas testé. Règles : [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.

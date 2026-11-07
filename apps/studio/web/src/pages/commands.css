@@ -88,7 +88,7 @@ button.cdx-tile:hover {
 }
 .cdx-f i {
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 .cdx-f.warn i {
   color: var(--amber);
@@ -173,14 +173,14 @@ button.cdx-tile:hover {
   min-width: 0;
 }
 .cdx-li__t b {
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cdx-li__t em {
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -192,7 +192,7 @@ button.cdx-tile:hover {
 .cdx-li__m {
   grid-column: 2;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -207,7 +207,7 @@ button.cdx-tile:hover {
 .cdx-flag {
   display: inline-grid;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .cdx-star {
   width: 24px;
@@ -310,7 +310,7 @@ button.cdx-tile:hover {
   display: block;
   margin-top: 1px;
   color: var(--ink2) !important;
-  font: 400 13px/1.5 var(--text) !important;
+  font: 400 13.5px/1.5 var(--text) !important;
 }
 .cdx-desc::placeholder,
 .cdx-name input::placeholder {
@@ -328,7 +328,7 @@ button.cdx-tile:hover {
 }
 .cdx-acts small {
   grid-column: 1 / -1;
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
 }
 .cdx-alias {
@@ -360,7 +360,7 @@ button.cdx-tile:hover {
   border-radius: 6px;
   outline: 0;
   background: none;
-  font: 400 13px var(--text);
+  font: 400 13.5px var(--text);
 }
 .cdx-chips input:focus {
   background: var(--fill);
@@ -371,7 +371,7 @@ button.cdx-tile:hover {
   gap: 7px;
   margin: 2px 0;
   color: var(--ink2);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .cdx-ro .d-ic {
   color: var(--ink3);
@@ -383,11 +383,11 @@ button.cdx-tile:hover {
   margin-bottom: 8px;
   padding: 8px 10px;
   border-radius: 9px;
-  background: rgb(255 179 92 / 0.08);
+  background: var(--amber-a);
   color: var(--amber);
 }
 .cdx-ban.bad {
-  background: rgb(255 125 125 / 0.08);
+  background: var(--red-a);
   color: var(--red);
 }
 .cdx-ban > .d-ic {
@@ -400,7 +400,7 @@ button.cdx-tile:hover {
   min-width: 0;
 }
 .cdx-ban b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .cdx-ban span {
   color: var(--ink2);
@@ -468,8 +468,8 @@ button.cdx-tile:hover {
   color: var(--mod);
 }
 .cdx-mirror mark.bad {
-  background: rgb(255 125 125 / 0.15);
-  box-shadow: 0 0 0 1.5px rgb(255 125 125 / 0.15);
+  background: var(--red-b);
+  box-shadow: 0 0 0 1.5px var(--red-b);
   color: var(--red);
 }
 .cdx-write textarea {
@@ -484,7 +484,7 @@ button.cdx-tile:hover {
   color: var(--ink3);
 }
 .cdx-write textarea::selection {
-  background: rgb(47 216 196 / 0.28);
+  background: var(--teal-b);
   color: transparent;
 }
 .cdx-vars {
@@ -501,7 +501,7 @@ button.cdx-tile:hover {
   border-radius: 7px;
   background: var(--fill);
   color: var(--ink2);
-  font: 500 12px var(--text);
+  font: 500 12.5px var(--text);
   cursor: pointer;
   transition:
     background 0.12s,
@@ -559,7 +559,7 @@ button.cdx-tile:hover {
   border-radius: 50%;
   background: var(--raise2);
   color: var(--ink2);
-  font: 600 12px var(--num);
+  font: 600 12.5px var(--num);
 }
 .cdx-step.is-reply {
   align-items: center;
@@ -628,11 +628,11 @@ button.cdx-tile:hover {
   align-items: center;
   gap: 5px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .cdx-rule b {
   font-weight: 500;
-  font-size: 13px;
+  font-size: 13.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -692,7 +692,7 @@ button.cdx-tile:hover {
   padding: 5px 8px;
   border-radius: 7px;
   background: var(--fill);
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
 }
 .cdx-syntax small {
   color: var(--ink3);
@@ -726,12 +726,12 @@ button.cdx-tile:hover {
   min-width: 0;
 }
 .cdx-pub b {
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
 }
 .cdx-pub small {
   display: block;
   color: var(--ink2);
-  font-size: 12px;
+  font-size: 12.5px;
   overflow-wrap: anywhere;
 }
 .cdx-icons {
@@ -747,7 +747,7 @@ button.cdx-tile:hover {
   border-radius: 7px;
   background: none;
   color: var(--c);
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
 }
 .cdx-icons button:hover {
@@ -775,7 +775,7 @@ button.cdx-tile:hover {
 }
 .cdx-swatches button.on {
   box-shadow:
-    0 0 0 2px #182332,
+    0 0 0 2px var(--pop),
     0 0 0 3.5px var(--ink);
 }
 .cdx-tgrid {
@@ -789,7 +789,7 @@ button.cdx-tile:hover {
   min-width: 0;
 }
 .cdx-tgrid .d-lb {
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 
 /* --- Faux chat --- */
@@ -815,8 +815,11 @@ button.cdx-tile:hover {
   padding: 0 6px;
   font-size: 11.5px;
 }
+.cdx-chath > span {
+  min-width: 0;
+}
 .cdx-who {
-  max-width: 132px;
+  max-width: min(132px, 100%);
   overflow: hidden;
 }
 .cdx-feed {
@@ -832,7 +835,7 @@ button.cdx-tile:hover {
   padding: 3px 4px;
 }
 .cdx-l b {
-  font-weight: 650;
+  font-weight: 600;
 }
 .cdx-l .cdx-bot {
   color: var(--teal);
@@ -844,7 +847,7 @@ button.cdx-tile:hover {
 .cdx-l small {
   display: block;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .cdx-l .cdx-bad {
   color: var(--red);
@@ -854,7 +857,7 @@ button.cdx-tile:hover {
   padding: 6px 9px;
   border-left: 3px solid var(--teal);
   border-radius: 3px 8px 8px 3px;
-  background: rgb(47 216 196 / 0.08);
+  background: var(--teal-a);
 }
 .cdx-l.ann small {
   font-weight: 600;
@@ -871,7 +874,7 @@ button.cdx-tile:hover {
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--hair2);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .cdx-verdict header {
   display: flex;
@@ -939,7 +942,7 @@ button.cdx-tile:hover {
 .cdx-chatnote {
   margin: 5px 2px 0;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .cdx-chatnote:empty {
   display: none;
@@ -956,7 +959,7 @@ button.cdx-tile:hover {
   width: 26px;
   height: 26px;
   margin-right: 4px;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .cdx-cat .d-fld {
   flex: 1;
@@ -978,7 +981,7 @@ button.cdx-tile:hover {
   flex: none;
 }
 .cdx-rsw.d-lb {
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.03em;
 }
 .cdx-sub {
@@ -1003,23 +1006,23 @@ button.cdx-tile:hover {
   gap: 8px;
   padding: 6px 0;
   border-bottom: 1px solid var(--hair);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .cdx-j time {
   padding-top: 3px;
   color: var(--ink3);
-  font: 500 12px var(--num);
+  font: 500 12.5px var(--num);
 }
 .cdx-j .d-tag {
   height: 20px;
   padding: 0 6px;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .cdx-j small {
   display: block;
   margin-top: 2px;
   color: var(--ink3);
-  font-size: 12px;
+  font-size: 12.5px;
   overflow-wrap: anywhere;
 }
 .cdx-jsteps {
@@ -1056,7 +1059,7 @@ button.cdx-tile:hover {
     bottom: 0;
     z-index: 6;
     width: 316px;
-    box-shadow: -14px 0 40px rgb(0 0 0 / 0.4);
+    box-shadow: -14px 0 40px var(--shade);
   }
 }
 @media (max-width: 1180px) {

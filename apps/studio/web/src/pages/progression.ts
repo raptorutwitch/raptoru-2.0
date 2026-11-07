@@ -434,8 +434,8 @@ export function mountProgressionPage(root: HTMLElement) {
             error ? 'Progression injoignable' : 'Lecture…',
           )
         : st.enabled
-          ? stateChip('', 'Active')
-          : stateChip('off', 'Inactive'),
+          ? stateChip('', 'Activée')
+          : stateChip('off', 'Coupée'),
     );
     patch(
       p.actions,

@@ -12,7 +12,7 @@
 }
 .cat-g {
   break-inside: avoid;
-  padding: 2px 0 12px;
+  padding: 0 0 12px;
 }
 .cat-g h2 {
   margin: 0 0 3px 8px;
@@ -49,7 +49,7 @@
   transition: transform 0.2s var(--spring);
 }
 .cat-m > b {
-  font: 600 14.5px var(--num);
+  font: 600 15px var(--num);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -73,7 +73,7 @@
 }
 .cat-m__s em {
   margin-right: 4px;
-  font: 600 14px var(--num);
+  font: 600 13.5px var(--num);
   font-style: normal;
   color: var(--tint, var(--ink));
 }
@@ -146,7 +146,7 @@
   color: var(--ink3);
 }
 .ac-day:first-child {
-  margin-top: 2px;
+  margin-top: 0;
 }
 .ac-e {
   display: grid;
@@ -205,7 +205,7 @@
 }
 .ac-e b {
   flex: none;
-  font-weight: 550;
+  font-weight: 600;
 }
 .ac-e span {
   min-width: 0;
@@ -247,7 +247,6 @@
   display: grid;
   gap: 18px;
   max-width: 760px;
-  padding-top: 8px;
 }
 .co-find .d-fld {
   width: 100%;
@@ -257,7 +256,7 @@
 }
 .co-find input {
   margin-left: 8px;
-  font-size: 14px !important;
+  font-size: 13.5px !important;
 }
 .co-hits {
   display: grid;
@@ -282,7 +281,7 @@
   background: var(--fill);
 }
 .co-v b {
-  font-weight: 550;
+  font-weight: 600;
 }
 .co-doors {
   display: grid;
@@ -315,14 +314,14 @@
 }
 .co-d__t b {
   display: block;
-  font: 600 16px var(--num);
+  font: 600 15px var(--num);
 }
 .co-d__t small {
   color: var(--ink2);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .co-d em {
-  font: 500 13px var(--num);
+  font: 500 13.5px var(--num);
   font-style: normal;
   color: var(--ink2);
   white-space: nowrap;

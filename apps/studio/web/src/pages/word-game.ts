@@ -170,9 +170,9 @@ export function mountWordGamePage(root: HTMLElement) {
     if (
       action === 'disable' &&
       !(await confirmBox({
-        title: 'Désactiver le Jeu des mots ?',
+        title: 'Fermer le Jeu des mots ?',
         body: 'Plus aucun mot automatique, même après un redémarrage ou un nouveau live, jusqu’à « Activer le jeu ». Les mots déjà affichés restent trouvables jusqu’à la fin du live.',
-        yes: 'Désactiver',
+        yes: 'Fermer',
       }))
     )
       return;

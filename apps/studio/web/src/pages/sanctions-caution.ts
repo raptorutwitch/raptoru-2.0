@@ -120,7 +120,7 @@ export function mountCautionPage(root: HTMLElement) {
           : s.to_verify
             ? stateChip('r', toVerifyText(s.to_verify))
             : !ex || silent
-              ? stateChip('r', 'Exécuteur Twitch absent')
+              ? stateChip('r', 'Bot Twitch absent')
               : s.ready
                 ? stateChip('', 'Prête')
                 : stateChip('w', 'Pas prête'),

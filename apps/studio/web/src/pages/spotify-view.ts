@@ -269,7 +269,7 @@ export function alertsView(s: SpState) {
     out.push(
       `${s.api.quota_exceeded ? 'Quota Spotify dépassé' : 'Spotify limite les appels'} jusqu’à ${hhmm(s.api.limited_until)}`,
     );
-  if (s.studio && !s.studio.fresh) out.push('Studio non vu par le Core');
+  if (s.studio && !s.studio.fresh) out.push('Studio non vu par le serveur');
   if (s.local.error) out.push('Erreur côté Studio');
   return out
     .map(

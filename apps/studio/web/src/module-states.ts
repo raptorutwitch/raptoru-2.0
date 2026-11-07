@@ -45,7 +45,7 @@ export function pageStates(
     out.set(
       m.id.replace(/_/g, '-'),
       m.status.intention === 'off'
-        ? { level: 'off', text: 'Coupé' }
+        ? { level: 'off', text: 'Fermé' }
         : (HOST_STATE[m.status.observed] ?? HOST_STATE.unknown!),
     );
   for (const c of checks ?? []) {

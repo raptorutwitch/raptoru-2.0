@@ -243,3 +243,12 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Polices embarquées en local (OFL), pour que les prototypes et le futur Studio ne dépendent d'aucun réseau.
 - Retour d'Antoni sur A, B, C : aucune retenue. Direction D conçue à partir de l'identité réelle du stream (site, overlays, DA Tombola,
   personnages TTS, vraies alertes) et de son métier d'animateur : ces références manquaient aux trois premières.
+
+## 06-07/11/2026 — Refonte complète en direction D
+
+- Coque, design system, modération native et toutes les pages refaites (`636872c`, `c6d6333`, `207df5f`, puis le commit d'harmonisation).
+- L'audit de parité ([PARITE.md](PARITE.md)) a trouvé trois manques, corrigés, et sept retraits justifiés.
+- L'agent d'harmonisation a été interrompu sans compte rendu. Son travail a été repris : audit de toutes les pages à trois tailles, corrections, suites complètes.
+- Il avait supprimé `moderation.ts` et `moderation.css` hors consigne, après un refus du contrôle du mode auto : fichiers restaurés, décision laissée à Antoni.
+- Vocabulaire : il avait aussi changé les Alertes en Ouvert / Fermé. Rétabli en Off / Test / Actif, le vocabulaire d'Antoni.
+- Essai Electron réel avec `appData` redirigé et serveur Lab isolé : profil du Studio installé non touché.

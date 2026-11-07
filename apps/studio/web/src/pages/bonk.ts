@@ -19,6 +19,7 @@ import {
   run,
   scrub,
   seg,
+  viewersSeg,
   stateChip,
   toast,
 } from '../ds/ds.js';
@@ -406,7 +407,7 @@ export function mountBonkPage(root: HTMLElement) {
                       : 'Source OBS absente',
                   )
                 : st === 'paused'
-                  ? stateChip('w', 'En pause')
+                  ? stateChip('w', 'Pause')
                   : st === 'disabled'
                     ? stateChip('off', 'Fermé aux viewers')
                     : q.recent.some(isLive)
@@ -415,7 +416,7 @@ export function mountBonkPage(root: HTMLElement) {
     patch(p.state, chip);
     patch(
       p.actions,
-      `<span class="d-lb" style="margin-right:-4px">Viewers</span>${seg('data-state', STATES, st)}${panelBtn(p.panel.isOpen())}`,
+      `${viewersSeg('data-state', STATES, st)}${panelBtn(p.panel.isOpen())}`,
     );
   }
   function paintHint() {
@@ -642,7 +643,7 @@ export function mountBonkPage(root: HTMLElement) {
            ? `<div class="d-tags">${counts}</div>
               ${list.length ? `<div class="bk-wall d-scroll">${list.map((e, n) => `<button type="button" data-emote="${n}" title="${esc(e.name)} · ${esc(PROVIDERS[e.provider] ?? e.provider)}" aria-label="Essayer ${esc(e.name)}"><img src="${esc(e.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div>` : ''}
               <button type="button" class="d-btn sm" data-catalog>${ic('repeat')}Actualiser</button>`
-           : `<small>${catalogRead ? 'Catalogue illisible sur ce profil.' : 'Lecture du catalogue…'}</small>`
+           : `<small>${catalogRead ? 'Catalogue non disponible sur ce profil. L’essai utilise les emotes par défaut.' : 'Lecture du catalogue…'}</small>`
        }
        <small>Clique une emote pour l’essayer sur la scène. Emojis et emotes Twitch : chaque viewer choisit les siens dans l’extension.</small></div>`,
       'catalogues',

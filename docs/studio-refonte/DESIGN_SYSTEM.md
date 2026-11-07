@@ -81,3 +81,10 @@ les notifications, les confirmations, le panneau de réglages et la modération 
 `setModuleState`).
 
 Ne pas utiliser : `confirm`, `alert`, `prompt`, `<table>` de formulaire, cases à cocher natives, `rs-page`, classes historiques.
+
+## Vocabulaire des états
+
+- Un module face aux viewers : **Ouvert, Pause, Fermé**.
+- Les sources d'alertes : **Off, Test, Actif**, le vocabulaire d'Antoni. Une alerte ne s'ouvre pas aux viewers, et Test n'a pas d'équivalent ailleurs.
+- Une fonction interne (lecture du chat, sortie chat) : **Activée, Coupée**.
+- `executor` du Core s'écrit **bot Twitch** à l'écran.

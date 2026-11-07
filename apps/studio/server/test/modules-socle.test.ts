@@ -234,7 +234,7 @@ describe('generic module page (pure parts)', () => {
         },
       }),
     );
-    expect(historical).toContain('Coupé.');
+    expect(historical).toContain('Fermé.');
     expect(historical).not.toContain('(réglage)');
     expect(historical).toContain('page « Simulation »');
     expect(
@@ -249,7 +249,7 @@ describe('generic module page (pure parts)', () => {
           },
         }),
       ),
-    ).toContain('Coupé (réglage)');
+    ).toContain('Fermé dans les réglages');
     const row = {
       activity_id: 'a1',
       module_id: 'coffre_mystere',
