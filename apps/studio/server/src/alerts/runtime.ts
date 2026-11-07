@@ -7,7 +7,7 @@ import type { LabCoreCall } from '../lab-moderation/proxy.js';
 import {
   ALERT_MEDIA,
   type AlertMediaStore,
-  USUAL_FOLDERS,
+  findMediaOrigins,
 } from './media-store.js';
 import { AlertPlacementStore } from './placement-store.js';
 import type { SeTipsLink } from './se-tips.js';
@@ -109,6 +109,8 @@ export interface AlertsRuntimeDeps {
   environment?: 'lab' | 'production';
   /** This profile's media folder is its own (the Lab on the main Core): the page may import files into it. */
   mediaImport?: boolean;
+  /** Where to look for media (tests); by default the usual folders and the installed Studio's settings. */
+  mediaOrigins?: { folders?: readonly string[]; config?: string };
 }
 
 /**
@@ -384,11 +386,25 @@ export class AlertsRuntime {
     return used;
   }
 
+  private origins(names: readonly string[]) {
+    return findMediaOrigins(names, this.d.media.dir, this.d.mediaOrigins);
+  }
+
   private async mediaView() {
     const used = await this.mediaNames();
+    const origins = this.d.mediaImport
+      ? await this.origins([...used.keys()])
+      : [];
     return {
       can_import: Boolean(this.d.mediaImport),
-      suggested_folders: USUAL_FOLDERS.filter((f) => existsSync(f)),
+      ...(this.d.mediaImport ? { store_dir: this.d.media.dir } : {}),
+      origins: origins.map(({ id, label, path, reserve, files }) => ({
+        id,
+        label,
+        path,
+        reserve,
+        count: files.size,
+      })),
       media: this.d.media
         .status([...used.keys()])
         .map(({ name, available, bytes, source }) => ({
@@ -397,13 +413,18 @@ export class AlertsRuntime {
           bytes,
           source,
           variants: used.get(name),
+          found_in: origins
+            .filter((o) => o.files.has(name))
+            .map((o) => o.label),
         })),
     };
   }
 
   /**
-   * Lab only. { folder }: every media of the catalogue found in it (by its exact name). { name, file }: one media replaced by
-   * that file. The originals are only read; nothing but the catalogue's names enters the store.
+   * Lab only. { origin: 'all' }: what is still missing, from the usual folders (never the installed Studio's copies).
+   * { origin: <id> }: all that origin holds; the installed Studio's copies are checked against their recorded hash.
+   * { folder }: every media of the catalogue found in it (by its exact name). { name, file }: one media replaced by that
+   * file. The originals are only read; nothing but the catalogue's names enters the store.
    */
   private async importMedia(body: Record<string, unknown>) {
     if (!this.d.mediaImport)
@@ -425,6 +446,25 @@ export class AlertsRuntime {
       if (!existsSync(from))
         throw Object.assign(new Error('file_not_found'), { status: 404 });
       return { report: await this.d.media.import([{ name, from }]) };
+    }
+    if (typeof body.origin === 'string') {
+      const origins = await this.origins([...used.keys()]);
+      const all = body.origin === 'all';
+      const chosen = origins.filter((o) =>
+        all ? !o.reserve : o.id === body.origin,
+      );
+      if (!all && !chosen.length)
+        throw Object.assign(new Error('origin_not_found'), { status: 404 });
+      const picks = new Map<string, { from: string; sha256?: string }>();
+      for (const o of chosen)
+        for (const [name, file] of o.files)
+          if (!picks.has(name) && !(all && this.d.media.path(name)))
+            picks.set(name, file);
+      return {
+        report: await this.d.media.import(
+          [...picks].map(([name, file]) => ({ name, ...file })),
+        ),
+      };
     }
     const folder = path(body.folder);
     if (!existsSync(folder))

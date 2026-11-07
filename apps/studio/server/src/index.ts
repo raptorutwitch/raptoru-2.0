@@ -65,6 +65,7 @@ import {
 import {
   fictionalEmoteSvg,
   labExtensionToken,
+  simulatedPurchase,
   labRoleOf,
   relayToFrontier,
   type LabFrontier,
@@ -732,6 +733,23 @@ export function createStudioServer(o: StudioServerOptions) {
             200,
             await panel.snapshot(Number(url.searchParams.get('since') ?? 0)),
           );
+        if (req.method === 'POST' && url.pathname === '/api/ext-lab/purchase') {
+          const b = (await readJson(req)) as Record<string, unknown>;
+          const reply =
+            labFrontier &&
+            typeof b.viewer_id === 'string' &&
+            typeof b.key === 'string' &&
+            typeof b.module_id === 'string'
+              ? await simulatedPurchase(labFrontier, b.viewer_id, b.key, {
+                  module_id: b.module_id,
+                  payload: b.payload,
+                })
+              : null;
+          if (!reply) return send(res, 400, { error: 'invalid_request' });
+          res.writeHead(reply.status, { 'content-type': reply.contentType });
+          res.end(reply.body);
+          return;
+        }
         const control = /^\/api\/ext-lab\/control\/([a-z-]+)$/.exec(
           url.pathname,
         );

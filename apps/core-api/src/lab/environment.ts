@@ -13,11 +13,15 @@ export const LAB_CHANNEL = Object.freeze({
   login: 'raptoru_lab',
 });
 
-/** The fictional Twitch accounts of the Lab: the Extension Lab's broadcaster, viewer and moderator. */
+/** The fictional Twitch accounts of the Lab: the Extension Lab's broadcaster, viewer and moderator, and the simulators' viewers. */
 export const LAB_TWITCH_USERS = Object.freeze([
   { id: '900100', login: 'raptoru_lab', display_name: 'Raptoru_ (lab)' },
   { id: '900101', login: 'lab_viewer', display_name: 'Viewer Lab' },
   { id: '900102', login: 'lab_modo', display_name: 'Modo Lab' },
+  { id: '900201', login: 'luna_lab', display_name: 'Luna_lab' },
+  { id: '900202', login: 'kiwi_lab', display_name: 'Kiwi_lab' },
+  { id: '900203', login: 'nox_lab', display_name: 'Nox_lab' },
+  { id: '900204', login: 'mila_lab', display_name: 'Mila_lab' },
 ]);
 
 /** Names of the Lab's viewers, in place of Helix: never a request. Unknown ids keep the Core's placeholder name. */

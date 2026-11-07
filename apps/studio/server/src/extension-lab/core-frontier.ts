@@ -34,8 +34,8 @@ export function labExtensionToken(
   role: LabRole,
   identityShared: boolean,
   nowS = Math.floor(Date.now() / 1000),
+  userId = LAB_USER_IDS[role],
 ): string {
-  const userId = LAB_USER_IDS[role];
   const enc = (v: unknown) =>
     Buffer.from(JSON.stringify(v)).toString('base64url');
   const head = `${enc({ alg: 'HS256', typ: 'JWT' })}.${enc({
@@ -48,6 +48,32 @@ export function labExtensionToken(
     pubsub_perms: { listen: ['broadcast', 'global'], send: [] },
   })}`;
   return `${head}.${createHmac('sha256', f.extensionSecret).update(head).digest('base64url')}`;
+}
+
+/** Ids the Lab keeps for its fictional viewers (lab/environment.ts): nothing else may buy through the simulators. */
+const LAB_VIEWER_ID = /^9001\d\d$|^9002\d\d$/;
+
+/**
+ * A fictional viewer buys with Lab Jetons, at the extension's own door: the Core checks, debits, admits or refuses exactly as
+ * for a real purchase. Only the JWT is Studio's, as for every Extension Lab request.
+ */
+export function simulatedPurchase(
+  f: LabFrontier,
+  viewerId: string,
+  key: string,
+  purchase: { module_id: string; payload: unknown },
+) {
+  if (!LAB_VIEWER_ID.test(viewerId)) return null;
+  return relayToFrontier(
+    f,
+    'POST',
+    '/actions/tokens',
+    JSON.stringify(purchase),
+    {
+      authorization: `Bearer ${labExtensionToken(f, 'viewer', true, undefined, viewerId)}`,
+      idempotencyKey: key,
+    },
+  );
 }
 
 /** The image of a fictional emote: its initials on a colour taken from its id. */

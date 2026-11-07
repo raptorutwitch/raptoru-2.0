@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { verifyExtensionJwt } from '../../../core-api/src/ext/twitch-jwt.js';
 import { LAB_TWITCH_USERS } from '../../../core-api/src/lab/environment.js';
 import {
   labExtensionToken,
   labRoleOf,
+  simulatedPurchase,
 } from '../src/extension-lab/core-frontier.js';
 
 // The Extension Lab on the main Core's /v1/ext: the JWT Studio signs is checked by the Core's OWN verifier (the one that
@@ -15,6 +16,33 @@ const f = {
   extensionSecret: randomBytes(32),
   channelId: '900100',
 };
+
+describe('simulated purchase', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('a Lab viewer at the extension door, with the JWT the Core verifies and the idempotency key; nobody else', async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({ url, init });
+      return new Response('{"ok":true}');
+    });
+    const purchase = { module_id: 'tts', payload: { text: 'salut' } };
+    expect(simulatedPurchase(f, '83603689', 'key-12345', purchase)).toBeNull();
+    expect(seen).toEqual([]);
+
+    const reply = await simulatedPurchase(f, '900201', 'key-12345', purchase);
+    expect(reply?.status).toBe(200);
+    expect(seen[0]!.url).toBe(`${f.coreUrl}/v1/ext/actions/tokens`);
+    const h = seen[0]!.init.headers as Record<string, string>;
+    expect(h['idempotency-key']).toBe('key-12345');
+    expect(
+      verifyExtensionJwt(h.authorization!, {
+        secret: f.extensionSecret,
+        channelId: f.channelId,
+      }),
+    ).toMatchObject({ role: 'viewer', userId: '900201' });
+  });
+});
 
 describe('Lab JWT of the Extension Lab', () => {
   it('accepted by the Core for each fictional account; user_id only when the identity is shared', () => {

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  mkdir,
   copyFile,
   mkdtemp,
   readFile,
@@ -11,7 +12,7 @@ import {
 import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AlertMediaStore } from '../src/alerts/media-store.js';
 import { AlertPlacementStore } from '../src/alerts/placement-store.js';
@@ -258,7 +259,11 @@ describe('AlertPlacementStore (calibration, Studio storage)', () => {
 async function setup(
   core: (path: string, body?: unknown) => unknown,
   media: string[] = ['Raid Titan.webm', 'Raptoru_Alerte_Raid_Sound.mp3'],
-  extra: { mediaImport?: boolean; environment?: 'lab' | 'production' } = {},
+  extra: {
+    mediaImport?: boolean;
+    mediaOrigins?: { folders?: readonly string[]; config?: string };
+    environment?: 'lab' | 'production';
+  } = {},
 ) {
   const store = await AlertMediaStore.open(join(await tmp(), 'media'));
   await store.import(
@@ -651,22 +656,27 @@ describe('AlertsRuntime', () => {
     const before = (await stat(join(folder, 'Raid Titan.webm'))).mtimeMs;
     const { origin, store, post } = await setup(catalog, [], {
       mediaImport: true,
+      mediaOrigins: { folders: [folder], config: join(folder, 'nope.json') },
     });
     const media = async () =>
       (await (
         await fetch(`${origin}/api/alerts/media`, { headers: H })
       ).json()) as {
         can_import: boolean;
-        suggested_folders: string[];
+        origins: { id: string; count: number; reserve: boolean }[];
         media: { name: string; available: boolean; variants: string[] }[];
       };
     expect((await media()).can_import).toBe(true);
+    expect((await media()).origins).toMatchObject([
+      { id: 'folder:0', reserve: false, count: 2 },
+    ]);
     expect(
       (await media()).media.find((m) => m.name === 'Halloween Jerry 1.webm'),
     ).toEqual({
       name: 'Halloween Jerry 1.webm',
       available: false,
       variants: ['hw_x'],
+      found_in: [basename(folder)],
     });
     // The Studio header is required, like the rest of the tab's API.
     expect((await post('/api/alerts/media/import', { folder })).status).toBe(
@@ -708,6 +718,90 @@ describe('AlertsRuntime', () => {
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({ error: 'lab_only' });
     expect(other.store.path('Raid Titan.webm')).toBeNull();
+    const noOrigin = await other.post(
+      '/api/alerts/media/import',
+      { origin: 'all' },
+      H,
+    );
+    expect(noOrigin.status).toBe(403);
+    const view = (await (
+      await fetch(`${other.origin}/api/alerts/media`, { headers: H })
+    ).json()) as { origins: unknown[]; store_dir?: string };
+    expect(view.origins).toEqual([]);
+    expect(view.store_dir).toBeUndefined();
+  });
+
+  it('media origins: usual folders on request, the installed Studio only by name, its files checked by hash', async () => {
+    const H = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
+    const catalog = (): unknown => ({
+      variants: [
+        { id: 'raid_default', video: 'Raid Titan.webm', audio: null },
+        { id: 'hw_x', video: 'Halloween Jerry 1.webm', audio: null },
+        { id: 'hw_y', video: 'Halloween Jerry 5.webm', audio: null },
+      ],
+    });
+    const folder = await tmp();
+    await copyFile(
+      join(FIX, 'video-1s.webm'),
+      join(folder, 'halloween jerry 1.WEBM'),
+    );
+    // The installed Studio's storage, as its settings name it.
+    const root = await tmp();
+    const reserve = join(root, 'apps/studio/server/.runtime/alerts/media');
+    await mkdir(reserve, { recursive: true });
+    const bytes = await readFile(join(FIX, 'video-1s.webm'));
+    const sha = createHash('sha256').update(bytes).digest('hex');
+    await writeFile(join(reserve, `${sha}.webm`), bytes);
+    await writeFile(join(reserve, `bad.webm`), 'altered');
+    await writeFile(
+      join(reserve, 'manifest.json'),
+      JSON.stringify({
+        files: {
+          'Raid Titan.webm': { file: `${sha}.webm`, sha256: sha },
+          'Halloween Jerry 5.webm': { file: 'bad.webm', sha256: sha },
+        },
+      }),
+    );
+    const config = join(root, 'studio.json');
+    await writeFile(config, JSON.stringify({ dataRoot: root }));
+    const { store, post } = await setup(catalog, [], {
+      mediaImport: true,
+      mediaOrigins: { folders: [folder], config },
+    });
+    const send = async (origin: string) =>
+      (await (
+        await post('/api/alerts/media/import', { origin }, H)
+      ).json()) as { report: { name: string; result: string }[] };
+
+    // Every usual folder, never the installed Studio; the name is found despite its case.
+    const all = await send('all');
+    expect(all.report).toMatchObject([
+      { name: 'Halloween Jerry 1.webm', result: 'copied' },
+    ]);
+    expect(store.path('Raid Titan.webm')).toBeNull();
+    // What is already there is not read again.
+    expect((await send('all')).report).toEqual([]);
+    // The installed Studio on an explicit request: a file that lost its hash stays out; its folder is not written.
+    const before = await readdir(reserve);
+    const reserved = await send('reserve');
+    expect(reserved.report).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Raid Titan.webm',
+          result: 'unchanged', // same bytes as the file already stored: content-addressed
+        }),
+        expect.objectContaining({
+          name: 'Halloween Jerry 5.webm',
+          result: 'corrupt',
+        }),
+      ]),
+    );
+    expect(store.path('Raid Titan.webm')).not.toBeNull();
+    expect(store.path('Halloween Jerry 5.webm')).toBeNull();
+    expect(await readdir(reserve)).toEqual(before);
+    expect(
+      (await post('/api/alerts/media/import', { origin: 'nope' }, H)).status,
+    ).toBe(404);
   });
 
   it('replay: the visual replay of the dock, on the profile of this Studio, one key per click', async () => {

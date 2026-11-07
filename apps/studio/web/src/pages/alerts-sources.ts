@@ -96,10 +96,19 @@ export interface MediaEntry {
   bytes?: number;
   source?: string;
   variants?: string[];
+  found_in?: string[];
+}
+export interface MediaOrigin {
+  id: string;
+  label: string;
+  path: string;
+  reserve: boolean;
+  count: number;
 }
 export interface MediaView {
   can_import: boolean;
-  suggested_folders: string[];
+  store_dir?: string;
+  origins: MediaOrigin[];
   media: MediaEntry[];
 }
 
@@ -354,28 +363,84 @@ export function dockPanelView(
     ${note(`${esc(FEED[info.feed?.state ?? ''] ?? 'État inconnu')}${info.feed?.error ? ` (${esc(info.feed.error)})` : ''} · ${info.clients ?? 0} dock(s) ouvert(s)`)}`;
 }
 
-/** Les médias : combien sont là, lesquels manquent, et dans le Lab comment les ramener. */
+type ImportLine = {
+  name: string;
+  result: 'copied' | 'unchanged' | 'missing' | 'corrupt';
+};
+export interface ImportReport {
+  lines: ImportLine[];
+  where: string;
+}
+
+const whyMissing = (x: MediaEntry) => {
+  if (x.found_in?.length) return `Trouvé : ${x.found_in.join(', ')}.`;
+  if (x.name === 'Raid Titan.webm')
+    return 'Absent des dossiers : il se fabrique depuis « Titan Avi 4.avi ». Utilise la copie du Studio installé, ou l’outil d’import.';
+  return 'Introuvable ici. Indique le dossier qui le contient, ou remplace-le depuis l’aperçu.';
+};
+
+const reportView = (r: ImportReport | null) => {
+  if (!r) return '';
+  const n = (k: ImportLine['result']) =>
+    r.lines.filter((x) => x.result === k).length;
+  const bad = r.lines.filter(
+    (x) => x.result === 'missing' || x.result === 'corrupt',
+  );
+  const parts = [
+    `${n('copied')} copié(s)`,
+    `${n('unchanged')} déjà là`,
+    ...(n('missing') ? [`${n('missing')} absent(s)`] : []),
+    ...(n('corrupt') ? [`${n('corrupt')} refusé(s)`] : []),
+  ];
+  return `<p class="d-note ${bad.length ? 'bad' : 'alr-ok'}">${esc(r.where)} : ${parts.join(', ')}.</p>${
+    n('corrupt')
+      ? note(
+          'Refusé : le fichier ne correspond plus à son empreinte enregistrée. Il n’a pas été copié.',
+          true,
+        )
+      : ''
+  }`;
+};
+
+/** Les médias : ce que le catalogue attend, où chaque fichier a été trouvé sur ce PC, ce qui manque et quoi faire. */
 export function mediaPanelView(
   m: MediaView | null,
   fallback: AlertsState['media'],
   folder: string,
-  report: string,
+  report: ImportReport | null,
 ) {
   const list: MediaEntry[] = m?.media ?? fallback;
   const missing = list.filter((x) => !x.available);
   const head = `<p class="d-note${missing.length ? ' bad' : ' alr-ok'}">${list.length - missing.length} sur ${list.length} médias présents.</p>`;
-  const names = missing.length
-    ? `<details class="d-acc" ${missing.length < 6 ? 'open' : ''}><summary>${missing.length} média(s) manquant(s)</summary><ul class="alr-miss-l">${missing.map((x) => `<li>${esc(x.name)}${x.variants?.length ? `<small>${x.variants.length} variante(s)</small>` : ''}</li>`).join('')}</ul></details>`
-    : '';
-  if (!m?.can_import)
+  if (!m?.can_import) {
+    const names = missing.length
+      ? `<details class="d-acc" ${missing.length < 6 ? 'open' : ''}><summary>${missing.length} média(s) manquant(s)</summary><ul class="alr-miss-l">${missing.map((x) => `<li>${esc(x.name)}${x.variants?.length ? `<small>${x.variants.length} variante(s)</small>` : ''}</li>`).join('')}</ul></details>`
+      : '';
     return `${head}${names}${note('Une alerte dont le média manque n’est pas jouée à moitié : elle est notée en échec, ou la variante habituelle la remplace pour Halloween.')}`;
-  return `${head}${names}
-    <div class="d-row col" data-k="dossier importer média fichiers"><span>Dossier de tes fichiers</span><label class="d-fld alr-line"><input type="text" data-folder value="${esc(folder)}" placeholder="C:\\...\\Version webm" aria-label="Dossier des médias" spellcheck="false"></label></div>
-    ${m.suggested_folders.length > 1 ? `<div class="d-tags">${m.suggested_folders.map((f) => `<button type="button" class="d-tag ${f === folder ? '' : 'off'}" data-folder-pick="${esc(f)}" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</button>`).join('')}</div>` : ''}
-    <div class="alr-url"><button type="button" class="d-btn sm pri" data-s="media-import">${ic('upload')}Importer dans le Lab</button></div>
-    ${report ? `<p class="d-note">${esc(report)}</p>` : ''}
-    ${missing.some((x) => x.name === 'Raid Titan.webm') ? note('Raid Titan.webm se fabrique depuis « Titan Avi 4.avi » avec l’outil d’import : il n’existe dans aucun dossier tel quel. Sans lui, le Raid reste en média manquant.') : ''}
-    ${note('Copie les fichiers du catalogue, par leur nom exact, dans les données du Lab. Tes originaux sont seulement lus. Rien ne va en Production. Un autre dossier complète le premier.')}`;
+  }
+  const folders = m.origins.filter((o) => !o.reserve);
+  const reachable = missing.filter((x) =>
+    x.found_in?.some((f) => folders.some((o) => o.label === f)),
+  ).length;
+  const originRow = (o: MediaOrigin) =>
+    `<li class="alr-orig"><div><b>${esc(o.label)}</b><small title="${esc(o.path)}">${o.reserve ? 'Lecture seule, empreinte vérifiée' : esc(o.path)}</small></div><span>${o.count} fichier${o.count > 1 ? 's' : ''}</span><button type="button" class="d-btn sm" data-s="media-origin" data-origin="${esc(o.id)}" ${o.count ? '' : 'disabled'}>Importer</button></li>`;
+  const missList = missing.length
+    ? `<details class="d-acc" ${missing.length < 6 ? 'open' : ''}><summary>${missing.length} média(s) manquant(s) : raisons</summary><ul class="alr-miss-l col">${missing.map((x) => `<li><b>${esc(x.name)}</b><small>${esc(whyMissing(x))}</small></li>`).join('')}</ul></details>`
+    : '';
+  const present = list.filter((x) => x.available);
+  const okList = present.length
+    ? `<details class="d-acc"><summary>${present.length} média(s) dans le Lab</summary><ul class="alr-miss-l">${present.map((x) => `<li>${esc(x.name)}${x.variants?.length ? `<small>${x.variants.length} variante(s)</small>` : ''}</li>`).join('')}</ul></details>`
+    : '';
+  return `${head}
+    ${reachable ? `<div class="alr-url"><button type="button" class="d-btn sm pri" data-s="media-all">${ic('upload')}Importer les ${reachable} fichiers trouvés</button></div>` : ''}
+    ${reportView(report)}
+    <ul class="alr-origs">${m.origins.map(originRow).join('')}</ul>
+    ${missList}${okList}
+    <details class="d-acc"><summary>Autre dossier</summary>
+      <div class="d-row col" data-k="dossier importer média fichiers"><label class="d-fld alr-line"><input type="text" data-folder value="${esc(folder)}" placeholder="C:\\...\\Version webm" aria-label="Dossier des médias" spellcheck="false"></label></div>
+      <div class="alr-url"><button type="button" class="d-btn sm" data-s="media-import">${ic('upload')}Importer ce dossier</button></div>
+    </details>
+    ${note(`Tes fichiers sont seulement lus, jamais déplacés. Les copies vont dans les données du Lab : ${m.store_dir ?? ''}. Rien ne va en Production.`)}`;
 }
 
 // --- Le panneau ----------------------------------------------------------------------------------------------------------------
@@ -412,7 +477,7 @@ export function mountSources(
   let dockShown = false;
   let media: MediaView | null = null;
   let folder = '';
-  let report = '';
+  let report: ImportReport | null = null;
   let seResult = '';
   let admin: HalloweenAdmin | null = null;
 
@@ -544,7 +609,6 @@ export function mountSources(
   };
   const readMedia = async () => {
     media = await tryGetJson<MediaView>('/api/alerts/media');
-    if (media && !folder) folder = media.suggested_folders[0] ?? '';
   };
   const readAdmin = async () => {
     admin = await tryGetJson<HalloweenAdmin>('/api/halloween/admin');
@@ -598,12 +662,6 @@ export function mountSources(
     const t = ev.target as HTMLElement;
     const tw = t.closest<HTMLElement>('[data-tw2]')?.dataset.tw2;
     if (tw) return void setTwitch(tw as TwitchState['mode']);
-    const pick =
-      t.closest<HTMLElement>('[data-folder-pick]')?.dataset.folderPick;
-    if (pick) {
-      folder = pick;
-      return paint();
-    }
     const sm = t.closest<HTMLElement>('[data-se-mode]')?.dataset.seMode;
     if (sm) return void setSeMode(sm);
     const btn = t.closest<HTMLElement>('[data-s]');
@@ -637,21 +695,15 @@ export function mountSources(
         );
         paint();
       });
-    if (a === 'media-import') {
-      folder =
-        body.querySelector<HTMLInputElement>('[data-folder]')?.value.trim() ??
-        '';
-      return void run(
+    const importing = (body: object, where: string) =>
+      void run(
         btn,
         async () => {
-          const r = await postJson<{ report: { result: string }[] }>(
+          const r = await postJson<{ report: ImportLine[] }>(
             '/api/alerts/media/import',
-            { folder },
+            body,
           );
-          const copied = r.report.filter((x) => x.result === 'copied').length;
-          const same = r.report.filter((x) => x.result === 'unchanged').length;
-          const miss = r.report.filter((x) => x.result === 'missing').length;
-          report = `${copied} copié(s), ${same} déjà là, ${miss} absent(s) de ce dossier.`;
+          report = { lines: r.report, where };
           await readMedia();
           d.onMedia();
           (document.activeElement as HTMLElement | null)?.blur();
@@ -660,10 +712,31 @@ export function mountSources(
         undefined,
         {
           folder_not_found: 'Ce dossier n’existe pas.',
+          origin_not_found: 'Cet emplacement a disparu : recharge la page.',
           bad_path: 'Donne le chemin complet du dossier.',
           lab_only: 'L’import n’existe que dans le Lab.',
         },
       );
+    if (a === 'media-import') {
+      folder =
+        body.querySelector<HTMLInputElement>('[data-folder]')?.value.trim() ??
+        '';
+      return importing({ folder }, 'Dossier importé');
+    }
+    if (a === 'media-all') return importing({ origin: 'all' }, 'Import');
+    if (a === 'media-origin') {
+      const o = media?.origins.find((x) => x.id === btn.dataset.origin);
+      if (!o) return;
+      if (!o.reserve) return importing({ origin: o.id }, o.label);
+      return void confirmBox({
+        title: 'Importer depuis le Studio installé ?',
+        body: `Studio lit ${o.count} fichiers dans ${o.path} et les copie dans le Lab. Rien n’y est modifié. Un fichier dont l’empreinte ne correspond pas est refusé.`,
+        yes: 'Importer',
+        no: 'Annuler',
+        danger: false,
+      }).then((yes) => {
+        if (yes) importing({ origin: o.id }, o.label);
+      });
     }
     if (a === 'se-forget' && bridge)
       return void bridge.forget().then(async () => {

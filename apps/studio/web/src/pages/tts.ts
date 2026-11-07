@@ -41,6 +41,12 @@ import {
   type ModItem,
 } from '../mod/mod.js';
 import { setNavCount } from '../shell/shell.js';
+import {
+  creditLab,
+  labBalance,
+  labViewer,
+  viewerOptions,
+} from '../lab-viewers.js';
 import { mountScene, type Scene } from './tts-stage.js';
 
 // Le TTS : la scène montre ce que voit OBS, la file se lit et se modère, les prix se règlent sur la règle graduée. Prix et limites
@@ -71,6 +77,7 @@ interface Queue {
 }
 interface Player {
   enabled: boolean;
+  can_simulate?: boolean;
   ready?: boolean;
   player?: { voices: number; seen_ms_ago: number } | null;
   overlayUrl?: string;
@@ -104,22 +111,47 @@ export function mountTtsPage(root: HTMLElement) {
       <div class="tts-qfoot" data-z="qfoot"></div>
     </section>
     <section class="tts-tarif" aria-label="Prix selon la longueur">
-      <div class="tts-line"><span class="d-lb">Prix selon la longueur</span><span class="d-sp"></span><span data-z="apply"></span></div>
-      <form class="tts-line" data-try>
-        <label class="d-fld tts-tryin">${ic('chat')}<input type="text" data-test placeholder="Écris un message : la règle montre son prix" aria-label="Message de test" maxlength="2000"></label>
-        <span class="tts-read" data-z="read"></span>
-        <label class="d-fld tts-cast"><select data-char aria-label="Personnage"></select></label>
-        <label class="d-fld tts-cast"><select data-voice aria-label="Voix"></select></label>
-        <button class="d-btn" data-readbtn type="submit">${ic('play')}Lire</button>
+      <form class="tts-try" data-try>
+        <div class="tts-line">
+          <label class="d-fld tts-tryin">${ic('chat')}<input type="text" data-test placeholder="Écris un message de test" aria-label="Message de test" maxlength="2000"></label>
+          <span class="tts-read" data-z="read"></span>
+        </div>
+        <div class="tts-ways">
+          <div class="tts-way" title="Voix et personnage sur cette page. Aucun achat, rien n’entre en file.">
+            <span class="d-lb">Écouter ici</span>
+            <label class="d-fld tts-cast"><select data-char aria-label="Personnage"></select></label>
+            <label class="d-fld tts-cast"><select data-voice aria-label="Voix"></select></label>
+            <button class="d-btn" data-readbtn type="submit">${ic('play')}Écouter</button>
+          </div>
+          <div class="tts-way" data-z="buy" hidden title="Un viewer fictif achète ce message : le Core du Lab débite ses Jetons Lab, le met en file, et le lecteur le joue.">
+            <span class="d-lb">Achat simulé</span>
+            <label class="d-fld tts-cast"><select data-viewer aria-label="Viewer fictif">${viewerOptions()}</select></label>
+            <span class="tts-bal" data-z="bal"></span>
+            <button class="d-btn pri" type="button" data-buy>${ic('coin')}Simuler l’achat</button>
+          </div>
+        </div>
       </form>
+      <div class="tts-line"><span class="d-lb">Prix selon la longueur</span><span class="d-sp"></span><span data-z="apply"></span></div>
       <div class="tts-rule" data-z="rule"></div>
     </section>
   </div>`;
   const z = (k: string) =>
     p.body.querySelector<HTMLElement>(`[data-z="${k}"]`)!;
+  const buyBtn = p.body.querySelector<HTMLElement>('[data-buy]')!;
+  buyBtn.addEventListener('click', () => void simulateBuy(buyBtn));
+  z('bal').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-credit]');
+    if (b)
+      void run(
+        b,
+        () => creditLab(viewerSel.value, 50_000).then(readBalance),
+        '50 000 Jetons Lab ajoutés.',
+      );
+  });
   const input = p.body.querySelector<HTMLInputElement>('[data-test]')!;
   const charSel = p.body.querySelector<HTMLSelectElement>('[data-char]')!;
   const voiceSel = p.body.querySelector<HTMLSelectElement>('[data-voice]')!;
+  const viewerSel = p.body.querySelector<HTMLSelectElement>('[data-viewer]')!;
 
   let q: Queue | null = null;
   let qError = '';
@@ -179,11 +211,22 @@ export function mountTtsPage(root: HTMLElement) {
       qError = errText(e);
     }
     player = await tryGetJson<Player>('/api/tts-lab/status');
+    z('buy').hidden = !player?.can_simulate;
+    if (player?.can_simulate) void readBalance();
     setNavCount('tts', q?.waiting.length ? String(q.waiting.length) : null);
     if (p.panel.isOpen()) paintPanel();
     if (tab === 'past') void readPast();
     refreshOpenItem();
     paint();
+  }
+  async function readBalance() {
+    const n = await labBalance(viewerSel.value);
+    patch(
+      z('bal'),
+      n === null
+        ? ''
+        : `<b>${fmt(n)}</b> Jetons Lab <button type="button" class="d-btn ghost sm" data-credit title="Ajoute 50 000 Jetons Lab à ce viewer fictif">+50 000</button>`,
+    );
   }
   async function readPast() {
     const r = await modGet<{ items: ModItem[] }>(
@@ -243,7 +286,7 @@ export function mountTtsPage(root: HTMLElement) {
       : globalPaused
         ? stateChip('w', 'Pause globale')
         : !up
-          ? stateChip('w', seen ? 'Lecteur sans voix' : 'Lecteur OBS absent')
+          ? stateChip('w', seen ? 'Lecteur sans voix' : 'Aucun lecteur')
           : st === 'paused'
             ? stateChip('w', 'Pause')
             : st === 'disabled'
@@ -266,7 +309,7 @@ export function mountTtsPage(root: HTMLElement) {
       !player
         ? ''
         : !up
-          ? `<b>Le lecteur OBS ne répond pas</b><span>Les messages attendent, rien n’est perdu.</span><button type="button" class="d-btn sm" data-open-source>Voir la source</button>`
+          ? `<b>Aucun lecteur ouvert</b><span>${player.can_simulate ? 'Le Core refuse un achat sans lecteur. OBS n’est pas nécessaire dans le Lab : Studio peut lire lui-même.' : 'Les messages attendent, rien n’est perdu.'}</span>${player.can_simulate ? '<button type="button" class="d-btn sm pri" data-here>Lire dans Studio</button>' : ''}<button type="button" class="d-btn sm" data-open-source>Voir la source OBS</button>`
           : '<span>Personne ne parle pour l’instant.</span>',
     );
   }
@@ -655,12 +698,61 @@ export function mountTtsPage(root: HTMLElement) {
       },
       () => {
         testing = false;
-        btn.innerHTML = `${ic('play')}Lire`;
+        btn.innerHTML = `${ic('play')}Écouter`;
         paintHint();
       },
     );
   });
   input.addEventListener('input', paintRule);
+  viewerSel.addEventListener('change', () => void readBalance());
+  /** Le lecteur de Studio, s'il n'y en a aucun : le Core n'admet rien sans lecteur prêt. */
+  async function needPlayer() {
+    if (player?.ready) return true;
+    if (!studioPlayer) toggleStudioPlayer();
+    for (let i = 0; i < 16 && !player?.ready; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      player = await tryGetJson<Player>('/api/tts-lab/status');
+    }
+    paintHead();
+    paintHint();
+    return !!player?.ready;
+  }
+  async function simulateBuy(btn: HTMLElement) {
+    const text = input.value.trim();
+    if (!text) return input.focus();
+    const v = labViewer(viewerSel.value);
+    await run(
+      btn,
+      async () => {
+        if (!(await needPlayer()))
+          throw Object.assign(new Error('no_player'), { code: 'no_player' });
+        await postJson('/api/ext-lab/purchase', {
+          viewer_id: v.id,
+          key: crypto.randomUUID(),
+          module_id: 'tts',
+          payload: { text },
+        });
+        input.value = '';
+        paintRule();
+        slow.now();
+      },
+      `${v.name} a acheté ce TTS : il est en file.`,
+      {
+        no_player:
+          'Le lecteur de Studio n’a trouvé aucune voix sur ce PC. Ouvre la source OBS, ou vérifie les voix Windows.',
+        viewer_busy: `${v.name} a déjà un message en attente : choisis un autre viewer.`,
+        viewer_cooldown: `${v.name} est encore en délai. Choisis un autre viewer, ou retire son délai en Modération.`,
+        insufficient_funds: `${v.name} n’a pas assez de Jetons Lab : ajoute-lui des Jetons.`,
+        stream_offline:
+          'Le TTS se paie pendant le live : démarre un live simulé (Simulation, barre latérale).',
+        tts_paused: 'Le TTS est en pause : passe-le à Ouvert.',
+        tts_disabled: 'Le TTS est fermé : passe-le à Ouvert.',
+        global_pause: 'La pause globale est active.',
+        lab_only: 'Dans le Lab seulement.',
+      },
+    );
+    void readBalance();
+  }
   p.root.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement;
     const g = t.dataset.g;
