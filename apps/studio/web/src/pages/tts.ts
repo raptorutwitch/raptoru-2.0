@@ -470,7 +470,7 @@ export function mountTtsPage(root: HTMLElement) {
        ${numrow('Délai entre deux TTS', fld('data-g="transition_gap_ms" step="100" min="0"', d.transition_gap_ms, 'ms'), 'pause transition')}
        ${numrow('Simultanés par viewer', fld('data-g="max_per_viewer" min="1"', d.max_per_viewer), 'limite')}`,
     )}
-    ${grp('Message', 'chat', numrow('Longueur maximale', fld('data-g="max_chars" step="50" min="1"', d.max_chars, 'car'), 'caractères'))}
+    ${grp('Message', 'chat', numrow('Longueur maximale', fld('data-g="max_chars" step="50" min="1" max="10000"', d.max_chars, 'car'), 'caractères'))}
     ${grp(
       'Source OBS',
       'eye',
@@ -551,7 +551,7 @@ export function mountTtsPage(root: HTMLElement) {
     const d = draft;
     const t = d.tiers[i]!;
     const html = `<div class="d-form"><h3>${t.min} à ${t.max ?? '∞'} caractères</h3>
-      ${t.max === null ? '' : `<div class="d-row"><span>Jusqu’à</span>${fld(`data-limit min="${t.min}" max="${d.tiers[i + 1]?.max ? d.tiers[i + 1]!.max! - 1 : 100_000}" step="1"`, t.max, 'car.')}</div>`}
+      ${t.max === null ? '' : `<div class="d-row"><span>Jusqu’à</span>${fld(`data-limit min="${t.min}" max="${d.tiers[i + 1]?.max ? d.tiers[i + 1]!.max! - 1 : d.max_chars}" step="1"`, t.max, 'car.')}</div>`}
       <div class="d-row"><span>Prix</span>${fld('data-e="price" step="250" min="0"', t.price, 'J')}</div>
       <div class="d-row"><span>Crédits TTS</span>${fld('data-e="credit_cost" min="0"', t.credit_cost, 'cr')}</div>
       <div class="d-row"><span>Attente du viewer</span>${fld('data-e="cooldown_seconds" step="15" min="0"', t.cooldown_seconds, 's')}</div>
