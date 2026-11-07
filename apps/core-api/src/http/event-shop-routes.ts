@@ -96,6 +96,13 @@ export function eventShopRoutes(
         mapped(() => shop.viewerHistory(channel(params[0]!), params[1]!)),
     },
     {
+      // Chaudron des subs (docs/HALLOWEEN.md § 13): the goal and its progress, read by Studio for its OBS page.
+      method: 'GET',
+      pattern: at('/channels/(\\d{1,32})/cauldron'),
+      auth,
+      handle: ({ params }) => shop.cauldron(channel(params[0]!)),
+    },
+    {
       method: 'POST',
       pattern: at('/channels/(\\d{1,32})/settings'),
       auth,
