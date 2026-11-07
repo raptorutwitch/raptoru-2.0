@@ -603,15 +603,22 @@ export function page(
     /* préférence d'affichage seulement */
   }
   const isFolded = (t: string) => folds[t] ?? !!o.folded?.includes(t);
+  // Le titre reste un titre (lecteurs d'écran, tests) ; un vrai bouton à l'intérieur porte le repli.
   const paintFolds = () =>
     pbody?.querySelectorAll<HTMLElement>(':scope > .d-grp').forEach((g) => {
       const h = g.querySelector<HTMLElement>(':scope > h3');
       if (!h) return;
+      let btn = h.querySelector<HTMLButtonElement>(':scope > .d-fold');
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'd-fold';
+        btn.append(...h.childNodes);
+        h.append(btn);
+      }
       const t = h.textContent?.trim() ?? '';
       g.classList.toggle('is-folded', isFolded(t));
-      h.tabIndex = 0;
-      h.setAttribute('role', 'button');
-      h.setAttribute('aria-expanded', String(!isFolded(t)));
+      btn.setAttribute('aria-expanded', String(!isFolded(t)));
     });
   const fold = (h: HTMLElement) => {
     const t = h.textContent?.trim() ?? '';
@@ -624,17 +631,10 @@ export function page(
     paintFolds();
   };
   pbody?.addEventListener('click', (e) => {
-    const h = (e.target as HTMLElement).closest<HTMLElement>(
-      ':scope > .d-grp > h3',
-    );
+    const h = (e.target as HTMLElement)
+      .closest<HTMLElement>('.d-fold')
+      ?.closest<HTMLElement>('h3');
     if (h && pbody.contains(h)) fold(h);
-  });
-  pbody?.addEventListener('keydown', (e) => {
-    const h = e.target as HTMLElement;
-    if ((e.key === 'Enter' || e.key === ' ') && h.matches('.d-grp > h3')) {
-      e.preventDefault();
-      fold(h);
-    }
   });
   const filter = () => {
     const s = (find?.value ?? '').toLowerCase().trim();

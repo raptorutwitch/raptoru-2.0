@@ -788,9 +788,25 @@ button.d-tag:hover {
   font-size: 13px;
 }
 /* Panneau de réglages : une section se replie sur son titre ; la recherche l'ignore. */
-.d-panel__b > .d-grp > h3 {
+.d-fold {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
   cursor: pointer;
-  user-select: none;
+}
+.d-fold:focus-visible {
+  outline: 2px solid var(--mod);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .d-panel__b > .d-grp > h3::after {
   content: '';
