@@ -1,6 +1,6 @@
 # Refonte de Raptoru Studio — checkpoint
 
-**Mis à jour : 07/11/2026 — Consolidation après la recette d'Antoni : [CONSOLIDATION.md](CONSOLIDATION.md), [RECETTE_CONSOLIDATION.md](RECETTE_CONSOLIDATION.md), [PARITE.md](PARITE.md). Direction D validée par Antoni ; migration et Production non validées. Règles : [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).**
+**Mis à jour : 07/11/2026 — Mission finale (finitions, socle modulaire, préparation de la migration) : [FINALISATION.md](FINALISATION.md), recette [RECETTE_FINALE.md](RECETTE_FINALE.md), livraison [LIVRAISON.md](LIVRAISON.md) § 9, données [MIGRATION_DONNEES.md](MIGRATION_DONNEES.md). Avant : consolidation ([CONSOLIDATION.md](CONSOLIDATION.md)). Direction D validée par Antoni ; migration et Production non validées. Règles : [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si
 le travail touche au comportement d'un module.

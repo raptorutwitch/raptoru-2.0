@@ -26,6 +26,25 @@ confirmation en Production) ; le simulateur Spotify passe des réglages à la pa
 Bloqué, limite réelle : ajouter ou remplacer un son du Soundboard (banque livrée avec le Core et l'extension). À arbitrer :
 le code mort ci-dessous.
 
+## Mission finale du 07/11 (après la recette de la consolidation)
+
+Rien de supprimé, aucune règle métier déplacée hors du Core. Détail : [FINALISATION.md](FINALISATION.md).
+
+| Élément | Statut | Ce qui change |
+|---|---|---|
+| Tirage du Ballon (Halloween) | préservé, corrigé | La dernière animation d'un tirage ne pouvait pas être retirée (le Core en garde une), mais l'écran la montrait décochée, puis recochée au retour. Elle est maintenant verrouillée et expliquée, sur Alertes comme sur Halloween |
+| Navigation | amélioré | Retour / Suivant, Alt + flèches, boutons latéraux de la souris ; position de défilement gardée |
+| TTS, achat simulé | amélioré | Solde de chaque viewer fictif, prix du message selon le Core, raison d'un refus (le code brut `insufficient_tokens` s'affichait), crédit de tous les viewers |
+| Tombola, résultat | amélioré | « Terminer » devient « Fermer le résultat » (n'a jamais touché la manche) ; retour seul à la préparation une minute après la fin |
+| Tombola, réglages | amélioré | Sections repliables, avancées repliées ; aucun réglage retiré ; la recherche montre tout |
+| Modération | amélioré | Files à la hauteur de leur contenu, tableau de l'équipe sans défilement latéral, « Portefeuille » au lieu de « Wallet » à l'écran (contrats et données inchangés) |
+| Récompenses Twitch | amélioré | Récompense sur Twitch, règle de Raptoru et demandes séparées ; Twitch et OBS du Lab dits fictifs, pas en panne |
+| Simulation | amélioré | Viewer choisi en haut, rôle du live fictif expliqué, événements envoyés listés |
+| Activité, Communauté | amélioré | Début / fin de live notés « Live » ; classement vide expliqué |
+| Bornes TTS | corrigé | Longueurs bornées comme le Core (10 000 caractères, au lieu de 100 000 acceptés puis refusés) |
+| Son des Bits | préservé | La vidéo des Bits n'a jamais eu de piste son ni de MP3 (vérifié) : l'écran dit « aucun fichier son » au lieu de « son de la vidéo » |
+| Raid Titan | préservé | Seul exemplaire dans la copie du Studio installé ; le panneau dit d'où il vient et comment l'importer |
+
 ## Audit mécanique du 06/11
 
 Audit du 06/11/2026, contre `5d63087`. Toutes les anciennes pages, y compris la console de modération de l'extension
