@@ -123,7 +123,12 @@ export function mergeFeed(
     ...audit.map((a): FeedItem => ({
       at: a.created_at,
       kind: 'moderation',
-      title: a.module_id ? labels(a.module_id) : 'Modération',
+      // Début et fin de live : un événement du stream, pas du module qui l'a déclenché (Tombola, Roue…).
+      title: /^stream_(start|end)$/.test(a.action)
+        ? 'Live'
+        : a.module_id
+          ? labels(a.module_id)
+          : 'Modération',
       text: [
         ...(/^(studio(:|$)|system$)/.test(a.actor) ? [] : [a.actor]),
         AUDIT_FR[a.action] ?? a.action,

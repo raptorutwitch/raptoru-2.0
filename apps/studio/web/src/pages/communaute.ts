@@ -123,7 +123,7 @@ export function mountCommunaute(root: HTMLElement): HubView {
                   `<button type="button" class="co-v" data-viewer="${esc(r.twitchUserId)}"><em>${r.rank}</em>${pp(r.displayName, 26)}<b>${esc(r.displayName)}</b><small>Niveau ${fmt(r.level)} · ${fmt(r.xp)} XP</small></button>`,
               )
               .join('')
-          : '<p class="d-empty">Personne au classement pour l’instant.</p>',
+          : '<p class="d-empty">Personne au classement pour l’instant : l’XP se gagne pendant le live, quand le comptage est actif. Règles et comptage : <a href="/?p=progression">Progression</a>.</p>',
     );
   }, 15000);
 
