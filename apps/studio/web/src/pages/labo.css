@@ -351,8 +351,39 @@ button:hover > .lb-sil {
 }
 .sc-compose {
   display: grid;
-  grid-template-columns: 190px 112px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
+}
+.sm-who {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.sm-who .d-fld {
+  height: 32px;
+}
+.sm-who select {
+  color: var(--ink);
+}
+.sm-sent {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--ink2);
+}
+.sm-sent li {
+  padding: 2px 0;
+}
+.sm-sent time {
+  margin-right: 6px;
+  color: var(--ink3);
+  font: 500 12px var(--num);
+}
+.sm-sent b {
+  color: var(--ink);
+  font-weight: 600;
 }
 .sc-compose .d-fld {
   height: 32px;

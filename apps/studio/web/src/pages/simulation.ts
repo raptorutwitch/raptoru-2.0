@@ -1,4 +1,4 @@
-import { esc, ic, page, patch, poller, run, stateChip } from '../ds/ds.js';
+import { esc, hhmm, ic, page, patch, poller, run, stateChip } from '../ds/ds.js';
 import { labOnMainCore, postJson } from '../http.js';
 import {
   chatTimeline,
@@ -60,19 +60,22 @@ export function mountSimulationPage(root: HTMLElement) {
       <div class="sc-list" data-id="list" aria-live="polite"></div>
       <div class="sc-quick">${QUICK.map((q) => `<button type="button" class="d-tag add" data-quick="${esc(q)}">${esc(q)}</button>`).join('')}</div>
       <form class="sc-compose" data-id="compose">
-        <label class="d-fld sc-who"><select data-id="who" aria-label="Identité"></select></label>
-        <label class="d-fld sc-role"><select data-id="role" aria-label="Rôle"><option value="viewer">Viewer</option><option value="moderator">Modérateur</option></select></label>
         <label class="d-fld sc-field"><input type="text" data-id="text" placeholder="Écris comme dans le chat (!roulette 100, !mots, !join…)" maxlength="500" autocomplete="off" aria-label="Message"></label>
         <button type="submit" class="d-btn pri">${ic('arrow')}Envoyer</button>
       </form>
       <p class="d-note bad" data-id="out"></p>
     </section>
     <aside class="sm-side d-scroll">
-      <section><h2 class="d-lb">Live fictif</h2><div data-id="controls"></div><pre class="sm-log" data-id="ingress" hidden title="Journal de l’ingestion Twitch"></pre></section>
-      <section><h2 class="d-lb">Événements de stream</h2><div class="sm-evs">${EVENTS.map(([k, l]) => `<button type="button" class="d-btn sm" data-ev="${k}">${esc(l)}</button>`).join('')}</div><p class="d-note">Au nom du viewer choisi. Ils entrent dans la vraie file des Alertes du Lab : à voir dans Alertes.</p></section>
+      <section><h2 class="d-lb">Agir en tant que</h2><div class="sm-who">
+        <label class="d-fld"><select data-id="who" aria-label="Viewer fictif"></select></label>
+        <label class="d-fld"><select data-id="role" aria-label="Rôle"><option value="viewer">Viewer</option><option value="moderator">Modérateur</option></select></label>
+      </div><p class="d-note">Pour les messages du chat comme pour les événements ci-dessous.</p></section>
+      <section><h2 class="d-lb">Live fictif</h2><div data-id="controls"></div><p class="d-note" data-id="livenote"></p><pre class="sm-log" data-id="ingress" hidden title="Journal de l’ingestion Twitch"></pre></section>
+      <section><h2 class="d-lb">Événements de stream</h2><div class="sm-evs">${EVENTS.map(([k, l]) => `<button type="button" class="d-btn sm" data-ev="${k}">${esc(l)}</button>`).join('')}</div><p class="d-note">Ils entrent dans la vraie file des Alertes du Lab.</p><ul class="sm-sent" data-id="sent"></ul></section>
       <section><h2 class="d-lb">Simulateurs des modules</h2><nav class="lb-doors">${labDoors()}</nav></section>
     </aside>
   </div>`;
+  const sent: string[] = [];
   const $ = <T extends HTMLElement>(id: string) =>
     root.querySelector<T>(`[data-id="${id}"]`)!;
 
@@ -106,6 +109,15 @@ export function mountSimulationPage(root: HTMLElement) {
 
   function paintControls() {
     patch($('controls'), simPanel(state, busy, error));
+    // Les achats du Lab ne sont jamais bloqués hors live (Core, live-gate) : le live fictif sert aux modules qui suivent le stream.
+    patch(
+      $('livenote'),
+      state?.stream === undefined
+        ? ''
+        : state.stream
+          ? 'Les modules liés au stream le voient comme un vrai live. « Terminer » le clôt comme Twitch.'
+          : 'Pas nécessaire pour acheter dans le Lab. Requis pour ce qui suit le stream : Tombola automatique, Spotify, Roue du Sub, Jeu des mots, Daily et présence.',
+    );
     patch(
       p.state,
       state
@@ -113,7 +125,7 @@ export function mountSimulationPage(root: HTMLElement) {
           ? stateChip('w', 'Écrit dans le vrai chat')
           : state.stream
             ? stateChip('live', 'Live simulé')
-            : stateChip('off', 'Hors ligne')
+            : stateChip('off', 'Live fictif arrêté')
         : '',
     );
     const ing = state?.ingress as
@@ -175,14 +187,21 @@ export function mountSimulationPage(root: HTMLElement) {
         $<HTMLSelectElement>('who').selectedOptions[0]?.dataset.login ||
         'lab_viewer';
       const type = fire.dataset.ev!;
+      const label = fire.textContent ?? type;
       return void run(
         fire,
-        () =>
-          postJson('/api/alerts/test', {
+        async () => {
+          await postJson('/api/alerts/test', {
             ...testEvent(type, { ...PRESETS.normal!.data, pseudo }),
             ...(type === 'sub' || type === 'resub' ? { tier: '1000' } : {}),
-          }),
-        `${fire.textContent} envoyé à la file des Alertes`,
+          });
+          sent.unshift(
+            `<li><time>${hhmm(new Date().toISOString())}</time><b>${esc(label)}</b> de ${esc(pseudo)} : en file des Alertes · <a href="/?p=alerts">voir</a></li>`,
+          );
+          sent.length = Math.min(sent.length, 4);
+          patch($('sent'), sent.join(''));
+        },
+        `${label} envoyé à la file des Alertes`,
       );
     }
     const b = t.closest<HTMLButtonElement>('[data-sim], [data-chat]');
