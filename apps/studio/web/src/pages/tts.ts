@@ -150,17 +150,19 @@ export function mountTtsPage(root: HTMLElement) {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-credit]');
     if (!b) return;
     const all = b.dataset.credit === 'all';
+    const amount = all ? 50_000 : Number(b.dataset.amount) || 50_000;
+    const name = labViewer(viewerSel.value).name;
     void run(
       b,
       () =>
         Promise.all(
           (all ? LAB_VIEWERS.map((v) => v.id) : [viewerSel.value]).map((id) =>
-            creditLab(id, 50_000),
+            creditLab(id, amount),
           ),
         ).then(readBalance),
       all
         ? '50 000 Jetons Lab ajoutés à chaque viewer fictif.'
-        : '50 000 Jetons Lab ajoutés.',
+        : `${fmt(amount)} Jetons Lab ajoutés à ${name} : l’achat est possible.`,
     );
   });
   const input = p.body.querySelector<HTMLInputElement>('[data-test]')!;
@@ -251,18 +253,35 @@ export function mountTtsPage(root: HTMLElement) {
     }
     paintBal();
   }
+  /** Ce qu'il manque au viewer choisi pour ce message (0 : il peut payer, null : solde ou prix inconnu). */
+  function missing() {
+    const n = bals.get(viewerSel.value);
+    const chars = Array.from(input.value.trim()).length;
+    const price = chars ? tierOf(chars)?.price : undefined;
+    return n == null || price === undefined ? null : Math.max(0, price - n);
+  }
+  /** Le crédit proposé : de quoi payer ce message, 50 000 au moins pour enchaîner plusieurs essais. */
+  const topUp = (short: number) =>
+    Math.max(50_000, Math.ceil(short / 1000) * 1000);
+  // Le solde, le prix, le manque, et l'action qui le comble : tout au même endroit que l'achat. Le crédit passe par le
+  // portefeuille du Lab (le Core), comme en Modération ; cette zone n'existe que dans le Lab.
   function paintBal() {
     const n = bals.get(viewerSel.value);
     const chars = Array.from(input.value.trim()).length;
     const price = chars ? tierOf(chars)?.price : undefined;
-    const short = n != null && price !== undefined && n < price;
+    const short = missing();
+    const name = labViewer(viewerSel.value).name;
+    buyBtn.toggleAttribute('disabled', !!short);
+    buyBtn.title = short
+      ? `${name} n’a pas assez de Jetons Lab : crédite-le d’abord.`
+      : '';
     patch(
       z('bal'),
       n == null
         ? ''
-        : `<span class="${short ? 'tts-short' : ''}"><b>${fmt(n)}</b> Jetons Lab${price !== undefined ? ` · ce message : <b>${fmt(price)}</b>` : ''}${short ? ' · pas assez' : ''}</span>
-          <button type="button" class="d-btn ghost sm" data-credit title="Ajoute 50 000 Jetons Lab à ce viewer fictif">+50 000</button>
-          <button type="button" class="d-btn ghost sm" data-credit="all" title="Ajoute 50 000 Jetons Lab à chacun des ${LAB_VIEWERS.length} viewers fictifs : de quoi remplir une file">Tous +50 000</button>`,
+        : `<span class="tts-sum"><span>Solde <b>${fmt(n)}</b></span>${price !== undefined ? `<span>Ce message <b>${fmt(price)}</b></span>` : '<span class="d-faint">Écris un message pour voir son prix</span>'}${short ? `<span class="tts-short">Il manque <b>${fmt(short)}</b></span>` : price !== undefined ? `<span class="tts-ok">${ic('check')}Assez de Jetons</span>` : ''}</span>
+          ${short ? `<span class="tts-need"><span>${esc(name)} n’a pas assez de Jetons Lab pour ce message.</span><button type="button" class="d-btn pri sm" data-credit data-amount="${topUp(short)}">${ic('coin')}Créditer ${fmt(topUp(short))} Jetons à ${esc(name)}</button></span>` : ''}
+          <span class="tts-tools"><button type="button" class="d-btn ghost sm" data-credit data-amount="50000" title="Ajoute 50 000 Jetons Lab à ${esc(name)}">${ic('plus')}50 000 à ${esc(name)}</button><button type="button" class="d-btn ghost sm" data-credit="all" title="Ajoute 50 000 Jetons Lab à chacun des ${LAB_VIEWERS.length} viewers fictifs : de quoi relancer un scénario à plusieurs">${ic('users')}Préparer les ${LAB_VIEWERS.length} viewers (+50 000 chacun)</button></span>`,
     );
   }
   async function readPast() {
@@ -771,7 +790,7 @@ export function mountTtsPage(root: HTMLElement) {
     const text = input.value.trim();
     if (!text) return input.focus();
     const v = labViewer(viewerSel.value);
-    const short = `${v.name} n’a pas assez de Jetons Lab (${fmt(bals.get(v.id) ?? 0)} pour ${fmt(tierOf(Array.from(text).length)?.price ?? 0)}) : clique « +50 000 ».`;
+    const short = `${v.name} n’a pas assez de Jetons Lab (${fmt(bals.get(v.id) ?? 0)} pour ${fmt(tierOf(Array.from(text).length)?.price ?? 0)}) : clique « Créditer » juste au-dessus.`;
     await run(
       btn,
       async () => {

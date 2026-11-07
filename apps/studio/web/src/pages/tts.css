@@ -220,21 +220,54 @@
   font-size: 12px;
   color: var(--ink2);
 }
+.tts-bal b {
+  color: var(--ink);
+}
+.tts-sum {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
 .tts-bal .tts-short,
 .tts-bal .tts-short b {
   color: var(--amber);
 }
-.tts-bal b {
+.tts-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--teal);
+}
+/* Le manque, et l'action qui le comble, juste au-dessus du bouton d'achat. */
+.tts-need {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--amber-l);
+  border-radius: 8px;
+  background: var(--amber-a);
   color: var(--ink);
+  font-size: 13px;
+}
+.tts-need > span {
+  flex: 1 1 200px;
+}
+.tts-tools {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .tts-way > .d-btn:last-child {
   margin-left: auto;
 }
 .tts-way .tts-cast:has([data-viewer]) {
   min-width: 190px;
-}
-.tts-bal > span {
-  flex: 1 1 auto;
 }
 .tts-tryin {
   flex: 1;
