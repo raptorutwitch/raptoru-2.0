@@ -1,26 +1,81 @@
 # Créer un module sur le socle
 
+> Vérifié contre le code de `feat/studio-ux` (HEAD `3099c10`) le 07/11/2026. Preuve rejouée : § « Preuve rejouable ».
+
 ## En 5 étapes
 
-1. **Squelette** : `npm run module:new -w @raptoru/core-api -- <id> [admin|paid]`.
-   - Le script écrit `core-api/src/modules/<id>.ts` et `core-api/test/module-<id>.test.ts`.
-   - Le module est **Lab uniquement et coupé**.
-   - Le script n'écrase rien, ne touche à aucun fichier central et affiche la ligne restante.
-2. **Logique propre** : remplir `run`, `status`, `viewerState` (et `chat` / `tick` si besoin). Tout le reste vient de
-   l'hôte :
+`<id>` s'écrit en `snake_case` (`^[a-z][a-z0-9_]{1,40}$`) ; les **fichiers** et la **page Studio** prennent sa forme
+`kebab-case` (`minuteur_de_scene` → `minuteur-de-scene.ts`, `?p=minuteur-de-scene`).
+
+1. **Squelette** : depuis la racine `npm run module:new -w @raptoru/core-api -- <id> [admin|paid]` (depuis
+   `apps/core-api` : `npm run module:new -- <id> [admin|paid]`).
+   - Le script (`core-api/scripts/new-module.mjs`) écrit `core-api/src/modules/<id-kebab>.ts` et
+     `core-api/test/module-<id-kebab>.test.ts`.
+   - Profil `admin` : un réglage, une action Studio, un état. Profil `paid` : un prix, une action viewer payante, une
+     politique de modération.
+   - Le module est **Lab uniquement** (`labOnly: true`) **et coupé** (interrupteur du socle à 0 par défaut).
+   - Le script refuse un identifiant mal formé, n'écrase aucun fichier existant, ne touche à aucun fichier central et
+     affiche la ligne restante.
+2. **Logique propre** : remplir `run`, `status`, `viewerState` (et `chat` / `tick` si besoin), remplacer les `TODO`.
+   Tout le reste vient de l'hôte :
    - paiement, idempotence ;
    - live, pause, blocages ;
    - journal, remboursement ;
    - routes, réglages, écran.
-3. **Une ligne** dans `core-api/src/modules/index.ts`.
-4. **Studio suit seul.** Le catalogue du Core donne au module sa page, sa ligne dans Modules (avec son état réel), sa place
-   dans la recherche Ctrl+K, les favoris et la supervision. Une entrée dans `shell/registry.ts` n'est utile que pour lui donner
-   un groupe ou son propre écran.
+3. **Une ligne** dans le tableau `MODULES` de `core-api/src/modules/index.ts` (plus son `import`). Les deux Cores
+   construisent leur hôte depuis ce tableau ; `checkModule` refuse le démarrage si la déclaration ment.
+4. **Studio suit seul** (aucune ligne à écrire). Au chargement, Studio lit `/api/modules` (relais vers le catalogue du
+   Core) et `addHostModulePages` (`studio/web/src/shell/registry.ts`) crée la page. Le module obtient alors :
+   - sa page générique `?p=<id-kebab>` (`studio/web/src/module-host.ts` : état, réglages, actions, activité, remboursement) ;
+   - sa tuile dans **Modules**, groupe « Nouveaux modules », avec son état réel (`pages/catalog.ts` + `pageStates` de
+     `module-states.ts` : coupé = « Fermé », `ready` = « Prêt », `waiting` = « En attente », sinon « Inconnu ») ;
+   - sa place dans la palette Ctrl+K (`searchPages`) et les favoris ;
+   - sa ligne dans **Système › Services**, carte « Modules du socle » (`studio/server/src/control-center/modules.ts`), et
+     dans « À surveiller » de la Régie s'il demande un regard.
+
+   Il n'apparaît **pas** dans les portes du Laboratoire (`pages/lab-doors.ts`, liste fixe) : on l'atteint par la porte
+   « Modules du socle ». Une entrée dans `shell/registry.ts` n'est utile que pour lui donner un autre groupe, une teinte
+   ou son propre écran.
 5. **Vue viewer** (seulement si `viewer`) :
-   - un fichier `twitch-extension/extension/shared/<id>.js` qui appelle `registerViewerModule('<id>', fabrique)` ;
-   - une ligne `import './<id>.js'` dans `shared/ui.js`.
+   - un fichier `twitch-extension/extension/shared/<id-kebab>.js` qui appelle `registerViewerModule('<id>', fabrique)` ;
+   - une ligne `import './<id-kebab>.js'` dans `shared/ui.js` ;
+   - aucune feuille de style si la vue réutilise les classes `rp-*` (cas du Coffre mystère) ; sinon un fichier CSS et une
+     ligne `<link>` dans **chacune** des trois pages `mobile.html`, `panel.html`, `video_component.html`.
 
    Voir `GUIDE_EXTENSION.md`.
+
+## Preuve rejouable (07/11/2026)
+
+Tests ciblés, tous verts à HEAD :
+
+| Commande (depuis le dossier du paquet) | Résultat |
+|---|---|
+| `apps/core-api` : `npx vitest run test/modules-host.test.ts test/modules-chat.test.ts test/modules-robustness.test.ts test/module-settings.test.ts test/caution-module.test.ts test/votekick-module.test.ts test/module-stats.test.ts` | 7 fichiers, 28 tests |
+| `apps/core-api` : `TEST_DATABASE_URL=postgres://postgres:uxtest@127.0.0.1:55499/raptoru_ux_test npx vitest run test/modules-host.integration.test.ts` | 2 tests (PostgreSQL réel, deux Cores) |
+| `apps/studio/server` : `npx vitest run test/module-states.test.ts test/modules-socle.test.ts test/modules-lab-chain.test.ts test/prod-modules.test.ts test/control-center.test.ts` | 5 fichiers, 49 tests |
+| `apps/twitch-extension` : `npx vitest run test/module-host.test.js` | 10 tests |
+
+Exercice du générateur, **dans une copie hors dépôt** (rien n'a été écrit dans le dépôt) : `new-module.mjs` copié dans
+un dossier temporaire, `minuteur_de_scene admin` et `essai_payant paid` générés, puis un script `tsx` a branché les deux
+squelettes **non modifiés** sur le vrai `ModuleHost` (`[...MODULES, nouveau]`, l'équivalent exact de la ligne d'`index.ts`)
+et sur les vraies fonctions de Studio :
+1. `checkModule` : aucune erreur pour les deux squelettes ;
+2. catalogue du Core : le module est listé, état `unknown` (jamais « prêt » par défaut), réglage `minuteur_de_scene.valeur` ;
+3. action Studio `faire` : exécutée et journalisée ;
+4. action payante : 1 000 → 900 Jetons, la même clé rejouée rend `replayed: true` sans second débit ;
+5. Studio : page `/?p=minuteur-de-scene`, groupe « Nouveaux modules », trouvée par Ctrl+K ;
+6. état du catalogue Studio : « Inconnu » ;
+7. carte « Modules du socle » : une ligne par nouveau module.
+
+Le second lancement du générateur sur le même identifiant refuse d'écrire ; un identifiant `Bad-Id` est refusé.
+
+**Parcours navigateur** (non rejoué ici, il démarre une pile) : `e2e/modularity.e2e.ts`. Lancement :
+`npm run build -w @raptoru/studio-web` (la pile sert `apps/studio/web/dist`), puis dans `apps/studio/server`
+`npx playwright test e2e/modularity.e2e.ts` (une fois : `npx playwright install chromium`). Il démarre deux piles
+`e2e/core-lab-stack.ts` (Core principal en environnement Lab, base en mémoire) sur les ports 4399 et 4389, qui doivent être
+libres. Aucun Twitch, aucun Docker, aucune donnée réelle.
+
+Rien de tout cela n'est une validation : c'est Antoni qui valide dans le vrai Lab (`npm run studio:lab`).
 
 ## Ce que le module ne doit jamais faire
 
@@ -43,7 +98,9 @@ Une question métier non tranchée bloque le passage en Production, pas le Lab.
 
 1. Retirer `labOnly` (décision d'Antoni).
 2. Appliquer `20261121180000_module_activity.sql` si le module a un journal.
-3. Activer l'interrupteur depuis Studio.
+3. Si le module répond dans le chat (`chat`) : `20261121190000_cmd_steps_module_origin_lab.sql` n'existe qu'en Lab ; il faut
+   d'abord écrire et appliquer son jumeau de Production (origine `module:<id>` des réponses).
+4. Activer l'interrupteur depuis Studio.
 
 Aucune de ces étapes ne se fait sans GO.
 

@@ -104,7 +104,7 @@ Studio (`studio/server/src/control-center/modules.ts`) traduit :
 | Core (Lab et cockpit) | `/v1/lab/modules/<ch>`, `/activity`, `/refund`, `/<id>/status`, `/<id>/viewer-state`, `/<id>/admin/<a>`, `/<id>/viewer/<a>`, `/<id>/queue`, `/<id>/report` | jeton Studio |
 | Cockpit Production | `/v1/studio/cockpit/modules/<ch>/…` (acteur forcé au streamer) | installation appairée |
 | Studio | `/api/modules…` (`studio/server/src/modules/relay.ts`, en-tête Studio, même hôte, corps ≤ 16 Ko, acteur forcé) | interface Studio |
-| Extension | `/modules/v3`, `/modules/v3/<id>/state`, `POST /modules/v3/<id>/<action>`, `/modules/v3/moderation/activity`, `POST /modules/v3/moderation/refund` | `packages/schemas/src/module-facade.ts`, **la même fonction** dans la façade de Production et l'EBS du Lab |
+| Extension | `/modules/v3`, `/modules/v3/<id>/state`, `POST /modules/v3/<id>/<action>`, `/modules/v3/moderation`, `/modules/v3/moderation/<id>/activity`, `POST /modules/v3/moderation/refund` | `packages/schemas/src/module-facade.ts`, **la même fonction** dans la façade de Production et l'EBS de l'ancien Lab (le Lab par défaut relaie vers la façade de Production) |
 
 ## 7. Lecteur OBS (pas de lecteur universel)
 

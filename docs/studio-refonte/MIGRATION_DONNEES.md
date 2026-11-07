@@ -1,0 +1,91 @@
+# Matrice de migration des données : Studio 0.1.25 → `feat/studio-ux` (+ nouveau Core)
+
+Établie le 07/11/2026 pour la mission finale ([FINALISATION.md](FINALISATION.md)). Procédure de livraison et de retour arrière : [LIVRAISON.md](LIVRAISON.md) § 9.
+Aucune migration réelle n'a été faite : tout ceci prépare le GO d'Antoni.
+
+Lecture seule, 07/11/2026. Branche `feat/studio-ux` @ `3099c10`, comparée à `8a897a5` (= `origin/main`). Chemins relatifs à la
+branche sauf mention. `DR` = dossier de données du Studio installé = checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0`
+(nommé par `%APPDATA%\Raptoru Studio\studio.json`) ; `RT` = `DR\apps\studio\server\.runtime`. Aucun secret ouvert : seuls des
+noms de fichiers ou de clés ont été listés.
+
+Constats de base :
+- **Production garde `Raptoru Studio`.** `desktop/src/main.ts:71-77` ne passe à `Raptoru Studio Lab` que si `STUDIO_LAB_CORE`
+  est posée dans l'environnement du processus Electron. Seul `scripts/studio-lab.mjs:75` la pose, et elle n'est pas posée
+  dans ce shell. Le reste de `main.ts` est inchangé : `dataRoot()` (l. 93-107), `obs-connection.json` (l. 395),
+  `se-connection.json` (l. 436), port 4100 (l. 53, donc même origine pour le Local Storage).
+- **Le Studio empaqueté reste en profil Production, jamais sur le « Lab sur le Core principal ».** `labCoreChoice` renvoie
+  `legacy` quand `RAPTORU_PACKAGED=1` (`server/src/runtime/main-lab-core.ts:53-58`). `mainLab` exige le profil Lab
+  (`index.ts:843-847`) ; `RT\profile.json` vaut `production`.
+- **Les chemins de Production sont inchangés.** Ils sont dans `index.ts:1117-1301` : `production/alerts`,
+  `production/channel-points`, `production/spotify`, `alerts`, `effects`. `test-lab/local-env.ts` n'est pas modifié.
+  `lab-main/` ne sert qu'au Lab.
+
+| Donnée | Source actuelle (Production) | Dans la nouvelle version | Compatibilité | Risque | Vérification possible | Rollback |
+|---|---|---|---|---|---|---|
+| Profil Studio, appairage | `RT\profile.json`, `RT\production\studio-installation.json` | mêmes fichiers. Le parseur accepte en plus `http://127.0.0.1` (`prod-transport/installation.ts:126-129`) | identique (sur-ensemble) | faible | au démarrage, le journal affiche « Profil Production (Core …) » | aucun |
+| Jetons Twitch, `.env` | `DR\.twitch-tokens*`, `DR\apps\core-api\.env`, `DR\apps\twitch-bot\.env*` | mêmes chemins (`local-env.ts` inchangé) | identique | faible | état du compte dans Système | aucun |
+| Prefs Electron (OBS, StreamElements, data root) | `%APPDATA%\Raptoru Studio\{studio,obs-connection,se-connection}.json`. Le mot de passe OBS est chiffré par `safeStorage` (Windows) | mêmes fichiers, même dossier | identique | faible. Même utilisateur Windows requis (`safeStorage`) | OBS reconnecté au démarrage sans ressaisie (LIVRAISON § 8) | aucun |
+| Prefs d'interface (Local Storage, origine `127.0.0.1:4100`) | `raptoru-studio-tab`, `raptoru-commands-fav`, `raptoru.studio.tombola.sections`, `raptoru-sim-chat-cleared` | nouvelles clés `raptoru-studio-favs`, `-recent`, `-page`, `-tab-systeme` (`web/src/shell/shell.ts:56-59`). `raptoru-studio-tab` est encore écrite pour l'ancien Studio (l. 334). `raptoru-commands-fav` est gardée (`pages/commands.ts:83`) | nouveau format, sans conversion | faible : favoris par défaut au premier lancement, plis Tombola perdus | coup d'œil au shell | l'ancien Studio relit `raptoru-studio-tab` |
+| Médias des alertes | `RT\alerts\media\` (30 fichiers + `manifest.json`, noms hachés) | même magasin, même manifeste (`index.ts:1191-1193`). L'import n'est proposé que dans le Lab (`mediaImport: Boolean(mainLab)`, l. 1194) | identique | faible | une alerte de test en Lab (Production : par Antoni) | aucun |
+| Placements et looks des alertes | `RT\alerts\placement.json` (`version: 1`) | même fichier (`alerts/runtime.ts:184`), plus un champ optionnel `look` par variante (`alerts/placement-store.ts:26`, l. 89-180) | sur-ensemble, toujours `version: 1` | **moyen au rollback** : l'ancien Studio ignore `look`, et sa prochaine sauvegarde réécrit le fichier sans les looks | sauvegarder `placement.json` avant | restaurer la copie |
+| Jeton des sources OBS | `RT\alerts\player-token`, `RT\effects\player-token`, `RT\halloween\overlay-token` | mêmes fichiers (`alerts/runtime.ts:159-168`). Un jeton est recréé seulement s'il est absent ou invalide | identique | moyen si le fichier se perd : les URL des sources OBS changent | comparer l'URL de chaque source OBS avant et après | restaurer le fichier |
+| Médias des effets, son Votekick | `RT\effects\media\` (19), `RT\effects\uploads\` (1), `RT\production\channel-points\votekick-launch-sound.json` | mêmes chemins (`index.ts:1275-1288`, `votekick/launch-sound.ts:7`). Nouveau : import d'effets depuis les dossiers usuels ou la copie du Studio installé, en lecture seule (`alerts/media-store.ts:43-161`, `effects/player.ts:185`) | identique | faible | « Tester » un effet en Lab | aucun |
+| Halloween (overlay, médias, réglages) | `RT\halloween\{settings.json, overlay-token, media\}` (36 médias) | aucun diff dans `server/src/halloween/` ni dans `desktop/src/halloween-overlay.ts` | identique | faible | — | aucun |
+| Réglages des alertes : modes par famille, liste follow, profil Halloween | Core : `alert_settings.variants` (jsonb), `alert_channels` | **nouveau champ `variants.weights`** (`packages/schemas/src/alerts.ts:187-190`), schéma `z.strictObject` (l. 171) | sur-ensemble côté nouveau Core | **élevé au rollback** (risque 1) | lire `alert_settings.variants` avant et après | restaurer la ligne depuis la sauvegarde, ou retirer la clé `weights` |
+| Mode StreamElements | `RT\production\alerts\se-mode.json` | même fichier, mais **un ACTIVE sauvegardé reprend ACTIVE en Production** (H5, `alerts/se-tips.ts:254`). Avant, il reprenait en TEST | même format, comportement changé | moyen : de vrais dons sont animés dès le démarrage | lire le mode avant l'installation | remettre le mode à TEST ou OFF |
+| Historiques (alertes, Bonk, sons, TTS, Spotify, commandes, modération) | Core : `alert_items`, `bonk_lab_interactions`, `sound_lab_interactions`, `tts_lab_*`, `spotify_requests`, `cmd_history`, `lab_moderation_audit`… Journaux locaux : `RT\production\{bonk,sound,tts}\journal.json` | mêmes tables, mêmes journaux (`prod-transport/profile.ts:138-144`). En plus : `module_activity` (vide en Production : aucun module du socle n'y écrit). « Vider la file » passe les alertes `queued` à `expired` (`core-api/src/alerts/service.ts`, `clearQueue`) | identique, plus une table additive | faible | `/v1/studio/cockpit/modules/<ch>` (LIVRAISON § 5) | les tables restent (additives) |
+| Rôles et permissions (supermods, droits d'équipe) | Core : `staff_roles`, `cmd_team_rights` | aucune référence nouvelle à ces tables dans le diff du Core | identique | faible | — | aucun |
+| Jetons, wallets, transactions | Core : `wallets`, `wallet_transactions`, `wallet_operations`, `loyalty_rewards`, `daily_*` | mêmes tables. Changements de règles, pas de format : H1 (pas d'achat hors live), H9 (complément de palier écrit dans `loyalty_rewards.breakdown`), H14 (paliers Daily dans `daily_config`, schéma déjà lu par 8a897a5) | identique | moyen : comportement monétaire changé (H1, H9) | tests de concurrence et d'idempotence existants ; aucun achat réel | redéployer le Core 8a897a5 |
+| Catalogues et articles (cosmétiques, boutique d'événement, Soundboard) | Core : `cosmetic_*`, `event_shop_*`, `sound_lab_sounds` | mêmes tables (lectures ajoutées seulement). Route `/style` sans `.json` ajoutée (`http/cosmetics-routes.ts`). Nouveau : catégories de la Soundboard, propres à Studio, dans `RT\production\sound\sound-library.json` (`sound-lab/runtime.ts:43`, créé vide) | identique, plus un fichier local | faible | — | l'ancien Studio ignore ce fichier |
+| XP, progression, défis | Core : `progression_*`, `challenge_*` | mêmes tables. `progression-routes.ts` : routes ajoutées (19 lignes) | identique | faible. **Non vérifié** : migrations frames et challenges appliquées en Production (d'après la mémoire seulement) | `ops/status.ts` liste `schema_migrations` | — |
+| Commandes et automatisations | Core : `cmd_*` | mêmes tables. La contrainte `cmd_steps_origin_check` s'élargit à `module:<id>` (migration `…190000`) | additif | faible | — | contrainte plus large, sans effet pour l'ancien Core |
+| Roue du Sub | Core : `sw_*` | **nouvelle colonne obligatoire `sw_settings.enabled_at`**, lue en SQL (`core-api/src/sub-wheel/draws.ts:62`, `service.ts:550-553`) | migration requise avant le Core | **élevé si la migration manque** : les tirages échouent | colonne présente après la migration | colonne ignorée par 8a897a5 |
+| Jeu des mots | Core : `word_game_*`. Local : `RT\word-game\{sound-token, sound-volume}` | **nouvelles colonnes obligatoires** `enabled`, `interval_min_s`, `interval_max_s` (migration `…140000_word_game_settings_lab.sql`, appliquée par le Core principal) ; `select *` puis `row.interval_min_s * 1000` (`word-game/service.ts:410`) | migration requise avant le Core | **élevé si la migration manque** (intervalle à NaN, écritures refusées) | — | 8a897a5 ignore les colonnes : un OFF H8 redevient ON |
+| Mini-jeux, Votekick, Caution, Random Ban | Core : `mini_game_*`, `votekick_settings`, `caution_requests`, `rb_requests`. Les prix et délais sont des constantes | **nouvelle table `module_settings`** ; absente → défauts (`module-settings/service.ts:102`, garde `to_regclass`). Défauts identiques (MIGRATIONS.md) | additif | faible. Rollback : les tarifs changés reviennent aux constantes | LIVRAISON § 5 (valeurs par défaut) | aucun |
+| Tombola | Core : `lab_raffle_*` (les tables de Production portent ce nom). Local Lab seulement : `RT\raffle-lab` | inchangé pour la Production | identique | faible | — | aucun |
+| Configuration TTS | Core : `tts_lab_settings`. Local : `RT\production\tts\journal.json` | mêmes routes ; seul l'écran passe de Modération à la page TTS (LIVRAISON § 8) | identique | faible | — | aucun |
+| Spotify | Core : `spotify_*`. Local : `RT\production\spotify\{spotify-auth.json, spotify-auto-skips.json}` (jetons Spotify en local) | mêmes chemins (`index.ts:1299-1301`). Nouvelle raison `STREAM_ENDED` dans `spotify_requests.reason` (texte libre, sans contrainte : `20261108130000_spotify.sql:47`) | identique, une valeur nouvelle | faible. **Non vérifié** : affichage de `STREAM_ENDED` par un ancien Studio ou Core | — | — |
+| Bonk | Core : `bonk_lab_*`. Local : `RT\production\bonk\{bonk-settings.json, journal.json}` | mêmes fichiers (`bonk-lab/runtime.ts:95`) | identique | faible | — | aucun |
+| Points de chaîne (règles, récompenses Twitch) | Core : `cp_rules`, `cp_rewards`, `cp_settings`, `cp_jobs`. Twitch : les récompenses elles-mêmes. Local : `RT\production\channel-points\{obs-reverts.json, obs-reverts-mute-holds.json}` | mêmes tables et fichiers (`channel-points/runtime.ts:111-138`). Nouveau : les jobs `queued` trop vieux passent `expired` (`core-api/src/channel-points/service.ts`). `releaseAll` des sourdines à la fermeture (`mute-holds.ts:98`) | identique | faible | — | aucun |
+| Dock OBS | Core : `dock_*`. Local : `RT\dock\key.json` | même fichier (`index.ts:1420`) | identique | faible | URL du dock inchangée | aucun |
+| Connexion OBS | `%APPDATA%\Raptoru Studio\obs-connection.json` | même fichier. Le bouton de connexion passe de Système à la page Bonk | identique | faible | reconnexion automatique | aucun |
+
+## Risques réels
+
+1. **Rollback du Core après un réglage de poids d'alertes.** Le nouveau Studio écrit `alert_settings.variants.weights`
+   (`web/src/pages/alerts.ts:994`). Le Core `8a897a5` valide `variants` avec un `z.strictObject` qui n'a pas `weights`, et
+   en cas d'échec retombe sur les défauts (`git show 8a897a5:apps/core-api/src/alerts/service.ts`, l. 222-226). Effet :
+   tous les modes par famille et la liste follow sont perdus en silence, puis écrasés au prochain enregistrement (l. 249).
+   C'est en contradiction avec « migrations additives, rollback sans risque » (LIVRAISON § 6).
+2. **Ordre de livraison strict.** Le Core ne migre pas au démarrage (`core-api/package.json:13`). Sans
+   `20261121130000_sub_wheel_enabled_at.sql` et `20261121140000_word_game_settings_lab.sql`, la Roue du Sub et le Jeu des
+   mots cassent en SQL. 5 fichiers sont à appliquer en Production : `…130000`, `…140000`, `…160000`, `…180000`, `…190000`.
+   Deux d'entre eux portent le suffixe `_lab` mais sont dans `MAIN_CORE_LAB_MIGRATIONS` (`db/migration-scopes.ts`). Le
+   tableau de LIVRAISON § 2 les range correctement.
+3. **Pertes au rollback de Studio.** Les looks d'alertes (`placement.json`) sont effacés dès que l'ancien Studio enregistre
+   un placement. Les catégories de la Soundboard ne sont pas lues par l'ancien Studio, mais restent sur le disque.
+4. **Comportement changé sur des données existantes, sans migration :**
+   - `se-mode.json` ACTIVE reprend ACTIVE (H5) ;
+   - les alertes de plus de 30 min ne sont plus animées par défaut (`core-api/src/alerts/service.ts:46`) ;
+   - les jobs de points de chaîne trop vieux expirent ;
+   - un OFF du Jeu des mots ou des tarifs modifiés sont perdus si l'on revient au Core 8a897a5.
+5. **Ce qu'une sauvegarde de la base ne couvre pas :**
+   - tout `RT` : médias, `placement.json`, jetons des sources OBS, jetons Spotify, `bonk-settings.json`, réglages
+     Halloween, clé du Dock, journaux de workers, `studio-installation.json` ;
+   - `%APPDATA%\Raptoru Studio` : connexions OBS et StreamElements, Local Storage ;
+   - les jetons Twitch et les `.env`.
+
+   La seule copie de ces données date du **24/10** (`origin/main:docs/BACKUPS.md`, l. 34 et 41). Elle est donc antérieure
+   aux médias Halloween v3, aux looks et au son Votekick. Faire une copie `studio_backup.py` avant l'installation.
+6. **Données partagées entre les deux Studios.** Le nouveau Lab lit en **lecture seule** les médias du Studio installé,
+   via `%APPDATA%\Raptoru Studio\studio.json` (`alerts/media-store.ts:55-59`, l. 88-125), et n'y écrit jamais. Le Studio
+   installé reste le seul à écrire dans `RT`. Il ne faut jamais lancer `npm run studio` (sans `:lab`) depuis le checkout
+   principal : il partagerait `Raptoru Studio` et `RT`.
+
+**Non vérifié ici :**
+- l'état réel des migrations et du schéma en Production (base non contactée) ;
+- le contenu des fichiers (seuls leurs noms ont été lus) ;
+- l'absence de `STUDIO_LAB_CORE` dans les variables d'environnement Windows de l'utilisateur. Elle est absente de ce shell,
+  mais si elle était posée pour l'utilisateur, le Studio installé ouvrirait `Raptoru Studio Lab` sans ses connexions OBS
+  et StreamElements ;
+- la réaction de l'ancien Studio à `STREAM_ENDED` et aux nouveaux champs de `/modules/v3`.

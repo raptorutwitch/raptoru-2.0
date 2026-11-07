@@ -228,7 +228,7 @@ Exercice réel : `npm run module:new -- minuteur_de_scene admin`, deux libellés
 | Modules | ligne « Minuteur de scène » sous « Nouveaux modules », état réel |
 | Page | `?p=minuteur-de-scene` : état, réglage, action, activité |
 | Ctrl+K | trouvé |
-| Système | présent dans « État des services » |
+| Système | onglet « Services », carte « Modules du socle » (une ligne par module) |
 
 | Mesure | Avant le jalon | Maintenant |
 |---|---|---|
@@ -238,6 +238,22 @@ Exercice réel : `npm run module:new -- minuteur_de_scene admin`, deux libellés
 | Lignes de Core, de Studio ou d'extension à ajouter pour le Wallet, la modération, le journal, le lecteur | 0 | 0 |
 
 Le module d'essai a été retiré ensuite : il ne prouvait rien de plus une fois mesuré.
+
+**Rejoué le 07/11 à HEAD `3099c10`**, sans rien écrire dans le dépôt : générateur lancé dans une copie temporaire
+(`minuteur_de_scene admin`, `essai_payant paid`), squelettes non modifiés branchés sur le vrai `ModuleHost` et les vraies
+fonctions de Studio (`addHostModulePages`, `searchPages`, `pageStates`, `modulesStatusProvider`) : contrat valide, catalogue,
+action Studio journalisée, achat 1 000 → 900 puis rejeu sans second débit, page `?p=minuteur-de-scene` dans « Nouveaux
+modules », trouvée par Ctrl+K, état « Inconnu », ligne dans « Modules du socle ». Tests ciblés verts : Core 28 + 2
+(PostgreSQL réel), Studio serveur 49, extension 10. Détail et commandes : `GUIDE_MODULE.md` § « Preuve rejouable ».
+`modularity.e2e.ts` n'a pas été relancé (pile navigateur).
+
+Points de raccordement mesurés à HEAD :
+
+| Geste | Lignes hors du fichier du module |
+|---|---|
+| Nouveau module du socle, Studio compris | 2 dans `modules/index.ts` (import + entrée) |
+| + vue viewer | + 1 `import` dans `shared/ui.js` (+ 3 `<link>` seulement s'il a sa propre feuille de style) |
+| Refaire un onglet (variante V2, l'ancien gardé) | 1 `import` dans `ui.js` (+ 3 `<link>`) ; côté Core, le signal V2 dans la session et, si une route manque, 1 ligne dans `ext-facade.ts` (+ `lab-ebs.ts` tant que l'ancien Lab existe) |
 
 ### Un parcours complet, automatisé
 
