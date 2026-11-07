@@ -7,6 +7,33 @@ Branche `feat/halloween` (worktree `C:\Users\Antoni\Documents\raptoru-halloween`
 **Pas encore validé** : la capture OBS ; le parcours d'achat complet dans le Lab réel (testé seulement en automatique,
 § 10) ; le chat.
 
+## 0. État réel au 30/10 ~19:30 UTC et liste « Avant le live »
+
+**En Production** : Core `bb63b75` (migration `20261117130000_halloween_economy.sql` appliquée), bot `4ba9243`,
+Studio 0.1.21 installé (lancé sans droits administrateur), médias Halloween (36) et d'alertes (30) présents. Événement
+**fermé**, profil d'alertes Halloween **coupé**, 40 articles actifs, 0 Bonbon en circulation. Échange Jetons → Bonbons
+refusé (vérifié : `410 conversion_removed` par la route de l'extension). Gains : sub 10, donneur 5 / sub offert,
+bénéficiaire 3 ; Prime / resub = montant du sub ; présence, Bits, dons **désactivés** (0). Variantes d'alertes : rien
+d'enregistré (comportement d'avant). Alertes simulées (habituelles et Halloween) jouées par la vraie page, file vide.
+
+**Pas en Production** : Chaudron des subs (§ 13, PR #47 brouillon) ; nouvelle version de l'extension (§ 7).
+
+**Avant le live, à faire par Antoni** :
+
+1. OBS ouvert, Studio › Halloween › Chaos : choisir la capture d'écran **que les viewers voient** › « Préparer les
+   filtres OBS » (6 filtres créés **désactivés** sur cette source ; plugins présents dans OBS 32.2.2 :
+   `obs-shaderfilter`, `obs-composite-blur`). Puis « Tester » rotation et flou, vérifier dans OBS que l'image revient
+   normale et que les 6 filtres « Raptoru Chaos · … » sont décochés au repos. Hors live.
+2. Studio › Alertes › « Simulation » : une alerte habituelle jouée par la source « Alertes (V2) ».
+3. Ambiance : déjà en place dans la collection active (« Navigateur web 4 » = araignée, « Nuée de chauve souris » =
+   chauves-souris + vignette, transition « Chovsouri » = `ChovSouriFixed.mov`) ; vérifier seulement qu'elles sont
+   visibles dans les bonnes scènes.
+4. Le jour J, dans Studio › Halloween : ouvrir l'événement ; si voulu, régler présence / Bits (montants à choisir) ;
+   activer le profil d'alertes Halloween. Les dons automatiques restent **désactivés** (pseudo libre peu fiable) :
+   créditer à la main après vérification d'un don (« Trouver un viewer » › Créditer).
+5. Ne rien déployer pendant le live ; en cas de souci : « Fermer la boutique » (rembourse les achats non joués),
+   STOP ALL `Ctrl`+`Maj`+`F12`, « Revenir aux alertes habituelles ».
+
 ## 1. Ce que ça fait
 
 Un viewer dépense des **Bonbons** dans le module « Halloween 🎃 » de l'extension. Le Core accepte l'achat, Studio le

@@ -1,6 +1,6 @@
 # Reprise — point d'entrée
 
-Mis à jour : **28/10/2026 soir** (**Halloween : PR #35 prête, non fusionnée, livraison sur GO — § 6** ; **Dock OBS V1.2 livré** : Core `dc06344`, Studio 0.1.17 publiée, à installer — [OBS_DOCK.md](OBS_DOCK.md) ; **Random Ban V3 en Production** : Core `ff4fb45`, bot `4ba9243` ; Studio 0.1.14 publiée (« Test Caution Random Ban »), à installer — § 3, § 6 ; **deuxième passe close** : Core et bot `5e7ebe6`, Studio 0.1.10 installé — § 3 ; premiers correctifs stream en Production le 26/10 (`d215778`) ; **Roue du Sub V2 active** (mode `v2`), Studio 0.1.8 — [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7 ; chantier infrastructure clos : CI/CD validée sur la vraie infrastructure, Core **et bot** déployés depuis GitHub — [CICD.md](CICD.md) ; Coolify sur `https://dashboard.raptoru.fr`, ports d'administration fermés depuis Internet — [OPERATIONS.md](OPERATIONS.md) § 8 ; Core `1df65d1`, bot `1df65d1`, Studio 0.1.8). À lire en premier dans toute nouvelle session, puis
+Mis à jour : **30/10/2026 ~19:30 UTC** (**Halloween livré** : Core `bb63b75` avec la migration `20261117130000_halloween_economy.sql`, Studio 0.1.21 installé, événement **fermé**, nouveaux gains désactivés — § 6 et [HALLOWEEN.md](HALLOWEEN.md) ; **Chaudron des subs** : Lab seulement, PR #47 brouillon ; bot `4ba9243` inchangé). À lire en premier dans toute nouvelle session, puis
 `git status`. Vérifier soi-même `git log` / Coolify avant de se fier à un SHA écrit ici.
 
 **Raptoru 2.0** : plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689). Objectif : tout
@@ -26,26 +26,32 @@ depuis le checkout principal.
 | Journal détaillé 21→24/10 (dont chantier Roue V2), anciens documents | [archive/](archive/README.md)                               |
 | Règles de travail des agents                                         | `CLAUDE.md` (racine)                                        |
 
-## 2. Production (relevé 26/10 ~22:25 UTC)
+## 2. Production (relevé 30/10 ~19:30 UTC)
 
-| Élément              | Version                                                                                                                                                                                                          | Remarque                                                                         |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Core `raptoru-core`  | **`dc06344`** (déployé 28/10 ~00:09 UTC, Core seul, sans migration : Dock OBS V1.2, PR #32 — photos Twitch dans la projection)                                                                                   | `running:healthy`, `/health` `/ready` 200 ; retour : `190bc0a`                   |
-| Bot `raptoru-bot`    | **`4ba9243`** (27/10 01:47 UTC, Random Ban V3 ; inchangé par PR #22 et #24)                                                                                                                                      | bail tenu, EventSub bot et diffuseur OK ; retour : `5e7ebe6`                     |
-| `origin/main`        | `dc06344` = PR #32 (Dock OBS V1.2), **déployé** (Core) ; bot inchangé `4ba9243` ; puis documentation                                                                                                             | Coolify : auto-deploy désactivé                                                  |
-| Studio installé (PC) | **0.1.17 publiée le 28/10** (`dc06344` : Dock OBS V1.2 ; test de mise à jour 0.1.16 → 0.1.17 : 8 fichiers identiques), **à installer par Antoni** (mise à jour intégrée ou installateur de la release `v0.1.17`) | retour : réinstaller 0.1.16                                                      |
-| Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; **invitations ON** (activées par Antoni le 26/10 12:20 UTC) ; récupération des doubles crédits OFF                                        | détails et retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) |
-| Extension Twitch     | `0bf7907` publiée (version servie : non vérifiable depuis le dépôt)                                                                                                                                              | publication manuelle par Antoni                                                  |
-| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                                                        | Node non épinglé (décision en attente)                                           |
-| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                                                              | journaux du bot sur `/data`                                                      |
-| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                                                                     | ne pas modifier ces réglages sans GO                                             |
+| Élément              | Version                                                                                                                                                                   | Remarque                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Core `raptoru-core`  | **`bb63b75`** (déployé 30/10 18:43 UTC, PR #46 : économie Halloween et variantes d'alertes ; migration additive `20261117130000_halloween_economy.sql` appliquée)         | `running:healthy`, `/health` `/ready` 200 ; retour : `6557f7b` (la migration peut rester)     |
+| Bot `raptoru-bot`    | **`4ba9243`** (27/10 01:47 UTC ; inchangé par les PR #45 et #46)                                                                                                          | bail tenu, EventSub bot et diffuseur OK (30/10 18:45 UTC)                                     |
+| `origin/main`        | `bb63b75` = PR #46, **déployé** (Core)                                                                                                                                    | Coolify : auto-deploy désactivé                                                               |
+| Studio installé (PC) | **0.1.21** (publiée et installée le 30/10 ~18:56 UTC ; profil et 66 médias identiques ; lancé sans droits administrateur)                                                 | retour : réinstaller 0.1.20                                                                   |
+| Roue du Sub          | **V2 active** (mode `v2`, interrupteur ON) depuis le 26/10 12:12 UTC ; **invitations ON** (activées par Antoni le 26/10 12:20 UTC) ; récupération des doubles crédits OFF | détails et retour arrière : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md)              |
+| Extension Twitch     | version servie : non vérifiable depuis le dépôt ; la version avec le module Événements dépend de la revue Twitch (Antoni)                                                 | sans bouton d'échange de Jetons : le Core répond « fermé » ([HALLOWEEN.md](HALLOWEEN.md) § 7) |
+| Staging              | `raptoru-core-staging`, branche `feat/compact-video-port`                                                                                                                 | Node non épinglé (décision en attente)                                                        |
+| Flags                | Core `CAUTION_CHAT`, `VOTEKICK_CHAT`, `SPOTIFY_CHAT` = true ; bot `CAUTION`, `VOTEKICK`, `CP_TWITCH_ACTIONS` = true                                                       | journaux du bot sur `/data`                                                                   |
+| OBS au repos         | « Micro » non muté ; filtres Votekick désactivés ; `zoom` 1,000001, `zoom_max` 1,101, drive facteur 0,8, `mute_duration` 110                                              | ne pas modifier ces réglages sans GO                                                          |
 
 Fonctions en Production : économie canonique (Wallet, Daily, fidélité, présence), Commands V2 (`cmd_steps`), modération
 D4, Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2, Points de chaîne et effets,
 Random Ban, **Roue du Sub V2** (26/10), Caution, Votekick V2, **Spotify V2** (demandes de musique sans SAMMI). Niveau de validation
 de chacune : [ROADMAP.md](ROADMAP.md).
 
-## 3. Dernières livraisons et décisions (24–27/10)
+## 3. Dernières livraisons et décisions (24–30/10)
+
+- **Halloween — 29–30/10** (PR #35, #45, #46 ; [HALLOWEEN.md](HALLOWEEN.md)) : boutique Bonbons, screamers et effets,
+  Chaos (écran retourné / flou + filtres OBS), ambiance OBS, profil d'alertes Halloween (coupé), économie : échange
+  Jetons → Bonbons **supprimé** (410), gains présence / Prime / resub / Bits / dons **ajoutés et désactivés**,
+  variantes d'alertes par famille (rien d'enregistré = comportement d'avant). Sauvegarde 30/10 18:30 UTC copiée hors VPS
+  (`Sauvegarde Raptoru 2.0\prod-db-2026-10-30`). Curseur Chaos : limite acceptée, reporté.
 
 - **Random Ban V3 — 27/10** (PR #20, Core et bot `4ba9243`, Studio 0.1.11 publiée) : acheteur 4× moins souvent tiré
   (w / N) ; streamer tiré 2 % des fois → son micro « Micro » coupé 60 s dans OBS (jamais de timeout), seulement si
@@ -126,18 +132,13 @@ de chacune : [ROADMAP.md](ROADMAP.md).
 
 ## 6. Prochaine action
 
-- **Halloween (31/10, prioritaire)** — PR #35, worktree `raptoru-halloween`, [HALLOWEEN.md](HALLOWEEN.md).
-  - **Validé par Antoni le 28/10** : screamers (vidéo et son) sur son écran ; achat depuis le module Événements,
-    cooldown, effet joué.
-  - **Développé et testé automatiquement, à valider** : défilement 565×376, Dock OBS (révélation à 5 s), Pause et
-    blocage, « Trouver un viewer » et crédit, Tombola en Bonbons, palette chauve-souris. Réglage « Testeurs
-    seulement » laissé inactif (l'extension a déjà ses restrictions d'accès).
-  - **État au 28/10 soir** : PR #35 sur `a11dd4d`, CI verte, fusionnable, **non fusionnée** ; Production inchangée.
-    Dépôt **public** depuis le 28/10 (contrôle des secrets : rien de réel ; [SECURITY.md](../SECURITY.md)) ; Actions
-    rétabli → voie A du runbook. Fermé = aucun spoiler (`!solde` habituel, `!bonbons` / `!peur` muets, module masqué).
-    Push Protection GitHub encore désactivée (à activer par Antoni, non bloquant).
-  - **Prochaine étape** : GO d'Antoni pour les étapes 1–2 de [HALLOWEEN_GO.md](HALLOWEEN_GO.md) (sauvegarde Production
-    vérifiée, puis fusion), hors stream, idéalement le 29/10 ; arrêt avant le déploiement du Core (GO séparé).
+- **Halloween (31/10)** — tout est livré ; restent les gestes d'Antoni ([HALLOWEEN.md](HALLOWEEN.md), liste « Avant le
+  live ») : préparer et tester les filtres Chaos dans OBS, choisir les montants des nouveaux gains s'il le souhaite,
+  ouvrir l'événement, activer le profil d'alertes Halloween. Ne rien déployer pendant le live.
+- **Chaudron des subs** : PR #47 en brouillon (Lab, désactivé par défaut) ; livrable seulement sur GO (Core sans
+  migration + Studio 0.1.22), après validation du design et de l'objectif par Antoni.
+- Après Halloween : nouvelle version de l'extension (retire la section « Échanger des Jetons », liste les nouveaux
+  gains), soumise en revue par Antoni.
 
 0. **Dock OBS V1.2** (livré le 28/10 : Core `dc06344`, sans migration ; Studio 0.1.17 publiée) : installer Studio
    0.1.17, actualiser le dock dans OBS (même URL, même clé, préférences V1.1 reprises) et le tester en vrai
