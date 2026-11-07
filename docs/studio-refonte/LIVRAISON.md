@@ -117,3 +117,63 @@ restaurée au démarrage ; `Prêt pour le live` cohérent avec la réalité en P
 n'est pas exécuté ; il ne concerne que le développement.
 
 **Non vérifié ici** : aucun écran n'a tourné contre le vrai Core de Production ; la recette se fait dans le Lab.
+
+## 9. Plan de livraison exécutable (07/11, mission finale) — remplace les §§ 4 et 6 là où ils diffèrent
+
+Préparé, **rien n'est exécuté**. Chaque étape attend le GO d'Antoni. Matrice des données : [MIGRATION_DONNEES.md](MIGRATION_DONNEES.md).
+Faits de compatibilité vérifiés dans le code le 07/11 (rien contre la vraie Production) :
+
+- Depuis le 06/11 : aucune migration nouvelle, aucun fichier de l'extension modifié. Studio 0.1.25 = tag `studio-v0.1.25` = `8a897a5`.
+- **Deux migrations sont obligatoires avant le nouveau Core**, pas seulement utiles : sans `…130000_sub_wheel_enabled_at`, la Roue du Sub
+  échoue en SQL (`sub-wheel/draws.ts:62`) ; sans `…140000_word_game_settings_lab`, le Jeu des mots échoue (`word-game/service.ts:410`).
+  Le Core ne migre pas au démarrage : `npm run db:migrate`. 5 fichiers en Production : `…130000`, `…140000`, `…160000`, `…180000`, `…190000`.
+- **Le correctif Lead Moderator est du code de Production** : `lab-chat-ingest.ts` est réutilisé par `core-chat-bridge.ts` vers
+  `/v1/bot/chat` quand `CHAT_GAMES=true`. Il ne prend effet qu'avec le déploiement du bot. Le nouveau bot marche avec l'ancien Core et inversement.
+- **L'extension n'a pas à être republiée.** La version publiée envoie déjà sa clé d'idempotence aux actions de modération.
+- Ancien Studio 0.1.25 + nouveau Core : seul « Créditer / Débiter » est refusé (clé P0-2). Installer le nouveau Studio juste après le Core.
+- Nouveau Studio + ancien Core : classement absent, tableau des droits remplacé par un message, poids d'alerte refusés (400, rien
+  d'écrit), « Vider la file » en erreur, modules du socle « illisibles ». Rien n'est écrit de travers.
+- Aucune route Lab n'est servie en Production (`labRoutes: false`, catalogue fictif sous `!production`, achat simulé sous `mainLab`).
+
+### 9.1 Avant (la veille, sans live)
+
+1. **Gel** : pas de live, Studio installé fermé.
+2. **Sauvegarde de la base** de Production selon `docs/BACKUPS.md`, relue (pas seulement listée).
+3. **Sauvegarde locale** : la base ne couvre ni `apps/studio/server/.runtime`, ni `%APPDATA%\Raptoru Studio`, ni les `.env` et jetons
+   Twitch. La dernière copie date du 24/10. Relancer `studio_backup.py` (nouvelle date), puis `python studio_backup.py verify`.
+   Points sensibles qu'elle doit contenir : `.runtime\alerts\placement.json` (looks), `.runtime\alerts\media` (dont **`Raid Titan.webm`,
+   seul exemplaire existant**), les jetons des sources OBS (`player-token`, `overlay-token`), `production\alerts\se-mode.json`.
+4. **Relevés avant** (pour comparer après) : `select variants from alert_settings` ; mode StreamElements (`se-mode.json`) ; l'URL de
+   chaque source navigateur dans OBS ; `schema_migrations` ; versions Coolify (Core `8a897a5`, bot `4ba9243`/`9cc27db` à reconfirmer) ;
+   `CHAT_GAMES` en Production ; absence de `STUDIO_LAB_CORE` dans les variables Windows d'Antoni.
+
+### 9.2 Livraison, dans cet ordre
+
+| # | Étape | Contrôle immédiat | Arrêt si |
+|---|---|---|---|
+| 1 | Migrations de Production (`db:migrate`, ordre des noms) | `schema_migrations` contient les 5 fichiers | une migration échoue |
+| 2 | Core (Coolify, commit validé) | `/health`, `/ready` ; catalogue cockpit (§ 5) | `/ready` en échec, 5xx sur `/v1/ext` |
+| 3 | Studio : `npm run studio:release` (bump et publication par le script), installation par Antoni **sans délai** | profil Production lu, OBS reconnecté sans ressaisie, URL des sources OBS inchangées, Créditer/Débiter, Classement, « Qui peut faire quoi » | Studio ne s'appaire pas, URL des sources changées |
+| 4 | Bot (indépendant, peut aussi précéder le Core) | bail d'instance unique ; une commande d'un Lead Moderator réel acceptée | bot sans bail |
+| 5 | Extension : **rien à faire** (republier seulement si une nouvelle version est voulue, après le Core) | — | — |
+| 6 | Contrôles après livraison (§ 5), annonce H1 aux viewers | un achat de test **en Lab seulement** | écart de solde |
+
+Pendant toute la fenêtre de retour arrière : **ne pas régler les poids des alertes Follow** (voir 9.3).
+
+### 9.3 Retour arrière
+
+- **Core** : redéployer `8a897a5`. Les migrations restent (additives, ignorées par l'ancien Core). **Avant**, si des poids d'alerte ont été
+  enregistrés : `update alert_settings set variants = variants - 'weights';` — sinon l'ancien Core rejette tout l'objet (`strictObject`) et
+  perd en silence tous les réglages de variantes (familles, liste Follow). Effets connus : un Jeu des mots OFF redevient ON, des tarifs
+  modifiés reviennent aux constantes.
+- **Studio** : réinstaller 0.1.25 (release `studio-v0.1.25`). Restaurer `.runtime\alerts\placement.json` depuis la sauvegarde : l'ancien
+  Studio ignore les looks et les efface à sa prochaine sauvegarde. Remettre `se-mode.json` à TEST ou OFF si besoin (le nouveau Studio
+  reprend un ACTIVE enregistré).
+- **Bot** : redéployer l'image précédente ; les Lead Moderators redeviennent des viewers dans le chat.
+- **Extension** : rien (pas republiée).
+- Non audité : d'autres réglages JSON relus en `strictObject` par l'ancien Core pourraient avoir le même risque que `weights`.
+
+### 9.4 Installateur
+
+Non préparé, volontairement : la version du dépôt est `0.1.6` et seul `npm run studio:release` la monte (règle : jamais à la main). Un
+paquet local construit aujourd'hui porterait un numéro plus ancien que la 0.1.25 installée. L'installateur se fabrique au GO, après validation.
