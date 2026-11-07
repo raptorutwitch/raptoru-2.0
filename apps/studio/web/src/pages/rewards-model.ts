@@ -436,25 +436,35 @@ export function statusView(s: CpState | null, error: string | null) {
           'Twitch : bot de production',
           'En profil Production, les récompenses arrivent par le bot Twitch de production.',
         )
-      : !s.twitch.scope
+      : s.environment === 'lab' && !s.twitch.scope
         ? fact(
-            'w',
-            'Twitch : autorisation manquante',
-            'Le compte du streamer n’a pas le droit de lire les récompenses (channel:read:redemptions) : aucune n’est reçue.',
+            'off',
+            'Twitch : fictif (Lab)',
+            'Le Lab ne reçoit aucune récompense de Twitch : catalogue fictif et boutons Tester.',
           )
-        : s.twitch.adapter_running
-          ? fact('', 'Twitch : réception active')
-          : fact(
+        : !s.twitch.scope
+          ? fact(
               'w',
-              'Twitch : lecture du chat arrêtée',
-              'Laboratoire, Simulation, Lecture du chat Twitch.',
-            );
+              'Twitch : autorisation manquante',
+              'Le compte du streamer n’a pas le droit de lire les récompenses (channel:read:redemptions) : aucune n’est reçue.',
+            )
+          : s.twitch.adapter_running
+            ? fact('', 'Twitch : réception active')
+            : fact(
+                'w',
+                'Twitch : lecture du chat arrêtée',
+                'Laboratoire, Simulation, Lecture du chat Twitch.',
+              );
   const fx = effectsFact(s.effects);
   return [
     twitch,
     fact(
-      s.obs.connected ? '' : 'w',
-      s.obs.connected ? 'OBS connecté' : 'OBS non connecté',
+      s.obs.connected ? '' : s.environment === 'lab' ? 'off' : 'w',
+      s.obs.connected
+        ? 'OBS connecté'
+        : s.environment === 'lab'
+          ? 'OBS non connecté (normal dans le Lab)'
+          : 'OBS non connecté',
     ),
     fx ? fact(fx.tone, fx.text, fx.hint) : '',
     s.jobs_waiting

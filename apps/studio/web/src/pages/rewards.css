@@ -132,7 +132,36 @@
   align-items: center;
   gap: 12px;
   min-height: 44px;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
+}
+.rw-card {
+  flex: none;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.rw-card .rw-desc {
+  margin: 0;
+}
+.rw-kick {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 4px;
+  color: var(--ink2);
+  font: 600 12px var(--num);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rw-kick .d-tag,
+.rw-kick .d-lb {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.rw-kick--rule {
+  flex: none;
+  margin-bottom: 6px;
 }
 .rw-wt {
   min-width: 0;

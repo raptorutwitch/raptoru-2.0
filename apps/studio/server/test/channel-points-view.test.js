@@ -43,8 +43,12 @@ describe('Points de chaîne views', () => {
     expect(masterChip(null, 'Core injoignable', null)).toContain(
       'Core injoignable',
     );
-    expect(lab).toContain('autorisation manquante');
-    expect(lab).toContain('OBS non connecté');
+    // The Lab has no Twitch: fictional, never shown as a failure.
+    expect(lab).toContain('Twitch : fictif (Lab)');
+    expect(lab).toContain('OBS non connecté (normal dans le Lab)');
+    expect(statusView({ ...base, environment: 'local' }, null)).toContain(
+      'autorisation manquante',
+    );
     expect(statusView({ ...base, environment: 'production' }, null)).toContain(
       'bot de production',
     );

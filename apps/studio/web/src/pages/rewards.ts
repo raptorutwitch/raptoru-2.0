@@ -83,7 +83,7 @@ export function mountRewardsPage(root: HTMLElement) {
       <div class="rw-rs" data-z="list"></div>
     </section>
     <section class="rw-wire" aria-label="Ce que fait la récompense" data-z="wire"></section>
-    <section class="rw-log" aria-label="Historique">
+    <section class="rw-log" aria-label="Demandes reçues">
       <div class="rw-loghead" data-z="loghead"></div>
       <div class="rw-hs" data-z="log"></div>
     </section>
@@ -188,8 +188,8 @@ export function mountRewardsPage(root: HTMLElement) {
       seg(
         'data-log',
         [
-          ['all', 'Historique'],
-          ['look', 'À voir'],
+          ['all', 'Demandes'],
+          ['look', 'À vérifier'],
           ['this', 'Cette récompense'],
         ],
         logTab,
@@ -210,7 +210,7 @@ export function mountRewardsPage(root: HTMLElement) {
         key: `${x.source}:${x.redemption_id}`,
         html: redemptionRow(x, st),
       })),
-      `<div class="d-empty">${logTab === 'all' ? 'Aucune récompense reçue.' : 'Rien à signaler.'}</div>`,
+      `<div class="d-empty">${logTab === 'all' ? 'Aucune demande reçue : chaque rachat sur Twitch, ou chaque test, s’affiche ici avec ce qui a été exécuté.' : logTab === 'look' ? 'Rien à vérifier : ni échec, ni retard, ni remboursement.' : 'Aucune demande pour cette récompense.'}</div>`,
     );
   };
   const paintPanel = () => {
@@ -403,7 +403,7 @@ export function mountRewardsPage(root: HTMLElement) {
           a.amount || '',
         ),
         'rw-num',
-      )}<p class="rw-desc">Crédités une fois par achat au viewer qui l’a fait ; repris si Twitch annule l’achat.</p>`;
+      )}<p class="rw-desc">Crédités une fois par achat au viewer qui l’a fait ; repris si Twitch annule l’achat. C’est ce choix, pas le nom de la récompense sur Twitch, qui décide des crédits versés.</p>`;
     else
       body = `${text(i, 'scene', a.scene, 'rw-scenes', 'Scène')}${duration(i, a.duration_ms)}`;
     return `${field('Type', type, 'rw-type')}${body}`;
@@ -422,14 +422,25 @@ export function mountRewardsPage(root: HTMLElement) {
       return;
     }
     const d = draft;
-    z('wire').innerHTML = `<header class="rw-wh">
-        <span class="rw-pts big">${fmt(r.cost)}<small>pts</small></span>
-        <div class="rw-wt"><h2>${esc(r.title)}</h2>${r.prompt ? `<p>${esc(r.prompt)}</p>` : ''}</div>
-        <span class="d-sp"></span>
-        <span class="d-lb">Active</span>${sw(d.enabled, 'data-rule', `Règle de ${r.title}`)}
-      </header>
+    // Deux objets liés mais distincts : la récompense (sur Twitch, Studio la lit) et la règle de Raptoru (ce qui s'exécute).
+    const onTwitch =
+      r.twitch_enabled === null
+        ? 'État sur Twitch inconnu'
+        : r.twitch_enabled
+          ? 'Active sur Twitch'
+          : 'En pause sur Twitch';
+    z('wire').innerHTML =
+      `<section class="rw-card rw-tw" aria-label="La récompense sur Twitch">
+        <p class="rw-kick">${ic('gift')}Récompense sur Twitch<span class="d-sp"></span><span class="d-tag ${r.twitch_enabled === false ? 'warn' : ''}">${onTwitch}</span></p>
+        <header class="rw-wh">
+          <span class="rw-pts big">${fmt(r.cost)}<small>pts</small></span>
+          <div class="rw-wt"><h2>${esc(r.title)}</h2>${r.prompt ? `<p>${esc(r.prompt)}</p>` : ''}</div>
+        </header>
+        <p class="rw-desc">Nom, coût, description et image se règlent sur Twitch : Studio les lit${r.listed_by_twitch ? '' : ' (celle-ci n’est connue que par un achat reçu)'}.</p>
+      </section>
+      <p class="rw-kick rw-kick--rule">${ic('bolt')}Ce que fait Raptoru<span class="d-sp"></span><span class="d-lb">Règle active</span>${sw(d.enabled, 'data-rule', `Règle de ${r.title}`)}</p>
       <ol class="rw-steps">
-        <li class="rw-start">${ic('gift')}<span>Un viewer rachète la récompense${r.user_input_required ? ' et écrit un texte' : ''}</span></li>
+        <li class="rw-start">${ic('gift')}<span>Quand un viewer rachète « ${esc(r.title)} »${r.user_input_required ? ' et écrit un texte' : ''}</span></li>
         ${d.actions
           .map(
             (
