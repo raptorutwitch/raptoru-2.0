@@ -16,6 +16,7 @@ import {
   stateChip,
   toast,
   esc,
+  streamTestConfirm,
 } from '../ds/ds.js';
 import { getJson, postJson } from '../http.js';
 import { setNavCount } from '../shell/shell.js';
@@ -396,7 +397,7 @@ export function mountSubWheelPage(root: HTMLElement) {
     },
     'sw-replay': async (el) => {
       if (
-        await confirmBox({
+        await streamTestConfirm({
           title: 'Rejouer l’animation ?',
           body: replayConfirm(
             el.dataset.name ?? 'ce viewer',
@@ -405,7 +406,6 @@ export function mountSubWheelPage(root: HTMLElement) {
           ),
           yes: 'Rejouer l’animation',
           no: 'Annuler',
-          danger: false,
         })
       )
         void post(

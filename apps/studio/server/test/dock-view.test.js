@@ -15,6 +15,7 @@ import {
   folded,
   GROUP_GAP_MS,
   groupState,
+  isTest,
   labelOf,
   learnRewards,
   money,
@@ -603,6 +604,7 @@ describe('preferences', () => {
       v: 2,
       hidden: ['sub', 'resub', 'gift', 'random_ban', 'raffle', 'bonk'],
       costs: true,
+      tests: false,
       rewards: { hidden: [], names: {} },
       density: 'mid',
     });
@@ -618,6 +620,7 @@ describe('preferences', () => {
       v: 2,
       hidden: ['raffle'],
       costs: false,
+      tests: false,
       rewards: { hidden: ['r1'], names: { r1: 'X' } },
       density: 'mid',
     });
@@ -879,5 +882,54 @@ describe('Halloween lines (revealed by the Core after the scare)', () => {
       label: 'Résultat inconnu',
       tone: 'bad',
     });
+  });
+});
+
+describe('tests launched from Studio: never mistaken for real events (post-migration 07/11)', () => {
+  // « Jouer sur le stream » / « Tester » a reward: the Core records them with source `simulation` (explicit, never the
+  // pseudo Raptoru_Fan). Hidden from the feed by default, shown and tagged on demand; nothing is deleted.
+  const test = alert('follow', {
+    source: 'simulation',
+    actor: { id: '0', login: 'raptoru_fan', display_name: 'Raptoru_Fan' },
+  });
+  const real = alert('follow', { source: 'twitch' });
+  const rewardTest = reward({}, { source: 'simulation' });
+
+  it('the source decides, not the name', () => {
+    expect(isTest(test)).toBe(true);
+    expect(isTest(rewardTest)).toBe(true);
+    expect(isTest(real)).toBe(false);
+    expect(
+      isTest(alert('follow', { actor: { display_name: 'Raptoru_Fan' } })),
+    ).toBe(false);
+    expect(isTest(bonk(0, 'Kev'))).toBe(false);
+  });
+
+  it('hidden by default, shown when asked; real events always follow their filters', () => {
+    expect(DEFAULT_PREFS.tests).toBe(false);
+    expect(shownBy(DEFAULT_PREFS, test)).toBe(false);
+    expect(shownBy(DEFAULT_PREFS, rewardTest)).toBe(false);
+    expect(shownBy(DEFAULT_PREFS, real)).toBe(true);
+    const on = readPrefs({ ...DEFAULT_PREFS, tests: true });
+    expect(shownBy(on, test)).toBe(true);
+    expect(shownBy({ ...on, hidden: ['follow'] }, test)).toBe(false);
+  });
+
+  it('the choice is stored and read back; anything else means hidden', () => {
+    expect(readPrefs({ v: 2, tests: true }).tests).toBe(true);
+    expect(readPrefs({ v: 2, tests: 'yes' }).tests).toBe(false);
+    expect(readPrefs({ v: 2 }).tests).toBe(false);
+    expect(readPrefs(null).tests).toBe(false);
+  });
+
+  it('a shown test is tagged, a real event is not; the panel offers the switch', () => {
+    expect(rowHtml(one(test), { now: T0 })).toContain('class="test"');
+    expect(rowHtml(one(real), { now: T0 })).not.toContain('class="test"');
+    const panel = prefsHtml(DEFAULT_PREFS);
+    expect(panel).toContain('id="tests"');
+    expect(panel).not.toMatch(/id="tests"[^>]*checked/);
+    expect(prefsHtml({ ...DEFAULT_PREFS, tests: true })).toMatch(
+      /id="tests" checked/,
+    );
   });
 });

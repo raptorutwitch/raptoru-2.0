@@ -7,7 +7,11 @@ import {
   patch,
   poller,
   run,
+  setStreamTestsConfirmed,
   stateChip,
+  streamTestsConfirmed,
+  sw,
+  toast,
   type IcName,
 } from '../ds/ds.js';
 import { STUDIO_HEADERS, tryGetJson } from '../http.js';
@@ -99,7 +103,7 @@ export function mountSysteme(root: HTMLElement) {
         `<button type="button" role="tab" id="sy-t-${id}" data-tab="${id}" aria-controls="sy-p-${id}" aria-selected="${id === tab}" tabindex="${id === tab ? 0 : -1}"${id === 'dev' ? ' hidden' : ''}>${label}</button>`,
     ).join('')}</div>
     <div class="sy-panels">
-      <section role="tabpanel" id="sy-p-profile" aria-labelledby="sy-t-profile"><div data-slot="profile"></div><h2 class="d-lb">Branchements</h2><div data-slot="links"></div></section>
+      <section role="tabpanel" id="sy-p-profile" aria-labelledby="sy-t-profile"><div data-slot="profile"></div><h2 class="d-lb">Branchements</h2><div data-slot="links"></div><h2 class="d-lb">Confirmations</h2><div data-slot="confirm"></div></section>
       <section role="tabpanel" id="sy-p-links" aria-labelledby="sy-t-links"><div data-slot="twitch-connections"></div></section>
       <section role="tabpanel" id="sy-p-services" aria-labelledby="sy-t-services">
         <div data-slot="control"></div>
@@ -117,6 +121,32 @@ export function mountSysteme(root: HTMLElement) {
   </div>`;
   const slot = (name: string) =>
     root.querySelector<HTMLElement>(`[data-slot="${name}"]`)!;
+  // Préférence locale de ce Studio (ds.ts, STREAM_TESTS_KEY) : seulement les tests joués sur le stream.
+  const paintConfirm = () =>
+    patch(
+      slot('confirm'),
+      line(
+        'play',
+        'Tests joués sur le stream',
+        'Demander avant « Jouer sur le stream » (alertes), « Tester » une récompense ou un effet et « Rejouer l’animation » de la Roue. Les actions d’argent, de modération, les suppressions et les réglages demandent toujours.',
+        sw(
+          streamTestsConfirmed(),
+          'data-stream-tests',
+          'Demander avant un test joué sur le stream',
+        ),
+      ),
+    );
+  paintConfirm();
+  slot('confirm').addEventListener('change', (e) => {
+    const t = e.target as HTMLInputElement;
+    if (!t.matches('[data-stream-tests]')) return;
+    setStreamTestsConfirmed(t.checked);
+    toast(
+      t.checked
+        ? 'Les tests joués sur le stream demandent de nouveau une confirmation.'
+        : 'Les tests joués sur le stream partent sans confirmation.',
+    );
+  });
   const tabs = () => [
     ...root.querySelectorAll<HTMLButtonElement>('.sy-tabs [role="tab"]'),
   ];

@@ -631,6 +631,7 @@ $('#prefs-body').addEventListener('change', (ev) => {
     else rh.add(t.dataset.reward);
     setPrefs({ ...prefs, rewards: { ...prefs.rewards, hidden: [...rh] } });
   } else if (t.id === 'costs') setPrefs({ ...prefs, costs: t.checked });
+  else if (t.id === 'tests') setPrefs({ ...prefs, tests: t.checked });
   else if (t.name === 'density') setPrefs({ ...prefs, density: t.value });
 });
 $('#all').addEventListener('click', () =>

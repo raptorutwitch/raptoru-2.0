@@ -104,6 +104,60 @@ test('Récompenses: the fictional catalogue, its rules through the Core, a test 
   ).toBeVisible();
 });
 
+test('Stream tests: « Ne plus demander » skips only their confirmation; Système brings it back; money still asks', async ({
+  page,
+}) => {
+  await page.goto('/?p=channel-points');
+  const tab = page.locator('#tab-channel-points');
+  const load = tab.locator('[data-lab-catalog]');
+  if (await load.count()) await load.click();
+  await tab.getByRole('button', { name: 'Ouvrir « Crédit TTS »' }).click();
+  const fiche = page.locator('dialog.rwf-drawer');
+  const tester = fiche.getByRole('button', { name: 'Tester', exact: true });
+  const ask = page.locator('dialog.d-dlg', { hasText: 'maintenant ?' });
+  // Asked by default; « Ne plus demander » is offered and remembered.
+  await tester.click();
+  await ask
+    .getByText('Ne plus demander pour les tests joués sur le stream')
+    .click();
+  await ask.getByRole('button', { name: 'Exécuter' }).click();
+  await expect(fiche.getByText('Exécutée').first()).toBeVisible();
+  // Next test: no dialog, it runs.
+  const before = await fiche.getByText('Exécutée').count();
+  await tester.click();
+  await expect(ask).toHaveCount(0);
+  await expect
+    .poll(() => fiche.getByText('Exécutée').count())
+    .toBeGreaterThan(before);
+  await page.keyboard.press('Escape');
+  // A money action keeps its confirmation (the Lab test wallet reset).
+  await page.goto('/?p=moderation');
+  const mod = page.locator('#tab-moderation');
+  await mod.getByRole('button', { name: 'Portefeuille de test' }).click();
+  await mod.locator('[data-op="reset"]').click();
+  const money = page.locator('dialog.d-dlg', { hasText: 'à zéro' });
+  await expect(money).toBeVisible();
+  await expect(money.locator('[data-remember]')).toHaveCount(0);
+  await money.locator('[data-no]').click();
+  // Système › Vue d'ensemble shows the choice and brings the confirmation back.
+  await page.goto('/?p=systeme');
+  const sw = page.locator('[data-stream-tests]');
+  await expect(sw).not.toBeChecked();
+  await sw.click({ force: true });
+  await expect(sw).toBeChecked();
+  await page.goto('/?p=channel-points');
+  await page
+    .locator('#tab-channel-points')
+    .getByRole('button', { name: 'Ouvrir « Crédit TTS »' })
+    .click();
+  await page
+    .locator('dialog.rwf-drawer')
+    .getByRole('button', { name: 'Tester', exact: true })
+    .click();
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+});
+
 test('Spotify: a request and its decision from the page, without any account', async ({
   page,
 }) => {

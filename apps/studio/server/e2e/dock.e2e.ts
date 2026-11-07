@@ -52,8 +52,18 @@ const reward = (sec: number, id: string, title: string) => ({
   state: { status: 'done', twitch_status: 'FULFILLED' },
   seq,
 });
+/** A « Jouer sur le stream » test: the Core's explicit source `simulation` (post-migration 07/11). */
+const simulated = {
+  ...alert('follow', 350, 'Raptoru_Fan'),
+  activity_key: 'alert:simulation:studio-test-1',
+};
+simulated.data = {
+  ...simulated.data,
+  source: 'simulation',
+} as typeof simulated.data;
 const ACTIVITIES = [
   alert('follow', 400, 'AresTeod'),
+  simulated,
   reward(300, 'rw-hydrate', 'Hydrate-toi'),
   ix('raffle', 250, 'Kev'),
   ix('random_ban', 240, 'Zed', { target: 'Lucie' }),
@@ -226,6 +236,32 @@ test('preferences: Random Ban without Tombola, one reward by id; kept after a re
   await page.click('#reset');
   await expect(page.locator('li.row.f-random_ban')).toHaveCount(1);
   await expect(page.locator('li.row.f-reward')).toHaveCount(1);
+});
+
+test('tests from Studio: hidden from the feed by default, shown and tagged « Test » on demand, kept after a reload', async ({
+  page,
+}) => {
+  await open(page);
+  await page.evaluate(() => localStorage.clear());
+  await open(page);
+  await expect(rows(page).first()).toBeVisible();
+  await expect(page.getByText('Raptoru_Fan')).toHaveCount(0);
+  await expect(page.getByText('AresTeod')).toHaveCount(1);
+  await page.click('#gear');
+  await page.check('input#tests');
+  const fan = page.locator('li.row', { hasText: 'Raptoru_Fan' });
+  await expect(fan).toHaveCount(1);
+  await expect(fan.locator('.test')).toHaveText('Test');
+  await expect(
+    page.locator('li.row', { hasText: 'AresTeod' }).locator('.test'),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('li.row', { hasText: 'Raptoru_Fan' })).toHaveCount(
+    1,
+  );
+  await page.click('#gear');
+  await page.uncheck('input#tests');
+  await expect(page.getByText('Raptoru_Fan')).toHaveCount(0);
 });
 
 /** The first row in view and its offset from the top of the list's view. */

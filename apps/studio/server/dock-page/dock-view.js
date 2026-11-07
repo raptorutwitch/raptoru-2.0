@@ -161,6 +161,7 @@ export const DEFAULT_PREFS = Object.freeze({
   v: 2,
   hidden: [],
   costs: false,
+  tests: false,
   rewards: { hidden: [], names: {} },
   density: 'mid',
 });
@@ -207,6 +208,7 @@ export function readPrefs(raw) {
     v: 2,
     hidden: [...new Set(hidden)],
     costs: raw?.costs === true,
+    tests: raw?.tests === true,
     density: DENSITIES.some(([d]) => d === raw?.density) ? raw.density : 'mid',
     rewards: {
       hidden: Array.isArray(r.hidden)
@@ -239,8 +241,15 @@ export function learnRewards(prefs, activities) {
   };
 }
 
-/** Is this activity shown with these preferences (its filter, and for a reward its own choice)? */
+/**
+ * A test launched from Studio (« Jouer sur le stream », « Tester » a reward): the Core records it with the explicit
+ * source `simulation`, never a real Twitch event. Hidden from the feed unless the streamer asks to see the tests.
+ */
+export const isTest = (a) => a?.data?.source === 'simulation';
+
+/** Is this activity shown with these preferences (tests, its filter, and for a reward its own choice)? */
 export function shownBy(prefs, a) {
+  if (isTest(a) && !prefs.tests) return false;
   if (prefs.hidden.includes(familyOf(a))) return false;
   const id = a.type === 'reward' ? a.data?.reward?.id : null;
   return !(id && prefs.rewards.hidden.includes(id));
@@ -813,7 +822,7 @@ export function rowHtml(row, ui = {}) {
   return `<li class="${cls}" data-key="${esc(row.key)}" tabindex="0"${detail && detail !== 'text' ? ` aria-expanded="${open}"` : ''}${ui.selected ? ' aria-selected="true"' : ''}>
     ${avatarHtml(row)}
     <div class="main">
-      <div class="l1"><span class="lab${l.named ? ' named' : ''}" title="${esc(label)}">${icon(FAMILIES[fam].icon)}<span class="lab-t">${esc(label)}</span></span><span class="who" title="${esc(people.all.join(', '))}">${esc(people.text)}</span>${statusHtml(groupState(row.items))}${replay}</div>
+      <div class="l1"><span class="lab${l.named ? ' named' : ''}" title="${esc(label)}">${icon(FAMILIES[fam].icon)}<span class="lab-t">${esc(label)}</span></span>${isTest(a) ? '<span class="test" title="Lancé depuis Studio : pas un vrai événement Twitch">Test</span>' : ''}<span class="who" title="${esc(people.all.join(', '))}">${esc(people.text)}</span>${statusHtml(groupState(row.items))}${replay}</div>
       <div class="l2"><span class="when" title="${esc(exact(a.occurred_at))}">${esc(ago(ui.now ?? Date.now(), a.occurred_at))}</span>${note ? `<span class="note" title="${esc(note)}">${esc(note)}</span>` : ''}${many ? '' : emoteHtml(a)}${detail && detail !== 'text' ? `<span class="more">${icon('chevron')}</span>` : ''}</div>
       ${text ? `<p class="l3${open ? ' whole' : ''}">${esc(text)}</p>` : ''}
       ${open && detail !== 'text' ? `<div class="detail">${detailHtml(row, ui.recipients)}</div>` : ''}
@@ -870,8 +879,10 @@ export function prefsHtml(prefs, { rewardsOpen = false } = {}) {
     ([d, label]) =>
       `<label><input type="radio" name="density" value="${d}"${prefs.density === d ? ' checked' : ''}><span>${label}</span></label>`,
   ).join('')}</div></fieldset>`;
+  const tests = `<fieldset class="pg"><legend>Diagnostic</legend><div class="pg-items">${box('id="tests"', prefs.tests, 'Afficher les tests lancés depuis Studio')}</div></fieldset>`;
   return (
     sizes +
+    tests +
     FILTER_GROUPS.map((g) => {
       const on = g.filters.filter((f) => !hidden.has(f)).length;
       const state =
