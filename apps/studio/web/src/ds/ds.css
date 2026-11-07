@@ -1074,6 +1074,19 @@ button.d-tag:hover {
   accent-color: var(--teal);
   margin: 0;
 }
+.d-dlg__r {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--ink2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.d-dlg__r input {
+  accent-color: var(--teal);
+  margin: 0;
+}
 .d-dlg__a {
   display: flex;
   justify-content: flex-end;

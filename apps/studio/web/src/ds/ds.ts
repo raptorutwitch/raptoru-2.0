@@ -413,6 +413,29 @@ function closeDlg(d: HTMLDialogElement) {
   setTimeout(() => d.remove(), 240);
 }
 
+/**
+ * Les tests joués sur le stream (« Jouer sur le stream » d'une alerte, « Tester » une récompense ou un effet, « Rejouer
+ * l'animation » de la Roue) : une préférence locale de ce Studio, confirmée par défaut, que le streamer peut couper depuis
+ * la fenêtre (« Ne plus demander ») et rétablir dans Système. Jamais l'argent, la modération, une suppression, un réglage
+ * ni le vrai chat : ces confirmations-là n'ont pas d'option. Rien côté Core.
+ */
+export const STREAM_TESTS_KEY = 'raptoru-studio-confirm-stream-tests';
+export function streamTestsConfirmed() {
+  try {
+    return localStorage.getItem(STREAM_TESTS_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+export function setStreamTestsConfirmed(on: boolean) {
+  try {
+    if (on) localStorage.removeItem(STREAM_TESTS_KEY);
+    else localStorage.setItem(STREAM_TESTS_KEY, 'off');
+  } catch {
+    /* mode privé : la confirmation reste */
+  }
+}
+
 /** Confirmation sobre, réservée aux actions sensibles ou irréversibles : jamais pour un interrupteur ordinaire. */
 export const confirmBox = (o: {
   title: string;
@@ -420,11 +443,13 @@ export const confirmBox = (o: {
   yes: string;
   no?: string;
   danger?: boolean;
+  /** Un test joué sur le stream : propose « Ne plus demander » (voir STREAM_TESTS_KEY). */
+  streamTest?: boolean;
 }) =>
   new Promise<boolean>((res) => {
     const d = dlg(
       'd-dlg',
-      `<div class="d-dlg__b"><h2>${esc(o.title)}</h2><p>${esc(o.body)}</p></div><div class="d-dlg__a"><button type="button" class="d-btn ghost" data-no>${esc(o.no ?? 'Garder')}</button><button type="button" class="d-btn ${o.danger === false ? 'pri' : 'danger'}" data-yes>${esc(o.yes)}</button></div>`,
+      `<div class="d-dlg__b"><h2>${esc(o.title)}</h2><p>${esc(o.body)}</p>${o.streamTest ? '<label class="d-dlg__r"><input type="checkbox" data-remember><span>Ne plus demander pour les tests joués sur le stream</span></label>' : ''}</div><div class="d-dlg__a"><button type="button" class="d-btn ghost" data-no>${esc(o.no ?? 'Garder')}</button><button type="button" class="d-btn ${o.danger === false ? 'pri' : 'danger'}" data-yes>${esc(o.yes)}</button></div>`,
     );
     const end = (v: boolean) => {
       closeDlg(d);
@@ -434,9 +459,28 @@ export const confirmBox = (o: {
       e.preventDefault();
       end(false);
     });
-    d.querySelector<HTMLElement>('[data-yes]')!.onclick = () => end(true);
+    d.querySelector<HTMLElement>('[data-yes]')!.onclick = () => {
+      if (d.querySelector<HTMLInputElement>('[data-remember]')?.checked) {
+        setStreamTestsConfirmed(false);
+        toast(
+          'Les tests joués sur le stream ne demandent plus de confirmation (Système › Vue d’ensemble pour la rétablir).',
+        );
+      }
+      end(true);
+    };
     d.querySelector<HTMLElement>('[data-no]')!.onclick = () => end(false);
   });
+
+/** Un test joué sur le stream : confirmé selon la préférence de ce Studio (sinon lancé directement). */
+export const streamTestConfirm = (o: {
+  title: string;
+  body: string;
+  yes: string;
+  no?: string;
+}) =>
+  streamTestsConfirmed()
+    ? confirmBox({ ...o, danger: false, streamTest: true })
+    : Promise.resolve(true);
 
 /**
  * Une action à plusieurs issues (« Purger + rembourser » / « Purger sans rembourser ») : le choix est explicite, rien par défaut

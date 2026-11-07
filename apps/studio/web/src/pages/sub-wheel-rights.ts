@@ -6,6 +6,7 @@ import {
   errText,
   toast,
   type Drawer,
+  streamTestConfirm,
 } from '../ds/ds.js';
 import {
   redrawConfirm,
@@ -210,7 +211,7 @@ export function mountRights(onChange: () => void) {
         });
     } else if (act === 'swr-replay' && spin) {
       if (
-        await confirmBox({
+        await streamTestConfirm({
           title: 'Rejouer l’animation ?',
           body: replayConfirm(
             name(),
@@ -219,7 +220,6 @@ export function mountRights(onChange: () => void) {
           ),
           yes: 'Rejouer l’animation',
           no: 'Annuler',
-          danger: false,
         })
       )
         void go(async () => {

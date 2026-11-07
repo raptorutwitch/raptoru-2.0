@@ -21,6 +21,7 @@ import {
   sw,
   toast,
   type Drawer,
+  streamTestConfirm,
 } from '../ds/ds.js';
 import { getJson, postJson, tryGetJson } from '../http.js';
 import { cpBlocker } from '../shell/regie.js';
@@ -626,7 +627,7 @@ export function mountRewardsPage(root: HTMLElement) {
     const f = fiche;
     const r = rewardOf(f?.id);
     if (!f || !r) return;
-    const yes = await confirmBox({
+    const yes = await streamTestConfirm({
       title: `Tester « ${r.title} » maintenant ?`,
       body: runNowConfirm(
         r.rule?.actions ?? [],

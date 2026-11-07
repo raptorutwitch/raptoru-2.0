@@ -16,6 +16,7 @@ import {
   seg,
   stateChip,
   toast,
+  streamTestConfirm,
 } from '../ds/ds.js';
 import {
   ApiError,
@@ -731,12 +732,11 @@ export function mountAlerts(root: HTMLElement) {
     const prod = st?.environment === 'production';
     if (
       prod &&
-      !(await confirmBox({
+      !(await streamTestConfirm({
         title: 'Jouer cette alerte sur le stream ?',
         body: 'C’est une alerte fictive, mais elle passe par la vraie file : la source OBS « Alertes » la joue devant les viewers. Aucun Jeton, aucun événement Twitch.',
         yes: 'Jouer sur le stream',
         no: 'Annuler',
-        danger: false,
       }))
     )
       return;

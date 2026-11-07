@@ -16,6 +16,7 @@ import {
   seg,
   stateChip,
   toast,
+  streamTestConfirm,
 } from '../ds/ds.js';
 import { getJson, postJson } from '../http.js';
 import { loadSettings, type SettingView } from '../module-settings.js';
@@ -219,7 +220,7 @@ export function mountEffectsPage(root: HTMLElement) {
     const r: CpReward | undefined = linked(id)[0];
     if (!r) return;
     const text = picked[id] ?? NATIVES.find((n) => n.id === id)?.chips?.[0];
-    const yes = await confirmBox({
+    const yes = await streamTestConfirm({
       title: `Tester « ${r.title} » maintenant ?`,
       body: `${text ? `Avec le texte « ${text} ».\n\n` : ''}${runNowConfirm(r.rule?.actions ?? [], s?.sounds, effectItems(s?.effects))}`,
       yes: 'Exécuter',
