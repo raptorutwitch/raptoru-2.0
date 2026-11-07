@@ -16,16 +16,17 @@ Ce document ne vaut pas autorisation. Chaque étape ci-dessous demande le GO exp
 
 ## 2. Migrations (8 fichiers, toutes additives, aucune donnée réécrite)
 
-| Fichier | Base | Contenu | Nécessaire à |
-|---|---|---|---|
-| `20261121130000_sub_wheel_enabled_at.sql` | Production | `sw_settings.enabled_at` (frontière de la roue, P0-3) | Roue du Sub du nouveau Core |
-| `20261121140000_word_game_settings_lab.sql` | Core principal (liste `MAIN_CORE_LAB_MIGRATIONS`) | `enabled`, intervalle du Jeu des mots (H8) | Jeu des mots du nouveau Core |
-| `20261121160000_module_settings.sql` | Production | table `module_settings` (H10, H12, H14) | réglages modifiables ; **sans elle, le Core applique les défauts** |
-| `20261121180000_module_activity.sql` | Production | journal et état des modules du socle, colonnes de réservation, index | premier module du socle **non Lab** avec journal ; aucun aujourd'hui |
-| `20261121190000_cmd_steps_module_origin_lab.sql` | Core principal | contrainte d'origine élargie à `module:<id>` | réponses chat des modules du socle ; aucune en Production aujourd'hui |
-| `…120000`, `…150000`, `…170000` (`_lab`) | base Lab locale de Studio | jumeaux Lab | Lab seulement |
+| Fichier                                          | Base                                              | Contenu                                                              | Nécessaire à                                                          |
+| ------------------------------------------------ | ------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `20261121130000_sub_wheel_enabled_at.sql`        | Production                                        | `sw_settings.enabled_at` (frontière de la roue, P0-3)                | Roue du Sub du nouveau Core                                           |
+| `20261121140000_word_game_settings_lab.sql`      | Core principal (liste `MAIN_CORE_LAB_MIGRATIONS`) | `enabled`, intervalle du Jeu des mots (H8)                           | Jeu des mots du nouveau Core                                          |
+| `20261121160000_module_settings.sql`             | Production                                        | table `module_settings` (H10, H12, H14)                              | réglages modifiables ; **sans elle, le Core applique les défauts**    |
+| `20261121180000_module_activity.sql`             | Production                                        | journal et état des modules du socle, colonnes de réservation, index | premier module du socle **non Lab** avec journal ; aucun aujourd'hui  |
+| `20261121190000_cmd_steps_module_origin_lab.sql` | Core principal                                    | contrainte d'origine élargie à `module:<id>`                         | réponses chat des modules du socle ; aucune en Production aujourd'hui |
+| `…120000`, `…150000`, `…170000` (`_lab`)         | base Lab locale de Studio                         | jumeaux Lab                                                          | Lab seulement                                                         |
 
 Règles :
+
 - **Ordre** : l'ordre des noms. L'outil `selectMigrations` refuse un fichier non classé.
 - **Avant** : sauvegarde de la base (`docs/BACKUPS.md`).
 - **Retour arrière** : chaque fichier porte ses lignes de rollback en tête. Toutes sont additives : l'ancien Core
@@ -34,6 +35,7 @@ Règles :
   sur l'origine (vérifié), seul Studio l'affiche.
 
 **Tests déjà en place** :
+
 - `migration-scopes.test.ts` : bases de Production du 22/10 au 25/10, chaque fichier une fois, contraintes jamais
   rétrécies ;
 - `migration-main-core.integration.test.ts` (67 fichiers) ;
@@ -41,14 +43,14 @@ Règles :
 
 ## 3. Coexistence des versions (vérifiée dans le code)
 
-| Combinaison | Comportement | Preuve |
-|---|---|---|
-| Nouveau Studio, ancien Core | « Modules du socle » affiche « Catalogue illisible » ; réglages « indisponibles » ; D4 › Autres modules « indisponibles (serveur) » ; aucune fausse capacité | `module-host.ts`, `module-settings.ts`, `module-moderation.js` |
-| Ancien Studio, nouveau Core | les écrans existants marchent ; **« Créditer / Débiter » exige la clé P0-2, qu'un ancien Studio n'envoie pas** : livrer Core et Studio ensemble | CHECKPOINT, P0-2 |
-| Ancienne extension, nouveau Core | elle n'appelle pas `/modules/v3` ; les anciennes routes sont inchangées | `ext-facade.ts` (porte ajoutée avant le 404 final) |
-| Nouvelle extension, ancien Core | `/modules/v3` répond 404 : aucun module du socle affiché ; modules de session selon la session, inchangée | `module-registry.js` (`loadHostModules`) |
-| Bot | modifié par la mission H (P0-5, H9) : à livrer avec le Core | CHECKPOINT |
-| Modules `labOnly` (Objectif de soirée, Coffre) | jamais montés en Production, réglages compris | `modules-host.test.ts` |
+| Combinaison                                    | Comportement                                                                                                                                                 | Preuve                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| Nouveau Studio, ancien Core                    | « Modules du socle » affiche « Catalogue illisible » ; réglages « indisponibles » ; D4 › Autres modules « indisponibles (serveur) » ; aucune fausse capacité | `module-host.ts`, `module-settings.ts`, `module-moderation.js` |
+| Ancien Studio, nouveau Core                    | les écrans existants marchent ; **« Créditer / Débiter » exige la clé P0-2, qu'un ancien Studio n'envoie pas** : livrer Core et Studio ensemble              | CHECKPOINT, P0-2                                               |
+| Ancienne extension, nouveau Core               | elle n'appelle pas `/modules/v3` ; les anciennes routes sont inchangées                                                                                      | `ext-facade.ts` (porte ajoutée avant le 404 final)             |
+| Nouvelle extension, ancien Core                | `/modules/v3` répond 404 : aucun module du socle affiché ; modules de session selon la session, inchangée                                                    | `module-registry.js` (`loadHostModules`)                       |
+| Bot                                            | modifié par la mission H (P0-5, H9) : à livrer avec le Core                                                                                                  | CHECKPOINT                                                     |
+| Modules `labOnly` (Objectif de soirée, Coffre) | jamais montés en Production, réglages compris                                                                                                                | `modules-host.test.ts`                                         |
 
 ## 4. Ordre de livraison proposé
 
@@ -88,6 +90,7 @@ Règles :
 
 Les commits `50e8601`, `602401a` et `2d9f7b2` ne changent que l'extension : aucune route du Core, aucune migration, aucun
 contrat d'API.
+
 - **Ordre.** Livrable avec le Core ou après lui ; jamais publiée par Claude. Antoni l'envoie à Twitch.
 - **Avant l'envoi**, vérification manuelle dans le vrai Lab, en viewer et en modérateur :
   - TTS V2 : achat, retour, mise à jour en direct ;
@@ -96,19 +99,18 @@ contrat d'API.
   - la liste « Voir tous les modules » ouverte pendant un changement de solde.
 - **Retour arrière** : republier la version précédente de l'extension. L'état est côté Core, rien n'est à migrer.
 
-
 ## 8. Mission Foundation (06/11) : ce qui change au jour du GO
 
 Aucune nouvelle migration. Rien de ceci n'est publié.
 
-| Surface | Changement visible en Production |
-|---|---|
-| Studio | Nouveau Centre, catalogue avec états, Activité, Système en onglets, incidents sur une ligne |
-| Studio | **OBS se connecte depuis la page Bonk**, la source TTS depuis la page TTS, le lecteur Soundboard est en haut de la page Soundboard (ils étaient dans Système) |
-| Studio | Configuration TTS sur la page TTS (elle était dans Modération) ; mêmes routes |
-| Core | `twitch_connected` de la session reflète enfin la liaison Twitch du viewer (l'extension croyait tout viewer non lié) |
-| Core | Route `/v1/studio/cosmetics/style` ajoutée à côté de `style.json` ; sans effet pour un ancien Studio |
-| Extension | Aucun changement dans cette mission |
+| Surface   | Changement visible en Production                                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Studio    | Nouveau Centre, catalogue avec états, Activité, Système en onglets, incidents sur une ligne                                                                   |
+| Studio    | **OBS se connecte depuis la page Bonk**, la source TTS depuis la page TTS, le lecteur Soundboard est en haut de la page Soundboard (ils étaient dans Système) |
+| Studio    | Configuration TTS sur la page TTS (elle était dans Modération) ; mêmes routes                                                                                 |
+| Core      | `twitch_connected` de la session reflète enfin la liaison Twitch du viewer (l'extension croyait tout viewer non lié)                                          |
+| Core      | Route `/v1/studio/cosmetics/style` ajoutée à côté de `style.json` ; sans effet pour un ancien Studio                                                          |
+| Extension | Aucun changement dans cette mission                                                                                                                           |
 
 **Contrôles ajoutés après livraison** : lecteur Soundboard chargé dès le lancement, sans ouvrir sa page ; connexion OBS mémorisée
 restaurée au démarrage ; `Prêt pour le live` cohérent avec la réalité en Production.
@@ -118,7 +120,11 @@ n'est pas exécuté ; il ne concerne que le développement.
 
 **Non vérifié ici** : aucun écran n'a tourné contre le vrai Core de Production ; la recette se fait dans le Lab.
 
-## 9. Plan de livraison exécutable (07/11, mission finale) — remplace les §§ 4 et 6 là où ils diffèrent
+## 9. Plan de livraison exécutable
+
+> **07/11 (soir)** : remplacé par [OPERATION_COULISSES.md](OPERATION_COULISSES.md) (faits vérifiés sur la vraie Production en
+> lecture seule et sur une copie restaurée de la base). Les sections ci-dessous restent pour l'historique.
+> (07/11, mission finale) — remplace les §§ 4 et 6 là où ils diffèrent
 
 Préparé, **rien n'est exécuté**. Chaque étape attend le GO d'Antoni. Matrice des données : [MIGRATION_DONNEES.md](MIGRATION_DONNEES.md).
 Faits de compatibilité vérifiés dans le code le 07/11 (rien contre la vraie Production) :
@@ -149,14 +155,14 @@ Faits de compatibilité vérifiés dans le code le 07/11 (rien contre la vraie P
 
 ### 9.2 Livraison, dans cet ordre
 
-| # | Étape | Contrôle immédiat | Arrêt si |
-|---|---|---|---|
-| 1 | Migrations de Production (`db:migrate`, ordre des noms) | `schema_migrations` contient les 5 fichiers | une migration échoue |
-| 2 | Core (Coolify, commit validé) | `/health`, `/ready` ; catalogue cockpit (§ 5) | `/ready` en échec, 5xx sur `/v1/ext` |
-| 3 | Studio : `npm run studio:release` (bump et publication par le script), installation par Antoni **sans délai** | profil Production lu, OBS reconnecté sans ressaisie, URL des sources OBS inchangées, Créditer/Débiter, Classement, « Qui peut faire quoi » | Studio ne s'appaire pas, URL des sources changées |
-| 4 | Bot (indépendant, peut aussi précéder le Core) | bail d'instance unique ; une commande d'un Lead Moderator réel acceptée | bot sans bail |
-| 5 | Extension : **rien à faire** (republier seulement si une nouvelle version est voulue, après le Core) | — | — |
-| 6 | Contrôles après livraison (§ 5), annonce H1 aux viewers | un achat de test **en Lab seulement** | écart de solde |
+| #   | Étape                                                                                                         | Contrôle immédiat                                                                                                                          | Arrêt si                                          |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| 1   | Migrations de Production (`db:migrate`, ordre des noms)                                                       | `schema_migrations` contient les 5 fichiers                                                                                                | une migration échoue                              |
+| 2   | Core (Coolify, commit validé)                                                                                 | `/health`, `/ready` ; catalogue cockpit (§ 5)                                                                                              | `/ready` en échec, 5xx sur `/v1/ext`              |
+| 3   | Studio : `npm run studio:release` (bump et publication par le script), installation par Antoni **sans délai** | profil Production lu, OBS reconnecté sans ressaisie, URL des sources OBS inchangées, Créditer/Débiter, Classement, « Qui peut faire quoi » | Studio ne s'appaire pas, URL des sources changées |
+| 4   | Bot (indépendant, peut aussi précéder le Core)                                                                | bail d'instance unique ; une commande d'un Lead Moderator réel acceptée                                                                    | bot sans bail                                     |
+| 5   | Extension : **rien à faire** (republier seulement si une nouvelle version est voulue, après le Core)          | —                                                                                                                                          | —                                                 |
+| 6   | Contrôles après livraison (§ 5), annonce H1 aux viewers                                                       | un achat de test **en Lab seulement**                                                                                                      | écart de solde                                    |
 
 Pendant toute la fenêtre de retour arrière : **ne pas régler les poids des alertes Follow** (voir 9.3).
 

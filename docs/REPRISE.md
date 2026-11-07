@@ -2,6 +2,10 @@
 
 **Mis à jour : 04/11/2026, après la livraison de raptoru.fr V2.**
 
+**07/11/2026 — Opération Coulisses (bascule du nouveau Studio) : préparation terminée, en attente du GO de bascule d'Antoni.**
+Point de reprise unique : [studio-refonte/OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) (état, sauvegardes,
+migrations répétées, compatibilité, plan, retour arrière). API Coolify : `COOLIFY_URL=https://dashboard.raptoru.fr`.
+
 - À lire en premier dans toute nouvelle session, puis `git status`.
 - Vérifier soi-même `git log` et Coolify avant de se fier à un SHA écrit ici :
   `node scripts/coolify-deploy.mjs status core`, et `curl -s https://raptoru.fr/api/status` pour le site.
