@@ -66,7 +66,15 @@ const statusPage = join(here, '..', 'static', 'status.html');
 // One Studio at a time, whether started from the repository (npm run studio) or installed: both
 // use the same profile folder, hence the same single-instance lock. A second launch only focuses
 // the existing window (no second server, the first one is never stopped).
-app.setPath('userData', join(app.getPath('appData'), 'Raptoru Studio'));
+// `npm run studio:lab` has its own folder: the installed Studio's OBS and StreamElements connections, its window state and
+// its logs are neither read nor written by the Lab.
+app.setPath(
+  'userData',
+  join(
+    app.getPath('appData'),
+    process.env.STUDIO_LAB_CORE ? 'Raptoru Studio Lab' : 'Raptoru Studio',
+  ),
+);
 let win: BrowserWindow | null = null;
 let quitting = false;
 const primary = app.requestSingleInstanceLock();

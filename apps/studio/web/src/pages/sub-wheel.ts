@@ -218,6 +218,9 @@ export function mountSubWheelPage(root: HTMLElement) {
       ui.tab === 'rights'
         ? rights.tab(!!state && !state.v2_unavailable)
         : undefined;
+    // Une saisie en cours (recherche des droits) ne se réécrit pas sous les doigts.
+    const typing = document.activeElement;
+    if (typing && z('side').contains(typing) && typing.matches('input')) return;
     const scroll = z('side').querySelector('.whl-body')?.scrollTop ?? 0;
     patch(z('side'), subWheelView(state, state ? null : error || null, ui));
     const body = z('side').querySelector('.whl-body');

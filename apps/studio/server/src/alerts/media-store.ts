@@ -89,6 +89,7 @@ async function reserveOrigin(
   config: string,
   ownDir: string,
   names: readonly string[],
+  store: 'alerts' | 'effects',
 ): Promise<MediaOrigin | null> {
   try {
     const { dataRoot } = JSON.parse(await readFile(config, 'utf8')) as {
@@ -101,7 +102,7 @@ async function reserveOrigin(
       'studio',
       'server',
       '.runtime',
-      'alerts',
+      store,
       'media',
     );
     if (resolve(dir) === resolve(ownDir)) return null;
@@ -130,7 +131,11 @@ async function reserveOrigin(
 export async function findMediaOrigins(
   names: readonly string[],
   ownDir: string,
-  o: { folders?: readonly string[]; config?: string } = {},
+  o: {
+    folders?: readonly string[];
+    config?: string;
+    store?: 'alerts' | 'effects';
+  } = {},
 ) {
   const origins: MediaOrigin[] = [];
   for (const path of o.folders ?? USUAL_FOLDERS) {
@@ -145,7 +150,12 @@ export async function findMediaOrigins(
       files: await folderFiles(path, names),
     });
   }
-  const reserve = await reserveOrigin(o.config ?? STUDIO_CONFIG, ownDir, names);
+  const reserve = await reserveOrigin(
+    o.config ?? STUDIO_CONFIG,
+    ownDir,
+    names,
+    o.store ?? 'alerts',
+  );
   if (reserve) origins.push(reserve);
   return origins;
 }

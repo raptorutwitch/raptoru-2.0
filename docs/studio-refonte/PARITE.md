@@ -1,5 +1,33 @@
 # Parité fonctionnelle de la refonte Studio
 
+**Matrice complète, module par module (07/11/2026)** : [parite/direct.md](parite/direct.md) (modules du direct) et [parite/admin.md](parite/admin.md)
+(économie, équipe, administration). Ancien Studio `5d63087`, nouveau Studio, routes du Core et console de l'extension, comparés par le comportement.
+Statuts : préservée, déplacée, remplacée, obsolète, manquante, bloquée.
+
+## Bilan du 07/11
+
+Aucun écart sur les droits, les prix enregistrés, les remboursements ou l'idempotence. Écarts trouvés, tous corrigés :
+
+| Écart | Gravité | Correction |
+|---|---|---|
+| Ouvrir ou fermer les mini-jeux en Production sans confirmation | Grave | Confirmation rétablie |
+| Mises et délais des mini-jeux sans « ancien → nouveau » | Moyen | Confirmation rétablie |
+| Prix du Bonk sans « ancien → nouveau » | Moyen | Confirmation rétablie |
+| Interrupteurs des modules du socle sans confirmation | Moyen | Confirmation rétablie |
+| Limites des paliers TTS non saisissables à l'unité, découpe invalide | Moyen | Champ « Jusqu’à », découpe corrigée |
+| Recliquer l'état courant renvoyait la commande et rouvrait le choix de file | Moyen | Ignoré |
+| Erreur du runtime TTS non affichée | Faible | Affichée |
+| Mode Twitch cliquable quand il est indisponible | Faible | Refusé avec un message |
+| Recherche des droits de la Roue perdue au relevé | Faible | Protégée |
+
+Déplacé dans cette passe, avec la preuve que rien ne se perd : l'interrupteur Mini-jeux de la Simulation vit dans la page Mini-jeux (même route, même
+confirmation en Production) ; le simulateur Spotify passe des réglages à la page ; la fenêtre de la Simulation devient un lien.
+
+Bloqué, limite réelle : ajouter ou remplacer un son du Soundboard (banque livrée avec le Core et l'extension). À arbitrer :
+le code mort ci-dessous.
+
+## Audit mécanique du 06/11
+
 Audit du 06/11/2026, contre `5d63087`. Toutes les anciennes pages, y compris la console de modération de l'extension
 (`shared/moderation-v2.js`), que l'ancien onglet Modération montait et qui était la vraie source de ses fonctions.
 

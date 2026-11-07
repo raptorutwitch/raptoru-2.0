@@ -32,10 +32,6 @@ export class TtsRuntime {
     readonly production = false,
     private readonly labReads = false,
   ) {}
-  /** The Lab's own Core (never the Production profile): a fictional viewer may buy here (/api/ext-lab/purchase). */
-  private get simulates() {
-    return !this.production || this.labReads;
-  }
   /** OBS browser source (1920×1080, transparent). */
   get overlayUrl() {
     return `${this.origin}/tts-lab/player.html#${this.worker.token}`;
@@ -149,7 +145,6 @@ export class TtsRuntime {
         }
         reply(200, {
           enabled: true,
-          can_simulate: this.simulates,
           ready: this.worker.ready,
           player: this.worker.playerInfo,
           module_state:

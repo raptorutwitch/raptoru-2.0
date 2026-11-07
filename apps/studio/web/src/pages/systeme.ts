@@ -36,6 +36,7 @@ type RuntimeStatus = {
 type BonkStatus = {
   enabled: boolean;
   obs?: boolean;
+  fictional?: boolean;
   sourceReady?: boolean;
   error?: string | null;
 };
@@ -242,9 +243,11 @@ export function mountSysteme(root: HTMLElement) {
     );
     const obs: ['' | 'w' | 'off', string] = bonk?.enabled
       ? bonk.obs
-        ? bonk.sourceReady
-          ? ['', 'Connecté · source active']
-          : ['w', 'Connecté · source Bonk inactive']
+        ? bonk.fictional
+          ? ['', 'OBS fictif']
+          : bonk.sourceReady
+            ? ['', 'Connecté · source active']
+            : ['w', 'Connecté · source Bonk inactive']
         : ['off', 'Non connecté']
       : ['off', 'Indisponible'];
     const player: ['' | 'w' | 'off', string] = sound?.enabled
@@ -266,7 +269,7 @@ export function mountSysteme(root: HTMLElement) {
       : 'non lue';
     patch(
       slot('links'),
-      `${line('film', 'OBS WebSocket', 'Connexion depuis la page Bonk (mot de passe jamais stocké en clair).', stateChip(...obs))}
+      `${line('film', 'OBS WebSocket', bonk?.fictional ? 'Le Lab n’ouvre aucune connexion : le vrai OBS n’est pas touché.' : 'Connexion depuis la page Bonk (mot de passe jamais stocké en clair).', stateChip(...obs))}
       ${line('sound', 'Lecteur Soundboard', `Un clic d’activation par chargement (règle d’autoplay), ${production ? 'en haut de la page Soundboard' : 'dans l’Extension Lab'}.`, stateChip(...player))}
       ${line('mic', 'Lecteur TTS (OBS)', production ? 'Adresse de la source OBS : page TTS.' : `Module ${esc(ttsState)} · file ${esc(ttsQueue)}. Adresse de la source OBS : page TTS.`, stateChip(...ttsPlayer))}
       ${line('layers', 'Données locales', production ? `${esc(rt?.dataRoot ?? 'non lues')} · .env et jetons lus ici, jamais embarqués.` : `${esc(rt?.dataRoot ?? 'non lues')} · dossier propre au Lab, ni .env ni jeton réel.`, `<span class="d-tag">${rt ? (rt.packaged ? 'Application installée' : 'Dépôt (dev)') : '?'}</span>`)}

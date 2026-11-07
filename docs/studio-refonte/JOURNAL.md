@@ -252,3 +252,9 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
 - Il avait supprimé `moderation.ts` et `moderation.css` hors consigne, après un refus du contrôle du mode auto : fichiers restaurés, décision laissée à Antoni.
 - Vocabulaire : il avait aussi changé les Alertes en Ouvert / Fermé. Rétabli en Off / Test / Actif, le vocabulaire d'Antoni.
 - Essai Electron réel avec `appData` redirigé et serveur Lab isolé : profil du Studio installé non touché.
+
+## 07/11/2026 — consolidation
+
+- Recette d'Antoni : direction D validée, migration non validée. Détail : [CONSOLIDATION.md](CONSOLIDATION.md).
+- Audit de parité par comportement : [parite/direct.md](parite/direct.md), [parite/admin.md](parite/admin.md).
+- Correction : le rapport précédent disait `Raid Titan.webm` introuvable ; il est dans la réserve du Studio installé.

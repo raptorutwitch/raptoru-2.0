@@ -1,7 +1,11 @@
 import { CpRewardsSync, CpRuleInput } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
 import { channelPointsRoutes } from '../src/http/channel-points-routes.js';
-import { LAB_REWARDS, loadLabRewards } from '../src/lab/rewards-catalog.js';
+import {
+  LAB_REWARDS,
+  labRewardList,
+  loadLabRewards,
+} from '../src/lab/rewards-catalog.js';
 import { CpError } from '../src/channel-points/service.js';
 
 const has = (routes: { pattern: RegExp }[], path: string) =>
@@ -9,7 +13,7 @@ const has = (routes: { pattern: RegExp }[], path: string) =>
 
 describe('Lab rewards catalogue', () => {
   it('obeys the real contracts of the list and of the rules', () => {
-    const rewards = LAB_REWARDS.map(({ actions, ...r }) => r);
+    const rewards = labRewardList();
     expect(() =>
       CpRewardsSync.parse({ channel_id: '900100', rewards }),
     ).not.toThrow();

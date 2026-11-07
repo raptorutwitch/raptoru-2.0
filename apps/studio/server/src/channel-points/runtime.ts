@@ -484,6 +484,10 @@ export class ChannelPointsRuntime {
       );
     if (p === '/test')
       return reply(200, await this.d.core(`${ch}/test`, await this.body(req)));
+    if (p === '/effects-import')
+      return this.d.environment === 'lab' && this.d.effects
+        ? reply(200, { report: await this.d.effects.importMissing() })
+        : reply(403, { error: 'lab_only' });
     if (p === '/lab-catalog')
       return this.d.environment === 'lab'
         ? reply(200, await this.d.core(`${ch}/lab-catalog`, {}))

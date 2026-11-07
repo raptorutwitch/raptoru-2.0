@@ -112,12 +112,24 @@ export const LAB_REWARDS: readonly Reward[] = [
   },
 ];
 
+/** The catalogue as Twitch lists it: no rule. */
+export const labRewardList = () =>
+  LAB_REWARDS.map((r) => ({
+    id: r.id,
+    title: r.title,
+    cost: r.cost,
+    prompt: r.prompt,
+    is_enabled: r.is_enabled,
+    is_paused: r.is_paused,
+    user_input_required: r.user_input_required,
+  }));
+
 /** Lists the catalogue as Twitch would, and writes a rule only where none exists: a rule edited in the Lab stays. */
 export async function loadLabRewards(
   cp: ChannelPointsService,
   channelId: string,
 ) {
-  const rewards = LAB_REWARDS.map(({ actions, ...r }) => r);
+  const rewards = labRewardList();
   await cp.syncRewards({ channel_id: channelId, rewards });
   let rules = 0;
   for (const { id, actions } of LAB_REWARDS)

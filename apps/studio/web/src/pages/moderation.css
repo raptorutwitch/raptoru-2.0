@@ -829,6 +829,9 @@ button.mj-r:hover {
   justify-items: center;
 }
 
+.ms-past {
+  margin: 10px 0 2px;
+}
 .mt-roles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

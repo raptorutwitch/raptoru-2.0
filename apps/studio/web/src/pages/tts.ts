@@ -25,7 +25,13 @@ import {
   toast,
   copy,
 } from '../ds/ds.js';
-import { getJson, postJson, statusError, tryGetJson } from '../http.js';
+import {
+  getJson,
+  labOnMainCore,
+  postJson,
+  statusError,
+  tryGetJson,
+} from '../http.js';
 import {
   act,
   marked,
@@ -77,7 +83,6 @@ interface Queue {
 }
 interface Player {
   enabled: boolean;
-  can_simulate?: boolean;
   ready?: boolean;
   player?: { voices: number; seen_ms_ago: number } | null;
   overlayUrl?: string;
@@ -153,6 +158,12 @@ export function mountTtsPage(root: HTMLElement) {
   const voiceSel = p.body.querySelector<HTMLSelectElement>('[data-voice]')!;
   const viewerSel = p.body.querySelector<HTMLSelectElement>('[data-viewer]')!;
 
+  let simulates = false;
+  void labOnMainCore().then((m) => {
+    simulates = m;
+    z('buy').hidden = !m;
+    if (m) void readBalance();
+  });
   let q: Queue | null = null;
   let qError = '';
   let player: Player | null = null;
@@ -211,8 +222,7 @@ export function mountTtsPage(root: HTMLElement) {
       qError = errText(e);
     }
     player = await tryGetJson<Player>('/api/tts-lab/status');
-    z('buy').hidden = !player?.can_simulate;
-    if (player?.can_simulate) void readBalance();
+    if (simulates) void readBalance();
     setNavCount('tts', q?.waiting.length ? String(q.waiting.length) : null);
     if (p.panel.isOpen()) paintPanel();
     if (tab === 'past') void readPast();
@@ -311,7 +321,7 @@ export function mountTtsPage(root: HTMLElement) {
       !player
         ? ''
         : !up
-          ? `<b>Aucun lecteur ouvert</b><span>${player.can_simulate ? 'Le Core refuse un achat sans lecteur. OBS n’est pas nécessaire dans le Lab : Studio peut lire lui-même.' : 'Les messages attendent, rien n’est perdu.'}</span>${player.can_simulate ? '<button type="button" class="d-btn sm pri" data-here>Lire dans Studio</button>' : ''}<button type="button" class="d-btn sm" data-open-source>Voir la source OBS</button>`
+          ? `<b>Aucun lecteur ouvert</b><span>${simulates ? 'Le Core refuse un achat sans lecteur. OBS n’est pas nécessaire dans le Lab : Studio peut lire lui-même.' : 'Les messages attendent, rien n’est perdu.'}</span>${simulates ? '<button type="button" class="d-btn sm pri" data-here>Lire dans Studio</button>' : ''}<button type="button" class="d-btn sm" data-open-source>Voir la source OBS</button>`
           : '<span>Personne ne parle pour l’instant.</span>',
     );
   }
@@ -718,6 +728,7 @@ export function mountTtsPage(root: HTMLElement) {
   viewerSel.addEventListener('change', () => void readBalance());
   /** Le lecteur de Studio, s'il n'y en a aucun : le Core n'admet rien sans lecteur prêt. */
   async function needPlayer() {
+    player ??= await tryGetJson<Player>('/api/tts-lab/status');
     if (player?.ready) return true;
     if (!studioPlayer) toggleStudioPlayer();
     for (let i = 0; i < 16 && !player?.ready; i++) {

@@ -161,7 +161,7 @@ export function mountEffectsPage(root: HTMLElement) {
           ['native', `Interactions ${natives.length}`],
         ],
         tab,
-      )}<span class="d-sp"></span><small class="${count.missing.length ? 'fxp-miss' : 'd-faint'}" title="${esc(count.missing.join(', '))}">${count.have} / ${count.total} importés</small>`,
+      )}<span class="d-sp"></span><small class="${count.missing.length ? 'fxp-miss' : 'd-faint'}" title="${esc(count.missing.join(', '))}">${count.have} / ${count.total} importés</small>${count.missing.length && s?.environment === 'lab' ? `<button type="button" class="d-btn sm" data-import title="Cherche dans tes dossiers habituels, puis dans la copie du Studio installé. Tes fichiers sont seulement lus.">${ic('upload')}Importer ce qui manque</button>` : ''}`,
     );
     const rows =
       tab === 'sounds' ? sounds : tab === 'videos' ? videos : natives;
@@ -248,6 +248,32 @@ export function mountEffectsPage(root: HTMLElement) {
     if (!b) return;
     if (b.matches('[data-copy]'))
       return copy(s?.effects?.url ?? '', 'Adresse copiée');
+    if (b.matches('[data-import]'))
+      return void confirmBox({
+        title: 'Importer les médias manquants ?',
+        body: 'Studio cherche dans tes dossiers habituels, puis dans la copie du Studio installé, et copie dans le Lab. Tes fichiers sont seulement lus, leur empreinte est vérifiée.',
+        yes: 'Importer',
+        no: 'Annuler',
+        danger: false,
+      }).then((yes) => {
+        if (!yes) return;
+        let report: { result: string }[] = [];
+        void run(b, async () => {
+          report = (
+            await postJson<{ report: typeof report }>(
+              '/api/channel-points/effects-import',
+              {},
+            )
+          ).report;
+          const done = report.filter((r) => r.result !== 'corrupt').length;
+          toast(
+            done
+              ? `${done} média(s) importé(s).`
+              : 'Aucun média trouvé sur ce PC.',
+            { bad: !done },
+          );
+        }).then(() => tick.now());
+      });
     if (b.dataset.tab) {
       tab = b.dataset.tab as typeof tab;
       return paintMedia();

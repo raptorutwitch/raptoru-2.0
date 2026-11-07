@@ -180,7 +180,13 @@ export function mountDesk(ctx: Ctx): View {
     const past = recent(m).slice(0, m === 'bonk' ? 9 : 5);
     keyed(
       strip(m, 'l'),
-      [...w.map((i) => row(i, m)), ...past.map((i) => row(i, m, true))],
+      [
+        ...w.map((i) => row(i, m)),
+        ...(w.length && past.length
+          ? [{ key: 'past', html: '<p class="d-lb ms-past">Récents</p>' }]
+          : []),
+        ...past.map((i) => row(i, m, true)),
+      ],
       `<div class="d-empty">${ctx.o ? (m === 'bonk' ? 'Aucun bonk.' : 'File vide.') : esc(ctx.err || 'Lecture…')}</div>`,
     );
   }
