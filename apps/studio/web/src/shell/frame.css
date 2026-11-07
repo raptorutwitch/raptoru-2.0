@@ -33,6 +33,41 @@ body {
   color: var(--ink);
   text-decoration: none;
 }
+.rs-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+}
+.rs-hist {
+  display: flex;
+  gap: 2px;
+}
+.rs-hist button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink2);
+  cursor: pointer;
+}
+.rs-hist button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--fill2);
+}
+.rs-hist button:disabled {
+  color: var(--ink3);
+  opacity: 0.45;
+  cursor: default;
+}
+.rs-side .rs-hist .rs-ic {
+  width: 15px;
+  height: 15px;
+}
 .rs-brand svg {
   width: 24px;
   height: 24px;
@@ -242,7 +277,15 @@ body {
   }
   .rs-brand {
     justify-content: center;
-    padding: 4px 0 10px;
+    padding: 4px 0 6px;
+  }
+  .rs-top {
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 6px;
+  }
+  .rs-hist button {
+    width: 20px;
   }
   .rs-brand span,
   .rs-nav span,

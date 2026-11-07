@@ -20,6 +20,7 @@ import {
   steadyEnds,
 } from './regie.js';
 import { icon } from './icons.js';
+import { ic } from '../ds/icons.js';
 import { loadReadiness, readiness } from '../readiness.js';
 import {
   type Page,
@@ -299,12 +300,39 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   });
 
   // --- Navigation -----------------------------------------------------------------------------------------------
+  // Retour / Suivant : l'historique du navigateur, numéroté pour savoir s'il reste une page avant ou après. Chaque entrée garde
+  // sa position de défilement ; les pages restent montées, leur onglet est donc retrouvé tel qu'on l'a laissé.
+  let pos = 0;
+  let max = 0;
+  const content = () => $('.rs-content');
+  const drawHist = () => {
+    const [back, fwd] = side.querySelectorAll<HTMLButtonElement>('.rs-hist button');
+    if (back) back.disabled = pos <= 0;
+    if (fwd) fwd.disabled = pos >= max;
+  };
   function open(
     p: Page,
-    { push = true, search = '' }: { push?: boolean; search?: string } = {},
+    {
+      push = true,
+      search = '',
+      scroll = 0,
+    }: { push?: boolean; search?: string; scroll?: number } = {},
   ) {
+    const href = search || hrefOf(p);
+    // Recliquer la page affichée n'empile rien : Retour ne ramène jamais à la même page.
+    const same =
+      p.id === current.id &&
+      new URL(href, location.href).search === location.search;
     current = p;
-    if (push) history.pushState({ p: p.id }, '', search || hrefOf(p));
+    if (push && !same) {
+      history.replaceState(
+        { ...(history.state ?? {}), y: content().scrollTop },
+        '',
+      );
+      pos += 1;
+      max = pos;
+      history.pushState({ p: p.id, i: pos }, '', href);
+    }
     if (p.hub) hubView(p.hub);
     for (const [id, v] of views) {
       v.el.hidden = id !== p.hub;
@@ -327,7 +355,9 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
           `#tab-extension-lab [data-surface="${CSS.escape(surface)}"]:not(.on)`,
         )
         ?.click();
-    $('.rs-content').scrollTop = 0;
+    content().scrollTop = scroll;
+    if (scroll) requestAnimationFrame(() => (content().scrollTop = scroll));
+    drawHist();
     pulse.recent = pushRecent(pulse.recent, p.id);
     store.set(RECENT_KEY, pulse.recent);
     store.set(LAST_KEY, p.id);
@@ -378,9 +408,30 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
         )!,
       );
   });
-  addEventListener('popstate', () => {
+  addEventListener('popstate', (e) => {
+    const st = (e.state ?? {}) as { i?: number; y?: number };
+    pos = st.i ?? 0;
+    max = Math.max(max, pos);
     const p = pageFromSearch(location.search);
-    if (p) open(p, { push: false });
+    if (p) open(p, { push: false, scroll: st.y ?? 0 });
+  });
+  side.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-nav]');
+    if (b) history.go(b.dataset.nav === 'back' ? -1 : 1);
+  });
+  // Alt+← / Alt+→ et les boutons latéraux de la souris, comme dans un navigateur.
+  addEventListener('keydown', (e) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.key === 'ArrowLeft' && pos > 0) history.back();
+    else if (e.key === 'ArrowRight' && pos < max) history.forward();
+    else return;
+    e.preventDefault();
+  });
+  addEventListener('mouseup', (e) => {
+    if (e.button !== 3 && e.button !== 4) return;
+    e.preventDefault();
+    if (e.button === 3 && pos > 0) history.back();
+    if (e.button === 4 && pos < max) history.forward();
   });
 
   // --- Palette Ctrl+K ---------------------------------------------------------------------------------------------
@@ -465,7 +516,7 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
     })();
   open(asked ?? last ?? pageById('centre')!, { push: false });
   history.replaceState(
-    { p: current.id },
+    { p: current.id, i: 0 },
     '',
     asked ? initialSearch || hrefOf(current) : hrefOf(current),
   );
@@ -498,7 +549,10 @@ export function shellHtml(viewsHtml: string) {
   return `
   <div class="rs-shell">
     <aside class="rs-side" aria-label="Navigation">
-      <a class="rs-brand" href="/?p=centre" data-page="centre" aria-label="raptoru_ · Centre de contrôle">${BRAND}<span>raptoru_</span></a>
+      <div class="rs-top">
+        <a class="rs-brand" href="/?p=centre" data-page="centre" aria-label="raptoru_ · Centre de contrôle">${BRAND}<span>raptoru_</span></a>
+        <span class="rs-hist"><button type="button" data-nav="back" title="Retour (Alt+←)" aria-label="Page précédente" disabled>${ic('back', 'rs-ic')}</button><button type="button" data-nav="fwd" title="Suivant (Alt+→)" aria-label="Page suivante" disabled>${ic('chev', 'rs-ic')}</button></span>
+      </div>
       <button type="button" class="rs-search-btn" aria-label="Rechercher">${icon('search')}<span>Rechercher…</span><kbd>Ctrl K</kbd></button>
       <nav class="rs-sections" aria-label="Pilotage"></nav>
       <p class="rs-side-h">Modules</p>
