@@ -9,7 +9,10 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const [id, profile = 'admin'] = process.argv.slice(2);
-if (!/^[a-z][a-z0-9_]{1,40}$/.test(id ?? '') || !['admin', 'paid'].includes(profile)) {
+if (
+  !/^[a-z][a-z0-9_]{1,40}$/.test(id ?? '') ||
+  !['admin', 'paid'].includes(profile)
+) {
   console.error('usage: npm run module:new -- <id_en_snake_case> [admin|paid]');
   process.exit(1);
 }

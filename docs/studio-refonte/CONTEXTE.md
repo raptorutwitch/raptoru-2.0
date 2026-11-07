@@ -14,18 +14,18 @@ les capacités métier restent.
 
 ## 2. Historique des décisions
 
-| Date | Décision | Source |
-|---|---|---|
-| 04/11 | Étude UX/UI d'Astra : diagnostic, architecture cible, charte (partie F), lots de migration (§ E.4). | [étude](../RAPTORU_STUDIO_UX_UI_2026-11-04.md) |
-| 04/11 | GO de la refonte en Lab, par lots, sans validation intermédiaire ; aucune Production ni release Studio implicite. | Antoni |
-| 04/11 | Direction et lots 0-4 validés « en Lab » comme direction (pas comme validation manuelle d'écran). Continuer en autonomie. | Antoni |
-| 04/11 | Questions métier Défis : documentées, règles inchangées pour l'instant (§ 13). | Antoni |
-| 04/11 | **Tout Studio peut être refondu**, prototypes validés compris : un prototype validé fixe un fonctionnement, pas une interface. Capacités métier conservées. | Antoni (consolidation) |
-| 04/11 | Studio doit accueillir les futurs modules sans nouvel onglet principal ni nouvelle charte (§ 9). | Antoni |
-| 04/11 | Le Laboratoire, en particulier l'**Extension Lab**, est essentiel : mieux organisé, jamais dégradé ni supprimé. | Antoni |
-| 04/11 | Catégories strictes **PRODUCTION / LAB / SIMULATION / APERÇU LOCAL** selon le comportement technique réel (§ 7) ; simulations inutiles ou trompeuses à éliminer progressivement après vérification des usages. | Antoni |
-| 04/11 | **Audit fonctionnel** (démarrages, cycle du live, automatisations, réglages) : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md). La refonte devient fonctionnelle autant que visuelle ; principes au § 17. Arbitrages métier H1-H16 en attente. | mission d'Antoni |
-| 05/11 | **H1-H16 tranchés** (§ 18) ; GO pour le développement autonome **en Lab** (aucune Production, aucune publication). | mission d'Antoni |
+| Date  | Décision                                                                                                                                                                                                                                    | Source                                         |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 04/11 | Étude UX/UI d'Astra : diagnostic, architecture cible, charte (partie F), lots de migration (§ E.4).                                                                                                                                         | [étude](../RAPTORU_STUDIO_UX_UI_2026-11-04.md) |
+| 04/11 | GO de la refonte en Lab, par lots, sans validation intermédiaire ; aucune Production ni release Studio implicite.                                                                                                                           | Antoni                                         |
+| 04/11 | Direction et lots 0-4 validés « en Lab » comme direction (pas comme validation manuelle d'écran). Continuer en autonomie.                                                                                                                   | Antoni                                         |
+| 04/11 | Questions métier Défis : documentées, règles inchangées pour l'instant (§ 13).                                                                                                                                                              | Antoni                                         |
+| 04/11 | **Tout Studio peut être refondu**, prototypes validés compris : un prototype validé fixe un fonctionnement, pas une interface. Capacités métier conservées.                                                                                 | Antoni (consolidation)                         |
+| 04/11 | Studio doit accueillir les futurs modules sans nouvel onglet principal ni nouvelle charte (§ 9).                                                                                                                                            | Antoni                                         |
+| 04/11 | Le Laboratoire, en particulier l'**Extension Lab**, est essentiel : mieux organisé, jamais dégradé ni supprimé.                                                                                                                             | Antoni                                         |
+| 04/11 | Catégories strictes **PRODUCTION / LAB / SIMULATION / APERÇU LOCAL** selon le comportement technique réel (§ 7) ; simulations inutiles ou trompeuses à éliminer progressivement après vérification des usages.                              | Antoni                                         |
+| 04/11 | **Audit fonctionnel** (démarrages, cycle du live, automatisations, réglages) : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md). La refonte devient fonctionnelle autant que visuelle ; principes au § 17. Arbitrages métier H1-H16 en attente. | mission d'Antoni                               |
+| 05/11 | **H1-H16 tranchés** (§ 18) ; GO pour le développement autonome **en Lab** (aucune Production, aucune publication).                                                                                                                          | mission d'Antoni                               |
 
 ## 3. Problèmes du Studio initial (résumé Astra, non réaudité)
 
@@ -57,15 +57,15 @@ les capacités métier restent.
 
 Six destinations + un Laboratoire séparé (registre `apps/studio/web/src/shell/registry.ts`) :
 
-| Destination | Rôle | Contenu actuel |
-|---|---|---|
-| Centre de contrôle | Accueil : santé, incidents, favoris, récents, préparation du live | hub |
-| Régie live | Pendant le stream : état réel des files, coupures nommées, accès aux contrôles | hub + Modération |
-| Modules | Catalogue de toutes les fonctionnalités, par groupes (Sons & voix, Alertes & points de chaîne, Jeux & tirages, Effets & mise en scène, Interactions à sanction, Musique, Commandes du chat, Événements saisonniers) | hub + pages modules |
-| Communauté | Viewers, progression, boutique, défis | hub + Progression, Boutique, Défis |
-| Activité | Incidents et historiques | hub |
-| Système | Profil, Core, bot, comptes Twitch, OBS, lecteurs, runtime | ancien accueil Studio |
-| **Laboratoire** (à part, bas de barre) | Simulation, Test Lab, Extension Lab | hub + vues |
+| Destination                            | Rôle                                                                                                                                                                                                                | Contenu actuel                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Centre de contrôle                     | Accueil : santé, incidents, favoris, récents, préparation du live                                                                                                                                                   | hub                                |
+| Régie live                             | Pendant le stream : état réel des files, coupures nommées, accès aux contrôles                                                                                                                                      | hub + Modération                   |
+| Modules                                | Catalogue de toutes les fonctionnalités, par groupes (Sons & voix, Alertes & points de chaîne, Jeux & tirages, Effets & mise en scène, Interactions à sanction, Musique, Commandes du chat, Événements saisonniers) | hub + pages modules                |
+| Communauté                             | Viewers, progression, boutique, défis                                                                                                                                                                               | hub + Progression, Boutique, Défis |
+| Activité                               | Incidents et historiques                                                                                                                                                                                            | hub                                |
+| Système                                | Profil, Core, bot, comptes Twitch, OBS, lecteurs, runtime                                                                                                                                                           | ancien accueil Studio              |
+| **Laboratoire** (à part, bas de barre) | Simulation, Test Lab, Extension Lab                                                                                                                                                                                 | hub + vues                         |
 
 Règles de navigation : barre latérale 232 px (tiroir sous 900 px), ≤ 6 favoris (défaut : Tombola, Alertes, Récompenses
 Twitch, Défis), récents (6), palette **Ctrl+K** qui ouvre des pages et n'exécute jamais d'action, fil d'Ariane ≤ 3
@@ -91,12 +91,12 @@ historique navigateur. Supervision compacte : une ligne par incident sous l'en-t
 
 Classer selon ce que fait **techniquement** l'action, pas selon le nom de l'écran :
 
-| Catégorie | Définition | Exemples actuels |
-|---|---|---|
-| **PRODUCTION** | Core de Production : données et opérations réelles (Jetons, sanctions Twitch, OBS du stream, achats). Portée dite avant d'agir. | Profil Production : Défis (activation, recomptage), Boutique (remboursement, dons), coupure des points de chaîne, Tombola |
-| **LAB** | Environnement isolé (Core local, base locale) : opérations réelles **sur des données isolées**. Pas une simulation. | Profil Lab ; pile E2E en mémoire |
-| **SIMULATION** | Événements ou données artificiels injectés pour tester un comportement (peuvent traverser le vrai circuit). | « Envoyer dans la file » des Alertes, chat simulé, live simulé |
-| **APERÇU LOCAL** | Rendu des vrais composants sans exécution métier. | Aperçu des alertes, aperçu raptoru.fr des cosmétiques, « Écouter » un son d'effet, Extension Lab (Lab EBS local) |
+| Catégorie        | Définition                                                                                                                      | Exemples actuels                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **PRODUCTION**   | Core de Production : données et opérations réelles (Jetons, sanctions Twitch, OBS du stream, achats). Portée dite avant d'agir. | Profil Production : Défis (activation, recomptage), Boutique (remboursement, dons), coupure des points de chaîne, Tombola |
+| **LAB**          | Environnement isolé (Core local, base locale) : opérations réelles **sur des données isolées**. Pas une simulation.             | Profil Lab ; pile E2E en mémoire                                                                                          |
+| **SIMULATION**   | Événements ou données artificiels injectés pour tester un comportement (peuvent traverser le vrai circuit).                     | « Envoyer dans la file » des Alertes, chat simulé, live simulé                                                            |
+| **APERÇU LOCAL** | Rendu des vrais composants sans exécution métier.                                                                               | Aperçu des alertes, aperçu raptoru.fr des cosmétiques, « Écouter » un son d'effet, Extension Lab (Lab EBS local)          |
 
 Règles : ne jamais présenter une simulation ou un aperçu comme connecté à la Production ; ne jamais masquer un état
 inconnu derrière un statut rassurant (« État inconnu », « Supervision indisponible ») ; jamais de donnée inventée
@@ -105,16 +105,16 @@ actifs ou files OBS de Production ; ne pas relier un aperçu local au Core de Pr
 
 **Inventaire à classer (non encore audité en détail, ROADMAP lot 9)** :
 
-| Outil | Comportement relevé | Classement provisoire |
-|---|---|---|
-| Extension Lab (`extension-lab.ts`) | Extension de production servie par Studio dans des cadres Twitch réalistes, contexte Twitch simulé, Lab EBS local, Jetons fictifs ; ne peut joindre que ce Studio (CSP). | Aperçu local + simulation — **essentiel, à garder** |
+| Outil                                                            | Comportement relevé                                                                                                                                                                                                           | Classement provisoire                                                       |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Extension Lab (`extension-lab.ts`)                               | Extension de production servie par Studio dans des cadres Twitch réalistes, contexte Twitch simulé, Lab EBS local, Jetons fictifs ; ne peut joindre que ce Studio (CSP).                                                      | Aperçu local + simulation — **essentiel, à garder**                         |
 | Widget « Simulation de stream » (`simulation.ts`, barre du haut) | Mélange live simulé, **ingestion du vrai chat Twitch** et **sortie réelle dans le chat par LeCroupier_**, mini-jeux. En Production : live simulé retiré et interrupteur mini-jeux annoncé réel avec confirmation (`0675b9b`). | **Ambigu** : actions réelles sous le nom « Simulation » → à séparer (lot 9) |
-| Vue Simulation (`simulation-tab.ts`) | Simulateur de chat (identités, rôles), mêmes interrupteurs que le widget. | Simulation utile ; à regrouper |
-| Test Lab (`test-lab.ts`) | « Temporary » : services locaux (Postgres, Core 3000, bot, auth), test de présence. En Production : seuls les arrêts sont permis (`cde6c4f`) : un bot démarré ici tournerait hors du bail du Core de production. | Diagnostic réel / historique → à auditer |
-| Aperçu Alertes | Moteur réel dans une iframe, sans file. | Aperçu local |
-| « Tester » d'une récompense (Récompenses Twitch) | Exécute la règle enregistrée **pour de vrai** (OBS, Soundboard, effets, Spotify sans mode à blanc ; crédits et Random Ban à blanc). | Action réelle — libellé à clarifier (audit P0-6) |
-| Random Ban « Tester » | Tirage à blanc, jamais de timeout. | Simulation (lecture Twitch réelle) |
-| Spotify, onglet simulateur (Lab) | Simulateur du module en profil Lab. | Simulation utile |
+| Vue Simulation (`simulation-tab.ts`)                             | Simulateur de chat (identités, rôles), mêmes interrupteurs que le widget.                                                                                                                                                     | Simulation utile ; à regrouper                                              |
+| Test Lab (`test-lab.ts`)                                         | « Temporary » : services locaux (Postgres, Core 3000, bot, auth), test de présence. En Production : seuls les arrêts sont permis (`cde6c4f`) : un bot démarré ici tournerait hors du bail du Core de production.              | Diagnostic réel / historique → à auditer                                    |
+| Aperçu Alertes                                                   | Moteur réel dans une iframe, sans file.                                                                                                                                                                                       | Aperçu local                                                                |
+| « Tester » d'une récompense (Récompenses Twitch)                 | Exécute la règle enregistrée **pour de vrai** (OBS, Soundboard, effets, Spotify sans mode à blanc ; crédits et Random Ban à blanc).                                                                                           | Action réelle — libellé à clarifier (audit P0-6)                            |
+| Random Ban « Tester »                                            | Tirage à blanc, jamais de timeout.                                                                                                                                                                                            | Simulation (lecture Twitch réelle)                                          |
+| Spotify, onglet simulateur (Lab)                                 | Simulateur du module en profil Lab.                                                                                                                                                                                           | Simulation utile                                                            |
 
 ## 8. Le Laboratoire et l'Extension Lab
 
@@ -188,18 +188,18 @@ anciennes adresses `?tab=` ; Extension Lab et les simulations utiles ; séparati
 
 ## 14. Emplacements
 
-| Quoi | Où |
-|---|---|
-| Shell, registre, icônes, Régie, styles de la charte | `apps/studio/web/src/shell/` (`shell.ts`, `registry.ts`, `icons.ts`, `regie.ts`, `shell.css`) |
-| Montage des vues | `apps/studio/web/src/main.ts` |
-| Vues refondues | `challenges.ts/.css`, `cosmetics.ts/.css`, `channel-points.ts/-view.ts/.css`, `progression.ts/.css` |
-| Serveur local, routes | `apps/studio/server/src` |
-| Tests unitaires | `apps/studio/server/test` (vitest) — `studio-shell.test.ts` pour le shell et la Régie |
-| E2E navigateur | `apps/studio/server/e2e` (Playwright ; pile isolée `lab-stack.ts`) |
+| Quoi                                                | Où                                                                                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shell, registre, icônes, Régie, styles de la charte | `apps/studio/web/src/shell/` (`shell.ts`, `registry.ts`, `icons.ts`, `regie.ts`, `shell.css`)                                               |
+| Montage des vues                                    | `apps/studio/web/src/main.ts`                                                                                                               |
+| Vues refondues                                      | `challenges.ts/.css`, `cosmetics.ts/.css`, `channel-points.ts/-view.ts/.css`, `progression.ts/.css`                                         |
+| Serveur local, routes                               | `apps/studio/server/src`                                                                                                                    |
+| Tests unitaires                                     | `apps/studio/server/test` (vitest) — `studio-shell.test.ts` pour le shell et la Régie                                                       |
+| E2E navigateur                                      | `apps/studio/server/e2e` (Playwright ; pile isolée `lab-stack.ts`)                                                                          |
 | Étude Astra (référence historique, ne pas réécrire) | `docs/RAPTORU_STUDIO_UX_UI_2026-11-04.md`, maquette `docs/RAPTORU_STUDIO_UX_UI_2026-11-04.prototype.html`, images `docs/assets/studio-ux-*` |
-| Copie d'origine des livrables Astra | `Documents\Codex\2026-11-04\files-pasted-by-the-user-raptoru\outputs\` |
-| Captures de revue (données fictives) | `docs/studio-refonte/captures/` |
-| Aperçu en un clic | `dev/apercu-refonte-studio.cmd` |
+| Copie d'origine des livrables Astra                 | `Documents\Codex\2026-11-04\files-pasted-by-the-user-raptoru\outputs\`                                                                      |
+| Captures de revue (données fictives)                | `docs/studio-refonte/captures/`                                                                                                             |
+| Aperçu en un clic                                   | `dev/apercu-refonte-studio.cmd`                                                                                                             |
 
 Branche `feat/studio-ux` (locale, non poussée), partie de `docs/site-hub-delivered` (68420a0, elle-même sur `main`
 8a897a5). Worktree : `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\studio-ux`.
@@ -257,24 +257,24 @@ Détail et preuves : [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md).
 Antoni a tranché les seize arbitrages de l'audit (§ H) et donné son GO pour les mettre en œuvre **en Lab uniquement**.
 Rien n'atteint la Production sans nouvelle autorisation explicite (déploiement, migration, release, extension).
 
-| # | Décision | Mise en œuvre |
-|---|---|---|
-| H1 | Interactions payantes liées au stream **uniquement en live** (Soundboard, TTS, Bonk, Chaos, `!rb`, Caution, Votekick, Spotify, effets de points de chaîne) ; refus avant débit, source de live canonique. Pas la Boutique, le Wallet, le Daily, la fidélité. Aucun contournement en Production ; tests en Lab. | codé, testé : source = session canonique `stream_sessions` (Production) ; le Lab n'est jamais bloqué |
-| H2 | Travaux OBS des points de chaîne non commencés : **expiration à 2 min**, remboursement unique quand c'est possible. | codé, testé |
-| H3 | Alertes : **30 min**, commande « Vider la file » (en attente seulement). | codé, testé |
-| H4 | TTS : **5 min** (au lieu de 30). | codé, testé |
-| H5 | StreamElements : **ACTIVE repris en Production** au redémarrage (Lab : TEST). | codé, testé |
-| H6 | Spotify en fin de live : fermer, annuler les non commencées, **rembourser** quand c'est possible, jamais deux fois. | codé, testé (délai de grâce technique de 10 min, voir § 19) |
-| H7 | Activités ponctuelles **manuelles** (aucun démarrage automatique nouveau). | rien à coder (comportement actuel) |
-| H8 | Jeu des mots : **ON/OFF durable**, intervalle réglable (5-15 min par défaut). | codé, testé |
-| H9 | Fidélité `tier_unknown` : **taux de base immédiat, complément différé** une seule fois. | codé, testé (règle de preuve au § 19) |
-| H10 | Prix, recharges, durées, limites **réglables** (§ D.3 Essentiels), bornes Core ; jamais cotes ni tables de gains. | en partie : mécanisme + `!rb`, `!fxcam`, Bonk ; reste Caution, Votekick, mini-jeux, Duel |
-| H11 | « Exécuter maintenant (réel) » et aperçu distincts ; Spotify à blanc. | codé, testé |
-| H12 | Bonk : prix et recharge réglables, **valeurs actuelles du Core** par défaut. | codé, testé (200 Jetons, délai 0 s par défaut) |
-| H13 | Roue : choix V1/V2 en **paramètres avancés** ; bug de frontière corrigé séparément. | codé, testé |
-| H14 | Daily : **paliers réglables**, heure fixe. | codé, testé (16:00 Paris confirmé dans le code, affichée) |
-| H15 | « Annoncer mes Level Up » **masqué**. | codé (extension à publier par Antoni) |
-| H16 | Moteur des Défis : **état réel affiché**, jamais activé d'ici. | codé, testé |
+| #   | Décision                                                                                                                                                                                                                                                                                                       | Mise en œuvre                                                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| H1  | Interactions payantes liées au stream **uniquement en live** (Soundboard, TTS, Bonk, Chaos, `!rb`, Caution, Votekick, Spotify, effets de points de chaîne) ; refus avant débit, source de live canonique. Pas la Boutique, le Wallet, le Daily, la fidélité. Aucun contournement en Production ; tests en Lab. | codé, testé : source = session canonique `stream_sessions` (Production) ; le Lab n'est jamais bloqué |
+| H2  | Travaux OBS des points de chaîne non commencés : **expiration à 2 min**, remboursement unique quand c'est possible.                                                                                                                                                                                            | codé, testé                                                                                          |
+| H3  | Alertes : **30 min**, commande « Vider la file » (en attente seulement).                                                                                                                                                                                                                                       | codé, testé                                                                                          |
+| H4  | TTS : **5 min** (au lieu de 30).                                                                                                                                                                                                                                                                               | codé, testé                                                                                          |
+| H5  | StreamElements : **ACTIVE repris en Production** au redémarrage (Lab : TEST).                                                                                                                                                                                                                                  | codé, testé                                                                                          |
+| H6  | Spotify en fin de live : fermer, annuler les non commencées, **rembourser** quand c'est possible, jamais deux fois.                                                                                                                                                                                            | codé, testé (délai de grâce technique de 10 min, voir § 19)                                          |
+| H7  | Activités ponctuelles **manuelles** (aucun démarrage automatique nouveau).                                                                                                                                                                                                                                     | rien à coder (comportement actuel)                                                                   |
+| H8  | Jeu des mots : **ON/OFF durable**, intervalle réglable (5-15 min par défaut).                                                                                                                                                                                                                                  | codé, testé                                                                                          |
+| H9  | Fidélité `tier_unknown` : **taux de base immédiat, complément différé** une seule fois.                                                                                                                                                                                                                        | codé, testé (règle de preuve au § 19)                                                                |
+| H10 | Prix, recharges, durées, limites **réglables** (§ D.3 Essentiels), bornes Core ; jamais cotes ni tables de gains.                                                                                                                                                                                              | en partie : mécanisme + `!rb`, `!fxcam`, Bonk ; reste Caution, Votekick, mini-jeux, Duel             |
+| H11 | « Exécuter maintenant (réel) » et aperçu distincts ; Spotify à blanc.                                                                                                                                                                                                                                          | codé, testé                                                                                          |
+| H12 | Bonk : prix et recharge réglables, **valeurs actuelles du Core** par défaut.                                                                                                                                                                                                                                   | codé, testé (200 Jetons, délai 0 s par défaut)                                                       |
+| H13 | Roue : choix V1/V2 en **paramètres avancés** ; bug de frontière corrigé séparément.                                                                                                                                                                                                                            | codé, testé                                                                                          |
+| H14 | Daily : **paliers réglables**, heure fixe.                                                                                                                                                                                                                                                                     | codé, testé (16:00 Paris confirmé dans le code, affichée)                                            |
+| H15 | « Annoncer mes Level Up » **masqué**.                                                                                                                                                                                                                                                                          | codé (extension à publier par Antoni)                                                                |
+| H16 | Moteur des Défis : **état réel affiché**, jamais activé d'ici.                                                                                                                                                                                                                                                 | codé, testé                                                                                          |
 
 « Codé, testé » = tests automatiques seulement. Rien n'est validé par Antoni ni publié. État détaillé : ROADMAP.
 
@@ -300,4 +300,3 @@ Rien n'atteint la Production sans nouvelle autorisation explicite (déploiement,
   « expiré ». Jamais un niveau supposé.
 - **H2 / H3 / H4** : délais pris tels que décidés (2 min, 30 min, 5 min) ; le délai TTS est fixé à la création de chaque
   message (un message déjà en attente garde le sien).
-

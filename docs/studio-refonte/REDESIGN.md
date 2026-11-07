@@ -15,10 +15,10 @@ page fonctionnelle remplacée.
 
 **Retour d'Antoni sur A, B, C (06/11) : aucune ne convient comme direction définitive.**
 
-| Direction | Verdict |
-|---|---|
-| A · Régie | Trop technique et dense. À garder : l'éditeur d'alertes (aperçu direct, timeline, déplacement, édition visuelle, tests) |
-| B · Plateau | Rejetée, à ne pas conserver |
+| Direction   | Verdict                                                                                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A · Régie   | Trop technique et dense. À garder : l'éditeur d'alertes (aperçu direct, timeline, déplacement, édition visuelle, tests)                                                      |
+| B · Plateau | Rejetée, à ne pas conserver                                                                                                                                                  |
 | C · Atelier | La moins éloignée, mais impersonnelle, éléments énormes, couleurs trop présentes, surtout Tombola. À garder : quelques tuiles, petits accents colorés, contrôles accessibles |
 
 Il refuse : logiciel financier, console d'ingénieur, tableau de bord générique, grosses cartes identiques.

@@ -306,7 +306,8 @@ export function mountShell(app: HTMLElement, deps: ShellDeps) {
   let max = 0;
   const content = () => $('.rs-content');
   const drawHist = () => {
-    const [back, fwd] = side.querySelectorAll<HTMLButtonElement>('.rs-hist button');
+    const [back, fwd] =
+      side.querySelectorAll<HTMLButtonElement>('.rs-hist button');
     if (back) back.disabled = pos <= 0;
     if (fwd) fwd.disabled = pos >= max;
   };

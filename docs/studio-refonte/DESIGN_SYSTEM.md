@@ -18,14 +18,14 @@ seulement). Référence d'implémentation : la page TTS (`apps/studio/web/src/pa
 
 ## Fichiers
 
-| Fichier | Rôle |
-|---|---|
-| `src/ds/ds.css` | Jetons et composants, préfixe `d-` |
-| `src/ds/ds.ts` | Contrôles, surcouches, cadre de page, relevés |
-| `src/ds/icons.ts` | La seule famille d'icônes (`ic(nom)`) |
-| `src/mod/mod.ts` | Modération native : détail d'une demande, fiche viewer, blocage, cooldown, Wallet, purge, état d'un module |
-| `src/shell/` | Coque, navigation, palette Ctrl+K, supervision |
-| `src/pages/<module>.ts` et `.css` | Les pages |
+| Fichier                           | Rôle                                                                                                       |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/ds/ds.css`                   | Jetons et composants, préfixe `d-`                                                                         |
+| `src/ds/ds.ts`                    | Contrôles, surcouches, cadre de page, relevés                                                              |
+| `src/ds/icons.ts`                 | La seule famille d'icônes (`ic(nom)`)                                                                      |
+| `src/mod/mod.ts`                  | Modération native : détail d'une demande, fiche viewer, blocage, cooldown, Wallet, purge, état d'un module |
+| `src/shell/`                      | Coque, navigation, palette Ctrl+K, supervision                                                             |
+| `src/pages/<module>.ts` et `.css` | Les pages                                                                                                  |
 
 Le préfixe `d-` évite toute collision avec le CSS de l'extension, chargé dans Studio. Chaque page préfixe ses propres classes
 (`tts-…`, `tb-…`). Une page ne définit pas de couleur en dur : elle utilise les jetons.
@@ -38,14 +38,14 @@ tabulaires), texte `--text` (Inter de raptoru.fr).
 
 La couleur signifie toujours quelque chose :
 
-| Couleur | Sens |
-|---|---|
-| `--teal` | Action principale, état sain, chat, sélection |
-| `--rose` | Extension Twitch, uniquement |
-| `--gold` | Gros gains, Super, jackpot, Full, uniquement |
-| `--amber` | Attention, 10 dernières secondes |
-| `--red` | Danger, sanction, échec |
-| `--mod` | Teinte discrète du module : `data-mod` sur la page (`tts`, `tombola`, `alerts`, `soundboard`, `bonk`, `spotify`, `commands`, `wheel`, `rewards`, `sanction`) |
+| Couleur   | Sens                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--teal`  | Action principale, état sain, chat, sélection                                                                                                                |
+| `--rose`  | Extension Twitch, uniquement                                                                                                                                 |
+| `--gold`  | Gros gains, Super, jackpot, Full, uniquement                                                                                                                 |
+| `--amber` | Attention, 10 dernières secondes                                                                                                                             |
+| `--red`   | Danger, sanction, échec                                                                                                                                      |
+| `--mod`   | Teinte discrète du module : `data-mod` sur la page (`tts`, `tombola`, `alerts`, `soundboard`, `bonk`, `spotify`, `commands`, `wheel`, `rewards`, `sanction`) |
 
 Deux signatures : le cadre de visée `.d-vf` pour la sélection, jamais une grosse bordure ; la règle graduée pour le temps et les prix.
 Pas de grosses cartes identiques, pas de dégradés décoratifs, pas d'ombres lourdes, pas d'éléments énormes.
@@ -53,7 +53,21 @@ Pas de grosses cartes identiques, pas de dégradés décoratifs, pas d'ombres lo
 ## Une page
 
 ```ts
-import { page, stateChip, panelBtn, poller, patch, keyed, grp, row, numrow, fld, sw, seg, ic } from '../ds/ds.js';
+import {
+  page,
+  stateChip,
+  panelBtn,
+  poller,
+  patch,
+  keyed,
+  grp,
+  row,
+  numrow,
+  fld,
+  sw,
+  seg,
+  ic,
+} from '../ds/ds.js';
 
 export function mountX(root: HTMLElement) {
   const p = page(root, { title: 'Soundboard', mod: 'soundboard', panel: true });

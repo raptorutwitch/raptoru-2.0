@@ -8,17 +8,17 @@ Statuts : préservée, déplacée, remplacée, obsolète, manquante, bloquée.
 
 Aucun écart sur les droits, les prix enregistrés, les remboursements ou l'idempotence. Écarts trouvés, tous corrigés :
 
-| Écart | Gravité | Correction |
-|---|---|---|
-| Ouvrir ou fermer les mini-jeux en Production sans confirmation | Grave | Confirmation rétablie |
-| Mises et délais des mini-jeux sans « ancien → nouveau » | Moyen | Confirmation rétablie |
-| Prix du Bonk sans « ancien → nouveau » | Moyen | Confirmation rétablie |
-| Interrupteurs des modules du socle sans confirmation | Moyen | Confirmation rétablie |
-| Limites des paliers TTS non saisissables à l'unité, découpe invalide | Moyen | Champ « Jusqu’à », découpe corrigée |
-| Recliquer l'état courant renvoyait la commande et rouvrait le choix de file | Moyen | Ignoré |
-| Erreur du runtime TTS non affichée | Faible | Affichée |
-| Mode Twitch cliquable quand il est indisponible | Faible | Refusé avec un message |
-| Recherche des droits de la Roue perdue au relevé | Faible | Protégée |
+| Écart                                                                       | Gravité | Correction                          |
+| --------------------------------------------------------------------------- | ------- | ----------------------------------- |
+| Ouvrir ou fermer les mini-jeux en Production sans confirmation              | Grave   | Confirmation rétablie               |
+| Mises et délais des mini-jeux sans « ancien → nouveau »                     | Moyen   | Confirmation rétablie               |
+| Prix du Bonk sans « ancien → nouveau »                                      | Moyen   | Confirmation rétablie               |
+| Interrupteurs des modules du socle sans confirmation                        | Moyen   | Confirmation rétablie               |
+| Limites des paliers TTS non saisissables à l'unité, découpe invalide        | Moyen   | Champ « Jusqu’à », découpe corrigée |
+| Recliquer l'état courant renvoyait la commande et rouvrait le choix de file | Moyen   | Ignoré                              |
+| Erreur du runtime TTS non affichée                                          | Faible  | Affichée                            |
+| Mode Twitch cliquable quand il est indisponible                             | Faible  | Refusé avec un message              |
+| Recherche des droits de la Roue perdue au relevé                            | Faible  | Protégée                            |
 
 Déplacé dans cette passe, avec la preuve que rien ne se perd : l'interrupteur Mini-jeux de la Simulation vit dans la page Mini-jeux (même route, même
 confirmation en Production) ; le simulateur Spotify passe des réglages à la page ; la fenêtre de la Simulation devient un lien.
@@ -30,20 +30,20 @@ le code mort ci-dessous.
 
 Rien de supprimé, aucune règle métier déplacée hors du Core. Détail : [FINALISATION.md](FINALISATION.md).
 
-| Élément | Statut | Ce qui change |
-|---|---|---|
+| Élément                      | Statut            | Ce qui change                                                                                                                                                                                                                   |
+| ---------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Tirage du Ballon (Halloween) | préservé, corrigé | La dernière animation d'un tirage ne pouvait pas être retirée (le Core en garde une), mais l'écran la montrait décochée, puis recochée au retour. Elle est maintenant verrouillée et expliquée, sur Alertes comme sur Halloween |
-| Navigation | amélioré | Retour / Suivant, Alt + flèches, boutons latéraux de la souris ; position de défilement gardée |
-| TTS, achat simulé | amélioré | Solde de chaque viewer fictif, prix du message selon le Core, raison d'un refus (le code brut `insufficient_tokens` s'affichait), crédit de tous les viewers |
-| Tombola, résultat | amélioré | « Terminer » devient « Fermer le résultat » (n'a jamais touché la manche) ; retour seul à la préparation une minute après la fin |
-| Tombola, réglages | amélioré | Sections repliables, avancées repliées ; aucun réglage retiré ; la recherche montre tout |
-| Modération | amélioré | Files à la hauteur de leur contenu, tableau de l'équipe sans défilement latéral, « Portefeuille » au lieu de « Wallet » à l'écran (contrats et données inchangés) |
-| Récompenses Twitch | amélioré | Récompense sur Twitch, règle de Raptoru et demandes séparées ; Twitch et OBS du Lab dits fictifs, pas en panne |
-| Simulation | amélioré | Viewer choisi en haut, rôle du live fictif expliqué, événements envoyés listés |
-| Activité, Communauté | amélioré | Début / fin de live notés « Live » ; classement vide expliqué |
-| Bornes TTS | corrigé | Longueurs bornées comme le Core (10 000 caractères, au lieu de 100 000 acceptés puis refusés) |
-| Son des Bits | préservé | La vidéo des Bits n'a jamais eu de piste son ni de MP3 (vérifié) : l'écran dit « aucun fichier son » au lieu de « son de la vidéo » |
-| Raid Titan | préservé | Seul exemplaire dans la copie du Studio installé ; le panneau dit d'où il vient et comment l'importer |
+| Navigation                   | amélioré          | Retour / Suivant, Alt + flèches, boutons latéraux de la souris ; position de défilement gardée                                                                                                                                  |
+| TTS, achat simulé            | amélioré          | Solde de chaque viewer fictif, prix du message selon le Core, raison d'un refus (le code brut `insufficient_tokens` s'affichait), crédit de tous les viewers                                                                    |
+| Tombola, résultat            | amélioré          | « Terminer » devient « Fermer le résultat » (n'a jamais touché la manche) ; retour seul à la préparation une minute après la fin                                                                                                |
+| Tombola, réglages            | amélioré          | Sections repliables, avancées repliées ; aucun réglage retiré ; la recherche montre tout                                                                                                                                        |
+| Modération                   | amélioré          | Files à la hauteur de leur contenu, tableau de l'équipe sans défilement latéral, « Portefeuille » au lieu de « Wallet » à l'écran (contrats et données inchangés)                                                               |
+| Récompenses Twitch           | amélioré          | Récompense sur Twitch, règle de Raptoru et demandes séparées ; Twitch et OBS du Lab dits fictifs, pas en panne                                                                                                                  |
+| Simulation                   | amélioré          | Viewer choisi en haut, rôle du live fictif expliqué, événements envoyés listés                                                                                                                                                  |
+| Activité, Communauté         | amélioré          | Début / fin de live notés « Live » ; classement vide expliqué                                                                                                                                                                   |
+| Bornes TTS                   | corrigé           | Longueurs bornées comme le Core (10 000 caractères, au lieu de 100 000 acceptés puis refusés)                                                                                                                                   |
+| Son des Bits                 | préservé          | La vidéo des Bits n'a jamais eu de piste son ni de MP3 (vérifié) : l'écran dit « aucun fichier son » au lieu de « son de la vidéo »                                                                                             |
+| Raid Titan                   | préservé          | Seul exemplaire dans la copie du Studio installé ; le panneau dit d'où il vient et comment l'importer                                                                                                                           |
 
 ## Audit mécanique du 06/11
 
@@ -70,15 +70,15 @@ et l'infobulle des boutons d'image indique le raccourci.
 
 ## Retrait justifié
 
-| Page | Fonction retirée | Raison |
-|---|---|---|
-| Alertes | Case « Calibrer la variante » | L'édition est toujours active. Rien ne part vers OBS sans « Enregistrer ». |
-| Alertes | Case « Masquer les cadres » | Les cadres n'apparaissent qu'au survol ou à la sélection : sans sélection, l'image est nette. |
-| Alertes | Bouton « Rejouer l'aperçu » | Fait double emploi avec « Jouer », qui rejoue avec les mêmes données de test. |
-| Commandes | Boutons Précédente et Suivante dans l'éditeur | La liste des commandes reste ouverte à côté de l'éditeur. |
-| Tombola | Pastille « Future monnaie » | Bouton désactivé, sans fonction. |
-| Modération | « Fermer (sans tirer) » de la Tombola | Dans le Core, `raffle_close` et `raffle_draw` sont la même opération : ce bouton tirait au sort, malgré son nom. « Tirer » et « Annuler » couvrent les deux cas. |
-| Modération | Console de l'extension montée dans Studio | Remplacée par la modération native : mêmes commandes, mêmes filtres et même pagination, vérifiés un par un. |
+| Page       | Fonction retirée                              | Raison                                                                                                                                                           |
+| ---------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Alertes    | Case « Calibrer la variante »                 | L'édition est toujours active. Rien ne part vers OBS sans « Enregistrer ».                                                                                       |
+| Alertes    | Case « Masquer les cadres »                   | Les cadres n'apparaissent qu'au survol ou à la sélection : sans sélection, l'image est nette.                                                                    |
+| Alertes    | Bouton « Rejouer l'aperçu »                   | Fait double emploi avec « Jouer », qui rejoue avec les mêmes données de test.                                                                                    |
+| Commandes  | Boutons Précédente et Suivante dans l'éditeur | La liste des commandes reste ouverte à côté de l'éditeur.                                                                                                        |
+| Tombola    | Pastille « Future monnaie »                   | Bouton désactivé, sans fonction.                                                                                                                                 |
+| Modération | « Fermer (sans tirer) » de la Tombola         | Dans le Core, `raffle_close` et `raffle_draw` sont la même opération : ce bouton tirait au sort, malgré son nom. « Tirer » et « Annuler » couvrent les deux cas. |
+| Modération | Console de l'extension montée dans Studio     | Remplacée par la modération native : mêmes commandes, mêmes filtres et même pagination, vérifiés un par un.                                                      |
 
 ## Tranché
 

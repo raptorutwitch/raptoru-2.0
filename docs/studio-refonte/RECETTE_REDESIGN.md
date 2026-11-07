@@ -18,6 +18,7 @@ Retour à l'interface précédente : commit `9e62353`. Rien n'est poussé ni pub
 **Coque.** Barre latérale, recherche Ctrl+K, favoris, bandeau d'incidents, badge Lab en bas. Une page reste au même endroit quand on y revient.
 
 **TTS.** Ouvre la source OBS dans un navigateur depuis la page, envoie un message de test :
+
 - le personnage et les sous-titres sont identiques à l'overlay, et les mots s'allument si ta voix le permet ;
 - un message en attente ou déjà lu s'ouvre avec son texte complet ;
 - « Passer » et « Passer et rembourser » sont distincts, et le solde suit ;
@@ -26,6 +27,7 @@ Retour à l'interface précédente : commit `9e62353`. Rien n'est poussé ni pub
 **Tombola.** Lance une manche depuis la page, compare avec l'ancienne : inscriptions, super tickets, tirage, annulation, automatisations. Regarde si le nouvel historique se lit naturellement.
 
 **Alertes.** Importe tes médias depuis le panneau (`Videos\Alertes Twitch Pour Claude\Version webm`) :
+
 - timeline, déplacement et taille des textes, transitions d'entrée et de sortie ;
 - position de l'alerte dans l'écran OBS, sans confusion avec la position des éléments ;
 - variantes et poids de tirage ;

@@ -66,13 +66,13 @@ absent » ne sont plus des incidents dans le Lab : un lecteur s'y ouvre à l'usa
 
 ## Lots
 
-| Lot | Commit | État |
-|---|---|---|
-| Import des médias, achat TTS simulé | `c50d4c5` | Testé sur Lab isolé, Chromium |
-| Écarts d'audit, Lead Moderators, Spotify, Récompenses | `c00f1a9` | Idem |
-| Laboratoire, Simulation, Équipe, Activité, Communauté, Système, catalogue | `742d399` | Idem |
-| Effets, dossier Electron du Lab, E2E des simulateurs, documents | `83306b8` | Idem |
-| Centre du Lab, achat TTS dans Electron, vérifications finales | voir `git log` | Vraie fenêtre Electron, dossier isolé |
+| Lot                                                                       | Commit         | État                                  |
+| ------------------------------------------------------------------------- | -------------- | ------------------------------------- |
+| Import des médias, achat TTS simulé                                       | `c50d4c5`      | Testé sur Lab isolé, Chromium         |
+| Écarts d'audit, Lead Moderators, Spotify, Récompenses                     | `c00f1a9`      | Idem                                  |
+| Laboratoire, Simulation, Équipe, Activité, Communauté, Système, catalogue | `742d399`      | Idem                                  |
+| Effets, dossier Electron du Lab, E2E des simulateurs, documents           | `83306b8`      | Idem                                  |
+| Centre du Lab, achat TTS dans Electron, vérifications finales             | voir `git log` | Vraie fenêtre Electron, dossier isolé |
 
 ## Vérifications du 07/11
 

@@ -15,20 +15,21 @@
 ## Une porte, deux serveurs (modules du socle)
 
 `packages/schemas/src/module-facade.ts` est utilisée **telle quelle** par :
+
 - la façade de Production (`core-api/src/ext/ext-facade.ts`) ;
 - l'EBS de l'ancien Lab (`studio/server/src/extension-lab/lab-ebs.ts`).
 
 Un module du socle n'est donc jamais écrit deux fois (friction E1). Elle reçoit l'identité vérifiée et la clé
 d'idempotence du client ; elle ne décide rien.
 
-| Requête | Effet |
-|---|---|
-| `GET /modules/v3` | modules à actions viewer : identité, interrupteur, actions (prix, règle de live), politique de modération |
-| `GET /modules/v3/<id>/state` | état pour CE viewer : disponibilité et raison, prix du serveur, état propre, historique récent |
-| `POST /modules/v3/<id>/<action>` | `identity_required` sans identité, `idempotency_key_required` sans clé |
-| `GET /modules/v3/moderation` | équipe : modules dont la politique est visible, coupés compris |
-| `GET /modules/v3/moderation/<id>/activity` | équipe : journal de ce module |
-| `POST /modules/v3/moderation/refund { activity_id, reason }` | équipe ; le Core revérifie la permission, refuse `self_refund` et audite |
+| Requête                                                      | Effet                                                                                                     |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `GET /modules/v3`                                            | modules à actions viewer : identité, interrupteur, actions (prix, règle de live), politique de modération |
+| `GET /modules/v3/<id>/state`                                 | état pour CE viewer : disponibilité et raison, prix du serveur, état propre, historique récent            |
+| `POST /modules/v3/<id>/<action>`                             | `identity_required` sans identité, `idempotency_key_required` sans clé                                    |
+| `GET /modules/v3/moderation`                                 | équipe : modules dont la politique est visible, coupés compris                                            |
+| `GET /modules/v3/moderation/<id>/activity`                   | équipe : journal de ce module                                                                             |
+| `POST /modules/v3/moderation/refund { activity_id, reason }` | équipe ; le Core revérifie la permission, refuse `self_refund` et audite                                  |
 
 ## Côté client — `twitch-extension/extension/shared/`
 
@@ -39,6 +40,7 @@ d'idempotence du client ; elle ne décide rien.
   - module inconnu de l'extension → pas affiché (jamais d'écran vide).
 
   La liste est relue au plus toutes les 30 s.
+
 - `purchase.js` : `createPurchaseButton({ document, run, onResult })` gère l'achat :
   - deux touches (prix, puis confirmation) ;
   - jamais deux envois en parallèle ;
@@ -54,6 +56,7 @@ d'idempotence du client ; elle ne décide rien.
 ## Écrire la vue d'un module du socle
 
 Prendre `shared/coffre-mystere.js` comme modèle (68 lignes) :
+
 - la fabrique reçoit `{ document, client, module }` et rend `{ node, start(), destroy() }` (`attached()` facultatif) ;
 - son seul contenu propre : son texte et son affichage ;
 - ajouter une ligne `import './<id-kebab>.js'` dans `ui.js` ;
@@ -63,13 +66,14 @@ Prendre `shared/coffre-mystere.js` comme modèle (68 lignes) :
 
 Trois entrées dans `module-registry.js`, un seul emplacement dans `ui.js` (`hostView`, `hostViewId`, `hostVariant`) :
 
-| Entrée | Pour quoi | Qui décide qu'il apparaît | Exemples |
-|---|---|---|---|
-| `registerViewerModule(id, fabrique)` | module du socle | le catalogue `/modules/v3` | Coffre mystère |
-| `registerSessionModule({ id, card, available, view, … })` | onglet offert par la session, sans module historique | `available({ state, client })`, lu dans l'état de session | Commandes, Roue du Sub, Événements |
-| `registerModuleVariant({ id, match, view, rendered?, onState?, … })` | **un autre écran pour un module que la session liste déjà** | `match({ module, state, client })` | TTS V2 / V1, Tombola V2 / V1, Soundboard, Bonk, modération V2 / V1 |
+| Entrée                                                               | Pour quoi                                                   | Qui décide qu'il apparaît                                 | Exemples                                                           |
+| -------------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------ |
+| `registerViewerModule(id, fabrique)`                                 | module du socle                                             | le catalogue `/modules/v3`                                | Coffre mystère                                                     |
+| `registerSessionModule({ id, card, available, view, … })`            | onglet offert par la session, sans module historique        | `available({ state, client })`, lu dans l'état de session | Commandes, Roue du Sub, Événements                                 |
+| `registerModuleVariant({ id, match, view, rendered?, onState?, … })` | **un autre écran pour un module que la session liste déjà** | `match({ module, state, client })`                        | TTS V2 / V1, Tombola V2 / V1, Soundboard, Bonk, modération V2 / V1 |
 
 Ordre suivi par `ui.js` :
+
 1. Hub : modules de la session, puis `sessionModules()` disponibles, puis `hostModules()` (`ui.js` ≈ 1323-1337).
 2. Ouverture : `sessionModule(id)` sinon `moduleVariant(env)` (la **première** variante enregistrée dont `match` est vrai),
    sinon la vue du socle (`ui.js` ≈ 1511-1524). La vue est créée **une fois** tant que l'onglet reste ouvert, `start()` est
@@ -83,15 +87,16 @@ Ordre suivi par `ui.js` :
 
 ## Comment TTS V2 et Tombola V2 ont remplacé leur V1
 
-| Commit | Ce qui a bougé |
-|---|---|
-| `bcfc7ee`, `0e90f13` | les écrans V2 arrivent (encore dessinés depuis `ui.js`) |
-| `50e8601` (05/11) | TTS V2 et Tombola V2 sortent de `ui.js` : chacun devient une variante dans son fichier |
-| `6e0e4ae` | TTS V1 devient une variante dans `tts-v1.js` ; E2E de parité V1 en mode démo (`e2e/v1-parity.e2e.ts`) |
-| `2ad1bb1` | Tombola V1 devient une variante dans `tombola-v1.js` (`ui.js` −495 lignes) |
+| Commit               | Ce qui a bougé                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `bcfc7ee`, `0e90f13` | les écrans V2 arrivent (encore dessinés depuis `ui.js`)                                                       |
+| `50e8601` (05/11)    | TTS V2 et Tombola V2 sortent de `ui.js` : chacun devient une variante dans son fichier                        |
+| `6e0e4ae`            | TTS V1 devient une variante dans `tts-v1.js` ; E2E de parité V1 en mode démo (`e2e/v1-parity.e2e.ts`)         |
+| `2ad1bb1`            | Tombola V1 devient une variante dans `tombola-v1.js` (`ui.js` −495 lignes)                                    |
 | `b27da6e`, `9443ac1` | modération V1 en variante ; le porte-monnaie d'en-tête lit la monnaie **déclarée** par la variante (`wallet`) |
 
 Le mécanisme, identique pour les deux :
+
 - le fichier V2 exporte son prédicat (`ttsV2Applies`, `tombolaV2Applies`) et s'enregistre avec `match: prédicat` ;
 - le fichier V1 importe ce prédicat et s'enregistre **après**, avec `match: (env) => !prédicat(env)` : jamais deux écrans
   pour une même interaction, jamais aucun ;
@@ -109,9 +114,10 @@ Cas visé : un onglet existant (exemple : Soundboard) reçoit un nouvel écran ;
 arrière. Même chemin que TTS V2 et Tombola V2.
 
 **1. Fichiers à créer** (rien d'autre n'est à écrire dans l'extension)
+
 - `shared/<onglet>-v2.js` : `create<Onglet>V2View({ document, client, … })` → `{ node, update(), destroy() }`,
   l'export `<onglet>V2Applies(env)`, et l'appel `registerModuleVariant({ id: '<id du module de session>', match, view,
-  rendered, onState?, intro?, ownHeader?, bodyData?, wallet? })` ;
+rendered, onState?, intro?, ownHeader?, bodyData?, wallet? })` ;
 - `<onglet>-v2.css` si nécessaire (préfixe propre, pas d'ajout dans `base.css`) ;
 - un test unitaire `twitch-extension/test/<onglet>-v2.test.js` (modèle : bloc « module variants » de
   `test/module-host.test.js`) et une spec `apps/studio/server/e2e/<onglet>-v2.e2e.ts`.
@@ -121,6 +127,7 @@ de l'ancien écran. Plus, s'il y a une feuille de style, une ligne `<link>` dans
 `panel.html`, `video_component.html`) : à vérifier une par une, `panel.html` n'a déjà pas `commands-v2.css`.
 
 **3. Garder l'ancien écran pour revenir en arrière**
+
 - Si l'ancien écran est encore dessiné par `ui.js` : l'extraire d'abord, **sans changer son UX**, dans
   `shared/<onglet>-v1.js` avec `match: (env) => !<onglet>V2Applies(env)` (comme `6e0e4ae`, `2ad1bb1`), et prouver la parité
   par un E2E avant de commencer le V2. Soundboard et Bonk le sont déjà (`soundboard-view.js`, `bonk-view.js`).
@@ -131,6 +138,7 @@ de l'ancien écran. Plus, s'il y a une feuille de style, une ligne `<link>` dans
 - Ne supprimer l'ancien fichier qu'après validation d'Antoni en réel.
 
 **4. Le contrat du Core à réutiliser**
+
 - Lire les routes que l'ancien écran utilise déjà (`api.js` : `ttsState` / `ttsBuy`, `raffleState` / `joinRaffle`,
   `spendTokens` / `useRedemption`…) : un nouvel écran n'est pas une nouvelle règle métier.
 - Afficher les valeurs du serveur (prix, disponibilité et raison, temps d'attente, droits) ; ne rien recalculer (voir
@@ -141,6 +149,7 @@ de l'ancien écran. Plus, s'il y a une feuille de style, une ligne `<link>` dans
 - Un achat envoie le prix confirmé quand la route l'accepte (`moduleAct`, `expected_price`) : `ttsBuy` ne l'envoie pas.
 
 **5. Tester dans le Lab**
+
 - Unitaires : `npx vitest run test/<onglet>-v2.test.js test/module-host.test.js` dans `apps/twitch-extension`
   (vérifier que les `match` V2 et V1 sont exactement complémentaires).
 - Navigateur : spec E2E sur la pile `core-lab-stack.ts` (vraie façade du Core, données fictives), plus

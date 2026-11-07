@@ -69,9 +69,9 @@ Laboratoire › Extension Lab, surface Panel viewer.
 
 ## Décision attendue
 
-| Question | Réponse d'Antoni |
-|---|---|
-| Studio te convient-il comme base ? | |
-| Le jalon est-il validé ? | |
-| Retirer l'ancien Lab ([RETRAIT_ANCIEN_LAB.md](RETRAIT_ANCIEN_LAB.md)) ? | |
-| Page ou parcours à reprendre avant de livrer ? | |
+| Question                                                                | Réponse d'Antoni |
+| ----------------------------------------------------------------------- | ---------------- |
+| Studio te convient-il comme base ?                                      |                  |
+| Le jalon est-il validé ?                                                |                  |
+| Retirer l'ancien Lab ([RETRAIT_ANCIEN_LAB.md](RETRAIT_ANCIEN_LAB.md)) ? |                  |
+| Page ou parcours à reprendre avant de livrer ?                          |                  |

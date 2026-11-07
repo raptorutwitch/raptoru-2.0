@@ -237,9 +237,7 @@ export function togglePool(
   const set = new Set(cur[kind]);
   if (on) set.add(n);
   else set.delete(n);
-  return set.size
-    ? { ...cur, [kind]: [...set].sort((a, b) => a - b) }
-    : null;
+  return set.size ? { ...cur, [kind]: [...set].sort((a, b) => a - b) } : null;
 }
 
 export const LAST_BALLON =

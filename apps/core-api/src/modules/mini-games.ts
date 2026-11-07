@@ -15,7 +15,8 @@ const s = (seconds: number) => seconds * 1000;
 export const miniGames: ModuleDefinition = {
   id: 'mini_games',
   label: 'Mini-jeux',
-  description: 'Roulette, Slot et Duel dans le chat : mises et délais réglables (les chances et les gains ne changent pas).',
+  description:
+    'Roulette, Slot et Duel dans le chat : mises et délais réglables (les chances et les gains ne changent pas).',
   category: 'jeux',
   capabilities: ['settings', 'supervision'],
   settings: {
@@ -69,9 +70,10 @@ export const miniGames: ModuleDefinition = {
   async enabled(ctx, q, channelId) {
     return (
       (
-        await q.query<{ enabled: boolean }>('select enabled from mini_game_channels where channel_id = $1', [
-          channelId,
-        ])
+        await q.query<{ enabled: boolean }>(
+          'select enabled from mini_game_channels where channel_id = $1',
+          [channelId],
+        )
       )[0]?.enabled ?? false
     );
   },
@@ -101,7 +103,9 @@ export const miniGames: ModuleDefinition = {
         : !live
           ? ['Aucun live ouvert sur la chaîne.']
           : [],
-      activity: plays ? `${plays} partie${plays > 1 ? 's' : ''} la dernière heure` : null,
+      activity: plays
+        ? `${plays} partie${plays > 1 ? 's' : ''} la dernière heure`
+        : null,
     };
   },
 };
@@ -116,7 +120,10 @@ export interface MiniGameLimits {
   duelCooldownMs: number;
 }
 
-export type MiniGameLimitsReader = (q: Queryable, channelId: string) => Promise<MiniGameLimits>;
+export type MiniGameLimitsReader = (
+  q: Queryable,
+  channelId: string,
+) => Promise<MiniGameLimits>;
 
 /** Without settings (older wiring, unit tests): the historical values. */
 export const DEFAULT_MINI_GAME_LIMITS: MiniGameLimits = {

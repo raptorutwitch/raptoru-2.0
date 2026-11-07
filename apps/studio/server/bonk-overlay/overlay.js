@@ -89,7 +89,8 @@ async function play(i) {
     ffz: /^https:\/\/cdn\.frankerfacez\.com\/emote\/[0-9]{1,10}\/(animated\/)?[124]$/,
   };
   // The Lab's fictional emotes: an image of this same Studio (their ids exist on no CDN).
-  const fictional = /^\/ext-lab\/fictional-emote\/[a-z0-9]+-[A-Za-z0-9_]{1,64}\.svg$/;
+  const fictional =
+    /^\/ext-lab\/fictional-emote\/[a-z0-9]+-[A-Za-z0-9_]{1,64}\.svg$/;
   const src =
     i.provider === 'unicode' && twemojiUrl.test(i.emote_url)
       ? '/ext/' + i.emote_url

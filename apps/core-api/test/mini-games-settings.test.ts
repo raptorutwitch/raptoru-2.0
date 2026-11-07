@@ -26,9 +26,21 @@ beforeEach(async () => {
   db = await createTestDb();
   clock = new FakeClock(T0);
   settings = new ModuleSettings(db, clock);
-  host = new ModuleHost([miniGames], { db, clock, economy: labEconomy, settings });
+  host = new ModuleHost([miniGames], {
+    db,
+    clock,
+    economy: labEconomy,
+    settings,
+  });
   // Every draw loses (0.9): only the stakes matter here, never the odds.
-  games = new MiniGamesService(db, clock, () => 0.9, null, labEconomy, miniGameLimits(settings));
+  games = new MiniGamesService(
+    db,
+    clock,
+    () => 0.9,
+    null,
+    labEconomy,
+    miniGameLimits(settings),
+  );
 });
 
 const live = () =>
@@ -38,18 +50,31 @@ const live = () =>
     [SESSION, CH, clock.now()],
   );
 let n = 0;
-const msg = (text: string, who = { id: '2001', name: 'Alice' }, source: 'twitch' | 'simulator' = 'twitch'): LabChatMessage => ({
+const msg = (
+  text: string,
+  who = { id: '2001', name: 'Alice' },
+  source: 'twitch' | 'simulator' = 'twitch',
+): LabChatMessage => ({
   channel_id: CH,
   message_id: `c-${++n}`,
   text,
-  chatter: { id: who.id, login: who.name.toLowerCase(), display_name: who.name, role: 'viewer' },
+  chatter: {
+    id: who.id,
+    login: who.name.toLowerCase(),
+    display_name: who.name,
+    role: 'viewer',
+  },
   source,
 });
-const set = (key: string, value: number) => settings.set(CH, `mini_games.${key}`, value, 'test');
+const set = (key: string, value: number) =>
+  settings.set(CH, `mini_games.${key}`, value, 'test');
 const lastBet = async () =>
   Number(
-    (await db.query<{ bet: string }>('select bet from mini_game_plays order by created_at desc, message_id desc limit 1'))[0]
-      ?.bet,
+    (
+      await db.query<{ bet: string }>(
+        'select bet from mini_game_plays order by created_at desc, message_id desc limit 1',
+      )
+    )[0]?.bet,
   );
 
 describe('Mini-jeux on the module host (démonstration C)', () => {
@@ -57,10 +82,14 @@ describe('Mini-jeux on the module host (démonstration C)', () => {
     await games.setEnabled(CH, true);
     await live();
     expect((await games.chat(msg('!roulette 19'))).skipped).toBe('below_min');
-    expect((await games.chat(msg('!roulette 20'))).outcome).toBe('mini_game_played');
+    expect((await games.chat(msg('!roulette 20'))).outcome).toBe(
+      'mini_game_played',
+    );
     expect((await games.chat(msg('!roulette 20'))).skipped).toBe('cooldown');
     clock.advance(10_000);
-    expect((await games.chat(msg('!roulette 20'))).outcome).toBe('mini_game_played');
+    expect((await games.chat(msg('!roulette 20'))).outcome).toBe(
+      'mini_game_played',
+    );
     await games.chat(msg('!slots'));
     expect(await lastBet()).toBe(20);
   });
@@ -72,29 +101,53 @@ describe('Mini-jeux on the module host (démonstration C)', () => {
     await set('roulette_cooldown_s', 0);
     await set('slot_min_bet', 40);
     expect((await games.chat(msg('!roulette 20'))).skipped).toBe('below_min');
-    expect((await games.chat(msg('!roulette 50'))).outcome).toBe('mini_game_played');
-    expect((await games.chat(msg('!roulette 50'))).outcome).toBe('mini_game_played'); // no delay now
+    expect((await games.chat(msg('!roulette 50'))).outcome).toBe(
+      'mini_game_played',
+    );
+    expect((await games.chat(msg('!roulette 50'))).outcome).toBe(
+      'mini_game_played',
+    ); // no delay now
     await games.chat(msg('!slots'));
     expect(await lastBet()).toBe(40);
-    await expect(set('roulette_min_bet', 0)).rejects.toMatchObject({ code: 'out_of_bounds' });
-    await expect(set('duel_max_bet', 2_000_000)).rejects.toMatchObject({ code: 'out_of_bounds' });
+    await expect(set('roulette_min_bet', 0)).rejects.toMatchObject({
+      code: 'out_of_bounds',
+    });
+    await expect(set('duel_max_bet', 2_000_000)).rejects.toMatchObject({
+      code: 'out_of_bounds',
+    });
   });
 
   it('the Duel cap: a higher stake is brought down to the channel’s cap (default 100 000)', async () => {
-    expect(resolveDuelBet('200k', 1_000_000)).toEqual({ amount: 100_000, capped: true });
-    expect(resolveDuelBet('1000', 5_000, 500)).toEqual({ amount: 500, capped: true });
+    expect(resolveDuelBet('200k', 1_000_000)).toEqual({
+      amount: 100_000,
+      capped: true,
+    });
+    expect(resolveDuelBet('1000', 5_000, 500)).toEqual({
+      amount: 500,
+      capped: true,
+    });
     await games.setEnabled(CH, true);
     await live();
     await set('duel_max_bet', 500);
     const bob = { id: '2002', name: 'Bob' };
     await games.chat(msg('salut', bob, 'simulator')); // the simulator teaches Bob's identity (Duel target)
-    expect((await games.chat(msg('!duel @bob 1000', undefined, 'simulator'))).outcome).toBe('duel_challenged');
-    const duel = (await db.query<{ bet: string }>('select bet from mini_game_duels where channel_id = $1', [CH]))[0];
+    expect(
+      (await games.chat(msg('!duel @bob 1000', undefined, 'simulator')))
+        .outcome,
+    ).toBe('duel_challenged');
+    const duel = (
+      await db.query<{ bet: string }>(
+        'select bet from mini_game_duels where channel_id = $1',
+        [CH],
+      )
+    )[0];
     expect(Number(duel?.bet)).toBe(500);
   });
 
   it('supervision reads ITS switch and the live, never green on the switch alone', async () => {
-    expect(await host.status(CH, 'mini_games')).toMatchObject({ intention: 'off' });
+    expect(await host.status(CH, 'mini_games')).toMatchObject({
+      intention: 'off',
+    });
     await games.setEnabled(CH, true);
     expect(await host.status(CH, 'mini_games')).toMatchObject({
       intention: 'on',
@@ -109,7 +162,11 @@ describe('Mini-jeux on the module host (démonstration C)', () => {
       activity: '1 partie la dernière heure',
     });
     const entry = (await host.catalog(CH)).modules[0]!;
-    expect(entry).toMatchObject({ id: 'mini_games', enabled: true, capabilities: ['settings', 'supervision'] });
+    expect(entry).toMatchObject({
+      id: 'mini_games',
+      enabled: true,
+      capabilities: ['settings', 'supervision'],
+    });
     expect(entry.settings).toContain('mini_games.duel_max_bet');
     expect(entry.settings).not.toContain('mini_games.enabled'); // its own switch, never a second one
   });

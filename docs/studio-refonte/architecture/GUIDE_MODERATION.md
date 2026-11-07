@@ -2,17 +2,18 @@
 
 ## Questions standard (à répondre dans la définition)
 
-| Question | Où la réponse vit |
-|---|---|
-| Le viewer paie-t-il ? | `viewer.<action>.price` (capacité `wallet`) |
-| L'équipe voit-elle le journal ? | `moderation.visible` (obligatoire pour un module payant) |
-| Peut-on rembourser, et qui ? | `moderation.refund`: `never` ou `moderator` |
-| Quand rembourser ? | `moderation.note` (affichée dans Studio) |
-| Hors live ? | `liveOnly` (par défaut, une action payante est réservée au live) |
+| Question                               | Où la réponse vit                                                |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| Le viewer paie-t-il ?                  | `viewer.<action>.price` (capacité `wallet`)                      |
+| L'équipe voit-elle le journal ?        | `moderation.visible` (obligatoire pour un module payant)         |
+| Peut-on rembourser, et qui ?           | `moderation.refund`: `never` ou `moderator`                      |
+| Quand rembourser ?                     | `moderation.note` (affichée dans Studio)                         |
+| Hors live ?                            | `liveOnly` (par défaut, une action payante est réservée au live) |
 | Un viewer bloqué ? Une pause globale ? | communs, appliqués par l'hôte (`viewer_blocked`, `global_pause`) |
-| Une action restée en attente ? | `expireQueuedMs` → échec et remboursement unique |
+| Une action restée en attente ?         | `expireQueuedMs` → échec et remboursement unique                 |
 
 `checkModule` refuse :
+
 - un module à actions viewer sans politique de modération ;
 - un module payant invisible pour la modération.
 
@@ -38,6 +39,7 @@ Les fondre exige une décision d'interface : faut-il un onglet « Modules » dan
 ## Mise à jour du 05/11 : D4 intégrée
 
 La limite ci-dessus est levée.
+
 - **Où.** D4 › « Autres modules », dans l'extension et dans Studio › Modération : mêmes panneaux et mêmes routes que sous
   chaque module.
 - **Règles en plus.** Pas de remboursement de son propre achat depuis l'extension. Le journal n'est lu que pour un module

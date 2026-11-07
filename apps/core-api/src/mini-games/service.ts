@@ -78,7 +78,8 @@ export class MiniGamesService {
     /** Bets, gains and Duel stakes (Lab wallet by default; the canonical Wallet once P1-001 lot 2 wires it). */
     private readonly economy: EconomyPort = labEconomy,
     /** Stakes, delays and Duel cap set from Studio (module host « mini_games », H10); default = historical values. */
-    private readonly limits: MiniGameLimitsReader = async () => DEFAULT_MINI_GAME_LIMITS,
+    private readonly limits: MiniGameLimitsReader = async () =>
+      DEFAULT_MINI_GAME_LIMITS,
   ) {
     this.duels = new DuelService(
       db,

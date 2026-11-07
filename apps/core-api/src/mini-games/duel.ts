@@ -49,7 +49,8 @@ export class DuelService {
     private readonly resolveTarget: TargetResolver,
     /** Stakes: locks, balances, cap and the atomic transfer (the Lab wallet today). */
     private readonly economy: EconomyPort,
-    private readonly limits: MiniGameLimitsReader = async () => DEFAULT_MINI_GAME_LIMITS,
+    private readonly limits: MiniGameLimitsReader = async () =>
+      DEFAULT_MINI_GAME_LIMITS,
   ) {}
 
   async chat(

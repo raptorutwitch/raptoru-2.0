@@ -24,8 +24,8 @@ Ligne d'arrivée et état de chaque critère : [FOUNDATION_COMPLETE.md](FOUNDATI
 - Lancer le Lab : `npm run studio:lab` (Studio installé fermé, Docker démarré). Retour arrière : `npm run studio:legacy`.
 - Vérifier : `cd apps/studio/server && npx playwright test` (vrai Core par défaut, `E2E_STACK=legacy` pour l'ancienne pile).
 - Serveur réel isolé pour regarder l'interface : `RAPTORU_DATA_ROOT=<scratch> PORT=4398 DOCK_PORT=4408
-  RAPTORU_LAB_PG_CONTAINER=studio-ux-test-pg STUDIO_LAB_DATABASE_URL=postgres://postgres:uxtest@127.0.0.1:55499/x node
-  apps/studio/server/dist/index.js` (jamais les ports 4100 / 4110 du Studio installé).
+RAPTORU_LAB_PG_CONTAINER=studio-ux-test-pg STUDIO_LAB_DATABASE_URL=postgres://postgres:uxtest@127.0.0.1:55499/x node
+apps/studio/server/dist/index.js` (jamais les ports 4100 / 4110 du Studio installé).
 - Base pour les suites d'intégration : `studio-ux-test-pg` (port 55499).
 
 ## Derniers commits (plus récent en haut)
@@ -104,43 +104,44 @@ Mise en œuvre du 05/11 (codé et testé automatiquement ; rien de validé par A
 
 Phase 1 (consolidation du socle) :
 
-| Commit | Contenu |
-|---|---|
-| `0148b26` | porte chat des modules : `chatWords` réservés contre Commandes V2, `ctx.say` (origine `module:<id>`), interrupteur du socle pour les lecteurs du chat, échec isolé ; migration `20261121190000_cmd_steps_module_origin_lab.sql` préparée |
+| Commit    | Contenu                                                                                                                                                                                                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0148b26` | porte chat des modules : `chatWords` réservés contre Commandes V2, `ctx.say` (origine `module:<id>`), interrupteur du socle pour les lecteurs du chat, échec isolé ; migration `20261121190000_cmd_steps_module_origin_lab.sql` préparée                                                 |
 | `77e614d` | correctifs d'une revue indépendante (13 constats, détail dans DECISIONS) : falsification d'achat par le cockpit (P0 latent), auto-remboursement, prix confirmé, réservation des lecteurs OBS avec bail, catalogue et travaux périodiques isolés, modération de l'extension sans `prompt` |
 
 Puis :
 
-| Commit | Contenu |
-|---|---|
-| `104acb7` | D4 › « Autres modules » (extension) |
-| `d080506` | même D4 dans Studio, et la pile d'aperçu reçoit `/api/lab` |
-| `f354ead` | `createStudioServer` en options nommées (S1) |
-| `c026907` | adaptateur Votekick |
-| `957bcc3` | adaptateur Caution |
+| Commit    | Contenu                                                           |
+| --------- | ----------------------------------------------------------------- |
+| `104acb7` | D4 › « Autres modules » (extension)                               |
+| `d080506` | même D4 dans Studio, et la pile d'aperçu reçoit `/api/lab`        |
+| `f354ead` | `createStudioServer` en options nommées (S1)                      |
+| `c026907` | adaptateur Votekick                                               |
+| `957bcc3` | adaptateur Caution                                                |
 | `ec2f170` | adaptateurs d'état Random Ban, Jeu des mots, Boutique d'événement |
 
 Stratégies et matrices de parité : `architecture/MIGRATIONS.md`.
 
 Puis :
 
-| Commit | Contenu |
-|---|---|
+| Commit    | Contenu                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------- |
 | `4c97661` | page « Modules du socle » en tuiles ; panneau de réglages compact avec un vrai interrupteur |
-| `d46e912` | Prettier et documentation (CONTRATS § 9, FRICTIONS, DECISIONS D15-D20, guides, PREUVES) |
+| `d46e912` | Prettier et documentation (CONTRATS § 9, FRICTIONS, DECISIONS D15-D20, guides, PREUVES)     |
 
 Suites complètes avant `d46e912` :
 
-| Suite | Résultat |
-|---|---|
-| Core | 1 396 |
-| Intégration PostgreSQL | 191 |
-| Studio | 884 |
-| Extension | 78 |
-| Bot | 287 |
-| Lint, typecheck | propres |
+| Suite                  | Résultat |
+| ---------------------- | -------- |
+| Core                   | 1 396    |
+| Intégration PostgreSQL | 191      |
+| Studio                 | 884      |
+| Extension              | 78       |
+| Bot                    | 287      |
+| Lint, typecheck        | propres  |
 
 Vu dans un navigateur, sur la pile isolée (port 4411) :
+
 - achat dans l'Extension Lab ;
 - remboursement depuis D4 › « Autres modules », dans l'extension et dans Studio ;
 - tuiles du socle ;
@@ -148,43 +149,45 @@ Vu dans un navigateur, sur la pile isolée (port 4411) :
 
 ### Mission continue (05/11)
 
-| Commit | Contenu |
-|---|---|
+| Commit    | Contenu                                                                                                         |
+| --------- | --------------------------------------------------------------------------------------------------------------- |
 | `66cab2b` | vérification ciblée du socle (10 questions, `PREUVES.md`) ; un module Lab ne laisse aucun réglage en Production |
-| `8a2f113` | extension : Commandes, Roue du Sub et Événements sortis de `ui.js` (`registerSessionModule`) |
-| `3e1785c` | `LIVRAISON.md` (8 migrations, coexistence des versions, ordre, retour arrière) ; Spotify H6 vérifié |
-| `9dddeec` | lecteur OBS fictif générique, en Lab seulement, par la vraie porte `claim` / `report` |
-| `46b2c50` | « Prêt pour le live » en grille de cartes |
-| `4624658` | les 3 P2 d'une revue indépendante corrigés |
+| `8a2f113` | extension : Commandes, Roue du Sub et Événements sortis de `ui.js` (`registerSessionModule`)                    |
+| `3e1785c` | `LIVRAISON.md` (8 migrations, coexistence des versions, ordre, retour arrière) ; Spotify H6 vérifié             |
+| `9dddeec` | lecteur OBS fictif générique, en Lab seulement, par la vraie porte `claim` / `report`                           |
+| `46b2c50` | « Prêt pour le live » en grille de cartes                                                                       |
+| `4624658` | les 3 P2 d'une revue indépendante corrigés                                                                      |
 
 Suites avant `4624658` :
 
-| Suite | Résultat |
-|---|---|
-| Core | 1 396 |
-| Intégration | 191 |
-| Studio | 886 |
-| Extension | 80 |
+| Suite       | Résultat |
+| ----------- | -------- |
+| Core        | 1 396    |
+| Intégration | 191      |
+| Studio      | 886      |
+| Extension   | 80       |
 
 En plus : les E2E Boutique, Commandes et modules de session.
 
 Vu en navigateur (pile isolée, port 4411) :
+
 - achat, prise par le lecteur fictif, échec, « remboursé » chez le viewer et dans Studio ;
 - Centre de contrôle en 1440 et 420 px.
 
 ### Mission d'exécution (05/11) — extension
 
-| Commit | Contenu |
-|---|---|
-| `b9ea6c4` | E2E de parité TTS V2 et Tombola V2, avant toute modification |
-| `50e8601` | variantes de module (`onState`) : TTS V2 et Tombola V2 sortis de `ui.js` |
-| `602401a` | la liste « Voir tous les modules » ne se referme plus toute seule |
-| `3483612` | correction de lint d'un test |
+| Commit    | Contenu                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `b9ea6c4` | E2E de parité TTS V2 et Tombola V2, avant toute modification                                                             |
+| `50e8601` | variantes de module (`onState`) : TTS V2 et Tombola V2 sortis de `ui.js`                                                 |
+| `602401a` | la liste « Voir tous les modules » ne se referme plus toute seule                                                        |
+| `3483612` | correction de lint d'un test                                                                                             |
 | `2d9f7b2` | D4 sorti de `ui.js` ; P1 corrigé (écran vide en modérateur sur TTS V2 et Tombola V2) ; chemin rapide prouvé par mutation |
 
 `ui.js` : 6 289 → 6 214 lignes. E2E de l'extension : 15 verts.
 
 Prochaines étapes (ordre conseillé) :
+
 1. Antoni valide dans le vrai Lab (`npm run studio`), en viewer **et** en modérateur :
    - le Hub de l'extension ;
    - TTS V2 (achat, retour) ;
@@ -197,20 +200,21 @@ Prochaines étapes (ordre conseillé) :
 
 ### Continuation (05/11) — Soundboard, Bonk, cycle de vie
 
-| Commit | Contenu |
-|---|---|
-| `a573bf4` | E2E de parité Soundboard (3 rôles) avant extraction |
-| `480ee5c` | E2E TTS intermittent : vraie cause trouvée et corrigée (signal `data-recovered`, lecteurs fictifs qui acquittent) |
-| `295e59c` / `b8a5f19` / `7cc951b` | aperçu et retour d'envoi Soundboard sortis de `ui.js` |
-| `208791e` | vue Soundboard = une poignée de cycle de vie ; 2 défauts du volume corrigés |
-| `dbf64cb` | E2E de parité Bonk (fournisseurs 7TV/BTTV/FFZ fictifs, aucun réseau) |
-| `c960894` / `725df10` | Bonk : ancien message au retour corrigé ; envoi sorti de `ui.js` |
-| `dc209e2` | contrat de cycle de vie : 3 rôles, transitions, lectures arrêtées, coupure réseau |
-| `d3e564a` | corrections de la revue indépendante (message Bonk en vol, test du glisser, garde réseau du navigateur) |
+| Commit                            | Contenu                                                                                                           |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `a573bf4`                         | E2E de parité Soundboard (3 rôles) avant extraction                                                               |
+| `480ee5c`                         | E2E TTS intermittent : vraie cause trouvée et corrigée (signal `data-recovered`, lecteurs fictifs qui acquittent) |
+| `295e59c` / `b8a5f19` / `7cc951b` | aperçu et retour d'envoi Soundboard sortis de `ui.js`                                                             |
+| `208791e`                         | vue Soundboard = une poignée de cycle de vie ; 2 défauts du volume corrigés                                       |
+| `dbf64cb`                         | E2E de parité Bonk (fournisseurs 7TV/BTTV/FFZ fictifs, aucun réseau)                                              |
+| `c960894` / `725df10`             | Bonk : ancien message au retour corrigé ; envoi sorti de `ui.js`                                                  |
+| `dc209e2`                         | contrat de cycle de vie : 3 rôles, transitions, lectures arrêtées, coupure réseau                                 |
+| `d3e564a`                         | corrections de la revue indépendante (message Bonk en vol, test du glisser, garde réseau du navigateur)           |
 
 `ui.js` : 6 214 → 6 005 lignes. Détail et limites : `architecture/MIGRATIONS.md`, `architecture/PREUVES.md`.
 
 Prochaines étapes (ordre conseillé) :
+
 1. Antoni valide dans le vrai Lab (`npm run studio`) : Soundboard (aperçu, volume + Échap, glisser, envoi) et Bonk (tir,
    salve, favori, retour au Hub), en viewer puis modérateur.
 2. Sortir `soundboardForm` dans son fichier (les E2E de parité sont prêts).
@@ -218,42 +222,43 @@ Prochaines étapes (ordre conseillé) :
 
 ### Frontières Soundboard et Bonk (05/11)
 
-| Commit | Contenu |
-|---|---|
-| `9c45e91` | Soundboard = variante dans son fichier ; 3 défauts à la souris corrigés (tri, volume, Échap) |
+| Commit    | Contenu                                                                                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `9c45e91` | Soundboard = variante dans son fichier ; 3 défauts à la souris corrigés (tri, volume, Échap)                                                                     |
 | `d163944` | scénario Bonk déterministe (Twitch fictif, prix et délai Studio, écrans étroits) ; 3 défauts corrigés (prix Lab, libellé du délai, étoile sur cellules de 44 px) |
-| `ae85b0c` | accès aux emotes Twitch = service de l'hôte (`emote-access.js`) |
-| `9a2c504` | Bonk = variante dans son fichier |
-| `59bb0fb` | la pile E2E écrit la cause de sa mort |
-| `dccec77` | corrections de la revue indépendante |
+| `ae85b0c` | accès aux emotes Twitch = service de l'hôte (`emote-access.js`)                                                                                                  |
+| `9a2c504` | Bonk = variante dans son fichier                                                                                                                                 |
+| `59bb0fb` | la pile E2E écrit la cause de sa mort                                                                                                                            |
+| `dccec77` | corrections de la revue indépendante                                                                                                                             |
 
 `ui.js` : 6 005 → 3444 lignes. Soundboard et Bonk : écran, état, écouteurs, minuteries et règles dans leurs fichiers ;
 `ui.js` ne garde que leur nom dans le Hub et le porte-monnaie d'en-tête de la Soundboard.
 
 Prochaines étapes (ordre conseillé) :
+
 1. Antoni valide dans le vrai Lab (`npm run studio`) : Soundboard (tri à la souris, volume, glisser, crédits) et Bonk
    (tir, salve, Twitch lié, panneau Twitch étroit), en viewer puis en modérateur.
 2. TTS V1, Tombola V1 et modération V1 : encore dans `ui.js` ; à sortir quand on y retouche (même méthode).
 
 ### Derniers couplages de l'extension (05/11)
 
-| Commit | Contenu |
-|---|---|
-| `6e0e4ae` | harnais V1 en mode démo (`v1-parity.e2e.ts`) ; TTS V1 = variante (`tts-v1.js`) |
-| `2ad1bb1` | Tombola V1 = variante (`tombola-v1.js`) |
+| Commit    | Contenu                                                                                         |
+| --------- | ----------------------------------------------------------------------------------------------- |
+| `6e0e4ae` | harnais V1 en mode démo (`v1-parity.e2e.ts`) ; TTS V1 = variante (`tts-v1.js`)                  |
+| `2ad1bb1` | Tombola V1 = variante (`tombola-v1.js`)                                                         |
 | `b27da6e` | modération V1 = variante (`moderation-v1.js`) ; Échap sur l'historique d'un utilisateur corrigé |
-| `9443ac1` | porte-monnaie d'en-tête déclaré par la variante (`wallet`) |
+| `9443ac1` | porte-monnaie d'en-tête déclaré par la variante (`wallet`)                                      |
 
 `ui.js` : 3 444 → 1 642 lignes. Les V1 restent les écrans des sessions sans V2 (Lab sans Core, calibration, TTS de
 Production en repli) : rien supprimé. Détail : architecture/MIGRATIONS.md, CONTRATS § 13.
 
 Studio ensuite (05/11) :
 
-| Commit | Contenu |
-|---|---|
-| `99c7478` | Alertes en quatre onglets (Créer et tester · File et OBS · Sources d’événements · Variantes) ; E2E `alerts-studio` |
+| Commit    | Contenu                                                                                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `99c7478` | Alertes en quatre onglets (Créer et tester · File et OBS · Sources d’événements · Variantes) ; E2E `alerts-studio`                     |
 | `f220e31` | Système : carte « Modules » retirée (doublon, liens Lab en Production), outils de développement en Lab seulement, profil illisible dit |
-| `5080f9e` | Prêt pour le live : seul ce qui demande attention reste en cartes ; « Prêt (n) » replié |
+| `5080f9e` | Prêt pour le live : seul ce qui demande attention reste en cartes ; « Prêt (n) » replié                                                |
 
 À voir par Antoni dans le vrai Lab : Alertes (les quatre onglets, l’aperçu, la file, les sources), Système, Centre de
 contrôle.
@@ -263,11 +268,11 @@ contrôle.
 
 ### Lab cible : véritable Core en mode Lab (05/11, décision d'Antoni : Lab local + Production, pas de staging permanent)
 
-| Commit | Contenu |
-|---|---|
+| Commit    | Contenu                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------- |
 | `67de267` | Core : `CORE_ENVIRONMENT=lab` gardé (base locale, chaîne fictive, pas de Twitch réel) ; `npm run lab` / `lab:reset` |
-| `356617d` | assemblage unique (`main-server.ts`) ; Extension Lab sur le vrai `/v1/ext` (Studio signe le JWT, relaie) |
-| `6fe32e9` | transport Production de Studio vers le Core Lab local ; boucle complète extension → Core → worker Studio → lecteur |
+| `356617d` | assemblage unique (`main-server.ts`) ; Extension Lab sur le vrai `/v1/ext` (Studio signe le JWT, relaie)            |
+| `6fe32e9` | transport Production de Studio vers le Core Lab local ; boucle complète extension → Core → worker Studio → lecteur  |
 
 | `f46e8fc` | 7TV / BTTV / FFZ publics : option du Core coupée par défaut (lecture seule) ; Twitch fictif dans le Lab |
 | `2041804` | `STUDIO_LAB_CORE=main npm run studio` : le Lab sur le véritable Core (opt-in ; l'ancien Lab reste le défaut) |
@@ -290,16 +295,16 @@ PREUVES (mesures des démos A, B, C et limites), DECISIONS (D11 **à arbitrer** 
 
 - Commits :
 
-  | Commit | Contenu |
-  |---|---|
-  | `54b2b87` | docs |
-  | `e780437` | Core |
-  | `037a7db` | Studio |
-  | `8a2d862` | extension |
-  | `8ef2912` | modération extension + **liste blanche Lab corrigée** (les réglages H10 / H12 / H14 étaient refusés en profil Lab) |
-  | `e08d1a5` | démo C mini-jeux |
-  | `5a418f1` / `90f1147` | générateur `module:new` + contrôle de navigation |
-  | `c4166e2` | porte du lecteur OBS |
+  | Commit                | Contenu                                                                                                            |
+  | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+  | `54b2b87`             | docs                                                                                                               |
+  | `e780437`             | Core                                                                                                               |
+  | `037a7db`             | Studio                                                                                                             |
+  | `8a2d862`             | extension                                                                                                          |
+  | `8ef2912`             | modération extension + **liste blanche Lab corrigée** (les réglages H10 / H12 / H14 étaient refusés en profil Lab) |
+  | `e08d1a5`             | démo C mini-jeux                                                                                                   |
+  | `5a418f1` / `90f1147` | générateur `module:new` + contrôle de navigation                                                                   |
+  | `c4166e2`             | porte du lecteur OBS                                                                                               |
 
 - À faire par Antoni : voir dans le Lab réel (`npm run studio`, profil Lab) :
   - Laboratoire › Modules du socle ;

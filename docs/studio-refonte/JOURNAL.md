@@ -104,16 +104,17 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   - typecheck du serveur Studio rouge.
 - Suites :
 
-  | Suite | Résultat |
-  |---|---|
-  | Core | 1 380 verts |
-  | Intégration PostgreSQL | 191 verts |
-  | Studio | 884 verts |
-  | Extension | 78 verts |
-  | Bot | 287 verts |
-  | Build web, lint, typecheck | propres |
+  | Suite                      | Résultat    |
+  | -------------------------- | ----------- |
+  | Core                       | 1 380 verts |
+  | Intégration PostgreSQL     | 191 verts   |
+  | Studio                     | 884 verts   |
+  | Extension                  | 78 verts    |
+  | Bot                        | 287 verts   |
+  | Build web, lint, typecheck | propres     |
 
   Deux plantages 0xC0000409, relancés seuls et verts.
+
 - Vu en navigateur sur la pile isolée (4411) : trois défauts trouvés et corrigés (`dbb1798`).
 
 ## 05/11/2026 — Opération fondation totale (consolidation, premières migrations)
@@ -133,13 +134,13 @@ Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici*
   de chaîne.
 - **Suites.**
 
-  | Suite | Résultat |
-  |---|---|
-  | Core | 1 396 |
-  | Intégration | 191 |
-  | Studio | 884 |
-  | Extension | 78 |
-  | Bot | 287 |
+  | Suite       | Résultat |
+  | ----------- | -------- |
+  | Core        | 1 396    |
+  | Intégration | 191      |
+  | Studio      | 884      |
+  | Extension   | 78       |
+  | Bot         | 287      |
 
 ## 05/11/2026 — Mission continue
 

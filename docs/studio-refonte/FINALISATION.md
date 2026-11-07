@@ -7,21 +7,21 @@ Reprendre ici après une interruption (`git log --oneline -20`). Recette : [RECE
 
 ## Lots
 
-| # | Lot | Commit | Vérifié |
-|---|---|---|---|
-| 1 | Ballon araignée qui se recoche | `bec4256` | reproduit puis corrigé (navigateur) ; Electron sur le vrai Lab |
-| 2 | Raid Titan, son des Bits | `3114e76`, `47e9fba` | diagnostic en lecture seule (empreintes, ffprobe, historique Git) |
-| 3 | Retour / Suivant | `7e92b07` | navigateur ; Electron sur le vrai Lab |
-| 4 | TTS : soldes, prix, refus, scénario | `d9c1c3b`, `47e9fba`, `a8c8ddb` | Electron sur le vrai Lab (refus, crédit, achat) |
-| 5 | Tombola : fermer le résultat, retour seul, réglages repliables | `d96fcd0` | tests unitaires, capture ; manche complète non rejouée |
-| 6 | Modération : densité, équipe, vocabulaire | `2755e02` | captures à 1024, 1280, 1366 |
-| 7 | Récompenses : Twitch / Raptoru / demandes | `e1bcc2e` | capture, tests |
-| 8 | Simulation | `88b614c` | capture, tests |
-| 9 | Activité, Communauté | `37942e1` | tests, captures |
-| 10 | Modularité : preuve et guides | `2793c85` | suites ciblées vertes, exercice rejoué hors dépôt |
-| 11 | Matrice des données | `2793c85` | lecture du code |
-| 12 | Plan de livraison et retour arrière | `5dda773` | lecture du code |
-| 13 | `npm run studio:lab` réel, suites finales | `dbb2957`, `86c4b32` | voir « Vérifications finales » |
+| #   | Lot                                                            | Commit                          | Vérifié                                                           |
+| --- | -------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------- |
+| 1   | Ballon araignée qui se recoche                                 | `bec4256`                       | reproduit puis corrigé (navigateur) ; Electron sur le vrai Lab    |
+| 2   | Raid Titan, son des Bits                                       | `3114e76`, `47e9fba`            | diagnostic en lecture seule (empreintes, ffprobe, historique Git) |
+| 3   | Retour / Suivant                                               | `7e92b07`                       | navigateur ; Electron sur le vrai Lab                             |
+| 4   | TTS : soldes, prix, refus, scénario                            | `d9c1c3b`, `47e9fba`, `a8c8ddb` | Electron sur le vrai Lab (refus, crédit, achat)                   |
+| 5   | Tombola : fermer le résultat, retour seul, réglages repliables | `d96fcd0`                       | tests unitaires, capture ; manche complète non rejouée            |
+| 6   | Modération : densité, équipe, vocabulaire                      | `2755e02`                       | captures à 1024, 1280, 1366                                       |
+| 7   | Récompenses : Twitch / Raptoru / demandes                      | `e1bcc2e`                       | capture, tests                                                    |
+| 8   | Simulation                                                     | `88b614c`                       | capture, tests                                                    |
+| 9   | Activité, Communauté                                           | `37942e1`                       | tests, captures                                                   |
+| 10  | Modularité : preuve et guides                                  | `2793c85`                       | suites ciblées vertes, exercice rejoué hors dépôt                 |
+| 11  | Matrice des données                                            | `2793c85`                       | lecture du code                                                   |
+| 12  | Plan de livraison et retour arrière                            | `5dda773`                       | lecture du code                                                   |
+| 13  | `npm run studio:lab` réel, suites finales                      | `dbb2957`, `86c4b32`            | voir « Vérifications finales »                                    |
 
 ## Diagnostics
 
@@ -69,15 +69,15 @@ faute de Jetons affichait `insufficient_tokens` (le Core n'emploie pas le code a
 
 ## Vérifications finales (07/11, HEAD `86c4b32`)
 
-| Suite | Résultat |
-|---|---|
-| Build, types, lint | propres |
-| Core (PostgreSQL réel) | 1 615 / 1 615, 159 fichiers |
-| Studio | 955 / 955, 97 fichiers (un premier passage a perdu un fichier sur le crash Windows connu ; le second est complet) |
-| Bot | 287 / 287 |
-| Extension | 97 / 97 |
-| E2E complet | 110 / 111 à `dbb2957`. L'échec restant (simulateur Spotify) venait de la spec : elle décidait avant de lire l'état du module et attendait 5 s une recherche fictive plus lente. Corrigé, la spec passe deux fois de suite seule. Le premier passage complet (31 échecs) avait révélé un vrai défaut (titres de réglages devenus boutons, corrigé) puis la chute connue de la pile de test |
-| Electron sur le vrai `npm run studio:lab` | 11 pages sans débordement à 1360 × 900 et 1024 × 768, Retour / Suivant, Ballons, achat TTS refusé puis réussi ; voir plus haut |
+| Suite                                     | Résultat                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build, types, lint                        | propres                                                                                                                                                                                                                                                                                                                                                                                   |
+| Core (PostgreSQL réel)                    | 1 615 / 1 615, 159 fichiers                                                                                                                                                                                                                                                                                                                                                               |
+| Studio                                    | 955 / 955, 97 fichiers (un premier passage a perdu un fichier sur le crash Windows connu ; le second est complet)                                                                                                                                                                                                                                                                         |
+| Bot                                       | 287 / 287                                                                                                                                                                                                                                                                                                                                                                                 |
+| Extension                                 | 97 / 97                                                                                                                                                                                                                                                                                                                                                                                   |
+| E2E complet                               | 110 / 111 à `dbb2957`. L'échec restant (simulateur Spotify) venait de la spec : elle décidait avant de lire l'état du module et attendait 5 s une recherche fictive plus lente. Corrigé, la spec passe deux fois de suite seule. Le premier passage complet (31 échecs) avait révélé un vrai défaut (titres de réglages devenus boutons, corrigé) puis la chute connue de la pile de test |
+| Electron sur le vrai `npm run studio:lab` | 11 pages sans débordement à 1360 × 900 et 1024 × 768, Retour / Suivant, Ballons, achat TTS refusé puis réussi ; voir plus haut                                                                                                                                                                                                                                                            |
 
 Non vérifié : le profil Production, le son réel des voix, une manche de Tombola complète dans Electron après ces retouches, la vraie
 Production (aucune connexion).
@@ -94,10 +94,10 @@ Production (aucune connexion).
 
 Recette précédente validée, sauf Récompenses Twitch. Rien n'a changé dans le Core (contrats, droits, remboursements).
 
-| Lot | Commit | Vérifié |
-|---|---|---|
+| Lot                                                                                                                 | Commit    | Vérifié                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | Récompenses Twitch refaite : galerie, fiche latérale (Twitch → actions Raptoru → test → demandes), fil des demandes | `db60c10` | navigateur sur le Lab à 1360 et 1024 (catalogue, fiche, ajout, test, interrupteur, détail d'une demande), tests de vues, E2E |
-| TTS : solde, prix, manque, « Créditer N Jetons à X » | `41bbd33` | navigateur sur le Lab (crédit puis achat débloqué) |
+| TTS : solde, prix, manque, « Créditer N Jetons à X »                                                                | `41bbd33` | navigateur sur le Lab (crédit puis achat débloqué)                                                                           |
 
 **Récompenses.** Trois objets séparés à l'écran : la récompense sur Twitch (lue), les actions de Raptoru (la règle du Core,
 seule chose réglée), les demandes. Crédits TTS et Crédits Soundboard sont deux familles distinctes à l'écran (même action
@@ -109,14 +109,14 @@ Production démarre sans ces routes (`labRoutes: false`) et la zone n'apparaît 
 
 **Halloween, vérifié sur le Core du Lab (`.lab-data`), réglages remis à l'identique ensuite.**
 
-| Situation | Follow | Sub | Prime | Resub | Subgift | Bits, Raid |
-|---|---|---|---|---|---|---|
-| Profil OFF, familles Auto | habituelle | Eren | Eren | Eren | habituelle | habituelles |
-| Profil OFF, Ballons changés (Sub 2, Prime 3, Resub 1-4) | — | Eren | Eren | Eren | — | — |
-| Profil ON, Auto | Miss Minute | Ballon 2 | Ballon 3 | Ballon 1 ou 4 | Halloween 5 | habituelles |
-| Profil ON, Follow « Habituelle », Sub « Off » | habituelle | aucune | Ballon 3 | — | — | — |
-| Profil OFF, Follow forcé « Halloween » | Miss Minute | Eren | — | — | — | — |
-| Réactivation (ON, Auto) | Miss Minute | Ballon 2 | — | — | Halloween 5 | — |
+| Situation                                               | Follow      | Sub      | Prime    | Resub         | Subgift     | Bits, Raid  |
+| ------------------------------------------------------- | ----------- | -------- | -------- | ------------- | ----------- | ----------- |
+| Profil OFF, familles Auto                               | habituelle  | Eren     | Eren     | Eren          | habituelle  | habituelles |
+| Profil OFF, Ballons changés (Sub 2, Prime 3, Resub 1-4) | —           | Eren     | Eren     | Eren          | —           | —           |
+| Profil ON, Auto                                         | Miss Minute | Ballon 2 | Ballon 3 | Ballon 1 ou 4 | Halloween 5 | habituelles |
+| Profil ON, Follow « Habituelle », Sub « Off »           | habituelle  | aucune   | Ballon 3 | —             | —           | —           |
+| Profil OFF, Follow forcé « Halloween »                  | Miss Minute | Eren     | —        | —             | —           | —           |
+| Réactivation (ON, Auto)                                 | Miss Minute | Ballon 2 | —        | —             | Halloween 5 | —           |
 
 Les Ballons se règlent profil coupé et ne jouent pas tant qu'il l'est ; chaque variante Halloween porte l'habituelle en
 secours ; « Raid forcé Halloween » est refusé (`no_halloween_variant`). Seule trace : les familles Sub, Resub et Subgift sont
