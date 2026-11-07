@@ -91,11 +91,17 @@ test('Récompenses: the fictional catalogue, its rules through the Core, a test 
   const tab = page.locator('#tab-channel-points');
   const load = tab.locator('[data-lab-catalog]');
   if (await load.count()) await load.click();
-  await expect(tab.getByText('Crédit TTS').first()).toBeVisible();
-  await tab.getByText('Crédit TTS').first().click();
-  await tab.getByRole('button', { name: 'Tester', exact: true }).click();
+  // The card opens the reward's panel: Twitch reward, Raptoru actions, test, its requests.
+  await tab.getByRole('button', { name: 'Ouvrir « Crédit TTS »' }).click();
+  const fiche = page.locator('dialog.rwf-drawer');
+  await expect(fiche).toContainText('Crédits TTS');
+  await fiche.getByRole('button', { name: 'Tester', exact: true }).click();
   await page.getByRole('button', { name: 'Exécuter' }).click();
-  await expect(tab.getByText('Exécutée').first()).toBeVisible();
+  await expect(fiche.getByText('Exécutée').first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(
+    tab.locator('.rwp-feed').getByText('Exécutée').first(),
+  ).toBeVisible();
 });
 
 test('Spotify: a request and its decision from the page, without any account', async ({
@@ -104,7 +110,9 @@ test('Spotify: a request and its decision from the page, without any account', a
   await page.goto('/?p=spotify');
   const tab = page.locator('#tab-spotify');
   // The page reads the module's state first: decide only once it is drawn (an earlier spec may have closed the module).
-  await expect(tab.getByText(/Spotify joue|Aucune demande/).first()).toBeVisible();
+  await expect(
+    tab.getByText(/Spotify joue|Aucune demande/).first(),
+  ).toBeVisible();
   if (await tab.getByText('Demandes fermées').count()) {
     await tab.getByRole('button', { name: 'Ouvert' }).click();
     await page

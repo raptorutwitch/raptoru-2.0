@@ -1,7 +1,7 @@
 // Points de chaîne : la partie pure (testée) partagée par les pages Récompenses Twitch et Effets. Les textes viennent de Twitch :
 // chacun est échappé. Le Core décide et enregistre, ces fonctions lisent ce qu'il a décidé, sans identifiant ni JSON à l'écran.
 import { COLOR_CAM, COLOR_CAM_PRESETS, FX_CAM } from '@raptoru/schemas';
-import { esc, fmt, ic, pp, stateChip, type IcName } from '../ds/ds.js';
+import { esc, fmt, ic, stateChip, type IcName } from '../ds/ds.js';
 
 export type CpInteraction =
   | 'creepy'
@@ -136,28 +136,6 @@ export const actionIcon = (a: CpActionView): IcName =>
     ? (INTERACTIONS[a.interaction]?.icon ?? 'sparkle')
     : (ACTION_TYPES.find((t) => t.id === a.type)?.icon ?? 'sparkle');
 
-export function blankAction(type: CpActionView['type']): CpActionView {
-  switch (type) {
-    case 'effect_sound':
-      return { type, sound_id: '', volume: 100 };
-    case 'effect_video':
-      return { type, video_id: '', volume: 100 };
-    case 'sound':
-      return { type, sound_id: '' };
-    case 'obs_source':
-      return { type, scene: '', source: '', visible: true };
-    case 'obs_filter':
-      return { type, source: '', filter: '', enabled: true };
-    case 'interaction':
-      return { type, interaction: 'creepy' };
-    case 'credits':
-      // Pas de nombre par défaut : le streamer le choisit, le Core refuse 0.
-      return { type, currency: 'credits_tts', amount: 0 };
-    case 'obs_scene':
-      return { type, scene: '' };
-  }
-}
-
 export interface CpReward {
   id: string;
   title: string;
@@ -234,13 +212,6 @@ const REASON: Record<string, string> = {
   stream_offline:
     'hors live : rien exécuté, seuls les crédits sont accordés (remboursement demandé à Twitch si la récompense est créée par Raptoru)',
 };
-const STATUS: Record<CpRedemption['status'], [string, string]> = {
-  ignored: ['Ignorée', 'off'],
-  pending: ['En cours', ''],
-  done: ['Exécutée', 'ok'],
-  partial: ['Partielle', 'warn'],
-  failed: ['Échec', 'bad'],
-};
 
 /** Les raisons lisibles (codes du Core, du Soundboard, d'OBS) ; celles d'OBS sont déjà en français. */
 const ERRORS: Record<string, string> = {
@@ -309,7 +280,9 @@ export function actionLabel(
         ? `Passer sur la scène « ${a.scene} »${seconds(a.duration_ms)}, puis revenir`
         : `Passer sur la scène « ${a.scene} »`;
     case 'credits':
-      return `Accorder ${a.amount} ${a.currency === 'credits_tts' ? 'Crédit(s) TTS' : 'Crédit(s) Soundboard'} au viewer`;
+      return a.amount
+        ? `Accorder ${a.amount} ${a.currency === 'credits_tts' ? 'Crédit(s) TTS' : 'Crédit(s) Soundboard'} au viewer`
+        : `Accorder des ${a.currency === 'credits_tts' ? 'Crédits TTS' : 'Crédits Soundboard'} au viewer (nombre à choisir)`;
     case 'interaction':
       return a.interaction === 'fx_cam' && a.effect
         ? `FX Cam « ${a.effect} »`
@@ -483,53 +456,6 @@ export function statusView(s: CpState | null, error: string | null) {
   ].join('');
 }
 
-/** Les récompenses que Twitch liste, avec ce que chacune fait. */
-export function rewardsView(s: CpState, selected: string | null, find = '') {
-  if (!s.rewards.length)
-    return `<div class="d-empty"><b>Aucune récompense connue</b><br>Elles apparaissent dès que Twitch les liste, ou à la première utilisation par un viewer.</div>`;
-  const q = find.trim().toLowerCase();
-  const list = s.rewards.filter((r) => !q || r.title.toLowerCase().includes(q));
-  if (!list.length)
-    return '<div class="d-empty">Aucune récompense trouvée.</div>';
-  return list
-    .map((r) => {
-      const twitch =
-        r.twitch_enabled === false
-          ? '<span class="d-tag off">désactivée sur Twitch</span>'
-          : r.twitch_enabled === null && r.listed_by_twitch
-            ? '<span class="d-tag warn">plus listée par Twitch</span>'
-            : '';
-      const rule = !r.rule
-        ? '<span class="d-tag off">aucune action</span>'
-        : r.rule.enabled
-          ? ''
-          : '<span class="d-tag off">règle désactivée</span>';
-      const acts = r.rule?.actions.length
-        ? r.rule.actions
-            .map((a) => esc(actionLabel(a, s.sounds, effectItems(s.effects))))
-            .join(' → ')
-        : '';
-      return `<button type="button" class="rw-r${r.id === selected ? ' is-sel d-vf' : ''}" data-reward="${esc(r.id)}">
-        <span class="rw-pts">${fmt(r.cost)}</span>
-        <span class="rw-rt"><b>${esc(r.title)}</b>${acts ? `<small>${acts}</small>` : ''}${twitch || rule ? `<span class="d-tags">${twitch}${rule}</span>` : ''}</span>
-      </button>`;
-    })
-    .join('');
-}
-
-const time = (iso: string) =>
-  new Date(iso).toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-const clockOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString('fr-FR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 /** Les raisons du Core arrivent avec un tiret long : ici, un point médian. */
 const plain = (t: string) => t.replace(/\s+—\s+/g, ' · ');
 
@@ -566,28 +492,14 @@ export const isNotable = (r: CpRedemption) =>
   r.reason === 'stream_offline' ||
   r.results.some((x) => /expir|rembours/i.test(x.error ?? ''));
 
-/** Une utilisation et ce qui est arrivé à chaque action. */
-export function redemptionRow(r: CpRedemption, s: CpState) {
-  const [label, tone] = STATUS[r.status];
-  const body =
-    r.status === 'ignored'
-      ? `<p class="rw-why">${esc(REASON[r.reason ?? ''] ?? r.reason ?? '')}</p>`
-      : `<ul class="rw-ress">${r.results.map((x) => resultLine(r, s, x)).join('')}</ul>`;
-  return `<details class="rw-h d-in is-${r.status}"${r.status === 'failed' || r.status === 'partial' ? ' open' : ''}><summary>
-    ${r.source === 'simulation' ? `<span class="rw-who"><span class="d-tag off">Test Studio</span></span>` : `<span class="rw-who">${pp(r.user.display_name, 20)}<b>${esc(r.user.display_name)}</b></span>`}
-    <span class="rw-hr">${esc(r.reward.title)}</span>
-    <span class="d-tag ${tone}">${label}</span>
-    <time title="${esc(time(r.received_at))}">${clockOf(r.received_at)}</time>
-  </summary>
-  ${r.user_input ? `<blockquote>« ${esc(r.user_input)} »</blockquote>` : ''}
-  ${body}
-  ${r.twitch_status === 'canceled' ? '<p class="rw-why">Annulée sur Twitch : points rendus au viewer, crédits repris.</p>' : ''}
-  </details>`;
+/** Ce qui est arrivé à une demande : la raison d'une demande ignorée, sinon le sort de chaque action. */
+export function redemptionDetail(r: CpRedemption, s: CpState) {
+  return r.status === 'ignored'
+    ? `<p class="rw-why">${esc(REASON[r.reason ?? ''] ?? r.reason ?? '')}</p>`
+    : r.results.length
+      ? `<ul class="rw-ress">${r.results.map((x) => resultLine(r, s, x)).join('')}</ul>`
+      : '<p class="rw-why">Aucune action exécutée.</p>';
 }
-export const historyView = (s: CpState) =>
-  s.recent.length
-    ? s.recent.map((r) => redemptionRow(r, s)).join('')
-    : '<div class="d-empty">Aucune récompense reçue.</div>';
 
 /** Le texte de test d'une récompense FX Cam ou Couleur Cam, sinon null. */
 export function textChoices(r: CpReward) {

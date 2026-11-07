@@ -1,12 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionLabel,
-  historyView,
   masterChip,
   mediaCount,
-  rewardsView,
   statusView,
 } from '../../web/src/pages/rewards-model.ts';
+import {
+  ADD_KINDS,
+  actionTitle,
+  feedRow,
+  filterRewards,
+  filtersHtml,
+  galleryHtml,
+  kindOf,
+  requestHtml,
+  requestsOf,
+  rewardCard,
+  ruleState,
+  twitchState,
+} from '../../web/src/pages/rewards-view.ts';
+
+/** The requests as the page shows them: the feed row, then its detail panel. */
+const historyView = (s) =>
+  s.recent.map((x) => feedRow(x) + requestHtml(x, s, null)).join('');
+const rewardsView = (s) => galleryHtml(s, 'all', '', new Set());
 
 // Page Récompenses Twitch, pure views: Twitch texts escaped, readable French, no ids / JSON shown.
 
@@ -133,7 +150,7 @@ describe('Points de chaîne views', () => {
     };
     const html = rewardsView(s, 'r1') + historyView(s);
     expect(html).not.toContain('<img');
-    expect(html).toContain('désactivée sur Twitch');
+    expect(html).toContain('En pause sur Twitch');
     expect(html).toContain('automatisations désactivées');
     expect(html).toMatch(line('done', 'Son « Eren cri »'));
     expect(html).toMatch(
@@ -396,5 +413,108 @@ describe('Points de chaîne views', () => {
         'en cours de lecture',
       ),
     );
+  });
+});
+
+describe('Récompenses page (rebuilt 07/11): Twitch reward, Raptoru actions, requests kept apart', () => {
+  const reward = (id, title, actions, extra = {}) => ({
+    id,
+    title,
+    cost: 500,
+    twitch_enabled: true,
+    listed_by_twitch: true,
+    rule: actions ? { enabled: true, actions, version: 1 } : null,
+    ...extra,
+  });
+  const sb = { type: 'credits', currency: 'credits_soundboard', amount: 2 };
+  const tts = { type: 'credits', currency: 'credits_tts', amount: 3 };
+
+  it('the shared « credits » type reads as two different things: Crédits TTS and Crédits Soundboard', () => {
+    expect(actionTitle(sb)).toBe('Crédits Soundboard');
+    expect(actionTitle(tts)).toBe('Crédits TTS');
+    expect(kindOf(sb)).toBe('sb');
+    expect(kindOf(tts)).toBe('tts');
+    const html = galleryHtml(
+      { ...base, rewards: [reward('a', 'Crédit Soundboard', [sb])] },
+      'all',
+      '',
+      new Set(),
+    );
+    expect(html).toContain('Crédits Soundboard');
+    expect(html).not.toContain('Crédits TTS');
+  });
+
+  it('every action offered by « Ajouter une action » is a Core action as is (no new type)', () => {
+    const types = new Set([
+      'sound',
+      'effect_sound',
+      'effect_video',
+      'obs_source',
+      'obs_filter',
+      'obs_scene',
+      'credits',
+      'interaction',
+    ]);
+    for (const k of ADD_KINDS) expect(types).toContain(k.make().type);
+    expect(ADD_KINDS.find((k) => k.id === 'credits_sb').make()).toEqual({
+      type: 'credits',
+      currency: 'credits_soundboard',
+      amount: 0,
+    });
+    expect(actionLabel(ADD_KINDS[0].make())).toContain('nombre à choisir');
+  });
+
+  it('filters, Twitch availability, rule state; a pending draft locks the card switch', () => {
+    const s = {
+      ...base,
+      rewards: [
+        reward('a', 'Reliée', [sb]),
+        reward('b', 'Vide', null),
+        reward('c', 'Coupée', [tts], {
+          rule: { enabled: false, actions: [tts], version: 2 },
+        }),
+        reward('d', 'Pause', [tts], { twitch_enabled: false }),
+      ],
+    };
+    expect(filterRewards(s.rewards, 'linked').map((r) => r.id)).toEqual([
+      'a',
+      'd',
+    ]);
+    expect(filterRewards(s.rewards, 'none').map((r) => r.id)).toEqual(['b']);
+    expect(filterRewards(s.rewards, 'off').map((r) => r.id)).toEqual(['c']);
+    expect(filterRewards(s.rewards, 'twitch').map((r) => r.id)).toEqual(['d']);
+    expect(filterRewards(s.rewards, 'all', 'coup').map((r) => r.id)).toEqual([
+      'c',
+    ]);
+    expect(twitchState(s.rewards[3]).text).toBe('En pause sur Twitch');
+    expect(ruleState(s.rewards[2]).text).toBe('Actions Raptoru coupées');
+    expect(ruleState(s.rewards[1]).text).toBe('Aucune action Raptoru');
+    const locked = rewardCard(s.rewards[0], s, { draft: true });
+    expect(locked).toMatch(/data-rule-toggle="a"[^>]*disabled/);
+    expect(locked).toContain('Pas enregistrée');
+    expect(filtersHtml(s, 'all')).toContain('data-filter="none"');
+  });
+
+  it('a request: feed row and detail escape Twitch texts; refunds are never manual', () => {
+    const hostile = '<img src=x onerror=alert(1)>';
+    const x = {
+      source: 'twitch',
+      redemption_id: 'r9',
+      reward: { id: 'a', title: hostile, cost: 500 },
+      user: { display_name: hostile },
+      user_input: hostile,
+      twitch_status: 'canceled',
+      received_at: '2026-11-07T20:00:00Z',
+      status: 'done',
+      reason: null,
+      actions: [sb],
+      results: [{ index: 0, status: 'done' }],
+    };
+    const s = { ...base, recent: [x], rewards: [reward('a', hostile, [sb])] };
+    const html = feedRow(x) + requestHtml(x, s, s.rewards[0]);
+    expect(html).not.toContain('<img');
+    expect(html).toContain('Annulée : points rendus au viewer');
+    expect(html).toContain('Aucun remboursement manuel');
+    expect(requestsOf(s, s.rewards[0])).toHaveLength(1);
   });
 });
