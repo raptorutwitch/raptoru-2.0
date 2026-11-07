@@ -150,7 +150,7 @@ describe('Points de chaîne views', () => {
     };
     const html = rewardsView(s, 'r1') + historyView(s);
     expect(html).not.toContain('<img');
-    expect(html).toContain('En pause sur Twitch');
+    expect(html).toContain('Désactivée ou en pause sur Twitch');
     expect(html).toContain('automatisations désactivées');
     expect(html).toMatch(line('done', 'Son « Eren cri »'));
     expect(html).toMatch(
@@ -486,7 +486,7 @@ describe('Récompenses page (rebuilt 07/11): Twitch reward, Raptoru actions, req
     expect(filterRewards(s.rewards, 'all', 'coup').map((r) => r.id)).toEqual([
       'c',
     ]);
-    expect(twitchState(s.rewards[3]).text).toBe('En pause sur Twitch');
+    expect(twitchState(s.rewards[3]).text).toBe('Désactivée ou en pause sur Twitch');
     expect(ruleState(s.rewards[2]).text).toBe('Actions Raptoru coupées');
     expect(ruleState(s.rewards[1]).text).toBe('Aucune action Raptoru');
     const locked = rewardCard(s.rewards[0], s, { draft: true });

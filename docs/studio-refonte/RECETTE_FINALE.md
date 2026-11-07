@@ -6,7 +6,7 @@ StreamElements réels. Fermer la fenêtre arrête tout. La recette précédente 
 ## 1. Récompenses Twitch (page refaite)
 
 1. **Parcourir.** La page montre une carte par récompense : tuile avec le coût en points et l’icône de ce qu’elle déclenche,
-   « Achetable » ou « En pause sur Twitch », les actions de Raptoru en pastilles, l’heure de la dernière demande. Filtres en
+   « Achetable » ou « Désactivée ou en pause sur Twitch », les actions de Raptoru en pastilles, l’heure de la dernière demande. Filtres en
    haut (Toutes, Reliées, Sans action, Coupées, Indisponibles sur Twitch), recherche par nom. Le fil des demandes reste à droite.
 2. **Interrupteur général.** Coupé : un bandeau ambre le dit au-dessus des cartes (« Activer… » demande confirmation).
 3. **Couper une récompense.** L’interrupteur d’une carte coupe ou rallume ses actions Raptoru, avec « Annuler » dans la

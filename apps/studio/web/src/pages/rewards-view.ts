@@ -200,7 +200,8 @@ export function twitchState(r: CpReward): {
   if (r.twitch_enabled === true)
     return { tone: 'ok', text: 'Achetable sur Twitch' };
   if (r.twitch_enabled === false)
-    return { tone: 'warn', text: 'En pause sur Twitch' };
+    // Le Core ne garde qu'un booléen (désactivée ou en pause, channel-points/service.ts syncRewards) : les deux sont possibles.
+    return { tone: 'warn', text: 'Désactivée ou en pause sur Twitch' };
   return r.listed_by_twitch
     ? { tone: 'off', text: 'Plus listée par Twitch' }
     : { tone: 'off', text: 'Connue par un achat seulement' };
