@@ -21,7 +21,7 @@ Reprendre ici après une interruption (`git log --oneline -20`). Recette : [RECE
 | 10 | Modularité : preuve et guides | `2793c85` | suites ciblées vertes, exercice rejoué hors dépôt |
 | 11 | Matrice des données | `2793c85` | lecture du code |
 | 12 | Plan de livraison et retour arrière | `5dda773` | lecture du code |
-| 13 | `npm run studio:lab` réel, suites finales | — | voir « Vérifications » |
+| 13 | `npm run studio:lab` réel, suites finales | `dbb2957`, `86c4b32` | voir « Vérifications finales » |
 
 ## Diagnostics
 
@@ -66,6 +66,21 @@ faute de Jetons affichait `insufficient_tokens` (le Core n'emploie pas le code a
   (« port 4302 déjà utilisé… »). Ne jamais lancer les deux ensemble.
 - À savoir : le Lab ouvre les fenêtres Halloween sur ton écran (overlay et « Chaos ») parce que le réglage Halloween est actif dans
   `.lab-data`. Comportement existant, pas modifié.
+
+## Vérifications finales (07/11, HEAD `86c4b32`)
+
+| Suite | Résultat |
+|---|---|
+| Build, types, lint | propres |
+| Core (PostgreSQL réel) | 1 615 / 1 615, 159 fichiers |
+| Studio | 955 / 955, 97 fichiers (un premier passage a perdu un fichier sur le crash Windows connu ; le second est complet) |
+| Bot | 287 / 287 |
+| Extension | 97 / 97 |
+| E2E complet | 110 / 111 à `dbb2957`. L'échec restant (simulateur Spotify) venait de la spec : elle décidait avant de lire l'état du module et attendait 5 s une recherche fictive plus lente. Corrigé, la spec passe deux fois de suite seule. Le premier passage complet (31 échecs) avait révélé un vrai défaut (titres de réglages devenus boutons, corrigé) puis la chute connue de la pile de test |
+| Electron sur le vrai `npm run studio:lab` | 11 pages sans débordement à 1360 × 900 et 1024 × 768, Retour / Suivant, Ballons, achat TTS refusé puis réussi ; voir plus haut |
+
+Non vérifié : le profil Production, le son réel des voix, une manche de Tombola complète dans Electron après ces retouches, la vraie
+Production (aucune connexion).
 
 ## Reste
 
