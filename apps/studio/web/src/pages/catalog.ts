@@ -16,7 +16,7 @@ const LABEL: Record<CatalogFilter, string> = {
   all: 'Tous',
   attention: 'À regarder',
   on: 'Prêts',
-  off: 'Fermés',
+  off: 'À l’arrêt',
 };
 const norm = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

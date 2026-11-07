@@ -19,7 +19,6 @@ const ALL_OFF = {
     token_login: 'lecroupier_',
   },
   output: { enabled: false, write_scope: true, executor_absent: true },
-  games: { enabled: false },
 };
 const button = (html, action) =>
   new RegExp(`<button[^>]*data-sim="${action}"[^>]*>([^<]*)</button>`).exec(
@@ -27,23 +26,22 @@ const button = (html, action) =>
   )?.[1];
 
 describe('states', () => {
-  it('everything off: grey dots, « Aucune écriture dans le vrai chat », the four « on » buttons', () => {
+  it('everything off: grey dots, nothing about the real chat, the « on » buttons', () => {
     expect(simStates(ALL_OFF).map((s) => s.tone)).toEqual([
-      'off',
       'off',
       'off',
       'off',
     ]);
     const html = simPanel(ALL_OFF);
-    expect(html).toContain('Aucune écriture dans le vrai chat');
+    expect(html).not.toContain('Écrit dans le vrai chat');
     expect(button(html, 'stream_start')).toBe('Démarrer');
     expect(button(html, 'ingress_on')).toBe('Activer');
     expect(button(html, 'output_on')).toBe('Activer');
-    expect(button(html, 'games_on')).toBe('Activer');
+    expect(html).not.toContain('Mini-jeux');
     expect(writesRealChat(ALL_OFF)).toBe(false);
   });
 
-  it('everything on: live (simulation), chat connected, output warns, games on', () => {
+  it('everything on: live (simulation), chat connected, output warns', () => {
     const s = {
       stream: { source: 'simulated', started_at: '2026-10-16T19:05:00.000Z' },
       ingress: {
@@ -53,21 +51,16 @@ describe('states', () => {
         token_login: 'lecroupier_',
       },
       output: { enabled: true, write_scope: true, executor_absent: false },
-      games: { enabled: true },
     };
-    expect(simStates(s).map((x) => x.tone)).toEqual(['on', 'on', 'warn', 'on']);
+    expect(simStates(s).map((x) => x.tone)).toEqual(['on', 'on', 'warn']);
     const html = simPanel(s);
     expect(html).toContain('En direct (simulation) depuis');
     expect(html).toContain('Activée · connectée (lecroupier_)');
     expect(html).toContain('Activée · écrit dans le vrai chat');
     expect(html).toContain('Écrit dans le vrai chat');
-    expect(html).toContain(
-      'Ouverts · !roulette, !slots et !duel répondent pendant un live',
-    );
     expect(button(html, 'stream_end')).toBe('Terminer');
     expect(button(html, 'ingress_off')).toBe('Désactiver');
     expect(button(html, 'output_off')).toBe('Désactiver');
-    expect(button(html, 'games_off')).toBe('Désactiver');
   });
 
   it('a real Twitch live cannot be ended from Studio; ingestion starting shows « démarrage »', () => {
@@ -91,35 +84,12 @@ describe('states', () => {
       stream: undefined,
       ingress: null,
       output: null,
-      games: null,
     });
     expect(html).toContain('Indisponible (profil Lab uniquement)');
     expect(html.match(/data-sim="/g)).toBeNull();
     expect(
-      simStates({ ingress: null, output: null, games: null }).map(
-        (s) => s.tone,
-      ),
-    ).toEqual(['na', 'na', 'na', 'na']);
-  });
-
-  it('Production profile: no simulated live; the mini-games switch says it is the real one and always asks', () => {
-    const prod = {
-      production: true,
-      stream: undefined,
-      ingress: null,
-      output: null,
-      games: { enabled: false },
-    };
-    const html = simPanel(prod);
-    expect(html).toContain('Indisponible (profil Lab uniquement)');
-    expect(button(html, 'stream_start')).toBeUndefined();
-    expect(html).toContain('PRODUCTION');
-    expect(html).toContain('ce n’est pas une simulation');
-    expect(confirmFor('games_on', prod)).toContain('Profil Production');
-    expect(
-      confirmFor('games_off', { ...prod, games: { enabled: true } }),
-    ).toContain('Profil Production');
-    expect(confirmFor('games_on', ALL_OFF)).toBeNull();
+      simStates({ ingress: null, output: null }).map((s) => s.tone),
+    ).toEqual(['na', 'na', 'na']);
   });
 
   it('busy disables the buttons; errors and the ingestion block message are escaped', () => {
@@ -142,11 +112,17 @@ describe('states', () => {
     expect(button(html, 'ingress_on')).toBeUndefined();
   });
 
-  it('the top bar button: one dot per service, open state', () => {
-    const html = simButton(ALL_OFF, true);
-    expect(html).toContain('aria-expanded="true"');
-    expect(html.match(/sim-dot--off/g)).toHaveLength(4);
-    expect(simButton(null, false)).toContain('Simulation');
+  it('the sidebar entry: a link to the page, one dot per service, the live said', () => {
+    const html = simButton(ALL_OFF);
+    expect(html).toContain('data-page="simulation"');
+    expect(html.match(/sim-dot--off/g)).toHaveLength(3);
+    expect(simButton(null)).toContain('Simulation');
+    expect(
+      simButton({
+        ...ALL_OFF,
+        stream: { source: 'simulated', started_at: '2026-10-16T19:05:00.000Z' },
+      }),
+    ).toContain('Live fictif en cours');
   });
 });
 
@@ -155,22 +131,16 @@ describe('confirmations (writing in the real chat)', () => {
     expect(confirmFor('output_on', ALL_OFF)).toContain('VRAI chat');
   });
 
-  it('output off: starting a live, the ingestion or the games asks nothing', () => {
-    for (const a of [
-      'stream_start',
-      'ingress_on',
-      'games_on',
-      'output_off',
-      'stream_end',
-    ])
+  it('output off: starting a live or the ingestion asks nothing', () => {
+    for (const a of ['stream_start', 'ingress_on', 'output_off', 'stream_end'])
       expect(confirmFor(a, ALL_OFF)).toBeNull();
   });
 
-  it('output on: live, ingestion and games ask; turning things off never asks', () => {
+  it('output on: live and ingestion ask; turning things off never asks', () => {
     const s = { ...ALL_OFF, output: { enabled: true } };
-    for (const a of ['stream_start', 'ingress_on', 'games_on'])
+    for (const a of ['stream_start', 'ingress_on'])
       expect(confirmFor(a, s)).toContain('VRAI chat');
-    for (const a of ['stream_end', 'ingress_off', 'games_off', 'output_off'])
+    for (const a of ['stream_end', 'ingress_off', 'output_off'])
       expect(confirmFor(a, s)).toBeNull();
   });
 });

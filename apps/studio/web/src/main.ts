@@ -107,7 +107,7 @@ if (app) {
     modules: mountModuleHost(el('modules')),
   };
   mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);
-  // « Simulation de stream » : live, chat, sortie réelle, mini-jeux (depuis n'importe quelle page).
+  // L'entrée Simulation de la barre latérale, avec l'état du live fictif (depuis n'importe quelle page).
   mountSimulation(app.querySelector<HTMLElement>('.sim-widget')!);
 
   let shown: ViewId | null | undefined;

@@ -9,7 +9,7 @@ const has = (routes: { pattern: RegExp }[], path: string) =>
 
 describe('Lab rewards catalogue', () => {
   it('obeys the real contracts of the list and of the rules', () => {
-    const rewards = LAB_REWARDS.map(({ actions: _, ...r }) => r);
+    const rewards = LAB_REWARDS.map(({ actions, ...r }) => r);
     expect(() =>
       CpRewardsSync.parse({ channel_id: '900100', rewards }),
     ).not.toThrow();

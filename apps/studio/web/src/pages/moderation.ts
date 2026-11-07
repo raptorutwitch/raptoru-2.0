@@ -217,6 +217,9 @@ export function mountModeration(root: HTMLElement) {
     views[id].paint();
     void views[id].read?.();
   }
+  window.addEventListener('raptoru:mod-tab', (e) =>
+    show((e as CustomEvent<Tab>).detail),
+  );
   function to(j: ModJump) {
     views[j.tab].enter?.(j);
     if (j.tab === tab) {

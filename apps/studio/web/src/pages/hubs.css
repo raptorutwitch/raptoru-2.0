@@ -245,8 +245,38 @@
 /* Communauté */
 .co {
   display: grid;
-  gap: 18px;
-  max-width: 760px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.co h2 {
+  margin: 0 0 8px;
+}
+.co-main,
+.co-side {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.co-side .d-btn {
+  margin-top: 8px;
+}
+.co-v em {
+  width: 16px;
+  color: var(--ink3);
+  font: 600 12.5px var(--num);
+  font-style: normal;
+  text-align: right;
+}
+.co-v small {
+  margin-left: auto;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+@media (max-width: 1100px) {
+  .co {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .co-find .d-fld {
   width: 100%;

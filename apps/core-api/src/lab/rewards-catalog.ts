@@ -117,7 +117,7 @@ export async function loadLabRewards(
   cp: ChannelPointsService,
   channelId: string,
 ) {
-  const rewards = LAB_REWARDS.map(({ actions: _, ...r }) => r);
+  const rewards = LAB_REWARDS.map(({ actions, ...r }) => r);
   await cp.syncRewards({ channel_id: channelId, rewards });
   let rules = 0;
   for (const { id, actions } of LAB_REWARDS)

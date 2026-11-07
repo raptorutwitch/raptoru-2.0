@@ -35,6 +35,14 @@ const HOST_STATE: Record<string, PageState> = {
   unknown: { level: 'unknown', text: 'Inconnu' },
 };
 
+/** One word per state across the catalogue (the readiness list keeps its own sentences). */
+const WORD: Record<string, string> = {
+  Coupé: 'Fermé',
+  Coupés: 'Fermé',
+  Fermés: 'Fermé',
+  Absent: 'Lecteur absent',
+};
+
 /** Pure. A module of the host is matched by its page id; the readiness check wins when both exist. */
 export function pageStates(
   checks: Check[] | undefined,
@@ -50,7 +58,7 @@ export function pageStates(
     );
   for (const c of checks ?? []) {
     const page = CHECK_PAGE[c.id];
-    if (page) out.set(page, { level: c.level, text: c.state });
+    if (page) out.set(page, { level: c.level, text: WORD[c.state] ?? c.state });
   }
   return out;
 }

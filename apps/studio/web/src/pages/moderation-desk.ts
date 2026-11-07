@@ -167,7 +167,7 @@ export function mountDesk(ctx: Ctx): View {
     if (m === 'raffle') return paintRaffle(note);
     const off =
       m === 'tts' && ctx.o?.tts.player_offline
-        ? '<p class="ms-warn">Lecteur OBS absent : les messages attendent.</p>'
+        ? '<p class="ms-warn">Aucun lecteur ouvert : la file attend, les nouveaux achats sont refusés.</p>'
         : '';
     patch(
       strip(m, 'now'),

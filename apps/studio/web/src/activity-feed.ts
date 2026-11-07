@@ -60,7 +60,42 @@ const AUDIT_FR: Record<string, string> = {
   set_permission: 'Droits modifiés',
   word_add: 'Mot ajouté',
   word_remove: 'Mot retiré',
+  allow: 'Demande laissée passer',
+  cancel: 'Demande retirée',
+  stop: 'Lecture coupée',
+  stop_current: 'Lecture coupée',
+  purge: 'File vidée',
+  refund: 'Remboursement',
+  module_state: 'État du module changé',
+  global_pause: 'Pause globale',
+  cooldown_set: 'Délai imposé',
+  cooldown_clear: 'Délai retiré',
+  cooldown_running_set: 'Délai en cours modifié',
+  cooldown_running_clear: 'Délai en cours retiré',
+  note_add: 'Note ajoutée',
+  wallet_adjust: 'Solde ajusté',
+  lab_wallet_adjust: 'Solde de test ajusté',
+  stream_start: 'Live démarré',
+  stream_end: 'Live terminé',
+  scheduler_skip: 'Tombola automatique passée',
+  raffle_retry_payout: 'Gain relancé',
+  sw_mode: 'Roue : mode changé',
+  sw_announce_delay: 'Roue : délai d’annonce changé',
+  sw_invitations: 'Roue : invitations changées',
+  sw_grant: 'Roue : tour accordé',
+  sw_draw_request: 'Roue : tirage demandé',
+  sw_confirm_shown: 'Roue : confirmation affichée',
+  sw_redraw: 'Roue : nouveau tirage',
+  sw_replay: 'Roue : tirage rejoué',
 };
+/** Les motifs fixes du Core ; un motif écrit à la main reste tel quel. */
+const REASON_FR: Record<string, string> = {
+  stopped_by_moderator: 'coupé par la modération',
+  cancelled_by_moderator: 'retiré par la modération',
+  failed_before_start: 'échec avant la lecture',
+};
+/** Une panne dit ce qui manque ; le code technique reste dans le journal de Système. */
+const plainIncident = (t: string) => t.replace(/ \([a-z_]+\)/, '');
 
 /** Pure: newest first, at most `max`. */
 export function mergeFeed(
@@ -75,7 +110,7 @@ export function mergeFeed(
       at: h.at,
       kind: 'incident',
       title: h.label,
-      text: h.text,
+      text: plainIncident(h.text),
       page: 'systeme',
     })),
     ...modules.map((m): FeedItem => ({
@@ -89,7 +124,11 @@ export function mergeFeed(
       at: a.created_at,
       kind: 'moderation',
       title: a.module_id ? labels(a.module_id) : 'Modération',
-      text: `${/^studio(:|$)/.test(a.actor) ? 'Studio' : a.actor} · ${AUDIT_FR[a.action] ?? a.action}${a.reason ? ` · ${a.reason}` : ''}`,
+      text: [
+        ...(/^(studio(:|$)|system$)/.test(a.actor) ? [] : [a.actor]),
+        AUDIT_FR[a.action] ?? a.action,
+        ...(a.reason ? [REASON_FR[a.reason] ?? a.reason] : []),
+      ].join(' · '),
       page: 'moderation',
     })),
   ]
@@ -115,8 +154,19 @@ export function feedHtml(
   filter: FeedFilter,
   href: (page: string) => string,
   missing: string[],
+  find = '',
 ) {
-  const shown = items.filter((i) => filter === 'all' || i.kind === filter);
+  const q = find.trim().toLowerCase();
+  const shown = items
+    .filter((i) => filter === 'all' || i.kind === filter)
+    .filter((i) => !q || `${i.title} ${i.text}`.toLowerCase().includes(q))
+    // La même ligne répétée à la suite : une seule, avec son nombre.
+    .reduce<(FeedItem & { n: number })[]>((out, i) => {
+      const last = out.at(-1);
+      if (last && last.title === i.title && last.text === i.text) last.n += 1;
+      else out.push({ ...i, n: 1 });
+      return out;
+    }, []);
   const day = (iso: string) =>
     new Date(iso).toLocaleDateString('fr-FR', {
       weekday: 'long',
@@ -134,10 +184,10 @@ export function feedHtml(
       const d = day(i.at);
       const head = d === at ? '' : `<li class="ac-day">${esc(d)}</li>`;
       at = d;
-      return `${head}<li class="ac-e" data-kind="${i.kind}"><time>${esc(hour(i.at))}</time><i title="${KIND[i.kind]}"></i><a href="${href(i.page)}" data-page="${esc(i.page)}"><b>${esc(i.title)}</b><span>${esc(i.text)}</span></a></li>`;
+      return `${head}<li class="ac-e" data-kind="${i.kind}"><time>${esc(hour(i.at))}</time><i title="${KIND[i.kind]}"></i><a href="${href(i.page)}" data-page="${esc(i.page)}"><b>${esc(i.title)}</b><span>${esc(i.text)}${i.n > 1 ? ` · ${i.n} fois` : ''}</span></a></li>`;
     })
     .join('');
-  return `${missing.length ? `<p class="d-note bad">Non lu : ${esc(missing.join(', '))}.</p>` : ''}${rows ? `<ol class="ac-feed">${rows}</ol>` : '<p class="d-empty">Rien pour l’instant.</p>'}`;
+  return `${missing.length ? `<p class="d-note bad">Non lu : ${esc(missing.join(', '))}.</p>` : ''}${rows ? `<ol class="ac-feed">${rows}</ol>` : `<p class="d-empty">${q ? 'Rien ne correspond.' : filter === 'incident' ? 'Aucun incident enregistré.' : 'Rien pour l’instant.'}</p>`}`;
 }
 
 /** The two read routes behind the feed (null: not readable on this profile). */

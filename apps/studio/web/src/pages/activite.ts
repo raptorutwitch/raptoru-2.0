@@ -4,7 +4,7 @@ import {
   FEED_FILTERS,
   mergeFeed,
 } from '../activity-feed.js';
-import { esc, page, patch, seg, stateChip } from '../ds/ds.js';
+import { esc, ic, page, patch, seg, stateChip } from '../ds/ds.js';
 import { icon } from '../shell/icons.js';
 import { hrefOf, pageById, type Page } from '../shell/registry.js';
 import type { HubView, Pulse } from './pulse.js';
@@ -36,11 +36,15 @@ export function mountActivite(root: HTMLElement): HubView {
   const out = p.body.querySelector<HTMLElement>('[data-z="feed"]')!;
   let filter: FeedFilter = 'all';
   let last: Pulse | null = null;
+  p.actions.innerHTML = `<label class="d-fld cat-find">${ic('search')}<input type="search" data-q placeholder="Filtrer le fil" aria-label="Filtrer le fil"></label><span data-z="seg"></span>`;
+  const z = p.actions.querySelector<HTMLElement>('[data-z="seg"]')!;
+  const find = p.actions.querySelector<HTMLInputElement>('[data-q]')!;
+  find.addEventListener('input', () => draw());
 
   function draw() {
     const u = last;
     if (!u) return;
-    patch(p.actions, seg('data-feed', FEED_FILTERS, filter));
+    patch(z, seg('data-feed', FEED_FILTERS, filter));
     if (!u.feed) {
       patch(out, '<p class="d-empty">Lecture…</p>');
       return;
@@ -59,7 +63,7 @@ export function mountActivite(root: HTMLElement): HubView {
         pageById(id === 'raffle' ? 'tombola' : id.replace(/_/g, '-'))?.label ??
         id,
     );
-    patch(out, feedHtml(items, filter, href, missing));
+    patch(out, feedHtml(items, filter, href, missing, find.value));
   }
   root.addEventListener('click', (e) => {
     const f = (e.target as HTMLElement).closest<HTMLElement>('[data-feed]')

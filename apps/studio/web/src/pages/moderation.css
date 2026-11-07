@@ -829,6 +829,87 @@ button.mj-r:hover {
   justify-items: center;
 }
 
+.mt-roles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.mt-roles > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 8px;
+  align-items: baseline;
+  padding: 8px 12px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+}
+.mt-roles b {
+  font: 600 20px var(--num);
+}
+.mt-roles span {
+  font-weight: 600;
+}
+.mt-roles small {
+  grid-column: 1 / -1;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.mt-more {
+  margin-top: 12px;
+}
+.mr {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(84px, 1fr));
+  min-width: 640px;
+  margin-top: 8px;
+}
+.mr-r {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-height: 30px;
+  border-bottom: 1px solid var(--hair);
+}
+.mr-r > span + span {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.mr-head {
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.mr-g {
+  grid-column: 1 / -1;
+  margin: 12px 0 4px;
+}
+.mr-y {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+}
+.mr-n {
+  color: var(--ink3);
+}
+.mr small {
+  color: var(--ink2);
+  font-size: 12px;
+  line-height: 1.2;
+}
+.mr-chat {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 8px 0;
+}
+.mr-chat dd {
+  margin: 0;
+  color: var(--ink2);
+}
+
 /* --- Mots surveillés -------------------------------------------------------------------------------------------------- */
 .mw-add {
   display: flex;

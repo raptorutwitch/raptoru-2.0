@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { simPanel, spotifyPanel } from '../../web/src/pages/spotify-panel.js';
+import { simBar, spotifyPanel } from '../../web/src/pages/spotify-panel.js';
 import {
   alertsView,
   countsView,
@@ -370,7 +370,7 @@ describe('Studio Spotify — the panel', () => {
     expect(html).toContain('http://127.0.0.1:4100/api/spotify/oauth/callback');
     expect(html).toContain('data-act="sp-connect"');
     expect(html).not.toContain('data-act="sp-simulate"');
-    expect(simPanel(state(), ui())).toBe('');
+    expect(simBar(state(), ui())).toBe('');
   });
 
   it('Lab: the simulator, no connection form', () => {
@@ -393,7 +393,8 @@ describe('Studio Spotify — the panel', () => {
         calls: 4,
       },
     });
-    expect(spotifyPanel(lab, ui())).toContain('data-act="sp-simulate"');
+    expect(simBar(lab, ui())).toContain('data-act="sp-simulate"');
+    expect(simBar(lab, ui())).toContain('data-act="sp-chat"');
     expect(spotifyPanel(lab, ui())).not.toContain('data-act="sp-connect"');
   });
 });

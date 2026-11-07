@@ -72,8 +72,8 @@ const SERVICE: Record<Service['state'], ['' | 'w' | 'r' | 'off', string]> = {
   stopped: ['off', 'Arrêté'],
 };
 const TABS: [string, string][] = [
-  ['profile', 'Profil'],
-  ['links', 'Connexions'],
+  ['profile', 'Vue d’ensemble'],
+  ['links', 'Comptes Twitch'],
   ['services', 'Services'],
   ['log', 'Journal'],
   ['dev', 'Outils'],
@@ -98,8 +98,8 @@ export function mountSysteme(root: HTMLElement) {
         `<button type="button" role="tab" id="sy-t-${id}" data-tab="${id}" aria-controls="sy-p-${id}" aria-selected="${id === tab}" tabindex="${id === tab ? 0 : -1}"${id === 'dev' ? ' hidden' : ''}>${label}</button>`,
     ).join('')}</div>
     <div class="sy-panels">
-      <section role="tabpanel" id="sy-p-profile" aria-labelledby="sy-t-profile" data-slot="profile"></section>
-      <section role="tabpanel" id="sy-p-links" aria-labelledby="sy-t-links"><div data-slot="links"></div><div data-slot="twitch-connections"></div></section>
+      <section role="tabpanel" id="sy-p-profile" aria-labelledby="sy-t-profile"><div data-slot="profile"></div><h2 class="d-lb">Branchements</h2><div data-slot="links"></div></section>
+      <section role="tabpanel" id="sy-p-links" aria-labelledby="sy-t-links"><div data-slot="twitch-connections"></div></section>
       <section role="tabpanel" id="sy-p-services" aria-labelledby="sy-t-services">
         <div data-slot="control"></div>
         <h2 class="d-lb">Sur ce PC</h2>
@@ -269,8 +269,8 @@ export function mountSysteme(root: HTMLElement) {
       `${line('film', 'OBS WebSocket', 'Connexion depuis la page Bonk (mot de passe jamais stocké en clair).', stateChip(...obs))}
       ${line('sound', 'Lecteur Soundboard', `Un clic d’activation par chargement (règle d’autoplay), ${production ? 'en haut de la page Soundboard' : 'dans l’Extension Lab'}.`, stateChip(...player))}
       ${line('mic', 'Lecteur TTS (OBS)', production ? 'Adresse de la source OBS : page TTS.' : `Module ${esc(ttsState)} · file ${esc(ttsQueue)}. Adresse de la source OBS : page TTS.`, stateChip(...ttsPlayer))}
-      ${line('layers', 'Données locales', `${esc(rt?.dataRoot ?? 'non lues')} · .env et jetons lus ici, jamais embarqués.`, `<span class="d-tag">${rt ? (rt.packaged ? 'Application installée' : 'Dépôt (dev)') : '?'}</span>`)}
-      ${line('coin', 'Économie', production ? 'Jetons, achats, récompenses et remboursements sont réels : le serveur de Production en décide.' : 'Aucun Jeton réel ; les connexions Twitch peuvent tout de même lire de vrais événements et exécuter des actions réelles selon les automatismes activés.', production ? '<span class="d-tag bad">Réelle</span>' : '<span class="d-tag ok">Simulée</span>')}`,
+      ${line('layers', 'Données locales', production ? `${esc(rt?.dataRoot ?? 'non lues')} · .env et jetons lus ici, jamais embarqués.` : `${esc(rt?.dataRoot ?? 'non lues')} · dossier propre au Lab, ni .env ni jeton réel.`, `<span class="d-tag">${rt ? (rt.packaged ? 'Application installée' : 'Dépôt (dev)') : '?'}</span>`)}
+      ${line('coin', 'Économie', production ? 'Jetons, achats, récompenses et remboursements sont réels : le serveur de Production en décide.' : 'Aucun Jeton réel : le Core du Lab tourne sur ce PC, avec sa propre base et des comptes fictifs.', production ? '<span class="d-tag bad">Réelle</span>' : '<span class="d-tag ok">Simulée</span>')}`,
     );
     if (Array.isArray(logs) && logs.length) {
       logSeq = logs[logs.length - 1]!.seq;

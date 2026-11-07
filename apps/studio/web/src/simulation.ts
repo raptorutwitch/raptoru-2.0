@@ -1,20 +1,12 @@
-import { confirmBox, patch, pop } from './ds/ds.js';
+import { confirmBox, patch } from './ds/ds.js';
 import { labOnMainCore } from './http.js';
-import {
-  confirmFor,
-  type SimState,
-  simButton,
-  simPanel,
-} from './simulation-view.js';
+import { confirmFor, type SimState, simButton } from './simulation-view.js';
 
-// Studio Lab — « Simulation de stream » (top bar). One compact panel over the EXISTING commands and states:
-// shared simulated live (Tombola status / actions), Twitch chat ingestion and real output (lab-chat), and
-// the mini-games switch. No new system: each button calls the route the detailed tabs already use.
-// The « Simulation » tab uses the same state reader and actions (loadSimState / runSimAction).
+// Studio Lab — the simulated stream over the EXISTING commands and states: shared simulated live (Tombola status /
+// actions), Twitch chat ingestion and real output (lab-chat). Each button calls the route the detailed tabs already use.
 
 const HEADERS = { 'x-raptoru-studio': '1', 'content-type': 'application/json' };
-const POLL_OPEN_MS = 2000;
-const POLL_CLOSED_MS = 10_000;
+const POLL_MS = 5000;
 
 export async function getJson(
   path: string,
@@ -53,8 +45,6 @@ const ACTIONS: Record<string, [string, unknown]> = {
   ingress_off: ['/api/lab-chat/ingress', { enabled: false }],
   output_on: ['/api/lab-chat/output', { enabled: true }],
   output_off: ['/api/lab-chat/output', { enabled: false }],
-  games_on: ['/api/mini-games/settings', { enabled: true }],
-  games_off: ['/api/mini-games/settings', { enabled: false }],
 };
 
 /** Fired after any switch changed, so the top bar panel and the Simulation tab both refresh at once. */
@@ -62,11 +52,10 @@ export const SIM_CHANGED = 'raptoru:simulation-changed';
 
 /** The effective states of the four services, from their existing routes (read only). */
 export async function loadSimState(): Promise<SimState> {
-  const [raffle, ingress, output, games, chatFictional] = await Promise.all([
+  const [raffle, ingress, output, chatFictional] = await Promise.all([
     getJson('/api/raffle/status'),
     getJson('/api/lab-chat/status'),
     getJson('/api/lab-chat/output'),
-    getJson('/api/mini-games/state'),
     labOnMainCore(),
   ]);
   // Production profile: the Studio server refuses a simulated live (it would open the real shared session).
@@ -85,10 +74,6 @@ export async function loadSimState(): Promise<SimState> {
     output:
       output && typeof output.enabled === 'boolean'
         ? (output as unknown as SimState['output'])
-        : null,
-    games:
-      games && typeof games.enabled === 'boolean'
-        ? { enabled: games.enabled }
         : null,
   };
   // Production profile: the lab-chat status says « unavailable ».
@@ -134,67 +119,14 @@ export async function runSimAction(
   }
 }
 
-/** Le widget de la barre latérale : l'état en points, le panneau en surcouche, depuis n'importe quelle page. */
+/** L'entrée de la barre latérale : un lien vers la Simulation et l'état du live fictif, depuis n'importe quelle page. */
 export function mountSimulation(root: HTMLElement) {
-  let state: SimState | null = null;
-  let panel: HTMLElement | null = null;
-  let busy = false;
-  let error: string | null = null;
-  let timer = 0;
-
-  const paint = () => {
-    patch(root, simButton(state, !!panel));
-    if (panel) patch(panel, simPanel(state, busy, error));
+  const read = async () => {
+    const s = await loadSimState();
+    root.hidden = !!s.production;
+    patch(root, simButton(s));
   };
-  async function refresh() {
-    state = await loadSimState();
-    paint();
-  }
-  const schedule = () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(
-      () => void refresh().finally(schedule),
-      panel ? POLL_OPEN_MS : POLL_CLOSED_MS,
-    );
-  };
-  const action = (b: HTMLButtonElement) => {
-    if (!state) return;
-    busy = true;
-    error = null;
-    paint();
-    void runSimAction(b.dataset.sim!, state).then((e) => {
-      error = e;
-      busy = false;
-      void refresh();
-    });
-  };
-  root.addEventListener('click', (ev) => {
-    const b = (ev.target as HTMLElement).closest<HTMLButtonElement>(
-      '[data-sim="panel"]',
-    );
-    if (!b) return;
-    if (panel) return panel.hidePopover();
-    error = null;
-    panel = pop(b, simPanel(state, busy, error), undefined, {
-      cls: 'sim-pop',
-      onClose: () => {
-        panel = null;
-        paint();
-        schedule();
-      },
-    });
-    panel.addEventListener('click', (e) => {
-      const x = (e.target as HTMLElement).closest<HTMLButtonElement>(
-        '[data-sim]',
-      );
-      if (x && !x.disabled) action(x);
-    });
-    paint();
-    void refresh();
-    schedule();
-  });
-  window.addEventListener(SIM_CHANGED, () => void refresh());
-  paint();
-  void refresh();
-  schedule();
+  void read();
+  setInterval(() => void read(), POLL_MS);
+  window.addEventListener(SIM_CHANGED, () => void read());
 }

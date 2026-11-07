@@ -1,5 +1,5 @@
-import { esc, ic, page, patch, poller, stateChip } from '../ds/ds.js';
-import { labOnMainCore } from '../http.js';
+import { esc, ic, page, patch, poller, run, stateChip } from '../ds/ds.js';
+import { labOnMainCore, postJson } from '../http.js';
 import {
   chatTimeline,
   chatView,
@@ -14,11 +14,22 @@ import {
   SIM_CHANGED,
 } from '../simulation.js';
 import { type SimState, simPanel, writesRealChat } from '../simulation-view.js';
+import { PRESETS, testEvent } from './alerts-model.js';
+import { labDoors } from './lab-doors.js';
 
-// La Simulation : le chat tel qu'un viewer le verrait, une seule entrée pour tous les modules (simulateur et vrai chat) et les
-// mêmes interrupteurs que le widget de la barre latérale, avec le même code et les mêmes confirmations.
+// La Simulation : le live fictif, le chat tel qu'un viewer le verrait (une seule entrée pour tous les modules), des événements de
+// stream, et le chemin vers les simulateurs de chaque module. Aucun réglage métier ici : chacun reste dans la page de son module.
 
 const CLEARED_KEY = 'raptoru-sim-chat-cleared';
+const EVENTS: [string, string][] = [
+  ['follow', 'Follow'],
+  ['sub', 'Sub'],
+  ['resub', 'Resub'],
+  ['gift_community', 'Subgift × 5'],
+  ['bits', 'Bits'],
+  ['raid', 'Raid'],
+  ['donation', 'Don'],
+];
 const QUICK = [
   '!join',
   '!roulette 100',
@@ -56,7 +67,11 @@ export function mountSimulationPage(root: HTMLElement) {
       </form>
       <p class="d-note bad" data-id="out"></p>
     </section>
-    <aside class="sm-side"><div data-id="controls"></div><pre class="sm-log" data-id="ingress" hidden title="Journal de l’ingestion Twitch"></pre></aside>
+    <aside class="sm-side d-scroll">
+      <section><h2 class="d-lb">Live fictif</h2><div data-id="controls"></div><pre class="sm-log" data-id="ingress" hidden title="Journal de l’ingestion Twitch"></pre></section>
+      <section><h2 class="d-lb">Événements de stream</h2><div class="sm-evs">${EVENTS.map(([k, l]) => `<button type="button" class="d-btn sm" data-ev="${k}">${esc(l)}</button>`).join('')}</div><p class="d-note">Au nom du viewer choisi. Ils entrent dans la vraie file des Alertes du Lab : à voir dans Alertes.</p></section>
+      <section><h2 class="d-lb">Simulateurs des modules</h2><nav class="lb-doors">${labDoors()}</nav></section>
+    </aside>
   </div>`;
   const $ = <T extends HTMLElement>(id: string) =>
     root.querySelector<T>(`[data-id="${id}"]`)!;
@@ -153,6 +168,22 @@ export function mountSimulationPage(root: HTMLElement) {
       input.value = `${q} `;
       input.focus();
       return;
+    }
+    const fire = t.closest<HTMLElement>('[data-ev]');
+    if (fire) {
+      const pseudo =
+        $<HTMLSelectElement>('who').selectedOptions[0]?.dataset.login ||
+        'lab_viewer';
+      const type = fire.dataset.ev!;
+      return void run(
+        fire,
+        () =>
+          postJson('/api/alerts/test', {
+            ...testEvent(type, { ...PRESETS.normal!.data, pseudo }),
+            ...(type === 'sub' || type === 'resub' ? { tier: '1000' } : {}),
+          }),
+        `${fire.textContent} envoyé à la file des Alertes`,
+      );
     }
     const b = t.closest<HTMLButtonElement>('[data-sim], [data-chat]');
     if (!b || b.disabled) return;

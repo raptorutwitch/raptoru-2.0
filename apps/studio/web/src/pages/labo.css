@@ -72,10 +72,61 @@ button:hover > .lb-sil {
   padding: 2px 0;
   color: var(--ink2);
 }
-.lb-bench .sim-head b {
-  display: none;
+.lb-more h2:not(:first-child) {
+  margin-top: 18px;
 }
-.lb-more a {
+.lb-more .d-btn {
+  margin-top: 8px;
+}
+.lb-doors {
+  display: grid;
+}
+.lb-doors.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+}
+.lb-door {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink);
+  text-decoration: none;
+}
+.lb-door:hover b {
+  color: var(--teal);
+}
+.lb-door b {
+  display: block;
+  font: 600 14.5px var(--num);
+}
+.lb-door small {
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.lb-door .d-ic {
+  color: var(--ink3);
+}
+.sm-side {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sm-side h2 {
+  margin: 0 0 8px;
+}
+.sm-evs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.lb-more nav a {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) 14px;
   align-items: center;
@@ -86,7 +137,7 @@ button:hover > .lb-sil {
   color: var(--ink);
   text-decoration: none;
 }
-.lb-more a:hover b {
+.lb-more nav a:hover b {
   color: var(--teal);
 }
 .lb-more b {
@@ -166,6 +217,7 @@ button:hover > .lb-sil {
   display: flex;
   align-items: center;
   gap: 8px;
+  box-sizing: border-box;
   width: 100%;
   height: 28px;
   padding: 0 8px;
@@ -174,10 +226,10 @@ button:hover > .lb-sil {
   background: none;
   color: var(--ink2);
   font: 400 12.5px var(--text);
+  text-decoration: none;
   cursor: pointer;
 }
-.sim-toggle:hover,
-.sim-toggle.is-open {
+.sim-toggle:hover {
   background: var(--fill);
   color: var(--ink);
 }
@@ -190,10 +242,6 @@ button:hover > .lb-sil {
   gap: 3px;
   margin-left: auto;
   font-style: normal;
-}
-.sim-pop {
-  width: 340px;
-  padding: 12px 14px;
 }
 
 /* Page Simulation */

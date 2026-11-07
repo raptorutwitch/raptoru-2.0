@@ -85,6 +85,7 @@ import { ControlCenter } from './control-center/model.js';
 import {
   type InteractionSources,
   interactionsStatusProvider,
+  labSignal,
   readSignals,
   type Signal,
 } from './supervision/signals.js';
@@ -1368,13 +1369,16 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     undefined,
     productionError,
   );
+  // The Lab: a player opens when it is used. Nothing absent here is an outage (no incident, no alarm on every page).
+  const interactionSignals = () => {
+    const signals = readSignals(interactionSources(), Date.now());
+    return mainLab ? signals.map(labSignal) : signals;
+  };
   const control = new ControlCenter(studioOrigin, [
     bot,
     // Every module of the module host, in one provider (architecture socle).
     modulesStatusProvider(labCore, cockpitChannel),
-    interactionsStatusProvider(() =>
-      readSignals(interactionSources(), Date.now()),
-    ),
+    interactionsStatusProvider(interactionSignals),
   ]);
   const supervisor = new Supervisor({
     read: async (): Promise<Signal[]> => {
@@ -1393,7 +1397,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               },
             ]
           : [];
-      return [...botSignal, ...readSignals(interactionSources(), Date.now())];
+      return [...botSignal, ...interactionSignals()];
     },
     log: (line) => console.log(lab.deps.redact(line)),
   });

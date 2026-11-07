@@ -144,6 +144,19 @@ function withError(s: Signal, error: string | null): Signal {
     : s;
 }
 
+/** The Lab has no OBS to supervise: an absent player is a player nobody opened yet, never an outage. */
+export const labSignal = (s: Signal): Signal =>
+  s.cause === 'player_offline' || s.cause === 'overlay_not_ready'
+    ? {
+        ...s,
+        level: 'off',
+        value: 'Lecteur non ouvert',
+        cause: null,
+        action: null,
+        hint: 'Dans le Lab, il s’ouvre depuis la page du module, sans OBS.',
+      }
+    : s;
+
 export function readSignals(src: InteractionSources, now: number): Signal[] {
   const out: Signal[] = [];
   if (src.link) out.push(linkSignal(src.link));

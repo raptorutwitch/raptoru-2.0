@@ -34,6 +34,7 @@ import {
   type Access,
   type Actor,
   type LabModule,
+  PERMISSIONS,
 } from './store.js';
 import { normalizeWord, wordRules } from './words.js';
 
@@ -1137,7 +1138,8 @@ export class LabModerationService {
         last_seen: null,
       });
     }
-    return { members };
+    // The rules themselves: Studio shows who may do what without a second copy of them.
+    return { members, rules: PERMISSIONS };
   }
 
   /** D4 « Surveillance »: the watched / blocked words. */

@@ -459,8 +459,8 @@ export function mountRewardsPage(root: HTMLElement) {
       foot,
       `<div class="rw-try">
         ${choices ? `<label class="d-fld rw-tryin">${ic('chat')}<input type="text" data-try list="rw-text" maxlength="500" value="${esc(testInput || choices[0]!)}" aria-label="Ce qu’un viewer écrirait" title="Ce qu’un viewer écrirait (texte inconnu possible)"></label><datalist id="rw-text">${choices.map((x) => `<option value="${esc(x)}"></option>`).join('')}</datalist>` : ''}
-        <button type="button" class="d-btn" data-test ${r.rule && !changed ? '' : 'disabled'} title="${changed ? 'Enregistre d’abord : le test joue la version enregistrée' : 'Exécute la règle enregistrée sur le stream'}">${ic('play')}Tester pour de vrai…</button>
-        <small>${saved.length ? (dry ? `${saved.length - dry} réelle${saved.length - dry > 1 ? 's' : ''}, ${dry} à blanc` : 'Actions réelles sur le stream') : 'Aucune action enregistrée'}</small>
+        <button type="button" class="d-btn" data-test ${r.rule && !changed ? '' : 'disabled'} title="${changed ? 'Enregistre d’abord : le test joue la version enregistrée' : s?.environment === 'lab' ? 'Exécute la règle enregistrée dans le Lab' : 'Exécute la règle enregistrée sur le stream'}">${ic('play')}${s?.environment === 'lab' ? 'Tester' : 'Tester pour de vrai…'}</button>
+        <small>${saved.length ? (dry ? `${saved.length - dry} réelle${saved.length - dry > 1 ? 's' : ''}, ${dry} à blanc` : s?.environment === 'lab' ? 'Exécutée dans le Lab' : 'Actions réelles sur le stream') : 'Aucune action enregistrée'}</small>
       </div>
       ${
         conflict
