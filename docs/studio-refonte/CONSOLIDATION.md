@@ -76,7 +76,7 @@ absent » ne sont plus des incidents dans le Lab : un lecteur s'y ouvre à l'usa
 
 ## Vérifications du 07/11
 
-Core 1 614 sur 1 615 avec PostgreSQL (le fichier interrompu par le crash Windows connu passe seul). Studio 944 sur 955 (même crash, le fichier passe seul, 16 sur 16). Bot 287. E2E : 104 passés
+Core 1 614 sur 1 615 avec PostgreSQL (le fichier interrompu par le crash Windows connu passe seul). Studio 953 sur 955 (même crash, le fichier passe seul). Bot 287. E2E : 104 passés
 sur 106, les 2 échecs venaient d'un port occupé par le serveur d'essai et d'une spec à mettre à jour, les deux passent ensuite. Lint, types, build propres.
 
 Vraie fenêtre Electron : dossier `Raptoru Studio Lab` confirmé, 12 pages sans erreur ni débordement, lecteur Studio ouvert seul avec 13 vraies voix Windows, achat simulé : 12 000 → 4 500 Jetons Lab,
