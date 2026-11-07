@@ -52,6 +52,7 @@ import {
   creditLab,
   labBalance,
   labViewer,
+  LAB_VIEWERS,
   viewerOptions,
 } from '../lab-viewers.js';
 import { mountScene, type Scene } from './tts-stage.js';
@@ -147,12 +148,20 @@ export function mountTtsPage(root: HTMLElement) {
   buyBtn.addEventListener('click', () => void simulateBuy(buyBtn));
   z('bal').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-credit]');
-    if (b)
-      void run(
-        b,
-        () => creditLab(viewerSel.value, 50_000).then(readBalance),
-        '50 000 Jetons Lab ajoutés.',
-      );
+    if (!b) return;
+    const all = b.dataset.credit === 'all';
+    void run(
+      b,
+      () =>
+        Promise.all(
+          (all ? LAB_VIEWERS.map((v) => v.id) : [viewerSel.value]).map((id) =>
+            creditLab(id, 50_000),
+          ),
+        ).then(readBalance),
+      all
+        ? '50 000 Jetons Lab ajoutés à chaque viewer fictif.'
+        : '50 000 Jetons Lab ajoutés.',
+    );
   });
   const input = p.body.querySelector<HTMLInputElement>('[data-test]')!;
   const charSel = p.body.querySelector<HTMLSelectElement>('[data-char]')!;
@@ -230,13 +239,30 @@ export function mountTtsPage(root: HTMLElement) {
     refreshOpenItem();
     paint();
   }
+  // Les soldes fictifs des viewers du Lab : lus au Core, jamais calculés ici. Le prix affiché est celui du palier du Core.
+  const bals = new Map<string, number | null>();
   async function readBalance() {
-    const n = await labBalance(viewerSel.value);
+    await Promise.all(
+      LAB_VIEWERS.map(async (v) => bals.set(v.id, await labBalance(v.id))),
+    );
+    for (const o of viewerSel.options) {
+      const n = bals.get(o.value);
+      o.textContent = `${labViewer(o.value).name}${n == null ? '' : ` · ${fmt(n)}`}`;
+    }
+    paintBal();
+  }
+  function paintBal() {
+    const n = bals.get(viewerSel.value);
+    const chars = Array.from(input.value.trim()).length;
+    const price = chars ? tierOf(chars)?.price : undefined;
+    const short = n != null && price !== undefined && n < price;
     patch(
       z('bal'),
-      n === null
+      n == null
         ? ''
-        : `<b>${fmt(n)}</b> Jetons Lab <button type="button" class="d-btn ghost sm" data-credit title="Ajoute 50 000 Jetons Lab à ce viewer fictif">+50 000</button>`,
+        : `<span class="${short ? 'tts-short' : ''}"><b>${fmt(n)}</b> Jetons Lab${price !== undefined ? ` · ce message : <b>${fmt(price)}</b>` : ''}${short ? ' · pas assez' : ''}</span>
+          <button type="button" class="d-btn ghost sm" data-credit title="Ajoute 50 000 Jetons Lab à ce viewer fictif">+50 000</button>
+          <button type="button" class="d-btn ghost sm" data-credit="all" title="Ajoute 50 000 Jetons Lab à chacun des ${LAB_VIEWERS.length} viewers fictifs : de quoi remplir une file">Tous +50 000</button>`,
     );
   }
   async function readPast() {
@@ -416,6 +442,7 @@ export function mountTtsPage(root: HTMLElement) {
         html += `<button type="button" class="tts-lim ${dragging === i ? 'drag' : ''}" data-lim="${i}" style="left:${r}%" aria-label="Limite du palier : ${t.max} caractères"><span>${t.max}</span></button>`;
     });
     if (n) html += `<i class="tts-mark" style="left:${chars2x(n)}%"></i>`;
+    paintBal();
     z('rule').innerHTML = html;
     patch(
       z('read'),
@@ -726,7 +753,7 @@ export function mountTtsPage(root: HTMLElement) {
     );
   });
   input.addEventListener('input', paintRule);
-  viewerSel.addEventListener('change', () => void readBalance());
+  viewerSel.addEventListener('change', paintBal);
   /** Le lecteur de Studio, s'il n'y en a aucun : le Core n'admet rien sans lecteur prêt. */
   async function needPlayer() {
     player ??= await tryGetJson<Player>('/api/tts-lab/status');
@@ -777,7 +804,7 @@ export function mountTtsPage(root: HTMLElement) {
           'Le lecteur ne répond pas au Core : réessaie dans un instant.',
         viewer_busy: `${v.name} a déjà un message en attente : choisis un autre viewer.`,
         viewer_cooldown: `${v.name} est encore en délai. Choisis un autre viewer, ou retire son délai en Modération.`,
-        insufficient_funds: `${v.name} n’a pas assez de Jetons Lab : ajoute-lui des Jetons.`,
+        insufficient_funds: `${v.name} n’a pas assez de Jetons Lab (${fmt(bals.get(v.id) ?? 0)} pour ${fmt(tierOf(Array.from(text).length)?.price ?? 0)}) : clique « +50 000 ».`,
         stream_offline:
           'Le TTS se paie pendant le live : démarre un live simulé (Simulation, barre latérale).',
         tts_paused: 'Le TTS est en pause : passe-le à Ouvert.',

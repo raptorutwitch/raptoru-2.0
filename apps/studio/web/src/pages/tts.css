@@ -212,18 +212,29 @@
   display: none;
 }
 .tts-bal {
-  display: inline-flex;
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--ink2);
-  white-space: nowrap;
+}
+.tts-bal .tts-short,
+.tts-bal .tts-short b {
+  color: var(--amber);
 }
 .tts-bal b {
   color: var(--ink);
 }
-.tts-way .d-btn:last-child {
+.tts-way > .d-btn:last-child {
   margin-left: auto;
+}
+.tts-way .tts-cast:has([data-viewer]) {
+  min-width: 190px;
+}
+.tts-bal > span {
+  flex: 1 1 auto;
 }
 .tts-tryin {
   flex: 1;
