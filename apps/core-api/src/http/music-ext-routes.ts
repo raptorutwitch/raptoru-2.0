@@ -35,6 +35,8 @@ const Actor = z.strictObject({
 const StateQuery = z.strictObject({
   viewer: Viewer.nullable(),
   team: z.boolean(),
+  /** The JWT's role (Core computes the grade: a supermod is a moderator named in lab_staff). */
+  role: z.enum(['viewer', 'moderator', 'broadcaster']).optional(),
 });
 const SearchQuery = z.strictObject({
   viewer_id: Id,
@@ -97,6 +99,7 @@ export function musicExtRoutes(spotify: SpotifyService): Route[] {
             params[0]!,
             b.viewer ? { id: b.viewer.id, login: b.viewer.login } : null,
             b.team,
+            b.role,
           );
         }),
     },

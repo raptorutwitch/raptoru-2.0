@@ -16,12 +16,14 @@ export interface LabFrontier {
   channelId: string;
 }
 
-export type LabRole = 'viewer' | 'moderator' | 'broadcaster';
+/** `supermod`: « Supermod Lab », a moderator for Twitch, a supermod for the Core (lab_staff, lab/fixtures.ts). */
+export type LabRole = 'viewer' | 'moderator' | 'supermod' | 'broadcaster';
 
 /** The Lab's fictional accounts (the same ids as core-api/src/lab/environment.ts LAB_TWITCH_USERS). */
 const LAB_USER_IDS: Record<LabRole, string> = {
   viewer: '900101',
   moderator: '900102',
+  supermod: '900103',
   broadcaster: '900100',
 };
 
@@ -43,7 +45,8 @@ export function labExtensionToken(
     opaque_user_id: `U${userId}`,
     ...(identityShared ? { user_id: userId } : {}),
     channel_id: f.channelId,
-    role,
+    // Twitch's JWT has no « supermod »: a moderator; the Core reads the grade from its own team (lab_staff).
+    role: role === 'supermod' ? 'moderator' : role,
     is_unlinked: !identityShared,
     pubsub_perms: { listen: ['broadcast', 'global'], send: [] },
   })}`;
@@ -84,7 +87,11 @@ export function fictionalEmoteSvg(id: string): string {
 }
 
 export function labRoleOf(value: string | null): LabRole {
-  return value === 'moderator' || value === 'broadcaster' ? value : 'viewer';
+  return value === 'moderator' ||
+    value === 'supermod' ||
+    value === 'broadcaster'
+    ? value
+    : 'viewer';
 }
 
 /** One extension request, relayed to the Core's /v1/ext as it came (method, path, query, body, auth, idempotency). */

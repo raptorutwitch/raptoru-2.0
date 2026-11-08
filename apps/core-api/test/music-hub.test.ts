@@ -48,6 +48,9 @@ const MOD = {
   via: 'extension' as const,
 };
 
+/** The streamer from the extension (Music Hub V2: the player is the supermods' and the streamer's). */
+const STREAMER = { ...MOD, id: '83603689', role: 'broadcaster' as const };
+
 async function hub(
   o: { extension?: boolean; open?: boolean; controls?: boolean } = {},
 ) {
@@ -443,13 +446,13 @@ describe('Music Hub — withdrawals and moderation', () => {
     expect(await h.balance(viewer(1))).toBe(4_500);
   });
 
-  it('player controls: OFF by default; ON: a job for Studio, its real result, the volume read back', async () => {
+  it('player controls (the streamer here; supermods: V2 tests): OFF by default; ON: a job for Studio, its real result, the volume read back', async () => {
     const off = await hub();
     expect(
       await off.code(
         off.spotify.extensionModerate(
           CH,
-          MOD,
+          STREAMER,
           { action: 'pause' },
           'key-pause-1',
         ),
@@ -458,7 +461,7 @@ describe('Music Hub — withdrawals and moderation', () => {
     const h = await hub({ controls: true });
     const asked = (await h.spotify.extensionModerate(
       CH,
-      MOD,
+      STREAMER,
       { action: 'volume', volume_percent: 40 },
       'key-volume-1',
     )) as { job_id: string };
@@ -485,5 +488,302 @@ describe('Music Hub — withdrawals and moderation', () => {
     expect((await h.spotify.controlResult(CH, asked.job_id)).status).toBe(
       'done',
     );
+  });
+});
+
+describe('Music Hub V2 — supermods, withdrawal while being added, links', () => {
+  const SUPER = {
+    ...MOD,
+    id: '900103',
+    login: 'lab_supermod',
+    display_name: 'Supermod_Lab',
+  };
+  const named = (h: Awaited<ReturnType<typeof hub>>, id = '900103') =>
+    h.core.db.query(
+      `insert into lab_staff (channel_id, viewer_id, role, granted_by, created_at) values ($1, $2, 'supermod', 'test', now())`,
+      [CH, id],
+    );
+  type Can = { can: { moderate: boolean; player: boolean; refund: boolean } };
+  type Mine = {
+    queue: unknown[];
+    me: {
+      requests: { request_id: string; state: string; cancellable: boolean }[];
+      history: { state: string; refunded: boolean }[];
+    };
+  };
+  const mine = async (h: Awaited<ReturnType<typeof hub>>) =>
+    (await h.spotify.extensionState(
+      CH,
+      { id: viewer(1).id, login: 'fan1' },
+      false,
+    )) as unknown as Mine;
+
+  it('the player (pause, resume, skip, volume) is the supermods: a moderator is refused by Core, whatever the button', async () => {
+    const h = await hub({ controls: true });
+    await named(h);
+    for (const command of [
+      { action: 'pause' as const },
+      { action: 'resume' as const },
+      { action: 'skip' as const },
+      { action: 'volume' as const, volume_percent: 30 },
+    ]) {
+      expect(
+        await h.code(
+          h.spotify.extensionModerate(
+            CH,
+            MOD,
+            command,
+            `key-mod-${command.action}`,
+          ),
+        ),
+      ).toBe('forbidden');
+      expect(
+        await h.code(
+          h.spotify.extensionModerate(
+            CH,
+            { ...MOD, id: viewer(1).id, role: 'viewer' },
+            command,
+            `key-v-${command.action}`,
+          ),
+        ),
+      ).toBe('forbidden');
+    }
+    const paused = (await h.spotify.extensionModerate(
+      CH,
+      SUPER,
+      { action: 'pause' },
+      'key-super-pause',
+    )) as { job_id: string };
+    expect(paused.job_id).toMatch(/^[0-9a-f-]{36}$/);
+    const skipped = (await h.spotify.extensionModerate(
+      CH,
+      SUPER,
+      { action: 'skip' },
+      'key-super-skip',
+    )) as { outcome: string; job_id: string | null };
+    expect(skipped.outcome).toBe('songskip');
+    expect((await h.spotify.controlResult(CH, skipped.job_id!)).status).toBe(
+      'pending',
+    );
+    // A moderator still removes (its standard moderation), never the player.
+    const st = async (
+      id: string,
+      team: boolean,
+      role?: 'viewer' | 'moderator',
+    ) =>
+      (
+        (await h.spotify.extensionState(
+          CH,
+          { id, login: 'x' },
+          team,
+          role,
+        )) as unknown as Can
+      ).can;
+    expect(await st(viewer(1).id, false)).toMatchObject({
+      moderate: false,
+      player: false,
+    });
+    expect(await st(MOD.id, true, 'moderator')).toMatchObject({
+      moderate: true,
+      refund: true,
+      player: false,
+    });
+    expect(await st(SUPER.id, true, 'moderator')).toMatchObject({
+      moderate: true,
+      player: true,
+    });
+    // Without the team flag (a viewer's JWT), even the supermod's id gets nothing: rights come from the verified token.
+    expect(await st(SUPER.id, false)).toMatchObject({
+      moderate: false,
+      player: false,
+    });
+  });
+
+  it('two supermods at once: two jobs, each with its own answer from Studio (never a success the player did not confirm)', async () => {
+    const h = await hub({ controls: true });
+    await named(h);
+    await named(h, '900104');
+    const [a, b] = (await Promise.all([
+      h.spotify.extensionModerate(CH, SUPER, { action: 'pause' }, 'key-two-1'),
+      h.spotify.extensionModerate(
+        CH,
+        { ...SUPER, id: '900104' },
+        { action: 'resume' },
+        'key-two-2',
+      ),
+    ])) as { job_id: string }[];
+    const jobs = (await h.sync()).jobs.filter((j) => j.kind === 'control');
+    expect(jobs).toHaveLength(2);
+    const outcomes = ['done', 'failed'] as const;
+    for (const [i, j] of jobs.entries()) {
+      const attempt_id = randomUUID();
+      await h.spotify.startJob(CH, j.job_id, attempt_id);
+      await h.spotify.reportJob(CH, j.job_id, {
+        kind: 'control',
+        attempt_id,
+        ...(outcomes[i] === 'done'
+          ? {
+              outcome: 'done' as const,
+              playback: {
+                observed_at: h.core.clock.now().toISOString(),
+                track: null,
+                progress_ms: null,
+                is_playing: false,
+                volume_percent: 50,
+              },
+            }
+          : { outcome: 'failed' as const, reason: 'NO_DEVICE' as const }),
+      });
+    }
+    const results = [
+      (await h.spotify.controlResult(CH, a!.job_id)).status,
+      (await h.spotify.controlResult(CH, b!.job_id)).status,
+    ].sort();
+    expect(results).toEqual(['done', 'failed']);
+  });
+
+  it('withdrawn before Studio takes it (RECEIVED): refunded once, its job withdrawn, never added to Spotify', async () => {
+    const h = await hub();
+    await h.fund(viewer(1), 1_000);
+    await h.search(viewer(1), 'titre');
+    await h.answerSearches([item(1)]);
+    const { request } = await h.ask(viewer(1), 1);
+    expect((await mine(h)).me.requests).toEqual([
+      expect.objectContaining({
+        request_id: request.request_id,
+        state: 'RECEIVED',
+        cancellable: true,
+      }),
+    ]);
+    const out = await h.spotify.extensionCancel(
+      CH,
+      { id: viewer(1).id, name: 'Fan1' },
+      request.request_id,
+    );
+    expect(out.outcome).toBe('songcancel');
+    expect(out.request).toMatchObject({
+      state: 'CANCELED',
+      refund_status: 'refunded',
+    });
+    expect(await h.balance(viewer(1))).toBe(1_000);
+    expect(
+      (await h.sync()).jobs.filter((j) => j.kind === 'song_request'),
+    ).toHaveLength(0);
+    const again = await h.spotify.extensionCancel(
+      CH,
+      { id: viewer(1).id, name: 'Fan1' },
+      request.request_id,
+    );
+    expect(again.outcome).toBe('songcancel_none');
+    expect(await h.balance(viewer(1))).toBe(1_000);
+    const after = await mine(h);
+    expect(after.queue).toHaveLength(0);
+    expect(after.me.requests).toHaveLength(0);
+    expect(after.me.history[0]).toMatchObject({
+      state: 'CANCELED',
+      refunded: true,
+    });
+  });
+
+  it('withdrawn while Studio adds it (SEARCHING): refunded at once; Spotify takes it, a tombstone skipped when it plays; refused, nothing again', async () => {
+    for (const outcome of ['queued', 'refused'] as const) {
+      const h = await hub();
+      await h.fund(viewer(1), 1_000);
+      await h.search(viewer(1), 'titre');
+      await h.answerSearches([item(1)]);
+      const { request } = await h.ask(viewer(1), 1);
+      const job = (await h.sync()).jobs.find((j) => j.kind === 'song_request')!;
+      const attempt_id = randomUUID();
+      await h.spotify.startJob(CH, job.job_id, attempt_id); // SEARCHING
+      const out = await h.spotify.extensionCancel(
+        CH,
+        { id: viewer(1).id, name: 'Fan1' },
+        request.request_id,
+      );
+      expect(out.outcome).toBe('songcancel');
+      expect(await h.balance(viewer(1))).toBe(1_000);
+      await h.spotify.reportJob(CH, job.job_id, {
+        kind: 'song_request',
+        attempt_id,
+        ...(outcome === 'queued'
+          ? {
+              outcome,
+              track: {
+                id: ID(1),
+                uri: `spotify:track:${ID(1)}`,
+                title: 'Titre 1',
+                artists: ['Artiste 1'],
+                duration_ms: 200_000,
+              },
+              confirmation: 'http_204' as const,
+            }
+          : { outcome, reason: 'NOT_FOUND' as const }),
+      });
+      expect(await h.balance(viewer(1))).toBe(1_000); // never twice
+      const s = await h.sync();
+      const tomb = s.queue.find((e) => e.request_id === request.request_id);
+      if (outcome === 'queued')
+        expect(tomb).toMatchObject({
+          state: 'CANCELED',
+          auto_skip: true,
+          track_uri: `spotify:track:${ID(1)}`,
+        });
+      else expect(tomb).toBeUndefined();
+      // Gone from Raptoru's queue at once, whatever Spotify's own queue still holds.
+      expect((await mine(h)).queue).toHaveLength(0);
+    }
+  });
+
+  it('!songcancel alone in the chat while the only request is being added: canceled, refunded, the chat says so', async () => {
+    const h = await hub();
+    await h.fund(viewer(1), 1_000);
+    await h.search(viewer(1), 'titre');
+    await h.answerSearches([item(1)]);
+    await h.ask(viewer(1), 1);
+    const before = await h.steps();
+    expect(
+      await h.spotify.cancel(CH, 'chat-inflight-1', {
+        id: viewer(1).id,
+        name: 'Fan1',
+      }),
+    ).toBe('songcancel');
+    expect(await h.balance(viewer(1))).toBe(1_000);
+    expect(await h.steps()).toBeGreaterThan(before);
+    expect(
+      await h.spotify.cancel(CH, 'chat-inflight-2', {
+        id: viewer(1).id,
+        name: 'Fan1',
+      }),
+    ).toBe('songcancel_none');
+    expect(await h.balance(viewer(1))).toBe(1_000);
+  });
+
+  it('a pasted Spotify track link searches that exact track (the reward reference rules); another link is refused', async () => {
+    const h = await hub();
+    const r = await h.search(
+      viewer(1),
+      `https://open.spotify.com/intl-fr/track/${ID(7)}?si=abc`,
+    );
+    expect(r.status).toBe('pending');
+    const job = (await h.sync()).jobs.find((j) => j.kind === 'search')!;
+    expect(job).toMatchObject({
+      kind: 'search',
+      query: `track:${ID(7)}`,
+      track_id: ID(7),
+    });
+    expect(
+      await h.code(
+        h.search(
+          viewer(1),
+          'https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy',
+        ),
+      ),
+    ).toBe('invalid_reference');
+    expect(
+      await h.code(h.search(viewer(1), 'https://example.com/track/abc')),
+    ).toBe('invalid_reference');
+    // The same track again (its URI): the same job, no second catalogue call.
+    const again = await h.search(viewer(1), `spotify:track:${ID(7)}`);
+    expect(again.search_id).toBe(r.search_id);
   });
 });

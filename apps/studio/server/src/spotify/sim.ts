@@ -115,6 +115,51 @@ export const LAB_CATALOG: Candidate[] = [
     m(3, 33),
     { album: 'Tests de mise en page' },
   ),
+  // Music Hub V2: one title in many versions, as a real catalogue answers « animal i have become » (original, remix,
+  // nightcore, slowed, sped up, acoustic, live, instrumental, covers): the viewer must find the exact one.
+  track(labId(27), 'Néon Sauvage', ['Lune Rouge'], m(3, 31), {
+    album: 'Néons',
+  }),
+  track(
+    labId(28),
+    'Néon Sauvage (Remix)',
+    ['Lune Rouge', 'DJ Orbite'],
+    m(3, 58),
+    {
+      album: 'Néons Remixés',
+    },
+  ),
+  track(labId(29), 'Néon Sauvage (Nightcore)', ['Kairo Station'], m(2, 49), {
+    album: 'Nightcore Vol. 3',
+  }),
+  track(
+    labId(30),
+    'Néon Sauvage (Slowed + Reverb)',
+    ['Café Cassette'],
+    m(4, 22),
+    {
+      album: 'Ralenti',
+    },
+  ),
+  track(labId(31), 'Néon Sauvage (Sped Up)', ['Lune Rouge'], m(2, 41), {
+    album: 'Néon Sauvage (Sped Up)',
+  }),
+  track(labId(32), 'Néon Sauvage (Acoustique)', ['Ava Solène'], m(3, 40), {
+    album: 'Reprises au salon',
+    art: false,
+  }),
+  track(labId(33), 'Néon Sauvage — Live', ['Lune Rouge'], m(4, 5), {
+    album: 'Néons — Live',
+  }),
+  track(labId(34), 'Néon Sauvage (Instrumental)', ['Lune Rouge'], m(3, 31), {
+    album: 'Néons (Instrumentals)',
+  }),
+  track(labId(35), 'Néon Sauvage', ['Les Phares'], m(3, 12), {
+    album: 'Reprises',
+  }),
+  track(labId(36), 'Néon Sauvage (Version Longue)', ['Lune Rouge'], m(11, 2), {
+    album: 'Néons — Deluxe',
+  }),
 ];
 
 export const SIM_CATALOG_HISTORICAL: Candidate[] = [

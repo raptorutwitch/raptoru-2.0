@@ -679,3 +679,91 @@ describe('Music Hub — search and player jobs (docs/music/MUSIC_HUB_STATE.md)',
     });
   });
 });
+
+describe('Music Hub V2 — pasted links, many versions, the withdrawn request skipped (latency in the simulator)', () => {
+  const lab = (n: number) => `LABMUSIC${String(n).padStart(14, '0')}`;
+  type Items = { outcome: string; items: { id: string; title: string }[] };
+
+  it('a pasted link names ONE exact track (read by id, as the reward reads it); a text gets every version of a title', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'search',
+      job_id: id(1),
+      query: `track:${lab(29)}`,
+      track_id: lab(29),
+    });
+    await h.rt.once();
+    const one = h.report() as unknown as Items;
+    expect(one.outcome).toBe('done');
+    expect(one.items.map((i) => i.title)).toEqual(['Néon Sauvage (Nightcore)']);
+    expect(h.events).toContain(`spotify GET tracks/${lab(29)}`);
+    h.job({ kind: 'search', job_id: id(2), query: 'neon sauv' });
+    await h.rt.once();
+    const all = h.report() as unknown as Items;
+    expect(all.items).toHaveLength(10);
+    expect(all.items.map((i) => i.title)).toEqual(
+      expect.arrayContaining([
+        'Néon Sauvage (Remix)',
+        'Néon Sauvage (Slowed + Reverb)',
+        'Néon Sauvage (Sped Up)',
+      ]),
+    );
+    // An unknown id: an empty answer, never an invented track.
+    h.job({
+      kind: 'search',
+      job_id: id(3),
+      query: 'track:LABMUSIC99999999999999',
+      track_id: 'LABMUSIC99999999999999',
+    });
+    await h.rt.once();
+    expect((h.report() as unknown as Items).items).toEqual([]);
+    expect(h.sim.view().queue).toEqual([]);
+  });
+
+  it('withdrawn after Spotify took it: skipped the moment it starts, once — measured latency in the simulator', async () => {
+    const h = await harness();
+    const uri = `spotify:track:${lab(28)}`;
+    h.job({
+      kind: 'song_request',
+      job_id: id(1),
+      request_id: id(101),
+      reference: { kind: 'exact', track_id: lab(28) },
+      max_duration_ms: 600_000,
+    });
+    await h.rt.once();
+    expect(h.sim.view().queue).toContain('Néon Sauvage (Remix)');
+    // The viewer withdrew it (Core: a tombstone, refunded once there); Spotify still holds it next.
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, uri, true)],
+      watch: true,
+    };
+    await h.rt.once();
+    await h.rt.api('POST', '/sim/near-end', async () => ({}));
+    const startsAt = h.clock.t + 3_000; // near-end: 3 s left on the track before it
+    let skippedAt = 0;
+    for (let i = 0; i < 80 && !skippedAt; i++) {
+      h.clock.t += 100;
+      await h.rt.once();
+      if (h.events.includes('spotify POST me/player/next'))
+        skippedAt = h.clock.t;
+    }
+    expect(skippedAt).toBeGreaterThan(0);
+    const latency = skippedAt - startsAt;
+    // The simulator's own pace (Studio reads Spotify every ~0.5 s while watching): a measure, not a frame-exact promise.
+    expect(latency).toBeGreaterThanOrEqual(0);
+    expect(latency).toBeLessThanOrEqual(1_500);
+    for (let i = 0; i < 10; i++) {
+      h.clock.t += 300;
+      await h.rt.once();
+    }
+    expect(
+      h.events.filter((x) => x === 'spotify POST me/player/next'),
+    ).toHaveLength(1);
+    expect(h.core.autoSkips).toHaveLength(1);
+    h.logs.push(`[test] auto-skip latency ${latency} ms`);
+    console.log(
+      `Music Hub V2 — latence du skip automatique (simulateur) : ${latency} ms`,
+    );
+  });
+});

@@ -209,6 +209,8 @@ export const SpotifyJob = z.discriminatedUnion('kind', [
     kind: z.literal('search'),
     job_id: Uuid,
     query: z.string().min(1).max(200),
+    /** Music Hub V2: a pasted track link — this exact track, read by its id (no text search). */
+    track_id: SpotifyId.optional(),
   }),
   z.strictObject({
     kind: z.literal('control'),

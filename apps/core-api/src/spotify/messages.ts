@@ -118,6 +118,9 @@ export const MSG = {
     `🎵 ${at(viewer)}, cette demande est déjà annulée.`,
   cancelTooLate: (viewer: string) =>
     `🎵 ${at(viewer)}, trop tard pour annuler cette demande : la lecture a déjà commencée.`,
+  /** Music Hub V2: withdrawn while Studio was still adding it (skipped if Spotify takes it anyway). */
+  canceledInFlight: (viewer: string, refunded: boolean) =>
+    `🎵 ${at(viewer)}, ta demande en cours d’ajout${refunded ? ' est annulée et remboursée.' : ' est annulée.'}`,
   cancelUnsafe:
     '🎵 Cette demande ne peut pas encore être annulée de façon sûre.',
   canceled: (

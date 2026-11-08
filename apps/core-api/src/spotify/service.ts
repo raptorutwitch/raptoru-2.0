@@ -23,6 +23,8 @@ import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { EconomyPort } from '../economy/economy.js';
 import {
+  access,
+  allowed,
   assertAllowed,
   LabForbiddenError,
   LabWalletError,
@@ -631,6 +633,37 @@ export class SpotifyService {
     return out.amount > 0;
   }
 
+  /**
+   * Music Hub V2: a request withdrawn while Studio is still adding it. Refunded once now (Jetons or channel points);
+   * not taken yet (RECEIVED) → its job is withdrawn too, Studio never adds it; being added (SEARCHING) → marked to be
+   * skipped: if Spotify takes it anyway, Studio's report turns it into a tombstone (reportJob) skipped when it starts.
+   * Returns whether something was given back.
+   */
+  private async cancelInFlight(
+    q: Queryable,
+    r: RequestRow,
+    by: string,
+    now: Date,
+  ) {
+    const refunded = await this.refundPayment(q, r, by);
+    await this.update(q, r.request_id, {
+      state: 'CANCELED',
+      reason: 'VIEWER_CANCEL',
+      canceled_at: now,
+      canceled_by: by,
+      end_reason: 'VIEWER_CANCEL',
+      ended_at: now,
+      auto_skip: r.state === 'SEARCHING',
+    });
+    if (r.state === 'RECEIVED')
+      await q.query(
+        `update spotify_jobs set status = 'expired', updated_at = $3
+         where channel_id = $1 and request_id = $2 and kind = 'song_request' and status = 'queued'`,
+        [r.channel_id, r.request_id, now],
+      );
+    return refunded;
+  }
+
   /** A removal WITHOUT refund (an explicit moderation choice): nothing given back, recorded as kept. */
   private async keepPayment(q: Queryable, r: RequestRow, actor: string) {
     if (r.payment === 'tokens') {
@@ -954,6 +987,10 @@ export class SpotifyService {
         kind: 'search',
         job_id: j.job_id,
         query: String(j.payload.query),
+        // Music Hub V2: a pasted Spotify link → that exact track (Studio reads it, the reward's way).
+        ...(typeof j.payload.track_id === 'string'
+          ? { track_id: j.payload.track_id }
+          : {}),
       };
     if (j.kind === 'control')
       return {
@@ -1022,6 +1059,25 @@ export class SpotifyService {
         const req = await this.request(q, job.request_id!);
         if (req && (req.state === 'SEARCHING' || req.state === 'RECEIVED')) {
           await this.finishSongRequest(q, req, r);
+          changed.push({ request_id: req.request_id });
+        } else if (
+          req &&
+          req.state === 'CANCELED' &&
+          req.auto_skip &&
+          !req.track &&
+          r.track &&
+          (r.outcome === 'queued' || r.outcome === 'unknown')
+        ) {
+          // Music Hub V2: withdrawn while Studio was adding it, and Spotify took it (or maybe did) — a tombstone now:
+          // Studio skips it the moment it starts. Already refunded at the withdrawal: nothing is given back again.
+          await this.update(q, req.request_id, {
+            track: r.track,
+            candidates: r.candidates ?? null,
+            confidence: r.confidence ?? null,
+            margin: r.margin ?? null,
+            confirmation: r.confirmation ?? null,
+            queued_at: now,
+          });
           changed.push({ request_id: req.request_id });
         }
       } else if (r.kind === 'skip') {
@@ -1697,10 +1753,30 @@ export class SpotifyService {
         );
       };
       const cancellable = own.filter((r) => r.state !== 'PLAYING' || graceOk());
+      // Music Hub V2: a request Studio is still adding (RECEIVED / SEARCHING) — withdrawn as well, never « impossible ».
+      const inFlight = rows.filter(
+        (r) =>
+          (r.state === 'RECEIVED' || r.state === 'SEARCHING') &&
+          r.viewer_id === viewer.id,
+      );
+      const withdrawInFlight = async (r: RequestRow) => {
+        const refunded = await this.cancelInFlight(q, r, viewer.id, now);
+        await say(
+          q,
+          channelId,
+          key,
+          MSG.canceledInFlight(viewer.name, refunded),
+        );
+        changed.push(r.request_id);
+        return 'songcancel' as const;
+      };
       let target: RequestRow | undefined;
       if (opts.request_id) {
         target = own.find((r) => r.request_id === opts.request_id);
-        if (!target) return 'songcancel_none';
+        if (!target) {
+          const adding = inFlight.find((r) => r.request_id === opts.request_id);
+          return adding ? withdrawInFlight(adding) : 'songcancel_none';
+        }
       } else if (index !== undefined) {
         target = own[index - 1];
         if (!target) {
@@ -1784,7 +1860,8 @@ export class SpotifyService {
         changed.push(target.request_id);
         return 'songcancel';
       }
-      // Nothing cancellable: their song playing too long already, or nothing at all.
+      // Nothing in the queue: the ONE request Studio is still adding (Music Hub V2), else too late / nothing at all.
+      if (inFlight.length === 1) return withdrawInFlight(inFlight[0]!);
       if (own.some((r) => r.state === 'PLAYING')) {
         await say(q, channelId, key, MSG.cancelTooLate(viewer.name));
         return 'songcancel_too_late';
@@ -2174,7 +2251,18 @@ export class SpotifyService {
 
   /** A search for the extension: the same words searched recently are reused, else one job for Studio. */
   async extensionSearch(channelId: string, viewerId: string, query: string) {
-    const text = query.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 200);
+    // A Spotify track link / URI → that exact track (reference.ts, the reward's rules); another kind of link → refused.
+    const ref = /^(?:spotify:|https?:\/\/|www\.|open\.spotify\.com\/)/i.test(
+      query.trim(),
+    )
+      ? parseTrackReference(query)
+      : null;
+    if (ref?.kind === 'invalid')
+      throw new SpotifyError(400, 'invalid_reference');
+    const trackId = ref?.kind === 'exact' ? ref.trackId : null;
+    const text = trackId
+      ? `track:${trackId}`
+      : query.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 200);
     if (text.length < SPOTIFY_RULES.searchMinChars)
       throw new SpotifyError(400, 'query_too_short');
     const id = await this.db.tx(async (q) => {
@@ -2215,7 +2303,11 @@ export class SpotifyService {
         [
           jobId,
           channelId,
-          JSON.stringify({ query: text, viewer: viewerId }),
+          JSON.stringify({
+            query: text,
+            viewer: viewerId,
+            ...(trackId ? { track_id: trackId } : {}),
+          }),
           now,
         ],
       );
@@ -2470,10 +2562,18 @@ export class SpotifyService {
       return { outcome, request: row ? requestView(row) : null };
     }
     if (a.action === 'skip') {
-      await this.allow(this.db, channelId, actor, 'queue.stop');
-      return {
-        outcome: await this.skip(channelId, `spotify:ext:${key}`, name),
-      };
+      // Music Hub V2: the stream's player is the supermods' (and the broadcaster's) from the extension.
+      await this.allow(this.db, channelId, actor, 'music.player');
+      const ref = `spotify:ext:${key}`;
+      const outcome = await this.skip(channelId, ref, name);
+      const job = (
+        await this.db.query<{ job_id: string }>(
+          `select job_id from spotify_jobs where channel_id = $1 and kind = 'skip' and payload->>'ref' = $2`,
+          [channelId, ref],
+        )
+      )[0];
+      // A job → the extension follows Studio's answer (never an assumed success); none → refused (reason in outcome).
+      return { outcome, job_id: job?.job_id ?? null };
     }
     if (a.action === 'open' || a.action === 'close') {
       await this.allow(this.db, channelId, actor, 'module.disable');
@@ -2486,12 +2586,7 @@ export class SpotifyService {
         ),
       };
     }
-    await this.allow(
-      this.db,
-      channelId,
-      actor,
-      a.action === 'resume' ? 'module.resume' : 'module.pause',
-    );
+    await this.allow(this.db, channelId, actor, 'music.player');
     return this.control(
       channelId,
       a.action,
@@ -2537,7 +2632,7 @@ export class SpotifyService {
   async controlResult(channelId: string, jobId: string) {
     const job = (
       await this.db.query<JobRow>(
-        `select * from spotify_jobs where channel_id = $1 and job_id = $2 and kind = 'control'`,
+        `select * from spotify_jobs where channel_id = $1 and job_id = $2 and kind in ('control', 'skip')`,
         [channelId, jobId],
       )
     )[0];
@@ -2546,7 +2641,9 @@ export class SpotifyService {
     return {
       status:
         job.status === 'done'
-          ? (r?.outcome ?? 'unknown')
+          ? r?.outcome === 'skipped'
+            ? 'done'
+            : (r?.outcome ?? 'unknown')
           : job.status === 'expired'
             ? 'failed'
             : 'pending',
@@ -2564,7 +2661,25 @@ export class SpotifyService {
     channelId: string,
     viewer: { id: string; login: string } | null,
     team: boolean,
+    role: 'viewer' | 'moderator' | 'broadcaster' = team
+      ? 'moderator'
+      : 'viewer',
   ) {
+    // What this caller may do (Core's grades: lab-moderation access — a supermod is a moderator the broadcaster named).
+    const acc =
+      viewer && team
+        ? await access(this.db, channelId, {
+            id: viewer.id,
+            role,
+            via: 'extension',
+          })
+        : null;
+    const can = {
+      moderate: !!acc && allowed(acc, 'queue.cancel'),
+      refund: !!acc && allowed(acc, 'refund'),
+      player: !!acc && allowed(acc, 'music.player'),
+      open_close: !!acc && allowed(acc, 'module.disable'),
+    };
     const settings = (
       await this.db.query<SettingsRow>(
         'select * from spotify_settings where channel_id = $1',
@@ -2642,12 +2757,41 @@ export class SpotifyService {
         balance: this.economy
           ? (await this.economy.balances(this.db, channelId, viewer.id)).tokens
           : null,
-        requests: own.map((r) => ({
+        requests: [
+          ...own,
+          // Music Hub V2: still being added — withdrawable too (refunded at once, skipped if Spotify takes it).
+          ...rows.filter(
+            (r) =>
+              (r.state === 'RECEIVED' || r.state === 'SEARCHING') &&
+              r.viewer_id === viewer.id,
+          ),
+        ].map((r) => ({
           request_id: r.request_id,
           state: r.state,
           title: r.track?.title ?? null,
+          artists: r.track?.artists ?? [],
+          image_url: r.display?.image_url ?? null,
           cancellable: r.state !== 'PLAYING' || graceOk,
           payment: r.payment ?? 'channel_points',
+        })),
+        // The viewer's last requests that left the queue (withdrawn, removed, played, refused), with their refund.
+        history: (
+          await this.db.query<RequestRow>(
+            `select * from spotify_requests where channel_id = $1 and viewer_id = $2 and received_at > $3
+               and state not in ('RECEIVED', 'SEARCHING', 'QUEUED', 'PLAYING')
+             order by coalesce(ended_at, received_at) desc limit 5`,
+            [channelId, viewer.id, this.recentCut()],
+          )
+        ).map((r) => ({
+          request_id: r.request_id,
+          state: r.state,
+          title: r.track?.title ?? null,
+          artists: r.track?.artists ?? [],
+          payment: r.payment ?? 'channel_points',
+          refunded:
+            r.payment === 'tokens'
+              ? r.refund_status === 'refunded'
+              : r.twitch_status === 'cancel_requested',
         })),
       };
     }
@@ -2707,6 +2851,7 @@ export class SpotifyService {
       me,
       recent,
       team,
+      can,
     };
   }
 }

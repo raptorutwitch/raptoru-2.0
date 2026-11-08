@@ -41,7 +41,11 @@ export async function musicExt(
   try {
     // Everyone may look (an anonymous viewer sees the queue without « mes demandes »).
     if (method === 'GET' && path === '/music/state')
-      return await ok(`${base}/state`, { viewer, team: team && !!caller });
+      return await ok(`${base}/state`, {
+        viewer,
+        team: team && !!caller,
+        ...(caller ? { role: caller.role } : {}),
+      });
     if (!caller) return fail(403, 'identity_required');
     if (method === 'POST' && path === '/music/search')
       return await ok(`${base}/search`, {

@@ -102,6 +102,9 @@ export const PERMISSIONS: Record<
   // Roue du Sub V2 (R-7): ask a draw · grant a right — the broadcaster, supermods, moderators granted it.
   'subwheel.draw': 'subWheelDraw',
   'subwheel.grant': 'subWheelGrant',
+  // Music Hub V2 (docs/music/MUSIC_HUB_STATE.md): the player of the stream (pause, resume, skip, volume) from the
+  // extension — supermods and the broadcaster only (a moderator's removals stay « queue.cancel » / « refund »).
+  'music.player': 'supermod',
 };
 const RANK: Record<LabRole, number> = {
   viewer: 0,

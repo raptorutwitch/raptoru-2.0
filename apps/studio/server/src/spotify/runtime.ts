@@ -759,7 +759,13 @@ export class SpotifyRuntime {
   > {
     const provider = this.d.sim ? ('lab' as const) : ('spotify' as const);
     try {
-      const items = (await this.d.api.search(job.query))
+      // Music Hub V2: a pasted link names one track — read by its id, as the reward reads an exact reference.
+      const found = job.track_id
+        ? [await this.d.api.track(job.track_id)].filter(
+            (c): c is NonNullable<typeof c> => !!c,
+          )
+        : await this.d.api.search(job.query);
+      const items = found
         .map(toSearchItem)
         .filter((i): i is SpotifySearchItem => i !== null)
         .slice(0, 10);

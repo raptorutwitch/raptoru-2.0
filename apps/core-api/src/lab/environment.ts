@@ -18,6 +18,8 @@ export const LAB_TWITCH_USERS = Object.freeze([
   { id: '900100', login: 'raptoru_lab', display_name: 'Raptoru_ (lab)' },
   { id: '900101', login: 'lab_viewer', display_name: 'Viewer Lab' },
   { id: '900102', login: 'lab_modo', display_name: 'Modo Lab' },
+  // A moderator the broadcaster named supermod (lab_staff, seeded by lab/fixtures.ts): Twitch only knows « moderator ».
+  { id: '900103', login: 'lab_supermod', display_name: 'Supermod Lab' },
   { id: '900201', login: 'luna_lab', display_name: 'Luna_lab' },
   { id: '900202', login: 'kiwi_lab', display_name: 'Kiwi_lab' },
   { id: '900203', login: 'nox_lab', display_name: 'Nox_lab' },
