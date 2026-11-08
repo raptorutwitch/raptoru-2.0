@@ -5,6 +5,7 @@
 
 import { createDemoSession } from './demo-data.js';
 import { RUNTIME } from './runtime-config.js';
+import { isAllowedApiBase } from './runtime-guard.js';
 import { traceTimeoutDebug } from './timeout-debug.js';
 
 export const API_BASE = RUNTIME.apiBase;
@@ -114,9 +115,11 @@ export function createClient({
       if (sessionRoute(path) === '/session') rememberSession(responsePayload);
       return responsePayload;
     }
-    if (!apiBase) {
-      traceTimeoutDebug('api.request.blocked', { method, route: diagnosticRoute(path), reason: 'api_not_configured' });
-      throw Object.assign(new Error('api_not_configured'), { code: 'api_not_configured' });
+    // Défense en profondeur : une source non emballée (apiBase vide) ou un paquet fabriqué hors de
+    // scripts/package.mjs (ancien serveur, hôte inconnu) n'appelle jamais le réseau.
+    if (!isAllowedApiBase(apiBase)) {
+      traceTimeoutDebug('api.request.blocked', { method, route: diagnosticRoute(path), reason: 'unconfigured_build' });
+      throw Object.assign(new Error('unconfigured_build'), { code: 'unconfigured_build' });
     }
 
     testLog('request', {
@@ -699,6 +702,7 @@ export const ERROR_LABELS = {
   network_error: 'Connexion au service impossible — réessaie dans un instant.',
   login_unavailable: 'Ton compte Twitch n’est pas encore reconnu — réessaie dans un instant.',
   api_not_configured: 'L’extension est momentanément indisponible.',
+  unconfigured_build: 'Version non configurée : cette extension n’a pas été emballée par scripts/package.mjs.',
   rate_limited: 'Un peu trop de demandes à la fois — attends quelques secondes.',
   // Bonk : emote Twitch refusée par Core (compte Twitch non lié / emote hors du catalogue du viewer).
   viewer_not_linked: 'Emotes Twitch indisponibles : aucun compte Twitch lié à cette identité.',

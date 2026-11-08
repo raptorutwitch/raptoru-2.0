@@ -1,5 +1,5 @@
 // Calibration data source (Video Component geometry, docs/TWITCH_GEOMETRY_CALIBRATION_2026-10.md).
-// Packaged only by scripts/build-calibration.mjs, which hands `calibrationCall` to the extension client
+// Packaged only by scripts/package.mjs --target calibration, which hands `calibrationCall` to the extension client
 // through the generated runtime-config (RUNTIME.fixtureCall): the real client, views and DOM run
 // unchanged, only their answers come from local fixtures. No network, no write, no Twitch action.
 import { CAPTURED_AT, FIXTURES } from './fixtures.js';
