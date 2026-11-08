@@ -6,6 +6,17 @@
 
 ## 0. Où reprendre (08/11, après le Design Lab)
 
+- **Direction F « Hybride » (A + B + E)**, issue du retour d'Antoni sur les cinq maquettes :
+  `prototypes/music-hub/f-hybride.html`, première du comparateur. **À valider par Antoni avant toute intégration.**
+  Recherche en haut, résultats et demande de E (barre courte), « À suivre » numéroté de B (colonne repliable, tiroir
+  en étroit, playlist quand rien n'est tapé), bande « En cours » en bas dépliée sur place, un seul historique
+  « Derniers titres passés » (panneau interne + Retour), retrait par poubelle avec confirmation par-dessus le module.
+- **Historique, limite des données** : Spotify V2 garde les demandes (`spotify_requests`, avec leur début de lecture)
+  et seulement l'instantané de ce qui joue (`spotify_studio.playback`). Les musiques personnelles du streamer ne sont
+  enregistrées nulle part : « Derniers titres passés » montre les **demandes** jouées ou passées, pas les autres
+  titres. Les garder demanderait un changement Core/Studio (hors de cette mission).
+- **Sauvegarde du Design Lab** (prototypes jamais versionnés) : `Documents\Sauvegarde Raptoru 2.0  music-hub-design-lab-2026-11-08\` (archive vérifiée à l'extraction, SHA-256 dans `LISEZMOI.txt`).
+
 - **Design en cours de choix** : cinq directions comparables dans `prototypes/music-hub/` (double-clic
   `Ouvrir le comparateur Music Hub.cmd`). Recommandation : **D — Raptoru Néon** (voir son README et le comparateur).
   Ce dossier est local (exclu de git par `.git/info/exclude`, comme tous les prototypes) : il vit dans le worktree.
