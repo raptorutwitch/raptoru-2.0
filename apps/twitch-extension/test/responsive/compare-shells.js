@@ -36,6 +36,7 @@ const SIZES = [
 const VIEWS = [
   ['hub', 'Hub'], ['tts', 'TTS'], ['soundboard', 'Soundboard'], ['bonk', 'Bonk'], ['raffle_join', 'Tombola'],
   ['moderation', 'Modération (calibration)'], ['actions', 'Historique'], ['lab_demo', 'Démo Lab (module fictif, v2 seulement)'],
+  ['music', 'Musique (Music Hub, v2 et Calibration seulement)'],
 ];
 
 const $ = (id) => document.getElementById(id);

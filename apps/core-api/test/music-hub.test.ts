@@ -357,6 +357,30 @@ describe('Music Hub — withdrawals and moderation', () => {
     expect(other.request).toBeNull();
   });
 
+  it('!songcancel in the chat on a request paid in Jetons: the Jetons come back once, the chat answers as for the reward', async () => {
+    const h = await hub();
+    await h.fund(viewer(1), 1_000);
+    await h.search(viewer(1), 'titre');
+    await h.answerSearches([item(1)]);
+    await h.ask(viewer(1), 1);
+    await h.runRequests();
+    expect(await h.balance(viewer(1))).toBe(500);
+    const before = await h.steps();
+    const a = await h.spotify.cancel(CH, 'chat-msg-1', {
+      id: viewer(1).id,
+      name: 'Fan1',
+    });
+    expect(a).toBe('songcancel');
+    expect(await h.balance(viewer(1))).toBe(1_000);
+    expect(await h.steps()).toBeGreaterThan(before); // the chat line, as for the reward
+    const again = await h.spotify.cancel(CH, 'chat-msg-2', {
+      id: viewer(1).id,
+      name: 'Fan1',
+    });
+    expect(again).toBe('songcancel_none');
+    expect(await h.balance(viewer(1))).toBe(1_000);
+  });
+
   it('a viewer cannot moderate; a moderator removes with refund, or without (kept), never twice', async () => {
     const h = await hub();
     await h.spotify.saveSettings(

@@ -85,6 +85,10 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   Rien de poussé, validé ni publié ; aucune release Studio sans GO explicite.
   - **Audit fonctionnel du 04/11** (démarrages, cycle du live, automatisations, réglages) :
     [studio-refonte/AUDIT_FONCTIONNEL.md](studio-refonte/AUDIT_FONCTIONNEL.md). Arbitrages H1-H16 à trancher par Antoni.
+- **En cours (GO du 08/11) : Music Hub** — module « Musique » de l'extension sur la file Spotify V2 existante, payé en
+  Jetons. Branche locale `feat/music-hub`, worktree `Raptoru 2.0 - Worktrees\music-hub`. Lab seulement, non validé.
+  **Reprise : [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md)** (tests, lancement Lab, conformité Spotify à
+  arbitrer § 8 et 10).
 
 ## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
 
@@ -107,6 +111,7 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   - `raptoru-fr-refonte` : site, branche de documentation `docs/site-context` (locale, non poussée) ;
   - `site-hub-core` : Core et Studio, branche de documentation `docs/site-hub-delivered` (locale, non poussée ; elle remplace le `REPRISE.md` du 28/10 d’`origin/main`) ;
   - `studio-ux` : refonte du Studio, branche `feat/studio-ux` (locale, partie de `docs/site-hub-delivered`).
+  - `music-hub` : Music Hub, branche `feat/music-hub` (locale, partie de `feat/extension-next` 2f45ac1).
 - **Anciens worktrees** (`git worktree list`) :
   - sous `AppData\Local\Temp\…\scratchpad\*-wt` ;
   - `Documents\raptoru-*` ;
