@@ -32,6 +32,8 @@ import '../shared/commands-public.js';
 import '../shared/sub-wheel-ext.js';
 import '../shared/events-shop.js';
 import '../shared/tombola-v2.js';
+// Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests' entry — a tiny file; its view and sheet load on opening.
+import '../modules/music/module.js';
 // Tombola V1 for the sessions without V2 (its « open » rule is also the Hub's and the header's).
 import { raffleIsActive } from '../shared/tombola-v1.js';
 // The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
@@ -116,6 +118,8 @@ const HUB_MODULE_STYLES = Object.freeze({
   moderation: { icon: 'moderation', color: '#10b981', color2: '#0e7490' },
   commands: { icon: 'commands', color: '#2fd8c4', color2: '#3b82f6' },
   event_shop: { icon: 'bat', color: '#7a1220', color2: '#d4561a' },
+  // Music Hub: an emerald of Raptoru's own (never a music service's brand colour).
+  music: { icon: 'music', color: '#16a34a', color2: '#0f766e' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 const MODERATION_MODULE = Object.freeze({
@@ -1417,7 +1421,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
                 ? { text: 'En pause', tone: 'neutral' }
                 : mod.id === MODERATION_MODULE.id
                   ? { text: 'Modérateurs', tone: 'staff' }
-                  : null;
+                  // Music Hub: open with the songs waiting, or closed (the card stays, its module says why).
+                  : mod.id === 'music'
+                    ? state?.music?.open
+                      ? { text: state.music.queue_count ? `${state.music.queue_count} en file` : 'Ouvert', tone: 'live' }
+                      : { text: 'Fermé', tone: 'neutral' }
+                    : null;
           return {
             id: mod.id,
             label: visibleModuleLabel(mod),

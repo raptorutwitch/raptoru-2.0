@@ -439,6 +439,7 @@ export class ExtFacade {
       ttsViewer,
       raffle,
       eventShop,
+      music,
       bonkRecent,
     ] = await Promise.all([
       this.core<Json>(`/v1/lab/moderation/${C}/overview`).catch(() => null),
@@ -460,6 +461,10 @@ export class ExtFacade {
         `/v1/lab/raffle/${C}/state${v ? `?viewer=${v.id}` : ''}`,
       ).catch(() => null),
       this.eventShop(who),
+      // Music Hub (Lab only): the Hub card's summary — never fails the session.
+      this.config.lab
+        ? this.core<Json>(`/v1/lab/spotify-ext/${C}/summary`).catch(() => null)
+        : null,
       v
         ? this.core<{ interactions: Json[] }>(
             `/v1/lab/bonk/channels/${C}/interactions?limit=10&viewer_id=${v.id}`,
@@ -640,6 +645,7 @@ export class ExtFacade {
       raffle: this.raffleSession(raffle, v),
       // Halloween: shown by the extension as its « Halloween » module only while the event is open.
       event_shop: eventShop,
+      music,
     };
   }
 
@@ -661,6 +667,7 @@ export class ExtFacade {
         // The extension only re-reads /state after its first load: live catalog and prices follow.
         'modules',
         'event_shop',
+        'music',
       ].map((k) => [k, s[k]]),
     );
   }

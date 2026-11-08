@@ -80,6 +80,13 @@ export function musicExtRoutes(spotify: SpotifyService): Route[] {
   const auth = 'studio' as const;
   return [
     {
+      method: 'GET',
+      pattern: at(`/${ch}/summary`),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => spotify.extensionSummary(params[0]!)),
+    },
+    {
       method: 'POST',
       pattern: at(`/${ch}/state`),
       auth,

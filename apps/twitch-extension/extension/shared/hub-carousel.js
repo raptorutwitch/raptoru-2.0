@@ -17,6 +17,8 @@ export const HUB_ICON_PATHS = Object.freeze({
   // Événements (Halloween) : une chauve-souris, ailes déployées, lisible sur fond rouge sombre.
   bat: '<path d="M12 8.2 10.4 6.4 9.6 8.6C7.4 7.3 4.3 6.9.8 8.4c2 1 3 2.9 3 5 1.8-1.2 3.8-1.3 5.4-.2.8-1.1 1.8-1.6 2.8-1.6s2 .5 2.8 1.6c1.6-1.1 3.6-1 5.4.2 0-2.1 1-4 3-5-3.5-1.5-6.6-1.1-8.8.2l-.8-2.2Z" fill="currentColor"/><circle cx="10.9" cy="10.6" r=".7" fill="#1a1030"/><circle cx="13.1" cy="10.6" r=".7" fill="#1a1030"/>',
   module: '<rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  // Music Hub (docs/music/MUSIC_HUB_STATE.md): a double note.
+  music: '<path d="M9 17.5V6.5l10-2v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.6" fill="currentColor"/><circle cx="16.6" cy="15.6" r="2.6" fill="currentColor"/><path d="M9 9.6l10-2" stroke="currentColor" stroke-width="1.8"/>',
   chevL: '<path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   chevR: '<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   arrow: '<path d="M5 12h12m-4.5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -27,6 +29,9 @@ export const HUB_ICON_PATHS = Object.freeze({
 
 // Motifs de fond propres à chaque module (discrets, blancs sur la couleur du module).
 const MOTIFS = Object.freeze({
+  // Music Hub: a soft equalizer wave.
+  music: `<g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">${[0, 1, 2]
+    .map((k) => `<path d="M0 ${96 + k * 16}${Array.from({ length: 9 }, (_, i) => ` Q${12 + i * 25} ${84 + k * 16 + (i % 2 ? 22 : -22)} ${25 + i * 25} ${96 + k * 16}`).join('')}"/>`).join('')}</g>`,
   tts: '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 40c10-10 10-26 0-36"/><path d="M30 46c16-16 16-40 0-56"/><path d="M182 40c-10-10-10-26 0-36"/><path d="M170 46c-16-16-16-40 0-56"/><path d="M40 118h40M50 128h24M130 108h34M138 118h22"/></g>',
   soundboard: `<g fill="currentColor">${[14, 26, 18, 40, 30, 52, 22, 36, 48, 28, 16, 38, 24, 44, 20, 12]
     .map((h, i) => `<rect x="${8 + i * 12}" y="${140 - h}" width="6" height="${h}" rx="3"/>`).join('')}</g>`,

@@ -277,7 +277,13 @@ export function packageExtension({
     rmSync(join(out, 'lab-modules'), { recursive: true, force: true });
     if (calibration) {
       mkdirSync(join(out, 'calibration'));
-      for (const name of ['adapter.js', 'fixtures.js', 'hud.js', 'hud.css'])
+      for (const name of [
+        'adapter.js',
+        'fixtures.js',
+        'music-fixtures.js',
+        'hud.js',
+        'hud.css',
+      ])
         copyFileSync(
           join(root, 'calibration', name),
           join(out, 'calibration', name),

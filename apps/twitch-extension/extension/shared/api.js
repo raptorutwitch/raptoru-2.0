@@ -566,6 +566,21 @@ export function createClient({
       body: { item_id: itemId },
       idempotencyKey: newIdempotencyKey(),
     }),
+    /** Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests from the extension — Core decides everything. */
+    musicState: () => call('GET', '/music/state'),
+    musicSearch: (query) => call('POST', '/music/search', { body: { query } }),
+    musicSearchResult: (id) => call('GET', `/music/search/${encodeURIComponent(id)}`),
+    /** One key per intent (chosen by the view, reused on a retry): a request is never paid twice. */
+    musicRequest: (key, trackId, expectedPrice) => call('POST', '/music/request', {
+      body: { track_id: trackId, expected_price: expectedPrice },
+      idempotencyKey: key,
+    }),
+    musicCancel: (requestId) => call('POST', '/music/cancel', { body: { request_id: requestId } }),
+    musicModerate: (command, key = newIdempotencyKey()) => call('POST', '/music/moderate', {
+      body: { command },
+      idempotencyKey: key,
+    }),
+    musicControl: (jobId) => call('GET', `/music/controls/${encodeURIComponent(jobId)}`),
     /** Tombola V2 (Lab): Core's viewer state (phase, timer, entries, refusal, result, history). */
     raffleState: () => call('GET', '/raffle/state'),
     joinRaffle: () => call('POST', '/actions/raffle', {

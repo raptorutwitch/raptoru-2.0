@@ -2153,6 +2153,25 @@ export class SpotifyService {
     }
   }
 
+  /** The Hub card (every session read): offered at all, open, why not, how many songs wait — a few rows only. */
+  async extensionSummary(channelId: string) {
+    const s = (
+      await this.db.query<SettingsRow>(
+        'select * from spotify_settings where channel_id = $1',
+        [channelId],
+      )
+    )[0];
+    if (!s?.extension_enabled || !this.economy) return { offered: false };
+    const st = await this.studio(this.db, channelId);
+    return {
+      offered: true,
+      open: s.enabled,
+      admission: this.extensionClosed(s, st) ?? 'ready',
+      queue_count: this.future(await this.live(this.db, channelId)).length,
+      price_tokens: s.extension_price_tokens,
+    };
+  }
+
   /** A search for the extension: the same words searched recently are reused, else one job for Studio. */
   async extensionSearch(channelId: string, viewerId: string, query: string) {
     const text = query.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 200);
@@ -2577,6 +2596,7 @@ export class SpotifyService {
       return {
         request_id: r.request_id,
         position,
+        track_id: r.track?.id ?? r.raw_input.replace(/^spotify:track:/, ''),
         title: r.track?.title ?? null,
         artists: r.track?.artists ?? [],
         duration_ms: r.track?.duration_ms ?? null,
