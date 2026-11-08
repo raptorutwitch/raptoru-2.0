@@ -1619,7 +1619,10 @@ body.component-view #panel {
   flex: 1 1 auto;
   flex-direction: column;
   gap: 5px;
-  overflow: hidden;
+  /* Lot 1 (08/11) : filet de sécurité — le corps défile en dernier recours au lieu de couper. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 body.component-view .jdm-tabs {

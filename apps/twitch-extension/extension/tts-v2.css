@@ -8,7 +8,7 @@
 .jdm-module__body[data-tts-v2] { display: flex !important; flex-direction: column; min-height: 0; gap: 0 !important; padding: 0 !important; overflow: hidden !important; }
 .jdm-module__body[data-tts-v2] > .ttsv2 { flex: 1 1 auto; min-height: 0; }
 /* Same frame as Bonk on mobile: the page never scrolls, the view scrolls inside (CTA always visible). */
-body.mobile:has(.ttsv2) .m-body { height: 100vh; max-height: 100vh; overflow: hidden; }
+body.mobile:has(.ttsv2) #panel.m-body { height: 100vh; max-height: 100vh; overflow: hidden; }
 .jdm-module-screen:has(.ttsv2), .jdm-module-screen:has(.ttsv2) > .jdm-module, .jdm-module-screen:has(.ttsv2) > .jdm-module > .jdm-module__body { min-height: 0; }
 .ttsv2 { position: relative; display: flex; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; }
 /* After the final recomposition: live updates / host renders never replay the entrances. */
@@ -289,3 +289,27 @@ body.mobile:has(.ttsv2) .m-body { height: 100vh; max-height: 100vh; overflow: hi
   body.component-view .ttsv2[data-surface='video'] .cta { min-height: 38px; border-radius: 12px; }
   body.component-view .ttsv2[data-surface='video'] .cur { border-radius: 12px; }
 }
+
+/* --- Lot 1 (08/11) : le paiement n'est jamais coupé (audit § B-1) ---
+   Grille bornée (la rangée ne grandit plus avec son contenu), colonne de droite souple 180–250 px, composer
+   qui rétrécit avant tout le reste, colonne gauche qui défile en dernier recours avec le paiement collé en
+   bas. À 651×434 et 565×376 rien ne change : le contenu tient, l'espaceur absorbe la place.
+   Colonne de paiement ≥ 252 px (Jetons + « Confirmer · prix »). Sous 480 px de large : une seule colonne qui défile, aperçu sous le paiement. */
+.ttsv2[data-surface='video'] { container-type: inline-size; }
+.ttsv2[data-surface='video'] .cols { grid-template-columns: minmax(252px, 1fr) minmax(180px, 250px); grid-template-rows: minmax(0, 1fr); }
+.ttsv2[data-surface='video'] .cols > .col:not(.col--stage) { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(168, 85, 247, 0.4) transparent; }
+.ttsv2[data-surface='video'] .cols > .col:not(.col--stage) > .composer { display: flex; min-height: 76px; flex: 0 1 auto; flex-direction: column; }
+.ttsv2[data-surface='video'] .cols > .col:not(.col--stage) > .composer textarea { min-height: 0; flex: 1 1 auto; }
+.ttsv2[data-surface='video'] .cols > .col:not(.col--stage) > .pay { position: sticky; bottom: 0; z-index: 1; background: linear-gradient(180deg, transparent, var(--bg) 10px); }
+@container (max-width: 479px) {
+  .ttsv2[data-surface='video'] .cols { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: max-content; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  .ttsv2[data-surface='video'] .cols > .col:not(.col--stage) { overflow: visible; }
+  .ttsv2[data-surface='video'] .cols > .col--stage { height: 190px; flex: none; }
+  .ttsv2[data-surface='video'] .cols > .col:not(.col--stage) > .composer textarea { height: 96px; }
+}
+/* Lot 1 : sur un téléphone étroit (360 px), les vignettes rétrécissent (≥ 38 px) au lieu de pousser les flèches
+   hors de l'écran ; « safe center » garde le début visible si la rangée déborde quand même. */
+.ttsv2[data-surface='mobile'] .roster__row { justify-content: safe center; }
+.ttsv2[data-surface='mobile'] .roster__row .pick { min-width: 38px; height: auto; flex: 0 1 48px; aspect-ratio: 1 / 1; }
+/* Lot 1 : un prix ne se coupe jamais (« 7 500 J » reste sur une ligne ; le libellé peut passer à la ligne). */
+.ttsv2 .cta__price { white-space: nowrap; }

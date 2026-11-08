@@ -878,7 +878,7 @@ body.mobile:has(.tmbx) .m-body { height: 100vh; max-height: 100vh; overflow: hid
 .tmbx .stage .orb .pp { width: 80px; height: 80px; --s: 80px; }
 }
 
-@media (min-width: 560px) {
+@media (min-width: 521px) {
   .tmbx .grid2 { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
   .tmbx .grid2 .sec:first-child { margin-top: 0; }
 }
