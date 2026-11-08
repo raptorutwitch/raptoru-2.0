@@ -110,6 +110,7 @@ export function view(ctx) {
   let menuFor = null; // team menu open on this request id
   let deck = false; // the supermods' player panel open
   let ctlBusy = null; // the player action waiting for Studio's answer
+  let historyOpen = false; // « Historique » stays as the viewer left it across readings
   const withdrawing = new Set();
   let toastTimer = null;
   let ticking = null;
@@ -148,16 +149,36 @@ export function view(ctx) {
     : `<span class="mh-art mh-art--none ${cls}" aria-hidden="true">${NOTE}</span>`;
   const artists = (a) => esc((a ?? []).join(', '));
 
+  /**
+   * A region is replaced only when its content changed, and the control that had the focus gets it back (fix of the
+   * 08/11 feedback: every 4 s reading rebuilt the lists — focus lost, « Historique » closed, the view moving).
+   */
+  const focusKey = (el) =>
+    el.dataset?.pick !== undefined ? `[data-pick="${el.dataset.pick}"]`
+      : el.dataset?.act ? `[data-act="${el.dataset.act}"]${el.dataset.id ? `[data-id="${el.dataset.id}"]` : ''}`
+        : el.dataset?.tab ? `[data-tab="${el.dataset.tab}"]`
+          : el.dataset?.idea !== undefined ? '[data-idea]'
+            : el.tagName === 'SUMMARY' ? 'summary' : null;
+  function put(box, html) {
+    if (box.dataset.html === html) return false;
+    const a = document.activeElement;
+    const key = a && a !== box && box.contains(a) ? focusKey(a) : null;
+    box.innerHTML = html;
+    box.dataset.html = html;
+    if (key) box.querySelector(key)?.focus({ preventScroll: true });
+    return true;
+  }
+
   // ------------------------------------------------------------------ top: limits in one line
 
   function renderMeta() {
     const box = $('meta');
-    if (!st) { box.innerHTML = ''; return; }
-    if (!st.open) { box.innerHTML = '<span class="mh-chip mh-chip--off">Demandes fermées</span>'; return; }
+    if (!st) { put(box, ''); return; }
+    if (!st.open) { put(box, '<span class="mh-chip mh-chip--off">Demandes fermées</span>'); return; }
     const me = st.me;
-    box.innerHTML = `<span class="mh-chip mh-chip--price" title="Prix d’une demande">◆ ${fmt(st.price_tokens)}</span>${me
+    put(box, `<span class="mh-chip mh-chip--price" title="Prix d’une demande">◆ ${fmt(st.price_tokens)}</span>${me
       ? `<button type="button" class="mh-chip" data-tab="queue" title="Tes demandes en attente / maximum" aria-label="Tes demandes : ${me.pending} sur ${me.max_pending}">${me.pending}/${me.max_pending}</button><span class="mh-chip mh-chip--cd" data-k="cooldown" hidden></span>`
-      : ''}`;
+      : ''}`);
     tick();
   }
 
@@ -196,34 +217,34 @@ export function view(ctx) {
     const q = input.value.trim();
     clearBtn.hidden = !q;
     if (st && !st.open) {
-      box.innerHTML = '<p class="mh-empty">Les demandes sont fermées pour le moment. La file reste visible dans « File ».</p>';
+      put(box, '<p class="mh-empty">Les demandes sont fermées pour le moment. La file reste visible dans « File ».</p>');
       return;
     }
     if (q.length < 2) {
       box.removeAttribute('aria-busy');
-      box.innerHTML = idle();
+      put(box, idle());
       return;
     }
     const link = LINK.test(q);
     if (searching && !results) {
-      box.innerHTML = `${link ? `<p class="mh-label">${LINKI} Lien détecté : recherche du titre exact…</p>` : ''}${skeleton()}`;
+      put(box, `${link ? `<p class="mh-label">${LINKI} Lien détecté : recherche du titre exact…</p>` : ''}${skeleton()}`);
       box.setAttribute('aria-busy', 'true');
       return;
     }
     if (!results) return;
     if (results.error) {
       box.removeAttribute('aria-busy');
-      box.innerHTML = `<div class="mh-empty mh-empty--err"><p>${esc(results.error === 'unavailable' ? 'Le catalogue ne répond pas pour le moment.' : refusal({ code: results.error }, st))}</p>${results.error === 'invalid_reference' ? '' : '<button type="button" class="mh-btn mh-btn--ghost" data-act="retry">Réessayer</button>'}</div>`;
+      put(box, `<div class="mh-empty mh-empty--err"><p>${esc(results.error === 'unavailable' ? 'Le catalogue ne répond pas pour le moment.' : refusal({ code: results.error }, st))}</p>${results.error === 'invalid_reference' ? '' : '<button type="button" class="mh-btn mh-btn--ghost" data-act="retry">Réessayer</button>'}</div>`);
       return;
     }
     if (!results.items.length) {
       box.removeAttribute('aria-busy');
-      box.innerHTML = `<p class="mh-empty">${link ? 'Ce lien ne correspond à aucun titre disponible.' : `Aucun titre pour « ${esc(q)} ». Essaie l’artiste seul, ou colle le lien du morceau.`}</p>`;
+      put(box, `<p class="mh-empty">${link ? 'Ce lien ne correspond à aucun titre disponible.' : `Aucun titre pour « ${esc(q)} ». Essaie l’artiste seul, ou colle le lien du morceau.`}</p>`);
       return;
     }
     const waiting = queuedIds();
     const n = results.items.length;
-    box.innerHTML = `<p class="mh-label">${LINK.test(results.query ?? '') ? `${LINKI} Titre du lien` : `${n} titre${n > 1 ? 's' : ''} · choisis la bonne version`}</p>` + results.items.map((i, k) => {
+    put(box, `<p class="mh-label">${LINK.test(results.query ?? '') ? `${LINKI} Titre du lien` : `${n} titre${n > 1 ? 's' : ''} · choisis la bonne version`}</p>` + results.items.map((i, k) => {
       const flag = !i.playable ? 'Indisponible' : i.too_long ? 'Trop long' : waiting.has(i.id) ? 'Déjà en file' : '';
       const sub = `${i.artists.join(', ')}${i.album ? ` · ${i.album}` : ''}`;
       return `<button type="button" class="mh-row ${flag ? 'is-off' : ''}" role="option" aria-selected="false" data-pick="${k}" ${flag ? 'aria-disabled="true"' : ''} aria-label="${esc(`${i.title}, ${sub}, ${dur(i.duration_ms)}${flag ? `, ${flag}` : ''}`)}">
@@ -233,7 +254,7 @@ export function view(ctx) {
       </button>`;
     }).join('') + (results.provider === 'lab'
       ? '<p class="mh-src">Catalogue de démonstration du Lab : titres et artistes fictifs, aucun service musical réel.</p>'
-      : '<p class="mh-src">Catalogue : compte musical connecté au Studio du stream.</p>');
+      : '<p class="mh-src">Catalogue : compte musical connecté au Studio du stream.</p>'));
     if (searching) box.setAttribute('aria-busy', 'true');
     else box.removeAttribute('aria-busy');
   }
@@ -283,7 +304,7 @@ export function view(ctx) {
     const box = $('sheet');
     if (!pick) {
       box.hidden = true;
-      box.innerHTML = '';
+      put(box, '');
       return;
     }
     const i = pick.item;
@@ -292,7 +313,7 @@ export function view(ctx) {
     const after = me?.balance === null || me?.balance === undefined ? null : me.balance - price;
     const r = st?.rules;
     box.hidden = false;
-    box.innerHTML = `
+    put(box, `
       <div class="mh-sheet__card" role="dialog" aria-modal="true" aria-labelledby="mh-sheet-title">
         <div class="mh-sheet__track">${art(i.image_url, 'mh-art--lg')}
           <span><strong id="mh-sheet-title">${esc(i.title)}</strong><small>${artists(i.artists)}</small><small>${i.album ? `${esc(i.album)} · ` : ''}${dur(i.duration_ms)}</small></span>
@@ -309,8 +330,12 @@ export function view(ctx) {
           <button type="button" class="mh-btn mh-btn--ghost" data-act="sheet-close">Annuler</button>
           <button type="button" class="mh-btn mh-btn--go" data-act="confirm" ${pick.busy ? 'disabled aria-busy="true"' : ''}>${pick.busy ? 'Envoi…' : `Demander · ◆ ${fmt(price)}`}</button>
         </div>
-      </div>`;
-    if (!pick.busy) box.querySelector('[data-act="confirm"]')?.focus({ preventScroll: true });
+      </div>`);
+    // Focus on « Demander » once, when the sheet opens (a reading never moves the focus again).
+    if (!pick.busy && !pick.focused) {
+      pick.focused = true;
+      box.querySelector('[data-act="confirm"]')?.focus({ preventScroll: true });
+    }
   }
 
   async function confirm() {
@@ -341,7 +366,7 @@ export function view(ctx) {
   function renderQueue() {
     const box = $('queue');
     if (!st) {
-      box.innerHTML = `<p class="mh-empty">${failed ? esc(refusal(failed, st)) : 'Chargement…'}</p>`;
+      put(box, `<p class="mh-empty">${failed ? esc(refusal(failed, st)) : 'Chargement…'}</p>`);
       return;
     }
     const c = can();
@@ -351,11 +376,11 @@ export function view(ctx) {
       ? `<button type="button" class="mh-mini" data-act="${st.open ? 'close' : 'open'}">${st.open ? 'Fermer les demandes' : 'Ouvrir les demandes'}</button>`
       : '';
     const count = rows.filter((e) => e.position).length;
-    box.innerHTML = `
+    put(box, `
       ${mineRows.length ? `<p class="mh-label">Tes demandes</p><ol class="mh-list mh-list--mine">${mineRows.map(mineRow).join('')}</ol>` : ''}
       <div class="mh-head"><p class="mh-label">${count ? `${count} titre${count > 1 ? 's' : ''} en file` : 'La file est vide'}${st.open ? '' : ' · demandes fermées'}</p>${tools}</div>
       ${rows.length ? `<ol class="mh-list">${rows.map(queueRow).join('')}</ol>` : `<p class="mh-empty">${st.open ? 'Personne n’a encore demandé de titre : la prochaine peut être la tienne.' : 'Rien en attente.'}</p>`}
-      ${history()}`;
+      ${history()}`);
   }
 
   function mineRow(r) {
@@ -391,7 +416,7 @@ export function view(ctx) {
     const mine = st?.me?.history ?? [];
     const recent = st?.recent ?? [];
     if (!mine.length && !recent.length) return '';
-    return `<details class="mh-recent"><summary>Historique</summary>
+    return `<details class="mh-recent" ${historyOpen ? 'open' : ''}><summary>Historique</summary>
       ${mine.length ? `<p class="mh-label">Tes dernières demandes</p><ul>${mine.map((r) => `<li><span>${esc(r.title ?? 'Titre non ajouté')}</span><small>${esc(ENDED[r.state] ?? r.state)}${r.refunded ? (r.payment === 'tokens' ? ' · Jetons rendus' : ' · points rendus') : ''}</small></li>`).join('')}</ul>` : ''}
       ${recent.length ? `<p class="mh-label">Passées sur le stream</p><ul>${recent.map((r) => `<li><span>${esc(r.title ?? '—')}</span><small>par ${esc(r.requested_by)}</small></li>`).join('')}</ul>` : ''}
     </details>`;
@@ -455,14 +480,14 @@ export function view(ctx) {
       body = `<span class="mh-eq ${n.is_playing ? 'is-on' : ''}" role="img" aria-label="${n.is_playing ? 'En lecture' : 'En pause'}"><i></i><i></i><i></i></span>
         <span class="mh-now__txt" title="${esc(`${n.title} — ${n.artists.join(', ')}`)}"><strong>${esc(n.title)}</strong><small>${artists(n.artists)}${who}</small></span>`;
     }
-    box.innerHTML = `${body}${deckBtn}`;
+    put(box, `${body}${deckBtn}`);
   }
 
   function renderDeck() {
     const box = $('deck');
     if (!deck || !can().player || !st) {
       box.hidden = true;
-      box.innerHTML = '';
+      put(box, '');
       return;
     }
     const p = st.player;
@@ -472,7 +497,7 @@ export function view(ctx) {
     const off = !on || !!ctlBusy;
     const why = !p.connected ? 'Lecteur indisponible (Studio, Spotify fermé ou aucun appareil).' : !p.controls ? 'Commandes du lecteur désactivées dans Studio.' : ctlBusy ? 'En attente de la réponse du lecteur…' : '';
     box.hidden = false;
-    box.innerHTML = `
+    put(box, `
       <div class="mh-deck__head"><strong>Lecteur du stream</strong><small>Supermods · le streamer garde la main</small><button type="button" class="mh-mini mh-mini--icon" data-act="deck" aria-label="Fermer le lecteur">${CLEAR}</button></div>
       <p class="mh-deck__state">${p.connected ? `${esc(p.device ?? 'Appareil')} · ${playing ? 'en lecture' : 'en pause'}${p.volume_percent !== null && p.volume_percent !== undefined ? ` · vol. ${p.volume_percent}` : ''}` : 'Indisponible'}</p>
       <div class="mh-ctl" role="group" aria-label="Lecteur du stream">
@@ -480,7 +505,7 @@ export function view(ctx) {
         <button type="button" class="mh-ctl__b" data-act="skip" ${off || !st.now_playing ? 'disabled' : ''} ${busy('skip')}>${NEXT}Passer</button>
         <label class="mh-vol"><span>Vol.</span><input type="range" min="0" max="100" step="5" value="${p.volume_percent ?? 50}" data-act="volume" ${off ? 'disabled' : ''} aria-label="Volume du lecteur"></label>
       </div>
-      ${why ? `<p class="mh-deck__why">${esc(why)}</p>` : ''}`;
+      ${why ? `<p class="mh-deck__why">${esc(why)}</p>` : ''}`);
   }
 
   // ------------------------------------------------------------------ frame
@@ -586,7 +611,11 @@ export function view(ctx) {
       (next < 0 ? input : rows[next]).focus();
     }
   };
+  const onToggle = (event) => {
+    if (event.target.classList?.contains('mh-recent')) historyOpen = event.target.open;
+  };
   input.addEventListener('input', onInput);
+  node.addEventListener('toggle', onToggle, true); // « toggle » does not bubble: captured
   node.addEventListener('click', onClick);
   node.addEventListener('change', onChange);
   node.addEventListener('keydown', onKey);
@@ -611,6 +640,7 @@ export function view(ctx) {
       clearTimeout(typing);
       clearTimeout(toastTimer);
       input.removeEventListener('input', onInput);
+      node.removeEventListener('toggle', onToggle, true);
       node.removeEventListener('click', onClick);
       node.removeEventListener('change', onChange);
       node.removeEventListener('keydown', onKey);
