@@ -65,9 +65,38 @@ la composition 651 réduite (≈ 14 sons au lieu de 20, comme annoncé au plan �
    coupée ; le corps défile. Un prix ou un bouton ne prend jamais d'ellipse.
 4. Pas de `transform: scale()` global, pas de `zoom` (testé : coordonnées incohérentes dans Chromium entre
    `getBoundingClientRect` et `offsetLeft`, `100vh` réduit), pas d'attribut `popover`, pas d'ancrage CSS (iOS 16.4).
-5. Cibles tactiles : ≥ 24 px partout, ≥ 44 px pour les actions principales en tactile (zone agrandie sans agrandir le dessin).
+5. Cibles tactiles : ≥ 24 px partout (32 px en tactile), zone agrandie sans agrandir le dessin (`app/css/targets.css`). Une
+   zone agrandie ne doit jamais mordre sur un autre contrôle : la matrice le vérifie (`hitOverlaps`) et échoue sinon.
 
 ## 4. Ajouter un module
+
+### 4.1 Module de session (le cas courant) — modèle : `extension/lab-modules/demo/`
+
+Le module fictif du Lab est le gabarit exécutable (vérifié par `node test/responsive/lab-module.mjs`). Trois fichiers à
+lui, **aucune ligne** dans `app/lazy-views.js`, `app/styles.js` ou `app/panel.js` :
+
+| Fichier | Rôle | Chargé |
+|---|---|---|
+| `module.js` (entrée) | `registerSessionModule({ id, card, available, lazy: { load, styles }, onState? })` | au démarrage (le Hub a besoin de sa carte) |
+| `view.js` | `export function view(ctx) → { node, start?, destroy?, attached?, onState? }` | à la première ouverture (ou en arrière-plan après le Hub, sauf `prefetch: false`) |
+| `<module>.css` | classes préfixées, `calc(N * var(--g))`, `var(--fs-N)` | avec la vue, après les feuilles des modules (avant `targets.css`) |
+
+L'entrée s'importe à une seule place : la liste des modules de session en tête de `app/panel.js` (l'ordre d'import est
+l'ordre du Hub). Un module seulement pour le Lab va dans `extension/lab-modules/` : aucun paquet ne l'embarque
+(`package.mjs` le retire, `verify-package.mjs` le refuse) et il ne se charge que si le runtime l'autorise (Lab, banc) **et**
+que la page le demande (`?labModules=1`).
+
+Cycle de vie garanti par l'hôte (`app/panel.js`) :
+- **ouverture** : `view(ctx)` puis `start()` — une seule vue tant que le module est ouvert ;
+- **rafraîchissements de l'hôte** : la même vue est rattachée (`attached()`), son état reste ;
+- **nouvelle session pendant l'ouverture** : `onState(view, next, prev, ctx)` de l'entrée ; `true` = absorbé (pas de
+  redessin) — seulement tant que le module est encore proposé ;
+- **retour au Hub, ou module qui n'est plus proposé** (`available` → `false`) : `destroy()`, la vue sort du DOM, le Hub
+  se redessine sans sa carte. Le banc vérifie qu'aucun `setInterval` ne reste après le retour, pour chaque module.
+- `ctx` = `{ document, client, root, module, state, body, team, host: { home, refresh, payment, walletMethods,
+  restrictionChips } }`.
+
+### 4.2 Module du module host (`/modules/v3`, achat via `purchase.js`) — modèle : **Coffre mystère**
 
 Le modèle à suivre est **Coffre mystère** (`shared/coffre-mystere.js`, Lab ; son `setInterval` date d’avant le socle et passera sur `createPoller`) :
 
@@ -96,8 +125,8 @@ du Core en français (`errorLabel`), l'achat idempotent en deux temps (`purchase
 l'échelle et les planchers, le chargement à la demande.
 
 Pour le brancher en v2 : une entrée dans `app/lazy-views.js` (`mon_module: { styles: ['modules/mon-module/mon-module.css'],
-load: [() => import('../shared/mon-module.js')] }`) et sa place dans `V2_ORDER` (`app/styles.js`) ; l'import statique
-dans `shared/ui.js` seulement s'il doit aussi exister dans le shell legacy.
+load: [() => import('../shared/mon-module.js')] }`) ; une feuille hors de `V2_ORDER` se place d'elle-même après les feuilles
+des modules ; l'import statique dans `shared/ui.js` seulement s'il doit aussi exister dans le shell legacy.
 
 **Interdits** : recalculer un prix, un solde, un cooldown ou un résultat (le Core décide, la vue affiche) ; un
 `setInterval` à soi (utiliser `createPoller` / `everySecond` de `app/store.js` et tout arrêter dans `destroy`) ; une
@@ -115,7 +144,9 @@ multijoueur (Blackjack, spectateurs) demandera côté Core des sessions et une d
 | `node test/responsive/matrix.mjs [--shell v2] [--quick] [--shots]` | contrôles coupés, polices, cibles, sur la matrice du plan |
 | `node test/responsive/compare.mjs <a> <b>` | écart de pixels entre deux jeux de captures |
 | `node test/responsive/styles.mjs [--floors off]` | styles calculés legacy ↔ v2 |
-| `node test/responsive/requests.mjs [--shell v2]` | requêtes économiques identiques aux références V1 |
+| `npm run test:requests [-- --shell v2]` | 13 parcours d'achat et de modération contre un faux Core : requêtes identiques à la V1 figée (`reference/requests-v1.json`) |
+| `npm run test:lab-module` | module fictif : chargement à la demande, état, `destroy`, retrait ; aucun minuteur laissé par aucun module |
+| `npm run lab:compare` (ou double-clic sur `Comparer legacy et v2.cmd`) | les deux shells côte à côte, données fictives locales, port 4480 |
 | `node test/responsive/grey-screen.mjs [--shell v2]` | garde « écran gris » |
 | `node test/responsive/payload.mjs` | poids et temps jusqu'au Hub, par shell et surface |
 | `node scripts/dev/css-v2.mjs` | générateur des feuilles v2 (**une fois** : il écrase les sorties éditées à la main) |
