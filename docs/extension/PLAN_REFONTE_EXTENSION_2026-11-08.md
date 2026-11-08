@@ -135,9 +135,26 @@ Préfixe CSS du socle : `rx-` (absent du code actuel). Les modules **gardent leu
 
 - **Géométrie** `--kg = clamp(0.85, min(L/651, H/434), 1.15)` : espacements, rayons, tailles de cartes, d'icônes, de
   vignettes, hauteurs de rangées. Les traits de 1 px ne sont pas mis à l'échelle.
-- **Texte** `--kt = clamp(0.95, min(L/651, H/434), 1.10)` et planchers absolus : **aucun texte sous 10 px**, corps ≥ 12 px.
+- **Texte** `--kt = clamp(0.95, min(L/651, H/434), 1.10)` et **planchers absolus par rôle** (tableau ci-dessous).
   Raison : à 565×376 (le vrai 65 %), une échelle unique donnerait `0,866` et ramènerait les textes actuels de 9–11 px à
   7,8–9,5 px ; et un viewer qui zoome pour mieux lire verrait son zoom annulé. Le texte suit donc la composition de loin.
+
+| Rôle du texte                                    | Taille à 651 (`--kt` = 1)     | Plancher absolu | Règle supplémentaire                               |
+| ------------------------------------------------ | ----------------------------- | --------------- | -------------------------------------------------- |
+| Texte courant (descriptions, messages, listes)   | 13 px                         | 12 px           | interligne ≥ 1,35                                  |
+| Libellé de bouton                                | 13 px                         | 12 px           | gras 600                                           |
+| Bouton d'action principal (acheter, confirmer)   | 14 px                         | 13 px           | —                                                  |
+| Prix, solde, coût                                | 14 px                         | 13 px           | chiffres tabulaires, gras ≥ 600, jamais en mention |
+| Titres de vue, de carte                          | 15–18 px                      | 14 px           | —                                                  |
+| Mentions secondaires (aide, horodatage, détail)  | 11,5 px                       | 11 px           | contraste ≥ 4,5:1                                  |
+| Micro-étiquettes (compteurs, « Nouveau », puces) | 10,5 px                       | 10 px           | un ou deux mots, jamais une phrase                 |
+| Tactile (mobile)                                 | + 1 px sur courant et boutons | 13 px           | —                                                  |
+
+État actuel mesuré : sur 1 382 déclarations de taille, 368 sont sous 10 px et 347 entre 10 et 12 px. Une teinte
+secondaire de l'identité (`--rh-faint` `#7a6f93` sur `#160f27`) n'a qu'un contraste de 4,0:1 : à éclaircir d'un cran
+pour les mentions (la teinte reste la même famille). Tout texte qui grossit et ne tient plus : retour à la ligne ou
+libellé plus court, jamais `…` sur un prix ou un bouton.
+
 - Calcul en JS (un `ResizeObserver`) : le CSS ne sait pas encore diviser une longueur par une longueur de façon portable.
   Valeurs par défaut en CSS (`--kg: 1; --kt: 1`, profil normal) si le script échoue.
 - Hystérésis de ± 8 px sur les changements de profil (pas de clignotement pendant un redimensionnement).
@@ -244,20 +261,47 @@ tirage Tombola, tables D4, carrousel du Hub (`hub-carousel.js`, conservé tel qu
 
 ## 7. À reconstruire
 
-| Élément                                                            | Mesure qui le justifie                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fondation CSS `base.css` + `overlay.css` + `mobile.css` (≈ 978 Ko) | **Couverture mesurée le 08/11** (7 vues × 3 surfaces × 10 tailles, menus ouverts) : 5,0 %, 4,2 % et 2,2 % des octets servent. 2 414 + 1 839 + 1 619 `!important`. Les règles utiles sont réécrites sur les jetons dans la feuille de chaque module ; le reste disparaît au lot 6. |
-| Shell (`ui.js` `createModulePanel`)                                | reconstruction totale à chaque état, écouteurs jamais retirés, Hub et routage mêlés                                                                                                                                                                                               |
-| Entrées `overlay.js` / `mobile.js`                                 | même logique écrite deux fois (d'où le correctif « écran gris » à poser deux fois)                                                                                                                                                                                                |
-| Détection de surface et seuils                                     | 7 systèmes concurrents                                                                                                                                                                                                                                                            |
-| Chargement                                                         | **≈ 2,2 Mo** de JS + CSS non compressés et 54 modules chargés **avant** le Hub, sur chaque surface, dont `unicode-emojis.js` (Bonk seulement). Cible : ≤ 700 Ko pour afficher le Hub, le reste à la demande.                                                                      |
-| Toasts, dialogues, popovers, relevés, compteurs dupliqués          | § 4                                                                                                                                                                                                                                                                               |
-| Page de configuration                                              | parle encore de SAMMI ; appelle une route qui répond `not_available`                                                                                                                                                                                                              |
-| Emballage (`build.mjs`)                                            | produit un paquet branché sur l'ancien serveur (§ 9, lot 0)                                                                                                                                                                                                                       |
+| Élément                                                            | Mesure qui le justifie                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fondation CSS `base.css` + `overlay.css` + `mobile.css` (≈ 978 Ko) | **Couverture mesurée le 08/11** (7 vues × 3 surfaces × 10 tailles, menus ouverts) : seuls 5,0 %, 4,2 % et 2,2 % des octets sont rencontrés ; 69 %, 90 % et 91 % sont **prouvés morts** (§ 7.1). 2 414 + 1 839 + 1 619 `!important`. Les règles utiles sont réécrites sur les jetons dans la feuille de chaque module ; le reste disparaît au lot 6. |
+| Shell (`ui.js` `createModulePanel`)                                | reconstruction totale à chaque état, écouteurs jamais retirés, Hub et routage mêlés                                                                                                                                                                                                                                                                 |
+| Entrées `overlay.js` / `mobile.js`                                 | même logique écrite deux fois (d'où le correctif « écran gris » à poser deux fois)                                                                                                                                                                                                                                                                  |
+| Détection de surface et seuils                                     | 7 systèmes concurrents                                                                                                                                                                                                                                                                                                                              |
+| Chargement                                                         | **≈ 2,2 Mo** de JS + CSS non compressés et 54 modules chargés **avant** le Hub, sur chaque surface, dont `unicode-emojis.js` (Bonk seulement). Cible : ≤ 700 Ko pour afficher le Hub, le reste à la demande.                                                                                                                                        |
+| Toasts, dialogues, popovers, relevés, compteurs dupliqués          | § 4                                                                                                                                                                                                                                                                                                                                                 |
+| Page de configuration                                              | parle encore de SAMMI ; appelle une route qui répond `not_available`                                                                                                                                                                                                                                                                                |
+| Emballage (`build.mjs`)                                            | produit un paquet branché sur l'ancien serveur (§ 9, lot 0)                                                                                                                                                                                                                                                                                         |
 
 **Retiré au lot 6 seulement, sur ton accord** : TTS V1, Tombola V1, Modération V1 (inatteignables sur le Core actuel,
 sauf TTS V1 si le Core ne lit pas sa configuration), tiroir et dock de l'ancien overlay, règles `.jdm-*` mortes,
-traçage `timeout-debug` actif par défaut, interface de restrictions (le Core de Production n'envoie pas `restrictions`).
+interface de restrictions (le Core de Production n'envoie pas `restrictions`). Le traçage `timeout-debug` est déjà
+éteint en Production (actif seulement si l'identifiant de build contient `timeout-debug`) : il reste comme outil de
+diagnostic.
+
+### 7.1 CSS mort ou seulement non rencontré : méthode conservatrice
+
+Deux mesures, à ne pas confondre :
+
+| Fichier       | Non rencontré dans les scénarios (couverture) | **Prouvé mort** (aucune de ses classes n'existe dans le JS/HTML, préfixes dynamiques comptés vivants) | Vivant mais non rencontré (états rares) |
+| ------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `base.css`    | 95,0 %                                        | 69 %                                                                                                  | ≈ 26 %                                  |
+| `overlay.css` | 95,8 %                                        | 90 %                                                                                                  | ≈ 6 %                                   |
+| `mobile.css`  | 97,8 %                                        | 91 %                                                                                                  | ≈ 7 %                                   |
+
+La colonne « vivant mais non rencontré » contient précisément les états rares : erreurs, cooldowns, pause, file pleine,
+remboursement, rôles de modération, thèmes Halloween et hiver, tutoriel, notifications, survol et focus.
+
+Règles :
+
+1. **On ne supprime jamais une règle sur la foi de la couverture.** Aucune suppression règle par règle avant le lot 6.
+2. Pendant la migration, la feuille d'une vue reprend **toutes** les règles vivantes qui la ciblent, rencontrées ou non
+   (recherche par classe, pas par couverture), y compris états, survol, focus, `@keyframes`, `prefers-reduced-motion`.
+3. Catalogue d'états par vue (lot 0) : chaque état listé est capturé avant et après migration, dans les rôles viewer,
+   modérateur, supermod et diffuseur. Les `@keyframes` sont conservées tant que leur nom figure dans le code.
+4. Contrôle par vue : avec et sans les feuilles legacy chargées, les styles calculés des éléments de la vue sont
+   identiques dans chaque état du catalogue. Une différence = une règle oubliée, ajoutée à la feuille de la vue.
+5. Les feuilles legacy restent dans le zip (shell legacy) jusqu'au lot 6 ; elles sont retirées **en bloc**, quand plus
+   aucune vue ne les charge, avec la liste des règles « prouvées mortes » jointe au rapport.
 
 ---
 
@@ -421,7 +465,7 @@ garde un retour arrière tant que la nouvelle version n'a pas fait ses preuves.
 | --- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | V1  | À 651×434, chaque vue a la composition de la référence : mêmes zones, même ordre, mêmes composants, mêmes animations           | écart de pixels sur zones fixes ≤ bruit de la référence (zones animées masquées) + page côte à côte validée par toi |
 | V2  | À 565×376, c'est la composition 651 réduite : rapport des boîtes principales = 0,87 ± 3 %                                      | banc de mesure                                                                                                      |
-| V3  | Aucun texte < 10 px, corps ≥ 12 px, quel que soit le profil                                                                    | taille calculée de chaque texte visible                                                                             |
+| V3  | Planchers de texte par rôle du § 3.1 et contraste ≥ 4,5:1, quel que soit le profil                                             | taille calculée de chaque texte visible                                                                             |
 | V4  | Aucun élément d'action coupé par un ancêtre `overflow` ; action principale visible sans défilement en normal, compact et large | `audit.mjs` sur la matrice complète                                                                                 |
 | V5  | Aucun défilement horizontal ; défilement de la racine seulement en dernier recours                                             | banc                                                                                                                |
 | V6  | Cibles ≥ 24 px partout ; ≥ 44 px pour les actions principales en tactile                                                       | banc                                                                                                                |
@@ -430,15 +474,15 @@ garde un retour arrière tant que la nouvelle version n'a pas fait ses preuves.
 
 ### Fonctionnels
 
-| #   | Critère                                                                                                                                       |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| F1  | Les E2E Studio qui touchent l'extension (17 fichiers) passent avec les deux shells                                                            |
-| F2  | Chaque action payante ou de modération émet **la même requête** que sa requête de référence (chemin, corps, clé d'idempotence par intention)  |
-| F3  | Clés `localStorage` conservées : favoris, ordre, alias, volume, notifications                                                                 |
-| F4  | Une vue quittée n'émet plus aucune requête et ne laisse aucun minuteur (compte des intervalles actifs)                                        |
-| F5  | Conformité Twitch vérifiée par test : helper en premier, aucun script inline, aucune ressource externe hors liste, CSP stricte du Lab         |
-| F6  | Garde « écran gris » et erreurs récupérables sur chaque surface                                                                               |
-| P1  | Performance : ≤ 700 Ko non compressés pour afficher le Hub (≈ 2,2 Mo aujourd'hui), un seul `ResizeObserver`, aucune mesure en boucle de rendu |
+| #   | Critère                                                                                                                                                                                                                                                                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | Les E2E Studio qui touchent l'extension (17 fichiers) passent avec les deux shells                                                                                                                                                                                                                                                                            |
+| F2  | Chaque action payante ou de modération émet **la même requête** que sa requête de référence (chemin, corps, clé d'idempotence par intention)                                                                                                                                                                                                                  |
+| F3  | Clés `localStorage` conservées : favoris, ordre, alias, volume, notifications                                                                                                                                                                                                                                                                                 |
+| F4  | Une vue quittée n'émet plus aucune requête et ne laisse aucun minuteur (compte des intervalles actifs)                                                                                                                                                                                                                                                        |
+| F5  | Conformité Twitch vérifiée par test : helper en premier, aucun script inline, aucune ressource externe hors liste, CSP stricte du Lab                                                                                                                                                                                                                         |
+| F6  | Garde « écran gris » et erreurs récupérables sur chaque surface                                                                                                                                                                                                                                                                                               |
+| P1  | Performance (**objectif, pas contrainte**) : viser ≤ 700 Ko non compressés pour afficher le Hub (≈ 2,2 Mo aujourd'hui), un seul `ResizeObserver`, aucune mesure en boucle de rendu. Mesuré et rapporté à chaque lot ; jamais une raison de retirer une fonction, une animation, un asset visible ou un état. S'il n'est pas atteint, je le dis et tu décides. |
 
 « Validé » = testé par toi. Les tests automatiques sont des preuves, jamais une validation.
 
@@ -482,19 +526,47 @@ Pendant le développement : tests ciblés ; suites globales avant livraison (rè
 Retour arrière pendant le développement : abandonner la branche du lot ; après fusion : shell legacy par défaut ; après
 bascule : option de shell, interrupteur ou version précédente.
 
+### 12.1 Écarts entre `main` et la version publiée
+
+**Version publiée : présumée `0bf7907` (22/10), non prouvée.** Preuve à faire au lot 0, sans rien modifier : sur
+twitch.tv/raptoru_, outils du navigateur (F12) › Sources › domaine `<client-id>.ext-twitch.tv` › `shared/runtime-config.js`
+→ `buildId: "production-<commit>-<date>"`. Si c'est le zip Halloween `f1c9a7d`, l'écart est de 35 commits au lieu de 44.
+
+44 commits touchent `extension/` entre `0bf7907` et `main` (73 fichiers, +7 116 / −4 927 lignes) :
+
+| Famille                                                                  | Commits                                                                                                                                                                                                      | Ce que verrait un viewer                                                                                                                               | Ce qui l'active                                                                     | Risque à la publication                                                                                                                                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Réorganisation du code** (vues sorties de `ui.js`)                     | 20 : `8a2f113` `50e8601` `602401a` `2d9f7b2` `480ee5c` `295e59c` `7cc951b` `208791e` `c960894` `725df10` `d3e564a` `9c45e91` `d163944` `ae85b0c` `9a2c504` `dccec77` `6e0e4ae` `2ad1bb1` `b27da6e` `9443ac1` | Rien de nouveau en principe ; ~12 défauts corrigés au passage (écran vide des modérateurs, volume Soundboard, souris, Bonk, « Voir tous les modules ») | toujours actif                                                                      | **Élevé** : touche TTS, Tombola, Soundboard, Bonk, D4 et porte-monnaie pour tous les viewers. Prouvé par E2E en Lab, **jamais recetté par toi côté viewer** (à ma connaissance) |
+| **Halloween / Événements / Titres**                                      | 12 : `a126492` `d27a741` `b0884a8` `ffe8184` `c2c5b46` `bce49e9` `63c17a9` `2f322bf` `b13d46f` `c0e3b28` `ab0560f` `473ad0b`                                                                                 | le module « Événements » (boutique Bonbons, Titres) ; règles D4 sur les achats pour les modérateurs                                                    | le Core (`event_shop.enabled`) : **fermé aujourd'hui** ; les règles D4 sont actives | Moyen : invisible tant que l'événement est fermé ; code présent dans le zip                                                                                                     |
+| **Socle des modules** (hôte, achat par intention, D4 « Autres modules ») | 6 : `8a2d862` `8ef2912` `dbb1798` `77e614d` `104acb7` `7a907dd`                                                                                                                                              | rien pour les viewers ; une section « Autres modules » vide pour l'équipe                                                                              | le Core : aucun module du socle visible en Production (Coffre réservé au Lab)       | Faible                                                                                                                                                                          |
+| **Règles économiques côté affichage**                                    | 3 : `f9e9724` (H1, achats seulement pendant le live), `9e1e3fa` (Créditer/Débiter D4 en une écriture), `e944670` (H15, préférence Level Up masquée)                                                          | messages « hors live » ; changement du geste Créditer/Débiter des modérateurs ; une préférence disparaît                                               | toujours actif ; le Core applique déjà ces règles                                   | Moyen : cohérent avec le Core de Production, mais nouveaux textes et nouveau geste à recetter                                                                                   |
+| **Roue du Sub V2**                                                       | 2 : `4848b5f` `05e19a4`                                                                                                                                                                                      | rien                                                                                                                                                   | le Core : `sub_wheel` réservé au Lab                                                | Faible                                                                                                                                                                          |
+| **Garde d'emballage**                                                    | 1 : `423623c`                                                                                                                                                                                                | rien                                                                                                                                                   | —                                                                                   | Nul (outil)                                                                                                                                                                     |
+
+**Empêcher une publication accidentelle** (protections techniques du lot 0, en plus du fait que seul toi peux téléverser
+et soumettre dans la console) :
+
+1. Fichier `apps/twitch-extension/PUBLISHED` : le commit réellement servi, relevé comme ci-dessus.
+2. L'emballage de Production calcule la liste des commits entre `PUBLISHED` et la source, et **refuse** de produire le zip
+   sans un inventaire `release/INVENTAIRE-<commit>.md` qui liste **exactement** ces commits et porte la mention de ta
+   validation. Un commit ajouté après l'inventaire, ou retiré, fait échouer l'emballage.
+3. Le zip embarque l'inventaire et le manifeste ; `verify:package` les affiche avant tout téléversement.
+4. Le nom du zip dit ce qu'il contient : `raptoru-live-PRODUCTION-<commit>-depuis-<publié>-<n>-commits.zip`.
+5. Après approbation par Twitch, `PUBLISHED` est mis à jour dans le même commit que la note de version.
+
 ---
 
 ## 13. Décisions qui te reviennent
 
-1. **Publication du lot 1** : (a) depuis `main`, recommandé : les correctifs partent avec tout le travail déjà fait depuis
-   le 22/10, après un Hosted Test complet ; (b) branche correctrice partant de la version publiée : risque minimal, mais
-   les correctifs sont à refaire et le travail non publié attend la refonte.
-2. **Planchers de texte** : `--kt` ≥ 0,95, aucun texte sous 10 px, corps ≥ 12 px. Certains textes du Hub (8,5–9 px
-   aujourd'hui) grossiront un peu. À trancher sur captures au lot 2.
+1. **Publication du lot 1** : (a) depuis `main` : les correctifs partent avec les 44 commits, après inventaire validé et
+   Hosted Test de toute l'extension ; (b) **recommandé** : branche correctrice partant du commit réellement publié, qui
+   ne contient que les 6 correctifs ; les 44 commits partiront avec la refonte, dont le Hosted Test complet (lot 5) les
+   couvre ; (c) aucune publication avant la refonte.
+2. **Planchers de texte** : tableau du § 3.1, jugé sur captures au lot 2.
 3. **Interrupteur de retour arrière sans review** : le service de configuration de Twitch (segment diffuseur, écrit depuis
    la page de configuration de l'extension) choisirait le shell à distance, sans changer le Core. Il doit être activé dans
    la version soumise (à vérifier en console). Alternative : un champ du Core, mais c'est un changement de Core.
-4. **Retraits du lot 6** : vues V1, tiroir/dock de l'overlay, interface de restrictions, traçage `timeout-debug`.
+4. **Retraits du lot 6** : vues V1, tiroir/dock de l'overlay, interface de restrictions.
 5. **`expected_price` sur les achats historiques** (TTS, Soundboard, Bonk, Événements) : un chantier Core séparé, après la
    refonte, ou jamais.
 6. **Sauvegarde `99157a3`** : un bundle hors Git suffit-il, ou faut-il aussi pousser la branche de sauvegarde sur GitHub ?
