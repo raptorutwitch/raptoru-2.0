@@ -568,6 +568,8 @@ export function createClient({
     }),
     /** Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests from the extension — Core decides everything. */
     musicState: () => call('GET', '/music/state'),
+    /** « Musiques de la soirée »: 20 per page, `before` = the previous page's `next`. */
+    musicHistory: (before = null) => call('GET', `/music/history${before ? `?before=${encodeURIComponent(before)}` : ''}`),
     musicSearch: (query) => call('POST', '/music/search', { body: { query } }),
     musicSearchResult: (id) => call('GET', `/music/search/${encodeURIComponent(id)}`),
     /** One key per intent (chosen by the view, reused on a retry): a request is never paid twice. */

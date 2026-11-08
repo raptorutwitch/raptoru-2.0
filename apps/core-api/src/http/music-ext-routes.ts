@@ -38,6 +38,10 @@ const StateQuery = z.strictObject({
   /** The JWT's role (Core computes the grade: a supermod is a moderator named in lab_staff). */
   role: z.enum(['viewer', 'moderator', 'broadcaster']).optional(),
 });
+const HistoryQuery = z.strictObject({
+  viewer_id: Id.nullable(),
+  before: z.iso.datetime({ offset: true }).nullable(),
+});
 const SearchQuery = z.strictObject({
   viewer_id: Id,
   query: z.string().max(200),
@@ -101,6 +105,16 @@ export function musicExtRoutes(spotify: SpotifyService): Route[] {
             b.team,
             b.role,
           );
+        }),
+    },
+    {
+      method: 'POST',
+      pattern: at(`/${ch}/history`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const b = parse(HistoryQuery, body);
+          return spotify.extensionHistory(params[0]!, b.viewer_id, b.before);
         }),
     },
     {

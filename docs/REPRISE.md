@@ -87,14 +87,10 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
     [studio-refonte/AUDIT_FONCTIONNEL.md](studio-refonte/AUDIT_FONCTIONNEL.md). Arbitrages H1-H16 à trancher par Antoni.
 - **En cours (GO du 08/11) : Music Hub** — module « Musique » de l'extension sur la file Spotify V2 existante, payé en
   Jetons. Branche locale `feat/music-hub`, worktree `Raptoru 2.0 - Worktrees\music-hub`. Lab seulement, non validé.
-  Deuxième passe V2 (retour du 08/11) livrée : recherche en tête, supermods, retrait pendant l'ajout, overlay OBS et
-  Dock. Lancement : `Ouvrir Music Hub (Lab).cmd` à la racine du worktree. Design Lab (08/11) : cinq directions à
-  comparer dans `prototypes/music-hub/` (attente du choix d'Antoni avant intégration).
-  **Reprise : [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md)** (tests, lancement Lab, conformité Spotify et
-  programme DJ à arbitrer § 10 et 12).
-
-## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
-
+  Design final (« une seule liste » : rideau de recherche, bandeau prix / demandes / délai, « en cours » en tête,
+  notifications, « Musiques de la soirée » réelles) **intégré dans le vrai module**, tests verts. Lancement :
+  `Ouvrir Music Hub (Lab).cmd` à la racine du worktree. Prochaine étape : test à la main par Antoni.
+  État et reprise : `docs/music/MUSIC_HUB_STATE.md` § 0.
 - Profil d'alertes Halloween `halloween_alerts` : **encore actif** le 02/11, à couper sur GO d'Antoni.
 - Un achat Halloween d’un viewer (125 Jetons, non remboursé) attend une décision d’Antoni ; le détail est conservé hors du dépôt public.
 - PRs ouvertes du dépôt Raptoru 2.0 au 04/11 : #54 (titres équipés depuis Studio ; commit local `5d24614` non poussé),

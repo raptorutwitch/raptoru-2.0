@@ -1,52 +1,46 @@
-# Music Hub — état (08/11/2026, deuxième passe « V2 »)
+# Music Hub — état (08/11/2026, design final intégré en Lab)
 
 > Branche `feat/music-hub` (worktree `Raptoru 2.0 - Worktrees\music-hub`, partie de `feat/extension-next` 2f45ac1).
 > **Lab uniquement.** Rien n'est poussé, fusionné, déployé ni publié. Non validé par Antoni.
-> V1 : commits 626d353 → 2722108. V2 (retour du 08/11) : 006cfac, c9e88a8, 5860b81 et la doc.
+> V1 : commits 626d353 → 2722108. V2 : 006cfac, c9e88a8, 5860b81. Design final intégré : voir `git log`.
 
-## 0. Où reprendre (08/11, après le Design Lab)
+## 0. Où reprendre
 
-- **F3 « compacte »** (F2 validée dans son principe, puis optimisée en hauteur) : `prototypes/music-hub/f3-hybride.html`,
-  ouverte par défaut dans le comparateur (mode « F2 ↔ F3 »). **À valider avant intégration.** Même file, même rideau,
-  mêmes interactions que F2 ; champ bas au repos (36 px, 42 au focus sans rien pousser) ; économie et libellé de la file
-  sur une ligne ; « en cours » = widget accroché au bord inférieur droit (languette du panneau), **ouvert par
-  défaut** (miniature, titre, artiste · @pseudo pour une demande, point vert qui pulse et petites barres en lecture,
-  immobile en pause, « Aucune musique » si rien ne joue), replié en petit bloc au clic. Ancienne pastille flottante :
-  `f3-pastille-flottante.html`. Titres entièrement visibles (F2 → F3) : 565 × 376 3 → 4 ; 651 × 434
-  4 → 5 ; 521 × 347 3 → 4 ; panel court 2 → 3 ; panel 5 → 6 ; paysage 3 → 4. L'intégration suivra F3 (même plan
-  que pour F2 ci-dessous).
-
-- **F2 « finale »** (retour d'Antoni sur F) : `prototypes/music-hub/f2-hybride.html`, ouverte par défaut dans le
-  comparateur (mode « F ↔ F2 » pour comparer). **À valider par Antoni avant toute intégration.** La file est le module ;
-  le catalogue descend en rideau par-dessus ; économie en mots ; mini-player flottant dépliable ; « Musiques de la
-  soirée » (simulée) derrière l'horloge. Faisabilité de l'historique complet : [HISTORIQUE_SOIREE.md](HISTORIQUE_SOIREE.md).
-- **Après validation de F2** : réécrire `apps/twitch-extension/extension/modules/music/view.js` et `music.css` selon F2
-  (mêmes appels `client.music*`, mêmes droits `st.can`, aucun changement Core/Studio) ; historique = demandes de la
-  soirée (données existantes) ; garder verts `test:music-stability`, `music-hub.e2e.ts`, la matrice responsive (ajouter
-  521 × 347 et le panel court), et transformer les contrôles de F2 (rideau, Échap, clic extérieur, focus) en tests.
-
-- **Direction F « Hybride » (A + B + E)**, issue du retour d'Antoni sur les cinq maquettes :
-  `prototypes/music-hub/f-hybride.html`, première du comparateur. **À valider par Antoni avant toute intégration.**
-  Recherche en haut, résultats et demande de E (barre courte), « À suivre » numéroté de B (colonne repliable, tiroir
-  en étroit, playlist quand rien n'est tapé), bande « En cours » en bas dépliée sur place, un seul historique
-  « Derniers titres passés » (panneau interne + Retour), retrait par poubelle avec confirmation par-dessus le module.
-- **Historique, limite des données** : Spotify V2 garde les demandes (`spotify_requests`, avec leur début de lecture)
-  et seulement l'instantané de ce qui joue (`spotify_studio.playback`). Les musiques personnelles du streamer ne sont
-  enregistrées nulle part : « Derniers titres passés » montre les **demandes** jouées ou passées, pas les autres
-  titres. Les garder demanderait un changement Core/Studio (hors de cette mission).
-- **Sauvegarde du Design Lab** (prototypes jamais versionnés) : `Documents\Sauvegarde Raptoru 2.0\music-hub-design-lab-2026-11-08\` (archive vérifiée à l'extraction, SHA-256 dans `LISEZMOI.txt`).
-
-- **Design en cours de choix** : cinq directions comparables dans `prototypes/music-hub/` (double-clic
-  `Ouvrir le comparateur Music Hub.cmd`). Recommandation : **D — Raptoru Néon** (voir son README et le comparateur).
-  Ce dossier est local (exclu de git par `.git/info/exclude`, comme tous les prototypes) : il vit dans le worktree.
-  **Rien n'est intégré** : le module V2 actuel reste la référence fonctionnelle jusqu'au choix d'Antoni.
-- **Prochaine mission** : intégrer la direction retenue dans `apps/twitch-extension/extension/modules/music/`
-  (`view.js`, `music.css`) sans toucher Core, Spotify V2, Jetons ni droits ; garder `test:music-stability`, l'E2E
-  `music-hub.e2e.ts` et la matrice responsive verts.
-- **Corrigé le 08/11** (commit fa09c88) : « Historique » qui se refermait et focus perdu à chaque relevé (4 s) —
-  une zone n'est redessinée que si elle change, le focus revient au même contrôle. Le saut de la file après un retrait
-  observé pendant l'enquête venait de l'outil de test (défilement pour cliquer), pas du module.
-- **Catalogue Spotify** : faisabilité et autorisations dans [SPOTIFY_CATALOGUE.md](SPOTIFY_CATALOGUE.md).
+- **Design final intégré dans le vrai module** (retour du 08/11 « une seule liste musicale ») :
+  `apps/twitch-extension/extension/modules/music/view.js` + `music.css`. Référence visuelle : prototype
+  `prototypes/music-hub/f3-hybride.html` (« F3 finale »). À tester par Antoni : `Ouvrir Music Hub (Lab).cmd`.
+  - Champ compact ; en tapant, un **rideau** de résultats descend par-dessus la liste (version exacte, barre
+    « Demander · ◆ prix », Échap replie et garde la saisie, défilement indépendant, flèches).
+  - **Bandeau** : prix · demandes disponibles (`n / max`) · délai quand il court. Survol = halo ; clic ou Entrée =
+    courte explication **des règles de Core** (quota = demandes en cours d'ajout + en file ; délai compté depuis
+    l'ajout de la dernière demande, même retirée ensuite), contenue dans le module.
+  - **Une seule liste** : « EN COURS » (halo vert, égaliseur) ou « EN PAUSE » = ce que le lecteur **confirme**
+    (`now_playing`), demandeur seulement pour une demande ; sinon la 1re demande porte « PROCHAINE MUSIQUE » ;
+    file vide + musique = « Rien d'autre en file » ; rien du tout = état vide. Plus de widget flottant.
+  - Retrait : poubelle → confirmation (« Conserver » / « Retirer », texte selon en file / en cours d'ajout) →
+    remboursement une fois (Core). Modération : menu « … » (avec / sans remboursement). Supermods : lecteur derrière
+    l'icône de la ligne « en cours » (pause, passer, volume ; Core vérifie `music.player`).
+  - **Notifications** (centre existant via `host.notify`, id stable `music:<demande>:<état>`, jamais en double) :
+    retirée par la modération, retirée de la file, non ajoutée (+ remboursement) ; « Pendant ton absence » si c'est
+    arrivé avant l'ouverture. Retours d'action en direct (ajoutée à la file, ta musique passe, refus, délai, erreur
+    de recherche / lecteur) dans le toast du module.
+  - **Musiques de la soirée** (horloge) : données réelles de Core, nouvelle route Lab
+    `GET /v1/ext/music/history?before=` → `extensionHistory` (demandes PLAYED / SKIPPED depuis le début du live,
+    sinon 12 h, 20 par page). La musique du streamer n'est pas listée (jamais enregistrée).
+  - Relectures : l'état toutes les 4 s comme avant, plus **une** relecture seulement quand le résumé musique de la
+    session change (avant : une à chaque rafraîchissement de l'hôte) ; l'historique seulement quand on l'ouvre.
+- **Ajouts Core (Lab, additifs)** : `me.history[].ended_at` / `reason` ; `extensionHistory` + route
+  `/v1/lab/spotify-ext/{ch}/history`. Aucune règle de file, de quota, de délai ni de remboursement modifiée.
+- **Tests** : Core 1430 ; extension 127 + `test:music-stability` (stabilité, rideau, bandeau, historique,
+  318 → 651 px) + `test:requests` identique ; E2E `music-hub.e2e.ts` réécrit sur le vrai Lab (demande, retrait
+  confirmé et remboursé, délai, lien, modération notifiée une fois, pause, transition, historique, relectures).
+- **Non couvert par un test UI réel** : retrait **pendant l'ajout** (trop rapide pour le simulateur : couvert par les
+  tests Core et la calibration) ; « rien en lecture » sur le vrai Lab (le simulateur joue toujours : couvert par le
+  prototype et les tests de calibration).
+- **Connexion Spotify réelle** : procédure préparée, rien d'activé — [SPOTIFY_CATALOGUE.md](SPOTIFY_CATALOGUE.md) § 5.
+- **Design Lab** (prototypes locaux, jamais versionnés) : comparateur `prototypes/music-hub/index.html` ; versions
+  précédentes conservées (`f3-widget-accroche.html`, `f3-pastille-flottante.html`, F2, F, A–E). Sauvegarde :
+  `Documents\Sauvegarde Raptoru 2.0\music-hub-design-lab-2026-11-08\` (SHA-256 dans `LISEZMOI.txt`).
 
 ## 1. En une phrase
 

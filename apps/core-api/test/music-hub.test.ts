@@ -831,3 +831,93 @@ describe('Music Hub V2 — the OBS Dock', () => {
     });
   });
 });
+
+describe('Music Hub final — « Musiques de la soirée » and the end of a request', () => {
+  const track = (n: number) => ({
+    id: ID(n),
+    uri: `spotify:track:${ID(n)}`,
+    title: `Titre de ${ID(n)}`,
+    artists: ['Artiste'],
+    duration_ms: 200_000,
+  });
+  const at = (
+    h: Awaited<ReturnType<typeof hub>>,
+    t: ReturnType<typeof track> | null,
+    progress = 1_000,
+  ) =>
+    h.sync({
+      observed_at: h.core.clock.now().toISOString(),
+      track: t,
+      progress_ms: t ? progress : null,
+      is_playing: true,
+    });
+
+  it('only the requests that really played, newest first, 20 per page, « toi » for the caller; nothing older than 12 h without a live', async () => {
+    const h = await hub();
+    await h.spotify.saveSettings(CH, { viewer_cooldown_seconds: 0 }, 'test');
+    await h.fund(viewer(1), 100_000);
+    await h.fund(viewer(2), 100_000);
+    for (let n = 1; n <= 22; n++) {
+      // One at a time (the per-viewer limit): asked, added, played to its end.
+      await h.search(n % 2 ? viewer(1) : viewer(2), `titre ${n}`);
+      await h.answerSearches([item(n)]);
+      await h.ask(n % 2 ? viewer(1) : viewer(2), n);
+      await h.runRequests();
+      await at(h, track(n), 1_000);
+      h.core.clock.set(new Date(h.core.clock.now().getTime() + 200_000));
+      await at(h, track(n), 198_000);
+    }
+    await at(h, null);
+    const first = await h.spotify.extensionHistory(CH, viewer(1).id, null);
+    expect(first.items).toHaveLength(20);
+    expect(first.items[0]).toMatchObject({
+      title: `Titre de ${ID(22)}`,
+      own: false,
+      requested_by: 'Fan2',
+      state: 'PLAYED',
+    });
+    expect(first.items[1]).toMatchObject({
+      title: `Titre de ${ID(21)}`,
+      own: true,
+    });
+    expect(first.next).toBe(first.items[19]!.at);
+    const second = await h.spotify.extensionHistory(CH, null, first.next);
+    expect(second.items.map((i) => i.title)).toEqual([
+      `Titre de ${ID(2)}`,
+      `Titre de ${ID(1)}`,
+    ]);
+    expect(second.items.every((i) => !i.own)).toBe(true); // anonymous: no « toi »
+    expect(second.next).toBeNull();
+    h.core.clock.set(new Date(h.core.clock.now().getTime() + 13 * 3_600_000));
+    expect(
+      (await h.spotify.extensionHistory(CH, null, null)).items,
+    ).toHaveLength(0);
+  });
+
+  it("a request's end (withdrawn, removed) carries when and why: the extension tells it once", async () => {
+    const h = await hub();
+    await h.fund(viewer(1), 1_000);
+    await h.search(viewer(1), 'titre');
+    await h.answerSearches([item(1)]);
+    const { request } = await h.ask(viewer(1), 1);
+    await h.runRequests();
+    await h.spotify.extensionModerate(
+      CH,
+      MOD,
+      { action: 'remove', request_id: request.request_id, refund: true },
+      randomUUID(),
+    );
+    const st = await h.spotify.extensionState(
+      CH,
+      { id: viewer(1).id, login: 'fan1' },
+      false,
+    );
+    expect(st.me!.history[0]).toMatchObject({
+      request_id: request.request_id,
+      state: 'REMOVED_BY_MOD',
+      refunded: true,
+      ended_at: h.core.clock.now().toISOString(),
+    });
+    expect(typeof st.me!.history[0]!.reason).toBe('string');
+  });
+});

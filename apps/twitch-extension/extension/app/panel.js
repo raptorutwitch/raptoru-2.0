@@ -308,6 +308,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           title: title ?? `Action ${mod?.id} échouée`,
           actionModule: mod?.id,
         })),
+        /** Any notice of this module in the notification centre (a stable `id` / `dedupe_key` never duplicates). */
+        notify: (notification) => publishRuntimeNotification({ module: mod?.id, ...notification }),
       },
     };
   }

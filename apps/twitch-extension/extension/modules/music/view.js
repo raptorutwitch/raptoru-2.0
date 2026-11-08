@@ -1,9 +1,12 @@
 // Music Hub (docs/music/MUSIC_HUB_STATE.md) — the view of the extension's music module (shell v2, loaded on opening).
-// V2 (retour du 08/11): the SEARCH is the centre — a catalogue list as you type (or a pasted Spotify link), pick the
-// exact version, confirm the price. Then the queue with « tes demandes » first (withdrawn at once, even while being
-// added), a slim « en cours » strip at the bottom, and the stream's player in a separate panel for supermods only.
+// FINAL design (Design Lab F3 finale, 08/11: « une seule liste musicale »): a compact field that drops a CURTAIN of
+// results over the list while typing (exact version, Jetons confirmation), an economics band (price · requests left ·
+// delay) whose sections explain themselves on a click, then ONE list: the track the player CONFIRMS first (« EN COURS »
+// / « EN PAUSE »; nothing invented — when the player confirms nothing, the first request is « PROCHAINE MUSIQUE »),
+// then the queue (yours withdrawable with a confirmation). The supermods' player sits behind a small icon of the
+// « en cours » row; « Musiques de la soirée » behind the clock (real played requests only, paginated by Core).
 // The view decides nothing: prices, limits, rights, refusals, refunds and the player's state are Core's (and Studio's),
-// shown as they are — never assumed. Every action of the team is checked again by Core (a hidden button is not a right).
+// shown as they are. Every team action is checked again by Core (a hidden button is not a right).
 import { newIdempotencyKey } from '../../shared/api.js';
 import { createPoller, everySecond } from '../../app/store.js';
 
@@ -14,25 +17,28 @@ const dur = (ms) => {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
-const wait = (ms) => {
-  if (ms === null || ms === undefined) return '';
-  const min = Math.round(ms / 60000);
-  return min < 1 ? 'tout de suite' : `dans ~${min} min`;
-};
+const hhmm = (iso) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** A pasted link or URI (the Core resolves it with the reward's own rules: a track, or refused). */
 const LINK = /^(?:spotify:|https?:\/\/|www\.|open\.spotify\.com\/)/i;
-const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
-const NOTE = icon('<path d="M9 17.5V6.5l10-2v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.6" fill="currentColor"/><circle cx="16.6" cy="15.6" r="2.6" fill="currentColor"/>');
-const LENS = icon('<circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15 15 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>');
-const PLUS = icon('<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>');
-const CLEAR = icon('<path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>');
-const LINKI = icon('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>');
-const SLIDERS = icon('<path d="M5 7h9M18 7h1M5 17h3M12 17h7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="1.9"/>');
-const DOTS = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1.6" fill="currentColor"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><circle cx="13" cy="8" r="1.6" fill="currentColor"/></svg>';
-const PAUSE = icon('<rect x="7" y="5" width="3.6" height="14" rx="1" fill="currentColor"/><rect x="13.4" y="5" width="3.6" height="14" rx="1" fill="currentColor"/>');
-const PLAY = icon('<path d="M8 5.5v13l11-6.5z" fill="currentColor"/>');
-const NEXT = icon('<path d="M6 5.5v13l9-6.5zM16.5 5.5h2.5v13h-2.5z" fill="currentColor"/>');
+const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const I = {
+  search: svg('<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>'),
+  plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  check: svg('<path d="m5 12.5 4.5 4.5L19 7.5"/>'),
+  x: svg('<path d="m6 6 12 12M18 6 6 18"/>'),
+  trash: svg('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/>'),
+  note: svg('<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>'),
+  play: svg('<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>'),
+  pause: svg('<rect x="6.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none"/>'),
+  next: svg('<path d="M6 5.5v13l9-6.5z" fill="currentColor" stroke="none"/><path d="M18 5.5v13"/>'),
+  left: svg('<path d="m15 6-6 6 6 6"/>'),
+  clock: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  dots: svg('<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>'),
+  sliders: svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
+  history: svg('<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5"/><path d="M4 4v4.5h4.5M12 8v4l3 2"/>'),
+};
+const EQ = '<span class="mh-eqs" aria-hidden="true"><i></i><i></i><i></i></span>';
 
 /** Core's refusal codes, in words (the details — cooldown, balance, limit — come from Core). */
 function refusal(e, st) {
@@ -66,55 +72,64 @@ function refusal(e, st) {
   }
 }
 
-const STATE_WORD = {
-  RECEIVED: 'Ajout en cours…', SEARCHING: 'Ajout en cours…', PLAYING: 'En cours', UNKNOWN: 'À vérifier par l’équipe',
-};
-const ENDED = {
-  PLAYED: 'Jouée', SKIPPED: 'Passée', CANCELED: 'Retirée', REMOVED_BY_MOD: 'Retirée par l’équipe', FAILED: 'Échec',
-  TOO_LONG: 'Trop longue', AMBIGUOUS: 'Titre introuvable', VIEWER_LIMIT: 'Refusée (limite)', VIEWER_COOLDOWN: 'Refusée (délai)',
-};
+/** How one of YOUR requests left the queue, in words — or null when there is nothing to tell (played, your own withdrawal). */
+function ending(h) {
+  const t = h.title ? `« ${h.title} »` : 'Ta demande';
+  const back = h.refunded ? (h.payment === 'tokens' ? ' · tes Jetons te sont rendus' : ' · tes points te sont rendus') : '';
+  if (h.state === 'PLAYED' || h.state === 'SKIPPED') return null;
+  if (h.state === 'CANCELED' && h.reason === 'VIEWER_CANCEL') return null;
+  if (h.state === 'REMOVED_BY_MOD') return { kind: 'warning', text: `${t} a été retirée par la modération${back}.` };
+  if (h.state === 'CANCELED') return { kind: 'warning', text: `${t} a été retirée de la file${back}.` };
+  return { kind: 'warning', text: `${t} n’a pas pu être ajoutée${back}.` };
+}
 
 export function view(ctx) {
   const { document, client } = ctx;
+  const host = ctx.host ?? {};
   const node = document.createElement('div');
   node.className = 'mh';
   node.innerHTML = `
     <div class="mh-top">
-      <label class="mh-search">${LENS}<input type="search" data-draft-key="music-search" placeholder="Titre, artiste ou lien Spotify" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Rechercher un titre ou un artiste" aria-controls="mh-results"><button type="button" class="mh-search__x" data-act="clear" aria-label="Effacer la recherche" hidden>${CLEAR}</button></label>
-      <div class="mh-bar">
-        <div class="mh-seg" role="tablist" aria-label="Choisir la prochaine musique du stream">
-          <button type="button" role="tab" class="mh-tab" data-tab="search">Rechercher</button>
-          <button type="button" role="tab" class="mh-tab" data-tab="queue">File</button>
-        </div>
-        <p class="mh-meta" data-k="meta"></p>
-      </div>
+      <label class="mh-field">${I.search}<input type="search" data-draft-key="music-search" placeholder="Titre, artiste ou lien Spotify" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Rechercher un titre ou un artiste, ou coller un lien Spotify" aria-controls="mh-curtain" aria-expanded="false"><button type="button" class="mh-x" data-act="clear" aria-label="Effacer la recherche" hidden>${I.x}</button></label>
+      <button type="button" class="mh-clock" data-act="history" aria-pressed="false" aria-label="Musiques de la soirée" title="Musiques de la soirée">${I.history}</button>
     </div>
-    <section class="mh-panel" data-panel="search"><div class="mh-results" id="mh-results" data-k="results" role="listbox" aria-label="Résultats"></div></section>
-    <section class="mh-panel" data-panel="queue" hidden><div data-k="queue"></div></section>
-    <div class="mh-deck" id="mh-deck" data-k="deck" hidden></div>
-    <footer class="mh-now" data-k="now"></footer>
-    <div class="mh-sheet" data-k="sheet" hidden></div>
+    <div class="mh-band" data-k="band"></div>
+    <section class="mh-main"><div class="mh-scroll" data-k="scroll"><div data-k="body"></div></div></section>
+    <div class="mh-curtain" id="mh-curtain" data-k="curtain" role="region" aria-label="Catalogue"><div class="mh-curtain__in"><div class="mh-results" id="mh-results" data-k="results" role="listbox" aria-label="Résultats"></div><div data-k="buy"></div></div></div>
+    <div data-k="dialog"></div>
     <p class="mh-toast" data-k="toast" role="status" aria-live="polite"></p>`;
   const $ = (k) => node.querySelector(`[data-k="${k}"]`);
   const input = node.querySelector('input[type="search"]');
-  const clearBtn = node.querySelector('[data-act="clear"]');
 
   let st = null; // Core's music state
   let failed = null;
-  let tab = 'search';
   let results = null; // { items, provider, query } | { error } | null
   let searching = false;
   let seq = 0;
   let typing = null;
-  let pick = null; // { item, key, busy, error, from }
+  let curtain = false;
+  let pick = null; // { item, key, busy, error } — the chosen result (the curtain's bar)
   let menuFor = null; // team menu open on this request id
-  let deck = false; // the supermods' player panel open
+  let dialog = null; // { id } — the withdrawal confirmation
+  let sup = false; // the supermods' player card under « en cours »
   let ctlBusy = null; // the player action waiting for Studio's answer
-  let historyOpen = false; // « Historique » stays as the viewer left it across readings
+  let tip = null; // the open explanation of the band
+  let hist = false; // « Musiques de la soirée » shown instead of the list
+  let evening = null; // { items, next, since, live, loading, error }
+  let flash = null;
+  const scrolls = { queue: 0, history: 0 };
   const withdrawing = new Set();
   let toastTimer = null;
   let ticking = null;
+  let io = null;
   let destroyed = false;
+  // Notifications: told once per panel session (host memory), « pendant ton absence » for what ended before opening.
+  const memory = host.memory ?? {};
+  const told = (memory.musicTold ??= new Set());
+  const openedAt = Date.now();
+  let states = null; // your requests' states at the previous reading (live « ajoutée à la file »)
+  let nowOwn = null;
+  let quietFocus = false; // the field gets the focus back from Escape: it must not reopen the curtain
 
   const can = () => st?.can ?? { moderate: false, refund: false, player: false, open_close: false };
   const team = () => can().moderate || can().player;
@@ -123,8 +138,9 @@ export function view(ctx) {
     const t = $('toast');
     t.textContent = text;
     t.dataset.kind = kind;
+    t.classList.add('is-on');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.textContent = ''; }, 4500);
+    toastTimer = setTimeout(() => t.classList.remove('is-on'), 4500);
   };
 
   const poller = createPoller({
@@ -134,6 +150,7 @@ export function view(ctx) {
         st = await client.musicState();
         st.readAt = Date.now(); // the cooldown moves from this reading, never beyond it
         failed = null;
+        notices();
         render();
         return true;
       } catch (e) {
@@ -144,21 +161,50 @@ export function view(ctx) {
     },
   });
 
+  /** What changed for YOU since the last reading: told live in the module, kept in the notification centre. */
+  function notices() {
+    const me = st?.me;
+    if (!me) return;
+    const next = new Map(me.requests.map((r) => [r.request_id, r.state]));
+    if (states) {
+      for (const r of me.requests) {
+        const was = states.get(r.request_id);
+        if ((was === 'RECEIVED' || was === 'SEARCHING') && r.state === 'QUEUED')
+          toast(`« ${r.title ?? 'Ta demande'} » a rejoint la file.`);
+      }
+    }
+    states = next;
+    const own = st.now_playing?.own ? st.now_playing.request_id : null;
+    if (own && nowOwn !== null && own !== nowOwn) toast(`Ta musique passe maintenant : « ${st.now_playing.title} ».`);
+    nowOwn = own ?? '';
+    for (const h of me.history ?? []) {
+      const said = ending(h);
+      if (!said || !h.ended_at) continue;
+      const at = Date.parse(h.ended_at);
+      if (Date.now() - at > 12 * 3_600_000) continue;
+      const id = `music:${h.request_id}:${h.state}`;
+      if (told.has(id)) continue;
+      told.add(id);
+      const absent = at < openedAt - 2_000;
+      // The extension's notification centre (one per request and outcome: a stable id never duplicates).
+      host.notify?.({ id, dedupe_key: id, type: said.kind, title: absent ? 'Pendant ton absence' : 'Musique', message: said.text, created_at: h.ended_at });
+      toast(absent ? `Pendant ton absence : ${said.text}` : said.text, 'warn');
+    }
+  }
+
   const art = (url, cls = '') => url
     ? `<img class="mh-art ${cls}" src="${esc(url)}" alt="" loading="lazy" decoding="async">`
-    : `<span class="mh-art mh-art--none ${cls}" aria-hidden="true">${NOTE}</span>`;
+    : `<span class="mh-art mh-art--none ${cls}" aria-hidden="true">${I.note}</span>`;
   const artists = (a) => esc((a ?? []).join(', '));
 
   /**
    * A region is replaced only when its content changed, and the control that had the focus gets it back (fix of the
-   * 08/11 feedback: every 4 s reading rebuilt the lists — focus lost, « Historique » closed, the view moving).
+   * 08/11 feedback: every 4 s reading rebuilt the lists — focus lost, the view moving).
    */
   const focusKey = (el) =>
-    el.dataset?.pick !== undefined ? `[data-pick="${el.dataset.pick}"]`
-      : el.dataset?.act ? `[data-act="${el.dataset.act}"]${el.dataset.id ? `[data-id="${el.dataset.id}"]` : ''}`
-        : el.dataset?.tab ? `[data-tab="${el.dataset.tab}"]`
-          : el.dataset?.idea !== undefined ? '[data-idea]'
-            : el.tagName === 'SUMMARY' ? 'summary' : null;
+    el.dataset?.key ? `[data-key="${el.dataset.key}"]`
+      : el.dataset?.pick !== undefined ? `[data-pick="${el.dataset.pick}"]`
+        : el.dataset?.act ? `[data-act="${el.dataset.act}"]${el.dataset.id ? `[data-id="${el.dataset.id}"]` : ''}` : null;
   function put(box, html) {
     if (box.dataset.html === html) return false;
     const a = document.activeElement;
@@ -169,100 +215,224 @@ export function view(ctx) {
     return true;
   }
 
-  // ------------------------------------------------------------------ top: limits in one line
+  // ------------------------------------------------------------------ the economics band (real rules, Core's)
 
-  function renderMeta() {
-    const box = $('meta');
+  const cooldownLeft = () => (st?.me ? Math.max(0, st.me.cooldown_left_ms - (Date.now() - st.readAt)) : 0);
+
+  function renderBand() {
+    const box = $('band');
     if (!st) { put(box, ''); return; }
-    if (!st.open) { put(box, '<span class="mh-chip mh-chip--off">Demandes fermées</span>'); return; }
     const me = st.me;
-    put(box, `<span class="mh-chip mh-chip--price" title="Prix d’une demande">◆ ${fmt(st.price_tokens)}</span>${me
-      ? `<button type="button" class="mh-chip" data-tab="queue" title="Tes demandes en attente / maximum" aria-label="Tes demandes : ${me.pending} sur ${me.max_pending}">${me.pending}/${me.max_pending}</button><span class="mh-chip mh-chip--cd" data-k="cooldown" hidden></span>`
-      : ''}`);
-    tick();
+    const left = me ? Math.max(0, me.max_pending - me.pending) : 0;
+    const cd = cooldownLeft();
+    if (tip === 'wait' && cd <= 0) tip = null;
+    if (tip === 'quota' && !me) tip = null;
+    const seg = (k, cls, inner) => `<button type="button" class="mh-seg ${cls}" data-act="tip" data-tip="${k}" data-key="tip-${k}" aria-expanded="${tip === k}" aria-controls="mh-tip">${inner}</button>`;
+    let html = `<span class="mh-band__lab">${hist ? '' : `À suivre <b>· ${st.queue.length}</b>`}</span>`;
+    if (!st.open) html += '<span class="mh-seg mh-seg--closed">Demandes fermées</span>';
+    else {
+      html += seg('price', 'mh-seg--price', `<b>◆ ${fmt(st.price_tokens)}</b><span class="mh-long">par demande</span>`);
+      if (me) html += seg('quota', `mh-seg--quota ${left ? '' : 'is-full'}`, `<b>${left} / ${me.max_pending}</b><span class="mh-long">disponible${left > 1 ? 's' : ''}</span>`);
+      if (cd > 0) html += seg('wait', 'mh-seg--wait', `${I.clock}<b>${dur(cd)}</b>`);
+    }
+    const T = {
+      price: `<b>◆ ${fmt(st.price_tokens)} Jetons par demande.</b><small>Débités quand tu confirmes. Rendus une seule fois si tu retires ta demande avant qu’elle commence, ou si elle ne peut pas être ajoutée.</small>`,
+      quota: me ? `<b>${left ? `Tu peux encore demander ${left} musique${left > 1 ? 's' : ''}.` : `Tu as déjà ${me.max_pending} demande${me.max_pending > 1 ? 's' : ''} en attente.`}</b><small>Au plus ${me.max_pending} demande${me.max_pending > 1 ? 's' : ''} en attente à la fois : cette limite évite qu’un même viewer monopolise la file. Une place se libère quand une de tes musiques commence.</small>` : '',
+      wait: `<b>Prochaine demande dans ${dur(cd)}.</b><small>Un délai sépare deux demandes, compté depuis l’ajout de ta dernière demande, même si tu l’as retirée ensuite.</small>`,
+    };
+    if (tip) html += `<div class="mh-tip" id="mh-tip" role="note">${T[tip]}</div>`;
+    put(box, html);
   }
 
-  /** The cooldown, from Core's last reading (never beyond it). */
-  function tick() {
-    const cd = $('cooldown');
-    if (!cd || !st?.me) return;
-    const left = Math.max(0, st.me.cooldown_left_ms - (Date.now() - st.readAt));
-    cd.hidden = left <= 0;
-    cd.textContent = left > 0 ? `⏱ ${dur(left)}` : '';
-    cd.title = left > 0 ? `Prochaine demande possible dans ${dur(left)}` : '';
+  // ------------------------------------------------------------------ the list: « en cours » first, then the queue
+
+  function nowHtml() {
+    const n = st.now_playing;
+    if (!n) return '';
+    const by = n.kind === 'request' ? (n.own ? '<span class="mh-who is-me">ta demande</span>' : n.requested_by ? `<span class="mh-who">@${esc(n.requested_by)}</span>` : '') : '';
+    const playing = !!n.is_playing;
+    return `<div class="mh-now ${playing ? '' : 'is-paused'}" role="group" aria-label="${playing ? 'En cours' : 'En pause'} : ${esc(n.title)}">
+      <span class="mh-now__ico">${playing ? EQ : I.pause}</span>${art(n.image_url, 'mh-art--now')}
+      <span class="mh-tx"><span class="mh-tag">${playing ? 'En cours' : 'En pause'}</span><b>${esc(n.title)}</b><span>${artists(n.artists)}${by ? ` · ${by}` : ''}</span></span>
+      ${can().player ? `<button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Lecteur du stream (supermods)" title="Lecteur du stream (supermods)">${I.sliders}</button>` : '<span></span>'}
+    </div>${sup && can().player ? supHtml() : ''}`;
   }
 
-  // ------------------------------------------------------------------ search
-
-  function queuedIds() {
-    return new Set([...(st?.queue ?? []), ...(st?.pending ?? [])].map((e) => e.track_id));
+  /** The supermods' player: what Studio confirms, never a guess (a hidden button is not a right: Core checks it). */
+  function supHtml() {
+    const p = st.player;
+    const on = p.controls && p.connected;
+    const playing = st.now_playing?.is_playing ?? p.is_playing;
+    const busy = (a) => (ctlBusy === a ? 'aria-busy="true"' : '');
+    const off = !on || !!ctlBusy;
+    const why = !p.connected ? 'Lecteur indisponible (Studio, Spotify fermé ou aucun appareil).' : !p.controls ? 'Commandes du lecteur désactivées dans Studio.' : ctlBusy ? 'En attente de la réponse du lecteur…' : '';
+    return `<div class="mh-sup" role="group" aria-label="Lecteur du stream (supermods)"><small>Lecteur du stream · supermods${p.connected && p.device ? ` · ${esc(p.device)}` : ''}</small>
+      <button type="button" class="mh-btn" data-act="${playing ? 'pause' : 'resume'}" data-key="pp" ${off ? 'disabled' : ''} ${busy(playing ? 'pause' : 'resume')}>${playing ? `${I.pause} Pause` : `${I.play} Reprendre`}</button>
+      <button type="button" class="mh-btn" data-act="skip" data-key="sk" ${off || !st.now_playing ? 'disabled' : ''} ${busy('skip')}>${I.next} Passer</button>
+      <input type="range" min="0" max="100" step="5" value="${p.volume_percent ?? 50}" data-act="volume" data-key="vol" ${off ? 'disabled' : ''} aria-label="Volume du lecteur">
+      ${why ? `<p class="mh-sup__why">${esc(why)}</p>` : ''}</div>`;
   }
 
-  /** Before typing: ideas (the recent songs of the stream) and what the field accepts. */
-  function idle() {
-    const seen = new Set();
-    const ideas = (st?.recent ?? [])
-      .filter((r) => r.title && !seen.has(r.title) && seen.add(r.title))
-      .slice(0, 6)
-      .map((r) => `<button type="button" class="mh-idea" data-idea="${esc(`${r.title} ${(r.artists ?? [])[0] ?? ''}`.trim())}">${art(r.image_url, 'mh-art--xs')}<span><strong>${esc(r.title)}</strong><small>${artists(r.artists)}</small></span></button>`)
-      .join('');
-    return `${ideas ? `<p class="mh-label">Passées récemment sur le stream</p><div class="mh-ideas">${ideas}</div>` : ''}
-      <p class="mh-hint">${LENS}<span>Tape un titre ou un artiste : les versions s’affichent pendant la frappe. Tu peux aussi coller le lien d’un morceau (open.spotify.com/track/…).</span></p>`;
+  function queueHtml() {
+    if (!st) return `<div class="mh-empty"><small>${failed ? esc(refusal(failed, st)) : 'Chargement…'}</small></div>`;
+    const c = can();
+    const rows = [...st.queue, ...st.pending.filter((p) => team() || p.own)].filter((e) => !withdrawing.has(e.request_id));
+    const now = nowHtml();
+    const off = team() && !st.player?.connected ? '<p class="mh-quiet">Lecteur du stream indisponible : rien n’est confirmé en lecture.</p>' : '';
+    const tools = c.open_close
+      ? `<div class="mh-team"><button type="button" class="mh-btn mh-btn--soft" data-act="${st.open ? 'close' : 'open'}" data-key="oc">${st.open ? 'Fermer les demandes' : 'Ouvrir les demandes'}</button></div>`
+      : '';
+    if (!rows.length && !now) return `${off}<div class="mh-empty">${I.note}<b>Rien en cours, rien en file</b><small>${st.open ? 'La prochaine musique peut être la tienne.' : 'Les demandes sont fermées pour le moment.'}</small></div>${tools}`;
+    if (!rows.length) return `${off}${now}<p class="mh-quiet">Rien d’autre en file pour l’instant.</p>${tools}`;
+    const mine = new Map((st.me?.requests ?? []).map((r) => [r.request_id, r]));
+    return `${off}${now}<ol class="mh-list">${rows.map((e, i) => {
+      const own = e.own;
+      const r = mine.get(e.request_id);
+      const adding = e.state === 'RECEIVED' || e.state === 'SEARCHING';
+      const who = own ? '<span class="mh-who is-me">toi</span>' : `<span class="mh-who">@${esc(e.requested_by)}</span>`;
+      const act = own && r?.cancellable
+        ? `<button type="button" class="mh-ico mh-ico--trash" data-act="withdraw" data-id="${esc(e.request_id)}" aria-label="Retirer ma demande « ${esc(e.title ?? 'en cours d’ajout')} »">${I.trash}</button>`
+        : c.moderate && !own && e.position
+          ? `<button type="button" class="mh-ico" data-act="menu" data-id="${esc(e.request_id)}" aria-haspopup="menu" aria-expanded="${menuFor === e.request_id}" aria-label="Modérer la demande de ${esc(e.requested_by)}">${I.dots}</button>`
+          : '<span></span>';
+      const pay = team() && e.payment ? ` · ${e.payment === 'tokens' ? `◆ ${fmt(e.price_tokens)}` : 'points'}` : '';
+      return `<li class="mh-row ${own ? 'is-mine' : ''} ${flash === e.request_id ? 'is-flash' : ''}" data-id="${esc(e.request_id)}">
+        <span class="mh-num">${e.position ?? '…'}</span>${art(e.image_url)}
+        <span class="mh-tx">${i === 0 && !now ? '<span class="mh-next">Prochaine musique</span>' : ''}<b>${esc(e.title ?? 'Titre en cours d’ajout')}</b><span>${who} · ${adding ? 'ajout en cours…' : artists(e.artists)}${pay}</span></span>
+        ${act}
+        ${menuFor === e.request_id ? `<span class="mh-menu" role="menu">
+          ${c.refund ? `<button type="button" role="menuitem" data-act="remove-refund" data-id="${esc(e.request_id)}">Retirer et rembourser</button>` : ''}
+          <button type="button" role="menuitem" class="is-danger" data-act="remove-keep" data-id="${esc(e.request_id)}">Retirer sans rembourser</button>
+        </span>` : ''}
+      </li>`;
+    }).join('')}</ol>${tools}`;
   }
 
-  const skeleton = () => `<div class="mh-skel" aria-hidden="true">${'<span class="mh-skel__row"><i></i><b></b></span>'.repeat(4)}</div>`;
+  // ------------------------------------------------------------------ « Musiques de la soirée » (Core, 20 per page)
 
-  function renderResults() {
-    const box = $('results');
+  async function loadEvening(more = false) {
+    if (evening?.loading) return;
+    evening = { items: [], next: null, ...(more ? evening : {}), loading: true, error: null };
+    renderBody();
+    try {
+      const r = await client.musicHistory(more ? evening.next : null);
+      if (destroyed) return;
+      evening = { items: [...(more ? evening.items : []), ...r.items], next: r.next, since: r.since, live: r.live, loading: false, error: null };
+    } catch (e) {
+      evening = { ...evening, loading: false, error: e };
+    }
+    renderBody();
+  }
+
+  function historyHtml() {
+    const ev = evening ?? { items: [], loading: true };
+    let lastHour = null;
+    const rows = ev.items.map((h) => {
+      const hour = new Date(h.at).getHours();
+      const sep = hour !== lastHour ? `<li class="mh-hhour">${hour} h</li>` : '';
+      lastHour = hour;
+      return `${sep}<li class="mh-hrow ${h.own ? 'is-mine' : ''}"><time datetime="${esc(h.at)}">${hhmm(h.at)}</time>${art(h.image_url, 'mh-art--sm')}<span class="mh-tx"><b>${esc(h.title ?? '—')}</b><span>${artists(h.artists)} · ${h.own ? '<span class="mh-who is-me">toi</span>' : `<span class="mh-who">@${esc(h.requested_by)}</span>`}</span></span></li>`;
+    }).join('');
+    const head = `<div class="mh-hhead"><button type="button" class="mh-back" data-act="history" data-key="back">${I.left} Retour</button><b>Musiques de la soirée</b><small>${ev.since ? (ev.live ? `depuis ${hhmm(ev.since)}` : '12 dernières heures') : ''}</small></div>`;
+    if (ev.error && !ev.items.length) return `${head}<div class="mh-empty"><small>${esc(refusal(ev.error))}</small><button type="button" class="mh-btn mh-btn--soft" data-act="hretry" data-key="hretry">Réessayer</button></div>`;
+    if (!ev.items.length) return `${head}${ev.loading ? '<div class="mh-skel"></div>'.repeat(4) : `<div class="mh-empty">${I.note}<b>Aucune demande jouée pour l’instant</b><small>Les musiques demandées s’afficheront ici une fois passées.</small></div>`}`;
+    return `${head}<ol class="mh-hlist">${rows}</ol>
+      ${ev.next ? `<button type="button" class="mh-more" data-act="hmore" data-key="hmore" ${ev.loading ? 'aria-busy="true"' : ''}>Afficher les plus anciennes</button><span data-k="sentinel"></span>` : '<p class="mh-hnote">Seules les demandes sont listées (pas la musique du streamer).</p>'}`;
+  }
+
+  function watchSentinel() {
+    const Observer = document.defaultView?.IntersectionObserver;
+    if (typeof Observer !== 'function') return;
+    io ??= new Observer((entries) => {
+      if (hist && evening?.next && !evening.loading && entries.some((e) => e.isIntersecting)) void loadEvening(true);
+    }, { root: $('scroll'), rootMargin: '0px 0px 60px 0px' });
+    io.disconnect();
+    const s = node.querySelector('[data-k="sentinel"]');
+    if (s) io.observe(s);
+  }
+
+  function renderBody() {
+    put($('body'), hist ? historyHtml() : queueHtml());
+    node.querySelector('.mh-clock').setAttribute('aria-pressed', String(hist));
+    renderBand();
+    if (hist) watchSentinel();
+  }
+
+  function switchView(toHist) {
+    scrolls[hist ? 'history' : 'queue'] = $('scroll').scrollTop;
+    hist = toHist;
+    tip = null;
+    renderBody();
+    $('scroll').scrollTop = scrolls[hist ? 'history' : 'queue'];
+    if (hist && !evening?.items?.length) void loadEvening(false);
+  }
+
+  // ------------------------------------------------------------------ the curtain: search, exact version, confirm
+
+  const typed = () => input.value.trim().length >= 2;
+  const queuedIds = () => new Set([...(st?.queue ?? []), ...(st?.pending ?? [])].map((e) => e.track_id));
+
+  function renderCurtain() {
     const q = input.value.trim();
-    clearBtn.hidden = !q;
-    if (st && !st.open) {
-      put(box, '<p class="mh-empty">Les demandes sont fermées pour le moment. La file reste visible dans « File ».</p>');
-      return;
+    node.querySelector('[data-act="clear"]').hidden = !q;
+    $('curtain').classList.toggle('is-open', curtain);
+    node.classList.toggle('is-searching', curtain);
+    input.setAttribute('aria-expanded', String(curtain));
+    const box = $('results');
+    let html = '';
+    if (searching && !results) html = `${LINK.test(q) ? '<p class="mh-rcap"><span>Lien détecté : recherche du titre exact…</span></p>' : ''}${'<div class="mh-skel"></div>'.repeat(5)}`;
+    else if (results?.error) html = `<div class="mh-msg">${esc(results.error === 'unavailable' ? 'Le catalogue ne répond pas pour le moment. Rien n’a été payé.' : refusal({ code: results.error }, st))}${results.error === 'invalid_reference' ? '' : '<br><button type="button" class="mh-more" data-act="retry" data-key="retry">Réessayer</button>'}</div>`;
+    else if (results && !results.items.length) html = `<div class="mh-msg">${LINK.test(q) ? 'Ce lien ne correspond à aucun titre disponible.' : `Aucun titre pour « ${esc(q)} ». Essaie l’artiste seul, ou colle le lien du morceau.`}</div>`;
+    else if (results) {
+      const waiting = queuedIds();
+      const n = results.items.length;
+      html = `<p class="mh-rcap"><span>${LINK.test(results.query ?? '') ? 'Titre du lien' : 'Catalogue'}</span><span>${n} résultat${n > 1 ? 's' : ''}</span></p>` + results.items.map((i, k) => {
+        const flag = !i.playable ? 'Indisponible' : i.too_long ? 'Trop long' : waiting.has(i.id) ? 'Déjà en file' : '';
+        const on = pick?.item.id === i.id;
+        return `<button type="button" class="mh-hit ${flag ? 'is-off' : ''} ${on ? 'is-sel' : ''}" role="option" aria-selected="${on}" data-pick="${k}" ${flag ? 'aria-disabled="true"' : ''} aria-label="${esc(`${i.title}, ${i.artists.join(', ')}${i.album ? `, ${i.album}` : ''}, ${dur(i.duration_ms)}${flag ? `, ${flag}` : ''}`)}">
+          ${art(i.image_url)}<span class="mh-tx"><b>${esc(i.title)}</b><span>${artists(i.artists)}${i.album ? ` · ${esc(i.album)}` : ''}</span></span>
+          <span class="mh-end">${flag ? `<span class="mh-why">${flag}</span>` : `<span class="mh-d">${dur(i.duration_ms)}</span><span class="mh-add">${on ? I.check : I.plus}</span>`}</span></button>`;
+      }).join('') + `<p class="mh-src">${results.provider === 'lab' ? 'Catalogue de démonstration du Lab : titres et artistes fictifs, aucun service musical réel.' : 'Catalogue : compte musical connecté au Studio du stream.'}</p>`;
     }
-    if (q.length < 2) {
-      box.removeAttribute('aria-busy');
-      put(box, idle());
-      return;
-    }
-    const link = LINK.test(q);
-    if (searching && !results) {
-      put(box, `${link ? `<p class="mh-label">${LINKI} Lien détecté : recherche du titre exact…</p>` : ''}${skeleton()}`);
-      box.setAttribute('aria-busy', 'true');
-      return;
-    }
-    if (!results) return;
-    if (results.error) {
-      box.removeAttribute('aria-busy');
-      put(box, `<div class="mh-empty mh-empty--err"><p>${esc(results.error === 'unavailable' ? 'Le catalogue ne répond pas pour le moment.' : refusal({ code: results.error }, st))}</p>${results.error === 'invalid_reference' ? '' : '<button type="button" class="mh-btn mh-btn--ghost" data-act="retry">Réessayer</button>'}</div>`);
-      return;
-    }
-    if (!results.items.length) {
-      box.removeAttribute('aria-busy');
-      put(box, `<p class="mh-empty">${link ? 'Ce lien ne correspond à aucun titre disponible.' : `Aucun titre pour « ${esc(q)} ». Essaie l’artiste seul, ou colle le lien du morceau.`}</p>`);
-      return;
-    }
-    const waiting = queuedIds();
-    const n = results.items.length;
-    put(box, `<p class="mh-label">${LINK.test(results.query ?? '') ? `${LINKI} Titre du lien` : `${n} titre${n > 1 ? 's' : ''} · choisis la bonne version`}</p>` + results.items.map((i, k) => {
-      const flag = !i.playable ? 'Indisponible' : i.too_long ? 'Trop long' : waiting.has(i.id) ? 'Déjà en file' : '';
-      const sub = `${i.artists.join(', ')}${i.album ? ` · ${i.album}` : ''}`;
-      return `<button type="button" class="mh-row ${flag ? 'is-off' : ''}" role="option" aria-selected="false" data-pick="${k}" ${flag ? 'aria-disabled="true"' : ''} aria-label="${esc(`${i.title}, ${sub}, ${dur(i.duration_ms)}${flag ? `, ${flag}` : ''}`)}">
-        ${art(i.image_url)}
-        <span class="mh-row__txt"><strong>${esc(i.title)}</strong><small>${esc(sub)}</small></span>
-        <span class="mh-row__end">${flag ? `<em class="mh-flag">${flag}</em>` : `<span class="mh-dur">${dur(i.duration_ms)}</span>`}<span class="mh-add">${PLUS}</span></span>
-      </button>`;
-    }).join('') + (results.provider === 'lab'
-      ? '<p class="mh-src">Catalogue de démonstration du Lab : titres et artistes fictifs, aucun service musical réel.</p>'
-      : '<p class="mh-src">Catalogue : compte musical connecté au Studio du stream.</p>'));
+    put(box, html);
     if (searching) box.setAttribute('aria-busy', 'true');
     else box.removeAttribute('aria-busy');
+    renderBuy();
+  }
+
+  function renderBuy() {
+    if (!pick) { put($('buy'), ''); return; }
+    const i = pick.item;
+    const price = st?.price_tokens ?? 0;
+    const bal = st?.me?.balance;
+    const after = bal === null || bal === undefined ? null : bal - price;
+    const line = pick.error
+      ? `<span class="mh-buy__err" role="alert">${esc(pick.error)}</span>`
+      : `<b>◆ ${fmt(price)}</b>${after !== null ? ` · il te restera ◆ ${fmt(after)}` : ''}`;
+    put($('buy'), `<div class="mh-buy" role="group" aria-label="Demander ce titre">${art(i.image_url)}<span class="mh-tx"><b>${esc(i.title)}</b><span>${line}</span></span>
+      <span class="mh-buy__acts"><button type="button" class="mh-x" data-act="unpick" data-key="unpick" aria-label="Annuler la sélection">${I.x}</button>
+      <button type="button" class="mh-btn mh-btn--go" data-act="confirm" data-key="confirm" ${pick.busy ? 'disabled aria-busy="true"' : ''}>${pick.busy ? 'Envoi…' : `Demander · ◆ ${fmt(price)}`}</button></span></div>`);
+  }
+
+  function openCurtain() {
+    if (curtain || !typed()) return;
+    curtain = true;
+    menuFor = null;
+    tip = null;
+    renderCurtain();
+    renderBand();
+  }
+  function closeCurtain(clear) {
+    if (clear) { input.value = ''; results = null; seq++; searching = false; }
+    curtain = false;
+    pick = null;
+    renderCurtain();
   }
 
   async function runSearch(q) {
     const mine = ++seq;
     searching = true;
-    renderResults();
+    renderCurtain();
     try {
       let r = await client.musicSearch(q);
       const started = Date.now();
@@ -278,7 +448,8 @@ export function view(ctx) {
       results = { error: e?.code ?? 'unavailable' };
     }
     searching = false;
-    renderResults();
+    if (pick && !results.items?.some((i) => i.id === pick.item.id)) pick = null;
+    renderCurtain();
   }
 
   const onInput = () => {
@@ -288,144 +459,65 @@ export function view(ctx) {
       seq++;
       results = null;
       searching = false;
-      renderResults();
+      closeCurtain(false);
       return;
     }
-    // The previous results stay on screen (dimmed) until the new ones arrive: no blink while typing.
     if (results?.error) results = null;
-    searching = true;
-    renderResults();
-    typing = setTimeout(() => runSearch(q), LINK.test(q) ? 0 : 260);
+    if (!curtain) { curtain = true; menuFor = null; tip = null; renderBand(); }
+    searching = true; // the previous results stay (dimmed) until the new ones arrive: no blink while typing
+    renderCurtain();
+    typing = setTimeout(() => runSearch(q), LINK.test(q) ? 0 : 230);
   };
-
-  // ------------------------------------------------------------------ confirm
-
-  function renderSheet() {
-    const box = $('sheet');
-    if (!pick) {
-      box.hidden = true;
-      put(box, '');
-      return;
-    }
-    const i = pick.item;
-    const price = st?.price_tokens ?? 0;
-    const me = st?.me;
-    const after = me?.balance === null || me?.balance === undefined ? null : me.balance - price;
-    const r = st?.rules;
-    box.hidden = false;
-    put(box, `
-      <div class="mh-sheet__card" role="dialog" aria-modal="true" aria-labelledby="mh-sheet-title">
-        <div class="mh-sheet__track">${art(i.image_url, 'mh-art--lg')}
-          <span><strong id="mh-sheet-title">${esc(i.title)}</strong><small>${artists(i.artists)}</small><small>${i.album ? `${esc(i.album)} · ` : ''}${dur(i.duration_ms)}</small></span>
-        </div>
-        <ul class="mh-rules">
-          <li><span>Prix</span><b class="mh-price">◆ ${fmt(price)}</b></li>
-          ${after !== null ? `<li><span>Solde après</span><b class="${after < 0 ? 'is-bad' : ''}">◆ ${fmt(after)}</b></li>` : ''}
-          ${r ? `<li><span>En attente</span><b>${me ? `${me.pending}/${me.max_pending}` : r.max_pending_per_viewer}</b></li>` : ''}
-          ${r?.viewer_cooldown_seconds ? `<li><span>Délai</span><b>${Math.round(r.viewer_cooldown_seconds / 60)} min entre deux</b></li>` : ''}
-        </ul>
-        <p class="mh-sheet__note">Retirable tant qu’elle n’a pas commencé, même pendant l’ajout : tes Jetons te sont rendus une seule fois.</p>
-        ${pick.error ? `<p class="mh-sheet__err" role="alert">${esc(pick.error)}</p>` : ''}
-        <div class="mh-sheet__act">
-          <button type="button" class="mh-btn mh-btn--ghost" data-act="sheet-close">Annuler</button>
-          <button type="button" class="mh-btn mh-btn--go" data-act="confirm" ${pick.busy ? 'disabled aria-busy="true"' : ''}>${pick.busy ? 'Envoi…' : `Demander · ◆ ${fmt(price)}`}</button>
-        </div>
-      </div>`);
-    // Focus on « Demander » once, when the sheet opens (a reading never moves the focus again).
-    if (!pick.busy && !pick.focused) {
-      pick.focused = true;
-      box.querySelector('[data-act="confirm"]')?.focus({ preventScroll: true });
-    }
-  }
 
   async function confirm() {
     if (!pick || pick.busy) return;
     pick.busy = true;
     pick.error = null;
-    renderSheet();
+    renderBuy();
     const chosen = pick;
     try {
-      await client.musicRequest(chosen.key, chosen.item.id, st?.price_tokens ?? null);
-      pick = null;
+      const r = await client.musicRequest(chosen.key, chosen.item.id, st?.price_tokens ?? null);
+      flash = r?.request?.request_id ?? null;
+      closeCurtain(true);
+      input.blur();
+      if (hist) switchView(false);
       toast(`« ${chosen.item.title} » est demandé : il rejoint la file.`);
-      tab = 'queue';
       await poller.now();
+      if (flash) node.querySelector(`.mh-row[data-id="${CSS.escape(flash)}"]`)?.scrollIntoView({ block: 'nearest' });
+      setTimeout(() => { flash = null; }, 1_600);
     } catch (e) {
       // A lost answer keeps the SAME key (a retry can never pay twice); a decided refusal gets a new one.
       if (e?.code !== 'network_error') chosen.key = newIdempotencyKey();
       if (e?.code === 'price_changed' && st) st.price_tokens = e.details?.price ?? st.price_tokens;
       chosen.error = refusal(e, st);
       chosen.busy = false;
+      renderBuy();
       if (e?.code !== 'network_error') void poller.now();
     }
-    render();
   }
 
-  // ------------------------------------------------------------------ queue: yours first, then everyone's
+  // ------------------------------------------------------------------ withdrawal (confirmation, refunded once by Core)
 
-  function renderQueue() {
-    const box = $('queue');
-    if (!st) {
-      put(box, `<p class="mh-empty">${failed ? esc(refusal(failed, st)) : 'Chargement…'}</p>`);
-      return;
-    }
-    const c = can();
-    const mineRows = (st.me?.requests ?? []).filter((r) => !withdrawing.has(r.request_id));
-    const rows = [...st.queue, ...(team() ? st.pending.filter((p) => !p.own) : [])].filter((e) => !withdrawing.has(e.request_id));
-    const tools = c.open_close
-      ? `<button type="button" class="mh-mini" data-act="${st.open ? 'close' : 'open'}">${st.open ? 'Fermer les demandes' : 'Ouvrir les demandes'}</button>`
-      : '';
-    const count = rows.filter((e) => e.position).length;
-    put(box, `
-      ${mineRows.length ? `<p class="mh-label">Tes demandes</p><ol class="mh-list mh-list--mine">${mineRows.map(mineRow).join('')}</ol>` : ''}
-      <div class="mh-head"><p class="mh-label">${count ? `${count} titre${count > 1 ? 's' : ''} en file` : 'La file est vide'}${st.open ? '' : ' · demandes fermées'}</p>${tools}</div>
-      ${rows.length ? `<ol class="mh-list">${rows.map(queueRow).join('')}</ol>` : `<p class="mh-empty">${st.open ? 'Personne n’a encore demandé de titre : la prochaine peut être la tienne.' : 'Rien en attente.'}</p>`}
-      ${history()}`);
-  }
-
-  function mineRow(r) {
-    const q = st.queue.find((e) => e.request_id === r.request_id);
-    const where = r.state === 'PLAYING' ? 'En cours' : q ? `#${q.position} · ${wait(q.eta_ms)}` : STATE_WORD[r.state] ?? '';
-    return `<li class="mh-q is-own" data-id="${esc(r.request_id)}">
-      ${art(r.image_url ?? q?.image_url)}
-      <span class="mh-row__txt"><strong>${esc(r.title ?? 'Titre en cours d’ajout')}</strong><small>${esc(where)}${r.payment === 'tokens' ? ' · Jetons' : ' · points de chaîne'}</small></span>
-      <span class="mh-row__end">${r.cancellable ? `<button type="button" class="mh-mini" data-act="withdraw" data-id="${esc(r.request_id)}">Retirer</button>` : ''}</span>
-    </li>`;
-  }
-
-  function queueRow(e) {
-    const c = can();
-    const own = e.own ? '<span class="mh-badge mh-badge--own">Toi</span>' : '';
-    const pay = team() && e.payment ? `<span class="mh-badge">${e.payment === 'tokens' ? `◆ ${fmt(e.price_tokens)}` : 'Points'}</span>` : '';
-    const label = e.title ?? 'Ajout en cours…';
-    return `<li class="mh-q ${e.own ? 'is-own' : ''}" data-id="${esc(e.request_id)}">
-      <span class="mh-q__pos">${e.position ?? '…'}</span>
-      ${art(e.image_url)}
-      <span class="mh-row__txt"><strong>${esc(label)}</strong><small>${artists(e.artists)}${e.artists.length ? ' · ' : ''}par ${esc(e.requested_by)}${team() && e.viewer_login ? ` (@${esc(e.viewer_login)})` : ''}</small></span>
-      <span class="mh-row__end">${own}${pay}<span class="mh-dur">${e.position ? wait(e.eta_ms) : 'ajout…'}</span>
-        ${c.moderate && e.position ? `<button type="button" class="mh-mini mh-mini--icon" data-act="menu" data-id="${esc(e.request_id)}" aria-haspopup="menu" aria-expanded="${menuFor === e.request_id}" aria-label="Modérer cette demande">${DOTS}</button>` : ''}
-      </span>
-      ${menuFor === e.request_id ? `<span class="mh-menu" role="menu">
-        ${c.refund ? `<button type="button" role="menuitem" data-act="remove-refund" data-id="${esc(e.request_id)}">Retirer + rembourser</button>` : ''}
-        <button type="button" role="menuitem" class="is-danger" data-act="remove-keep" data-id="${esc(e.request_id)}">Retirer sans rembourser</button>
-      </span>` : ''}
-    </li>`;
-  }
-
-  function history() {
-    const mine = st?.me?.history ?? [];
-    const recent = st?.recent ?? [];
-    if (!mine.length && !recent.length) return '';
-    return `<details class="mh-recent" ${historyOpen ? 'open' : ''}><summary>Historique</summary>
-      ${mine.length ? `<p class="mh-label">Tes dernières demandes</p><ul>${mine.map((r) => `<li><span>${esc(r.title ?? 'Titre non ajouté')}</span><small>${esc(ENDED[r.state] ?? r.state)}${r.refunded ? (r.payment === 'tokens' ? ' · Jetons rendus' : ' · points rendus') : ''}</small></li>`).join('')}</ul>` : ''}
-      ${recent.length ? `<p class="mh-label">Passées sur le stream</p><ul>${recent.map((r) => `<li><span>${esc(r.title ?? '—')}</span><small>par ${esc(r.requested_by)}</small></li>`).join('')}</ul>` : ''}
-    </details>`;
+  function renderDialog() {
+    if (!dialog) { put($('dialog'), ''); return; }
+    const e = [...(st?.queue ?? []), ...(st?.pending ?? [])].find((x) => x.request_id === dialog.id);
+    const r = (st?.me?.requests ?? []).find((x) => x.request_id === dialog.id);
+    if (!e || !r?.cancellable) { dialog = null; put($('dialog'), ''); return; }
+    const back = r.payment === 'tokens' ? 'tes Jetons te seront rendus' : 'tes points de chaîne te seront rendus';
+    const adding = e.state === 'RECEIVED' || e.state === 'SEARCHING';
+    const text = adding
+      ? `Elle est en cours d’ajout : ${back}. Si elle arrive quand même dans la file Spotify, elle sera passée dès son début.`
+      : `${back[0].toUpperCase()}${back.slice(1)}. Elle est déjà dans la file Spotify : elle sera passée au moment de sa lecture.`;
+    put($('dialog'), `<div class="mh-scrim" data-act="keep-out"><div class="mh-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mh-wt" aria-describedby="mh-wd">
+      <div class="mh-dialog__row">${art(e.image_url, 'mh-art--lg')}<div><h3 id="mh-wt">Retirer cette musique ?</h3><p><b>${esc(e.title ?? 'Titre en cours d’ajout')}</b>${e.artists?.length ? ` · ${esc(e.artists[0])}` : ''}</p></div></div>
+      <p id="mh-wd">${esc(text)}</p>
+      <div class="mh-dialog__acts"><button type="button" class="mh-btn" data-act="keep" data-key="keep">Conserver</button><button type="button" class="mh-btn mh-btn--danger" data-act="confirm-withdraw" data-key="cw">Retirer</button></div></div></div>`);
   }
 
   async function withdraw(id) {
     if (withdrawing.has(id)) return;
-    withdrawing.add(id); // gone from the active queue at once, confirmed (or put back) by Core
-    render();
+    withdrawing.add(id); // gone from the list at once, confirmed (or put back) by Core
+    renderBody();
     try {
       const r = await client.musicCancel(id);
       if (r.outcome === 'songcancel' || r.outcome === 'songcancel_current')
@@ -436,13 +528,13 @@ export function view(ctx) {
     }
     await poller.now();
     withdrawing.delete(id);
-    render();
+    renderBody();
   }
 
   /** A team action. A player action waits for Studio's answer: the view shows what really happened, never a guess. */
   async function moderate(command, success) {
     const player = ['pause', 'resume', 'skip', 'volume'].includes(command.action);
-    if (player) { ctlBusy = command.action; renderDeck(); }
+    if (player) { ctlBusy = command.action; renderBody(); }
     try {
       const r = await client.musicModerate(command);
       if (r.job_id) {
@@ -462,116 +554,54 @@ export function view(ctx) {
     await poller.now();
   }
 
-  // ------------------------------------------------------------------ now playing (a strip) and the supermods' deck
-
-  function renderNow() {
-    const n = st?.now_playing;
-    const p = st?.player;
-    const box = $('now');
-    const deckBtn = can().player
-      ? `<button type="button" class="mh-now__deck ${deck ? 'is-on' : ''}" data-act="deck" aria-expanded="${deck}" aria-controls="mh-deck" title="Lecteur du stream (supermods)">${SLIDERS}<span>Lecteur</span></button>`
-      : '';
-    let body;
-    if (!st) body = '<span class="mh-now__txt"><small>Chargement…</small></span>';
-    else if (!p?.connected) body = `<span class="mh-now__ic">${NOTE}</span><span class="mh-now__txt"><small>Lecteur du stream indisponible</small></span>`;
-    else if (!n) body = `<span class="mh-now__ic">${NOTE}</span><span class="mh-now__txt"><small>Rien en cours</small></span>`;
-    else {
-      const who = n.kind === 'request' ? (n.own ? ' · ta demande' : n.requested_by ? ` · par ${esc(n.requested_by)}` : '') : '';
-      body = `<span class="mh-eq ${n.is_playing ? 'is-on' : ''}" role="img" aria-label="${n.is_playing ? 'En lecture' : 'En pause'}"><i></i><i></i><i></i></span>
-        <span class="mh-now__txt" title="${esc(`${n.title} — ${n.artists.join(', ')}`)}"><strong>${esc(n.title)}</strong><small>${artists(n.artists)}${who}</small></span>`;
-    }
-    put(box, `${body}${deckBtn}`);
-  }
-
-  function renderDeck() {
-    const box = $('deck');
-    if (!deck || !can().player || !st) {
-      box.hidden = true;
-      put(box, '');
-      return;
-    }
-    const p = st.player;
-    const on = p.controls && p.connected;
-    const playing = st.now_playing?.is_playing ?? p.is_playing;
-    const busy = (a) => (ctlBusy === a ? 'aria-busy="true"' : '');
-    const off = !on || !!ctlBusy;
-    const why = !p.connected ? 'Lecteur indisponible (Studio, Spotify fermé ou aucun appareil).' : !p.controls ? 'Commandes du lecteur désactivées dans Studio.' : ctlBusy ? 'En attente de la réponse du lecteur…' : '';
-    box.hidden = false;
-    put(box, `
-      <div class="mh-deck__head"><strong>Lecteur du stream</strong><small>Supermods · le streamer garde la main</small><button type="button" class="mh-mini mh-mini--icon" data-act="deck" aria-label="Fermer le lecteur">${CLEAR}</button></div>
-      <p class="mh-deck__state">${p.connected ? `${esc(p.device ?? 'Appareil')} · ${playing ? 'en lecture' : 'en pause'}${p.volume_percent !== null && p.volume_percent !== undefined ? ` · vol. ${p.volume_percent}` : ''}` : 'Indisponible'}</p>
-      <div class="mh-ctl" role="group" aria-label="Lecteur du stream">
-        <button type="button" class="mh-ctl__b" data-act="${playing ? 'pause' : 'resume'}" ${off ? 'disabled' : ''} ${busy(playing ? 'pause' : 'resume')}>${playing ? `${PAUSE}Pause` : `${PLAY}Reprendre`}</button>
-        <button type="button" class="mh-ctl__b" data-act="skip" ${off || !st.now_playing ? 'disabled' : ''} ${busy('skip')}>${NEXT}Passer</button>
-        <label class="mh-vol"><span>Vol.</span><input type="range" min="0" max="100" step="5" value="${p.volume_percent ?? 50}" data-act="volume" ${off ? 'disabled' : ''} aria-label="Volume du lecteur"></label>
-      </div>
-      ${why ? `<p class="mh-deck__why">${esc(why)}</p>` : ''}`);
-  }
-
   // ------------------------------------------------------------------ frame
 
   function render() {
     if (destroyed) return;
-    for (const b of node.querySelectorAll('.mh-tab')) {
-      const on = b.dataset.tab === tab;
-      b.classList.toggle('is-on', on);
-      b.setAttribute('aria-selected', String(on));
-      if (b.dataset.tab === 'queue') b.dataset.count = st?.queue.length ? String(st.queue.length) : '';
-    }
-    for (const p of node.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== tab;
     input.disabled = !!st && !st.open;
-    renderMeta();
-    if (tab === 'search') renderResults();
-    if (tab === 'queue') renderQueue();
-    renderNow();
-    renderDeck();
-    renderSheet();
+    renderBody();
+    renderCurtain();
+    renderDialog();
   }
 
-  // ------------------------------------------------------------------ events
-
-  function closeSheet() {
-    const from = pick?.from;
-    pick = null;
-    renderSheet();
-    (node.querySelector(`[data-pick="${from}"]`) ?? input).focus({ preventScroll: true });
-  }
+  const onPointer = (event) => {
+    // A press outside the curtain folds it — never while a version is chosen (nothing typed or chosen is lost).
+    if (curtain && !pick && !event.target.closest('.mh-curtain, .mh-field, .mh-scrim')) closeCurtain(false);
+    if (tip && !event.target.closest('.mh-seg, .mh-tip')) { tip = null; renderBand(); }
+  };
 
   const onClick = (event) => {
-    const t = event.target.closest?.('[data-tab],[data-act],[data-pick],[data-idea]');
+    const t = event.target.closest?.('[data-act],[data-pick]');
+    if (menuFor && !(t && (t.dataset.act === 'menu' || t.closest('.mh-menu')))) { menuFor = null; renderBody(); if (!t) return; }
     if (!t || !node.contains(t)) return;
-    if (t.dataset.tab) {
-      tab = t.dataset.tab;
-      menuFor = null;
-      render();
-      return;
-    }
-    if (t.dataset.idea !== undefined) {
-      input.value = t.dataset.idea;
-      onInput();
-      input.focus({ preventScroll: true });
-      return;
-    }
     if (t.dataset.pick !== undefined) {
       if (t.getAttribute('aria-disabled') === 'true') return;
       const item = results?.items?.[Number(t.dataset.pick)];
-      if (item) {
-        pick = { item, key: newIdempotencyKey(), busy: false, error: null, from: t.dataset.pick };
-        renderSheet();
+      if (!item) return;
+      pick = pick?.item.id === item.id ? null : { item, key: newIdempotencyKey(), busy: false, error: null };
+      renderCurtain();
+      if (pick) {
+        t.scrollIntoView?.({ block: 'nearest' });
+        $('buy').querySelector('[data-act="confirm"]:not(:disabled)')?.focus({ preventScroll: true });
       }
       return;
     }
     const a = t.dataset.act;
     const id = t.dataset.id;
-    if (a === 'sheet-close') closeSheet();
+    if (a === 'keep-out') { if (event.target === t) { dialog = null; renderDialog(); } return; }
+    if (a === 'clear') { closeCurtain(true); input.focus({ preventScroll: true }); }
+    else if (a === 'retry') { if (typed()) { results = null; void runSearch(input.value.trim()); } }
+    else if (a === 'unpick') { pick = null; renderCurtain(); }
     else if (a === 'confirm') void confirm();
-    else if (a === 'clear') { input.value = ''; onInput(); input.focus({ preventScroll: true }); }
-    else if (a === 'retry') {
-      const q = input.value.trim();
-      if (q.length >= 2) { results = null; void runSearch(q); }
-    } else if (a === 'withdraw') void withdraw(id);
-    else if (a === 'menu') { menuFor = menuFor === id ? null : id; render(); }
-    else if (a === 'deck') { deck = !deck; render(); }
+    else if (a === 'tip') { tip = tip === t.dataset.tip ? null : t.dataset.tip; renderBand(); }
+    else if (a === 'history') { switchView(!hist); if (curtain && !pick) closeCurtain(false); }
+    else if (a === 'hmore') void loadEvening(true);
+    else if (a === 'hretry') void loadEvening(false);
+    else if (a === 'sup') { sup = !sup; renderBody(); }
+    else if (a === 'menu') { menuFor = menuFor === id ? null : id; renderBody(); }
+    else if (a === 'withdraw') { dialog = { id, from: id }; renderDialog(); node.querySelector('[data-act="keep"]')?.focus({ preventScroll: true }); }
+    else if (a === 'keep') { const back = dialog?.from; dialog = null; renderDialog(); node.querySelector(`[data-act="withdraw"][data-id="${back}"]`)?.focus({ preventScroll: true }); }
+    else if (a === 'confirm-withdraw') { const d = dialog; dialog = null; renderDialog(); if (d) void withdraw(d.id); }
     else if (a === 'remove-refund') void moderate({ action: 'remove', request_id: id, refund: true }, 'Retirée et remboursée.');
     else if (a === 'remove-keep') {
       if (t.dataset.sure !== '1') { t.dataset.sure = '1'; t.textContent = 'Confirmer : sans remboursement'; return; }
@@ -587,35 +617,48 @@ export function view(ctx) {
       void moderate({ action: 'volume', volume_percent: Number(event.target.value) }, `Volume réglé à ${event.target.value} %.`);
   };
   const onKey = (event) => {
-    if (event.key === 'Escape' && (pick || deck || menuFor)) {
+    if (event.key === 'Escape') {
+      const handled = dialog || menuFor || pick || curtain || tip || sup || hist;
+      if (!handled) { if (event.target === input) event.preventDefault(); return; }
+      event.preventDefault(); // Chrome would clear a type=search field
       event.stopPropagation();
-      if (pick) closeSheet();
-      else { deck = false; menuFor = null; render(); }
+      if (dialog) { const back = dialog.from; dialog = null; renderDialog(); node.querySelector(`[data-act="withdraw"][data-id="${back}"]`)?.focus({ preventScroll: true }); }
+      else if (menuFor) { menuFor = null; renderBody(); }
+      else if (pick) { pick = null; renderCurtain(); }
+      else if (curtain) { closeCurtain(false); quietFocus = true; input.focus({ preventScroll: true }); quietFocus = false; }
+      else if (tip) { const k = tip; tip = null; renderBand(); node.querySelector(`[data-key="tip-${k}"]`)?.focus({ preventScroll: true }); }
+      else if (sup) { sup = false; renderBody(); node.querySelector('[data-act="sup"]')?.focus({ preventScroll: true }); }
+      else if (hist) { switchView(false); node.querySelector('.mh-clock')?.focus({ preventScroll: true }); }
       return;
     }
-    if (event.key === 'Enter' && event.target === input) {
-      // Enter in the field: search now (no wait for the typing pause).
-      clearTimeout(typing);
-      const q = input.value.trim();
-      if (q.length >= 2) void runSearch(q);
-      event.preventDefault();
+    if (event.target === input) {
+      if (event.key === 'Enter' && typed()) {
+        // Enter in the field: search now (no wait for the typing pause).
+        event.preventDefault();
+        clearTimeout(typing);
+        openCurtain();
+        void runSearch(input.value.trim());
+        return;
+      }
+      if (event.key === 'ArrowDown' && curtain) {
+        const f = node.querySelector('[data-pick]:not([aria-disabled])');
+        if (f) { event.preventDefault(); f.focus(); }
+      }
       return;
     }
-    // Results: arrows move between them, from the search field too.
-    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && tab === 'search' && !pick) {
-      const rows = [...node.querySelectorAll('[data-pick],[data-idea]')];
-      if (!rows.length) return;
+    // Results: arrows move between them, up from the first back to the field.
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && curtain && document.activeElement?.dataset?.pick !== undefined) {
+      const rows = [...node.querySelectorAll('[data-pick]')];
       const at = rows.indexOf(document.activeElement);
-      const next = event.key === 'ArrowDown' ? Math.min(rows.length - 1, at + 1) : at <= 0 ? -1 : at - 1;
+      const next = event.key === 'ArrowDown' ? Math.min(rows.length - 1, at + 1) : at - 1;
       event.preventDefault();
       (next < 0 ? input : rows[next]).focus();
     }
   };
-  const onToggle = (event) => {
-    if (event.target.classList?.contains('mh-recent')) historyOpen = event.target.open;
-  };
+  const onFocus = () => { if (!quietFocus && typed() && results) openCurtain(); };
   input.addEventListener('input', onInput);
-  node.addEventListener('toggle', onToggle, true); // « toggle » does not bubble: captured
+  input.addEventListener('focus', onFocus);
+  node.addEventListener('pointerdown', onPointer);
   node.addEventListener('click', onClick);
   node.addEventListener('change', onChange);
   node.addEventListener('keydown', onKey);
@@ -624,12 +667,14 @@ export function view(ctx) {
   return {
     node,
     start() {
+      // A draft kept by the host (data-draft-key) is searched again on return.
+      if (typed()) onInput();
       void poller.now();
-      ticking = everySecond(tick);
+      ticking = everySecond(renderBand);
     },
-    /** A session refresh (open / closed, queue size): re-read the module's own state, absorbed (no host redraw). */
-    onState() {
-      void poller.now();
+    /** A session refresh: absorbed (no host redraw); the music summary changed (open / closed, queue size) → re-read. */
+    onState(next, previous) {
+      if (JSON.stringify(next?.music ?? null) !== JSON.stringify(previous?.music ?? null)) void poller.now();
       return true;
     },
     destroy() {
@@ -637,10 +682,12 @@ export function view(ctx) {
       seq++;
       poller.stop();
       ticking?.();
+      io?.disconnect();
       clearTimeout(typing);
       clearTimeout(toastTimer);
       input.removeEventListener('input', onInput);
-      node.removeEventListener('toggle', onToggle, true);
+      input.removeEventListener('focus', onFocus);
+      node.removeEventListener('pointerdown', onPointer);
       node.removeEventListener('click', onClick);
       node.removeEventListener('change', onChange);
       node.removeEventListener('keydown', onKey);

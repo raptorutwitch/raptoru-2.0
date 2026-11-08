@@ -3,7 +3,7 @@
 // through the generated runtime-config (RUNTIME.fixtureCall): the real client, views and DOM run
 // unchanged, only their answers come from local fixtures. No network, no write, no Twitch action.
 import { CAPTURED_AT, FIXTURES } from './fixtures.js';
-import { MUSIC_SUMMARY, musicSearch, musicState } from './music-fixtures.js';
+import { MUSIC_SUMMARY, musicHistory, musicSearch, musicState } from './music-fixtures.js';
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 
@@ -74,6 +74,8 @@ export function createCalibrationSource(now = Date.now(), clock = Date.now) {
     if (['/session', '/state', '/raffle/state'].includes(path)) liveRaffle();
     if (method === 'GET' && path === '/music/state')
       return answer(musicState(now, clock, role));
+    if (method === 'GET' && path === '/music/history')
+      return answer(musicHistory(now, qs.get('before')));
     // A catalogue search is a read (nothing is asked, paid or queued); a pasted link: that track, or refused.
     if (method === 'POST' && path === '/music/search') {
       const found = musicSearch(body?.query);

@@ -2657,6 +2657,48 @@ export class SpotifyService {
    * balance, requests and whether each can still be withdrawn), and for the team the requesters and payments. Never a
    * guess: no fresh reading of Studio → the player is « indisponible » and nothing is said to play.
    */
+  /**
+   * Music Hub — « Musiques de la soirée »: the requests that really played (PLAYED / SKIPPED, with their start), newest
+   * first, since the live began (else the last 12 h), 20 per page (`before` = the previous page's last `at`). Only the
+   * requests: the streamer's own tracks are never stored (docs/music/HISTORIQUE_SOIREE.md).
+   */
+  async extensionHistory(
+    channelId: string,
+    viewerId: string | null,
+    before: string | null,
+    limit = 20,
+  ) {
+    const live = await activeSession(this.db);
+    const since = live
+      ? new Date(live.startedAt)
+      : new Date(this.clock.now().getTime() - 12 * 3_600_000);
+    const rows = await this.db.query<RequestRow>(
+      `select * from spotify_requests where channel_id = $1 and state in ('PLAYED', 'SKIPPED')
+         and playback_started_at is not null and playback_started_at >= $2
+         and ($3::timestamptz is null or playback_started_at < $3)
+       order by playback_started_at desc limit $4`,
+      [channelId, since, before, limit + 1],
+    );
+    const page = rows.slice(0, limit);
+    return {
+      since: since.toISOString(),
+      live: !!live,
+      items: page.map((r) => ({
+        at: new Date(r.playback_started_at!).toISOString(),
+        title: r.track?.title ?? null,
+        artists: r.track?.artists ?? [],
+        image_url: r.display?.image_url ?? null,
+        requested_by: r.viewer_name,
+        own: !!viewerId && r.viewer_id === viewerId,
+        state: r.state,
+      })),
+      next:
+        rows.length > limit
+          ? new Date(page[page.length - 1]!.playback_started_at!).toISOString()
+          : null,
+    };
+  }
+
   async extensionState(
     channelId: string,
     viewer: { id: string; login: string } | null,
@@ -2792,6 +2834,9 @@ export class SpotifyService {
             r.payment === 'tokens'
               ? r.refund_status === 'refunded'
               : r.twitch_status === 'cancel_requested',
+          // Music Hub final: when it left the queue and why (the extension tells it once, « pendant ton absence »).
+          ended_at: r.ended_at ? new Date(r.ended_at).toISOString() : null,
+          reason: r.reason,
         })),
       };
     }

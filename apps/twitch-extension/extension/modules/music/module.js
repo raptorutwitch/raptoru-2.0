@@ -22,6 +22,7 @@ registerSessionModule({
     load: () => import('./view.js'),
     styles: ['modules/music/music.css'],
   },
-  // A new session while the module is open: the view re-reads its own state (absorbed, no host redraw).
-  onState: (view, next) => view.onState?.(next) === true,
+  // A new session while the module is open: absorbed (no host redraw); the view re-reads its own state only when the
+  // session's music summary changed (open / closed, queue size) — never one more reading per host refresh.
+  onState: (view, next, previous) => view.onState?.(next, previous) === true,
 });

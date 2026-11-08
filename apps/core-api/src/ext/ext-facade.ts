@@ -257,7 +257,7 @@ export class ExtFacade {
         this.core,
         this.C,
         method,
-        path,
+        rawPath,
         body as Record<string, unknown> | undefined,
         who.viewer ? this.actor(who) : null,
         who.team,

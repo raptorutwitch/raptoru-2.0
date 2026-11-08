@@ -207,7 +207,18 @@ export function musicState(startedAt, clock, role = 'moderator') {
           // A viewer never sees who paid what (Core sends the team's fields to the team only).
           ({ viewer_id, viewer_login, payment, price_tokens, ...rest }) => rest,
         ),
-    pending: [],
+    // Your request being added by Studio (Core lists it in `pending` for its owner, for the whole team).
+    pending: [
+      {
+        ...entry(12, null, 'Toi (calibration)', true, { viewer_id: '5555' }),
+        request_id: '00000000-0000-4000-8000-000000000099',
+        track_id: id(12),
+        title: null,
+        artists: [],
+        image_url: null,
+        state: 'SEARCHING',
+      },
+    ].map((e) => (team ? e : (({ viewer_id, viewer_login, payment, price_tokens, ...rest }) => rest)(e))),
     me: {
       pending: 2,
       max_pending: 3,
@@ -242,6 +253,8 @@ export function musicState(startedAt, clock, role = 'moderator') {
           artists: ['Ava Solène'],
           payment: 'tokens',
           refunded: true,
+          ended_at: new Date(startedAt - m(20, 0)).toISOString(),
+          reason: 'VIEWER_CANCEL', // your own withdrawal: nothing to tell
         },
       ],
     },
@@ -261,6 +274,31 @@ export function musicState(startedAt, clock, role = 'moderator') {
     ],
     team,
     can: CAN[role] ?? CAN.viewer,
+  };
+}
+
+/** « Musiques de la soirée »: the requests played since the (calibration) live began, newest first, 20 per page. */
+export function musicHistory(startedAt, before = null) {
+  const live = startedAt - m(150, 0);
+  const all = Array.from({ length: 26 }, (_, k) => {
+    const c = MUSIC_CATALOG[(k + 3) % MUSIC_CATALOG.length];
+    return {
+      at: new Date(startedAt - m(4 + k * 5, 10)).toISOString(),
+      title: c.title,
+      artists: c.artists,
+      image_url: c.image_url,
+      requested_by: ['Viewer_B', 'Viewer_C', 'Toi (calibration)', 'Viewer_D'][k % 4],
+      own: k % 4 === 2,
+      state: 'PLAYED',
+    };
+  });
+  const rest = before ? all.filter((h) => h.at < before) : all;
+  const items = rest.slice(0, 20);
+  return {
+    since: new Date(live).toISOString(),
+    live: true,
+    items,
+    next: rest.length > 20 ? items[items.length - 1].at : null,
   };
 }
 

@@ -49,3 +49,27 @@ Il faudrait seulement :
 5. tester avec le compte du streamer, en Lab d'abord.
 
 Chaque étape demande un GO ; aucune ne doit être faite tant que les autorisations du § 3 ne sont pas tranchées.
+
+## 5. Procédure de connexion réelle (préparée le 08/11, rien d'activé)
+
+État : l'extension publique n'a **aucun** compte réel. Le module ne vit qu'en Lab (`config.lab`), sur le catalogue
+fictif du simulateur. Aucun secret dans les maquettes, les fixtures ni les journaux : le compte du streamer reste
+celui de Studio (jeton chiffré DPAPI, jamais transmis à l'extension ni à Core).
+
+| Étape | Qui | Quoi | Pré-requis |
+| ----- | --- | ---- | ---------- |
+| 0 | Antoni | Trancher les autorisations du § 3 (affichage du catalogue, Jetons, programme DJ Twitch) et relire les conditions Spotify et Twitch **à la date du branchement**. | — |
+| 1 | Code | `api.search()` : `market=from_token` (disponibilité réelle : `is_playable`), `offset` pour « Plus de résultats » (une page = un appel). | GO 0 |
+| 2 | Code | Porte d'appels : budget de recherches séparé (ex. 40/min) pour que la recherche ne puisse jamais bloquer la file ; délai de frappe 400 ms, 3 caractères minimum. | GO 0 |
+| 3 | Code | Attribution Spotify et lien vers le titre sur chaque résultat et sur « en cours » ; pochettes non recadrées. | GO 0 |
+| 4 | Antoni | En Lab, connecter le compte Spotify du streamer dans Studio (déjà possible : OAuth PKCE). Tester la recherche réelle **sans ouvrir l'extension publique**. | 1–3 |
+| 5 | Code + Antoni | Ouvrir la façade `/v1/ext/music/*` hors Lab (aujourd'hui fermée dans le code, pas par un drapeau) et l'activer par réglage Studio. | GO explicite, après 4 |
+
+Limites à garder en tête :
+
+- **Spotify** : mode développement (comptes autorisés limités) ; plafond 429 avec `Retry-After` qui bloque **tout**
+  Spotify V2 (porte persistée) ; pagination par `offset` ; disponibilité seulement avec `market`.
+- **Budget partagé** : 90 appels/min pour lecture, file, passages automatiques et recherches (§ 1–2).
+- **Twitch** : l'extension n'appelle que Core (JWT vérifié) ; les relectures du module restent à une toutes les 4 s
+  par viewer, plus une à chaque changement du résumé musique de la session.
+- Chaque étape 1 → 5 demande un GO séparé ; aucune pendant un live.

@@ -46,6 +46,18 @@ export async function musicExt(
         team: team && !!caller,
         ...(caller ? { role: caller.role } : {}),
       });
+    // « Musiques de la soirée »: public like the queue (« toi » only with an identity).
+    if (method === 'GET' && path === '/music/history') {
+      const before = new URLSearchParams(rawPath.split('?')[1] ?? '').get(
+        'before',
+      );
+      if (before !== null && Number.isNaN(Date.parse(before)))
+        return fail(400, 'invalid_before');
+      return await ok(`${base}/history`, {
+        viewer_id: caller?.id ?? null,
+        before: before === null ? null : new Date(before).toISOString(),
+      });
+    }
     if (!caller) return fail(403, 'identity_required');
     if (method === 'POST' && path === '/music/search')
       return await ok(`${base}/search`, {
