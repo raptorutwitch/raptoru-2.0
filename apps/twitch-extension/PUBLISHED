@@ -1,0 +1,4 @@
+# Commit de l'extension servi par Twitch (version publiée).
+# 0bf7907 : présumé, non prouvé — preuve: buildId de shared/runtime-config.js servi par <client-id>.ext-twitch.tv
+# Mis à jour, après approbation de Twitch, dans le même commit que la note de version.
+0bf7907
