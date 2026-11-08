@@ -15,7 +15,7 @@
   et seulement l'instantané de ce qui joue (`spotify_studio.playback`). Les musiques personnelles du streamer ne sont
   enregistrées nulle part : « Derniers titres passés » montre les **demandes** jouées ou passées, pas les autres
   titres. Les garder demanderait un changement Core/Studio (hors de cette mission).
-- **Sauvegarde du Design Lab** (prototypes jamais versionnés) : `Documents\Sauvegarde Raptoru 2.0  music-hub-design-lab-2026-11-08\` (archive vérifiée à l'extraction, SHA-256 dans `LISEZMOI.txt`).
+- **Sauvegarde du Design Lab** (prototypes jamais versionnés) : `Documents\Sauvegarde Raptoru 2.0\music-hub-design-lab-2026-11-08\` (archive vérifiée à l'extraction, SHA-256 dans `LISEZMOI.txt`).
 
 - **Design en cours de choix** : cinq directions comparables dans `prototypes/music-hub/` (double-clic
   `Ouvrir le comparateur Music Hub.cmd`). Recommandation : **D — Raptoru Néon** (voir son README et le comparateur).
