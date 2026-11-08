@@ -87,3 +87,13 @@ if (isDemo()) {
   });
   twitch.listen?.('broadcast', () => refresh());
 }
+// Sans helper Twitch ou sans onAuthorized (bloqueur, boucliers du navigateur), le panneau restait vide
+// indéfiniment : une erreur récupérable à la place. Une session reçue plus tard l'efface.
+if (!isDemo()) {
+  const authFailed = () => panel.setError(
+    'Connexion à Twitch impossible. Désactive le bloqueur ou les boucliers pour twitch.tv, puis réessaie.',
+    () => window.location.reload(),
+  );
+  if (!twitch) authFailed();
+  else window.setTimeout(() => { if (!token && !panel.state) authFailed(); }, 10_000);
+}
