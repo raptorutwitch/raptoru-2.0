@@ -6,6 +6,15 @@
 
 ## 0. Où reprendre (08/11, après le Design Lab)
 
+- **F3 « compacte »** (F2 validée dans son principe, puis optimisée en hauteur) : `prototypes/music-hub/f3-hybride.html`,
+  ouverte par défaut dans le comparateur (mode « F2 ↔ F3 »). **À valider avant intégration.** Même file, même rideau,
+  mêmes interactions que F2 ; champ bas au repos (36 px, 42 au focus sans rien pousser) ; économie et libellé de la file
+  sur une ligne ; « en cours » = pastille flottante de 40 px dans le coin inférieur droit (disque qui tourne en
+  lecture, immobile en pause, inactive si rien ne joue), qui s'élargit vers la gauche avec titre, artiste et
+  « Demandé par @pseudo » pour une demande. Titres entièrement visibles (F2 → F3) : 565 × 376 3 → 4 ; 651 × 434
+  4 → 5 ; 521 × 347 3 → 4 ; panel court 2 → 3 ; panel 5 → 6 ; paysage 3 → 4. L'intégration suivra F3 (même plan
+  que pour F2 ci-dessous).
+
 - **F2 « finale »** (retour d'Antoni sur F) : `prototypes/music-hub/f2-hybride.html`, ouverte par défaut dans le
   comparateur (mode « F ↔ F2 » pour comparer). **À valider par Antoni avant toute intégration.** La file est le module ;
   le catalogue descend en rideau par-dessus ; économie en mots ; mini-player flottant dépliable ; « Musiques de la
