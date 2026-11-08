@@ -217,13 +217,16 @@ export function createHubCarousel({
     const w = track.clientWidth;
     const h = track.clientHeight;
     if (!w || !h) return;
-    const wide = w > 460;
+    const cs = document.defaultView?.getComputedStyle(track);
+    // Échelle géométrique du shell v2 (app/layout.js, --kg) ; absente du shell legacy : 1, rien ne change.
+    const k = parseFloat(cs?.getPropertyValue('--kg')) || 1;
+    const wide = w / k > 460;
     // Largeur large réglable par un profil de densité CSS (--rh-card-w) ; 176 px sinon.
-    const wideCw = parseFloat(document.defaultView?.getComputedStyle(track)?.getPropertyValue('--rh-card-w')) || 176;
-    cw = wide ? wideCw : w > 340 ? Math.min(224, w - 150) : Math.min(200, w - 110);
+    const wideCw = (parseFloat(cs?.getPropertyValue('--rh-card-w')) || 176) * k;
+    cw = wide ? wideCw : w / k > 340 ? Math.min(224 * k, w - 150 * k) : Math.min(200 * k, w - 110 * k);
     side = Math.max(1, Math.min(wide ? 2 : 1, Math.floor((n - 1) / 2)));
-    const ch = Math.max(180, Math.min(h - 18, Math.round(cw * 1.52)));
-    gap = cw * 0.5 + cw * 0.86 * 0.5 + 12;
+    const ch = Math.max(180 * k, Math.min(h - 18 * k, Math.round(cw * 1.52)));
+    gap = cw * 0.5 + cw * 0.86 * 0.5 + 12 * k;
     track.style.setProperty('--rh-cw', `${cw}px`);
     track.style.setProperty('--rh-ch', `${ch}px`);
     paint();

@@ -1,0 +1,28 @@
+/* Socle v2 — zones de clic minimales (plan § 3.2, critère V6 ; décision 8 recommandée : agrandir la ZONE, pas le dessin).
+   Un pseudo-élément transparent porte la zone à --hit (24 px ; 32 px en tactile) autour des petits contrôles relevés
+   par la matrice (test/responsive). Rien ne change à l'œil. Contrôles exclus : ceux qui utilisent déjà ::after
+   (bkc-sw) et les rangées serrées de la modération (la zone mordrait sur la voisine). Les champs de saisie gardent
+   leur hauteur (une zone invisible ne donne pas le focus au bon endroit). */
+:root {
+  --hit: 24px;
+}
+:root[data-touch] {
+  --hit: 32px;
+}
+/* Sans spécificité : une feuille qui positionne déjà ces boutons garde la main. */
+:where(.sbx-filter, .bkc-grab, .bkc-help-btn, .bkc-wipe, .icon-btn--xs) {
+  position: relative;
+}
+.sbx-card__fav::after,
+.sbx-filter::after,
+.bkc-grab::after,
+.bkc-help-btn::after,
+.bkc-wipe::after,
+.icon-btn--xs::after {
+  position: absolute;
+  top: min(0px, calc(50% - var(--hit) / 2));
+  right: min(0px, calc(50% - var(--hit) / 2));
+  bottom: min(0px, calc(50% - var(--hit) / 2));
+  left: min(0px, calc(50% - var(--hit) / 2));
+  content: '';
+}

@@ -78,7 +78,13 @@ export function audit() {
       if (c.cut) res.cutInteractive.push(entry);
       else if (c.off) res.offInteractive.push(entry);
       if (!c.cut && !c.off && !c.scrollHidden) {
-        targets.push([Math.min(r.width, r.height), `${desc(el)} ${Math.round(r.width)}x${Math.round(r.height)}`]);
+        // Effective hit area: an absolute ::after (app/css/targets.css) may enlarge it beyond the drawn box.
+        const pa = getComputedStyle(el, '::after');
+        const grow = pa.content !== 'none' && pa.position === 'absolute'
+          ? (k) => -Math.min(0, parseFloat(pa[k]) || 0) : () => 0;
+        const ew = r.width + grow('left') + grow('right');
+        const eh = r.height + grow('top') + grow('bottom');
+        targets.push([Math.min(ew, eh), `${desc(el)} ${Math.round(ew)}x${Math.round(eh)}`]);
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) res.covered.push(`${desc(el)} under ${desc(hit)}`);
       }

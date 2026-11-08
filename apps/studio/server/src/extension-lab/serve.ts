@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import { extname, join, normalize } from 'node:path';
 import { TWITCH_EXT_MOCK_PATH } from './twitch-mock.js';
 
@@ -26,6 +27,12 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
+// Shell of the served extension (apps/twitch-extension/extension/app/boot.js): legacy unless RAPTORU_EXT_SHELL=v2
+// (Lab and E2E only; `?shell=v2` on a page also works). Read once at start.
+function labShell(): 'legacy' | 'v2' {
+  return process.env.RAPTORU_EXT_SHELL === 'v2' ? 'v2' : 'legacy';
+}
+
 export const LAB_RUNTIME_CONFIG_JS = `// Extension Lab (Raptoru Studio): local Lab EBS, fictitious jetons. Never uploaded.
 export const RUNTIME = Object.freeze({
   mode: 'connected',
@@ -33,6 +40,7 @@ export const RUNTIME = Object.freeze({
   siteUrl: '',
   buildId: 'extension-lab',
   labTwitchAuthorizePath: '/v1/ext/lab/twitch-authorize',
+  shell: '${labShell()}',
 });
 `;
 

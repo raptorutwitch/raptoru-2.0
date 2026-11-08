@@ -16,6 +16,7 @@ export const V2_ORDER = [
   'modules/moderation/moderation.css',
   'modules/commands/commands.css',
   'modules/tombola/tombola.css',
+  'app/css/targets.css',
 ];
 
 const loaded = new Map();

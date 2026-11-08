@@ -22,7 +22,7 @@ const LEGACY = {
 };
 // v2: what the Hub needs; module sheets come with their view (app/lazy-views.js), at their canonical place.
 const V2_HUB = ['app/css/tokens.css', 'app/css/tokens-fonts.css', 'app/css/shell-base.css', 'app/css/currency-switch.css',
-  'modules/hub/hub.css', 'modules/events/events.css', 'modules/tombola/tombola.css'];
+  'modules/hub/hub.css', 'modules/events/events.css', 'modules/tombola/tombola.css', 'app/css/targets.css'];
 const V2 = {
   video_component: [...V2_HUB, 'app/css/shell-video.css'],
   panel: [...V2_HUB, 'app/css/shell-panel.css'],

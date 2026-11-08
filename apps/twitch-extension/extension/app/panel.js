@@ -50,6 +50,7 @@ import {
   restrictionsFor,
   tickRestrictions,
 } from '../shared/viewer-restrictions.js';
+import { boxWidth } from '../shared/box.js';
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -1489,10 +1490,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       // immédiate ensuite) ; le premier affichage n'attend rien d'elles.
       prefetchLazyViews(hubModules.map((mod) => mod.id));
       // Hauteur disponible sous le haut du Hub : rien ne déborde de la surface Twitch.
-      hub.classList.toggle('is-narrow', hub.clientWidth <= 340);
+      hub.classList.toggle('is-narrow', boxWidth(hub) <= 340);
       requestAnimationFrame(() => {
         if (!hub.isConnected) return;
-        hub.classList.toggle('is-narrow', hub.clientWidth <= 340);
+        hub.classList.toggle('is-narrow', boxWidth(hub) <= 340);
         const page = document.scrollingElement;
         const topOffset = hub.getBoundingClientRect().top + (page?.scrollTop ?? 0);
         hub.style.setProperty('--rh-top', `${Math.max(0, Math.round(topOffset))}px`);
