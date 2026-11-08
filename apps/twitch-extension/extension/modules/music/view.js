@@ -23,7 +23,8 @@ const LENS = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="
 
 /** Core's refusal codes, in words (the details — cooldown, balance, limit — come from Core). */
 function refusal(e, st) {
-  const d = e?.details ?? {};
+  // The façade's answer is the Core's body: its details sit under `details` (cooldown, limit, balance…).
+  const d = { ...(e?.details ?? {}), ...(e?.details?.details ?? {}) };
   switch (e?.code ?? e?.message) {
     case 'requests_closed': return 'Les demandes sont fermées pour le moment.';
     case 'extension_disabled': return 'Les demandes depuis l’extension sont désactivées.';

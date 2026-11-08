@@ -398,3 +398,85 @@ describe('Studio Spotify — the panel', () => {
     expect(spotifyPanel(lab, ui())).not.toContain('data-act="sp-connect"');
   });
 });
+
+describe('Studio Spotify — Music Hub (the extension on the same queue)', () => {
+  const MH = {
+    enabled: true,
+    max_pending_per_viewer: 2,
+    viewer_cooldown_seconds: 600,
+    max_duration_seconds: 600,
+    cancel_grace_seconds: 10,
+    extension_enabled: true,
+    extension_price_tokens: 500,
+    no_duplicates: true,
+    player_controls: true,
+  };
+  const tokens = req({
+    request_id: '00000000-0000-4000-8000-000000000009',
+    source: 'extension',
+    payment: 'tokens',
+    price_tokens: 500,
+  });
+
+  it('a Core without Music Hub: no extension group, no player controls, the reward rows unchanged', () => {
+    const s = state();
+    expect(spotifyPanel(s, ui())).not.toContain('data-sp-flag');
+    expect(nowView(s, ui())).not.toContain('data-act="sp-play"');
+    expect(queueRows(s, ui())[0]!.html).not.toContain('data-keep');
+  });
+
+  it('the panel: extension switch, price, duplicates, player controls; Production says the extension is not open yet', () => {
+    const html = spotifyPanel(state({ settings: MH }), ui());
+    for (const f of ['extension_enabled', 'no_duplicates', 'player_controls'])
+      expect(html).toContain(`data-sp-flag="${f}"`);
+    expect(html).toContain('data-act="sp-ext-price"');
+    expect(html).toContain('n’ont d’effet que dans le Lab');
+    expect(
+      spotifyPanel(state({ settings: MH, environment: 'lab' }), ui()),
+    ).not.toContain('n’ont d’effet que dans le Lab');
+  });
+
+  it('player controls: pause while it plays, resume when paused, the volume read from Spotify', () => {
+    const s = state({ settings: MH });
+    s.studio!.playback!.volume_percent = 70;
+    expect(nowView(s, ui())).toContain('data-play="pause"');
+    expect(nowView(s, ui())).toMatch(/data-vol value="70"/);
+    s.studio!.playback!.is_playing = false;
+    expect(nowView(s, ui())).toContain('data-play="resume"');
+  });
+
+  it('the queue: what each request cost; « sans rembourser » only for Jetons, never for the reward’s points', () => {
+    const s = state({ settings: MH, queue: [req(), tokens], to_verify: [] });
+    const [points, ext] = queueRows(s, ui());
+    expect(points!.html).toContain('>points<');
+    expect(points!.html).not.toContain('data-keep');
+    expect(ext!.html).toContain('◆ 500 Jetons');
+    expect(ext!.html).toContain('data-keep="1"');
+  });
+
+  it('the history: the extension tag and what happened to the Jetons', () => {
+    const s = state({
+      recent: [
+        {
+          ...tokens,
+          state: 'REMOVED_BY_MOD',
+          removed_by: 'studio',
+          refund_status: 'kept',
+        },
+        {
+          ...tokens,
+          request_id: '00000000-0000-4000-8000-000000000010',
+          state: 'CANCELED',
+          canceled_by: '1',
+          refund_status: 'refunded',
+        },
+      ],
+    });
+    const html = historyRows(s)
+      .map((r) => r.html)
+      .join('');
+    expect(html).toContain('>Extension<');
+    expect(html).toContain('Jetons gardés');
+    expect(html).toContain('Jetons remboursés');
+  });
+});

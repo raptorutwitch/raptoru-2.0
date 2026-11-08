@@ -14,7 +14,7 @@ export interface SpTrack {
 
 export interface SpRequest {
   request_id: string;
-  source: 'twitch' | 'simulation';
+  source: 'twitch' | 'simulation' | 'extension';
   viewer: { id: string; login: string; name: string };
   input: string | null;
   state: string;
@@ -32,6 +32,10 @@ export interface SpRequest {
   auto_skip: boolean;
   auto_skip_result: string | null;
   twitch_status: 'cancel_requested' | 'kept' | 'unmanaged' | 'none' | null;
+  /** Music Hub (absent d'un Core plus ancien) : la récompense paie en points, l'extension en Jetons. */
+  payment?: 'channel_points' | 'tokens';
+  price_tokens?: number | null;
+  refund_status?: 'refunded' | 'kept' | null;
 }
 
 export interface SpSettings {
@@ -40,6 +44,11 @@ export interface SpSettings {
   viewer_cooldown_seconds: number;
   max_duration_seconds: number;
   cancel_grace_seconds: number;
+  /** Music Hub (absent d'un Core plus ancien). */
+  extension_enabled?: boolean;
+  extension_price_tokens?: number;
+  no_duplicates?: boolean;
+  player_controls?: boolean;
 }
 
 export interface SpOverride {
@@ -74,6 +83,7 @@ export interface SpPlayback {
   track: SpTrack | null;
   progress_ms: number | null;
   is_playing: boolean;
+  volume_percent?: number | null;
 }
 
 export interface SpState {
@@ -202,7 +212,18 @@ export const REASONS: Record<string, string> = {
   LATE: 'rédemption trop ancienne',
   INTERRUPTED: 'interrompue par une autre demande',
   INTERRUPTED_EXTERNAL: 'interrompue par un autre titre',
+  DUPLICATE_TRACK: 'titre déjà en file',
+  NOT_PLAYABLE: 'titre non jouable',
+  EXTENSION_DISABLED: 'demandes depuis l’extension fermées',
 };
+
+/** Ce qu'a coûté une demande : des points de la récompense, ou des Jetons depuis l'extension (Music Hub). */
+export const paidWith = (r: SpRequest) =>
+  r.payment === 'tokens'
+    ? `<span class="d-tag" title="Demandée depuis l’extension">◆ ${r.price_tokens ?? '?'} Jetons</span>`
+    : r.source === 'twitch'
+      ? '<span class="d-tag off" title="Récompense de points de chaîne">points</span>'
+      : '';
 
 export const STATES: Record<string, string> = {
   RECEIVED: 'Reçue',
@@ -328,6 +349,11 @@ export function nowView(s: SpState, ui: SpUi) {
   const seen = read?.stale
     ? `<span>Lu ${esc(agoMs(read.age))}</span><button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>`
     : '';
+  const vol = read?.p.volume_percent ?? null;
+  const controls = s.settings.player_controls
+    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${read?.p.is_playing ? 'pause' : 'resume'}">${read?.p.is_playing ? 'Pause' : 'Reprendre'}</button>
+        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume"><b>${vol ?? '—'}</b></label>`
+    : '';
   return `<div class="spo-art">${cover(s, track)}${playing ? '<span class="spo-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}</div>
     <div class="spo-meta">
       <span class="d-lb">${esc(kicker)}</span>
@@ -337,7 +363,7 @@ export function nowView(s: SpState, ui: SpUi) {
       <div class="spo-trans"><span class="spo-t" data-t0></span><span class="d-prog"><i data-prog></i></span><span class="spo-t" data-t1></span></div>
       <div class="spo-sub">
         <button type="button" class="d-btn" data-act="sp-skip" title="Passe le titre en cours sur Spotify, même hors demandes">${ic('skip')}Passer la musique</button>
-        ${device ? `<span>${ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
+        ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
       </div>
     </div>`;
 }
@@ -394,6 +420,9 @@ export function queueRows(s: SpState, ui: SpUi) {
           queued.has(r.request_id)
             ? `<button type="button" class="d-btn ghost sm" data-act="sp-remove" ${id} title="Le viewer est remboursé ; déjà dans la file Spotify, le titre sera passé automatiquement">Retirer et rembourser</button>`
             : '',
+          queued.has(r.request_id) && r.payment === 'tokens'
+            ? `<button type="button" class="d-btn ghost sm" data-act="sp-remove" data-keep="1" ${id} title="Les Jetons ne sont pas rendus (abus, contenu interdit)">Sans rembourser</button>`
+            : '',
           toVerify
             ? `<button type="button" class="d-btn sm" data-act="sp-settle" data-decision="refund" ${id} title="Rend les points (récompense de Raptoru)">Rembourser</button>
                <button type="button" class="d-btn sm" data-act="sp-settle" data-decision="keep" ${id} title="Rien n’est envoyé à Twitch : la réclamation reste en attente">Garder</button>`
@@ -405,7 +434,7 @@ export function queueRows(s: SpState, ui: SpUi) {
         <span class="spo-pos">${pos}</span>${cover(s, r.track, 'spo-cov--s')}
         <div class="spo-r__m"><b>${r.track ? esc(r.track.title) : `« ${esc(r.input)} »`}</b><small>${r.track ? esc(r.track.artists.join(', ')) : ''}</small></div>
         <span class="spo-t">${time}</span>
-        <div class="spo-r__by">${pp(r.viewer.name || r.viewer.login, 18)}<span>@${esc(r.viewer.login)}</span><span class="spo-quota" title="Demandes en attente · délai restant">${esc(quota)}</span>${status}</div>
+        <div class="spo-r__by">${pp(r.viewer.name || r.viewer.login, 18)}<span>@${esc(r.viewer.login)}</span><span class="spo-quota" title="Demandes en attente · délai restant">${esc(quota)}</span>${paidWith(r)}${status}</div>
         ${acts ? `<div class="spo-r__a">${acts}</div>` : ''}
       </div>`,
     };
@@ -413,7 +442,7 @@ export function queueRows(s: SpState, ui: SpUi) {
 }
 
 export const queueEmpty = (s: SpState) =>
-  `<div class="d-empty">La file est vide.<br><small>Les viewers demandent une musique avec la récompense Twitch.</small>${s.sim ? '<br><button type="button" class="d-btn sm" data-open="simulateur" style="margin-top:8px">Simuler une demande</button>' : ''}</div>`;
+  `<div class="d-empty">La file est vide.<br><small>Les viewers demandent une musique avec la récompense Twitch${s.settings.extension_enabled ? ' ou depuis l’extension' : ''}.</small>${s.sim ? '<br><button type="button" class="d-btn sm" data-open="simulateur" style="margin-top:8px">Simuler une demande</button>' : ''}</div>`;
 
 /** La note qui explique la décision, seulement quand il y en a une à prendre. */
 export const verifyNote = (s: SpState) =>
@@ -439,11 +468,18 @@ function resultOf(r: SpRequest) {
         ? 'off'
         : 'bad';
   const why = r.reason && REASONS[r.reason] ? REASONS[r.reason] : '';
-  const twitch = r.twitch_status
-    ? TWITCH[r.twitch_status]
-    : r.source === 'twitch' && !['RECEIVED', 'SEARCHING'].includes(r.state)
-      ? 'réclamation en attente sur Twitch'
-      : '';
+  const twitch =
+    r.payment === 'tokens'
+      ? r.refund_status === 'refunded'
+        ? 'Jetons remboursés'
+        : r.refund_status === 'kept'
+          ? 'Jetons gardés'
+          : ''
+      : r.twitch_status
+        ? TWITCH[r.twitch_status]
+        : r.source === 'twitch' && !['RECEIVED', 'SEARCHING'].includes(r.state)
+          ? 'réclamation en attente sur Twitch'
+          : '';
   const skip = r.auto_skip
     ? `passée automatiquement : ${r.auto_skip_result === 'SKIPPED' ? 'oui' : (r.auto_skip_result ?? 'en attente')}`
     : '';
@@ -463,7 +499,7 @@ export function historyRows(s: SpState) {
     return {
       key: r.request_id,
       html: `<div class="spo-h"><span class="spo-t">${esc(hhmm(r.received_at))}</span>
-        <div class="spo-r__m"><b>${r.source === 'simulation' ? '<span class="d-tag off">Lab</span> ' : ''}@${esc(r.viewer.login)}</b><small>${esc(r.input)}</small></div>
+        <div class="spo-r__m"><b>${r.source === 'simulation' ? '<span class="d-tag off">Lab</span> ' : r.source === 'extension' ? '<span class="d-tag">Extension</span> ' : ''}@${esc(r.viewer.login)}</b><small>${esc(r.input)}</small></div>
         <span class="d-tag ${x.tone}">${esc(x.head)}</span>
         ${x.detail ? `<p>${esc(x.detail)}</p>` : ''}</div>`,
     };

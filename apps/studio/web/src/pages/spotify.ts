@@ -55,6 +55,10 @@ const ERRORS: Record<string, string> = {
   playing_use_skip: 'Elle joue déjà : utilise « Passer la musique ».',
   already_settled: 'Déjà réglée.',
   not_uncertain: 'Cette demande n’est plus à vérifier.',
+  player_controls_disabled:
+    'Commandes du lecteur désactivées (panneau, Extension).',
+  no_device: 'Aucun appareil Spotify actif.',
+  studio_unavailable: 'Studio absent pour le serveur.',
 };
 const SETTINGS = ['set-pending', 'set-cooldown', 'set-duration', 'set-grace'];
 
@@ -246,6 +250,24 @@ export function mountSpotifyPage(root: HTMLElement) {
   };
   p.root.addEventListener('input', keep);
   p.root.addEventListener('change', keep);
+  // Music Hub : les interrupteurs de l'extension et le volume s'appliquent dès qu'on les lâche.
+  p.root.addEventListener('change', (ev) => {
+    const t = ev.target as HTMLInputElement;
+    if (t.dataset.spFlag)
+      void post(
+        null,
+        '/settings',
+        { [t.dataset.spFlag]: t.checked },
+        'Réglage enregistré',
+      );
+    else if (t.hasAttribute('data-vol'))
+      void post(
+        null,
+        '/actions',
+        { action: 'volume', volume_percent: Number(t.value) },
+        `Volume ${t.value} demandé`,
+      );
+  });
   scrub(p.root, (i) => i.dispatchEvent(new Event('input', { bubbles: true })));
 
   async function setOpen(btn: HTMLElement | null, on: boolean) {
@@ -285,20 +307,42 @@ export function mountSpotifyPage(root: HTMLElement) {
         void post(el, '/actions', { action: 'skip' }, 'Passage demandé');
     },
     'sp-remove': async (el) => {
+      const keep = el.dataset.keep === '1';
       if (
         await confirmBox({
-          title: 'Retirer cette demande ?',
-          body: 'Le viewer est remboursé (récompense de Raptoru) ; si elle est déjà dans la file Spotify, elle sera passée automatiquement.',
-          yes: 'Retirer et rembourser',
+          title: keep ? 'Retirer sans rembourser ?' : 'Retirer cette demande ?',
+          body: keep
+            ? 'Les Jetons ne sont pas rendus au viewer. Si elle est déjà dans la file Spotify, elle sera passée automatiquement.'
+            : 'Le viewer est remboursé (Jetons, ou points de la récompense de Raptoru) ; si elle est déjà dans la file Spotify, elle sera passée automatiquement.',
+          yes: keep ? 'Retirer sans rembourser' : 'Retirer et rembourser',
         })
       )
         void post(
           el,
           '/actions',
-          { action: 'remove', request_id: el.dataset.id },
-          'Demande retirée',
+          {
+            action: 'remove',
+            request_id: el.dataset.id,
+            ...(keep ? { refund: false } : {}),
+          },
+          keep ? 'Demande retirée, Jetons gardés' : 'Demande retirée',
         );
     },
+    'sp-play': (el) =>
+      post(
+        el,
+        '/actions',
+        { action: el.dataset.play },
+        el.dataset.play === 'pause' ? 'Pause demandée' : 'Reprise demandée',
+      ),
+    'sp-ext-price': (el) =>
+      post(
+        el,
+        '/settings',
+        { extension_price_tokens: Number(field('ext-price')) },
+        'Prix enregistré',
+        ['ext-price'],
+      ),
     'sp-settle': async (el) => {
       const refund = el.dataset.decision === 'refund';
       if (

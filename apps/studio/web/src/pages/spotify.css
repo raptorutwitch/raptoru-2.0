@@ -155,10 +155,19 @@
   color: var(--ink3);
   font-size: 12.5px;
 }
-.spo-sub > span {
+.spo-sub > span,
+.spo-vol {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+.spo-vol input {
+  width: 110px;
+}
+.spo-vol b {
+  min-width: 2.2em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .spo-sim {

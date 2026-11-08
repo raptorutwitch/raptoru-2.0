@@ -1,4 +1,4 @@
-import { esc, fld, grp, hhmm, row } from '../ds/ds.js';
+import { esc, fld, grp, hhmm, row, sw } from '../ds/ds.js';
 import {
   REASONS,
   STATES,
@@ -81,6 +81,26 @@ function exceptions(s: SpState, ui: SpUi) {
       <small>Une case vide suit le quota global ; 0 min = aucun délai. Les deux vides : retour aux valeurs globales.</small>
     </div>`,
     'viewers',
+  );
+}
+
+/** Music Hub : la même file depuis l'extension, payée en Jetons ; et les commandes du lecteur (pause, volume). */
+function extension(s: SpState, ui: SpUi) {
+  const v = s.settings;
+  if (v.extension_enabled === undefined) return '';
+  return grp(
+    'Extension',
+    'music',
+    `<div class="d-row col" data-k="extension jetons music hub demandes prix lecteur pause volume doublon">
+      ${row('Demandes depuis l’extension', sw(v.extension_enabled, 'data-sp-flag="extension_enabled"', 'Demandes depuis l’extension'))}
+      ${row('Prix d’une demande', `${fld('data-f="ext-price" min="1" max="1000000"', val(ui, 'ext-price', v.extension_price_tokens ?? 500), 'Jetons')}<button type="button" class="d-btn sm" data-act="sp-ext-price">Enregistrer</button>`, 'prix jetons')}
+      ${row('Refuser un titre déjà en file', sw(v.no_duplicates ?? true, 'data-sp-flag="no_duplicates"', 'Refuser un titre déjà en file'), 'doublon')}
+      ${row('Commandes du lecteur', sw(v.player_controls ?? false, 'data-sp-flag="player_controls"', 'Commandes du lecteur'), 'pause reprendre volume')}
+      <small>Même file, mêmes quotas et mêmes commandes du chat que la récompense ; seul le paiement change : des Jetons, rendus une seule fois si la demande est refusée, retirée ou annulée. La récompense de points n’est pas touchée.</small>
+      <small>Commandes du lecteur : pause, reprise et volume ici et pour l’équipe dans l’extension. Elles agissent sur ton appareil Spotify.</small>
+      ${s.environment === 'production' ? '<p class="spo-state warn">En Production, l’extension n’a pas encore accès à la musique : ces réglages n’ont d’effet que dans le Lab.</p>' : ''}
+    </div>`,
+    'jetons music hub',
   );
 }
 
@@ -253,4 +273,4 @@ export function simBar(s: SpState, ui: SpUi) {
 }
 
 export const spotifyPanel = (s: SpState, ui: SpUi) =>
-  `${quotas(s, ui)}${exceptions(s, ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;
+  `${quotas(s, ui)}${exceptions(s, ui)}${extension(s, ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;
