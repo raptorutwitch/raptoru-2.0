@@ -63,6 +63,25 @@ export function audit() {
   };
   const fonts = [];
   const targets = [];
+  const hits = [];
+  function hitRect(el, r) {
+    let e = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    // A pseudo-element is clipped (and not hit) outside an element whose own overflow is not visible.
+    const ownClip = getComputedStyle(el).overflow !== 'visible';
+    for (const pseudo of ownClip ? [] : ['::after', '::before']) {
+      const pa = getComputedStyle(el, pseudo);
+      if (pa.content === 'none' || pa.position !== 'absolute' || pa.pointerEvents === 'none') continue;
+      const g = (k) => -Math.min(0, parseFloat(pa[k]) || 0);
+      e = { left: Math.min(e.left, r.left - g('left')), top: Math.min(e.top, r.top - g('top')),
+        right: Math.max(e.right, r.right + g('right')), bottom: Math.max(e.bottom, r.bottom + g('bottom')) };
+    }
+    const label = el.matches('input, textarea, select') ? el.closest('label') : null;
+    if (label) {
+      const l = hitRect(label, label.getBoundingClientRect());
+      e = { left: Math.min(e.left, l.left), top: Math.min(e.top, l.top), right: Math.max(e.right, l.right), bottom: Math.max(e.bottom, l.bottom) };
+    }
+    return e;
+  }
   for (const el of els) {
     if (sr(el)) continue;
     const r = el.getBoundingClientRect();
@@ -78,13 +97,12 @@ export function audit() {
       if (c.cut) res.cutInteractive.push(entry);
       else if (c.off) res.offInteractive.push(entry);
       if (!c.cut && !c.off && !c.scrollHidden) {
-        // Effective hit area: an absolute ::after (app/css/targets.css) may enlarge it beyond the drawn box.
-        const pa = getComputedStyle(el, '::after');
-        const grow = pa.content !== 'none' && pa.position === 'absolute'
-          ? (k) => -Math.min(0, parseFloat(pa[k]) || 0) : () => 0;
-        const ew = r.width + grow('left') + grow('right');
-        const eh = r.height + grow('top') + grow('bottom');
+        // Effective hit area: a transparent absolute ::after / ::before (app/css/targets.css) may enlarge it beyond
+        // the drawn box; a field inside a <label> is focused by a click anywhere on the label.
+        const e = hitRect(el, r);
+        const ew = e.right - e.left, eh = e.bottom - e.top;
         targets.push([Math.min(ew, eh), `${desc(el)} ${Math.round(ew)}x${Math.round(eh)}`]);
+        hits.push({ el, r, e, grown: e.left < r.left - 0.5 || e.top < r.top - 0.5 || e.right > r.right + 0.5 || e.bottom > r.bottom + 0.5 });
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
         if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) res.covered.push(`${desc(el)} under ${desc(hit)}`);
       }
@@ -96,6 +114,24 @@ export function audit() {
       if (!c.cut && !c.off && !c.scrollHidden) fonts.push([parseFloat(cs.fontSize), desc(el)]);
     }
   }
+  // Enlarged hit areas must not reach another control: an enlarged zone over a neighbour's drawn box (or over its
+  // enlarged zone) would take its clicks. Nested controls (label > input) are not a conflict.
+  // A small control drawn ON a larger one (the favourite star on a sound card) is a design choice of V1: reported apart
+  // (hitOverlays); its enlarged zone is still checked against every OTHER control.
+  res.hitOverlaps = [];
+  res.hitOverlays = 0;
+  const inter = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+  const inside = (a, b) => a.left >= b.left - 0.5 && a.right <= b.right + 0.5 && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5;
+  for (let i = 0; i < hits.length; i += 1) for (let j = i + 1; j < hits.length; j += 1) {
+    const A = hits[i], B = hits[j];
+    if (A.el.contains(B.el) || B.el.contains(A.el)) continue;
+    const la = A.el.closest('label'), lb = B.el.closest('label');
+    if (la && la === lb) continue;
+    if (!inter(A.e, B.e)) continue;
+    if (inside(A.r, B.r) || inside(B.r, A.r)) { res.hitOverlays += 1; continue; }
+    const box = (h) => `${Math.round(h.e.left)},${Math.round(h.e.top)}→${Math.round(h.e.right)},${Math.round(h.e.bottom)}`;
+    res.hitOverlaps.push(`${desc(A.el)} [${box(A)}] ↔ ${desc(B.el)} [${box(B)}]`);
+  }
   fonts.sort((a, b) => a[0] - b[0]);
   targets.sort((a, b) => a[0] - b[0]);
   res.minFont = fonts[0]?.[0] ?? null;
@@ -103,7 +139,7 @@ export function audit() {
   res.textCount = fonts.length;
   res.smallestFonts = fonts.slice(0, 4).map(([f, d]) => `${f}px ${d}`);
   res.minTarget = targets[0]?.[0] != null ? Math.round(targets[0][0] * 10) / 10 : null;
-  res.targetsLt24 = targets.filter(([s]) => s < 24).map(([, d]) => d);
+  res.targetsLt24 = targets.filter(([s]) => s < 23.95).map(([, d]) => d);
   res.targetsLt44 = targets.filter(([s]) => s < 44).length;
   // Scroll containers that actually scroll.
   for (const el of els) {

@@ -94,7 +94,7 @@ async function main() {
         Object.assign(r, { surface, label, size: `${w}x${h}`, dpr, req: view, errors });
         if (flag('shots')) await page.screenshot({ path: join(out, 'shots', tag, `${surface}-${w}x${h}@${dpr}-${view}.png`) });
         results.push(r);
-        process.stdout.write(`${surface} ${w}x${h}@${dpr} ${view}: cut=${r.cutInteractive.length} off=${r.offInteractive.length} cutTxt=${r.cutText.length} minFont=${r.minFont} hscroll=${r.doc.sw > r.doc.cw} err=${errors.length}\n`);
+        process.stdout.write(`${surface} ${w}x${h}@${dpr} ${view}: cut=${r.cutInteractive.length} off=${r.offInteractive.length} cutTxt=${r.cutText.length} minFont=${r.minFont} t<24=${r.targetsLt24.length} overlap=${r.hitOverlaps.length} hscroll=${r.doc.sw > r.doc.cw} err=${errors.length}\n`);
         await ctx.close();
       }
     }
@@ -118,11 +118,15 @@ async function main() {
     }
   }
   const cuts = results.filter((r) => r.cutInteractive.length + r.offInteractive.length);
+  const small = results.reduce((n, r) => n + r.targetsLt24.length, 0);
+  const overlaps = results.filter((r) => r.hitOverlaps.length);
+  md += `\n${small} cibles < 24 px · ${overlaps.length} mesures avec zones de clic qui se chevauchent.\n`;
+  for (const r of overlaps) md += `- chevauchement ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${r.hitOverlaps.slice(0, 3).join(' ; ')}\n`;
   md += `\n${cuts.length} cas avec contrôle coupé.\n`;
   for (const r of cuts) md += `- ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${[...r.cutInteractive, ...r.offInteractive].slice(0, 3).join(' ; ')}\n`;
   writeFileSync(join(out, `${tag}.md`), md);
-  console.log(`\n${results.length} mesures, ${cuts.length} avec contrôle coupé → ${join(out, tag + '.md')}`);
-  process.exitCode = cuts.length ? 1 : 0;
+  console.log(`\n${results.length} mesures, ${cuts.length} avec contrôle coupé, ${small} cibles < 24 px, ${overlaps.length} avec chevauchement → ${join(out, tag + '.md')}`);
+  process.exitCode = cuts.length || overlaps.length ? 1 : 0;
 }
 
 if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) await main();

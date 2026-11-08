@@ -1,16 +1,22 @@
 /* Socle v2 — zones de clic minimales (plan § 3.2, critère V6 ; décision 8 recommandée : agrandir la ZONE, pas le dessin).
-   Un pseudo-élément transparent porte la zone à --hit (24 px ; 32 px en tactile) autour des petits contrôles relevés
-   par la matrice (test/responsive). Rien ne change à l'œil. Contrôles exclus : ceux qui utilisent déjà ::after
-   (bkc-sw) et les rangées serrées de la modération (la zone mordrait sur la voisine). Les champs de saisie gardent
-   leur hauteur (une zone invisible ne donne pas le focus au bon endroit). */
+   Rien ne change à l'œil. Trois moyens, selon le contrôle :
+   1. un pseudo-élément transparent porte la zone à --hit (24 px ; 32 px en tactile) autour des petits contrôles relevés
+      par la matrice (test/responsive) : ::after, ou ::before quand ::after dessine déjà quelque chose (bkc-sw) ;
+   2. les contrôles qui coupent leur débordement (overflow: hidden, pour l'ellipse) cachent leur pseudo-élément :
+      marge intérieure verticale compensée par une marge négative (fond transparent : même dessin, même mise en page) ;
+   3. le bouton « Tirer » du Bonk (overflow: hidden, fond dessiné) : hauteur plancher de 24 px (il mesure 24 × échelle,
+      soit au pire une fraction de pixel de plus).
+   La matrice vérifie qu'aucune zone agrandie ne mord sur un autre contrôle (audit.mjs, hitOverlaps). */
 :root {
   --hit: 24px;
 }
 :root[data-touch] {
   --hit: 32px;
 }
-/* Sans spécificité : une feuille qui positionne déjà ces boutons garde la main. */
-:where(.sbx-filter, .bkc-grab, .bkc-help-btn, .bkc-wipe, .icon-btn--xs) {
+/* Sans spécificité : une feuille qui positionne déjà ces boutons (absolute, sticky) garde la main. */
+:where(.sbx-filter, .bkc-grab, .bkc-help-btn, .bkc-wipe, .icon-btn--xs, .sbx-card__play, .rh-util-btn,
+  .jdm-notification-toggle, .jdm-viewer-preferences-toggle, .rl-cswitch__chip, .sbx-vol-trigger, .sbx-sort__button,
+  .tmbx .ib, .modv2 .sidelink, .modv2 .btn--stop, .bkc-sw, .sbx-search) {
   position: relative;
 }
 .sbx-card__fav::after,
@@ -18,11 +24,58 @@
 .bkc-grab::after,
 .bkc-help-btn::after,
 .bkc-wipe::after,
-.icon-btn--xs::after {
+.icon-btn--xs::after,
+.sbx-card__play::after,
+.rh-tuto::after,
+.rh-util-btn::after,
+.rh-nav::after,
+.jdm-notification-toggle::after,
+.jdm-viewer-preferences-toggle::after,
+.rl-cswitch__chip::after,
+.sbx-vol-trigger::after,
+.sbx-sort__button::after,
+.tmbx .ib::after,
+.modv2 .sidelink::after,
+.modv2 .btn--stop::after,
+.rl-picker__head::after,
+.sbx-search::after,
+.bkc-sw::before {
   position: absolute;
   top: min(0px, calc(50% - var(--hit) / 2));
   right: min(0px, calc(50% - var(--hit) / 2));
   bottom: min(0px, calc(50% - var(--hit) / 2));
   left: min(0px, calc(50% - var(--hit) / 2));
   content: '';
+}
+/* Modération : nom du viewer et message (rangées serrées, ellipse). */
+.modv2 .row .who,
+.modv2 .row button.txt,
+.modv2 .now__row .who,
+.modv2 .now__row button.txt {
+  margin-block: -4px;
+  padding-block: 4px;
+}
+/* Bonk : le champ de recherche des emotes (transparent) occupe toute la hauteur de sa barre, bordure comprise. */
+.rl-picker__input {
+  align-self: stretch;
+  margin-block: -1px;
+}
+/* Poignée du chargeur : les emotes sont juste au-dessus, la zone grandit vers le bas (2 px au plus vers le haut). */
+.bkc-grab::after {
+  top: max(-2px, min(0px, calc(50% - var(--hit) / 2)));
+  bottom: min(0px, calc(100% + 2px - var(--hit)));
+}
+.bkc-cta {
+  min-height: 24px;
+}
+/* Voisins serrés : en tactile, la zone de 32 px mordrait sur le contrôle d'à côté. Zone de 24 px pour eux ;
+   pas d'élargissement horizontal pour les deux boutons ronds du haut du Hub (6 px entre eux). */
+.bkc-grab,
+.rl-picker__head {
+  --hit: 24px;
+}
+.jdm-notification-toggle::after,
+.jdm-viewer-preferences-toggle::after {
+  right: min(0px, calc(50% - 12px));
+  left: min(0px, calc(50% - 12px));
 }
