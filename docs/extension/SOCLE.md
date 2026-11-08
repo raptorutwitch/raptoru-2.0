@@ -7,10 +7,10 @@
 
 Chaque page (`video_component.html`, `panel.html`, `mobile.html`) charge le helper Twitch puis **`app/boot.js`**, qui choisit :
 
-| Shell | Quand | Ce qui tourne |
-|---|---|---|
-| `legacy` (défaut tant qu'Antoni n'a pas basculé) | toujours, sauf choix contraire | feuilles historiques `base/overlay/mobile.css` + `overlay.js` / `mobile.js` + `shared/ui.js`, **inchangés** (retour arrière) |
-| `v2` | `?shell=v2` (Lab, banc) ou `RUNTIME.shell = 'v2'` (`scripts/package.mjs --shell v2`) | `app/` + `modules/` ci-dessous |
+| Shell                                            | Quand                                                                                | Ce qui tourne                                                                                                                |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `legacy` (défaut tant qu'Antoni n'a pas basculé) | toujours, sauf choix contraire                                                       | feuilles historiques `base/overlay/mobile.css` + `overlay.js` / `mobile.js` + `shared/ui.js`, **inchangés** (retour arrière) |
+| `v2`                                             | `?shell=v2` (Lab, banc) ou `RUNTIME.shell = 'v2'` (`scripts/package.mjs --shell v2`) | `app/` + `modules/` ci-dessous                                                                                               |
 
 Les **vues** (`shared/tts-v2.js`, `soundboard-view.js`, `bonk-view.js`, `tombola-v2.js`, `moderation-v2.js`…), le client du
 Core (`shared/api.js`), l'achat par intention (`shared/purchase.js`) et les modèles sont **communs aux deux shells**. Le
@@ -18,22 +18,22 @@ shell v2 change la plomberie (entrée, mesure, chargement, feuilles), pas le com
 
 ## 2. Fichiers du shell v2
 
-| Fichier | Rôle |
-|---|---|
-| `app/boot.js` | choix du shell, feuilles initiales, entrée |
-| `app/v2.js` | démarre la mesure puis le viewer |
-| `app/main.js` | **une** entrée pour les 3 surfaces : helper Twitch, JWT, relevé de session, reprise, garde « écran gris » |
-| `app/store.js` | `createPoller()` (relevé suspendu page cachée) et `everySecond()` (horloge 1 s partagée) |
-| `app/layout.js` | **la seule mesure** : `data-surface`, `data-profile`, `data-touch`, `data-mq`, `--kg`, `--kt`, `--vw`, `--vh` |
-| `app/mq.js`, `app/mq-eval.js` | requêtes de taille historiques, réévaluées sur la boîte de composition |
-| `app/panel.js` | panneau (Hub, chrome, hôte des modules) ; issu de `shared/ui.js` |
-| `app/lazy-views.js` | vues chargées à la demande (+ leurs feuilles), préchargement une fois le Hub affiché |
-| `app/styles.js` | insertion des feuilles dans **un ordre canonique** (cascade identique au legacy) |
-| `app/css/tokens.css` | échelles, planchers de texte, couleurs de l'identité |
-| `app/css/tokens-fonts.css` | `--fs-N` / `--fsm-N` : tailles de texte avec plancher |
-| `app/css/shell-{base,video,panel}.css` | règles vivantes des feuilles historiques, mises à l'échelle |
-| `modules/<id>/<id>.css` | feuille d'un module (copie mise à l'échelle de sa feuille historique) |
-| `shared/box.js` | `boxWidth(node)` : largeur en pixels de composition, pour tout seuil JS |
+| Fichier                                | Rôle                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `app/boot.js`                          | choix du shell, feuilles initiales, entrée                                                                    |
+| `app/v2.js`                            | démarre la mesure puis le viewer                                                                              |
+| `app/main.js`                          | **une** entrée pour les 3 surfaces : helper Twitch, JWT, relevé de session, reprise, garde « écran gris »     |
+| `app/store.js`                         | `createPoller()` (relevé suspendu page cachée) et `everySecond()` (horloge 1 s partagée)                      |
+| `app/layout.js`                        | **la seule mesure** : `data-surface`, `data-profile`, `data-touch`, `data-mq`, `--kg`, `--kt`, `--vw`, `--vh` |
+| `app/mq.js`, `app/mq-eval.js`          | requêtes de taille historiques, réévaluées sur la boîte de composition                                        |
+| `app/panel.js`                         | panneau (Hub, chrome, hôte des modules) ; issu de `shared/ui.js`                                              |
+| `app/lazy-views.js`                    | vues chargées à la demande (+ leurs feuilles), préchargement une fois le Hub affiché                          |
+| `app/styles.js`                        | insertion des feuilles dans **un ordre canonique** (cascade identique au legacy)                              |
+| `app/css/tokens.css`                   | échelles, planchers de texte, couleurs de l'identité                                                          |
+| `app/css/tokens-fonts.css`             | `--fs-N` / `--fsm-N` : tailles de texte avec plancher                                                         |
+| `app/css/shell-{base,video,panel}.css` | règles vivantes des feuilles historiques, mises à l'échelle                                                   |
+| `modules/<id>/<id>.css`                | feuille d'un module (copie mise à l'échelle de sa feuille historique)                                         |
+| `shared/box.js`                        | `boxWidth(node)` : largeur en pixels de composition, pour tout seuil JS                                       |
 
 ## 3. Responsive : la composition 651×434 et ses échelles
 
@@ -75,11 +75,11 @@ la composition 651 réduite (≈ 14 sons au lieu de 20, comme annoncé au plan �
 Le module fictif du Lab est le gabarit exécutable (vérifié par `node test/responsive/lab-module.mjs`). Trois fichiers à
 lui, **aucune ligne** dans `app/lazy-views.js`, `app/styles.js` ou `app/panel.js` :
 
-| Fichier | Rôle | Chargé |
-|---|---|---|
-| `module.js` (entrée) | `registerSessionModule({ id, card, available, lazy: { load, styles }, onState? })` | au démarrage (le Hub a besoin de sa carte) |
-| `view.js` | `export function view(ctx) → { node, start?, destroy?, attached?, onState? }` | à la première ouverture (ou en arrière-plan après le Hub, sauf `prefetch: false`) |
-| `<module>.css` | classes préfixées, `calc(N * var(--g))`, `var(--fs-N)` | avec la vue, après les feuilles des modules (avant `targets.css`) |
+| Fichier              | Rôle                                                                               | Chargé                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `module.js` (entrée) | `registerSessionModule({ id, card, available, lazy: { load, styles }, onState? })` | au démarrage (le Hub a besoin de sa carte)                                        |
+| `view.js`            | `export function view(ctx) → { node, start?, destroy?, attached?, onState? }`      | à la première ouverture (ou en arrière-plan après le Hub, sauf `prefetch: false`) |
+| `<module>.css`       | classes préfixées, `calc(N * var(--g))`, `var(--fs-N)`                             | avec la vue, après les feuilles des modules (avant `targets.css`)                 |
 
 L'entrée s'importe à une seule place : la liste des modules de session en tête de `app/panel.js` (l'ordre d'import est
 l'ordre du Hub). Un module seulement pour le Lab va dans `extension/lab-modules/` : aucun paquet ne l'embarque
@@ -87,6 +87,7 @@ l'ordre du Hub). Un module seulement pour le Lab va dans `extension/lab-modules/
 que la page le demande (`?labModules=1`).
 
 Cycle de vie garanti par l'hôte (`app/panel.js`) :
+
 - **ouverture** : `view(ctx)` puis `start()` — une seule vue tant que le module est ouvert ;
 - **rafraîchissements de l'hôte** : la même vue est rattachée (`attached()`), son état reste ;
 - **nouvelle session pendant l'ouverture** : `onState(view, next, prev, ctx)` de l'entrée ; `true` = absorbé (pas de
@@ -94,7 +95,7 @@ Cycle de vie garanti par l'hôte (`app/panel.js`) :
 - **retour au Hub, ou module qui n'est plus proposé** (`available` → `false`) : `destroy()`, la vue sort du DOM, le Hub
   se redessine sans sa carte. Le banc vérifie qu'aucun `setInterval` ne reste après le retour, pour chaque module.
 - `ctx` = `{ document, client, root, module, state, body, team, host: { home, refresh, payment, walletMethods,
-  restrictionChips } }`.
+restrictionChips } }`.
 
 ### 4.2 Module du module host (`/modules/v3`, achat via `purchase.js`) — modèle : **Coffre mystère**
 
@@ -107,14 +108,24 @@ import { createPurchaseButton } from './purchase.js';
 
 export function createMonModuleView({ document, client, module }) {
   const node = document.createElement('section');
-  node.className = 'mm';                       // préfixe de classes propre au module
+  node.className = 'mm'; // préfixe de classes propre au module
   const buy = createPurchaseButton({
     document,
     run: (key, price) => client.moduleAct(module.id, 'jouer', null, key, price), // une clé par intention
-    onResult: (r) => { /* afficher r.message, relire l'état */ },
+    onResult: (r) => {
+      /* afficher r.message, relire l'état */
+    },
   });
   node.append(buy.node);
-  return { node, start() { /* premier relevé */ }, destroy() { /* tout arrêter */ } };
+  return {
+    node,
+    start() {
+      /* premier relevé */
+    },
+    destroy() {
+      /* tout arrêter */
+    },
+  };
 }
 registerViewerModule('mon_module', createMonModuleView, { icon: '🎲' });
 ```
@@ -138,18 +149,18 @@ multijoueur (Blackjack, spectateurs) demandera côté Core des sessions et une d
 
 ## 5. Tests et outils
 
-| Commande (dans `apps/twitch-extension`) | Vérifie |
-|---|---|
-| `npx vitest run` | modèles, emballage, mise en page (`test/layout.test.js`) |
-| `node test/responsive/matrix.mjs [--shell v2] [--quick] [--shots]` | contrôles coupés, polices, cibles, sur la matrice du plan |
-| `node test/responsive/compare.mjs <a> <b>` | écart de pixels entre deux jeux de captures |
-| `node test/responsive/styles.mjs [--floors off]` | styles calculés legacy ↔ v2 |
-| `npm run test:requests [-- --shell v2]` | 13 parcours d'achat et de modération contre un faux Core : requêtes identiques à la V1 figée (`reference/requests-v1.json`) |
-| `npm run test:lab-module` | module fictif : chargement à la demande, état, `destroy`, retrait ; aucun minuteur laissé par aucun module |
-| `npm run lab:compare` (ou double-clic sur `Comparer legacy et v2.cmd`) | les deux shells côte à côte, données fictives locales, port 4480 |
-| `node test/responsive/grey-screen.mjs [--shell v2]` | garde « écran gris » |
-| `node test/responsive/payload.mjs` | poids et temps jusqu'au Hub, par shell et surface |
-| `node scripts/dev/css-v2.mjs` | générateur des feuilles v2 (**une fois** : il écrase les sorties éditées à la main) |
+| Commande (dans `apps/twitch-extension`)                                | Vérifie                                                                                                                     |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`                                                       | modèles, emballage, mise en page (`test/layout.test.js`)                                                                    |
+| `node test/responsive/matrix.mjs [--shell v2] [--quick] [--shots]`     | contrôles coupés, polices, cibles, sur la matrice du plan                                                                   |
+| `node test/responsive/compare.mjs <a> <b>`                             | écart de pixels entre deux jeux de captures                                                                                 |
+| `node test/responsive/styles.mjs [--floors off]`                       | styles calculés legacy ↔ v2                                                                                                 |
+| `npm run test:requests [-- --shell v2]`                                | 13 parcours d'achat et de modération contre un faux Core : requêtes identiques à la V1 figée (`reference/requests-v1.json`) |
+| `npm run test:lab-module`                                              | module fictif : chargement à la demande, état, `destroy`, retrait ; aucun minuteur laissé par aucun module                  |
+| `npm run lab:compare` (ou double-clic sur `Comparer legacy et v2.cmd`) | les deux shells côte à côte, données fictives locales, port 4480                                                            |
+| `node test/responsive/grey-screen.mjs [--shell v2]`                    | garde « écran gris »                                                                                                        |
+| `node test/responsive/payload.mjs`                                     | poids et temps jusqu'au Hub, par shell et surface                                                                           |
+| `node scripts/dev/css-v2.mjs`                                          | générateur des feuilles v2 (**une fois** : il écrase les sorties éditées à la main)                                         |
 
 ## 6. Emballage
 

@@ -34,17 +34,17 @@ commit entre `PUBLISHED` et la source, et la ligne exacte `Validé par Antoni : 
 3. Comptes : LeCroupier_ (test) ; Antoni ; si accord, Wenhuir et Ace of Spade (message préparé au plan lot 0, non envoyé).
 4. Parcours à faire, chacun en viewer puis en modérateur :
 
-| # | Parcours | Où | Attendu |
-|---|---|---|---|
-| 1 | Ouvrir le composant à 65 %, zoom 100 / 110 / 125 / 150 % | PC | Hub entier ou défilant, rien de coupé ; textes ≥ 10 px |
-| 2 | Mode théâtre, plein écran | PC | cartes plus grandes, Soundboard avec plus de sons |
-| 3 | TTS : écrire, changer de monnaie, confirmer | PC + mobile | paiement visible, un seul débit, message de file |
-| 4 | Soundboard : écouter, favori, jouer | PC + mobile | requête identique, favoris conservés |
-| 5 | Bonk : choisir une emote, tirer | PC + mobile | emojis chargés à l'ouverture (premier affichage plus léger) |
-| 6 | Tombola : participer, liste des participants | PC (521–600 px) | liste lisible et défilante |
-| 7 | Modération D4 : file TTS, restrictions, Créditer/Débiter | PC | toutes les actions présentes |
-| 8 | Bloqueur de pub actif / boucliers Brave | PC | message « Connexion à Twitch impossible » + Réessayer, jamais d'écran gris |
-| 9 | iPhone (iOS ≥ 16.4) et Android, portrait et paysage | mobile | personnages TTS et flèches atteignables, défilement sain |
+| #   | Parcours                                                 | Où              | Attendu                                                                    |
+| --- | -------------------------------------------------------- | --------------- | -------------------------------------------------------------------------- |
+| 1   | Ouvrir le composant à 65 %, zoom 100 / 110 / 125 / 150 % | PC              | Hub entier ou défilant, rien de coupé ; textes ≥ 10 px                     |
+| 2   | Mode théâtre, plein écran                                | PC              | cartes plus grandes, Soundboard avec plus de sons                          |
+| 3   | TTS : écrire, changer de monnaie, confirmer              | PC + mobile     | paiement visible, un seul débit, message de file                           |
+| 4   | Soundboard : écouter, favori, jouer                      | PC + mobile     | requête identique, favoris conservés                                       |
+| 5   | Bonk : choisir une emote, tirer                          | PC + mobile     | emojis chargés à l'ouverture (premier affichage plus léger)                |
+| 6   | Tombola : participer, liste des participants             | PC (521–600 px) | liste lisible et défilante                                                 |
+| 7   | Modération D4 : file TTS, restrictions, Créditer/Débiter | PC              | toutes les actions présentes                                               |
+| 8   | Bloqueur de pub actif / boucliers Brave                  | PC              | message « Connexion à Twitch impossible » + Réessayer, jamais d'écran gris |
+| 9   | iPhone (iOS ≥ 16.4) et Android, portrait et paysage      | mobile          | personnages TTS et flèches atteignables, défilement sain                   |
 
 ## 4. Publication (sur GO explicite, après le Hosted Test validé par Antoni)
 
@@ -57,10 +57,10 @@ commit entre `PUBLISHED` et la source, et la ligne exacte `Validé par Antoni : 
 
 ## 5. Retour arrière
 
-| Situation | Moyen | Délai |
-|---|---|---|
-| Pendant le développement | abandonner la branche `feat/extension-next` (rien n'est fusionné) | immédiat |
-| Après fusion, avant publication | le défaut reste `legacy` : rien ne change pour les viewers | immédiat |
+| Situation                               | Moyen                                                                                                                                                                                                                                                                                                                        | Délai                                    |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Pendant le développement                | abandonner la branche `feat/extension-next` (rien n'est fusionné)                                                                                                                                                                                                                                                            | immédiat                                 |
+| Après fusion, avant publication         | le défaut reste `legacy` : rien ne change pour les viewers                                                                                                                                                                                                                                                                   | immédiat                                 |
 | Après publication d'un zip `--shell v2` | (1) remettre en ligne la version précédente depuis la console — **possibilité non vérifiée**, à relever par Antoni ; (2) nouvelle soumission du même code avec `--shell legacy` (le shell legacy est dans chaque zip) ; (3) interrupteur sans review par le service de configuration Twitch — décision § 13-3, non construit | (1) minutes si possible ; (2) 8–14 jours |
 
 Le shell legacy (`overlay.js`, `mobile.js`, `shared/ui.js`, `base/overlay/mobile.css`) reste dans chaque zip jusqu'au
