@@ -46,6 +46,8 @@ export interface SpotifyDevice {
   type: string;
   is_active: boolean;
   is_restricted: boolean;
+  /** The device's volume (0–100), when Spotify gives it. */
+  volume_percent?: number | null;
 }
 
 export interface SpotifyPlaybackRaw {
@@ -196,7 +198,7 @@ export class SpotifyApi {
 
   /** One HTTP call, in the serialized queue. */
   private call(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     path: string,
     query: Record<string, string | number | undefined> = {},
   ) {
@@ -206,12 +208,12 @@ export class SpotifyApi {
   }
 
   private async send(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     path: string,
     query: Record<string, string | number | undefined>,
   ) {
     await this.load();
-    const write = method === 'POST';
+    const write = method !== 'GET';
     const endpoint = `${method} /${path.replace(/\/[A-Za-z0-9]{22}$/, '/{id}')}`;
     const url = new URL(`${this.base}/${path}`);
     for (const [k, v] of Object.entries(query))
@@ -452,6 +454,34 @@ export class SpotifyApi {
     this.forget('queue');
     if (r.status !== 204)
       throw new SpotifyApiError('QUEUE_RESULT_UNKNOWN', true, r.status);
+  }
+
+  /**
+   * Music Hub: PUT /me/player/pause or /me/player/play (resume, no body). 204 (or 200) = done; anything else is « maybe
+   * sent »: the caller reads the playback back, never retries.
+   */
+  async setPlaying(play: boolean, deviceId: string | null) {
+    this.forget('playback');
+    const r = await this.call(
+      'PUT',
+      play ? 'me/player/play' : 'me/player/pause',
+      { device_id: deviceId ?? undefined },
+    );
+    this.forget('playback');
+    if (r.status !== 204 && r.status !== 200)
+      throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', true, r.status);
+  }
+
+  /** Music Hub: PUT /me/player/volume?volume_percent= (same « maybe sent » rule). */
+  async setVolume(percent: number, deviceId: string | null) {
+    this.forget('playback');
+    const r = await this.call('PUT', 'me/player/volume', {
+      volume_percent: Math.max(0, Math.min(100, Math.round(percent))),
+      device_id: deviceId ?? undefined,
+    });
+    this.forget('playback');
+    if (r.status !== 204 && r.status !== 200)
+      throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', true, r.status);
   }
 
   /** POST /me/player/next. Anything but 204 is « maybe sent »: read the playback back. */

@@ -596,3 +596,86 @@ describe('Spotify runtime (Studio)', () => {
     expect(h.core.syncs.at(-1)!.status.limited_until).not.toBeNull();
   });
 });
+
+describe('Music Hub — search and player jobs (docs/music/MUSIC_HUB_STATE.md)', () => {
+  it('a search job: the Lab catalogue as you type (prefixes), versions told apart, no cover / not playable kept, never queued', async () => {
+    const h = await harness();
+    h.job({ kind: 'search', job_id: id(1), query: 'nuit bl' });
+    await h.rt.once();
+    const r = h.report() as unknown as {
+      outcome: string;
+      provider: string;
+      items: {
+        title: string;
+        album: string | null;
+        image_url: string | null;
+        playable: boolean;
+      }[];
+    };
+    expect(r.outcome).toBe('done');
+    expect(r.provider).toBe('lab');
+    expect(r.items.map((i) => i.title)).toEqual([
+      'Nuit Blanche',
+      'Nuit Blanche (Live à Lyon)',
+      'Nuit Blanche (Remix Club)',
+      'Nuit Blanche',
+    ]);
+    expect(r.items[3]!.album).toBe('Marées');
+    expect(r.items[0]!.image_url).toMatch(/^data:image\/svg\+xml,/);
+    h.job({ kind: 'search', job_id: id(2), query: 'comete acoustique' });
+    await h.rt.once();
+    const c = h.report() as unknown as typeof r;
+    expect(c.items[0]!.image_url).toBeNull();
+    h.job({ kind: 'search', job_id: id(3), query: 'session perdue' });
+    await h.rt.once();
+    expect((h.report() as unknown as typeof r).items[0]!.playable).toBe(false);
+    expect(h.sim.view().queue).toEqual([]);
+  });
+
+  it('pause, resume and volume: what the player says afterwards, never an assumed success', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'control',
+      job_id: id(4),
+      action: 'pause',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'done' });
+    expect(h.sim.view().playing).toBe(false);
+    h.job({
+      kind: 'control',
+      job_id: id(5),
+      action: 'volume',
+      volume_percent: 35,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'done',
+      playback: { volume_percent: 35, is_playing: false },
+    });
+    h.job({
+      kind: 'control',
+      job_id: id(6),
+      action: 'resume',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'done',
+      playback: { is_playing: true },
+    });
+    h.sim.deviceActive = false;
+    h.job({
+      kind: 'control',
+      job_id: id(7),
+      action: 'pause',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'failed',
+      reason: 'NO_DEVICE',
+    });
+  });
+});

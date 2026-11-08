@@ -16,16 +16,108 @@ const track = (
   name: string,
   artists: string[],
   duration_ms: number,
+  o: { album?: string; art?: boolean; playable?: boolean } = {},
 ): Candidate => ({
   id,
   uri: `spotify:track:${id}`,
   name,
   artists: artists.map((name) => ({ name })),
   duration_ms,
-  album: { images: [{ url: simCover(id) }] },
+  album: {
+    ...(o.album ? { name: o.album } : {}),
+    images: o.art === false ? [] : [{ url: simCover(id) }],
+  },
+  ...(o.playable === false ? { is_playable: false } : {}),
 });
 
-export const SIM_CATALOG: Candidate[] = [
+/** Music Hub: a fictional catalogue (invented artists and titles), with what a real one shows — several versions of a
+ *  title, the same title by two artists, short and too long tracks, a version that cannot be played, no cover. */
+const labId = (n: number) => `LABMUSIC${String(n).padStart(14, '0')}`;
+const m = (min: number, sec: number) => (min * 60 + sec) * 1000;
+export const LAB_CATALOG: Candidate[] = [
+  track(labId(1), 'Nuit Blanche', ['Lune Rouge'], m(3, 42), { album: 'Néons' }),
+  track(labId(2), 'Nuit Blanche (Live à Lyon)', ['Lune Rouge'], m(4, 58), {
+    album: 'Néons — Live',
+  }),
+  track(
+    labId(3),
+    'Nuit Blanche (Remix Club)',
+    ['Lune Rouge', 'DJ Orbite'],
+    m(5, 31),
+    { album: 'Néons Remixés' },
+  ),
+  track(labId(4), 'Nuit Blanche', ['Les Phares'], m(2, 57), {
+    album: 'Marées',
+  }),
+  track(labId(5), 'Comète', ['Ava Solène'], m(3, 18), { album: 'Ciel Ouvert' }),
+  track(labId(6), 'Comète (Acoustique)', ['Ava Solène'], m(3, 4), {
+    album: 'Ciel Ouvert — Sessions',
+    art: false,
+  }),
+  track(labId(7), 'Pixel Rain', ['Kairo Station'], m(3, 55), {
+    album: 'Arcade Heart',
+  }),
+  track(labId(8), 'Boss Final', ['Kairo Station'], m(2, 41), {
+    album: 'Arcade Heart',
+  }),
+  track(labId(9), 'Respawn', ['Kairo Station', 'Mira'], m(3, 33), {
+    album: 'Arcade Heart',
+  }),
+  track(labId(10), 'Velours', ['Mira'], m(4, 12), { album: 'Satin' }),
+  track(labId(11), 'Satin Noir', ['Mira'], m(3, 49), { album: 'Satin' }),
+  track(labId(12), 'Raptor Run', ['The Velociraptors'], m(2, 48), {
+    album: 'Jurassic Garage',
+  }),
+  track(labId(13), 'Fossiles', ['The Velociraptors'], m(3, 26), {
+    album: 'Jurassic Garage',
+    art: false,
+  }),
+  track(labId(14), 'Odyssée Intégrale', ['Orchestre Halcyon'], m(12, 30), {
+    album: 'Odyssée',
+  }),
+  track(labId(15), 'Prélude', ['Orchestre Halcyon'], m(1, 52), {
+    album: 'Odyssée',
+  }),
+  track(labId(16), 'Session Perdue', ['Lune Rouge'], m(3, 10), {
+    album: 'Inédits',
+    playable: false,
+  }),
+  track(labId(17), 'Lo-fi pour réviser', ['Café Cassette'], m(2, 22), {
+    album: 'Pluie de Mars',
+  }),
+  track(labId(18), 'Lo-fi pour coder', ['Café Cassette'], m(2, 35), {
+    album: 'Pluie de Mars',
+  }),
+  track(labId(19), 'Lo-fi pour dormir', ['Café Cassette'], m(3, 1), {
+    album: 'Pluie de Mars',
+    art: false,
+  }),
+  track(labId(20), 'Hymne du Chat', ['Raptoru Allstars'], m(3, 3), {
+    album: 'Communauté Vol. 1',
+  }),
+  track(labId(21), 'GG WP', ['Raptoru Allstars', 'Ava Solène'], m(2, 59), {
+    album: 'Communauté Vol. 1',
+  }),
+  track(labId(22), 'Tempête', ['Les Phares'], m(4, 40), { album: 'Marées' }),
+  track(labId(23), 'Tempête (Radio Edit)', ['Les Phares'], m(3, 9), {
+    album: 'Marées (Radio)',
+  }),
+  track(labId(24), 'Été Indien', ['Solaris Club'], m(3, 37), {
+    album: 'Saison 2',
+  }),
+  track(labId(25), 'Ultraviolet', ['Solaris Club', 'Mira'], m(4, 4), {
+    album: 'Saison 2',
+  }),
+  track(
+    labId(26),
+    'Un titre au nom vraiment très long pour vérifier que rien ne déborde du panneau',
+    ['Artiste au nom tout aussi long que le titre'],
+    m(3, 33),
+    { album: 'Tests de mise en page' },
+  ),
+];
+
+export const SIM_CATALOG_HISTORICAL: Candidate[] = [
   track(
     '4iV5W9uYEdYUVa79Axb7Rh',
     'Young, Wild & Free',
@@ -51,6 +143,12 @@ export const SIM_CATALOG: Candidate[] = [
     601_000,
   ),
 ];
+/** Everything the Lab's catalogue answers: the historical fixtures (Spotify V2 tests) and the Music Hub catalogue. */
+export const SIM_CATALOG: Candidate[] = [
+  ...SIM_CATALOG_HISTORICAL,
+  ...LAB_CATALOG,
+];
+
 /** What plays when no request is queued (the broadcaster's own playlist: « external » tracks). */
 const PLAYLIST = [
   track(
@@ -78,6 +176,14 @@ export class SpotifySim {
   queueAnswer: 204 | 200 | 403 | 500 = 204;
   private limitedUntil = 0;
   readonly calls: string[] = [];
+  /** Music Hub: the player (pause keeps the progress where it was). */
+  playing = true;
+  private pausedProgress = 0;
+  volume = 60;
+
+  private progress() {
+    return this.playing ? this.now() - this.startedAt : this.pausedProgress;
+  }
 
   constructor(private readonly now: () => number = Date.now) {
     this.startedAt = now();
@@ -94,6 +200,7 @@ export class SpotifySim {
 
   /** Plays on: tracks that reached their end give way to the queue, then the playlist. */
   private tick() {
+    if (!this.playing) return;
     for (let n = 0; n < 50 && this.current; n++) {
       const end = this.startedAt + (this.current.duration_ms ?? 0);
       if (this.now() < end) return;
@@ -132,7 +239,9 @@ export class SpotifySim {
       current: this.current
         ? `${this.current.name} — ${this.current.artists.map((a) => a.name).join(', ')}`
         : null,
-      progress_ms: this.current ? this.now() - this.startedAt : null,
+      progress_ms: this.current ? this.progress() : null,
+      playing: this.playing,
+      volume: this.volume,
       queue: this.userQueue.map((t) => t.name),
       calls: this.calls.length,
     };
@@ -172,17 +281,31 @@ export class SpotifySim {
       type: 'Computer',
       is_active: this.deviceActive,
       is_restricted: false,
+      volume_percent: this.volume,
     };
     if (method === 'GET' && path === 'search') {
       const words = normalizeText(url.searchParams.get('q'))
         .split(' ')
         .filter((w) => w.length > 1);
-      const items = SIM_CATALOG.filter((t) => {
-        const hay = normalizeText(
-          `${t.name} ${t.artists.map((a) => a.name).join(' ')}`,
+      const hay = (t: Candidate) =>
+        normalizeText(`${t.name} ${t.artists.map((a) => a.name).join(' ')}`);
+      // The Music Hub catalogue answers a search as you type (every word starts a word of the title or the artists);
+      // when it has nothing, the historical fixtures keep their loose matching (Spotify V2's tests).
+      const starts = (t: Candidate) =>
+        words.length > 0 &&
+        words.every((w) =>
+          hay(t)
+            .split(' ')
+            .some((x) => x.startsWith(w)),
         );
-        return words.some((w) => hay.includes(w));
-      }).slice(0, 10);
+      const lab = LAB_CATALOG.filter(starts);
+      const items = (
+        lab.length
+          ? lab
+          : SIM_CATALOG_HISTORICAL.filter((t) =>
+              words.some((w) => hay(t).includes(w)),
+            )
+      ).slice(0, 10);
       return json(200, { tracks: { items } });
     }
     const tr = /^tracks\/([A-Za-z0-9]+)$/.exec(path);
@@ -205,8 +328,8 @@ export class SpotifySim {
         return new Response(null, { status: 204 });
       return json(200, {
         device,
-        is_playing: true,
-        progress_ms: this.now() - this.startedAt,
+        is_playing: this.playing,
+        progress_ms: this.progress(),
         currently_playing_type: 'track',
         item: this.current,
       });
@@ -244,6 +367,28 @@ export class SpotifySim {
     }
     if (method === 'POST' && path === 'me/player/next') {
       this.advance();
+      if (!this.playing) this.pausedProgress = 0;
+      return new Response(null, { status: 204 });
+    }
+    if (method === 'PUT' && path === 'me/player/pause') {
+      if (this.playing) {
+        this.pausedProgress = this.now() - this.startedAt;
+        this.playing = false;
+      }
+      return new Response(null, { status: 204 });
+    }
+    if (method === 'PUT' && path === 'me/player/play') {
+      if (!this.playing) {
+        this.startedAt = this.now() - this.pausedProgress;
+        this.playing = true;
+      }
+      return new Response(null, { status: 204 });
+    }
+    if (method === 'PUT' && path === 'me/player/volume') {
+      const v = Number(url.searchParams.get('volume_percent'));
+      if (!Number.isInteger(v) || v < 0 || v > 100)
+        return json(400, { error: { status: 400, message: 'Invalid volume' } });
+      this.volume = v;
       return new Response(null, { status: 204 });
     }
     return json(404, { error: { status: 404, message: 'Not simulated' } });

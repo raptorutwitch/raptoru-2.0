@@ -8,6 +8,7 @@ import {
   type SpotifyJobReport,
   type SpotifyPlayback,
   type SpotifyReason,
+  type SpotifySearchItem,
   type SpotifySyncAnswer,
   type SpotifyTrack,
 } from '@raptoru/schemas';
@@ -114,6 +115,22 @@ function toPlayback(
         ? Math.max(0, Math.round(raw!.progress_ms!))
         : null,
     is_playing: Boolean(raw?.is_playing && track),
+    volume_percent: Number.isInteger(raw?.device?.volume_percent)
+      ? Math.max(0, Math.min(100, raw!.device!.volume_percent!))
+      : null,
+  };
+}
+
+/** Music Hub: a catalogue result as the extension shows it (never sent anywhere else). */
+export function toSearchItem(c: Candidate): SpotifySearchItem | null {
+  const t = toTrack(c);
+  if (!t) return null;
+  const art = c.album?.images?.[0]?.url ?? null;
+  return {
+    ...t,
+    album: c.album?.name ? String(c.album.name).slice(0, 300) : null,
+    image_url: art && COVER_URL.test(art) && art.length <= 4_000 ? art : null,
+    playable: c.is_playable !== false,
   };
 }
 
@@ -563,6 +580,10 @@ export class SpotifyRuntime {
       };
     else if (job.kind === 'skip')
       report = { kind: 'skip', attempt_id, ...(await this.skip()) };
+    else if (job.kind === 'search')
+      report = { kind: 'search', attempt_id, ...(await this.search(job)) };
+    else if (job.kind === 'control')
+      report = { kind: 'control', attempt_id, ...(await this.control(job)) };
     else
       report = {
         kind: 'read_playback',
@@ -724,6 +745,63 @@ export class SpotifyRuntime {
       }
     } catch (e) {
       return { outcome: 'failed', reason: reasonOf(e), skipped_track: before };
+    }
+  }
+
+  /**
+   * Music Hub: a catalogue search for the extension. The same gate as everything else (pacing, cache of 5 min per text,
+   * 429). Never queues anything. The provider says whose catalogue it is: the Lab's simulator or the connected account.
+   */
+  private async search(
+    job: Extract<SpotifyJob, { kind: 'search' }>,
+  ): Promise<
+    Omit<Extract<SpotifyJobReport, { kind: 'search' }>, 'kind' | 'attempt_id'>
+  > {
+    const provider = this.d.sim ? ('lab' as const) : ('spotify' as const);
+    try {
+      const items = (await this.d.api.search(job.query))
+        .map(toSearchItem)
+        .filter((i): i is SpotifySearchItem => i !== null)
+        .slice(0, 10);
+      return { outcome: 'done', provider, items };
+    } catch (e) {
+      return { outcome: 'failed', reason: reasonOf(e), provider, items: [] };
+    }
+  }
+
+  /**
+   * Music Hub: pause / resume / volume on the playing device. The result is what Spotify says after (a fresh reading),
+   * never an assumed success; « maybe sent » → read back, `unknown` when the reading does not prove it.
+   */
+  private async control(
+    job: Extract<SpotifyJob, { kind: 'control' }>,
+  ): Promise<
+    Omit<Extract<SpotifyJobReport, { kind: 'control' }>, 'kind' | 'attempt_id'>
+  > {
+    try {
+      const p = await this.d.api.playback(true);
+      const device =
+        p.data?.device?.is_active && !p.data.device.is_restricted
+          ? p.data.device
+          : pickDevice(await this.d.api.devices(true));
+      if (!device) return { outcome: 'failed', reason: 'NO_DEVICE' };
+      const proven = (after: SpotifyPlayback) =>
+        job.action === 'volume'
+          ? after.volume_percent === job.volume_percent
+          : after.is_playing === (job.action === 'resume');
+      try {
+        if (job.action === 'volume')
+          await this.d.api.setVolume(job.volume_percent ?? 0, device.id);
+        else await this.d.api.setPlaying(job.action === 'resume', device.id);
+      } catch (e) {
+        if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
+      }
+      this.nextPollAt = 0;
+      const after = await this.d.api.playback(true);
+      const playback = toPlayback(after.data, after.at);
+      return { outcome: proven(playback) ? 'done' : 'unknown', playback };
+    } catch (e) {
+      return { outcome: 'failed', reason: reasonOf(e) };
     }
   }
 
@@ -921,7 +999,7 @@ export class SpotifyRuntime {
       return { ok: true };
     }
     const sim =
-      /^\/sim\/(near-end|external|no-device|device|rate-limit|answer-200|answer-500)$/.exec(
+      /^\/sim\/(near-end|external|no-device|device|rate-limit|answer-200|answer-500|end)$/.exec(
         path,
       );
     if (sim && this.d.sim) {
@@ -931,6 +1009,7 @@ export class SpotifyRuntime {
       else if (sim[1] === 'no-device') s.deviceActive = false;
       else if (sim[1] === 'device') s.deviceActive = true;
       else if (sim[1] === 'rate-limit') s.rateLimit(30);
+      else if (sim[1] === 'end') s.seekNearEnd(0);
       else s.queueAnswer = sim[1] === 'answer-200' ? 200 : 500;
       this.nextPollAt = 0;
       return s.view();
