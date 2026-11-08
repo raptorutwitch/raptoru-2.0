@@ -222,6 +222,34 @@ describe('verify-package', () => {
     );
   });
 
+  it('calibration: any Raptoru or local endpoint URL is refused, a bare hostname comparison is not', () => {
+    const calibration = (extra) =>
+      entries({
+        'build-manifest.json': JSON.stringify({
+          target: 'calibration',
+          commit: HEAD,
+          dirty: false,
+          apiBase: '',
+        }),
+        'shared/runtime-config.js': runtimeConfigSource(TARGETS.calibration, {
+          buildId: 'c',
+          shell: 'legacy',
+        }),
+        'shared/x.js': extra,
+      });
+    expect(
+      verifyZip(zipStored(calibration("host === '127.0.0.1'"))).errors,
+    ).toEqual([]);
+    for (const url of [
+      'http://127.0.0.1:4100/v',
+      '//localhost:3000',
+      'https://core.raptoru.fr/v1/ext',
+    ])
+      expect(verifyZip(zipStored(calibration(url))).errors.join('\n')).toMatch(
+        /calibration package/,
+      );
+  });
+
   it('detects an apiBase that is not the target one, and an unknown target', () => {
     const forged = entries({
       'shared/runtime-config.js':

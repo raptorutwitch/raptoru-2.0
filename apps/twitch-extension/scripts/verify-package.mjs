@@ -24,9 +24,11 @@ export const TWITCH_HELPER =
 export const VALIDATION_LINE = 'Validé par Antoni : oui';
 // The legacy EBS and the legacy site; the Core hosts (core.raptoru.fr, core-staging.raptoru.fr) are allowed.
 export const LEGACY = /raptoru\.fr\/api|(?<![\w.-])raptoru\.fr/i;
-// Calibration: no Raptoru endpoint at all, not even in a comment.
+// Calibration: no Raptoru endpoint at all, not even in a comment. Local hosts only as URLs (`//127.0.0.1`):
+// shared/emote-access.js compares a hostname with the bare loopback literal for the Lab's consent page
+// (dead code without RUNTIME.labTwitchAuthorizePath, which no package defines).
 export const CALIBRATION_FORBIDDEN =
-  /raptoru\.fr|core-staging|\/v1\/ext|localhost|127\.0\.0\.1/i;
+  /raptoru\.fr|core-staging|\/v1\/ext|\/\/(localhost|127\.0\.0\.1)/i;
 export const TEXTUAL = /\.(js|mjs|html|css|json|txt|svg|md)$/i;
 const FORBIDDEN_FILE =
   /(^|\/)(\.env[^/]*|twitch-ext-mock\.js|[^/]*\.map|[^/]*\.md)$/i;
