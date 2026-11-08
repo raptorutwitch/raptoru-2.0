@@ -8,6 +8,7 @@
     "test:responsive": "node test/responsive/matrix.mjs",
     "test:requests": "node test/responsive/requests.mjs --compare test/responsive/reference/requests-v1.json",
     "test:lab-module": "node test/responsive/lab-module.mjs",
+    "lab:compare": "node test/responsive/compare-shells.mjs",
     "test:grey-screen": "node test/responsive/grey-screen.mjs",
     "package": "node scripts/package.mjs",
     "package:production": "node scripts/package.mjs --target production",

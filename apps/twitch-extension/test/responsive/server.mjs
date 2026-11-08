@@ -36,11 +36,29 @@ export const RUNTIME = Object.freeze({ mode: 'demo', environment: 'calibration',
     : `export const RUNTIME = Object.freeze({ mode: 'demo', apiBase: '', siteUrl: '', buildId: 'bench'${shellField}, labModules: true });\n`;
 };
 
-export function startServer(port = Number(process.env.PORT || 4471)) {
+// The Extension Lab's policy (apps/studio/server/src/extension-lab/serve.ts): only this origin, public emote images.
+// Sent by the shell comparison page (compare-shells.mjs): a page opened in Antoni's browser calls no service at all.
+export const LAB_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com",
+  "media-src 'self' blob:",
+  "connect-src 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
+/** `pages`: { '/path': file } served as is (the comparison page); `csp`: the Lab policy on every HTML page. */
+export function startServer(port = Number(process.env.PORT || 4471), { pages = {}, csp = false } = {}) {
   if ([4100, 4110, 3789].includes(port)) throw new Error(`port ${port} is reserved for the installed Studio`);
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
+      if (Object.hasOwn(pages, url.pathname)) {
+        const type = TYPES[extname(pages[url.pathname]).toLowerCase()];
+        res.writeHead(200, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store', ...(csp ? { 'content-security-policy': LAB_CSP } : {}) });
+        return res.end(await readFile(pages[url.pathname]));
+      }
       const m = /^\/(calib|demo|live)(?:-(legacy|v2))?(\/.*)$/.exec(decodeURIComponent(url.pathname));
       if (!m) { res.writeHead(404); return res.end(); }
       const [, variant, shell, rel] = m;
@@ -62,13 +80,16 @@ export const isAllowedApiBase = (b) => ALLOWED_API_BASES.includes(b);
       const type = TYPES[extname(file).toLowerCase()] || 'application/octet-stream';
       if (type === 'text/html')
         body = body.toString('utf8').replace(/<script src="https:\/\/extension-files\.twitch\.tv[^"]*"><\/script>/, '');
-      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', ...(csp && type === 'text/html' ? { 'content-security-policy': LAB_CSP } : {}) });
       res.end(body);
     } catch {
       res.writeHead(404); res.end();
     }
   });
-  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
+  return new Promise((resolve, reject) => {
+    server.once('error', reject); // port taken: said, never a silent hang
+    server.listen(port, '127.0.0.1', () => resolve(server));
+  });
 }
 
 if (process.argv[1] && normalize(fileURLToPath(import.meta.url)) === normalize(process.argv[1])) {

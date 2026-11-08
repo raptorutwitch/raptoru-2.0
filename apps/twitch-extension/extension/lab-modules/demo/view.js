@@ -31,7 +31,7 @@ export function view(ctx) {
   let seconds = 0;
   let updates = 0;
   let stopClock = null;
-  const showBalance = (state) => { out('balance').textContent = state?.wallet ? fmt(state.wallet.balance ?? state.wallet.tokens) : '—'; };
+  const showBalance = (state) => { out('balance').textContent = state?.wallet ? fmt(state.wallet.available) : '—'; };
   showBalance(ctx.state);
 
   const onClick = (event) => {

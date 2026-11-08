@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comparer legacy et v2</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0e0b16; --panel: #17121f; --line: #2c2438; --text: #ece6f5; --muted: #a497b8; --accent: #b98aff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+    header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: end; gap: 12px 18px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+    h1 { margin: 0 8px 2px 0; font-size: 16px; }
+    label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+    select, button { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #221a2e; color: var(--text); font: inherit; }
+    button { cursor: pointer; }
+    button:hover, select:hover { border-color: var(--accent); }
+    .note { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+    main { display: flex; flex-wrap: wrap; gap: 24px; padding: 16px; }
+    figure { margin: 0; }
+    figcaption { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+    figcaption strong { font-size: 14px; }
+    figcaption span { color: var(--muted); font-size: 12px; }
+    figcaption a { margin-left: auto; color: var(--accent); font-size: 12px; }
+    iframe { display: block; border: 1px solid var(--line); background: #000; }
+  </style>
+  <script type="module" src="compare-shells.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Extension · legacy ↔ v2</h1>
+    <label>Surface et taille <select id="size"></select></label>
+    <label>Écran <select id="view"></select></label>
+    <label>Données <select id="data">
+      <option value="calib">Calibration (modérateur, tous les modules)</option>
+      <option value="demo">Démo (viewer)</option>
+    </select></label>
+    <button type="button" id="reload">Recharger les deux</button>
+    <p class="note" id="note"></p>
+  </header>
+  <main>
+    <figure><figcaption><strong>Legacy</strong><span>interface actuelle (lot 1 inclus)</span><a id="open-legacy" target="_blank" rel="noopener">ouvrir seule ↗</a></figcaption><iframe id="legacy" title="Shell legacy"></iframe></figure>
+    <figure><figcaption><strong>v2</strong><span>nouveau socle</span><a id="open-v2" target="_blank" rel="noopener">ouvrir seule ↗</a></figcaption><iframe id="v2" title="Shell v2"></iframe></figure>
+  </main>
+</body>
+</html>
