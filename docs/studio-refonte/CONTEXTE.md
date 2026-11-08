@@ -74,6 +74,8 @@ historique navigateur. Supervision compacte : une ligne par incident sous l'en-t
 
 ## 6. Design system (charte Astra partie F, appliquée)
 
+> **Dépassé** : la charte appliquée est la direction D « Coulisses », décrite dans [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) (jetons `d-`). Ce paragraphe décrit l'étape Astra (`rs-`), retirée.
+
 - Jetons `--rs-*` dans `apps/studio/web/src/shell/shell.css` : surfaces (canvas `#0f1416`, barre `#12191c`, surface
   `#182126`, relief `#202b31`), bordures, texte (`#eef3f1` / muted / dim), accent menthe Raptoru `#83dfc1` (encre
   `#0e241c`), états succès / alerte `#f0c780` / danger `#ff9797` / info `#9ecbff`, focus `#c2a9ff` (2 px, décalage 3 px).
@@ -201,7 +203,7 @@ anciennes adresses `?tab=` ; Extension Lab et les simulations utiles ; séparati
 | Captures de revue (données fictives)                | `docs/studio-refonte/captures/`                                                                                                             |
 | Aperçu en un clic                                   | `dev/apercu-refonte-studio.cmd`                                                                                                             |
 
-Branche `feat/studio-ux` (locale, non poussée), partie de `docs/site-hub-delivered` (68420a0, elle-même sur `main`
+Branche `feat/studio-ux` (à l'époque locale et non poussée ; fusionnée par la PR #56 le 07/11), partie de `docs/site-hub-delivered` (68420a0, elle-même sur `main`
 8a897a5). Worktree : `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\studio-ux`.
 
 ## 15. Commandes

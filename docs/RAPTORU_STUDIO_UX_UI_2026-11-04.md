@@ -1,5 +1,7 @@
 # Raptoru Studio nouvelle génération
 
+> **Note de consolidation (08/11/2026).** Proposition du 04/11, historique. Sa navigation a été adoptée ; sa palette a été remplacée par la direction D « Coulisses » ([studio-refonte/DESIGN_SYSTEM.md](studio-refonte/DESIGN_SYSTEM.md)). Studio Coulisses est en Production depuis le 07/11.
+
 ## Dossier unique d’audit UX/UI et de conception — 4 novembre 2026
 
 **Statut : proposition de conception à arbitrer. Aucune implémentation dans Studio.**

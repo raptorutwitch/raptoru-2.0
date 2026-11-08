@@ -1,5 +1,7 @@
 # Refonte de Raptoru Studio — journal
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Le journal s'arrête à la consolidation du 07/11 ; la suite est dans OPERATION_COULISSES § 12.
+
 Historique daté et détails de mise en œuvre. **L'état courant n'est pas ici** : [CHECKPOINT.md](CHECKPOINT.md),
 [ROADMAP.md](ROADMAP.md) ; les règles et décisions : [CONTEXTE.md](CONTEXTE.md).
 

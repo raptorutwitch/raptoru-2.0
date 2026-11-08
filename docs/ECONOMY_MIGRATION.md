@@ -1,5 +1,7 @@
 # Migration économique StreamElements → Wallet Raptoru
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 **Statut (19/10/2026) : préparation. Pilote de lecture StreamElements fait (§ 7, lecture seule) ; aucun import, aucune bascule.** Production =
 Jetons StreamElements. Base de travail : audit Astra `docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md` (16/10, non suivi
 par git), revérifié ici dans le code, les decks SAMMI (lecture seule, `decks_data.json` du 18/10) et la configuration

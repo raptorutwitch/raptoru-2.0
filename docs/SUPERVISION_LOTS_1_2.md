@@ -1,5 +1,7 @@
 # Supervision des interactions viewers — lots 1 et 2 (Studio seul)
 
+> **Note de consolidation (08/11/2026).** Les lots 1–2 ont été commités (PR #1) et repris dans Studio « Coulisses » ; les lots 3–4 restent à faire ([ROADMAP.md](ROADMAP.md) § 1). L'en-tête ci-dessous est d'époque.
+
 - **Livré le** : 23/10/2026.
 - **Worktree** : `sup-wt`, branche `fix/supervision`, base `origin/main` = `2d80c2a`.
 - **État** : non commité, **non validé** (aucun test manuel d'Antoni à ce stade).

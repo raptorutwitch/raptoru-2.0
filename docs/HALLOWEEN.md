@@ -1,5 +1,7 @@
 # Opération Halloween 2026 — boutique d'événement et moteur de screamers
 
+> **Note de consolidation (08/11/2026).** Halloween a été livré le 30/10 et **fermé le 02/11**. L'en-tête ci-dessous (« rien n'est en Production ») est d'époque. État courant : [ROADMAP.md](ROADMAP.md) § 1.
+
 Branche `feat/halloween` (worktree `C:\Users\Antoni\Documents\raptoru-halloween`). Stream visé : samedi 31/10, 24 h.
 **Rien n'est en Production** : ni migration, ni Core, ni Studio, ni extension.
 

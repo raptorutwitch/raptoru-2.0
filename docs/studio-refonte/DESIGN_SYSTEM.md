@@ -13,6 +13,15 @@ seulement). Référence d'implémentation : la page TTS (`apps/studio/web/src/pa
 - Le Core décide. Une page montre et transmet ; elle ne calcule aucune règle métier.
 - Jamais de `confirm()`, `alert()` ou `prompt()` natifs. Un interrupteur ordinaire agit tout de suite. Une action sensible ou
   irréversible a une confirmation explicite (`confirmBox`, `choiceBox`). Tout ce qui touche l'argent dit clairement ce qu'il fait.
+- **« Ne plus demander »** (Studio 0.1.27, `b1564dd`) n'existe que pour les **tests joués sur le stream** :
+  - alertes « Jouer sur le stream » ;
+  - récompense ou effet « Tester » ;
+  - Roue « Rejouer l'animation ».
+
+  Le développeur passe `confirmBox({ …, streamTest: true })`. C'est une préférence locale (`STREAM_TESTS_KEY`), rétablie
+  dans Système. L'argent, la modération, une suppression, un réglage et le vrai chat gardent toujours leur confirmation,
+  sans cette option.
+
 - Pas de croix ambiguë : des verbes clairs (« Retirer et rembourser », « Retirer sans rembourser »).
 - Aucun état inconnu maquillé. Pas de vert sur une intention seule. Chaque page a ses états vide, erreur, chargement et Core injoignable.
 

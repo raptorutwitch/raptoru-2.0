@@ -1,5 +1,7 @@
 # Jeu des mots V1 — référence de parité (Lot 0)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 > **Statut (16/10/2026) : JEU DES MOTS V1 FONCTIONNELLEMENT MIGRÉ ET VALIDÉ EN CONDITIONS RÉELLES.**
 > **Validation réelle : 16/10/2026** (par Antoni) — vrai chat Twitch, Wallet Lab, sortie chat LeCroupier_, son OBS
 > (SSE), Studio. **Pas encore en production** : l'activation définitive et la coupure du deck SAMMI dépendent du

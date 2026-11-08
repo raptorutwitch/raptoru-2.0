@@ -1,5 +1,7 @@
 # RAPTORU 2.0 — STUDIO FOUNDATION COMPLETE
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Jalon historique du 06/11 (recette de la fondation refusée, puis direction D validée).
+
 Ligne d'arrivée de la refonte structurelle. Fixée le 06/11/2026. **Les critères ne s'allongent pas pendant la mission** :
 ce qui apparaît en cours de route va en P2 ou dans [ROADMAP.md](ROADMAP.md).
 

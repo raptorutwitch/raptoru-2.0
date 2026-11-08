@@ -1,5 +1,7 @@
 # Refonte de Raptoru Studio — checkpoint
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Ce point de reprise est **historique** : le point d'entrée est [../REPRISE.md](../REPRISE.md).
+
 **Mis à jour : 07/11/2026 — Mission finale (finitions, socle modulaire, préparation de la migration) : [FINALISATION.md](FINALISATION.md), recette [RECETTE_FINALE.md](RECETTE_FINALE.md), livraison [LIVRAISON.md](LIVRAISON.md) § 9, données [MIGRATION_DONNEES.md](MIGRATION_DONNEES.md). Avant : consolidation ([CONSOLIDATION.md](CONSOLIDATION.md)). Direction D validée par Antoni ; migration et Production non validées. Règles : [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md).**
 Lire ensuite [CONTEXTE.md](CONTEXTE.md) (décisions, règles, architecture ; principes fonctionnels § 17), puis
 [ROADMAP.md](ROADMAP.md) (état par lot, lots fonctionnels F1-F7), puis [AUDIT_FONCTIONNEL.md](AUDIT_FONCTIONNEL.md) si

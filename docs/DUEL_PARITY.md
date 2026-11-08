@@ -1,5 +1,7 @@
 # Duel V1 — référence de parité (RET-GAME-003)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 > **Statut (16/10/2026) : DUEL V1 FONCTIONNELLEMENT MIGRÉ ET VALIDÉ EN LAB — PAS EN PRODUCTION** (`2bf4fc8`).
 > Validé par Antoni le 16/10/2026 dans l'onglet Simulation et en vrai chat Twitch avec de vrais comptes (création du
 > défi, refus d'un second défi, acceptation, résultat). Transferts Wallet et protections : tests automatiques. Réserves

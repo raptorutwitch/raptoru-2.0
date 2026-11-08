@@ -1,5 +1,7 @@
 # Mission finale : finitions, socle modulaire, préparation de la migration
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Les mentions « aucun déploiement », « aucun push » sont d'époque ; les points ouverts sont repris dans [../ROADMAP.md](../ROADMAP.md) § 2.2.
+
 Reçue le 07/11/2026 après la recette de la consolidation. Direction D validée ; migration et Production **non** validées.
 Aucun push, aucun déploiement, aucun remplacement du Studio installé, aucune action réelle Twitch / OBS / Spotify / StreamElements.
 Reprendre ici après une interruption (`git log --oneline -20`). Recette : [RECETTE_FINALE.md](RECETTE_FINALE.md). Livraison :

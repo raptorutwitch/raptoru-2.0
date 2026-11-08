@@ -1,5 +1,15 @@
 # Dock OBS unifié — suivi du chantier
 
+> **État au 08/11/2026 (consolidation).**
+>
+> - Le Dock V1.2 est clos et validé à 100 % par Antoni dans son vrai OBS le 28/10. Trace : PR #34, branche `docs/handoff-2026-10-28`, non fusionnée.
+> - Il est en Production avec Studio « Coulisses » : serveur du Dock sur le port 4110 du Studio installé.
+> - **Studio 0.1.27** (commit `6350501`, PR #57) a ajouté un changement de lecture seulement, sans modification du Core
+>   ni des contrats : les tests lancés depuis Studio (« Jouer sur le stream », « Tester » une récompense), que le Core
+>   enregistre avec la source `simulation`, sont **masqués par défaut**. La préférence « Afficher les tests lancés
+>   depuis Studio » (Diagnostic) les montre, étiquetés « Test ».
+> - Les étapes « prochaine action » plus bas (installer 0.1.17…) sont d'époque.
+
 Document de reprise du chantier « Dock OBS » (démarré le 27/10/2026). À lire avec `docs/REPRISE.md`. Source d'étude :
 rapport Astra `C:\Users\Antoni\Documents\Codex\2026-10-27\files-pasted-by-the-user-mission\outputs\ASTRA_DOCK_OBS_DOSSIER_CLAUDE_2026-10-27.md`
 (lu intégralement ; architecture « C » retenue, simplifiée ci-dessous).

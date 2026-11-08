@@ -1,5 +1,7 @@
 # Bonk VNext — document de référence (état au 15/10/2026)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 > **Document canonique de Bonk VNext.** La section 0 donne l'état exact (lots, commits, validations, règles figées,
 > déploiement, suite). Les sections 1–2 décrivent le Bonk **d'avant VNext** (audit du 14/10/2026 sur `c7f20de`,
 > historique). Les sections 3–17 sont l'architecture validée par Antoni le 14/10/2026 ; quand l'implémentation
