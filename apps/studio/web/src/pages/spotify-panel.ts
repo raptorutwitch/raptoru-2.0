@@ -95,12 +95,54 @@ function extension(s: SpState, ui: SpUi) {
       ${row('Demandes depuis l’extension', sw(v.extension_enabled, 'data-sp-flag="extension_enabled"', 'Demandes depuis l’extension'))}
       ${row('Prix d’une demande', `${fld('data-f="ext-price" min="1" max="1000000"', val(ui, 'ext-price', v.extension_price_tokens ?? 500), 'Jetons')}<button type="button" class="d-btn sm" data-act="sp-ext-price">Enregistrer</button>`, 'prix jetons')}
       ${row('Refuser un titre déjà en file', sw(v.no_duplicates ?? true, 'data-sp-flag="no_duplicates"', 'Refuser un titre déjà en file'), 'doublon')}
-      ${row('Commandes du lecteur', sw(v.player_controls ?? false, 'data-sp-flag="player_controls"', 'Commandes du lecteur'), 'pause reprendre volume')}
+      ${row('Commandes du lecteur', sw(v.player_controls ?? false, 'data-sp-flag="player_controls"', 'Commandes du lecteur'), 'pause reprendre passer volume supermods')}
       <small>Même file, mêmes quotas et mêmes commandes du chat que la récompense ; seul le paiement change : des Jetons, rendus une seule fois si la demande est refusée, retirée ou annulée. La récompense de points n’est pas touchée.</small>
-      <small>Commandes du lecteur : pause, reprise et volume ici et pour l’équipe dans l’extension. Elles agissent sur ton appareil Spotify.</small>
+      <small>Commandes du lecteur : pause, reprise et volume ici ; dans l’extension, pause, reprise, passer et volume pour les supermods seulement (les modérateurs gardent le retrait des demandes). Elles agissent sur ton appareil Spotify, et tu gardes la main ici.</small>
       ${s.environment === 'production' ? '<p class="spo-state warn">En Production, l’extension n’a pas encore accès à la musique : ces réglages n’ont d’effet que dans le Lab.</p>' : ''}
     </div>`,
     'jetons music hub',
+  );
+}
+
+const POSITIONS: [string, string][] = [
+  ['top-right', 'En haut à droite'],
+  ['top-left', 'En haut à gauche'],
+  ['bottom-right', 'En bas à droite'],
+  ['bottom-left', 'En bas à gauche'],
+];
+
+/** Music Hub V2 : la carte musique de l'overlay OBS (une brève carte par demande, par la source « Effets »). */
+function overlay(ui: SpUi) {
+  const o = ui.overlay;
+  if (!o) return '';
+  const c = o.config;
+  const sounds = o.sounds.filter((x) => x.available);
+  const imported =
+    c.sound?.startsWith('upload:') && c.sound
+      ? `<option value="${esc(c.sound)}" selected>${esc(c.sound_name ?? 'Son importé')}</option>`
+      : '';
+  const soundSel = `<select class="d-in" data-ov="sound" aria-label="Son d’alerte">
+      <option value="" ${c.sound ? '' : 'selected'}>Aucun son (carte silencieuse)</option>
+      ${sounds.map((x) => `<option value="${esc(x.id)}" ${x.id === c.sound ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}
+      ${imported}
+    </select>
+    <label class="d-btn sm" title="Importer un son (mp3, wav, ogg, 5 Mo max)">Importer…<input type="file" accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg" data-ov-file hidden></label>`;
+  return grp(
+    'Overlay OBS',
+    'music',
+    `<div class="d-row col" data-k="overlay obs carte alerte son demande lecture effets">
+      ${row('Carte musique sur OBS', sw(c.enabled, 'data-ov="enabled"', 'Carte musique sur OBS'))}
+      ${row('À chaque nouvelle demande', sw(c.on_request, 'data-ov="on_request"', 'À chaque nouvelle demande'), 'demande file')}
+      ${row('Au début de la lecture', sw(c.on_start, 'data-ov="on_start"', 'Au début de la lecture'), 'lecture debut')}
+      ${row('Son d’alerte', soundSel, 'son alerte importer')}
+      ${row('Volume du son', `<input type="range" min="0" max="100" step="5" value="${c.volume}" data-ov="volume" aria-label="Volume du son d’alerte" ${c.sound ? '' : 'disabled'}><b>${c.volume} %</b>`, 'volume')}
+      ${row('Durée d’affichage', `<select class="d-in" data-ov="duration_s" aria-label="Durée d’affichage">${[3, 4, 5, 6, 8, 10, 12, 15].map((n) => `<option value="${n}" ${n === c.duration_s ? 'selected' : ''}>${n} s</option>`).join('')}</select>`, 'duree')}
+      ${row('Position', `<select class="d-in" data-ov="position" aria-label="Position de la carte">${POSITIONS.map(([k, l]) => `<option value="${k}" ${k === c.position ? 'selected' : ''}>${l}</option>`).join('')}</select>`, 'position coin')}
+      <div class="d-acts"><button type="button" class="d-btn sm" data-act="sp-ov-preview" ${o.available ? '' : 'disabled'}>Prévisualiser</button></div>
+      <small>Une brève carte (titre, artiste, viewer) sur la source OBS « Effets », la même que les effets des points de chaîne. Elle ne diffuse jamais la musique ; seul le son d’alerte choisi est joué. Les cartes passent une par une.</small>
+      ${o.available ? '' : '<p class="spo-state warn">Lecteur d’effets indisponible : ajoute la source « Effets » dans OBS (Points de chaîne).</p>'}
+    </div>`,
+    'overlay obs',
   );
 }
 
@@ -273,4 +315,4 @@ export function simBar(s: SpState, ui: SpUi) {
 }
 
 export const spotifyPanel = (s: SpState, ui: SpUi) =>
-  `${quotas(s, ui)}${exceptions(s, ui)}${extension(s, ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;
+  `${quotas(s, ui)}${exceptions(s, ui)}${extension(s, ui)}${overlay(ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;

@@ -199,6 +199,28 @@ test('Music Hub: search the Lab catalogue (text, pasted link), request in Jetons
     1,
     { timeout: 15_000 },
   );
+  // Music Hub V2: the OBS music card's settings (the effects player's « Effets » source), saved in Studio.
+  await expect(admin.locator('[data-ov="enabled"]')).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  const ov = await admin.request.fetch('/api/spotify/overlay', {
+    method: 'POST',
+    headers: { 'x-raptoru-studio': '1' },
+    data: {
+      enabled: false,
+      on_request: true,
+      on_start: true,
+      sound: null,
+      sound_name: null,
+      volume: 50,
+      duration_s: 5,
+      position: 'bottom-right',
+    },
+  });
+  expect(ov.ok(), `${ov.status()} ${await ov.text()}`).toBe(true);
+  expect(
+    ((await ov.json()) as { config: { position: string } }).config.position,
+  ).toBe('bottom-right');
   await admin.getByRole('button', { name: 'Dernières décisions' }).click();
   await expect(
     admin.locator('.spo-h', { hasText: 'Extension' }).first(),

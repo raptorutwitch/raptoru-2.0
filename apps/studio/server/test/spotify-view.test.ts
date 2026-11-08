@@ -480,3 +480,47 @@ describe('Studio Spotify — Music Hub (the extension on the same queue)', () =>
     expect(html).toContain('Jetons remboursés');
   });
 });
+
+describe('Spotify page — the OBS music card settings (Music Hub V2)', () => {
+  it('« Overlay OBS »: on/off, per event, alert sound (or silent), volume, duration, position, preview; absent without the effects player', async () => {
+    const { spotifyPanel } =
+      await import('../../web/src/pages/spotify-panel.ts');
+    const base = { fields: {}, who: [], now: Date.now() };
+    const s = state();
+    expect(spotifyPanel(s, base)).not.toContain('Overlay OBS');
+    const html = spotifyPanel(s, {
+      ...base,
+      overlay: {
+        config: {
+          enabled: true,
+          on_request: true,
+          on_start: false,
+          sound: 'tiens-bon',
+          sound_name: null,
+          volume: 40,
+          duration_s: 6,
+          position: 'bottom-left',
+        },
+        available: false,
+        sounds: [{ id: 'tiens-bon', label: 'Tiens bon !', available: true }],
+      },
+    });
+    expect(html).toContain('Overlay OBS');
+    for (const k of [
+      'enabled',
+      'on_request',
+      'on_start',
+      'sound',
+      'volume',
+      'duration_s',
+      'position',
+    ])
+      expect(html).toContain(`data-ov="${k}"`);
+    expect(html).toMatch(/<option value="tiens-bon" selected>/);
+    expect(html).toMatch(/<option value="bottom-left" selected>/);
+    expect(html).toContain('Aucun son (carte silencieuse)');
+    expect(html).toContain('data-act="sp-ov-preview" disabled');
+    expect(html).toContain('Lecteur d’effets indisponible');
+    expect(html).toContain('ne diffuse jamais la musique');
+  });
+});

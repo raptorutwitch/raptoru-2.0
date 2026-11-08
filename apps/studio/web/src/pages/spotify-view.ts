@@ -166,6 +166,24 @@ export interface SpUi {
   now: number;
   replies?: string[];
   simClosed?: boolean;
+  /** Music Hub V2 : la carte musique de l'overlay OBS (absente d'un Studio sans lecteur d'effets). */
+  overlay?: SpOverlay | null;
+}
+
+/** Music Hub V2 : le réglage de la carte musique (Studio, music-overlay.json) et les sons du lecteur d'effets. */
+export interface SpOverlay {
+  config: {
+    enabled: boolean;
+    on_request: boolean;
+    on_start: boolean;
+    sound: string | null;
+    sound_name: string | null;
+    volume: number;
+    duration_s: number;
+    position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  };
+  available: boolean;
+  sounds: { id: string; label: string; available: boolean }[];
 }
 
 export const trackLabel = (t: SpTrack | null) =>

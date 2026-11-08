@@ -22,6 +22,12 @@ import {
 import { SpotifyAuth, simulatedAuth } from './oauth.js';
 import { selectCandidate, type Candidate } from './search.js';
 import { SpotifySim } from './sim.js';
+import {
+  MusicOverlay,
+  MusicOverlayConfig,
+  type MusicCardPlayer,
+  type MusicStateView,
+} from './overlay.js';
 
 // Spotify V2 in Studio (docs/SPOTIFY_V2.md § 2–6): the only Spotify caller, Core's hands. Every second Studio tells Core
 // its state (+ a playback reading when it took one) and gets the jobs and the logical queue back; it runs the jobs
@@ -72,7 +78,19 @@ export interface SpotifyRuntimeDeps {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
+  /** Music Hub V2: the OBS music card (overlay.ts), and the effects player's sounds (catalogue, import). */
+  overlay?: MusicOverlay | null;
+  sounds?: {
+    list(): { id: string; label: string; available: boolean }[];
+    importSound(
+      body: Buffer,
+      name: string,
+    ): Promise<{ id: string; name: string }>;
+  } | null;
 }
+
+/** Music Hub V2: how often Core's state is read for the overlay (only while it is on). */
+const OVERLAY_READ_MS = 2_500;
 
 interface Reservation {
   request_id: string;
@@ -193,6 +211,15 @@ export class SpotifyRuntime {
     /** This Studio's origin (http://127.0.0.1:4100). */
     origin: string;
     log?: (line: string) => void;
+    /** Music Hub V2: the effects player (the music card of the overlay, its sounds). */
+    effects?: {
+      sounds(): { id: string; label: string; available: boolean }[];
+      importSound(
+        body: Buffer,
+        name: string,
+      ): Promise<{ id: string; name: string }>;
+      play: MusicCardPlayer['play'];
+    } | null;
   }) {
     const sim = p.environment === 'lab' ? new SpotifySim() : null;
     const auth = sim
@@ -214,6 +241,17 @@ export class SpotifyRuntime {
       sim,
       reservationsFile: join(p.dir, 'spotify-auto-skips.json'),
       ...(p.log ? { log: p.log } : {}),
+      overlay: await MusicOverlay.open(
+        join(p.dir, 'music-overlay.json'),
+        p.effects ?? null,
+        p.log,
+      ),
+      sounds: p.effects
+        ? {
+            list: () => p.effects!.sounds(),
+            importSound: (b, n) => p.effects!.importSound(b, n),
+          }
+        : null,
     });
   }
 
@@ -261,11 +299,32 @@ export class SpotifyRuntime {
       this.timer.unref?.();
     };
     void loop();
+    // Music Hub V2: the overlay follows Core's queue on its own pace, only while it is on (no read otherwise).
+    const overlay = this.d.overlay;
+    if (overlay) {
+      const follow = async () => {
+        if (this.stopped) return;
+        if (overlay.following)
+          try {
+            overlay.observe(
+              await this.d.core<MusicStateView>(`${this.base}/state`),
+            );
+          } catch {
+            /* Core unreachable: the next reading after the gap only notes (never a late card) */
+          }
+        this.overlayTimer = setTimeout(() => void follow(), OVERLAY_READ_MS);
+        this.overlayTimer.unref?.();
+      };
+      void follow();
+    }
   }
+
+  private overlayTimer: ReturnType<typeof setTimeout> | null = null;
 
   stop() {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
+    if (this.overlayTimer) clearTimeout(this.overlayTimer);
   }
 
   /** One cycle: maybe a playback reading, the sync, the auto-skip, the jobs. Returns the delay to the next one. */
@@ -924,13 +983,64 @@ export class SpotifyRuntime {
     };
   }
 
+  private async overlayApi(
+    method: string,
+    path: string,
+    body: () => Promise<Record<string, unknown>>,
+    upload?: () => Promise<{ body: Buffer; name: string }>,
+  ) {
+    const o = this.d.overlay;
+    if (!o)
+      throw Object.assign(new Error('overlay_unavailable'), { status: 503 });
+    const view = () => ({
+      config: o.config,
+      available: o.available,
+      sounds: this.d.sounds?.list() ?? [],
+    });
+    if (method === 'GET' && path === '/overlay') return view();
+    if (method === 'POST' && path === '/overlay') {
+      const next = MusicOverlayConfig.safeParse(await body());
+      if (!next.success)
+        throw Object.assign(new Error('invalid_overlay'), {
+          status: 400,
+          body: { issues: next.error.issues.map((i) => i.path.join('.')) },
+        });
+      await o.save(next.data);
+      return view();
+    }
+    if (method === 'POST' && path === '/overlay/preview') {
+      try {
+        return await o.preview();
+      } catch (e) {
+        throw Object.assign(e as Error, {
+          status: (e as { status?: number }).status ?? 409,
+        });
+      }
+    }
+    if (method === 'POST' && path === '/overlay/sounds') {
+      if (!this.d.sounds || !upload)
+        throw Object.assign(new Error('effects_unavailable'), { status: 503 });
+      const { body: raw, name } = await upload();
+      try {
+        return await this.d.sounds.importSound(raw, name);
+      } catch (e) {
+        throw Object.assign(e as Error, { status: 400 });
+      }
+    }
+    throw Object.assign(new Error('not_found'), { status: 404 });
+  }
+
   /** /api/spotify/* behind Studio's origin check. */
   async api(
     method: string,
     path: string,
     body: () => Promise<Record<string, unknown>>,
+    upload?: () => Promise<{ body: Buffer; name: string }>,
   ) {
     const auth = this.d.auth;
+    // Music Hub V2: the OBS music card (overlay.ts): its setting, a preview, an imported alert sound.
+    if (path.startsWith('/overlay'))
+      return this.overlayApi(method, path, body, upload);
     if (method === 'GET' && path === '/state') {
       const core = await this.d.core<Record<string, unknown>>(
         `${this.base}/state`,

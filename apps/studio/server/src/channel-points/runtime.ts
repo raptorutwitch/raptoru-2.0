@@ -151,6 +151,8 @@ export class ChannelPointsRuntime {
             dir: d.spotifyDir,
             origin: d.origin,
             log: (line) => console.log(line),
+            // Music Hub V2: the music card of the overlay goes through the effects player (never its own source).
+            effects: d.effects ?? null,
           })
         : null,
     );
@@ -388,6 +390,18 @@ export class ChannelPointsRuntime {
             req.method ?? 'GET',
             url.pathname.slice('/api/spotify'.length),
             () => this.body(req),
+            // Music Hub V2: an alert sound imported for the overlay (same checks as the Votekick sounds).
+            async () => {
+              let name = 'son';
+              try {
+                name = decodeURIComponent(
+                  String(req.headers['x-sound-name'] ?? 'son'),
+                );
+              } catch {
+                /* keep the default */
+              }
+              return { body: await this.raw(req, SOUND_MAX_BYTES), name };
+            },
           ),
         );
       else if (rb)

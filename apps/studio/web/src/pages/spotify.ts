@@ -36,6 +36,7 @@ import {
   stateView,
   timeView,
   verifyNote,
+  type SpOverlay,
   type SpState,
   type SpUi,
 } from './spotify-view.js';
@@ -45,6 +46,16 @@ import {
 // le seul à appeler Spotify (« Actualiser » est limité par Studio).
 
 const ERRORS: Record<string, string> = {
+  effects_player_offline:
+    'Source OBS « Effets » absente : ouvre OBS ou ajoute la source.',
+  effects_player_muted:
+    'Source « Effets » sans son : active le son de la source.',
+  effects_player_outdated: 'Source « Effets » à recharger dans OBS.',
+  effect_media_missing: 'Ce son n’est pas importé dans Studio.',
+  invalid_overlay: 'Réglage de l’overlay refusé.',
+  overlay_unavailable: 'Overlay indisponible dans ce Studio.',
+  unsupported_audio: 'Format de son non pris en charge (mp3, wav, ogg).',
+  sound_too_large: 'Son trop lourd (5 Mo max).',
   reward_exists: 'La récompense existe déjà.',
   reward_create_in_progress: 'Une création est déjà en cours.',
   rate_limited: 'Spotify limite les appels : réessaie plus tard.',
@@ -203,6 +214,27 @@ export function mountSpotifyPage(root: HTMLElement) {
     }
     paint();
   }
+  // Music Hub V2 : le réglage de la carte musique (lu une fois, puis à chaque enregistrement).
+  async function readOverlay() {
+    ui.overlay = await tryGetJson<SpOverlay>('/api/spotify/overlay');
+    paint();
+  }
+  void readOverlay();
+  async function saveOverlay(next: Partial<SpOverlay['config']>, done: string) {
+    if (!ui.overlay) return;
+    await run(
+      null,
+      async () => {
+        ui.overlay = await postJson<SpOverlay>('/api/spotify/overlay', {
+          ...ui.overlay!.config,
+          ...next,
+        });
+      },
+      done,
+      ERRORS,
+    );
+    paint();
+  }
   const tick = poller(read, 3000);
   const clockTick = poller(paintProgress, 1000);
 
@@ -260,7 +292,52 @@ export function mountSpotifyPage(root: HTMLElement) {
         { [t.dataset.spFlag]: t.checked },
         'Réglage enregistré',
       );
-    else if (t.hasAttribute('data-vol'))
+    else if (t.dataset.ov) {
+      const k = t.dataset.ov;
+      const v =
+        t.type === 'checkbox'
+          ? t.checked
+          : k === 'volume' || k === 'duration_s'
+            ? Number(t.value)
+            : k === 'sound'
+              ? t.value || null
+              : t.value;
+      void saveOverlay(
+        k === 'sound'
+          ? { sound: v as string | null, sound_name: null }
+          : { [k]: v },
+        'Overlay enregistré',
+      );
+    } else if (t.hasAttribute('data-ov-file') && t.files?.[0]) {
+      const file = t.files[0];
+      void run(
+        null,
+        async () => {
+          const res = await fetch('/api/spotify/overlay/sounds', {
+            method: 'POST',
+            headers: {
+              'x-raptoru-studio': '1',
+              'content-type': 'application/octet-stream',
+              'x-sound-name': encodeURIComponent(file.name),
+            },
+            body: file,
+          });
+          const up = (await res.json().catch(() => ({}))) as {
+            id?: string;
+            name?: string;
+            error?: string;
+          };
+          if (!res.ok || !up.id)
+            throw new Error(up.error ?? `HTTP ${res.status}`);
+          await saveOverlay(
+            { sound: up.id, sound_name: up.name ?? null },
+            `« ${up.name} » importé`,
+          );
+        },
+        'Son importé',
+        ERRORS,
+      );
+    } else if (t.hasAttribute('data-vol'))
       void post(
         null,
         '/actions',
@@ -334,6 +411,13 @@ export function mountSpotifyPage(root: HTMLElement) {
         '/actions',
         { action: el.dataset.play },
         el.dataset.play === 'pause' ? 'Pause demandée' : 'Reprise demandée',
+      ),
+    'sp-ov-preview': (el) =>
+      run(
+        el,
+        () => postJson('/api/spotify/overlay/preview', {}),
+        'Carte envoyée à la source « Effets »',
+        ERRORS,
       ),
     'sp-ext-price': (el) =>
       post(

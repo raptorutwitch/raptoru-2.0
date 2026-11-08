@@ -787,3 +787,47 @@ describe('Music Hub V2 — supermods, withdrawal while being added, links', () =
     expect(again.search_id).toBe(r.search_id);
   });
 });
+
+describe('Music Hub V2 — the OBS Dock', () => {
+  it('a request from the extension is ONE dock activity whose status follows it (received, queued, withdrawn + refunded)', async () => {
+    const { DockActivityService } = await import('../src/dock/service.js');
+    const h = await hub();
+    const dock = new DockActivityService(h.core.db, h.core.clock, {
+      autoScan: false,
+    });
+    await h.fund(viewer(1), 1_000);
+    await h.search(viewer(1), 'titre');
+    await h.answerSearches([item(1)]);
+    const { request } = await h.ask(viewer(1), 1);
+    await dock.scan(CH);
+    const key = `ix:music:${request.request_id}`;
+    const status = async () => {
+      const rows = (await dock.recent(CH)).activities.filter(
+        (a) => a.type === 'music',
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.activity_key).toBe(key);
+      return rows[0]!;
+    };
+    expect((await status()).state).toMatchObject({ status: 'music_received' });
+    await h.runRequests();
+    await dock.scan(CH);
+    const queued = await status();
+    expect(queued.state).toMatchObject({ status: 'music_queued' });
+    expect(queued.data).toMatchObject({
+      actor: { id: viewer(1).id, name: 'Fan1' },
+      track: { title: `Titre de ${ID(1)}` },
+      price: 500,
+    });
+    await h.spotify.extensionCancel(
+      CH,
+      { id: viewer(1).id, name: 'Fan1' },
+      request.request_id,
+    );
+    await dock.scan(CH);
+    expect((await status()).state).toMatchObject({
+      status: 'music_canceled',
+      refund_status: 'refunded',
+    });
+  });
+});
