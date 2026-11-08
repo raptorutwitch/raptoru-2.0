@@ -43,6 +43,13 @@ export function startServer(port = Number(process.env.PORT || 4471)) {
       const m = /^\/(calib|demo|live)(?:-(legacy|v2))?(\/.*)$/.exec(decodeURIComponent(url.pathname));
       if (!m) { res.writeHead(404); return res.end(); }
       const [, variant, shell, rel] = m;
+      // The bench's fake Core (live variant) is allowed here only; the shipped list is unchanged.
+      if (rel === '/shared/runtime-guard.js' && variant === 'live') {
+        res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' });
+        return res.end(`export const ALLOWED_API_BASES = Object.freeze(['https://core.bench.invalid/v1/ext']);
+export const isAllowedApiBase = (b) => ALLOWED_API_BASES.includes(b);
+`);
+      }
       if (rel === '/shared/runtime-config.js') {
         res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' });
         return res.end(runtime(variant, shell || null));

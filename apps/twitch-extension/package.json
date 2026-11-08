@@ -5,6 +5,9 @@
   "scripts": {
     "build": "node -e \"console.log('Rien \u00e0 construire : l\u2019extension est servie telle quelle. Emballage : npm run package:production | package:staging | package:calibration')\"",
     "test": "vitest run",
+    "test:responsive": "node test/responsive/matrix.mjs",
+    "test:requests": "node test/responsive/requests.mjs",
+    "test:grey-screen": "node test/responsive/grey-screen.mjs",
     "package": "node scripts/package.mjs",
     "package:production": "node scripts/package.mjs --target production",
     "package:staging": "node scripts/package.mjs --target staging",

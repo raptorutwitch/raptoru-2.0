@@ -1,0 +1,85 @@
+{
+ "tts-tokens": {
+  "writes": [
+   {
+    "method": "POST",
+    "path": "/emotes/refresh",
+    "body": {},
+    "idempotencyKey": false,
+    "authorization": true
+   },
+   {
+    "method": "POST",
+    "path": "/actions/tokens",
+    "body": {
+     "module_id": "tts",
+     "payload": {
+      "text": "Message de référence"
+     }
+    },
+    "idempotencyKey": true,
+    "authorization": true
+   }
+  ],
+  "errors": [],
+  "scenarioError": null
+ },
+ "raffle-join": {
+  "writes": [
+   {
+    "method": "POST",
+    "path": "/emotes/refresh",
+    "body": {},
+    "idempotencyKey": false,
+    "authorization": true
+   },
+   {
+    "method": "POST",
+    "path": "/actions/raffle",
+    "body": {},
+    "idempotencyKey": true,
+    "authorization": true
+   }
+  ],
+  "errors": [],
+  "scenarioError": null
+ },
+ "soundboard-first": {
+  "writes": [
+   {
+    "method": "POST",
+    "path": "/emotes/refresh",
+    "body": {},
+    "idempotencyKey": false,
+    "authorization": true
+   },
+   {
+    "method": "POST",
+    "path": "/actions/tokens",
+    "body": {
+     "module_id": "soundboard",
+     "payload": {
+      "sound_id": "son-01"
+     }
+    },
+    "idempotencyKey": true,
+    "authorization": true
+   }
+  ],
+  "errors": [],
+  "scenarioError": null
+ },
+ "bonk-first": {
+  "writes": [
+   {
+    "method": "POST",
+    "path": "/emotes/refresh",
+    "body": {},
+    "idempotencyKey": false,
+    "authorization": true
+   }
+  ],
+  "errors": [],
+  "scenarioError": null
+ }
+}
