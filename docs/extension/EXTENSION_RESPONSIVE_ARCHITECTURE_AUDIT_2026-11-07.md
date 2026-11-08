@@ -5,7 +5,7 @@ installé, la Production ni les données. Annexes détaillées (preuves fichier:
 [v1-comparaison.html](audit-2026-11-07/v1-comparaison.html) ·
 [A1 règles Twitch](audit-2026-11-07/A1-regles-twitch.md) · [A2 architecture](audit-2026-11-07/A2-architecture.md) ·
 [A3 diagnostic responsive](audit-2026-11-07/A3-responsive.md) · [A4 matrice de mesures](audit-2026-11-07/A4-matrice-mesures.md) ·
-[captures](audit-2026-11-07/captures/).
+[captures](audit-2026-11-07/captures/) · **[plan d'exécution de la refonte (08/11)](PLAN_REFONTE_EXTENSION_2026-11-08.md)**.
 
 Méthode : documentation officielle Twitch consultée en ligne le 07/11 (URL dans A1) ; lecture du code et de l'historique Git ;
 **mesures réelles** dans Chromium (Playwright) des trois surfaces rendues avec les données fictives de la version
@@ -278,6 +278,12 @@ avant la première soumission (sinon, le retour arrière passe par une nouvelle 
 ---
 
 ## K. Décisions qui te reviennent
+
+> **Tranché le 08/11** (Antoni) : référence artistique **651×434** ; réglage console vérifié à **65 %** ; plancher initial
+> 0,85 ; correctifs avant le socle ; mobile conservé ; anciennes vues gardées temporairement ; mesures réelles préparées sans
+> bloquer le socle. Suite et nouvelles décisions : [plan d'exécution](PLAN_REFONTE_EXTENSION_2026-11-08.md). Mesures
+> ajoutées le 08/11 : couverture CSS (`base` 5,0 %, `overlay` 4,2 %, `mobile` 2,2 % utilisés) et charge initiale
+> (≈ 2,2 Mo JS + CSS, 54 modules avant le Hub), plan § 7.
 
 1. **Référence V1** : 565×376 actuel (k = 1), ou la composition du 651×434 que tu préférais ?
 2. **Plancher d'échelle** : ~0,85 (lisibilité prioritaire, réarrangement en dessous) ou plus bas (V1 plus fidèle, texte plus petit) ?
