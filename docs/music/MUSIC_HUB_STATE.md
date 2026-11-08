@@ -4,6 +4,20 @@
 > **Lab uniquement.** Rien n'est poussé, fusionné, déployé ni publié. Non validé par Antoni.
 > V1 : commits 626d353 → 2722108. V2 (retour du 08/11) : 006cfac, c9e88a8, 5860b81 et la doc.
 
+## 0. Où reprendre (08/11, après le Design Lab)
+
+- **Design en cours de choix** : cinq directions comparables dans `prototypes/music-hub/` (double-clic
+  `Ouvrir le comparateur Music Hub.cmd`). Recommandation : **D — Raptoru Néon** (voir son README et le comparateur).
+  Ce dossier est local (exclu de git par `.git/info/exclude`, comme tous les prototypes) : il vit dans le worktree.
+  **Rien n'est intégré** : le module V2 actuel reste la référence fonctionnelle jusqu'au choix d'Antoni.
+- **Prochaine mission** : intégrer la direction retenue dans `apps/twitch-extension/extension/modules/music/`
+  (`view.js`, `music.css`) sans toucher Core, Spotify V2, Jetons ni droits ; garder `test:music-stability`, l'E2E
+  `music-hub.e2e.ts` et la matrice responsive verts.
+- **Corrigé le 08/11** (commit fa09c88) : « Historique » qui se refermait et focus perdu à chaque relevé (4 s) —
+  une zone n'est redessinée que si elle change, le focus revient au même contrôle. Le saut de la file après un retrait
+  observé pendant l'enquête venait de l'outil de test (défilement pour cliquer), pas du module.
+- **Catalogue Spotify** : faisabilité et autorisations dans [SPOTIFY_CATALOGUE.md](SPOTIFY_CATALOGUE.md).
+
 ## 1. En une phrase
 
 Le module « Musique » de l'extension (shell v2) est une **nouvelle entrée dans la file Spotify V2 existante**,
