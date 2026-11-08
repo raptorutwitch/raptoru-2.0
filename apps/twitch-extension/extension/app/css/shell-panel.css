@@ -1,0 +1,612 @@
+/* Socle v2 — panel et mobile (ancien mobile.css), règles VIVANTES uniquement.
+   Généré une fois par scripts/dev/css-alive.mjs depuis extension/mobile.css (commit de la refonte) : 128 règles
+   gardées, 682 prouvées mortes retirées (scripts/dev/css-dead-mobile.txt). Depuis, ce
+   fichier est une source éditée à la main ; l'historique et les commentaires d'origine sont dans extension/mobile.css
+   (shell legacy, inchangé). */
+html,
+body.mobile {
+  min-height: 100%;
+  background: var(--jdm-bg-solid);
+}
+body.mobile {
+  padding:
+  env(safe-area-inset-top) env(safe-area-inset-right)
+  env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.m-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--jdm-bg-solid);
+  border-bottom: 1px solid var(--jdm-line);
+}
+.m-refresh {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--jdm-line);
+  border-radius: 10px;
+  background: var(--jdm-surface);
+  font-size: 17px;
+  cursor: pointer;
+}
+.m-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 32px;
+}
+.mobile .jdm-btn {
+  min-height: 48px;
+}
+.mobile .jdm-input {
+  min-height: 48px; padding: 12px; font-size: 16px;
+}
+.mobile textarea.jdm-input {
+  min-height: 92px;
+}
+.mobile .jdm-wallet {
+  padding: 12px 14px;
+}
+.mobile .jdm-wallet__value {
+  font-size: 19px;
+}
+@media (min-width: 620px) {
+  .m-body {
+    max-width: 560px; margin: 0 auto;
+  }
+}
+@media (max-height: 420px) and (orientation: landscape) {
+  .m-head {
+    padding: 8px 14px;
+  }
+  .m-body {
+    padding: 10px 14px 20px;
+  }
+}
+html,
+body.mobile {
+  background:
+  radial-gradient(circle at 100% 0, rgba(168, 85, 247, .18), transparent 34%),
+  radial-gradient(circle at 0 100%, rgba(76, 29, 149, .14), transparent 38%),
+  var(--jdm-bg-solid);
+}
+.m-head {
+  background: rgba(11, 9, 18, .82);
+  border-bottom-color: rgba(216, 180, 254, .16);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .2);
+  backdrop-filter: blur(14px);
+}
+.m-refresh {
+  border-color: rgba(216, 180, 254, .2);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .1), rgba(76, 29, 149, .16));
+}
+.m-head {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: block;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+.m-refresh {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 9px;
+  opacity: .72;
+  pointer-events: auto;
+}
+.m-refresh:hover,
+.m-refresh:focus-visible {
+  opacity: 1; outline: 0;
+}
+.mobile .m-body {
+  min-height: 100vh;
+  padding: 6px 10px 24px;
+  gap: 0;
+}
+.mobile .jdm-module__screen-head {
+  min-height: 44px;
+  padding-inline: 0;
+}
+.mobile .jdm-back {
+  min-height: 44px;
+  padding-inline: 11px;
+}
+.mobile .jdm-module__screen-side--right .jdm-wallet--shell-header {
+  min-height: 34px;
+  padding-inline: 9px;
+}
+.mobile .jdm-module-screen > .jdm-module > .jdm-module__body {
+  padding-bottom: 12px;
+}
+body.mobile:has(#panel[data-view="module"]) .m-head {
+  display: none;
+}
+body.mobile:has(#panel[data-view="module"]) .m-body {
+  padding-top: 4px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  .mobile .m-body {
+    padding-inline: 7px;
+  }
+  .mobile .jdm-module__screen-head {
+    min-height: 42px;
+  }
+  .mobile .jdm-back {
+    min-height: 42px; padding-inline: 9px;
+  }
+}
+.mobile .jdm-module[data-module="actions"] .jdm-module__body {
+  padding: 5px 7px 8px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__item {
+  min-height: 32px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  gap: 4px;
+  padding-block: 3px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__icon {
+  width: 18px; height: 18px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__action {
+  font-size: 9.5px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__cost,
+.mobile .jdm-module[data-module="actions"] .jdm-history__status,
+.mobile .jdm-module[data-module="actions"] .jdm-history__when {
+  font-size: 8px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__cost {
+  max-width: 76px;
+}
+.mobile .jdm-module[data-module="actions"] .jdm-history__status {
+  max-width: 72px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  .mobile .jdm-module[data-module="actions"] .jdm-history__item {
+    min-height: 30px;
+    grid-template-columns: 17px minmax(0, 1fr) auto auto auto;
+  }
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-module__body {
+  gap: 0;
+  padding: 4px 7px 8px;
+  overflow: hidden;
+}
+.mobile .jdm-module__screen-head--moderation .jdm-back {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+.mobile .jdm-moderation__subnav {
+  min-height: 44px;
+  gap: 4px;
+  justify-content: space-between;
+  padding-bottom: 4px;
+}
+.mobile .jdm-moderation__tab {
+  width: auto;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+}
+.mobile .jdm-moderation__tab:not(.jdm-btn--primary) {
+  width: 44px;
+  padding-inline: 0;
+}
+.mobile .jdm-moderation__tab-icon {
+  width: 20px; height: 20px; flex-basis: 20px; font-size: 15px;
+}
+.mobile .jdm-moderation--screen .jdm-moderation__controls .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-moderation__actions .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-history__filters .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-users__user,
+.mobile .jdm-moderation--screen .jdm-mod-modules__list .jdm-btn,
+.mobile .jdm-mod-user-card__group .jdm-btn {
+  min-height: 44px;
+}
+.mobile .jdm-moderation--screen .jdm-moderation__controls .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-moderation__actions .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-history__filters .jdm-btn,
+.mobile .jdm-moderation--screen .jdm-mod-users__user,
+.mobile .jdm-moderation--screen .jdm-mod-modules__list .jdm-btn,
+.mobile .jdm-mod-user-card__group .jdm-btn {
+  padding-inline: 8px;
+}
+.mobile .jdm-moderation--screen .jdm-mod-history__filters .jdm-input {
+  min-height: 48px; padding-inline: 10px; font-size: 16px;
+}
+.mobile .jdm-moderation--screen .jdm-mod-history__list {
+  overflow: visible;
+}
+.mobile .jdm-moderation--screen .jdm-history__item {
+  min-height: 34px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  gap: 4px;
+  padding-block: 5px;
+}
+.mobile .jdm-moderation--screen .jdm-history__icon {
+  width: 18px; height: 18px; font-size: 12px;
+}
+.mobile .jdm-moderation--screen .jdm-history__action {
+  font-size: 10px;
+}
+.mobile .jdm-moderation--screen .jdm-history__cost,
+.mobile .jdm-moderation--screen .jdm-history__status,
+.mobile .jdm-moderation--screen .jdm-history__when {
+  font-size: 8px;
+}
+.mobile .jdm-mod-user-card__group .jdm-input {
+  min-height: 44px;
+}
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="moderation"] .jdm-module__body {
+    padding-inline: 5px;
+  }
+  .mobile .jdm-moderation__subnav {
+    gap: 2px;
+  }
+  .mobile .jdm-moderation__tab {
+    padding-inline: 8px;
+  }
+  .mobile .jdm-moderation__tab:not(.jdm-btn--primary) {
+    width: 42px; min-width: 42px;
+  }
+  .mobile .jdm-moderation--screen .jdm-history__item {
+    grid-template-columns: 17px minmax(0, 1fr) auto auto auto;
+    gap: 3px;
+  }
+  .mobile .jdm-moderation--screen .jdm-history__icon {
+    width: 17px; height: 17px; font-size: 11px;
+  }
+  .mobile .jdm-moderation--screen .jdm-history__cost {
+    max-width: 70px;
+  }
+  .mobile .jdm-moderation--screen .jdm-history__status {
+    max-width: 74px;
+  }
+  .mobile .jdm-moderation--screen .jdm-history__when {
+    max-width: 38px;
+  }
+}
+.mobile .jdm-module[data-module="bonk"] .jdm-emote-source {
+  height: 40px;
+  min-width: 40px;
+  padding-inline: 7px;
+}
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="bonk"] .jdm-module__body {
+    padding-inline: 5px;
+  }
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__search .jdm-input {
+  min-height: 44px;
+  padding-inline: 10px;
+  font-size: 16px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__search-button {
+  min-height: 44px;
+  padding-inline: 10px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__list {
+  max-height: 88px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-users__user {
+  min-height: 44px;
+  padding-inline: 9px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card {
+  gap: 5px 8px;
+  padding: 8px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__avatar {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group {
+  gap: 5px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group .jdm-input {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__credit-button,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history-toggle,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--credits {
+  grid-template-columns: auto auto 44px minmax(44px, 52px) 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--suspension {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--suspension .jdm-mod-user-history-toggle {
+  grid-column: 2 / -1;
+  justify-self: end;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--suspension .jdm-mod-user-card__suspension-button {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspensions,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-picker {
+  grid-column: 1 / -1;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-picker {
+  gap: 5px;
+  padding: 6px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-option {
+  min-height: 44px;
+  padding-inline: 8px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__module-option input {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions {
+  gap: 5px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions .jdm-input,
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions .jdm-mod-user-card__suspension-button {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__duration-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__duration-controls .jdm-input {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__custom-duration {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__custom-duration .jdm-input {
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 0;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__suspension-actions .jdm-mod-user-card__suspension-button {
+  flex: 1 1 auto;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history {
+  max-height: min(300px, 42vh);
+  padding: 8px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history__close {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="moderation"] .jdm-mod-user-history__list {
+  max-height: 240px;
+}
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="moderation"] .jdm-mod-users__list {
+    max-height: 82px;
+  }
+  .mobile .jdm-module[data-module="moderation"] .jdm-mod-user-card__group--credits {
+    grid-template-columns: auto auto 42px minmax(40px, 1fr) 42px;
+  }
+}
+.mobile .jdm-module[data-module="tts"] .jdm-tts-actions.is-visible {
+  max-height: 82px;
+}
+.mobile .jdm-module[data-module="tts"] .jdm-multi-payment__cta,
+.mobile .jdm-module[data-module="tts"] .jdm-multi-payment__switch {
+  min-height: 44px;
+}
+.mobile .jdm-module[data-module="tts"] .jdm-multi-payment__switch {
+  min-width: 76px;
+  padding-inline: 8px;
+}
+.mobile .jdm-module[data-module="tts"] .jdm-tts-action--lab {
+  min-height: 38px;
+}
+@media (max-width: 390px) {
+  .mobile .jdm-module[data-module="tts"] .jdm-multi-payment__switch {
+    min-width: 72px;
+  }
+}
+@media (max-height: 320px) {
+  body.mobile:has(#panel[data-view="module"]) .m-body {
+    height: 100vh;
+    max-height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+body.mobile .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-home .jdm-wallet--home.jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-module__screen-side--right .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-wallet.jdm-ui-wallet:not(.jdm-wallet--bonk-header) {
+  width: min(122px, calc(100vw - 20px));
+  height: 36px;
+  min-height: 36px;
+  align-self: center;
+  margin-right: 4px;
+  padding: 3px 7px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.mobile .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+  body.mobile .jdm-home .jdm-wallet--home.jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+  body.mobile .jdm-module__screen-side--right .jdm-ui-wallet:not(.jdm-wallet--bonk-header),
+  body.mobile .jdm-module__screen-head--soundboard .jdm-soundboard-wallet.jdm-ui-wallet:not(.jdm-wallet--bonk-header) {
+    width: min(112px, calc(100vw - 20px));
+    height: 34px;
+    min-height: 34px;
+    padding: 2px 5px;
+  }
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-composer > .jdm-row {
+  position: static;
+  display: flex;
+  min-height: 16px;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-input {
+  height: 104px;
+  min-height: 104px;
+  max-height: 140px;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-actions {
+  display: flex;
+  max-height: 0;
+  overflow: visible;
+}
+body.mobile .jdm-module[data-module="tts"] .jdm-tts-actions.is-visible {
+  max-height: 62px;
+}
+body.mobile .jdm-wallet-stack {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0;
+  overflow: visible;
+  padding: 2px 1px 4px 7px;
+}
+body.mobile .jdm-wallet-stack::before,
+body.mobile .jdm-wallet-stack::after {
+  display: none !important;
+  content: none !important;
+}
+body.mobile .jdm-wallet-stack > .jdm-wallet__face {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--wallet-tint) 42%, transparent),
+  0 3px 7px rgba(0, 0, 0, .38);
+}
+body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  max-width: min(220px, 100%);
+  overflow: visible;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard {
+  overflow: visible !important;
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard,
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  overflow: visible !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  column-gap: 3px !important;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.component-view .jdm-module__body {
+    padding: 6px 7px 34px;
+  }
+}
+@keyframes jdm-soundboard-select-pop {
+  0% { --jdm-soundboard-selected-scale: 1; }
+    38% { --jdm-soundboard-selected-scale: 1.18; }
+    68% { --jdm-soundboard-selected-scale: 1.12; }
+    100% { --jdm-soundboard-selected-scale: 1.15; }
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  display: block !important;
+  width: 22px !important;
+  height: 16px !important;
+  overflow: visible !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  pointer-events: none !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  display: flex !important;
+  align-items: center !important;
+  line-height: 1.1 !important;
+  vertical-align: middle !important;
+}
+@keyframes jdm-soundboard-select-pop-v34 {
+  0% { --jdm-soundboard-selected-scale: 1; }
+    38% { --jdm-soundboard-selected-scale: 1.22; }
+    70% { --jdm-soundboard-selected-scale: 1.13; }
+    100% { --jdm-soundboard-selected-scale: 1.17; }
+}
+@keyframes jdm-soundboard-switch-spin {
+  from { transform: rotate(0deg); }
+    to { transform: rotate(180deg); }
+}
+@keyframes jdm-soundboard-select-pop-v35 {
+  0% { --jdm-soundboard-selected-scale-x: 1; --jdm-soundboard-selected-scale-y: 1; }
+    38% { --jdm-soundboard-selected-scale-x: 1.22; --jdm-soundboard-selected-scale-y: 1.25; }
+    70% { --jdm-soundboard-selected-scale-x: 1.13; --jdm-soundboard-selected-scale-y: 1.16; }
+    100% { --jdm-soundboard-selected-scale-x: 1.17; --jdm-soundboard-selected-scale-y: 1.2; }
+}
+html body.mobile .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  width: 20px !important;
+  height: 15px !important;
+  aspect-ratio: 4 / 3 !important;
+}
+html body.mobile .jdm-module__screen-head--soundboard {
+  --soundboard-volume-offset-y: 4px;
+}
+html body.mobile .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  position: relative !important;
+  top: 3px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-source {
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  flex: 0 0 36px !important;
+  gap: 0 !important;
+  padding: 0 !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-bonk-feedback {
+  grid-column: 1 / span 2 !important;
+  grid-row: 3 !important;
+}
+html body.mobile .jdm-module__screen-head--bonk .jdm-wallet--bonk-header {
+  width: max-content !important;
+  max-width: none !important;
+  gap: 3px !important;
+  padding: 2px 5px !important;
+}
+html body.mobile .jdm-module[data-module="bonk"] .jdm-emote-oauth-button {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+}

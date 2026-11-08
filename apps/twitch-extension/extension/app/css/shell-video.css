@@ -1,0 +1,795 @@
+/* Socle v2 — composant vidéo (ancien overlay.css), règles VIVANTES uniquement.
+   Généré une fois par scripts/dev/css-alive.mjs depuis extension/overlay.css (commit de la refonte) : 144 règles
+   gardées, 744 prouvées mortes retirées (scripts/dev/css-dead-overlay.txt). Depuis, ce
+   fichier est une source éditée à la main ; l'historique et les commentaires d'origine sont dans extension/overlay.css
+   (shell legacy, inchangé). */
+html,
+body.overlay {
+  height: 100%;
+  background: transparent;
+  pointer-events: none;
+  overflow: hidden;
+}
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.dock {
+  position: absolute;
+  top: 30%;
+  right: 0;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+.dock__btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--jdm-line);
+  border-right: 0;
+  border-radius: var(--jdm-radius) 0 0 var(--jdm-radius);
+  background: rgba(20, 16, 28, .72);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  opacity: .52;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.dock__btn:hover,
+.dock__btn:focus-visible {
+  opacity: 1; transform: translateX(-3px);
+}
+.dock__icon {
+  color: #d8b4fe; font-size: 18px; line-height: 1;
+}
+.dock__count {
+  position: absolute;
+  top: -5px; right: -5px;
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--jdm-accent);
+  color: var(--jdm-accent-ink);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+.dock__btn:has(.dock__count:not([hidden])) {
+  opacity: .85;
+}
+.dock__btn:has(.dock__count:not([hidden])) .dock__count {
+  animation: badge-pulse 1.8s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(169, 112, 255, .55); }
+    50% { box-shadow: 0 0 0 5px rgba(169, 112, 255, 0); }
+}
+.drawer {
+  position: absolute;
+  top: 50%;
+  right: 54px;
+  transform: translateY(-50%);
+  width: min(300px, calc(100vw - 62px));
+  height: min(64%, 360px);
+  max-height: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--jdm-line);
+  border-radius: 14px;
+  background: rgba(14, 14, 18, .78);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+  pointer-events: auto;
+}
+.drawer[hidden] {
+  display: none;
+}
+body.component-view .dock {
+  display: none;
+}
+body.component-view .drawer {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+  background:
+  radial-gradient(circle at 100% 0, rgba(124, 58, 237, .1), transparent 42%),
+  rgba(10, 10, 14, .62);
+  backdrop-filter: blur(14px) saturate(115%);
+  box-shadow: none;
+}
+body.component-view .drawer__head {
+  display: none;
+}
+body.component-view .drawer__body {
+  position: relative;
+  gap: 6px;
+  padding: 0 6px 6px;
+  overflow: hidden;
+}
+body.component-view .jdm-actions .jdm-btn {
+  min-height: clamp(32px, 8vh, 44px);
+}
+body.component-view .jdm-module {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+body.component-view .jdm-module__body {
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.drawer__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--jdm-line);
+}
+.drawer__mark,
+.m-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #a970ff, #7c3aed);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.drawer__title {
+  display: flex; min-width: 0; flex: 1; flex-direction: column;
+}
+.drawer__title strong {
+  font-size: 13px;
+}
+.drawer__title small {
+  overflow: hidden; color: var(--jdm-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap;
+}
+.drawer__close {
+  border: 0;
+  background: none;
+  color: var(--jdm-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.drawer__close:hover {
+  color: var(--jdm-text);
+}
+.drawer__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 9px 9px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(169, 112, 255, .7) transparent;
+}
+.drawer__body .jdm-module {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.drawer__body .jdm-wallet {
+  padding: 6px 9px;
+}
+.drawer__body .jdm-wallet__value {
+  font-size: clamp(12px, 3vw, 16px);
+}
+.drawer__body .jdm-module__body {
+  gap: 6px; padding: 7px;
+}
+.drawer__body textarea.jdm-input {
+  min-height: 56px; max-height: 72px;
+}
+.drawer__body .jdm-module__body > .jdm-hint {
+  display: none;
+}
+.drawer__body .jdm-actions {
+  flex: 0 0 auto; padding-top: 2px;
+}
+.drawer__body .jdm-actions .jdm-btn {
+  min-height: 30px; padding: 5px 13px;
+}
+@media (max-width: 520px) {
+  .drawer {
+    width: min(calc(100vw - 62px), 300px);
+    height: min(70%, 340px);
+  }
+}
+@media (max-height: 380px) {
+  .drawer {
+    height: calc(100% - 24px); max-height: calc(100% - 24px);
+  }
+  .drawer__head {
+    padding-block: 6px;
+  }
+}
+body.component-view .drawer {
+  border: 1px solid rgba(216, 180, 254, .2);
+  border-radius: 18px;
+  background:
+  radial-gradient(circle at 100% 0, rgba(168, 85, 247, .22), transparent 38%),
+  radial-gradient(circle at 0 100%, rgba(76, 29, 149, .14), transparent 42%),
+  rgba(10, 8, 18, .88);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+body.component-view .drawer::before {
+  position: absolute;
+  inset: 0 16% auto 16%;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(216, 180, 254, .85), transparent);
+  pointer-events: none;
+}
+body.component-view .drawer__body {
+  gap: 10px;
+  padding: 10px 12px 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .018), transparent 48%);
+}
+body.component-view .jdm-module__body {
+  gap: 9px; padding: 10px;
+}
+body.component-view .jdm-actions .jdm-btn {
+  min-height: 40px;
+}
+.drawer {
+  width: min(336px, calc(100vw - 62px));
+  border-radius: 16px;
+  background:
+  radial-gradient(circle at 100% 0, rgba(168, 85, 247, .18), transparent 40%),
+  rgba(10, 8, 18, .86);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .54), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.dock__btn {
+  border-color: rgba(216, 180, 254, .38);
+  background: linear-gradient(145deg, rgba(20, 12, 34, .9), rgba(76, 29, 149, .72));
+  box-shadow: 0 0 18px rgba(168, 85, 247, .2);
+}
+.dock__icon {
+  color: #f0d9ff; font-size: 20px; font-weight: 700;
+}
+body.component-view .drawer {
+  border: 0;
+  border-radius: 0;
+  background:
+  radial-gradient(circle at 8% 0, rgba(142, 66, 237, .13), transparent 34%),
+  linear-gradient(180deg, rgba(20, 17, 27, .91), rgba(9, 8, 13, .93));
+  backdrop-filter: blur(18px) saturate(118%);
+}
+body.component-view .drawer::before {
+  display: none;
+}
+body.component-view .drawer__body {
+  gap: 0;
+  padding: 0;
+  background: none;
+}
+body.component-view .jdm-module {
+  min-height: 0;
+  overflow: hidden;
+}
+body.component-view .jdm-module__body {
+  gap: clamp(6px, 1.5vw, 10px);
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: clamp(8px, 2vw, 14px) clamp(9px, 2.2vw, 16px) clamp(36px, 8vh, 52px);
+  overflow-y: auto;
+}
+body.component-view .jdm-input {
+  min-height: clamp(56px, 16vh, 96px); max-height: none;
+}
+body.component-view .jdm-module__body > .jdm-input {
+  min-height: clamp(56px, 16vh, 96px);
+  flex: 1 1 clamp(80px, 22vh, 140px);
+}
+body.component-view .jdm-actions .jdm-btn {
+  min-height: clamp(32px, 8vh, 44px);
+}
+body.component-view .jdm-wallet {
+  right: clamp(7px, 2vw, 12px); bottom: clamp(6px, 2vh, 12px);
+}
+body.component-view .jdm-module[data-module="bonk"] .jdm-module__body {
+  padding: clamp(6px, 1.7vw, 11px) clamp(7px, 2vw, 14px) clamp(34px, 7.5vh, 48px);
+  overflow: hidden;
+}
+.dock__count {
+  background: #ed3f53;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(8, 7, 12, .9), 0 3px 10px rgba(237, 63, 83, .36);
+}
+.dock__btn:has(.dock__count:not([hidden])) .dock__count {
+  animation-name: badge-pulse-red;
+}
+@keyframes badge-pulse-red {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(8, 7, 12, .9), 0 0 0 0 rgba(237, 63, 83, .5); }
+    50% { box-shadow: 0 0 0 2px rgba(8, 7, 12, .9), 0 0 0 5px rgba(237, 63, 83, 0); }
+}
+body.component-view .jdm-module__intro {
+  display: none;
+}
+body.component-view .jdm-module__body {
+  gap: 6px;
+  padding: 6px 8px 34px;
+}
+body.component-view .jdm-actions {
+  gap: 5px;
+}
+body.component-view .jdm-actions .jdm-btn {
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 9px;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-module__body > .jdm-input {
+  flex: 0 0 auto;
+  min-height: 64px;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-actions {
+  margin-top: auto;
+}
+.jdm-tts-composer {
+  position: relative;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.jdm-tts-input {
+  display: block;
+  height: 104px;
+  min-height: 104px;
+  max-height: 104px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 25px;
+  resize: none;
+  scrollbar-color: rgba(183, 121, 255, .55) transparent;
+  scrollbar-width: thin;
+}
+.jdm-tts-composer > .jdm-row {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  z-index: 1;
+  margin: 0;
+  pointer-events: none;
+}
+.jdm-tts-help {
+  display: block !important;
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(226, 218, 238, .72);
+  font-size: 9px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jdm-tts-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+  max-height: 0;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  visibility: hidden;
+  background: none;
+  transition: max-height .2s ease, opacity .16s ease, transform .2s ease, visibility 0s linear .2s;
+}
+.jdm-tts-actions.is-visible {
+  max-height: 44px;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.jdm-tts-action {
+  display: flex;
+  min-width: 0;
+  min-height: 38px;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 6px;
+  overflow: hidden;
+  line-height: 1.05;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-module__body {
+  gap: 5px;
+  padding: 6px 8px 8px;
+  overflow: hidden;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-tts-input {
+  height: 104px;
+  min-height: 104px;
+  max-height: 104px;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-tts-actions {
+  margin-top: 0;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-tts-credit-hint,
+body.component-view .jdm-module[data-module="tts"] .jdm-module__body > .jdm-hint:not(.jdm-tts-help) {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jdm-tts-actions {
+    transition: none;
+  }
+}
+body.component-view .jdm-module[data-module="bonk"] .jdm-module__body {
+  position: relative;
+  padding: 6px 8px;
+  overflow: hidden;
+}
+body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  gap: 5px;
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header {
+  position: static;
+  inset: auto;
+  height: 27px;
+  min-height: 27px;
+  padding: 3px 7px;
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__coin {
+  font-size: 11px;
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__label {
+  font-size: 8px;
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__value {
+  margin-left: 0;
+  font-size: 13px;
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__hold {
+  display: none;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.component-view .jdm-module[data-module="bonk"] .jdm-module__body {
+    padding: 5px 7px;
+  }
+  body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+    gap: 4px;
+  }
+}
+body.overlay:not(.component-view) .drawer__head {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 31px;
+  min-height: 31px;
+  padding: 3px 6px;
+  border: 0;
+  pointer-events: none;
+}
+body.overlay:not(.component-view) .drawer__mark,
+body.overlay:not(.component-view) .drawer__title {
+  display: none;
+}
+body.overlay:not(.component-view) .drawer__close {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  margin-left: auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(216, 180, 254, .18);
+  border-radius: 50%;
+  background: rgba(10, 8, 18, .5);
+  pointer-events: auto;
+}
+body.overlay:not(.component-view) .drawer__body {
+  padding-top: 0;
+}
+body.overlay:not(.component-view) .jdm-home__topbar,
+body.overlay:not(.component-view) .jdm-module__screen-head {
+  padding-right: 34px;
+}
+body.component-view .jdm-module__screen-head {
+  min-height: 34px;
+  padding-inline: 7px;
+}
+body.component-view .jdm-module-screen > .jdm-module > .jdm-module__body {
+  padding-bottom: 8px;
+}
+body.component-view .jdm-module-screen .jdm-module[data-module="bonk"] .jdm-module__body {
+  padding-bottom: 6px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.component-view .jdm-module__screen-head {
+    min-height: 30px; padding-inline: 7px;
+  }
+  body.overlay:not(.component-view) .jdm-home__topbar,
+  body.overlay:not(.component-view) .jdm-module__screen-head {
+    padding-right: 32px;
+  }
+}
+body.overlay .jdm-module[data-module="actions"] .jdm-module__body {
+  gap: 4px;
+  padding: 4px 6px 6px;
+  overflow: hidden;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.overlay .jdm-module[data-module="actions"] .jdm-module__body {
+    padding: 3px 6px 5px;
+  }
+}
+body.overlay .jdm-module[data-module="moderation"] .jdm-module__body {
+  padding: 2px 6px 4px;
+  overflow: hidden;
+}
+body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__subpanel {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__subnav {
+  padding-bottom: 2px;
+}
+body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__tab {
+  height: 27px; min-height: 27px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.overlay .jdm-module[data-module="moderation"] .jdm-module__body {
+    padding: 1px 5px 3px;
+  }
+  body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__tab {
+    height: 26px;
+    min-height: 26px;
+  }
+}
+body.overlay .jdm-ui-wallet:not(.jdm-wallet--bonk-header) {
+  width: clamp(104px, 21vw, 124px);
+  height: 32px;
+  min-height: 32px;
+  align-self: center;
+  margin-right: 4px;
+  padding: 2px 6px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.overlay .jdm-ui-wallet:not(.jdm-wallet--bonk-header) {
+    width: clamp(104px, 30vw, 112px);
+    height: 32px;
+    min-height: 32px;
+    padding: 2px 5px;
+  }
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-composer {
+  display: grid;
+  gap: 3px;
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-input {
+  height: 82px;
+  min-height: 82px;
+  max-height: 120px;
+  padding: 10px 11px;
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-composer > .jdm-row {
+  position: static;
+  display: flex;
+  min-height: 14px;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0;
+  pointer-events: auto;
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-actions {
+  display: flex;
+  max-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-actions.is-visible {
+  max-height: 56px;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.overlay .jdm-module[data-module="tts"] .jdm-tts-input {
+    height: 68px;
+    min-height: 68px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.overlay .jdm-module[data-module="tts"] .jdm-tts-actions,
+  body.overlay .jdm-module[data-module="tts"] .jdm-tts-payment__cta,
+  body.overlay .jdm-module[data-module="tts"] .jdm-tts-payment__switch,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-soundboard-volume,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-sound-search,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-sound-payment,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+    transition: none;
+  }
+}
+body.overlay .jdm-wallet-stack {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0;
+  overflow: visible;
+  padding: 2px 1px 4px 7px;
+}
+body.overlay .jdm-wallet-stack::before,
+body.overlay .jdm-wallet-stack::after {
+  display: none !important;
+  content: none !important;
+}
+body.overlay .jdm-wallet-stack > .jdm-wallet__face {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--wallet-tint) 42%, transparent),
+  0 3px 7px rgba(0, 0, 0, .38);
+}
+body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  max-width: min(220px, 100%);
+  overflow: visible;
+}
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard {
+  overflow: visible !important;
+}
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+html body.overlay .jdm-module__screen-head--soundboard,
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  overflow: visible !important;
+}
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  column-gap: 3px !important;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  body.component-view .jdm-module__body {
+    padding: 6px 7px 34px;
+  }
+}
+@keyframes jdm-soundboard-select-pop {
+  0% { --jdm-soundboard-selected-scale: 1; }
+    38% { --jdm-soundboard-selected-scale: 1.18; }
+    68% { --jdm-soundboard-selected-scale: 1.12; }
+    100% { --jdm-soundboard-selected-scale: 1.15; }
+}
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  display: block !important;
+  width: 22px !important;
+  height: 16px !important;
+  overflow: visible !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  pointer-events: none !important;
+}
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  display: flex !important;
+  align-items: center !important;
+  line-height: 1.1 !important;
+  vertical-align: middle !important;
+}
+@keyframes jdm-soundboard-select-pop-v34 {
+  0% { --jdm-soundboard-selected-scale: 1; }
+    38% { --jdm-soundboard-selected-scale: 1.22; }
+    70% { --jdm-soundboard-selected-scale: 1.13; }
+    100% { --jdm-soundboard-selected-scale: 1.17; }
+}
+@keyframes jdm-soundboard-switch-spin {
+  from { transform: rotate(0deg); }
+    to { transform: rotate(180deg); }
+}
+@keyframes jdm-soundboard-select-pop-v35 {
+  0% { --jdm-soundboard-selected-scale-x: 1; --jdm-soundboard-selected-scale-y: 1; }
+    38% { --jdm-soundboard-selected-scale-x: 1.22; --jdm-soundboard-selected-scale-y: 1.25; }
+    70% { --jdm-soundboard-selected-scale-x: 1.13; --jdm-soundboard-selected-scale-y: 1.16; }
+    100% { --jdm-soundboard-selected-scale-x: 1.17; --jdm-soundboard-selected-scale-y: 1.2; }
+}
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  width: 20px !important;
+  height: 15px !important;
+  aspect-ratio: 4 / 3 !important;
+}
+html body.overlay .jdm-module__screen-head--soundboard {
+  --soundboard-volume-offset-y: 4px;
+}
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  position: relative !important;
+  top: 3px !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  gap: 5px !important;
+  overflow: hidden !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-emote-source {
+  position: relative !important;
+  width: 27px !important;
+  min-width: 27px !important;
+  height: 27px !important;
+  min-height: 27px !important;
+  flex: 0 0 27px !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  border-radius: 7px !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-emote-source.is-active {
+  background: rgba(173, 108, 255, .23) !important;
+  box-shadow: inset 2px 0 0 #c18aff, 0 0 9px rgba(173, 108, 255, .15) !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-feedback {
+  grid-column: 1 / span 2 !important;
+  grid-row: 3 !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header {
+  width: max-content !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  gap: 3px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 2px 5px !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__coin {
+  font-size: 9px !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__label {
+  font-size: 7px !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__value {
+  font-size: 11px !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-emote-oauth-button {
+  width: 25px !important;
+  height: 25px !important;
+  min-width: 25px !important;
+  min-height: 25px !important;
+  padding: 0 !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  grid-template-columns: 31px minmax(0, 1fr) !important;
+  gap: 3px !important;
+}
+@media (max-width: 390px), (max-height: 320px) {
+  html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+    grid-template-columns: 30px minmax(0, 1fr) !important;
+  }
+  html body.component-view .jdm-module[data-module="bonk"] .jdm-emote-sources > .jdm-emote-search__toggle,
+  html body.component-view .jdm-module[data-module="bonk"] .jdm-emote-source {
+    width: 26px !important;
+    min-width: 26px !important;
+    height: 26px !important;
+    min-height: 26px !important;
+    flex-basis: 26px !important;
+  }
+}
