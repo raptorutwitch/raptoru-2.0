@@ -6,7 +6,9 @@
       marge intérieure verticale compensée par une marge négative (fond transparent : même dessin, même mise en page) ;
    3. le bouton « Tirer » du Bonk (overflow: hidden, fond dessiné) : hauteur plancher de 24 px (il mesure 24 × échelle,
       soit au pire une fraction de pixel de plus).
-   La matrice vérifie qu'aucune zone agrandie ne mord sur un autre contrôle (audit.mjs, hitOverlaps). */
+   La matrice vérifie qu'aucune zone agrandie ne mord sur un autre contrôle (audit.mjs, hitOverlaps) ni ne recouvre un
+   contrôle qu'elle contient (covered) : jamais de zone sur un conteneur de boutons (le champ de recherche du Soundboard
+   et son bouton « Effacer » : la zone prenait le clic du bouton). */
 :root {
   --hit: 24px;
 }
@@ -16,7 +18,7 @@
 /* Sans spécificité : une feuille qui positionne déjà ces boutons (absolute, sticky) garde la main. */
 :where(.sbx-filter, .bkc-grab, .bkc-help-btn, .bkc-wipe, .icon-btn--xs, .sbx-card__play, .rh-util-btn,
   .jdm-notification-toggle, .jdm-viewer-preferences-toggle, .rl-cswitch__chip, .sbx-vol-trigger, .sbx-sort__button,
-  .tmbx .ib, .modv2 .sidelink, .modv2 .btn--stop, .bkc-sw, .sbx-search) {
+  .tmbx .ib, .modv2 .sidelink, .modv2 .btn--stop, .bkc-sw) {
   position: relative;
 }
 .sbx-card__fav::after,
@@ -38,7 +40,6 @@
 .modv2 .sidelink::after,
 .modv2 .btn--stop::after,
 .rl-picker__head::after,
-.sbx-search::after,
 .bkc-sw::before {
   position: absolute;
   top: min(0px, calc(50% - var(--hit) / 2));

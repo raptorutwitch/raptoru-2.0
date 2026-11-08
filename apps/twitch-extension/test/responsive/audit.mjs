@@ -104,7 +104,8 @@ export function audit() {
         targets.push([Math.min(ew, eh), `${desc(el)} ${Math.round(ew)}x${Math.round(eh)}`]);
         hits.push({ el, r, e, grown: e.left < r.left - 0.5 || e.top < r.top - 0.5 || e.right > r.right + 0.5 || e.bottom > r.bottom + 0.5 });
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) res.covered.push(`${desc(el)} under ${desc(hit)}`);
+        // Another element, or an ANCESTOR (its enlarged hit area drawn over its own children), takes the click.
+        if (hit && hit !== el && !el.contains(hit)) res.covered.push(`${desc(el)} under ${desc(hit)}`);
       }
     } else {
       if (c.cut) res.cutText.push(entry);

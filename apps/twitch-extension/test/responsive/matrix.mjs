@@ -94,7 +94,7 @@ async function main() {
         Object.assign(r, { surface, label, size: `${w}x${h}`, dpr, req: view, errors });
         if (flag('shots')) await page.screenshot({ path: join(out, 'shots', tag, `${surface}-${w}x${h}@${dpr}-${view}.png`) });
         results.push(r);
-        process.stdout.write(`${surface} ${w}x${h}@${dpr} ${view}: cut=${r.cutInteractive.length} off=${r.offInteractive.length} cutTxt=${r.cutText.length} minFont=${r.minFont} t<24=${r.targetsLt24.length} overlap=${r.hitOverlaps.length} hscroll=${r.doc.sw > r.doc.cw} err=${errors.length}\n`);
+        process.stdout.write(`${surface} ${w}x${h}@${dpr} ${view}: cut=${r.cutInteractive.length} off=${r.offInteractive.length} cutTxt=${r.cutText.length} minFont=${r.minFont} t<24=${r.targetsLt24.length} overlap=${r.hitOverlaps.length} covered=${r.covered.length} hscroll=${r.doc.sw > r.doc.cw} err=${errors.length}\n`);
         await ctx.close();
       }
     }
@@ -120,6 +120,9 @@ async function main() {
   const cuts = results.filter((r) => r.cutInteractive.length + r.offInteractive.length);
   const small = results.reduce((n, r) => n + r.targetsLt24.length, 0);
   const overlaps = results.filter((r) => r.hitOverlaps.length);
+  const covered = results.filter((r) => r.covered.length);
+  md += `\n${covered.length} mesures avec un contrôle recouvert (son centre ne reçoit pas le clic).\n`;
+  for (const r of covered) md += `- recouvert ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${r.covered.slice(0, 3).join(' ; ')}\n`;
   md += `\n${small} cibles < 24 px · ${overlaps.length} mesures avec zones de clic qui se chevauchent.\n`;
   for (const r of overlaps) md += `- chevauchement ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${r.hitOverlaps.slice(0, 3).join(' ; ')}\n`;
   md += `\n${cuts.length} cas avec contrôle coupé.\n`;
