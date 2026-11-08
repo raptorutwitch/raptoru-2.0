@@ -3,15 +3,18 @@
 > À lire en premier pour reprendre la refonte sans refaire l'audit. Mis à jour à chaque jalon.
 > Cahier des charges : [PLAN_REFONTE_EXTENSION_2026-11-08.md](PLAN_REFONTE_EXTENSION_2026-11-08.md) ·
 > audit : [EXTENSION_RESPONSIVE_ARCHITECTURE_AUDIT_2026-11-07.md](EXTENSION_RESPONSIVE_ARCHITECTURE_AUDIT_2026-11-07.md).
+> Documents centraux du projet (sur `main` depuis la consolidation du 08/11) : `docs/REPRISE.md` (point d'entrée),
+> `docs/PROJECT_STATUS.md` (état vérifié), `docs/ROADMAP.md` § 2.1 (étapes jusqu'à la publication). Ce journal reste la
+> référence détaillée du chantier ; la roadmap centrale n'en garde qu'un résumé.
 
-| | |
-|---|---|
-| Mise à jour | 08/11/2026 |
-| Mandat | GO global d'Antoni (08/11) : développement **local** complet, lots 0 → 6. **Aucune** publication Twitch, aucun Hosted Test, aucun déploiement, aucun push/merge sans nouvel accord. |
-| Worktree | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\extension-next` |
-| Branche | `feat/extension-next` (locale, non poussée) |
-| Départ | `3834d6b` = `origin/main` `13ed6e8` + 4 commits de docs d'audit |
-| Sous-branche fusionnée | `feat/extension-next-packaging` (worktree `extension-next-packaging`, fusionné en `d021b47`) |
+|                        |                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mise à jour            | 08/11/2026                                                                                                                                                                          |
+| Mandat                 | GO global d'Antoni (08/11) : développement **local** complet, lots 0 → 6. **Aucune** publication Twitch, aucun Hosted Test, aucun déploiement, aucun push/merge sans nouvel accord. |
+| Worktree               | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\extension-next`                                                                                                                  |
+| Branche                | `feat/extension-next` (locale, non poussée)                                                                                                                                         |
+| Départ                 | `3834d6b` = `origin/main` `13ed6e8` + 4 commits de docs d'audit                                                                                                                     |
+| Sous-branche fusionnée | `feat/extension-next-packaging` (worktree `extension-next-packaging`, fusionné en `d021b47`)                                                                                        |
 
 ## Précautions Production (permanentes)
 
@@ -25,13 +28,13 @@
 
 ## Fait
 
-| Phase | Commit | Contenu | Preuve |
-|---|---|---|---|
-| A — sauvegardes | — | bundle `99157a3` vérifié, patch du checkout principal | fichiers dans `Sauvegarde Raptoru 2.0\extension-next-2026-11-08\` |
-| A — banc | `2ecba82`, `d5c0839` | `test/responsive/` : matrice, captures, comparaison pixel, écran gris, requêtes de référence ; références V1 versionnées | `npm run test:responsive`, `test:requests`, `test:grey-screen` |
-| A — emballage | `dac6f74`, `21b36cd`, `80bbaee` | `scripts/package.mjs` (production/staging/calibration, `--shell`, `--check`), `targets.mjs`, `verify-package.mjs`, source `runtime-config` non configurée, garde `runtime-guard.js`, `PUBLISHED` (= `0bf7907` présumé), inventaire obligatoire, CI adaptée | vitest 112/112 ; 3 emballages réels |
-| B — écran gris | `2f80968` | seuls les 2 blocs `overlay.js`/`mobile.js` de `99157a3` | message en 0,1–1,7 s sur les 3 surfaces ; V1 : rien |
-| B — lot 1 | `c322de0` | TTS (paiement), Hub (barre du bas), Tombola (521 px), mobile TTS, filet de sécurité | 0 contrôle coupé / 133 (V1 : 7) ; identique à la V1 à 651×434 et 565×376 |
+| Phase           | Commit                          | Contenu                                                                                                                                                                                                                                                    | Preuve                                                                   |
+| --------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| A — sauvegardes | —                               | bundle `99157a3` vérifié, patch du checkout principal                                                                                                                                                                                                      | fichiers dans `Sauvegarde Raptoru 2.0\extension-next-2026-11-08\`        |
+| A — banc        | `2ecba82`, `d5c0839`            | `test/responsive/` : matrice, captures, comparaison pixel, écran gris, requêtes de référence ; références V1 versionnées                                                                                                                                   | `npm run test:responsive`, `test:requests`, `test:grey-screen`           |
+| A — emballage   | `dac6f74`, `21b36cd`, `80bbaee` | `scripts/package.mjs` (production/staging/calibration, `--shell`, `--check`), `targets.mjs`, `verify-package.mjs`, source `runtime-config` non configurée, garde `runtime-guard.js`, `PUBLISHED` (= `0bf7907` présumé), inventaire obligatoire, CI adaptée | vitest 112/112 ; 3 emballages réels                                      |
+| B — écran gris  | `2f80968`                       | seuls les 2 blocs `overlay.js`/`mobile.js` de `99157a3`                                                                                                                                                                                                    | message en 0,1–1,7 s sur les 3 surfaces ; V1 : rien                      |
+| B — lot 1       | `c322de0`                       | TTS (paiement), Hub (barre du bas), Tombola (521 px), mobile TTS, filet de sécurité                                                                                                                                                                        | 0 contrôle coupé / 133 (V1 : 7) ; identique à la V1 à 651×434 et 565×376 |
 
 | C — socle étape 1 | `7da34a6` | `app/boot.js` (choix du shell), `app/layout.js` (mesure unique), feuilles v2 = règles vivantes | v2 = legacy : 133 captures ≤ 0,03 %, styles calculés identiques |
 | C — socle étape 2 | `a3158d5` | `app/main.js` (entrée unique), `app/store.js`, `app/panel.js` (vues lourdes à la demande), feuilles v2 générées (`--g`, `--fs-N`, `data-mq`), jetons et planchers | échelle 1 + planchers à 0 : styles = legacy ; 0 contrôle coupé ; requêtes = V1 ; Hub 857 Ko (dont 126 Ko de fixtures du banc) au lieu de 2 158–2 266 Ko |
@@ -43,25 +46,47 @@
 
 Deuxième passe (demande d'Antoni du 08/11, 5 points avant sa recette visuelle) :
 
-| Point | Commit | Contenu | Preuve |
-|---|---|---|---|
-| 2 — cibles | `5e8a1dc` (+ `2e0777a`) | l'audit mesure la vraie zone (pseudo-élément coupé par `overflow` exclu, champ compté avec son `<label>`) et détecte les zones agrandies qui mordent sur un autre contrôle ; zones ≥ 24 px (32 en tactile, 24 entre voisins serrés) sur Hub, Soundboard, Bonk, Tombola, Modération | 133 mesures : cibles < 24 px 200 → **21** (19 = la bande « Vider » du chargeur Bonk, gardée discrète : action destructive ; 2 = recherche du Soundboard au zoom 125–150 %, 23,x px), **0** chevauchement, 0 contrôle coupé ; pixels = v2 précédente (seules horloges et barres de progression bougent) |
-| 1 + 3 — ajout d'un module | `1536c8b` | module de session `lazy` (entrée = carte + disponibilité, vue et feuille à l'ouverture) ; feuille hors liste placée seule ; hooks `onState`/`rendered` pour les modules de session ; un module qui n'est plus proposé est fermé ; module fictif `extension/lab-modules/demo` (Lab seulement, jamais emballé) | `npm run test:lab-module` : 23 vérifications ✓ (chargement à la demande, état, `destroy`, retrait sans effet, aucun minuteur laissé par les 5 modules du Hub) ; vitest 127/127 (dont 3 tests d'emballage du module Lab) ; vrai emballage staging v2 `--check` : vérification OK |
-| 4 — contrats | `fb3dada` | 13 parcours contre le faux Core : TTS Jetons / crédits / double clic / réponse perdue, Tombola, Soundboard Jetons / crédits, salve Bonk, Modération (retirer + rembourser, stop sans rembourser, créditer, débiter double clic, bloquer) | référence régénérée sur une V1 figée (`3834d6b`) ; legacy et v2 **identiques** (`--compare`) ; double clic = 1 requête ; réponse perdue = même clé renvoyée |
-| 2 — régression corrigée | `2e0777a` | la zone agrandie du champ de recherche du Soundboard prenait le clic du bouton « Effacer » (trouvé par l'E2E `soundboard.e2e.ts:50`) : zone retirée ; l'audit signale désormais un contrôle dont le centre est pris par un parent | matrice v2 (133) : 0 coupé, 0 chevauchement, 0 recouvert, 21 cibles < 24 px (legacy, même audit : 241) |
-| Recette automatique | — | E2E Studio, 13 fichiers qui chargent l'extension (44 tests) | legacy **44/44**, v2 **44/44**. Deux passages précédents interrompus par un arrêt silencieux de la pile E2E de Studio (port 4399 refusé, à un test différent à chaque fois, dans les deux shells) : environnement, relancé |
-| 5 — comparaison | `e97ca86` | `Comparer legacy et v2.cmd` / `npm run lab:compare` : les deux shells côte à côte, 18 tailles, 8 écrans, données fictives, politique du Lab | page vérifiée : 0 hôte externe contacté, 0 erreur ; port occupé = message clair |
+| Point                     | Commit                  | Contenu                                                                                                                                                                                                                                                                                                      | Preuve                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2 — cibles                | `5e8a1dc` (+ `2e0777a`) | l'audit mesure la vraie zone (pseudo-élément coupé par `overflow` exclu, champ compté avec son `<label>`) et détecte les zones agrandies qui mordent sur un autre contrôle ; zones ≥ 24 px (32 en tactile, 24 entre voisins serrés) sur Hub, Soundboard, Bonk, Tombola, Modération                           | 133 mesures : cibles < 24 px 200 → **21** (19 = la bande « Vider » du chargeur Bonk, gardée discrète : action destructive ; 2 = recherche du Soundboard au zoom 125–150 %, 23,x px), **0** chevauchement, 0 contrôle coupé ; pixels = v2 précédente (seules horloges et barres de progression bougent) |
+| 1 + 3 — ajout d'un module | `1536c8b`               | module de session `lazy` (entrée = carte + disponibilité, vue et feuille à l'ouverture) ; feuille hors liste placée seule ; hooks `onState`/`rendered` pour les modules de session ; un module qui n'est plus proposé est fermé ; module fictif `extension/lab-modules/demo` (Lab seulement, jamais emballé) | `npm run test:lab-module` : 23 vérifications ✓ (chargement à la demande, état, `destroy`, retrait sans effet, aucun minuteur laissé par les 5 modules du Hub) ; vitest 127/127 (dont 3 tests d'emballage du module Lab) ; vrai emballage staging v2 `--check` : vérification OK                        |
+| 4 — contrats              | `fb3dada`               | 13 parcours contre le faux Core : TTS Jetons / crédits / double clic / réponse perdue, Tombola, Soundboard Jetons / crédits, salve Bonk, Modération (retirer + rembourser, stop sans rembourser, créditer, débiter double clic, bloquer)                                                                     | référence régénérée sur une V1 figée (`3834d6b`) ; legacy et v2 **identiques** (`--compare`) ; double clic = 1 requête ; réponse perdue = même clé renvoyée                                                                                                                                            |
+| 2 — régression corrigée   | `2e0777a`               | la zone agrandie du champ de recherche du Soundboard prenait le clic du bouton « Effacer » (trouvé par l'E2E `soundboard.e2e.ts:50`) : zone retirée ; l'audit signale désormais un contrôle dont le centre est pris par un parent                                                                            | matrice v2 (133) : 0 coupé, 0 chevauchement, 0 recouvert, 21 cibles < 24 px (legacy, même audit : 241)                                                                                                                                                                                                 |
+| Recette automatique       | —                       | E2E Studio, 13 fichiers qui chargent l'extension (44 tests)                                                                                                                                                                                                                                                  | legacy **44/44**, v2 **44/44**. Deux passages précédents interrompus par un arrêt silencieux de la pile E2E de Studio (port 4399 refusé, à un test différent à chaque fois, dans les deux shells) : environnement, relancé                                                                             |
+| 5 — comparaison           | `e97ca86`               | `Comparer legacy et v2.cmd` / `npm run lab:compare` : les deux shells côte à côte, 18 tailles, 8 écrans, données fictives, politique du Lab                                                                                                                                                                  | page vérifiée : 0 hôte externe contacté, 0 erreur ; port occupé = message clair                                                                                                                                                                                                                        |
 
 ## En cours
 
-**Développement arrêté** (demande d'Antoni du 08/11) : il juge lui-même l'apparence, le responsive, le défilement et
-l'ergonomie avant d'autoriser la suite. Outil : double-clic sur `apps/twitch-extension/Comparer legacy et v2.cmd`
-(page sur `http://127.0.0.1:4480/`, legacy à gauche, v2 à droite).
+**Recette visuelle utilisateur en Lab : approuvée sur le principe et le ressenti général** (Antoni, 08/11, comparateur
+legacy ↔ v2). La refonte conserve l'identité graphique voulue, et le responsive correspond à son intention.
+
+Ce n'est **pas** une validation exhaustive de chaque vue, taille, fonction ou appareil. Restent :
+
+- Hosted Test sur Twitch ;
+- preuve de la version publique ;
+- vrais appareils ;
+- navigateurs et zooms réels ;
+- interactions dans l'environnement Twitch ;
+- décision de publication ;
+- review Twitch.
+
+Aucune modification artistique ni responsive n'est demandée. La référence reste 651 × 434, le réglage Twitch 65 %.
+
+Branche poussée sur GitHub le 08/11 comme sauvegarde (opération « Final Freeze ») : **non fusionnée dans `main`, non
+publiée**. Outil de comparaison : double-clic sur `apps/twitch-extension/Comparer legacy et v2.cmd` (page sur
+`http://127.0.0.1:4480/`, legacy à gauche, v2 à droite).
 
 ## Prochaine action
 
-1. Attendre le verdict de la recette visuelle d'Antoni ; corriger ce qu'il relève ; puis décisions du plan § 13 (dont
-   13-1 publication, 13-3 interrupteur).
+1. Mission de publication, distincte et sur GO d'Antoni :
+   - prouver la version servie ;
+   - inventaire validé ;
+   - zip staging v2 et Hosted Test, vrais appareils ;
+   - décisions du plan § 13 (13-1 publication, 13-3 interrupteur) ;
+   - soumission.
+
+   Procédure : [EXTENSION_NEXT_PUBLICATION.md](EXTENSION_NEXT_PUBLICATION.md).
+
 2. Améliorations restantes, non bloquantes : Hub à < 0,6 (377×251) défile de ≈ 15 px ; TTS mobile paysage reste
    empilée (deux colonnes possibles) ; bande « Vider » du Bonk (15 px, à agrandir seulement si Antoni le veut) ; Coffre
    sur `createPoller` (son minuteur est bien arrêté au départ) ; vues encore dans `shared/` ; nettoyage du lot 6 (legacy)
