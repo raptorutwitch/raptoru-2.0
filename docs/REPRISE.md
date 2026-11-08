@@ -87,8 +87,10 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
     [studio-refonte/AUDIT_FONCTIONNEL.md](studio-refonte/AUDIT_FONCTIONNEL.md). Arbitrages H1-H16 à trancher par Antoni.
 - **En cours (GO du 08/11) : Music Hub** — module « Musique » de l'extension sur la file Spotify V2 existante, payé en
   Jetons. Branche locale `feat/music-hub`, worktree `Raptoru 2.0 - Worktrees\music-hub`. Lab seulement, non validé.
-  **Reprise : [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md)** (tests, lancement Lab, conformité Spotify à
-  arbitrer § 8 et 10).
+  Deuxième passe V2 (retour du 08/11) livrée : recherche en tête, supermods, retrait pendant l'ajout, overlay OBS et
+  Dock. Lancement : `Ouvrir Music Hub (Lab).cmd` à la racine du worktree.
+  **Reprise : [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md)** (tests, lancement Lab, conformité Spotify et
+  programme DJ à arbitrer § 10 et 12).
 
 ## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
 

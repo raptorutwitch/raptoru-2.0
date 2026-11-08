@@ -1,50 +1,54 @@
-# Music Hub — état (08/11/2026)
+# Music Hub — état (08/11/2026, deuxième passe « V2 »)
 
 > Branche `feat/music-hub` (worktree `Raptoru 2.0 - Worktrees\music-hub`, partie de `feat/extension-next` 2f45ac1).
 > **Lab uniquement.** Rien n'est poussé, fusionné, déployé ni publié. Non validé par Antoni.
+> V1 : commits 626d353 → 2722108. V2 (retour du 08/11) : 006cfac, c9e88a8, 5860b81 et la doc.
 
 ## 1. En une phrase
 
 Le module « Musique » de l'extension (shell v2) est une **nouvelle entrée dans la file Spotify V2 existante**,
-payée en Jetons. Ce n'est ni un second lecteur ni une seconde file. La récompense « Choisi la prochaine musique »
-(1 500 points) reste inchangée.
+payée en Jetons, centrée sur la **recherche**. Ce n'est ni un second lecteur ni une seconde file. La récompense
+« Choisi la prochaine musique » (1 500 points) reste inchangée.
 
 ## 2. Le système existant (Spotify V2, en Production depuis le 25/10) — référence `docs/SPOTIFY_V2.md`
 
 - **Core** (`apps/core-api/src/spotify/service.ts`) : seule autorité.
-  - Il reçoit les rédemptions et les tient dans `spotify_requests` : file logique FIFO, quotas par viewer, exceptions,
-    commandes `!song*`, fin du live.
+  - Il tient les demandes dans `spotify_requests` : file logique FIFO, quotas par viewer, exceptions, commandes
+    `!song*`, fin du live.
   - Il confie le travail à Studio par `spotify_jobs`.
   - Il rembourse les points par une action Twitch CANCELED (`cp_twitch_actions`, exécutée par le bot).
-- **Studio** (`apps/studio/server/src/spotify/*`) : seul à appeler Spotify.
-  - OAuth PKCE du compte Premium du streamer.
-  - Recherche notée, `POST /me/player/queue` et suivi de la lecture.
-  - Passage automatique des demandes annulées.
-  - Simulateur du Lab (`sim.ts`).
-  - Page Studio « Spotify ».
-- **Bot** : exécute les remboursements Twitch (`CP_TWITCH_ACTIONS`) et relaie le chat (`SPOTIFY_CHAT`).
+- **Studio** (`apps/studio/server/src/spotify/*`) : seul à appeler Spotify (OAuth PKCE, recherche notée,
+  `POST /me/player/queue`, suivi de la lecture, passage automatique des demandes annulées, simulateur du Lab `sim.ts`).
+- **Bot** : remboursements Twitch (`CP_TWITCH_ACTIONS`), relais du chat (`SPOTIFY_CHAT`).
+
+**Annulation logique (existante, conservée).** Spotify ne permet pas de retirer un titre de sa file. Une demande
+annulée devient une « tombe » (`CANCELED` / `REMOVED_BY_MOD`, `auto_skip`) : elle disparaît de la file de Raptoru,
+elle est remboursée une fois, et Studio la **passe dès qu'elle commence** (`autoSkip`, réservation persistée, jamais
+deux fois). Le titre reste dans la file Spotify jusque-là ; aucune suppression physique n'est tentée.
 
 ## 3. Ce qui est réutilisé tel quel
 
-- File, ordre, quotas (`usage()`), exceptions par viewer et délai entre deux demandes. Ce délai compte aussi une
-  demande retirée par le viewer : c'est la règle anti-abus existante.
-- Fin du live, commandes `!song`, `!songqueue`, `!mysong`, `!songcancel`, `!songremove`, `!songskip`.
-- Job `song_request` et chemin exact de Studio (identifiant de titre, sans nouvelle recherche).
-- Ajout réel à la file Spotify, passage automatique, suivi de lecture, cache et rythme des appels.
-- Lecture automatique : inchangée.
+- File, ordre, quotas (`usage()`), exceptions, délai entre deux demandes. Ce délai compte aussi une demande retirée
+  par le viewer : règle anti-abus existante, conservée.
+- Fin du live, `!song`, `!songqueue`, `!mysong`, `!songcancel`, `!songremove`, `!songskip`.
+- Job `song_request`, chemin exact de Studio, ajout réel, passage automatique, suivi de lecture, rythme des appels.
+- **Résolution des liens** : `parseTrackReference` (`reference.ts`, mêmes règles que la récompense) et
+  `api.track(id)` côté Studio.
+- **Grades** : `lab-moderation` (`lab_staff`, `PERMISSIONS`, `access()`) ; un supermod est un modérateur nommé par le
+  streamer.
+- **Overlay** : le lecteur d'effets OBS (source « Effets ») ; **Dock** : la projection `dock_activity` existante.
 
 ## 4. Ce qui est ajouté
 
-| Couche                  | Ajout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Schémas                 | `SPOTIFY_RULES.extensionPriceTokens` (500), jobs `search` et `control`, `SpotifySearchItem`, actions du panneau `pause` / `resume` / `volume`, `remove.refund`.                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Migration               | `20261122130000_music_hub.sql` (prod) et son jumeau Lab, additive et idempotente. Colonnes de réglage : `extension_enabled` (false), `extension_price_tokens` (500), `no_duplicates` (true), `player_controls` (false). Colonnes de demande : `payment` (`channel_points` par défaut), `price_tokens`, `refund_status`, `display`. Source `extension` et jobs `search` / `control`.                                                                                                                                                                                     |
-| Core                    | `extensionSearch` : un job réutilisé pendant 5 min pour le même texte, 20 recherches par minute et par viewer. `extensionRequest` : débit en Jetons dans la **même transaction** que la demande et son job, clé d'idempotence, prix attendu. `extensionCancel`, `extensionModerate` (permissions de `lab-moderation`), `control`, `extensionState`. `refundPayment` est le seul chemin de remboursement, au plus une fois ; `keepPayment` sert au retrait sans remboursement. Routes `/v1/lab/spotify-ext/*` et façade `/v1/ext/music/*` **seulement si `config.lab`**. |
-| Studio                  | Exécution des jobs `search` (catalogue, 10 résultats au plus) et `control` (PUT pause / play / volume, résultat relu, jamais supposé). Le simulateur reçoit un catalogue fictif de 26 titres (`LABMUSIC…`) et un lecteur (pause, volume).                                                                                                                                                                                                                                                                                                                               |
-| Page Studio « Spotify » | Groupe « Extension » du panneau : interrupteur, prix, doublons, commandes du lecteur. Pause / Reprendre et volume dans « Lecture en cours ». Paiement sur chaque ligne de la file. « Sans rembourser » **pour les Jetons seulement**. Historique : « Extension », « Jetons remboursés » / « Jetons gardés ».                                                                                                                                                                                                                                                            |
-| Extension               | `modules/music/` (module de session v2, chargé à l'ouverture). Carte du Hub avec un compteur (« 3 en file » / « Fermé »). Lecture en cours avec progression. Onglets Rechercher / File / Mes demandes. Feuille de confirmation : prix, solde après, limites. File avec position, attente estimée, Retirer. Équipe : menu de retrait (avec ou sans remboursement, double clic), Pause / Reprendre / Passer / Volume / Ouvrir-Fermer. Fixtures du banc de calibration.                                                                                                    |
+| Couche         | Ajout                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migration (V1) | `20261122130000_music_hub.sql` et son jumeau Lab, additive : réglages `extension_enabled` (false), `extension_price_tokens` (500), `no_duplicates` (true), `player_controls` (false) ; demande : `payment`, `price_tokens`, `refund_status`, `display`. **V2 n'ajoute aucune migration.**                                                                                                                                                                 |
+| Core (V1)      | Recherche par job (réutilisée 5 min, 20/min/viewer), demande en Jetons débitée **dans la même transaction**, `refundPayment` (un seul chemin de remboursement), `keepPayment`, façade `/v1/ext/music/*` **seulement si `config.lab`**.                                                                                                                                                                                                                    |
+| Core (V2)      | Permission `music.player` = **supermod** (pause, reprise, passer, volume depuis l'extension). L'état dit à chacun ce qu'il peut faire (`can`). **Annulation pendant l'ajout** (`cancelInFlight`). **Lien collé** → le titre exact. Historique du viewer (`me.history`). Source Dock « musique ». Compte Lab « Supermod Lab » (900103).                                                                                                                    |
+| Studio (V2)    | Recherche par identifiant (lien) ; catalogue fictif enrichi (« Néon Sauvage » en 10 versions) ; **carte musique** de l'overlay (`spotify/overlay.ts`, kind `music` du lecteur d'effets) ; réglages « Overlay OBS » dans la page Spotify ; jeton Lab `labRole=supermod`.                                                                                                                                                                                   |
+| Extension (V2) | Vue refaite autour de la recherche : champ en tête (titre, artiste ou lien), liste de catalogue (pochette, titre, artiste · album, durée, ajout), squelettes de chargement, erreurs avec « Réessayer », clavier ; « File » avec **tes demandes** d'abord, puis la file, puis l'historique ; bande « en cours » d'une ligne en bas ; **panneau Lecteur séparé, supermods seulement**. En-tête « Prochaine musique ». Calibration par rôle (`?calibRole=`). |
 
-## 5. Comment les deux entrées convergent
+## 5. Deux entrées, une file
 
 ```
 Récompense (1 500 pts) ─┐                        ┌─ !song / !songqueue / !songcancel / !songremove / !songskip
@@ -52,82 +56,118 @@ Récompense (1 500 pts) ─┐                        ┌─ !song / !songqueue 
 Extension (500 Jetons) ─┘    (une file, un usage(), un ordre)       (même chemin exact)
 ```
 
-Seul le paiement diffère :
+Seul le paiement diffère : **points** → Twitch CANCELED par le bot ; **Jetons** → `economy.refund` une seule fois
+(`refund_status`), « sans rembourser » → `kept`. Les points ne sont jamais convertis en Jetons ; une demande n'est
+jamais payée deux fois.
 
-- **points** : refus, annulation ou retrait → Twitch CANCELED par le bot, comme avant ;
-- **Jetons** : débit à la demande ; refus, annulation, retrait ou fin du live → `economy.refund` une seule fois
-  (`refund_status`). Un retrait « sans rembourser » donne `kept`.
+**Retrait pendant l'ajout (V2).** Avant, une demande « en cours d'ajout » ne pouvait pas être retirée.
 
-Les points ne sont jamais convertis en Jetons, et une demande n'est jamais payée deux fois. Une même clé
-d'idempotence, sur deux Cores à la fois, produit une seule demande et un seul débit (test sur PostgreSQL réel).
+| Moment du retrait                             | Ce qui se passe                                                                                                                                             |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reçue, pas encore prise par Studio (RECEIVED) | Remboursée une fois, son job est retiré : Studio ne l'ajoute jamais.                                                                                        |
+| Studio est en train de l'ajouter (SEARCHING)  | Remboursée une fois, marquée « à passer ». Si Spotify l'accepte quand même, elle devient une tombe et est passée dès qu'elle commence. Sinon, rien de plus. |
+| Dans la file Spotify (QUEUED)                 | Comportement existant : tombe, passée dès qu'elle commence.                                                                                                 |
+| En cours (dans les 10 s de grâce)             | Comportement existant : passée tout de suite.                                                                                                               |
 
-## 6. Tests
+Les deux mouvements (retrait et rapport de Studio) passent sous le même verrou de chaîne : pas de course. `!songcancel`
+seul fait la même chose quand l'unique demande du viewer est en cours d'ajout (avant : « aucune demande annulable »).
+**Latence mesurée dans le simulateur** : titre retiré passé ~200 ms après son début (Studio relit Spotify toutes les
+~0,5 s quand il surveille une tombe). Ce n'est pas une promesse à la frame près ; le réel dépend de Spotify.
 
-| Suite                                                                                                                                                                                                     | Résultat                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Core `test/music-hub.test.ts` (11) : off par défaut, recherche, débit unique, refus avant débit, file et quotas partagés, refus Studio, retraits, modération, lecteur, `!songcancel` en Jetons            | 11/11                                                                          |
-| Core `test/music-hub.integration.test.ts` (PostgreSQL réel, deux Cores) : même clé, limite sous concurrence, annulation et retrait simultanés → un remboursement                                          | 3/3 (`TEST_DATABASE_URL` sur la base de test du conteneur `studio-ux-test-pg`) |
-| Core `spotify-service`, `migration-scopes`                                                                                                                                                                | verts                                                                          |
-| Studio `spotify-runtime` (jobs de recherche et de contrôle), `spotify-view` (+5 Music Hub)                                                                                                                | 58/58, 24/24                                                                   |
-| Extension vitest                                                                                                                                                                                          | 127/127                                                                        |
-| Extension `test:requests` (requêtes réseau des autres modules)                                                                                                                                            | identique à la référence                                                       |
-| Matrice responsive v2 `--views hub,music` (19 tailles : vidéo, panneau, mobile, zooms)                                                                                                                    | 0 contrôle coupé, 0 chevauchement, 0 cible < 24 px                             |
-| Matrice responsive legacy (shell inchangé)                                                                                                                                                                | 0 contrôle coupé, 0 chevauchement                                              |
-| E2E Lab `e2e/music-hub.e2e.ts` : carte du Hub, recherche, demande en Jetons, file partagée, retrait remboursé, refus du délai, retrait sans remboursement par un modérateur, pause / reprise, page Studio | vert                                                                           |
+## 6. Permissions (vérifiées par le Core, jamais par un bouton)
 
-**Rien n'a été testé à la main par Antoni.** Rien n'a été testé avec un vrai compte Spotify ni sur Twitch.
+| Qui                  | Peut                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| Viewer (anonyme)     | Voir la file, chercher (identité requise pour chercher et demander)                    |
+| Viewer (identifié)   | Chercher, coller un lien, demander, retirer **ses** demandes, voir son historique      |
+| Modérateur           | En plus : retirer une demande avec ou sans remboursement (`queue.cancel`, `refund`)    |
+| Supermod et streamer | En plus : pause, reprise, passer, volume (`music.player`), ouvrir / fermer (`modules`) |
 
-## 7. Tester
+Le rôle vient du JWT Twitch vérifié (la façade ne lit jamais un rôle envoyé par le navigateur) ; le grade supermod
+vient de `lab_staff`. Un modérateur qui appelle la commande « pause » reçoit `forbidden` (testé). Le streamer garde
+toujours la main dans Studio (page Spotify). Les commandes du lecteur restent coupées tant que « Commandes du lecteur »
+est éteint dans Studio, et l'extension n'existe que dans le Lab.
 
-- **Regarder le module (sans rien lancer d'autre)** : double-clic sur « Comparer legacy et v2.cmd » (ou
-  `npm run lab:compare -w @raptoru/twitch-extension` depuis ce worktree). Choisir Données « Calibration » et Module
-  « Musique ». Ce sont des données fictives en lecture seule : une demande y est refusée « not_available ».
-- **Le parcours réel du Lab** : fermer le Studio installé (le Lab prend le port 4100), puis `npm run studio:lab`
-  **depuis ce worktree**.
-  1. Dans Studio → Spotify : passer « Ouvert », puis dans le panneau « Extension » activer « Demandes depuis
-     l'extension » (et « Commandes du lecteur » si tu veux tester l'équipe).
-  2. Ouvrir l'extension du Lab : `http://127.0.0.1:4100/ext/mobile.html?shell=v2&labRole=viewer` (ou
-     `labRole=moderator` pour l'équipe).
-  3. Hub → Musique → chercher « nuit », « comète », « odyssée » (trop long) ou « session perdue » (indisponible).
-  4. Tout est simulé : catalogue fictif, Jetons du Lab, aucun appel à Spotify ni à Twitch.
+## 7. Overlay OBS et Dock
 
-## 8. Limites Spotify et Twitch (textes officiels lus le 08/11)
+- **Carte musique** : une brève carte (« Nouvelle demande » ou « À l'écoute », titre, artiste, viewer), dans un coin,
+  avec un son d'alerte facultatif (catalogue ou importé), son volume et sa durée (3 à 15 s). Elle passe par le
+  **lecteur d'effets** (source OBS « Effets ») comme le flop du Random Ban : aucune nouvelle source, aucun second
+  système d'alertes, **jamais la musique elle-même**. Studio lit l'état Spotify du Core toutes les 2,5 s **seulement
+  si la carte est activée** ; chaque carte une fois, jamais en retard (au démarrage ou après une coupure, ce qui est
+  déjà là est seulement noté), une à la fois, 4 au plus en attente. **Éteinte par défaut.**
+  Réglages : Studio → Spotify → « Overlay OBS » (activation, à chaque demande, au début de la lecture, son ou carte
+  silencieuse, volume, durée, position, « Prévisualiser »).
+- **Dock** : une demande faite depuis l'extension = **une** activité « Musique » dont le statut suit la demande (reçue,
+  en file, en lecture, jouée, retirée, retirée par l'équipe, passée, échec, « remboursée »). Une demande payée en
+  points reste sa rédemption (règle du Dock : jamais une seconde activité).
+- Les alertes Twitch (`alert_items`) ne sont pas utilisées : leurs types sont fixes (follow, sub…), aucun module n'y
+  ajoute le sien ; les modules visuels passent par le lecteur d'effets.
 
-| Sujet                                     | Constat                                                                                                                                                                                                                                                                          |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Son de Spotify diffusé sur le stream      | **Interdit**. Sources : Spotify Developer Policy III.4, III.5, III.6 et III.10, conditions d'utilisation (EUA) et User Guidelines, rubrique « broadcasting ». **Cela concerne aussi la récompense déjà en Production**, que le Music Hub ne crée pas. C'est à Antoni d'arbitrer. |
-| Afficher le catalogue aux viewers         | Autorisé sous conditions : attribution Spotify, lien vers Spotify, pochette non recadrée. Les pochettes sont déjà en `contain`. **Attribution et lien restent à ajouter** avant tout fournisseur réel.                                                                           |
-| Pilotage du lecteur par un tiers (équipe) | Peu clair dans la politique. Désactivé par défaut (`player_controls` = false).                                                                                                                                                                                                   |
-| Faire payer en Jetons                     | Peu clair, plutôt défavorable (Developer Policy IV.2.2 et II.2 : monétisation autour du contenu).                                                                                                                                                                                |
-| Marque                                    | Logo et vert Spotify seulement selon leurs guidelines, sans co-marquage. Le module utilise un vert émeraude propre à Raptoru, sans logo.                                                                                                                                         |
-| Quotas                                    | Mode développement : 5 utilisateurs, Premium. Le quota étendu est réservé aux organisations d'au moins 250 000 utilisateurs actifs par mois. La recherche renvoie au plus 10 résultats.                                                                                          |
-| Twitch                                    | Extension Policy 6.2.2 : pas de Bits pour un jukebox. Les points de fidélité (Jetons) sont permis.                                                                                                                                                                               |
-| Alternatives sous licence                 | Soundtrack by Twitch est arrêté. L'extension Pretzel a été retirée. L'API Epidemic Sound demande un accord partenaire payant. Monstercat Gold et StreamBeats n'ont pas d'API documentée.                                                                                         |
+## 8. Tests (08/11, V2)
 
-Rien n'utilise d'API privée, de scraping ni d'extraction audio. La simulation n'est jamais présentée comme une
-intégration Spotify : le pied du module l'indique (« Catalogue de démonstration (Lab) »).
+| Suite                                                                                                                                                                                      | Résultat                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Core `music-hub.test.ts` (V1 11 + V2 7 + Dock 1) : supermods, deux supermods à la fois, retrait RECEIVED / SEARCHING, `!songcancel` pendant l'ajout, lien collé, Dock                      | 19/19                                     |
+| Core Spotify V2 et modération existants (`spotify-*`, `lab-moderation`, `moderation-d4`, `dock*`)                                                                                          | verts                                     |
+| Studio `spotify-runtime` (+ lien exact, 10 versions, latence du passage automatique), `music-overlay`, `effects-player`, `spotify-view`, `dock-view`                                       | verts                                     |
+| Extension vitest                                                                                                                                                                           | 127/127                                   |
+| Matrice responsive v2 `--views hub,music` (19 tailles dont 565 × 376 et 651 × 434)                                                                                                         | 0 coupé, 0 chevauchement, 0 cible < 24 px |
+| Captures par rôle (viewer, modérateur, supermod) × (651 × 434, 565 × 376, 390 × 844), recherche, confirmation, file, lecteur                                                               | aucune erreur JS                          |
+| E2E Lab `music-hub.e2e.ts` : viewer, lien collé, lien d'album refusé, demande, retrait remboursé une fois, délai, modérateur sans lecteur, supermod pause / reprise, réglages de l'overlay | vert                                      |
+| E2E `effects-player.e2e.ts` (vraie page OBS) : carte avec son, carte silencieuse, position, durée                                                                                          | vert                                      |
 
-## 9. Garde-fous Production
+Globales et E2E complet : voir le rapport de livraison. **Rien n'a été testé à la main par Antoni**, ni avec un vrai
+compte Spotify, ni sur Twitch, ni dans un vrai OBS.
 
-- La façade `/v1/ext/music/*` et le résumé de session ne répondent que si `config.lab`. En Production, l'extension
-  ne voit pas le module (`offered: false`).
-- `extension_enabled` vaut false par défaut. Avec ce réglage, la récompense et les commandes du chat se comportent
-  exactement comme avant (testé).
-- La migration prod est **additive**, avec des valeurs par défaut qui gardent l'ancien comportement. Un déploiement
-  du Core l'appliquerait : `coolify-deploy` exige `--migrations-approved`, donc un GO explicite.
+## 9. Voir le résultat
 
-## 10. Décisions ouvertes (Antoni)
+- **Le plus simple (données fictives, rien d'autre à lancer)** : double-clic sur
+  `apps/twitch-extension/Comparer legacy et v2.cmd`, Données « Calibration », Écran « Musique », puis **Rôle** :
+  Viewer, Modérateur ou Supermod. Lecture seule : une demande y est refusée « not_available ».
+- **Le vrai parcours (Lab)** : fermer Raptoru Studio et démarrer Docker Desktop, puis double-clic sur
+  **`Ouvrir Music Hub (Lab).cmd`** à la racine de ce worktree. Il lance `npm run studio:lab`, ouvre la musique **dans
+  le Lab** (demandes, entrée extension, commandes du lecteur), puis l'extension en viewer, modérateur et supermod.
+  Chercher « néon » (10 versions), « nuit bl », « odyssée » (trop long), « session perdue » (indisponible), ou coller
+  `https://open.spotify.com/track/LABMUSIC00000000000029`. L'overlay : Studio → Spotify → « Overlay OBS ».
+  Le script refuse d'agir si le Studio qui répond n'est pas le Lab.
 
-1. **Conformité** : faut-il ouvrir le Music Hub sur Spotify alors que la diffusion est interdite (§ 8), y compris pour
-   la récompense actuelle ? Faut-il plutôt un autre fournisseur (sous licence) ?
-2. **Prix** : 500 Jetons par demande (provisoire) ? Faut-il une formule différente pour les abonnés ?
-3. **Commandes du lecteur pour l'équipe** (pause, volume) : les garder ? À qui ?
-4. **Ouverture en Production** : ouvrir la façade (le code la ferme), appliquer la migration, déployer le Core,
-   installer Studio, publier l'extension. Chaque étape sur GO.
+## 10. Conformité, par fonction (textes officiels lus le 08/11)
 
-## 11. Reste à faire (non bloquant pour le Lab)
+| Fonction                                        | Constat                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Recherche** dans le catalogue                 | Spotify : afficher des métadonnées est permis sous conditions (attribution, lien vers Spotify, pochette non recadrée). **Attribution et lien restent à ajouter** avant tout fournisseur réel. Lab : catalogue fictif, signalé comme tel sous les résultats.                                                                                                                                                                                                    |
+| **Suggestions** (titres passés récemment)       | Données de Raptoru (son historique de demandes), pas d'API de recommandation. Mêmes conditions d'affichage que la recherche.                                                                                                                                                                                                                                                                                                                                   |
+| **Pilotage du lecteur** (pause, passer, volume) | Spotify : l'API le permet au propriétaire du compte ; le faire piloter par des tiers n'est pas clairement couvert. Réservé aux supermods, coupé par défaut, Lab seulement.                                                                                                                                                                                                                                                                                     |
+| **Diffusion musicale** sur le stream            | Spotify : **interdite** (Developer Policy III.4/5/6/10, conditions d'utilisation, « broadcasting »). Concerne aussi la récompense déjà en Production. Le Music Hub ne diffuse rien lui-même ; l'overlay n'affiche que du texte et un son d'alerte.                                                                                                                                                                                                             |
+| **Programme DJ Twitch**                         | Conditions officielles (lues en traduction : `legal.twitch.com/ko-kr/legal/dj-program-terms`, `/zh-tw/…`) : pas de diffusion **automatisée** ou sans performance en direct, ne pas diffuser une demande du public **immédiatement** après qu'elle est faite, pas d'album entier, catalogue du programme seulement. Une file de demandes jouée automatiquement est donc **à risque** dans ce programme ; l'original anglais est à relire avant toute ouverture. |
+| **Jetons** comme paiement                       | Twitch : pas de Bits pour un jukebox (Extension Policy 6.2.2) ; points de fidélité permis. Spotify : monétisation autour du contenu plutôt défavorable (IV.2.2, II.2).                                                                                                                                                                                                                                                                                         |
+| Marque                                          | Aucun logo ni vert Spotify : émeraude propre à Raptoru, interface propre (pas de copie de celle de Spotify).                                                                                                                                                                                                                                                                                                                                                   |
+
+Rien n'utilise d'API privée, de scraping ni d'extraction audio. Aucun contournement.
+
+## 11. Garde-fous Production
+
+- La façade `/v1/ext/music/*` et le résumé de session ne répondent que si `config.lab` : en Production, l'extension
+  ne voit pas le module.
+- `extension_enabled`, `player_controls` et l'overlay sont éteints par défaut ; la récompense et le chat se comportent
+  comme avant. Changement de Production à arbitrer : `!songcancel` seul annule aussi une demande en cours d'ajout.
+- La permission `music.player` ne touche que l'extension (la page Studio reste au streamer).
+- Migration V1 additive ; un déploiement du Core exige `--migrations-approved`, donc un GO explicite. V2 : aucune.
+
+## 12. Décisions ouvertes (Antoni)
+
+1. **Conformité** : ouvrir le Music Hub sur Spotify malgré § 10 (diffusion interdite, programme DJ) ? Un autre
+   fournisseur sous licence ? Le garder comme « file de suggestions » sans lecture automatique ?
+2. **Prix** : 500 Jetons (provisoire).
+3. **Choix artistiques** à valider : recherche en tête et bande « en cours » en bas ; en-tête « Prochaine musique » ;
+   carte OBS (coin haut droit, 6 s, émeraude, sans son par défaut) ; titre « Néon Sauvage » du catalogue fictif.
+4. **`!songcancel` pendant l'ajout** en Production (§ 11).
+5. **Ouverture en Production** : façade, migration, Core, Studio, extension — chaque étape sur GO.
+
+## 13. Reste à faire (non bloquant pour le Lab)
 
 - Attribution et lien Spotify dans le module, si un fournisseur réel est retenu.
-- Messages de chat propres aux demandes de l'extension (aujourd'hui : silencieuses, l'extension affiche le résultat).
-- Barre de progression mise à jour par la lecture réelle de Studio quand elle arrive (aujourd'hui : relevé toutes les
-  4 s, puis extrapolation).
+- Messages de chat propres aux demandes de l'extension (aujourd'hui silencieuses, l'extension affiche le résultat).
+- Exceptions individuelles (`overrides`) : existantes côté Studio, pas encore affichées dans l'extension.
+- Carte OBS pour une demande de la récompense : déjà incluse (même file) ; Dock : la rédemption seule.
