@@ -26,7 +26,12 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    if (e instanceof SpotifyError || e instanceof CpTwitchError)
+    if (e instanceof SpotifyError)
+      throw new HttpError(e.status, {
+        error: e.code,
+        ...(e.details ? { details: e.details } : {}),
+      });
+    if (e instanceof CpTwitchError)
       throw new HttpError(e.status, { error: e.code });
     throw e;
   }
@@ -188,18 +193,34 @@ export function spotifyRoutes(
           const id = channel(params[0]!);
           const a = parse(SpotifyPanelAction, body);
           const key = `spotify:panel:${randomUUID()}`;
-          return {
-            outcome:
-              a.action === 'remove'
-                ? await spotify.remove(
-                    id,
-                    key,
-                    { request_id: a.request_id },
-                    'studio',
-                  )
-                : await spotify.skip(id, key, null),
-          };
+          if (a.action === 'remove')
+            return {
+              outcome: await spotify.remove(
+                id,
+                key,
+                { request_id: a.request_id },
+                'studio',
+                { refund: a.refund !== false },
+              ),
+            };
+          if (a.action === 'skip')
+            return { outcome: await spotify.skip(id, key, null) };
+          // Music Hub: the player (Studio is the broadcaster's console; « Commandes du lecteur » must be on).
+          return spotify.control(
+            id,
+            a.action,
+            a.action === 'volume' ? a.volume_percent : null,
+            'studio',
+          );
         }),
+    },
+    {
+      // Music Hub: what a player control really did (done / failed / unknown / pending).
+      method: 'GET',
+      pattern: at(base, `/${ch}/controls/${uuid}`),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => spotify.controlResult(channel(params[0]!), params[1]!)),
     },
     {
       // A viewer's exception to the global limits (null = global; both null = back to the global settings).

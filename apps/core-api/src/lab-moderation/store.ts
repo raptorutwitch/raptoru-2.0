@@ -12,7 +12,9 @@ export type PaidModule =
   | 'fx_cam'
   | 'caution'
   // Boutique d'événement: the Jetons of a Bonbons conversion (docs/HALLOWEEN.md).
-  | 'event_shop';
+  | 'event_shop'
+  // Music Hub: a song request from the extension, paid in Jetons (docs/music/MUSIC_HUB_STATE.md).
+  | 'music';
 export type ModuleState = 'active' | 'paused' | 'disabled';
 export type LabRole = 'broadcaster' | 'supermod' | 'moderator' | 'viewer';
 export type WalletCurrency = 'tokens' | 'credits_tts' | 'credits_soundboard';

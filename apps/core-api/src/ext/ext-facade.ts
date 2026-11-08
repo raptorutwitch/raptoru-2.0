@@ -2,6 +2,7 @@ import { eventTitlesView } from '@raptoru/schemas';
 import { moduleFacade } from '@raptoru/schemas';
 import { commandsPublic, commandsTeam } from './commands-ext.js';
 import { subWheelExt } from './sub-wheel-ext.js';
+import { musicExt } from './music-ext.js';
 import {
   BONK_LAB_RULES,
   bonkVolleyRules,
@@ -248,6 +249,19 @@ export class ExtFacade {
         path,
         body,
         who.viewer ? this.actor(who) : null,
+      );
+    // Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests' extension entry — the Lab environment only for
+    // now (its use with a real music service on Twitch is not cleared: Production stays closed in code, not by a flag).
+    if (this.config.lab && path.startsWith('/music/'))
+      return musicExt(
+        this.core,
+        this.C,
+        method,
+        path,
+        body as Record<string, unknown> | undefined,
+        who.viewer ? this.actor(who) : null,
+        who.team,
+        idempotencyKey,
       );
     // Halloween shop (docs/HALLOWEEN.md): its state, a purchase, a conversion — the JWT's viewer, never a body field.
     if (method === 'GET' && path === '/events/state')

@@ -179,6 +179,7 @@ export function createCore(
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
   const cpTwitch = new CpTwitchActions(db, clock);
   const spotify = new SpotifyService(db, clock, cpTwitch);
+  spotify.economy = economy; // Music Hub: the extension's requests are paid in Jetons on this Core's economy
   const channelPoints = new ChannelPointsService(
     db,
     clock,

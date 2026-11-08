@@ -22,6 +22,17 @@ export const SPOTIFY_RULES = {
   observationFreshMs: 10_000,
   /** `!song`: Studio's answer awaited this long, then « indisponible ». */
   readPlaybackTimeoutMs: 6_000,
+  // Music Hub (docs/music/MUSIC_HUB_STATE.md): the extension's entry, paid in Jetons, into the SAME requests and queue.
+  /** Default price of a request made from the extension, in Jetons (set in Studio). */
+  extensionPriceTokens: 500,
+  /** A search shorter than this is not sent (characters, trimmed). */
+  searchMinChars: 2,
+  /** The extension's searches of one viewer per minute (Core refuses beyond, the catalogue API is shared). */
+  searchesPerViewerPerMinute: 20,
+  /** A search job Studio has not answered within this delay: « catalogue indisponible ». */
+  searchTimeoutMs: 6_000,
+  /** A finished search stays reusable this long (same text): no second job, no second catalogue call. */
+  searchReuseMs: 5 * 60_000,
 } as const;
 
 const ChannelId = z.string().regex(/^\d{1,32}$/);
@@ -36,6 +47,13 @@ export const SpotifySettingsUpdate = z.strictObject({
   viewer_cooldown_seconds: z.number().int().min(0).max(3_600).optional(),
   max_duration_seconds: z.number().int().min(60).max(1_800).optional(),
   cancel_grace_seconds: z.number().int().min(0).max(60).optional(),
+  // Music Hub (extension entry). OFF by default: nothing changes for the channel-points reward.
+  extension_enabled: z.boolean().optional(),
+  extension_price_tokens: z.number().int().min(0).max(1_000_000).optional(),
+  /** From the extension: a track already waiting in the queue cannot be asked again (the reward is unchanged). */
+  no_duplicates: z.boolean().optional(),
+  /** Pause / resume / volume from the team (Studio, extension moderators). OFF by default. */
+  player_controls: z.boolean().optional(),
 });
 export type SpotifySettingsUpdate = z.infer<typeof SpotifySettingsUpdate>;
 
@@ -119,6 +137,11 @@ export const SpotifyReason = z.enum([
   'STUDIO_LOST',
   // Refonte H6: canceled at the end of the live (not started), refunded when the reward allows it.
   'STREAM_ENDED',
+  // Music Hub: the track is already waiting in the queue / the catalogue says it cannot be played / the
+  // extension's entry is off.
+  'DUPLICATE_TRACK',
+  'NOT_PLAYABLE',
+  'EXTENSION_DISABLED',
 ]);
 export type SpotifyReason = z.infer<typeof SpotifyReason>;
 
@@ -142,6 +165,8 @@ export const SpotifyPlayback = z.strictObject({
   track: SpotifyTrack.nullable(),
   progress_ms: z.number().int().min(0).nullable(),
   is_playing: z.boolean(),
+  /** The device's volume (0–100) when the reading has it. */
+  volume_percent: z.number().int().min(0).max(100).nullable().optional(),
 });
 export type SpotifyPlayback = z.infer<typeof SpotifyPlayback>;
 
@@ -179,8 +204,46 @@ export const SpotifyJob = z.discriminatedUnion('kind', [
     request_id: Uuid.nullable(),
   }),
   z.strictObject({ kind: z.literal('read_playback'), job_id: Uuid }),
+  // Music Hub: a catalogue search for the extension (never queues anything) and a player control.
+  z.strictObject({
+    kind: z.literal('search'),
+    job_id: Uuid,
+    query: z.string().min(1).max(200),
+  }),
+  z.strictObject({
+    kind: z.literal('control'),
+    job_id: Uuid,
+    action: z.enum(['pause', 'resume', 'volume']),
+    volume_percent: z.number().int().min(0).max(100).nullable(),
+  }),
 ]);
 export type SpotifyJob = z.infer<typeof SpotifyJob>;
+
+/**
+ * One catalogue result shown to a viewer (Music Hub). The provider says where it comes from: `spotify` (Studio's
+ * connected account; its use in a Twitch extension is NOT cleared — docs/music/MUSIC_HUB_STATE.md § Conformité) or
+ * `lab` (the Lab's fictional catalogue). The art is a link (https) or, in the Lab, a small inline picture.
+ */
+export const SpotifySearchItem = z.strictObject({
+  id: SpotifyId,
+  uri: TrackUri,
+  title: ShortText,
+  artists: z.array(ShortText).max(20),
+  album: ShortText.nullable(),
+  duration_ms: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 3_600_000),
+  image_url: z
+    .string()
+    .max(4_000)
+    .regex(/^(https:\/\/|data:image\/svg\+xml,)/)
+    .nullable(),
+  /** False: the catalogue says this version cannot be played (shown, never requestable). */
+  playable: z.boolean(),
+});
+export type SpotifySearchItem = z.infer<typeof SpotifySearchItem>;
 
 /** One entry of the logical queue as Studio needs it (matching a playing track, auto-skip of canceled ones). */
 export const SpotifyQueueEntry = z.strictObject({
@@ -245,6 +308,22 @@ export const SpotifyJobReport = z.discriminatedUnion('kind', [
     playback: SpotifyPlayback.nullable(),
     reason: SpotifyReason.optional(),
   }),
+  z.strictObject({
+    kind: z.literal('search'),
+    attempt_id: Uuid,
+    outcome: z.enum(['done', 'failed']),
+    reason: SpotifyReason.optional(),
+    provider: z.enum(['spotify', 'lab']),
+    items: z.array(SpotifySearchItem).max(10),
+  }),
+  z.strictObject({
+    kind: z.literal('control'),
+    attempt_id: Uuid,
+    outcome: z.enum(['done', 'failed', 'unknown']),
+    reason: SpotifyReason.optional(),
+    /** The reading after the control (what really plays now), when Studio could read it. */
+    playback: SpotifyPlayback.nullable().optional(),
+  }),
 ]);
 export type SpotifyJobReport = z.infer<typeof SpotifyJobReport>;
 
@@ -258,8 +337,20 @@ export type SpotifyAutoSkipReport = z.infer<typeof SpotifyAutoSkipReport>;
 
 /** The Studio panel's moderation actions (Studio is the broadcaster's own console). */
 export const SpotifyPanelAction = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('remove'), request_id: Uuid }),
+  z.strictObject({
+    action: z.literal('remove'),
+    request_id: Uuid,
+    /** Music Hub: false = removed without refund (an explicit choice, journaled). Default: refunded. */
+    refund: z.boolean().optional(),
+  }),
   z.strictObject({ action: z.literal('skip') }),
+  // Music Hub: the player (only with `player_controls` on).
+  z.strictObject({ action: z.literal('pause') }),
+  z.strictObject({ action: z.literal('resume') }),
+  z.strictObject({
+    action: z.literal('volume'),
+    volume_percent: z.number().int().min(0).max(100),
+  }),
 ]);
 export type SpotifyPanelAction = z.infer<typeof SpotifyPanelAction>;
 

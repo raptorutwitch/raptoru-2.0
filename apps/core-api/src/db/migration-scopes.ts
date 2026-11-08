@@ -102,6 +102,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261121160000_module_settings.sql',
   // Module host journal (architecture socle): history, intent keys, refund link; Lab twin 20261121170000.
   '20261121180000_module_activity.sql',
+  // Music Hub: the extension's entry into Spotify V2 (Jetons), search / control jobs, removal trace (additive, OFF by
+  // default); Lab twin 20261122120000_music_hub_lab.sql.
+  '20261122130000_music_hub.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -208,6 +211,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261121170000_module_activity_lab.sql',
   // Module host: the chat answers' origin `module:<id>` (one migration for every future module).
   '20261121190000_cmd_steps_module_origin_lab.sql',
+  // Music Hub: the Lab twin of 20261122130000_music_hub.sql (same content).
+  '20261122120000_music_hub_lab.sql',
 ]);
 
 /**

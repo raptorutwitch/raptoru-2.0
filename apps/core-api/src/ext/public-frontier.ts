@@ -1,3 +1,4 @@
+import { musicExtRoutes } from '../http/music-ext-routes.js';
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
 import { modulesRoutes } from '../http/modules-routes.js';
 import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
@@ -109,6 +110,8 @@ export function createPublicFrontier(
     ...miniGamesRoutes(core.chat.miniGames),
     // Roue du Sub V2 (R8): the viewer frontier's own tours / team actions, in-process only (never on HTTP).
     ...subWheelRoutes(core.subWheel, core.alerts),
+    // Music Hub (docs/music/MUSIC_HUB_STATE.md): the extension's song requests on Spotify V2, in-process only.
+    ...musicExtRoutes(core.spotify),
     // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
     ...eventShopRoutes(core.eventShop),
     // Halloween « Titres » (docs/COSMETIC_SHOP.md § 8): the cosmetic shop's catalogue, a viewer's side and the purchase,

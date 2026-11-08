@@ -9,6 +9,7 @@ import {
   type SpotifyQueueEntry,
   type SpotifyReason,
   type SpotifyRequestState,
+  type SpotifySearchItem,
   type SpotifySettingsUpdate,
   type SpotifyStudioStatus,
   type SpotifyStudioSync,
@@ -20,6 +21,13 @@ import type { CpTwitchActions } from '../channel-points/twitch-actions.js';
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
+import type { EconomyPort } from '../economy/economy.js';
+import {
+  assertAllowed,
+  LabForbiddenError,
+  LabWalletError,
+  type Actor as MusicActor,
+} from '../lab-moderation/store.js';
 import { MSG, trackLabel } from './messages.js';
 import { parseTrackReference } from './reference.js';
 
@@ -34,6 +42,8 @@ export class SpotifyError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    /** What the viewer needs to understand a refusal (cooldown left, balance…). Never a secret. */
+    readonly details?: Record<string, unknown>,
   ) {
     super(code);
   }
@@ -61,6 +71,10 @@ export interface SpotifySettings {
   viewer_cooldown_seconds: number;
   max_duration_seconds: number;
   cancel_grace_seconds: number;
+  extension_enabled: boolean;
+  extension_price_tokens: number;
+  no_duplicates: boolean;
+  player_controls: boolean;
   updated_at: string | null;
 }
 
@@ -78,6 +92,10 @@ interface SettingsRow {
   viewer_cooldown_seconds: number;
   max_duration_seconds: number;
   cancel_grace_seconds: number;
+  extension_enabled: boolean;
+  extension_price_tokens: number;
+  no_duplicates: boolean;
+  player_controls: boolean;
   updated_at: Date;
 }
 
@@ -85,7 +103,7 @@ export interface RequestRow {
   request_id: string;
   seq: number | string;
   channel_id: string;
-  source: 'twitch' | 'simulation';
+  source: 'twitch' | 'simulation' | 'extension';
   source_ref: string;
   reward_id: string | null;
   redemption_id: string | null;
@@ -116,6 +134,17 @@ export interface RequestRow {
   auto_skip_consumed_at: Date | null;
   auto_skip_result: string | null;
   twitch_status: 'cancel_requested' | 'kept' | 'unmanaged' | 'none' | null;
+  /** Music Hub: channel points (the reward) or Jetons (the extension). */
+  payment: 'channel_points' | 'tokens';
+  price_tokens: number | null;
+  refund_status: 'refunded' | 'kept' | null;
+  refunded_at: Date | null;
+  refunded_by: string | null;
+  display: {
+    album?: string | null;
+    image_url?: string | null;
+    provider?: 'spotify' | 'lab';
+  } | null;
   updated_at: Date;
 }
 
@@ -180,6 +209,11 @@ export const requestView = (r: RequestRow) => ({
   auto_skip: r.auto_skip,
   auto_skip_result: r.auto_skip_result,
   twitch_status: r.twitch_status,
+  payment: r.payment ?? 'channel_points',
+  price_tokens: r.price_tokens ?? null,
+  refund_status: r.refund_status ?? null,
+  refunded_by: r.refunded_by ?? null,
+  display: r.display ?? null,
 });
 export type SpotifyRequestView = ReturnType<typeof requestView>;
 
@@ -207,6 +241,9 @@ export class SpotifyService {
     channelId: string,
     ref: { request_id?: string; job_id?: string },
   ) => Promise<void>)[] = [];
+
+  /** Music Hub: the economy the extension's requests are paid with (Jetons). Null: that entry is unavailable. */
+  economy: EconomyPort | null = null;
 
   constructor(
     private readonly db: Db,
@@ -258,6 +295,11 @@ export class SpotifyService {
         s?.max_duration_seconds ?? SPOTIFY_RULES.maxDurationSeconds,
       cancel_grace_seconds:
         s?.cancel_grace_seconds ?? SPOTIFY_RULES.cancelGraceSeconds,
+      extension_enabled: s?.extension_enabled ?? false,
+      extension_price_tokens:
+        s?.extension_price_tokens ?? SPOTIFY_RULES.extensionPriceTokens,
+      no_duplicates: s?.no_duplicates ?? true,
+      player_controls: s?.player_controls ?? false,
       updated_at: s ? iso(new Date(s.updated_at)) : null,
     };
   }
@@ -557,6 +599,53 @@ export class SpotifyService {
     return true;
   }
 
+  /**
+   * Music Hub: the ONE refund of a request, whatever paid it — Jetons given back by the economy (the debit of this
+   * request, at most once: the economy keys it by the request id) or the channel points (Twitch CANCELED, above).
+   * Returns true when something was given back now.
+   */
+  private async refundPayment(q: Queryable, r: RequestRow, actor = 'system') {
+    if (r.payment !== 'tokens') return this.refundTwitch(q, r);
+    const fresh = (await this.request(q, r.request_id)) ?? r;
+    if (fresh.refund_status !== null) return false;
+    if (!this.economy || !fresh.price_tokens) {
+      await this.update(q, r.request_id, {
+        refund_status: 'kept',
+        twitch_status: 'none',
+      });
+      return false;
+    }
+    const out = await this.economy.refund(
+      q,
+      this.clock.now(),
+      r.request_id,
+      actor.slice(0, 64),
+      'demande de musique',
+    );
+    await this.update(q, r.request_id, {
+      refund_status: 'refunded',
+      refunded_at: this.clock.now(),
+      refunded_by: actor.slice(0, 64),
+      twitch_status: 'none',
+    });
+    return out.amount > 0;
+  }
+
+  /** A removal WITHOUT refund (an explicit moderation choice): nothing given back, recorded as kept. */
+  private async keepPayment(q: Queryable, r: RequestRow, actor: string) {
+    if (r.payment === 'tokens') {
+      if (r.refund_status === null)
+        await this.update(q, r.request_id, {
+          refund_status: 'kept',
+          refunded_by: actor.slice(0, 64),
+          twitch_status: 'none',
+        });
+      return;
+    }
+    if (r.twitch_status === null)
+      await this.update(q, r.request_id, { twitch_status: 'kept' });
+  }
+
   private recentCut() {
     return new Date(this.clock.now().getTime() - ACTIVITY_MS);
   }
@@ -636,7 +725,7 @@ export class SpotifyService {
           reason,
           ended_at: now,
         });
-        const refunded = await this.refundTwitch(q, row);
+        const refunded = await this.refundPayment(q, row);
         await this.say(
           q,
           e.channel_id,
@@ -860,6 +949,23 @@ export class SpotifyService {
       };
     if (j.kind === 'skip')
       return { kind: 'skip', job_id: j.job_id, request_id: j.request_id };
+    if (j.kind === 'search')
+      return {
+        kind: 'search',
+        job_id: j.job_id,
+        query: String(j.payload.query),
+      };
+    if (j.kind === 'control')
+      return {
+        kind: 'control',
+        job_id: j.job_id,
+        action: j.payload.action as 'pause' | 'resume' | 'volume',
+        volume_percent:
+          j.payload.volume_percent === null ||
+          j.payload.volume_percent === undefined
+            ? null
+            : Number(j.payload.volume_percent),
+      };
     return { kind: 'read_playback', job_id: j.job_id };
   }
 
@@ -922,6 +1028,14 @@ export class SpotifyService {
         await this.finishSkip(q, job, r);
         if (job.request_id) changed.push({ request_id: job.request_id });
         changed.push({ job_id: job.job_id });
+      } else if (r.kind === 'search') {
+        // Stored in the job (result): the extension reads it, a later request checks its pick against it.
+      } else if (r.kind === 'control') {
+        if (r.playback) {
+          const prior = await this.studio(q, channelId);
+          for (const id of await this.observe(q, channelId, prior, r.playback))
+            changed.push({ request_id: id });
+        }
       } else {
         if (r.playback) {
           const prior = await this.studio(q, channelId);
@@ -984,13 +1098,14 @@ export class SpotifyService {
       reason,
       ended_at: now,
     });
-    await this.refundTwitch(q, req);
-    await this.say(
-      q,
-      req.channel_id,
-      `spotify:req:${req.request_id}`,
-      MSG.refused(req.viewer_name, reason),
-    );
+    await this.refundPayment(q, req);
+    if (req.source !== 'extension')
+      await this.say(
+        q,
+        req.channel_id,
+        `spotify:req:${req.request_id}`,
+        MSG.refused(req.viewer_name, reason),
+      );
   }
 
   private async finishSkip(
@@ -1280,7 +1395,7 @@ export class SpotifyService {
       const st = await this.studio(q, channelId);
       for (const r of waiting) {
         if (r.request_id === st?.current_request_id) continue; // playing now: never canceled here
-        await this.refundTwitch(q, r);
+        await this.refundPayment(q, r);
         await this.update(q, r.request_id, {
           state: 'CANCELED',
           reason: 'STREAM_ENDED',
@@ -1308,6 +1423,12 @@ export class SpotifyService {
   private async expire(q: Queryable, channelId: string) {
     const now = this.clock.now();
     const changed: string[] = [];
+    // Music Hub: a search or a control nobody took in time is over (the extension says « indisponible »).
+    await q.query(
+      `update spotify_jobs set status = 'expired', updated_at = $2
+       where channel_id = $1 and kind in ('search', 'control') and status = 'queued' and created_at < $3`,
+      [channelId, now, new Date(now.getTime() - SPOTIFY_RULES.searchTimeoutMs)],
+    );
     // A running job whose report never came: it may have run — never replayed.
     const lost = await q.query<JobRow>(
       `select * from spotify_jobs where channel_id = $1 and status = 'running' and lease_expires_at < $2`,
@@ -1366,7 +1487,7 @@ export class SpotifyService {
             reason: 'STUDIO_UNAVAILABLE',
             ended_at: now,
           });
-          await this.refundTwitch(q, req);
+          await this.refundPayment(q, req);
           await this.say(
             q,
             channelId,
@@ -1555,7 +1676,11 @@ export class SpotifyService {
     messageId: string,
     viewer: { id: string; name: string },
     index?: number,
+    opts: { request_id?: string; silent?: boolean } = {},
   ) {
+    // Music Hub: the extension cancels one request by its id and shows the outcome itself (no chat line).
+    const say = (q: Queryable, ch: string, k: string, text: string) =>
+      opts.silent ? Promise.resolve() : this.say(q, ch, k, text);
     const changed: string[] = [];
     const outcome = await this.db.tx(async (q) => {
       const settings = await this.lock(q, channelId);
@@ -1573,10 +1698,13 @@ export class SpotifyService {
       };
       const cancellable = own.filter((r) => r.state !== 'PLAYING' || graceOk());
       let target: RequestRow | undefined;
-      if (index !== undefined) {
+      if (opts.request_id) {
+        target = own.find((r) => r.request_id === opts.request_id);
+        if (!target) return 'songcancel_none';
+      } else if (index !== undefined) {
         target = own[index - 1];
         if (!target) {
-          await this.say(
+          await say(
             q,
             channelId,
             key,
@@ -1585,7 +1713,7 @@ export class SpotifyService {
           return 'songcancel_no_index';
         }
       } else if (cancellable.length > 1) {
-        await this.say(
+        await say(
           q,
           channelId,
           key,
@@ -1596,10 +1724,10 @@ export class SpotifyService {
 
       if (target && target.state === 'PLAYING') {
         if (!graceOk()) {
-          await this.say(q, channelId, key, MSG.cancelTooLate(viewer.name));
+          await say(q, channelId, key, MSG.cancelTooLate(viewer.name));
           return 'songcancel_too_late';
         }
-        const refunded = await this.refundTwitch(q, target);
+        const refunded = await this.refundPayment(q, target, viewer.id);
         await this.update(q, target.request_id, {
           state: 'CANCELED',
           reason: 'VIEWER_CANCEL',
@@ -1623,7 +1751,7 @@ export class SpotifyService {
           { kind: 'cancel_current' },
           `cancel:${target.request_id}`,
         );
-        await this.say(
+        await say(
           q,
           channelId,
           key,
@@ -1634,7 +1762,7 @@ export class SpotifyService {
       }
       if (target) {
         const inSpotify = !!target.queued_at; // QUEUED or an uncertain addition proven in the queue
-        const refunded = await this.refundTwitch(q, target);
+        const refunded = await this.refundPayment(q, target, viewer.id);
         await this.update(q, target.request_id, {
           state: 'CANCELED',
           reason: 'VIEWER_CANCEL',
@@ -1647,7 +1775,7 @@ export class SpotifyService {
         const remaining = own.filter(
           (r) => r.request_id !== target.request_id && r.state !== 'PLAYING',
         ).length;
-        await this.say(
+        await say(
           q,
           channelId,
           key,
@@ -1658,7 +1786,7 @@ export class SpotifyService {
       }
       // Nothing cancellable: their song playing too long already, or nothing at all.
       if (own.some((r) => r.state === 'PLAYING')) {
-        await this.say(q, channelId, key, MSG.cancelTooLate(viewer.name));
+        await say(q, channelId, key, MSG.cancelTooLate(viewer.name));
         return 'songcancel_too_late';
       }
       const last = (
@@ -1668,7 +1796,7 @@ export class SpotifyService {
           [channelId, viewer.id],
         )
       )[0];
-      await this.say(
+      await say(
         q,
         channelId,
         key,
@@ -1686,7 +1814,12 @@ export class SpotifyService {
     key: string,
     target: { position: number } | { login: string } | { request_id: string },
     actor: string,
+    opts: { refund?: boolean; silent?: boolean } = {},
   ) {
+    // Music Hub: a removal is refunded unless the moderator explicitly keeps the payment (never twice either way).
+    const refund = opts.refund !== false;
+    const say = (q: Queryable, ch: string, k: string, text: string) =>
+      opts.silent ? Promise.resolve() : this.say(q, ch, k, text);
     const changed: string[] = [];
     const outcome = await this.db.tx(async (q) => {
       await this.lock(q, channelId);
@@ -1701,30 +1834,25 @@ export class SpotifyService {
       let fresh: RequestRow | undefined;
       if ('position' in target) {
         if (target.position < 1 || !(fresh = entries[target.position - 1])) {
-          await this.say(
-            q,
-            channelId,
-            key,
-            MSG.removeNoPosition(target.position),
-          );
+          await say(q, channelId, key, MSG.removeNoPosition(target.position));
           return 'songremove_none';
         }
       } else if ('login' in target) {
         const login = target.login.replace(/^@+/, '').toLowerCase();
         if (!/^[a-z0-9_]{1,30}$/.test(login)) {
-          await this.say(q, channelId, key, MSG.removeBadViewer);
+          await say(q, channelId, key, MSG.removeBadViewer);
           return 'songremove_invalid';
         }
         const candidates = [...(current ? [current] : []), ...entries].filter(
           (r) => r.viewer_login.toLowerCase() === login,
         );
         if (new Set(candidates.map((r) => r.viewer_id)).size > 1) {
-          await this.say(q, channelId, key, MSG.removeAmbiguous(target.login));
+          await say(q, channelId, key, MSG.removeAmbiguous(target.login));
           return 'songremove_ambiguous';
         }
         fresh = candidates[0];
         if (!fresh) {
-          await this.say(q, channelId, key, MSG.removeNone(target.login));
+          await say(q, channelId, key, MSG.removeNone(target.login));
           return 'songremove_none';
         }
       } else {
@@ -1735,15 +1863,17 @@ export class SpotifyService {
       if (current && fresh.request_id === current.request_id) {
         if ('request_id' in target)
           throw new SpotifyError(409, 'playing_use_skip');
-        await this.say(q, channelId, key, MSG.removePlaying);
+        await say(q, channelId, key, MSG.removePlaying);
         return 'songremove_playing';
       }
       if (!isQueuedLike(fresh) || !fresh.track) {
-        await this.say(q, channelId, key, MSG.removeUnsafe);
+        await say(q, channelId, key, MSG.removeUnsafe);
         return 'songremove_unsafe';
       }
       const now = this.clock.now();
-      const refunded = await this.refundTwitch(q, fresh);
+      let refunded = false;
+      if (refund) refunded = await this.refundPayment(q, fresh, actor);
+      else await this.keepPayment(q, fresh, actor);
       await this.update(q, fresh.request_id, {
         state: 'REMOVED_BY_MOD',
         reason: 'MOD_REMOVE',
@@ -1753,7 +1883,7 @@ export class SpotifyService {
         ended_at: now,
         auto_skip: !!fresh.queued_at,
       });
-      await this.say(
+      await say(
         q,
         channelId,
         key,
@@ -1861,7 +1991,7 @@ export class SpotifyService {
         throw new SpotifyError(409, 'not_uncertain');
       if (decision === 'keep')
         await this.update(q, requestId, { twitch_status: 'kept' });
-      else await this.refundTwitch(q, req);
+      else await this.refundPayment(q, req);
       if (decision === 'refund')
         await this.update(q, requestId, {
           ended_at: this.clock.now(),
@@ -1944,7 +2074,7 @@ export class SpotifyService {
            count(*) filter (where state in ('FAILED', 'AMBIGUOUS', 'TOO_LONG', 'VIEWER_LIMIT', 'VIEWER_COOLDOWN')) as refused,
            count(*) filter (where state = 'CANCELED') as canceled,
            count(*) filter (where state = 'REMOVED_BY_MOD') as removed,
-           count(*) filter (where twitch_status = 'cancel_requested') as refunded
+           count(*) filter (where twitch_status = 'cancel_requested' or refund_status = 'refunded') as refunded
          from spotify_requests where channel_id = $1
            and received_at >= (date_trunc('day', $2::timestamptz at time zone 'Europe/Paris') at time zone 'Europe/Paris')`,
         [channelId, this.clock.now()],
@@ -1989,6 +2119,574 @@ export class SpotifyService {
       ),
       twitch_actions: actions,
       managed_rewards: managed,
+    };
+  }
+
+  // ---------------------------------------------------------------- Music Hub (docs/music/MUSIC_HUB_STATE.md)
+  // The extension's entry into THIS module: the same requests, the same logical queue, the same limits, the same Studio
+  // jobs and the same chat commands as the reward. Only the payment differs: Jetons, debited here in the request's own
+  // transaction and given back by refundPayment (once). The catalogue is read by Studio (search jobs): the Lab's
+  // simulator, or the connected provider — Core never calls a music service.
+
+  /** Why the extension cannot ask now (null: it can). */
+  private extensionClosed(settings: SettingsRow, st: StudioRow | null) {
+    if (!this.economy) return 'extension_disabled';
+    if (!settings.extension_enabled) return 'extension_disabled';
+    if (!settings.enabled) return 'requests_closed';
+    const reason = this.studioRefusal(st);
+    return reason ? reason.toLowerCase() : null;
+  }
+
+  /** A team action: the moderation permission of the Core (lab-moderation PERMISSIONS), never the button alone. */
+  private async allow(
+    q: Queryable,
+    channelId: string,
+    actor: MusicActor,
+    permission: string,
+  ) {
+    try {
+      await assertAllowed(q, channelId, actor, permission);
+    } catch (e) {
+      if (e instanceof LabForbiddenError)
+        throw new SpotifyError(403, 'forbidden', { permission });
+      throw e;
+    }
+  }
+
+  /** A search for the extension: the same words searched recently are reused, else one job for Studio. */
+  async extensionSearch(channelId: string, viewerId: string, query: string) {
+    const text = query.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 200);
+    if (text.length < SPOTIFY_RULES.searchMinChars)
+      throw new SpotifyError(400, 'query_too_short');
+    const id = await this.db.tx(async (q) => {
+      const settings = await this.lock(q, channelId);
+      const closed = this.extensionClosed(
+        settings,
+        await this.studio(q, channelId),
+      );
+      if (closed) throw new SpotifyError(409, closed);
+      const now = this.clock.now();
+      const reuse = (
+        await q.query<{ job_id: string }>(
+          `select job_id from spotify_jobs where channel_id = $1 and kind = 'search' and payload->>'query' = $2
+             and status in ('queued', 'running', 'done') and created_at > $3 order by created_at desc limit 1`,
+          [
+            channelId,
+            text,
+            new Date(now.getTime() - SPOTIFY_RULES.searchReuseMs),
+          ],
+        )
+      )[0];
+      if (reuse) return reuse.job_id;
+      const recent = Number(
+        (
+          await q.query<{ n: string }>(
+            `select count(*) as n from spotify_jobs where channel_id = $1 and kind = 'search'
+               and payload->>'viewer' = $2 and created_at > $3`,
+            [channelId, viewerId, new Date(now.getTime() - 60_000)],
+          )
+        )[0]!.n,
+      );
+      if (recent >= SPOTIFY_RULES.searchesPerViewerPerMinute)
+        throw new SpotifyError(429, 'search_rate_limited');
+      const jobId = randomUUID();
+      await q.query(
+        `insert into spotify_jobs (job_id, channel_id, kind, payload, status, created_at, updated_at)
+         values ($1, $2, 'search', $3, 'queued', $4, $4)`,
+        [
+          jobId,
+          channelId,
+          JSON.stringify({ query: text, viewer: viewerId }),
+          now,
+        ],
+      );
+      return jobId;
+    });
+    return this.searchResult(channelId, id);
+  }
+
+  /** Where a search stands: pending (Studio has it), done (its results), failed (Studio absent, catalogue error). */
+  async searchResult(channelId: string, searchId: string) {
+    const job = (
+      await this.db.query<JobRow>(
+        `select * from spotify_jobs where channel_id = $1 and job_id = $2 and kind = 'search'`,
+        [channelId, searchId],
+      )
+    )[0];
+    if (!job) throw new SpotifyError(404, 'search_not_found');
+    if (job.status === 'done') {
+      const r = job.result as Extract<
+        SpotifyJobReport,
+        { kind: 'search' }
+      > | null;
+      if (!r || r.outcome !== 'done')
+        return {
+          status: 'failed' as const,
+          search_id: searchId,
+          reason: r?.reason ?? 'SPOTIFY_UNAVAILABLE',
+        };
+      const settings = await this.settings(channelId);
+      return {
+        status: 'done' as const,
+        search_id: searchId,
+        provider: r.provider,
+        items: r.items.map((i) => ({
+          ...i,
+          too_long: i.duration_ms > settings.max_duration_seconds * 1000,
+        })),
+      };
+    }
+    const age = this.clock.now().getTime() - ms(job.created_at);
+    if (
+      job.status === 'expired' ||
+      (job.status === 'queued' && age > SPOTIFY_RULES.searchTimeoutMs)
+    )
+      return {
+        status: 'failed' as const,
+        search_id: searchId,
+        reason: 'STUDIO_UNAVAILABLE',
+      };
+    return { status: 'pending' as const, search_id: searchId };
+  }
+
+  /** The catalogue item a viewer picked: it must come from a recent search of this channel (never an arbitrary id). */
+  private async pickedItem(q: Queryable, channelId: string, trackId: string) {
+    const rows = await q.query<{
+      result: Extract<SpotifyJobReport, { kind: 'search' }>;
+    }>(
+      `select result from spotify_jobs where channel_id = $1 and kind = 'search' and status = 'done'
+         and created_at > $2 and result->'items' @> $3::jsonb order by created_at desc limit 1`,
+      [
+        channelId,
+        new Date(this.clock.now().getTime() - 3_600_000),
+        JSON.stringify([{ id: trackId }]),
+      ],
+    );
+    const r = rows[0]?.result;
+    const item: SpotifySearchItem | undefined = r?.items.find(
+      (i) => i.id === trackId,
+    );
+    return item && r ? { item, provider: r.provider } : null;
+  }
+
+  /**
+   * A request from the extension, paid in Jetons. Every rule of the reward's admission (requests open, Studio able,
+   * cooldown, pending limit, duration) plus the extension's own (its switch, its price — never another one than the
+   * viewer saw —, a track already waiting). All in ONE transaction with the debit: refused = nothing debited, nothing
+   * recorded; admitted = debited once and handed to Studio as the reward's requests are. The same key again (double
+   * click, retry after a lost answer) returns the same request, never a second debit.
+   */
+  async extensionRequest(e: {
+    channel_id: string;
+    viewer: { id: string; login: string; name: string };
+    track_id: string;
+    key: string;
+    expected_price: number | null;
+  }) {
+    if (!/^[A-Za-z0-9_:-]{8,128}$/.test(e.key))
+      throw new SpotifyError(400, 'idempotency_key_required');
+    if (!/^[A-Za-z0-9]{22}$/.test(e.track_id))
+      throw new SpotifyError(400, 'invalid_track');
+    const sourceRef = `extension:${e.viewer.id}:${e.key}`;
+    const out = await this.db.tx(async (q) => {
+      const settings = await this.lock(q, e.channel_id);
+      const prior = (
+        await q.query<RequestRow>(
+          'select * from spotify_requests where channel_id = $1 and source_ref = $2',
+          [e.channel_id, sourceRef],
+        )
+      )[0];
+      if (prior) return { row: prior, duplicate: true };
+      const closed = this.extensionClosed(
+        settings,
+        await this.studio(q, e.channel_id),
+      );
+      if (closed || !this.economy)
+        throw new SpotifyError(409, closed ?? 'extension_disabled');
+      const price = settings.extension_price_tokens;
+      if (e.expected_price !== null && e.expected_price !== price)
+        throw new SpotifyError(409, 'price_changed', { price });
+      const picked = await this.pickedItem(q, e.channel_id, e.track_id);
+      if (!picked) throw new SpotifyError(409, 'track_unknown');
+      if (!picked.item.playable) throw new SpotifyError(409, 'not_playable');
+      if (picked.item.duration_ms > settings.max_duration_seconds * 1000)
+        throw new SpotifyError(409, 'too_long', {
+          max_duration_seconds: settings.max_duration_seconds,
+        });
+      const use = await this.usage(q, e.channel_id, e.viewer, settings, null);
+      if (use.cooldown_left_ms > 0)
+        throw new SpotifyError(409, 'viewer_cooldown', {
+          cooldown_left_ms: use.cooldown_left_ms,
+        });
+      if (use.pending >= use.max_pending)
+        throw new SpotifyError(409, 'viewer_limit', {
+          max_pending: use.max_pending,
+        });
+      if (settings.no_duplicates) {
+        const waiting = (await this.live(q, e.channel_id)).some(
+          (r) =>
+            (isQueuedLike(r) ||
+              r.state === 'RECEIVED' ||
+              r.state === 'SEARCHING' ||
+              r.state === 'PLAYING') &&
+            (r.track?.id === e.track_id ||
+              r.raw_input === `spotify:track:${e.track_id}`),
+        );
+        if (waiting) throw new SpotifyError(409, 'duplicate_track');
+      }
+      const id = randomUUID();
+      const now = this.clock.now();
+      if (price > 0) {
+        try {
+          await this.economy.debit(q, now, {
+            channelId: e.channel_id,
+            viewer: { id: e.viewer.id, display_name: e.viewer.name },
+            currency: 'tokens',
+            amount: price,
+            module: 'music',
+            interactionId: id,
+          });
+        } catch (err) {
+          if (err instanceof LabWalletError)
+            throw new SpotifyError(409, err.code, { price, ...err.details });
+          throw err;
+        }
+      }
+      await q.query(
+        `insert into spotify_requests (request_id, channel_id, source, source_ref, reward_id, redemption_id, viewer_id,
+           viewer_login, viewer_name, raw_input, mode, state, max_duration_ms, received_at, updated_at, payment,
+           price_tokens, display)
+         values ($1, $2, 'extension', $3, null, null, $4, $5, $6, $7, 'exact', 'RECEIVED', $8, $9, $9, 'tokens', $10, $11)`,
+        [
+          id,
+          e.channel_id,
+          sourceRef,
+          e.viewer.id,
+          e.viewer.login,
+          e.viewer.name,
+          `spotify:track:${e.track_id}`,
+          settings.max_duration_seconds * 1000,
+          now,
+          price,
+          JSON.stringify({
+            album: picked.item.album,
+            image_url: picked.item.image_url,
+            provider: picked.provider,
+          }),
+        ],
+      );
+      await q.query(
+        `insert into spotify_jobs (job_id, channel_id, kind, request_id, payload, status, created_at, updated_at)
+         values ($1, $2, 'song_request', $3, $4, 'queued', $5, $5)`,
+        [
+          randomUUID(),
+          e.channel_id,
+          id,
+          JSON.stringify({
+            reference: { kind: 'exact', track_id: e.track_id },
+            max_duration_ms: settings.max_duration_seconds * 1000,
+          }),
+          now,
+        ],
+      );
+      return { row: (await this.request(q, id))!, duplicate: false };
+    });
+    return { duplicate: out.duplicate, request: requestView(out.row) };
+  }
+
+  /**
+   * The viewer withdraws ONE of their requests from the extension: the rules of `!songcancel` (a future request, or
+   * the one playing within its first seconds), refunded once — Jetons or channel points, whatever paid it. Asked twice
+   * (retry, two windows): the second finds nothing to cancel, nothing is refunded again.
+   */
+  async extensionCancel(
+    channelId: string,
+    viewer: { id: string; name: string },
+    requestId: string,
+  ) {
+    const outcome = await this.cancel(
+      channelId,
+      `ext-cancel:${requestId}`,
+      viewer,
+      undefined,
+      { request_id: requestId, silent: true },
+    );
+    const row = await this.request(this.db, requestId);
+    return {
+      outcome,
+      request: row && row.viewer_id === viewer.id ? requestView(row) : null,
+    };
+  }
+
+  /**
+   * The team's actions from the extension, each behind its permission (Core decides, never the button):
+   * remove with / without refund (queue.cancel, + refund), skip (queue.stop), pause / resume / volume (module.pause,
+   * and Studio's « Commandes du lecteur » switch), open / close the requests (module.disable).
+   */
+  async extensionModerate(
+    channelId: string,
+    actor: MusicActor,
+    a:
+      | { action: 'remove'; request_id: string; refund: boolean }
+      | { action: 'skip' }
+      | { action: 'pause' }
+      | { action: 'resume' }
+      | { action: 'volume'; volume_percent: number }
+      | { action: 'open' }
+      | { action: 'close' },
+    key: string,
+  ) {
+    const name = actor.display_name ?? actor.login ?? actor.id;
+    if (a.action === 'remove') {
+      await this.allow(this.db, channelId, actor, 'queue.cancel');
+      if (a.refund) await this.allow(this.db, channelId, actor, 'refund');
+      const outcome = await this.remove(
+        channelId,
+        `spotify:ext:${key}`,
+        { request_id: a.request_id },
+        name,
+        { refund: a.refund, silent: true },
+      );
+      const row = await this.request(this.db, a.request_id);
+      return { outcome, request: row ? requestView(row) : null };
+    }
+    if (a.action === 'skip') {
+      await this.allow(this.db, channelId, actor, 'queue.stop');
+      return {
+        outcome: await this.skip(channelId, `spotify:ext:${key}`, name),
+      };
+    }
+    if (a.action === 'open' || a.action === 'close') {
+      await this.allow(this.db, channelId, actor, 'module.disable');
+      return {
+        outcome: a.action,
+        settings: await this.saveSettings(
+          channelId,
+          { enabled: a.action === 'open' },
+          `ext:${name}`,
+        ),
+      };
+    }
+    await this.allow(
+      this.db,
+      channelId,
+      actor,
+      a.action === 'resume' ? 'module.resume' : 'module.pause',
+    );
+    return this.control(
+      channelId,
+      a.action,
+      a.action === 'volume' ? a.volume_percent : null,
+      name,
+    );
+  }
+
+  /** A player control (pause / resume / volume): a job for Studio, only with « Commandes du lecteur » on. */
+  async control(
+    channelId: string,
+    action: 'pause' | 'resume' | 'volume',
+    volume: number | null,
+    actor: string,
+  ) {
+    return this.db.tx(async (q) => {
+      const settings = await this.lock(q, channelId);
+      if (!settings.player_controls)
+        throw new SpotifyError(409, 'player_controls_disabled');
+      const reason = this.studioRefusal(await this.studio(q, channelId));
+      if (reason) throw new SpotifyError(409, reason.toLowerCase());
+      const jobId = randomUUID();
+      const now = this.clock.now();
+      await q.query(
+        `insert into spotify_jobs (job_id, channel_id, kind, payload, status, created_at, updated_at)
+         values ($1, $2, 'control', $3, 'queued', $4, $4)`,
+        [
+          jobId,
+          channelId,
+          JSON.stringify({
+            action,
+            volume_percent: action === 'volume' ? volume : null,
+            actor: actor.slice(0, 64),
+          }),
+          now,
+        ],
+      );
+      return { outcome: 'requested', job_id: jobId };
+    });
+  }
+
+  /** A control's result (the extension and Studio show what really happened, never an assumed success). */
+  async controlResult(channelId: string, jobId: string) {
+    const job = (
+      await this.db.query<JobRow>(
+        `select * from spotify_jobs where channel_id = $1 and job_id = $2 and kind = 'control'`,
+        [channelId, jobId],
+      )
+    )[0];
+    if (!job) throw new SpotifyError(404, 'job_not_found');
+    const r = job.result as { outcome?: string; reason?: string } | null;
+    return {
+      status:
+        job.status === 'done'
+          ? (r?.outcome ?? 'unknown')
+          : job.status === 'expired'
+            ? 'failed'
+            : 'pending',
+      reason: r?.reason ?? (job.status === 'expired' ? 'STUDIO_LOST' : null),
+    };
+  }
+
+  /**
+   * What the extension shows: the module's state for everyone (open, price, rules, the player, what plays — a request
+   * of the queue or the broadcaster's own music —, the queue with an estimated wait), the viewer's own side (usage,
+   * balance, requests and whether each can still be withdrawn), and for the team the requesters and payments. Never a
+   * guess: no fresh reading of Studio → the player is « indisponible » and nothing is said to play.
+   */
+  async extensionState(
+    channelId: string,
+    viewer: { id: string; login: string } | null,
+    team: boolean,
+  ) {
+    const settings = (
+      await this.db.query<SettingsRow>(
+        'select * from spotify_settings where channel_id = $1',
+        [channelId],
+      )
+    )[0];
+    const view = this.settingsView(settings);
+    const st = await this.studio(this.db, channelId);
+    const now = this.clock.now().getTime();
+    const fresh = !!st && now - ms(st.seen_at) <= SPOTIFY_RULES.studioFreshMs;
+    const rows = await this.live(this.db, channelId);
+    const entries = this.future(rows);
+    const current =
+      rows.find(
+        (r) => r.request_id === st?.current_request_id && r.state === 'PLAYING',
+      ) ?? null;
+    const pb = fresh ? st!.playback : null;
+    const progress = fresh ? this.progressNow(st) : null;
+    const nowTrack = pb?.track ?? null;
+    let wait =
+      nowTrack && progress !== null
+        ? Math.max(0, nowTrack.duration_ms - progress)
+        : null;
+    const graceOk =
+      progress !== null && progress <= view.cancel_grace_seconds * 1000;
+    const entry = (r: RequestRow, position: number | null) => {
+      const eta = wait;
+      if (wait !== null && r.track) wait += r.track.duration_ms;
+      return {
+        request_id: r.request_id,
+        position,
+        title: r.track?.title ?? null,
+        artists: r.track?.artists ?? [],
+        duration_ms: r.track?.duration_ms ?? null,
+        album: r.display?.album ?? null,
+        image_url: r.display?.image_url ?? null,
+        requested_by: r.viewer_name,
+        own: !!viewer && r.viewer_id === viewer.id,
+        state: r.state,
+        eta_ms: position === null ? null : eta,
+        source: r.source === 'extension' ? 'extension' : 'reward',
+        ...(team
+          ? {
+              viewer_id: r.viewer_id,
+              viewer_login: r.viewer_login,
+              payment: r.payment ?? 'channel_points',
+              price_tokens: r.price_tokens ?? null,
+            }
+          : {}),
+      };
+    };
+    const queue = entries.map((r, i) => entry(r, i + 1));
+    const pending = rows
+      .filter((r) => r.state === 'RECEIVED' || r.state === 'SEARCHING')
+      .filter((r) => team || r.viewer_id === viewer?.id)
+      .map((r) => entry(r, null));
+    let me = null;
+    if (viewer) {
+      const own = this.ownRequests(rows, st, viewer.id);
+      const usage = await this.usage(
+        this.db,
+        channelId,
+        viewer,
+        settings ?? {
+          max_pending_per_viewer: view.max_pending_per_viewer,
+          viewer_cooldown_seconds: view.viewer_cooldown_seconds,
+        },
+        null,
+      );
+      me = {
+        pending: usage.pending,
+        max_pending: usage.max_pending,
+        cooldown_left_ms: usage.cooldown_left_ms,
+        balance: this.economy
+          ? (await this.economy.balances(this.db, channelId, viewer.id)).tokens
+          : null,
+        requests: own.map((r) => ({
+          request_id: r.request_id,
+          state: r.state,
+          title: r.track?.title ?? null,
+          cancellable: r.state !== 'PLAYING' || graceOk,
+          payment: r.payment ?? 'channel_points',
+        })),
+      };
+    }
+    const recent = (
+      await this.db.query<RequestRow>(
+        `select * from spotify_requests where channel_id = $1 and state in ('PLAYED', 'SKIPPED')
+           and received_at > $2 order by ended_at desc nulls last limit 5`,
+        [channelId, this.recentCut()],
+      )
+    ).map((r) => ({
+      title: r.track?.title ?? null,
+      artists: r.track?.artists ?? [],
+      requested_by: r.viewer_name,
+      image_url: r.display?.image_url ?? null,
+    }));
+    const closed = this.extensionClosed(
+      settings ?? (this.settingsView(undefined) as unknown as SettingsRow),
+      st,
+    );
+    return {
+      admission: closed ?? 'ready',
+      open: view.enabled,
+      extension_enabled: view.extension_enabled && !!this.economy,
+      price_tokens: view.extension_price_tokens,
+      rules: {
+        max_pending_per_viewer: view.max_pending_per_viewer,
+        viewer_cooldown_seconds: view.viewer_cooldown_seconds,
+        max_duration_seconds: view.max_duration_seconds,
+        cancel_grace_seconds: view.cancel_grace_seconds,
+        no_duplicates: view.no_duplicates,
+      },
+      player: {
+        connected: fresh && st!.status.auth === 'ok',
+        reason: fresh ? (this.studioRefusal(st) ?? null) : 'STUDIO_UNAVAILABLE',
+        device: fresh ? (st!.status.device?.name ?? null) : null,
+        controls: view.player_controls,
+        is_playing: pb?.is_playing ?? null,
+        volume_percent: pb?.volume_percent ?? null,
+      },
+      now_playing: nowTrack
+        ? {
+            kind: current ? ('request' as const) : ('broadcaster' as const),
+            title: nowTrack.title,
+            artists: nowTrack.artists,
+            duration_ms: nowTrack.duration_ms,
+            progress_ms: progress,
+            is_playing: pb!.is_playing,
+            requested_by: current?.viewer_name ?? null,
+            request_id: current?.request_id ?? null,
+            own: !!current && !!viewer && current.viewer_id === viewer.id,
+            album: current?.display?.album ?? null,
+            image_url: current?.display?.image_url ?? null,
+          }
+        : null,
+      queue,
+      pending,
+      me,
+      recent,
+      team,
     };
   }
 }

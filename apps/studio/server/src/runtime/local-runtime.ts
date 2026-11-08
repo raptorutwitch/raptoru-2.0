@@ -95,6 +95,8 @@ export const LAB_MIGRATIONS = [
   '20261121150000_module_settings_lab.sql',
   '20261121170000_module_activity_lab.sql',
   '20261121190000_cmd_steps_module_origin_lab.sql',
+  // Music Hub: the Lab twin of 20261122130000_music_hub.sql (docs/music/MUSIC_HUB_STATE.md).
+  '20261122120000_music_hub_lab.sql',
 ];
 
 export type ServiceState =
