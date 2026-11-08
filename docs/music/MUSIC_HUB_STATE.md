@@ -9,9 +9,10 @@
 - **F3 « compacte »** (F2 validée dans son principe, puis optimisée en hauteur) : `prototypes/music-hub/f3-hybride.html`,
   ouverte par défaut dans le comparateur (mode « F2 ↔ F3 »). **À valider avant intégration.** Même file, même rideau,
   mêmes interactions que F2 ; champ bas au repos (36 px, 42 au focus sans rien pousser) ; économie et libellé de la file
-  sur une ligne ; « en cours » = pastille flottante de 40 px dans le coin inférieur droit (disque qui tourne en
-  lecture, immobile en pause, inactive si rien ne joue), qui s'élargit vers la gauche avec titre, artiste et
-  « Demandé par @pseudo » pour une demande. Titres entièrement visibles (F2 → F3) : 565 × 376 3 → 4 ; 651 × 434
+  sur une ligne ; « en cours » = widget accroché au bord inférieur droit (languette du panneau), **ouvert par
+  défaut** (miniature, titre, artiste · @pseudo pour une demande, point vert qui pulse et petites barres en lecture,
+  immobile en pause, « Aucune musique » si rien ne joue), replié en petit bloc au clic. Ancienne pastille flottante :
+  `f3-pastille-flottante.html`. Titres entièrement visibles (F2 → F3) : 565 × 376 3 → 4 ; 651 × 434
   4 → 5 ; 521 × 347 3 → 4 ; panel court 2 → 3 ; panel 5 → 6 ; paysage 3 → 4. L'intégration suivra F3 (même plan
   que pour F2 ci-dessous).
 
