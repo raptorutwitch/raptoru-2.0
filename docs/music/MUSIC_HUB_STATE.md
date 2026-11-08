@@ -6,6 +6,15 @@
 
 ## 0. Où reprendre (08/11, après le Design Lab)
 
+- **F2 « finale »** (retour d'Antoni sur F) : `prototypes/music-hub/f2-hybride.html`, ouverte par défaut dans le
+  comparateur (mode « F ↔ F2 » pour comparer). **À valider par Antoni avant toute intégration.** La file est le module ;
+  le catalogue descend en rideau par-dessus ; économie en mots ; mini-player flottant dépliable ; « Musiques de la
+  soirée » (simulée) derrière l'horloge. Faisabilité de l'historique complet : [HISTORIQUE_SOIREE.md](HISTORIQUE_SOIREE.md).
+- **Après validation de F2** : réécrire `apps/twitch-extension/extension/modules/music/view.js` et `music.css` selon F2
+  (mêmes appels `client.music*`, mêmes droits `st.can`, aucun changement Core/Studio) ; historique = demandes de la
+  soirée (données existantes) ; garder verts `test:music-stability`, `music-hub.e2e.ts`, la matrice responsive (ajouter
+  521 × 347 et le panel court), et transformer les contrôles de F2 (rideau, Échap, clic extérieur, focus) en tests.
+
 - **Direction F « Hybride » (A + B + E)**, issue du retour d'Antoni sur les cinq maquettes :
   `prototypes/music-hub/f-hybride.html`, première du comparateur. **À valider par Antoni avant toute intégration.**
   Recherche en haut, résultats et demande de E (barre courte), « À suivre » numéroté de B (colonne repliable, tiroir
