@@ -30,7 +30,10 @@ async function studio(page: Page, path: string, body?: object) {
   return (await r.json()) as St;
 }
 
-async function music(browser: Browser, role: 'viewer' | 'moderator') {
+async function music(
+  browser: Browser,
+  role: 'viewer' | 'moderator' | 'supermod',
+) {
   const page = await browser.newPage({ viewport: { width: 400, height: 860 } });
   await page.goto(`/ext/mobile.html?shell=v2&labRole=${role}`);
   await page.getByRole('button', { name: 'Voir tous les modules' }).click();
@@ -77,7 +80,7 @@ test.afterAll(async ({ browser }) => {
   await page.close();
 });
 
-test('Music Hub: search the Lab catalogue, request in Jetons, the shared queue, withdrawal refunded once; the team removes without refund and drives the player', async ({
+test('Music Hub: search the Lab catalogue (text, pasted link), request in Jetons, the shared queue, withdrawal refunded once; a moderator removes without refund, the supermod drives the player', async ({
   browser,
 }) => {
   const admin = await browser.newPage();
@@ -100,12 +103,16 @@ test('Music Hub: search the Lab catalogue, request in Jetons, the shared queue, 
     )
     .toBe('tokens');
   await viewer.getByRole('tab', { name: /^File/ }).click();
-  const mine = viewer.locator('.mh-q.is-own', {
+  // « Tes demandes » first (V2): the viewer's own request, withdrawable.
+  const mine = viewer.locator('.mh-list--mine .mh-q', {
     hasText: 'Nuit Blanche (Live à Lyon)',
   });
   await expect(mine).toBeVisible({ timeout: 15_000 });
-  // Withdrawal: refunded exactly once (the Core records it on the request).
+  // Withdrawal: gone from the active queue at once, refunded exactly once (the Core records it on the request).
   await mine.getByRole('button', { name: 'Retirer' }).click();
+  await expect(
+    viewer.locator('.mh-q', { hasText: 'Nuit Blanche (Live à Lyon)' }),
+  ).toHaveCount(0);
   expect(
     (await settled(admin, 'Nuit Blanche (Live à Lyon)')).refund_status,
   ).toBe('refunded');
@@ -130,9 +137,31 @@ test('Music Hub: search the Lab catalogue, request in Jetons, the shared queue, 
   await viewer.locator('[data-act="sheet-close"]').click();
   await studio(admin, '/settings', { viewer_cooldown_seconds: 0 });
 
-  // A second request; the moderator removes it without refund (two clicks), then pauses and resumes the player.
+  // A pasted Spotify link finds that exact track (the reward's reference rules); an album link is refused.
+  await viewer.getByRole('tab', { name: /^Rechercher/ }).click();
+  await viewer
+    .getByLabel('Rechercher un titre ou un artiste')
+    .fill(
+      'https://open.spotify.com/intl-fr/track/LABMUSIC00000000000029?si=e2e',
+    );
+  await expect(viewer.locator('.mh-row')).toHaveCount(1, { timeout: 15_000 });
+  await expect(viewer.locator('.mh-row')).toContainText(
+    'Néon Sauvage (Nightcore)',
+  );
+  await viewer
+    .getByLabel('Rechercher un titre ou un artiste')
+    .fill('https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy');
+  await expect(viewer.locator('.mh-empty--err')).toContainText(
+    'n’est pas celui d’un titre',
+    { timeout: 15_000 },
+  );
+  // A viewer has no team tools and no player.
+  await expect(viewer.locator('[data-act="deck"]')).toHaveCount(0);
+
+  // A second request; the moderator removes it without refund (two clicks) — but the player is not theirs.
   await request(viewer, 'tempete radio', 'Tempête (Radio Edit)');
   const mod = await music(browser, 'moderator');
+  await expect(mod.locator('[data-act="deck"]')).toHaveCount(0);
   await mod.getByRole('tab', { name: /^File/ }).click();
   const row = mod.locator('.mh-q', { hasText: 'Tempête (Radio Edit)' });
   await expect(row).toBeVisible({ timeout: 20_000 });
@@ -145,16 +174,19 @@ test('Music Hub: search the Lab catalogue, request in Jetons, the shared queue, 
     'kept',
   );
 
-  await mod.locator('.mh-ctl [data-act="pause"]').click();
+  // The supermod (Core's grade: lab_staff, « Supermod Lab ») opens the player panel, pauses and resumes.
+  const sup = await music(browser, 'supermod');
+  await sup.locator('.mh-now [data-act="deck"]').click();
+  await sup.locator('.mh-ctl [data-act="pause"]').click();
   await expect
     .poll(async () => (await studio(admin, '/state')).sim?.playing, {
       timeout: 20_000,
     })
     .toBe(false);
-  await expect(mod.locator('.mh-ctl [data-act="resume"]')).toBeVisible({
+  await expect(sup.locator('.mh-ctl [data-act="resume"]')).toBeVisible({
     timeout: 20_000,
   });
-  await mod.locator('.mh-ctl [data-act="resume"]').click();
+  await sup.locator('.mh-ctl [data-act="resume"]').click();
   await expect
     .poll(async () => (await studio(admin, '/state')).sim?.playing, {
       timeout: 20_000,
@@ -171,5 +203,5 @@ test('Music Hub: search the Lab catalogue, request in Jetons, the shared queue, 
   await expect(
     admin.locator('.spo-h', { hasText: 'Extension' }).first(),
   ).toBeVisible();
-  await Promise.all([viewer.close(), mod.close(), admin.close()]);
+  await Promise.all([viewer.close(), mod.close(), sup.close(), admin.close()]);
 });

@@ -50,6 +50,59 @@ export const MUSIC_CATALOG = [
   item(16, 'Session Perdue', ['Lune Rouge'], m(3, 10), 'Inédits', {
     playable: false,
   }),
+  item(27, 'Néon Sauvage', ['Lune Rouge'], m(3, 31), 'Néons'),
+  item(
+    28,
+    'Néon Sauvage (Remix)',
+    ['Lune Rouge', 'DJ Orbite'],
+    m(3, 58),
+    'Néons Remixés',
+  ),
+  item(
+    29,
+    'Néon Sauvage (Nightcore)',
+    ['Kairo Station'],
+    m(2, 49),
+    'Nightcore Vol. 3',
+  ),
+  item(
+    30,
+    'Néon Sauvage (Slowed + Reverb)',
+    ['Café Cassette'],
+    m(4, 22),
+    'Ralenti',
+  ),
+  item(
+    31,
+    'Néon Sauvage (Sped Up)',
+    ['Lune Rouge'],
+    m(2, 41),
+    'Néon Sauvage (Sped Up)',
+  ),
+  item(
+    32,
+    'Néon Sauvage (Acoustique)',
+    ['Ava Solène'],
+    m(3, 40),
+    'Reprises au salon',
+    { art: false },
+  ),
+  item(33, 'Néon Sauvage — Live', ['Lune Rouge'], m(4, 5), 'Néons — Live'),
+  item(
+    34,
+    'Néon Sauvage (Instrumental)',
+    ['Lune Rouge'],
+    m(3, 31),
+    'Néons (Instrumentals)',
+  ),
+  item(35, 'Néon Sauvage', ['Les Phares'], m(3, 12), 'Reprises'),
+  item(
+    36,
+    'Néon Sauvage (Version Longue)',
+    ['Lune Rouge'],
+    m(11, 2),
+    'Néons — Deluxe',
+  ),
   item(
     26,
     'Un titre au nom vraiment très long pour vérifier que rien ne déborde du panneau',
@@ -84,8 +137,19 @@ const entry = (n, position, by, own, o = {}) => {
   };
 };
 
-/** The module's state, its progress counted from `startedAt` (the track loops on its length). */
-export function musicState(startedAt, clock) {
+/** What each calibration role may do (Core's answer: lab-moderation grades, « music.player » = supermods). */
+const CAN = {
+  viewer: { moderate: false, refund: false, player: false, open_close: false },
+  moderator: { moderate: true, refund: true, player: false, open_close: false },
+  supermod: { moderate: true, refund: true, player: true, open_close: true },
+};
+
+/**
+ * The module's state for a role (viewer, moderator, supermod), its progress counted from `startedAt` (the track loops
+ * on its length).
+ */
+export function musicState(startedAt, clock, role = 'moderator') {
+  const team = role !== 'viewer';
   const playing = MUSIC_CATALOG[0];
   const progress = (clock() - startedAt) % playing.duration_ms;
   const left = playing.duration_ms - progress;
@@ -95,7 +159,7 @@ export function musicState(startedAt, clock) {
       source: 'reward',
       viewer_id: '1002',
     }),
-    entry(26, 2, 'Mod_Test', true, {
+    entry(26, 2, 'Toi (calibration)', true, {
       eta_ms: left + m(2, 57),
       viewer_id: '5555',
     }),
@@ -137,11 +201,16 @@ export function musicState(startedAt, clock) {
       album: playing.album,
       image_url: playing.image_url,
     },
-    queue,
+    queue: team
+      ? queue
+      : queue.map(
+          // A viewer never sees who paid what (Core sends the team's fields to the team only).
+          ({ viewer_id, viewer_login, payment, price_tokens, ...rest }) => rest,
+        ),
     pending: [],
     me: {
-      pending: 1,
-      max_pending: 2,
+      pending: 2,
+      max_pending: 3,
       cooldown_left_ms: 0,
       balance: 12_000,
       requests: [
@@ -149,8 +218,30 @@ export function musicState(startedAt, clock) {
           request_id: queue[1].request_id,
           state: 'QUEUED',
           title: queue[1].title,
+          artists: queue[1].artists,
+          image_url: queue[1].image_url,
           cancellable: true,
           payment: 'tokens',
+        },
+        {
+          // Being added by Studio: withdrawable too (Music Hub V2).
+          request_id: '00000000-0000-4000-8000-000000000099',
+          state: 'SEARCHING',
+          title: null,
+          artists: [],
+          image_url: null,
+          cancellable: true,
+          payment: 'tokens',
+        },
+      ],
+      history: [
+        {
+          request_id: '00000000-0000-4000-8000-000000000098',
+          state: 'CANCELED',
+          title: 'Comète',
+          artists: ['Ava Solène'],
+          payment: 'tokens',
+          refunded: true,
         },
       ],
     },
@@ -168,12 +259,32 @@ export function musicState(startedAt, clock) {
         image_url: cover(id(10)),
       },
     ],
-    team: true,
+    team,
+    can: CAN[role] ?? CAN.viewer,
   };
 }
 
 /** A search: every word starts a word of the title or the artists (the Lab simulator's rule). */
 export function musicSearch(query) {
+  const link = /(?:track[:/])([A-Za-z0-9]{22})/.exec(String(query ?? ''));
+  if (
+    /^(?:spotify:|https?:\/\/|www\.|open\.spotify\.com\/)/i.test(
+      String(query ?? '').trim(),
+    ) &&
+    !link
+  )
+    return Promise.reject(
+      Object.assign(new Error('invalid_reference'), {
+        code: 'invalid_reference',
+      }),
+    );
+  if (link)
+    return {
+      status: 'done',
+      search_id: '00000000-0000-4000-8000-0000000000ab',
+      provider: 'lab',
+      items: MUSIC_CATALOG.filter((i) => i.id === link[1]),
+    };
   const words = String(query ?? '')
     .toLowerCase()
     .normalize('NFD')
@@ -189,7 +300,7 @@ export function musicSearch(query) {
   const items = words.length
     ? MUSIC_CATALOG.filter((i) =>
         words.every((w) => hay(i).some((x) => x.startsWith(w))),
-      )
+      ).slice(0, 10)
     : [];
   return {
     status: 'done',

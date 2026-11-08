@@ -14,7 +14,9 @@ registerSessionModule({
       : 'Les demandes sont fermées pour le moment',
   }),
   available: ({ state }) => state?.music?.offered === true,
-  // The view draws its own player at the top: no host intro above it (every pixel counts at 65 %).
+  // Music Hub V2: the module's header says what it is for (the Hub card keeps the short « Musique »).
+  headLabel: 'Prochaine musique',
+  // The view starts with its search field: no host intro above it (every pixel counts at 65 %).
   intro: false,
   lazy: {
     load: () => import('./view.js'),

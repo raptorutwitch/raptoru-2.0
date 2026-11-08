@@ -1585,7 +1585,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         screenIcon.setAttribute('aria-hidden', 'true');
       }
       if (!isModeration) heading.append(screenIcon);
-      heading.append(el('strong', 'jdm-module__screen-name', visibleModuleLabel(mod)));
+      heading.append(el('strong', 'jdm-module__screen-name', registered?.headLabel ?? visibleModuleLabel(mod)));
       // A control the view puts after the title (Bonk: its tour's « ? »).
       const headAfter = hostedView && registered?.headAfter ? registered.headAfter(hostView, variantContext(registered, mod)) : null;
       if (headAfter) heading.append(headAfter);

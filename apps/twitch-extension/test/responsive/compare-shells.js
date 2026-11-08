@@ -53,6 +53,7 @@ const params = new URLSearchParams(window.location.search);
 sizeSelect.value = params.get('s') ?? 'v565';
 $('view').value = params.get('m') ?? 'hub';
 $('data').value = params.get('d') ?? 'calib';
+$('role').value = params.get('r') ?? 'moderator';
 
 function src(shell) {
   const size = SIZES.flatMap(([, items]) => items).find(([id]) => id === sizeSelect.value);
@@ -60,6 +61,8 @@ function src(shell) {
   let url = `/${$('data').value}-${shell}/${PAGES[size[1]]}`;
   if (view === 'lab_demo') url += '&labModules=1&demoModule=lab_demo';
   else if (view !== 'hub') url += `&demoModule=${view}`;
+  // Calibration: the role looked at (viewer, moderator, supermod) — the Music module answers each one differently.
+  if ($('data').value === 'calib' && $('role').value !== 'moderator') url += `&calibRole=${$('role').value}`;
   return { url, size };
 }
 
@@ -76,10 +79,10 @@ function show() {
   $('note').textContent = `${zoom ? `Taille vue par l’extension quand le navigateur est zoomé à ${zoom[1]} % (zoom simulé). ` : ''}`
     + 'Données fictives locales : aucun appel au Core, à Twitch ni au Studio. Les deux cadres partagent les préférences '
     + 'du navigateur (favoris, brouillons, tutoriels vus).';
-  const next = new URLSearchParams({ s: sizeSelect.value, m: $('view').value, d: $('data').value });
+  const next = new URLSearchParams({ s: sizeSelect.value, m: $('view').value, d: $('data').value, r: $('role').value });
   window.history.replaceState(null, '', `?${next}`);
 }
 
-for (const id of ['size', 'view', 'data']) $(id).addEventListener('change', show);
+for (const id of ['size', 'view', 'data', 'role']) $(id).addEventListener('change', show);
 $('reload').addEventListener('click', show);
 show();
