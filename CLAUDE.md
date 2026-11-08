@@ -2,10 +2,13 @@
 
 ## Resuming work
 
-- Start with `docs/REPRISE.md` (entry point: state, versions, work in progress, next action) and
-  `git status`. Reference documents: `docs/ROADMAP.md` (every module's state, arbitrations),
-  `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, `docs/BACKUPS.md`; they are on `origin/main` (the main
-  checkout is behind: read them in an up-to-date worktree or with `git show origin/main:<path>`, see REPRISE § 1). `Raptoru-2.0-HANDOFF.md` and `Raptoru-2.0-ETAT-PROJET.md` are frozen history:
+- Start with `docs/REPRISE.md` (single entry point for agents: limits, workspaces, read-only checks, next
+  work, « si on change de modèle ») and `git status`. Then `docs/PROJECT_STATUS.md` (verified state:
+  versions, environments, features, tests, open issues, Antoni's pending actions) and `docs/ROADMAP.md`
+  (every module as delivered / developed / to validate / to develop; next features). Index of every
+  document and its status: `docs/README.md`. Also `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`,
+  `docs/BACKUPS.md`. They are on `origin/main` once the consolidation branch is merged (the main
+  checkout is behind: read them in an up-to-date worktree or with `git show origin/main:<path>`, see REPRISE § 3). `Raptoru-2.0-HANDOFF.md` and `Raptoru-2.0-ETAT-PROJET.md` are frozen history:
   open them only for the section a task needs. Verify `git status` / `git log` yourself before
   trusting any SHA in a document.
 - Keep `docs/REPRISE.md` current and short at each milestone and before stopping (precise enough to
@@ -41,6 +44,10 @@ Progressive extraction, no big refactor. Baseline at the decision: `apps/twitch-
 
 ## Workflow (decided 2026-10-21)
 
+- Since 2026-11-08 (Antoni): audit seriously once when needed, decide the direction, then work in large
+  autonomous functional lots (tests, autonomous fixes, coherent local commits, a resume journal, a testable
+  deliverable). No GO per CSS fix, no repeated audits, no review between small lots. This autonomy never
+  extends to Production or destructive operations.
 - Deliver vertical features (Core, routes, Studio/extension, tests) up to a milestone usable in the
   Lab; do not stop between interdependent sub-lots when the information to continue is available.
 - Take ordinary technical decisions and fix local problems alone. Interrupt Antoni only for an
@@ -63,7 +70,8 @@ Progressive extraction, no big refactor. Baseline at the decision: `apps/twitch-
 
 ## Raptoru Studio releases
 
-- When a slice that impacts Raptoru Studio (see README "Does a change need a Studio release?") is
+- (Original rule, narrowed since 2026-10-21 by the next bullet: a release needs Antoni's explicit request.)
+  When a slice that impacts Raptoru Studio (see README "Does a change need a Studio release?") is
   finished, tested, and explicitly validated by the user ("c'est bon", "validé", "go"), commit it
   and run `npm run studio:release` right away. No separate permission is needed to bump, package
   and publish Studio.

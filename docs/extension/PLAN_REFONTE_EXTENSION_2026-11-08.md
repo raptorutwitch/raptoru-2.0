@@ -1,5 +1,15 @@
 # Extension Raptoru Live — plan d'exécution de la refonte (08/11/2026)
 
+> **État au 08/11/2026 (consolidation).** Le plan a été exécuté en local sur la branche `feat/extension-next` :
+> non poussée, non fusionnée, **non publiée**. Ses documents de travail sont sur cette branche :
+>
+> - `docs/extension/EXTENSION_NEXT_EXECUTION_STATE.md` : journal ;
+> - `docs/extension/SOCLE.md` : guide du socle et recette d'un module ;
+> - `docs/extension/EXTENSION_NEXT_PUBLICATION.md` : Hosted Test, publication et retour arrière.
+>
+> Pour les lire : `git show feat/extension-next:docs/extension/<fichier>`. Résumé, tests et étapes restantes :
+> [../PROJECT_STATUS.md](../PROJECT_STATUS.md) § 7 et [../ROADMAP.md](../ROADMAP.md) § 2.1.
+
 Plan issu de l'[audit du 07–08/11](EXTENSION_RESPONSIVE_ARCHITECTURE_AUDIT_2026-11-07.md) et des décisions d'Antoni du 08/11.
 **Rien n'est implémenté.** Ce document est le cahier des charges des futures missions : chaque lot s'exécute sans
 réinventer l'architecture ; une mission qui veut s'en écarter le dit et le justifie avant de coder.

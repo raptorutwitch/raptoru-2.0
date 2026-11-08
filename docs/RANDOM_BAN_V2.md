@@ -1,5 +1,7 @@
 # Random Ban V2 (M1.1)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 ## V3 (27/10/2026) — **en Production** (Core et bot `4ba9243`, Studio 0.1.11 publiée), **non validée en réel**
 
 Décisions d'Antoni (GO du 26–27/10) : tirage toujours aléatoire, acheteur plus rare, streamer cible exceptionnelle.

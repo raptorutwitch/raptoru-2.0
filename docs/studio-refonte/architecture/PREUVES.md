@@ -1,5 +1,7 @@
 # Preuves : les trois démonstrations, mesurées (05/11/2026)
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](../OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../../PROJECT_STATUS.md). « Rien n'est validé » et « D11 à arbitrer » sont d'époque (D11 décidée le 05/11 : [DECISIONS.md](DECISIONS.md)).
+
 Branche `feat/studio-ux`, commits `54b2b87` → `c4166e2`. Données fictives, Lab uniquement.
 
 **Rien n'est validé** au sens du projet : ni testé à la main par Antoni, ni publié.

@@ -1,5 +1,7 @@
 # Consolidation du Studio refondu
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Les mentions « aucun déploiement », « aucun push » sont d'époque.
+
 Mission reçue le 07/11/2026 après la recette d'Antoni. Direction D validée, pas de nouvelle refonte artistique. La migration et la
 préparation à la Production ne sont **pas** validées. Reprendre ici après une interruption. Recette : [RECETTE_CONSOLIDATION.md](RECETTE_CONSOLIDATION.md).
 Parité : [PARITE.md](PARITE.md).

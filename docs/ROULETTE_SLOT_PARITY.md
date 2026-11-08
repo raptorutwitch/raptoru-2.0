@@ -1,5 +1,7 @@
 # Roulette et Slot V1 — référence de parité (RET-GAME-001 / 002)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 > **Statut (16/10/2026) : ROULETTE ET SLOT V1 FONCTIONNELLEMENT MIGRÉS ET VALIDÉS EN CONDITIONS RÉELLES — PAS EN
 > PRODUCTION.** **Validation réelle : 16/10/2026** (par Antoni) — vrai chat Twitch, ingestion Lab, sortie LeCroupier_,
 > Wallet Lab ; défaites validées au simulateur. Activation production liée au cutover économique (§ 0).

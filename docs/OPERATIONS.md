@@ -1,7 +1,16 @@
 # Opérations — procédures utilisées
 
-Procédures réellement employées jusqu'au **24/10/2026**. Commandes de développement détaillées : [README](../README.md).
-Sauvegardes : [BACKUPS.md](BACKUPS.md). Architecture : [ARCHITECTURE.md](ARCHITECTURE.md).
+Procédures réellement employées, rédigées jusqu'au 24/10/2026 et **corrigées le 08/11/2026** (consolidation). L'état
+courant est dans [PROJECT_STATUS.md](PROJECT_STATUS.md). Commandes de développement détaillées : [README](../README.md).
+
+> **À savoir au 08/11.**
+>
+> - L'API Coolify répond sur `https://dashboard.raptoru.fr` (Coolify 4.6.0) ; `https://coolify.raptoru.fr` renvoie 502.
+>   Exporter `COOLIFY_URL=https://dashboard.raptoru.fr` avant `coolify-deploy.mjs` : les scripts ont encore l'ancienne
+>   adresse par défaut.
+> - Dernière release Studio : **0.1.27** (étiquette `studio-v0.1.27`, installée).
+> - Bascule « Coulisses » du 07/11 et son retour arrière : [studio-refonte/OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md).
+>   Sauvegardes : [BACKUPS.md](BACKUPS.md). Architecture : [ARCHITECTURE.md](ARCHITECTURE.md).
 
 > Toute action qui touche la Production (push, déploiement, migration, flag, variable, redémarrage, installation
 > Studio, OBS, Wallet, sanction hors test consenti) exige le **GO explicite d'Antoni**, pour cette action précise.
@@ -16,7 +25,8 @@ Sauvegardes : [BACKUPS.md](BACKUPS.md). Architecture : [ARCHITECTURE.md](ARCHITE
 | `.env` locaux, jetons Twitch du PC, données Studio                                    | checkout principal (dossier de données de Studio) : [BACKUPS.md](BACKUPS.md) § 1 |
 | Exports privés de la migration                                                        | `C:\Users\Antoni\Documents\Raptoru\_migration-exports\`                          |
 
-Coolify 4.5.0 : API en HTTPS sur `https://coolify.raptoru.fr` (seulement `/api/`, jeton requis — [CICD.md](CICD.md)
+Coolify 4.5.0 au 24/10 (4.6.0 le 07/11) : API en HTTPS sur `https://coolify.raptoru.fr` (**502 depuis le 04/11 : utiliser
+`https://dashboard.raptoru.fr`**) (seulement `/api/`, jeton requis — [CICD.md](CICD.md)
 § 5) ; interface sur `https://dashboard.raptoru.fr` (ports directs fermés depuis Internet : § 8).
 Applications : `raptoru-core` `3m7cputub9wt7nwx2k78cme3`, `raptoru-bot`
 `hdbljqmwoq5364w0ypqmz46p`, `raptoru-core-staging` `leadrn7q8x0efkc9u6nxtdic` ; base `4jaqdyvzlelgwkyvuxhjy4mr`.
@@ -77,11 +87,14 @@ Variables de Production notables : Core `CAUTION_CHAT=true`, `VOTEKICK_CHAT=true
 ### Release officielle (`npm run studio:release`)
 
 Pipeline et règles : [README](../README.md) « Studio releases ». Publie sur `raptorutwitch/raptoru-studio-releases`
-(dernière : **0.1.8**, 26/10, publiée par le workflow GitHub — [CICD.md](CICD.md) § 3). Depuis le 21/10 (CLAUDE.md) :
+(au 08/11 : **0.1.27**, 07/11 ; workflow GitHub — [CICD.md](CICD.md) § 3). Depuis le 21/10 (CLAUDE.md) :
 commit, push et release **seulement sur demande explicite d'Antoni** ; un lot « validé en local » ne suffit pas. Exige
 un `main` propre : jamais depuis le checkout principal (fichiers non commités).
 
-### Build local de test (`0.1.7-sup.N`, utilisé du 23 au 24/10)
+### Build local de test (`0.1.7-sup.N`, utilisé du 23 au 24/10) — **historique, ne plus utiliser**
+
+Lab actuel : `npm run studio:lab` (Core local réel, [studio-refonte/architecture/GUIDE_LAB.md](studio-refonte/architecture/GUIDE_LAB.md)) ;
+développement : `npm run studio`.
 
 Clone de build `C:\Users\Antoni\Documents\rs-vk` (porte le patch `sup-wt` non commité ; remote = `vk-wt`, push désactivé) :
 
@@ -106,7 +119,10 @@ Clone de build `C:\Users\Antoni\Documents\rs-vk` (porte le patch `sup-wt` non co
 
 ## 7. Extension Twitch
 
-`npm run build -w @raptoru/twitch-extension` → `dist/` = paquet à téléverser ; publication **manuelle par Antoni**
+**Sur `main`, `npm run build` emballe l'ancien serveur `raptoru.fr/api` : ne pas l'utiliser.** Le paquet correct est
+`npm run build:production -w @raptoru/twitch-extension` (`core.raptoru.fr/v1/ext`, celui de la CI). Sur la branche
+`feat/extension-next`, l'emballage est verrouillé : `node scripts/package.mjs --target production|staging|calibration
+[--shell v2] [--check]`, Production refusée sans inventaire validé par Antoni. Publication **manuelle par Antoni**
 dans la console Twitch (Hosted Test puis Release). Version réellement servie : à lire dans la console (non vérifiable
 depuis le dépôt). Détails : `apps/twitch-extension/README.md`.
 

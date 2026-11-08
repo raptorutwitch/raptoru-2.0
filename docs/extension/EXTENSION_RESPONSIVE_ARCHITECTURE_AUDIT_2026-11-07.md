@@ -1,5 +1,15 @@
 # Extension Raptoru Live — audit responsive, architecture et conformité Twitch (07–08/11/2026)
 
+> **État au 08/11/2026 (consolidation).** Le plan a été exécuté en local sur la branche `feat/extension-next` :
+> non poussée, non fusionnée, **non publiée**. Ses documents de travail sont sur cette branche :
+>
+> - `docs/extension/EXTENSION_NEXT_EXECUTION_STATE.md` : journal ;
+> - `docs/extension/SOCLE.md` : guide du socle et recette d'un module ;
+> - `docs/extension/EXTENSION_NEXT_PUBLICATION.md` : Hosted Test, publication et retour arrière.
+>
+> Pour les lire : `git show feat/extension-next:docs/extension/<fichier>`. Résumé, tests et étapes restantes :
+> [../PROJECT_STATUS.md](../PROJECT_STATUS.md) § 7 et [../ROADMAP.md](../ROADMAP.md) § 2.1.
+
 Audit **en lecture seule** de `origin/main` `13ed6e8`. Rien n'a été modifié dans le code, l'extension publiée, le Studio
 installé, la Production ni les données. Annexes détaillées (preuves fichier:ligne, sources, mesures) — et comparaison visuelle en taille réelle :
 [v1-comparaison.html](audit-2026-11-07/v1-comparaison.html) ·

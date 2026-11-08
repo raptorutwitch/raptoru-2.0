@@ -2,6 +2,23 @@
 
 Relevé du **24/10/2026 ~12:20**, complété le **24/10 ~13:30** par deux sauvegardes réellement faites (§ 1) ; aucune
 sauvegarde restaurée ni supprimée.
+
+> **Complément du 08/11/2026 (consolidation).** L'inventaire détaillé ci-dessous date du 24/10. Depuis, d'après les
+> noms des dossiers et les comptes rendus cités (aucune ouverture des fichiers) :
+>
+> | Sauvegarde                                                            | Contenu                                                                                        | Vérification                     | Source                                                               |
+> | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------- |
+> | Base Production, sauvegarde automatique Coolify à 04:00 UTC           | —                                                                                              | dernière réussie le 08/11        | `coolify-deploy.mjs status core`                                     |
+> | `Documents\Sauvegarde Raptoru 2.0\prod-db-2026-11-07-avant-coulisses` | dump du 07/11, juste avant la bascule « Coulisses »                                            | **restauré** (confiance A)       | [OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) § 12 |
+> | Dump du 04/11 00:06 UTC                                               | —                                                                                              | restauré (A)                     | [OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) § 2  |
+> | `studio-data-2026-11-07-avant-coulisses`                              | données de Studio, 204 fichiers                                                                | restauration d'essai 204/204 (A) | idem                                                                 |
+> | `studio-installer-0.1.25`, `studio-installer-0.1.26`                  | installateurs de retour arrière                                                                | —                                | —                                                                    |
+> | `extension-next-2026-11-08`                                           | bundle de `backup/roue-v2-wip-2026-10-25` ; patch du travail non commité du checkout principal | —                                | journal d'Extension Next                                             |
+> | dossiers datés du 29/10 au 02/11                                      | Halloween, titres, profils Studio avant chaque mise à jour                                     | —                                | —                                                                    |
+>
+> La restauration de la base a donc été prouvée le 20/10, le 04/11 et le 07/11. Le script de déploiement est dans le
+> dépôt (`scripts/coolify-deploy.mjs`) : la ligne « unique copie » plus bas est d'époque.
+
 Mettre à jour ce fichier à chaque nouvelle sauvegarde ou suppression. Procédures d'exploitation : [OPERATIONS.md](OPERATIONS.md).
 
 Niveaux de confiance : **A** restauration démontrée · **B** intégrité vérifiée (patch qui s'applique, archive lisible,
@@ -42,7 +59,7 @@ Risques encore ouverts :
 | Copie hors VPS **manuelle**                           | la seule copie récente est celle du 24/10 ; l'API Coolify ne permet pas de télécharger un dump (le jeton est renvoyé vers `/login`) et le PC n'a pas de clé SSH : chaque copie demande un clic « Download » d'Antoni dans Coolify. Pas de S3.                                                                                                                                                                                                                                            |
 | Restauration régulière de la base                     | démontrée **une seule fois** (20/10 : dump de 13:57 UTC restauré sans erreur dans une base jetable, `HANDOFF_MIGRATION_2026-10-20.md` § 4, document privé) ; jamais refaite depuis. `RAPTORU_POST_MIGRATION_TRUTH_2026-10-23.md` § 7 la note « jamais testée » : contradiction, l'essai du 20/10 fait foi pour le format.                                                                                                                                                                |
 
-Propositions (accord d'Antoni requis) : voir [REPRISE.md](REPRISE.md) « Actions en attente d'accord ».
+Propositions (accord d'Antoni requis) : voir [PROJECT_STATUS.md](PROJECT_STATUS.md) § 12 et [CLEANUP_LATER.md](CLEANUP_LATER.md).
 
 ## 2. Base de Production (Coolify)
 

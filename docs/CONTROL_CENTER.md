@@ -1,5 +1,7 @@
 # Centre de contrôle Studio — architecture (lot 3, 21/10/2026)
 
+> **Note de consolidation (08/11/2026).** Document de conception du 21/10. Le Centre de contrôle est en Production dans Studio « Coulisses » (destination « Centre de contrôle », « Prêt pour le live ») : voir [studio-refonte/CONTEXTE.md](studio-refonte/CONTEXTE.md).
+
 **Objectif (décision d'Antoni) :** Raptoru Studio est la seule application ouverte pendant le live, avec OBS. Le Centre de contrôle montre l'état
 **réel** de chaque service, puis, plus tard, permettra de les piloter. Le **lot 3** ne livre que la base et un premier module : **LeCroupier\_ (bot)**.
 

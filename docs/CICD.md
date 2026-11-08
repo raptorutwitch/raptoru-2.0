@@ -1,6 +1,17 @@
 # CI/CD — livrer Raptoru 2.0
 
-Mis en place le 25/10/2026. Tout se fait depuis l'onglet **Actions** du dépôt GitHub, sans ligne de commande. La
+Mis en place le 25/10/2026.
+
+> **Corrections du 08/11/2026 (consolidation).**
+>
+> - Coolify répond désormais sur `https://dashboard.raptoru.fr` ; `https://coolify.raptoru.fr` renvoie 502 depuis le 04/11.
+> - Le secret GitHub `COOLIFY_URL` utilisé par « Déployer » et « État » doit être corrigé par Antoni. Sa valeur actuelle
+>   n'est pas lisible d'ici.
+> - Le dépôt est **public** depuis le 28/10 : les remarques de la fin sur le dépôt privé (protections, coût des minutes)
+>   sont d'époque.
+> - Dernière release Studio : 0.1.27.
+
+Tout se fait depuis l'onglet **Actions** du dépôt GitHub, sans ligne de commande. La
 Production n'est jamais touchée par un simple push ou une fusion : seuls « Déployer Core / bot » et « Studio —
 construire / publier », lancés à la main, agissent sur elle.
 
@@ -151,7 +162,7 @@ En local (même outil, mêmes règles) : `node scripts/coolify-deploy.mjs status
 | `DEPLOY_ACTORS`               | `raptorutwitch` (défaut si absente) — comptes autorisés à déployer / publier            |
 | `COOLIFY_ALLOW_INSECURE_HTTP` | absente. `true` = arbitrage explicite d'envoyer le jeton Coolify en clair (déconseillé) |
 
-**HTTPS de Coolify (adresse définitive depuis le 25/10)** : `https://coolify.raptoru.fr` (DNS OVH : A `coolify` →
+**HTTPS de Coolify (adresse du 25/10 ; remplacée par `https://dashboard.raptoru.fr`, voir l'encadré en tête)** : `https://coolify.raptoru.fr` (DNS OVH : A `coolify` →
 `62.84.187.170`), certificat Let's Encrypt renouvelé automatiquement par Traefik.
 
 - projet Coolify « Raptoru ops », application `coolify-api-https` (nginx) ;

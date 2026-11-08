@@ -1,5 +1,7 @@
 # Refonte de Raptoru Studio — roadmap
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Cette roadmap de la refonte est **historique** ; ce qui reste (lots F3–F7, ancien Lab, code mort…) est repris dans [../ROADMAP.md](../ROADMAP.md) § 2.2.
+
 Lots d'Astra (étude § E.4) adaptés à ce qui a réellement été fait. Quatre niveaux, jamais confondus :
 **Code** (développé) · **Tests** (automatiques : unitaires, E2E sur pile isolée, captures) · **Validé** (essayé à la main
 par Antoni) · **Publié** (release Studio). À ce jour : rien n'est validé ni publié ; tout est sur `feat/studio-ux`

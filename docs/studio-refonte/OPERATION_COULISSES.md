@@ -1,5 +1,7 @@
 # Opération Coulisses — dossier GO / NO-GO (07/11/2026)
 
+> **Exécuté le 07/11/2026** (GO d'Antoni) : voir § 12. Les §§ 1–11 décrivent la préparation (« Candidat », « aucune action sur la Production ») et sont d'époque. Après la bascule, PR #57 → Studio 0.1.27, installée (code Studio seulement). Une recette d'usage d'Antoni en Production n'est pas écrite à ce jour.
+
 Point de reprise de la bascule. Préparation faite le 07/11 ; **aucune action sur la Production, le Studio installé, Twitch ou
 OBS**. Détails antérieurs : [LIVRAISON.md](LIVRAISON.md) § 9, [MIGRATION_DONNEES.md](MIGRATION_DONNEES.md),
 [PARITE_RECOMPENSES.md](PARITE_RECOMPENSES.md). Ce document prime là où il diffère.

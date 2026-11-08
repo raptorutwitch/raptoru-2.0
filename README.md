@@ -1,23 +1,29 @@
 # Raptoru 2.0
 
-Self-owned streaming platform for one streamer. Source of truth: `Raptoru Studio — Infrastructure Spec.md`.
+Self-owned streaming platform for one streamer. Original vision: `Raptoru Studio — Infrastructure Spec.md` (24/09);
+the current state is in `docs/PROJECT_STATUS.md`.
 
 > **Core thinks, Studio controls/displays and talks to OBS, Bot talks to Twitch, Extension/Web talk to viewers.**
 
 **In production since the 20/10/2026 cutover**: Core on Coolify (`core.raptoru.fr`), bot on the VPS, Raptoru Studio
 on the streamer's PC, Twitch extension. SAMMI is abandoned (unplugged, never to be re-enabled); StreamElements only
-keeps donations and the chat display. `apps/viewer-web` is not started.
+keeps donations and the chat display. `apps/viewer-web` is not started (the public site raptoru.fr lives in its own
+repository). As of 08/11/2026: Core and bot `1b25f30`, Raptoru Studio « Coulisses » 0.1.27; the rebuilt extension
+(« Extension Next ») is on the local branch `feat/extension-next`, not published. This repository is **public**
+(`SECURITY.md`).
 
 Canonical documents (French):
 
-| Document                                       | Content                                                                     |
-| ---------------------------------------------- | --------------------------------------------------------------------------- |
-| [`docs/REPRISE.md`](docs/REPRISE.md)           | **start here**: current state, versions, work in progress, next action      |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md)           | the single roadmap: every module's real state, remaining work, arbitrations |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | components, flows, external dependencies, per-module documents              |
-| [`docs/OPERATIONS.md`](docs/OPERATIONS.md)     | tests, deployment, rollback, Studio builds, read-only checks                |
-| [`docs/BACKUPS.md`](docs/BACKUPS.md)           | backup inventory, restore confidence, known gaps                            |
-| [`docs/archive/`](docs/archive/README.md)      | historical documents and journals                                           |
+| Document                                           | Content                                                                             |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [`docs/REPRISE.md`](docs/REPRISE.md)               | **start here**: agent handoff — limits, workspaces, checks, next work               |
+| [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) | verified state: versions, environments, features, tests, open issues                |
+| [`docs/README.md`](docs/README.md)                 | index of every document and its status                                              |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md)               | the single roadmap: delivered / developed / to validate / to develop, next features |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)     | components, flows, external dependencies, per-module documents                      |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md)         | tests, deployment, rollback, Studio builds, read-only checks                        |
+| [`docs/BACKUPS.md`](docs/BACKUPS.md)               | backup inventory, restore confidence, known gaps                                    |
+| [`docs/archive/`](docs/archive/README.md)          | historical documents and journals                                                   |
 
 Older status documents (`Raptoru-2.0-HANDOFF.md`, `Raptoru-2.0-ETAT-PROJET.md`) are frozen history; the audit register
 is `docs/ASTRA_GLOBAL_AUDIT_2026-10.md`. The module sections further down (Daily, Presence, Wallet, Loyalty) describe
@@ -85,7 +91,7 @@ custom updater logic.
   electron-updater reads — do not rename or edit it; GitHub uploads the `.exe` under a
   hyphenated name and `latest.yml` already points at that name).
 - **Feed**: public releases-only repo `raptorutwitch/raptoru-studio-releases` (no source code;
-  the source repo stays private — a private feed would need a token inside the app). Nothing
+  written when the source repo was private — it is public since 28/10, the feed is unchanged). Nothing
   publishes on its own: `package:win` always runs with `--publish never`; only
   `npm run studio:release` publishes.
 - **Install**: silent NSIS update then forced relaunch (`quitAndInstall(true, true)`): with the
@@ -102,8 +108,10 @@ custom updater logic.
 
 ## Studio releases (`npm run studio:release`)
 
-One local command takes a validated Studio change to the installed apps. No CI, no publish on
-commit.
+One local command takes a validated Studio change to the installed apps (the
+« Studio — construire / publier » GitHub workflow also exists: `docs/CICD.md`). Nothing publishes on commit.
+**Only when Antoni explicitly asks** (`CLAUDE.md`). The released version lives in the `studio-v*` tags; the
+repository's `package.json` version (0.1.6) is no longer bumped (`docs/CICD.md`).
 
 ```sh
 npm run studio:release -- --dry-run   # full validation + build + checks, publishes nothing, bump undone
@@ -152,10 +160,8 @@ Studio ships its own copy of everything below (`apps/studio/desktop/scripts/stag
 
 This is decided explicitly per slice ("this slice impacts Studio"), not guessed by a script.
 
-**Rule**: when a slice impacting Raptoru Studio is finished, tested and explicitly validated by the
-user ("c'est bon", "validé", "go"), run `npm run studio:release` right away — no separate
-permission is needed to bump, package and publish Studio. Never publish a change that has not
-been validated.
+**Rule** (since 21/10, `CLAUDE.md`): release only when Antoni explicitly asks for it; a lot « validé en local » is
+not that request. Never publish a change that has not been validated.
 
 Default ports: core-api `3000` (`PORT`), studio/server `4100` (`PORT`; Electron expects 4100), studio/web dev `5173`,
 viewer-web dev `5174`, Lab Core `4301` (`BONK_LAB_CORE_PORT`), Twitch OAuth callback `3789` (registered redirect,
@@ -163,6 +169,11 @@ fixed), OBS WebSocket `4455` (Studio default, editable), browser E2E stack `4399
 no dev server: Studio serves it (`/ext/`).
 
 ## Extension Lab (Studio → "Extension Lab" tab)
+
+> **Historical (before Studio « Coulisses », 07/11).** The Lab now runs on the real local Core with its own database
+> (`npm run studio:lab`; `docs/studio-refonte/architecture/GUIDE_LAB.md`); the old Lab (`npm run studio:legacy`) is
+> due for removal (`docs/studio-refonte/RETRAIT_ANCIEN_LAB.md`). To compare the extension shells, see
+> `docs/REPRISE.md` § 5.
 
 Local test bench for the Twitch extension, without a stream: the production extension
 (`apps/twitch-extension/extension`, imported unchanged) runs inside realistic Twitch frames.
@@ -180,7 +191,7 @@ Local test bench for the Twitch extension, without a stream: the production exte
 - **Local stage**: accepted actions are played in the Studio (sound file, TTS voice, Bonk
   animation, raffle) with a journal; wallets, modules and raffle are controllable.
 - **Bonk renderer and target** (Auto from the OBS scene / Manuel zone / Fullscreen, adaptive sound, « Tester »
-  preview): Bonk VNext, Lots 0–3 validated locally on `feat/compact-video-port`, not released — status and rules in
+  preview): Bonk VNext, in Production since the cutover — rules in
   [`docs/BONK_VNEXT_AUDIT_2026-10.md`](docs/BONK_VNEXT_AUDIT_2026-10.md) § 0.
 
 ```sh
@@ -211,6 +222,9 @@ Docker Postgres (raptoru2-pg) → base raptoru_bonk_lab + Lab migrations → Cor
 
 `npm run bonk:lab` (Studio 4101 + Lab Core 4301) still works for source work, but not at the same
 time as a Studio that already runs its local Core.
+
+> **The Daily, Presence, Wallet and Loyalty sections below predate the 20/10 cutover**: all four are in Production;
+> their current state is in `docs/ROADMAP.md`. Kept for their development commands.
 
 ## Daily (status: dev/test only)
 

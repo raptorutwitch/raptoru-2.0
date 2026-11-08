@@ -1,5 +1,7 @@
 # Alertes Twitch — audit de parité legacy (A0, 16/10/2026)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 > **Statut courant (17/10/2026, voir § 23)** : **ALERTES V1 — DÉVELOPPEMENT TERMINÉ / PRÊT POUR CUTOVER / NON
 > DÉPLOYÉ**. Production : SAMMI / StreamElements legacy. Niveaux de preuve, architecture, checklist du cutover et
 > retour arrière : § 23 (les §§ 13 à 22 décrivent chaque lot dans son état du moment).

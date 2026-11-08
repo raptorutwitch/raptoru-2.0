@@ -1,5 +1,7 @@
 # Lecteur d'effets — sons et vidéos d'effet joués par Studio (P0.1, P0.2)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 **Statut : LECTEUR D'EFFETS P0.1 — DÉVELOPPEMENT TERMINÉ / TESTS AUTOMATISÉS RÉUSSIS / VALIDATION FONCTIONNELLE OBS
 RÉUSSIE / NON DÉPLOYÉ** (code `77039d7`). Validé manuellement par Antoni dans son vrai OBS le 17/10/2026 (source
 navigateur ajoutée, tests Studio « Eren cri » → son d'effet joué dans OBS ; traces Lab : 2 tests exécutés à 23:14). Pas

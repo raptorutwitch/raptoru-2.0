@@ -1,5 +1,7 @@
 # Préparation de la future livraison de `feat/studio-ux` (rien n'est exécuté)
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Ce plan de livraison est remplacé par OPERATION_COULISSES.md (voir son § 9).
+
 Mis à jour le 06/11/2026. Référence Production présumée : `origin/main` = `8a897a5`, déployé le 04/11 d'après la mémoire de
 session. **À reconfirmer sur Coolify avant tout GO** : `docs/REPRISE.md` sur `origin/main` date du 28/10.
 

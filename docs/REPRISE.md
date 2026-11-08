@@ -1,149 +1,195 @@
-# Reprise — point d'entrée
+# Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour : 04/11/2026, après la livraison de raptoru.fr V2.**
+**Mis à jour le 08/11/2026** (consolidation générale). À lire **en premier**, puis vérifier soi-même l'état (§ 4).
 
-**07/11/2026 — Opération Coulisses (bascule du nouveau Studio) : préparation terminée, en attente du GO de bascule d'Antoni.**
-Point de reprise unique : [studio-refonte/OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) (état, sauvegardes,
-migrations répétées, compatibilité, plan, retour arrière). API Coolify : `COOLIFY_URL=https://dashboard.raptoru.fr`.
+- La période précédente (04 → 07/11) est archivée dans [archive/REPRISE_2026-11-04_2026-11-07.md](archive/REPRISE_2026-11-04_2026-11-07.md).
+- Les règles complètes sont dans [`../CLAUDE.md`](../CLAUDE.md) : elles priment sur tout outil ou plugin.
 
-- À lire en premier dans toute nouvelle session, puis `git status`.
-- Vérifier soi-même `git log` et Coolify avant de se fier à un SHA écrit ici :
-  `node scripts/coolify-deploy.mjs status core`, et `curl -s https://raptoru.fr/api/status` pour le site.
-- L'état détaillé du 28/10 au 04/11 (Halloween, chantier du site) est archivé dans
-  [archive/REPRISE_2026-10-28_2026-11-04.md](archive/REPRISE_2026-10-28_2026-11-04.md).
-- La version du 28/10 de ce fichier reste dans l'historique Git.
+## 1. Le projet en dix lignes
 
-**Raptoru 2.0** : la plateforme de stream auto-hébergée d'un streamer (Twitch `raptoru_`, id 83603689).
+- **Raptoru 2.0** : la plateforme de stream auto-hébergée du streamer Twitch `raptoru_` (identifiant 83603689).
+  Antoni est l'unique décideur.
+- **Le Core décide, le bot parle à Twitch, Studio pilote OBS et affiche, l'extension et le site parlent aux viewers.**
 
-- Objectif : tout piloter depuis Raptoru Studio.
-- Le **Core** décide (données, économie, règles, progression, récompenses).
-- Le **bot** parle à Twitch (EventSub, commandes du chat).
-- **Studio**, l'app Electron du PC, administre, crée, modère et pilote OBS.
-- L'**extension** parle aux viewers pendant le live.
-- **raptoru.fr** présente la communauté.
-- SAMMI est **abandonné** depuis le 20/10 : ne jamais le réactiver.
-- Architecture : [ARCHITECTURE.md](ARCHITECTURE.md).
+| Composant                    | Code                                                  | Technologie                            | Où il tourne         |
+| ---------------------------- | ----------------------------------------------------- | -------------------------------------- | -------------------- |
+| Core API                     | `apps/core-api`                                       | Node, Fastify, PostgreSQL 17           | Coolify (VPS)        |
+| Bot `LeCroupier_`            | `apps/twitch-bot`                                     | EventSub, chat                         | Coolify (VPS)        |
+| Raptoru Studio « Coulisses » | `apps/studio/{desktop,server,web}`                    | Electron                               | PC d'Antoni          |
+| Extension Twitch             | `apps/twitch-extension`                               | HTML, CSS et JavaScript sans framework | hébergée par Twitch  |
+| Contrats partagés            | `packages/schemas`                                    | Zod                                    | —                    |
+| Schéma SQL                   | `supabase/migrations`                                 | SQL                                    | appliqué par le Core |
+| Site raptoru.fr              | dépôt séparé `raptorutwitch/Leaderboard-Jeu-des-mots` | —                                      | —                    |
 
-## 1. Où lire quoi
+**Monorepo** npm workspaces + turbo.
 
-| Besoin                                                                                              | Document                                                                                                                                                     |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Le site raptoru.fr** : contexte, architecture, état, décisions, prochaines étapes, **checkpoint** | **`lb-app/docs/SITE_CONTEXT.md`**, dépôt du site (`raptorutwitch/Leaderboard-Jeu-des-mots`, worktree `Documents\Raptoru 2.0 - Worktrees\raptoru-fr-refonte`) |
-| Roadmap du projet, état de chaque module, arbitrages                                                | [ROADMAP.md](ROADMAP.md)                                                                                                                                     |
-| Composants, flux, document de chaque module                                                         | [ARCHITECTURE.md](ARCHITECTURE.md)                                                                                                                           |
-| Tests, déploiement, retour arrière, build Studio                                                    | [OPERATIONS.md](OPERATIONS.md), [CICD.md](CICD.md)                                                                                                           |
-| Sauvegardes, restauration                                                                           | [BACKUPS.md](BACKUPS.md)                                                                                                                                     |
-| Cosmétiques côté Core / défis / statistiques des modules                                            | [COSMETIC_SHOP.md](COSMETIC_SHOP.md), [CHALLENGES.md](CHALLENGES.md), [MODULE_STATS.md](MODULE_STATS.md)                                                     |
-| Dernière publication (site, Core, Studio) : plan, compte rendu, retour arrière                      | [RELEASE_SITE_HUB.md](RELEASE_SITE_HUB.md)                                                                                                                   |
-| Règles de travail des agents                                                                        | `CLAUDE.md` (racine)                                                                                                                                         |
-| Anciens journaux                                                                                    | [archive/](archive/README.md)                                                                                                                                |
+**Environnements**
 
-**Attention, deux copies.** Le checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0` est très en retard sur
-`origin/main` : environ 260 commits le 04/11.
+- **Production** : Core, bot et base sur le VPS ; Studio installé sur le PC.
+- **Lab** : Core local réel, avec sa base Docker et le dossier `%APPDATA%\Raptoru Studio Lab` ; jamais la Production.
+- **staging** : `core-staging.raptoru.fr`.
 
-- Seuls `CLAUDE.md` et `docs/REPRISE.md`, une copie **non suivie** du présent fichier, y sont à jour.
-- Lire les autres documents :
-  - dans un worktree à jour de `origin/main`, par exemple `Documents\Raptoru 2.0 - Worktrees\site-hub-core` après `git fetch` ;
-  - ou depuis le checkout principal, avec `git show origin/main:docs/<FICHIER>.md`.
-- `C:\Users\Antoni\Documents\raptoru-docs` est en retard lui aussi.
+État détaillé, versions, tests et problèmes ouverts : **[PROJECT_STATUS.md](PROJECT_STATUS.md)**.
+Roadmap : [ROADMAP.md](ROADMAP.md). Index : [README.md](README.md).
 
-## 2. Production (04/11/2026 ~02:00 UTC)
+## 2. Limites d'autonomie : ce qu'on ne fait jamais sans GO explicite d'Antoni
 
-| Élément             | Version                                                                                                                                                   | Retour arrière                                        |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Core `raptoru-core` | **`8a897a5`** (PR #55, 04/11) ; migrations `cosmetic_frames_banners` et `challenges` appliquées ; `CHALLENGES_ENGINE` absent (= off)                      | `deploy core 8b2189e --rollback --go`                 |
-| Bot `raptoru-bot`   | **`4ba9243`** (27/10), inchangé                                                                                                                           | —                                                     |
-| Site raptoru.fr     | **`74f7542`** (PR site #116, 04/11) ; ancien site sur `/classic/`                                                                                         | Coolify › redéployer `542b1f2`                        |
-| Studio              | **0.1.25 publiée** le 04/11 (atelier Cadres / Bannières, onglet Défis). Version **installée sur le PC : à confirmer** par Antoni                          | réinstaller la 0.1.24                                 |
-| Sauvegarde du Core  | Coolify quotidienne (04:00 UTC) ; 04/11 01:44 UTC juste avant les migrations ; dump 00:06 UTC vérifié par restauration (fichier chez Antoni, `Downloads`) | [BACKUPS.md](BACKUPS.md)                              |
-| Coolify             | tableau de bord `https://dashboard.raptoru.fr` ; proxy API `https://coolify.raptoru.fr` en **502** le 04/11                                               | `COOLIFY_URL=https://dashboard.raptoru.fr` fonctionne |
+**Production, Twitch et OBS**
 
-En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
+- Push, fusion dans `main`, déploiement Coolify, migration distante, drapeau ou variable, redémarrage d'un service.
+- Release ou installation de Studio. `npm run studio:release` seulement quand Antoni le demande.
+- Publication de l'extension, Hosted Test sur un compte réel, modification de la console Twitch.
+- Toute action sur OBS, Twitch, StreamElements ou le Wallet : soldes, crédits, débits, remboursements, sanctions.
+  Les messages dans le vrai chat aussi.
 
-- économie canonique (Wallet, Daily, fidélité, présence), Commands V2, modération ;
-- Tombola, Jeu des mots, Roulette / Slot / Duel, Soundboard, TTS, Bonk, alertes V2 ;
-- Points de chaîne et effets, Random Ban V3, Roue du Sub V2 ;
-- Caution, Votekick V2, Spotify V2, Dock OBS ;
-- Boutique cosmétique (depuis le 30/10 au soir).
-- Événement Halloween **fermé** le 02/11.
-- Niveau de validation de chaque module : [ROADMAP.md](ROADMAP.md).
+**Destruction**
 
-## 3. Où on en est
+- `git clean`, `reset --hard`, `checkout .` ou `-f`, réécriture d'historique, suppression de branche ou de worktree.
+- Suppression de sauvegardes, de médias ou de données de Studio.
 
-- **raptoru.fr V2 : livré et clos le 04/11.**
-  - Classements avec équipement, carte de joueur, cadres et bannières, statistiques des modules (privées), défis, Twitch,
-    Portfolio, panneau « EN LIVE », Daily à 10 points.
-  - Tout le détail est dans `lb-app/docs/SITE_CONTEXT.md` ; le **checkpoint du site est son § 13** (il n'y en a pas d'autre).
-- **Protections actives** :
-  - moteur de défis coupé ;
-  - **aucun défi ni cosmétique définitif créé** : le contenu est à décider par Antoni.
-- **Prochain chantier** : les vrais cosmétiques, les récompenses et les premiers défis.
-  - Avant : confirmer Studio 0.1.25 installé et valider les parcours connectés du site (`SITE_CONTEXT.md` § 10-11).
-- **En cours (GO du 04/11) : refonte UX/UI du Studio** — branche locale `feat/studio-ux`, worktree
-  `Raptoru 2.0 - Worktrees\studio-ux`. **Reprise : [studio-refonte/CHECKPOINT.md](studio-refonte/CHECKPOINT.md)**,
-  puis [CONTEXTE.md](studio-refonte/CONTEXTE.md) et [ROADMAP.md](studio-refonte/ROADMAP.md) (dans ce worktree).
-  Rien de poussé, validé ni publié ; aucune release Studio sans GO explicite.
-  - **Audit fonctionnel du 04/11** (démarrages, cycle du live, automatisations, réglages) :
-    [studio-refonte/AUDIT_FONCTIONNEL.md](studio-refonte/AUDIT_FONCTIONNEL.md). Arbitrages H1-H16 à trancher par Antoni.
+**Contenu et sécurité**
 
-## 4. Points ouverts hors site (repris du 02/11, non revérifiés le 04/11)
+- Créer du contenu métier à sa place : défis, montants, récompenses, objets, cosmétiques.
+- Le dépôt est **public** : aucun secret, `.env`, jeton, dump, journal ni donnée de viewer dans un fichier commité,
+  un rapport ou une réponse ([../SECURITY.md](../SECURITY.md)).
+- Ne jamais committer `docs/HANDOFF_MIGRATION_2026-10-20.md` ni `docs/POST_LIVE_AUDIT_2026-10-20.md`.
 
-- Profil d'alertes Halloween `halloween_alerts` : **encore actif** le 02/11, à couper sur GO d'Antoni.
-- Un achat Halloween d’un viewer (125 Jetons, non remboursé) attend une décision d’Antoni ; le détail est conservé hors du dépôt public.
-- PRs ouvertes du dépôt Raptoru 2.0 au 04/11 : #54 (titres équipés depuis Studio ; commit local `5d24614` non poussé),
-  #47 (brouillon, chaudron des subs), #44 et #43 (brouillons), et les PRs de documentation #48, #40, #38, #36, #34.
-- Côté site : PR #76 (ancienne) ; #115 est remplacée par la documentation de clôture et peut être fermée.
-- Extension : nouvelle version après Halloween (sans « Échanger des Jetons »), à soumettre en revue par Antoni.
-- Tests e2e de Studio instables (`tombola-bonbons`, `progression-studio`, `halloween-*`) et test Windows `alerts-se`
-  pendant les releases : les relances passent, cause à traiter dans un chantier dédié.
+**Méthode attendue (08/11)**
 
-## 5. Espaces de travail — ne rien écraser
+- Pour un lot autorisé : travailler en autonomie (décisions techniques ordinaires, corrections, tests, commits locaux,
+  journal), puis rendre un livrable testable.
+- Interrompre Antoni seulement pour :
+  - une décision métier ou artistique ;
+  - un blocage insoluble ;
+  - une action de Production ;
+  - une action destructrice.
+- « **Validé** » = testé à la main par Antoni. Un test automatique n'est jamais une validation.
 
-- **Checkout principal** `C:\Users\Antoni\Documents\Raptoru 2.0` :
-  - c'est **le dossier de données du Studio installé** (`.env`, jetons Twitch, `.runtime`) ;
-  - il contient du travail non commité (`tools/subgoal/`, un correctif « écran gris » de l'extension…) ;
-  - **jamais** de `git clean`, `reset --hard` ni `checkout .`.
-- **Worktrees de travail** : `Documents\Raptoru 2.0 - Worktrees\…`. Nouveaux worktrees **uniquement** à cet endroit.
-  - `raptoru-fr-refonte` : site, branche de documentation `docs/site-context` (locale, non poussée) ;
-  - `site-hub-core` : Core et Studio, branche de documentation `docs/site-hub-delivered` (locale, non poussée ; elle remplace le `REPRISE.md` du 28/10 d’`origin/main`) ;
-  - `studio-ux` : refonte du Studio, branche `feat/studio-ux` (locale, partie de `docs/site-hub-delivered`).
-- **Anciens worktrees** (`git worktree list`) :
-  - sous `AppData\Local\Temp\…\scratchpad\*-wt` ;
-  - `Documents\raptoru-*` ;
-  - `Documents\Raptoru 2.0 - Worktrees\{halloween-24h, halloween-titles, live-feedback, responsive-live}`.
-  - Ce sont surtout des chantiers fusionnés. **À vérifier un par un avant tout retrait** ; aucun n'a été nettoyé.
-- **Sauvegardes** : `Documents\Sauvegarde Raptoru 2.0\` (accès restreint). Ne jamais les déplacer ni les supprimer.
+## 3. Où travailler sans rien casser
 
-## 6. Risques connus
+**Checkout principal** `C:\Users\Antoni\Documents\Raptoru 2.0`
 
-1. Données de travail de Studio (`.env`, jetons, `.runtime`) : sauvegardes ponctuelles seulement ([BACKUPS.md](BACKUPS.md)).
-2. Copies hors VPS de la base : manuelles (téléchargement dans Coolify). La restauration a été prouvée le 20/10, puis le
-   04/11.
-3. Checkout principal en retard et non commité : sa mise à jour doit préserver les données de Studio. Retirer d'abord
-   la copie non suivie `docs/REPRISE.md`, sinon Git refuse d'écraser un fichier non suivi.
-4. Proxy API Coolify en 502 : le workflow GitHub « Déployer » en dépend.
+- C'est le **dossier de données du Studio installé** (`.env`, jetons Twitch, `apps/studio/server/.runtime`).
+- Il est sur `main` local, **429 commits derrière** `origin/main`, avec du travail non commité.
+- On n'y travaille pas ; on ne le nettoie pas.
+- Pour lire un document à jour depuis là : `git show origin/main:<chemin>`.
+- Sa mise à jour demande un GO et une sauvegarde des données de Studio.
+- Conseil : retirer d'abord les copies non suivies qui bloqueraient la mise à jour, par exemple un ancien `docs/REPRISE.md`.
 
-## 7. Règles (texte complet dans `CLAUDE.md`)
+**Nouveaux worktrees**
 
-- GO explicite d'Antoni pour :
-  - push, fusion, déploiement, migration ;
-  - flag ou variable, redémarrage ;
-  - release ou installation de Studio ;
-  - OBS, Wallet, sanction Twitch hors test consenti, vote réel.
-- « Validé » = testé à la main par Antoni. Les tests automatiques ne sont pas une validation.
-- Git : ajouter les fichiers un par un ; jamais de reset, clean ni réécriture d'historique. Ne jamais committer
-  `docs/HANDOFF_MIGRATION_2026-10-20.md` ni `docs/POST_LIVE_AUDIT_2026-10-20.md`.
-- Ne jamais afficher un secret : jeton Coolify, `.env`, jetons Twitch, mot de passe OBS.
-- Ne jamais créer de contenu métier à la place d'Antoni (défis, montants, récompenses, objets).
+- **Uniquement** dans `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\<nom>`.
+- Partir de `origin/main`, ou de la branche du chantier.
 
-## 8. Procédure de reprise (nouvelle session)
+**À préserver absolument** (branches et worktrees)
 
-1. Lire ce fichier, puis lancer `git -C "C:\Users\Antoni\Documents\Raptoru 2.0" status` et `git fetch`.
-2. Pour le site : lire `lb-app/docs/SITE_CONTEXT.md`, en entier ou ses § 4, 10, 11 et 13.
-3. Vérifier la Production en lecture seule : `node scripts/coolify-deploy.mjs status core`, depuis un worktree à jour (ajouter
-   `COOLIFY_URL=https://dashboard.raptoru.fr` si `coolify.raptoru.fr` répond 502), et `https://raptoru.fr/api/status`.
-4. Travailler dans un worktree basé sur `origin/main`, jamais dans le checkout principal.
-5. À chaque étape franchie et avant de s'arrêter :
-   - mettre à jour ce fichier (court : état, décisions, prochaine action) ;
-   - mettre à jour `SITE_CONTEXT.md` pour le site ;
-   - le détail daté va dans `archive/`.
+| Branche                                                                    | Worktree                           | Pourquoi                                              |
+| -------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------- |
+| `feat/extension-next`                                                      | `…Worktrees\extension-next`        | **Extension Next, seule copie** : locale, non poussée |
+| `docs/consolidation-2026-11`                                               | `…Worktrees\consolidation`         | cette documentation                                   |
+| `docs/extension-audit`                                                     | `…Worktrees\studio-ux`             | base des deux branches précédentes                    |
+| `backup/roue-v2-wip-2026-10-25` (`99157a3`)                                | `Documents\raptoru-roue-v2-backup` | sauvegarde, aussi conservée en bundle                 |
+| `feat/studio-viewer-titles`, `feat/level-up-v2`, `feat/halloween-cauldron` | —                                  | PR non fusionnées                                     |
+
+Les anciens worktrees sont listés, sans aucune suppression, dans [CLEANUP_LATER.md](CLEANUP_LATER.md).
+
+**Sauvegardes** : `C:\Users\Antoni\Documents\Sauvegarde Raptoru 2.0\`, à accès restreint. Ne jamais les déplacer ni les supprimer.
+
+**Ports réservés au Studio installé** : 4100 (serveur), 4110 (Dock), 3789. Les tests utilisent 4389–4399 (E2E) et
+4471–4482 (banc de l'extension).
+
+## 4. Vérifier l'état soi-même (lecture seule)
+
+```sh
+git -C "C:\Users\Antoni\Documents\Raptoru 2.0" fetch origin
+git -C "C:\Users\Antoni\Documents\Raptoru 2.0" log --oneline -5 origin/main
+git -C "C:\Users\Antoni\Documents\Raptoru 2.0" worktree list
+
+# Depuis un worktree à jour. L'ancienne adresse coolify.raptoru.fr répond 502.
+export COOLIFY_URL=https://dashboard.raptoru.fr
+node scripts/coolify-deploy.mjs status core     # SHA déployé, santé, sauvegarde, commit vu par le Core, bail du bot
+node scripts/coolify-deploy.mjs status bot
+curl -s https://raptoru.fr/api/status           # build du site
+
+# Studio installé
+cat "$LOCALAPPDATA/Programs/Raptoru Studio/resources/app/build-info.json"
+```
+
+La version de l'extension **servie par Twitch** ne se lit pas d'ici. Il faut la console Twitch, ou sur
+twitch.tv/raptoru_ : F12 › Sources › `shared/runtime-config.js` › `buildId`.
+
+**Relevé du 08/11**
+
+- Core et bot `1b25f30`, sains, bail actif.
+- Studio 0.1.27, construit depuis `13ed6e8`.
+- Site `74f7542`.
+- `origin/main` `13ed6e8`.
+
+## 5. Situation au 08/11
+
+**En Production**
+
+- Opération Coulisses (07/11) : Core et bot `1b25f30`, 5 migrations ; Studio 0.1.26, puis 0.1.27.
+- Les modules déjà en service : liste dans [ROADMAP.md](ROADMAP.md) § 1.
+
+**Extension Next**
+
+- **Développé, non livré.**
+- Branche `feat/extension-next`, commit de tête `38323bb`, basée sur `3834d6b` = `origin/main` + 4 commits de documents d'audit.
+- Recette visuelle d'Antoni en Lab : retour très positif (08/11).
+- Ses documents de travail sont **sur la branche** :
+  - `docs/extension/EXTENSION_NEXT_EXECUTION_STATE.md` : journal de reprise ;
+  - `docs/extension/SOCLE.md` : guide développeur ;
+  - `docs/extension/EXTENSION_NEXT_PUBLICATION.md` : Hosted Test, publication, retour arrière.
+- Pour les lire sans changer de branche :
+  `git show feat/extension-next:docs/extension/EXTENSION_NEXT_EXECUTION_STATE.md`.
+- L'audit et le plan sont aussi dans cette branche-ci : [extension/](extension/PLAN_REFONTE_EXTENSION_2026-11-08.md).
+
+**Comparer les shells legacy et v2 dans le Lab**
+
+- Double-cliquer `…Worktrees\extension-next\apps\twitch-extension\Comparer legacy et v2.cmd`, ou lancer `npm run lab:compare` dans ce dossier.
+- Une page s'ouvre sur `127.0.0.1:4480`, legacy à gauche, v2 à droite : 18 tailles, 8 écrans, données fictives.
+- Aucun service n'est appelé.
+- Autre option : le Studio de développement avec `RAPTORU_EXT_SHELL=v2`, ou `?shell=v2` sur une page de l'extension servie par le Lab.
+
+**Builds sûrs de l'extension**
+
+- Sur `main` : seul `npm run build:production -w @raptoru/twitch-extension` vise le bon serveur
+  (`core.raptoru.fr/v1/ext`). Ne jamais utiliser `npm run build`, qui emballe l'ancien `raptoru.fr/api`.
+- Sur `feat/extension-next` : `node scripts/package.mjs --target production|staging|calibration [--shell v2] [--check]`.
+  La Production y est refusée sans inventaire validé par Antoni ; `npm run build` n'emballe plus rien.
+- Aucun emballage n'est une publication.
+
+**Builds sûrs de Studio**
+
+- Développement : `npm run studio`.
+- Lab : `npm run studio:lab`.
+- Release : `npm run studio:release`, **seulement sur demande d'Antoni**.
+- Le numéro de version des `package.json` du dépôt (0.1.6) n'est pas celui des releases : c'est l'étiquette `studio-v*` qui fait foi.
+
+## 6. Prochain travail réalisable
+
+1. **Extension Next vers la publication** ([ROADMAP.md](ROADMAP.md) § 2.1).
+   Côté agent : les restes non bloquants, ou ce qu'Antoni relève en recette.
+   Côté Antoni : push et fusion, preuve de la version servie, inventaire, Hosted Test, soumission.
+2. Puis **une passe « expérience » sur des modules existants**, et la **Roulette visuelle** ([ROADMAP.md](ROADMAP.md) § 4).
+3. **Avant toute publication de l'extension**, il faut :
+   - la version servie prouvée ;
+   - l'inventaire validé par Antoni ;
+   - un Hosted Test réussi sur vrais appareils ;
+   - le GO explicite.
+
+## 7. Si on change de modèle demain
+
+1. Lire ce fichier en entier, puis [../CLAUDE.md](../CLAUDE.md) (règles), puis [PROJECT_STATUS.md](PROJECT_STATUS.md)
+   (état), puis [ROADMAP.md](ROADMAP.md) (§ 2 et § 4).
+2. Lancer les commandes du § 4 et comparer avec le relevé du 08/11. **Un écart veut dire que quelqu'un a agi depuis** :
+   le comprendre avant d'agir.
+3. Selon le chantier :
+   - extension : lire le journal de la branche (§ 5) et `SOCLE.md` ;
+   - Studio : [studio-refonte/CONTEXTE.md](studio-refonte/CONTEXTE.md), puis
+     [DESIGN_SYSTEM.md](studio-refonte/DESIGN_SYSTEM.md) et [architecture/GUIDE_MODULE.md](studio-refonte/architecture/GUIDE_MODULE.md) ;
+   - un module : son document, listé dans [ARCHITECTURE.md](ARCHITECTURE.md) § 5.
+4. Créer un worktree dans `…Worktrees\` et ne jamais toucher le checkout principal.
+5. Tenir un journal de reprise du chantier (modèle : `EXTENSION_NEXT_EXECUTION_STATE.md`).
+6. Avant de s'arrêter : mettre à jour **ce fichier**, court. Le détail daté va dans `archive/`.

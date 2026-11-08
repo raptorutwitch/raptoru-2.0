@@ -1,7 +1,8 @@
 # Archives documentaires
 
 Documents historiques conservés pour leurs preuves et leur détail. **Ils ne décrivent pas l'état courant** : voir
-[../REPRISE.md](../REPRISE.md) et [../ROADMAP.md](../ROADMAP.md).
+[../REPRISE.md](../REPRISE.md), [../PROJECT_STATUS.md](../PROJECT_STATUS.md) et [../ROADMAP.md](../ROADMAP.md). Index de
+toute la documentation : [../README.md](../README.md).
 
 ## Archivés ici
 
@@ -11,6 +12,8 @@ Documents historiques conservés pour leurs preuves et leur détail. **Ils ne d�
 | [STATE_AUDIT_2026-10-23.md](STATE_AUDIT_2026-10-23.md)                     | 23/10         | contradictions C1–C14 entre documents, § 5 « migré vs encore SAMMI / SE »                                                                                                                                                                                                                             |
 | [LIVE_2026-10-23_VOTEKICK_CAUTION.md](LIVE_2026-10-23_VOTEKICK_CAUTION.md) | 23/10         | runbook de mise en service Caution + Votekick (ordre, retour arrière) ; sa variante d'overlay D a été abandonnée                                                                                                                                                                                      |
 | [REPRISE_2026-10-28_2026-11-04.md](REPRISE_2026-10-28_2026-11-04.md)       | 28/10 → 04/11 | point d’entrée de travail de cette période : fermeture d’Halloween (02/11), points en attente (alertes Halloween, achat d’un viewer), chantier raptoru.fr V2 (lots, SHAs, intégration, répétition, livraison du 04/11), espaces de travail détaillés                                                  |
+| [REPRISE_2026-11-04_2026-11-07.md](REPRISE_2026-11-04_2026-11-07.md)       | 04/11 → 07/11 | point d'entrée de cette période : Production `8a897a5` / Studio 0.1.25, préparation de l'Opération Coulisses, points ouverts hors site au 04/11, espaces de travail. Archivé par la consolidation du 08/11                                                                                            |
+| [ROADMAP_2026-10-24_2026-10-29.md](ROADMAP_2026-10-24_2026-10-29.md)       | 24/10 → 29/10 | roadmap consolidée du 24/10 (échelle 1–5 par module, sources TRUTH / SA / PPL / ETAT, arbitrages), plan « monnaies du Wallet et gestionnaire d'événements » du 29/10 (détail repris en résumé dans la roadmap actuelle § 3)                                                                           |
 
 ## Historiques laissés à leur place (référencés par le code, la configuration ou de nombreux liens)
 
@@ -20,16 +23,16 @@ Documents historiques conservés pour leurs preuves et leur détail. **Ils ne d�
 
 ## Non suivis par Git (checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0`, non déplacés)
 
-| Document                                                                                          | Statut                                                                                  |
-| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `docs/REPRISE.md`                                                                                 | point d'entrée courant (copie de travail de [../REPRISE.md](../REPRISE.md))             |
-| `docs/SUB_WHEEL_V2_PLAN.md`                                                                       | ancienne copie : la version de référence est suivie sur `main` depuis le 26/10 (PR #11) |
-| `docs/PLAN_SUPERVISION_2026-10-23.md`                                                             | plan supervision (lots 3–4 restants) : à committer avec `sup-wt`                        |
-| `docs/RAPTORU_POST_MIGRATION_TRUTH_2026-10-23.md`                                                 | état prouvé après bascule (23/10) ; consolidé dans ROADMAP / ARCHITECTURE ; à archiver  |
-| `docs/TWITCH_CONNECTION_INCIDENT_2026-10-22.md`                                                   | enquête incident du 22/10 (§ 9 requêtes de diagnostic) ; à archiver                     |
-| `docs/CLAUDE_HANDOFF_CURRENT.md`, `RAPTORU_2_0_CHATGPT_HANDOFF_2026-10-23.md`                     | passations du 23/10, remplacées par REPRISE ; à archiver                                |
-| `docs/HANDOFF_MIGRATION_2026-10-20.md`, `docs/POST_LIVE_AUDIT_2026-10-20.md`                      | **privés : ne jamais committer**                                                        |
-| `docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md`, `docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md` | **privés** (exclus par `.git/info/exclude`)                                             |
+| Document                                                                                          | Statut                                                                                                             |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `docs/REPRISE.md`                                                                                 | ancienne copie de travail du point d'entrée (périmée : le point d'entrée suivi est [../REPRISE.md](../REPRISE.md)) |
+| `docs/SUB_WHEEL_V2_PLAN.md`                                                                       | ancienne copie : la version de référence est suivie sur `main` depuis le 26/10 (PR #11)                            |
+| `docs/PLAN_SUPERVISION_2026-10-23.md`                                                             | plan supervision (lots 3–4 restants) : à committer avec `sup-wt`                                                   |
+| `docs/RAPTORU_POST_MIGRATION_TRUTH_2026-10-23.md`                                                 | état prouvé après bascule (23/10) ; consolidé dans ROADMAP / ARCHITECTURE ; à archiver                             |
+| `docs/TWITCH_CONNECTION_INCIDENT_2026-10-22.md`                                                   | enquête incident du 22/10 (§ 9 requêtes de diagnostic) ; à archiver                                                |
+| `docs/CLAUDE_HANDOFF_CURRENT.md`, `RAPTORU_2_0_CHATGPT_HANDOFF_2026-10-23.md`                     | passations du 23/10, remplacées par REPRISE ; à archiver                                                           |
+| `docs/HANDOFF_MIGRATION_2026-10-20.md`, `docs/POST_LIVE_AUDIT_2026-10-20.md`                      | **privés : ne jamais committer**                                                                                   |
+| `docs/LEGACY_DATA_MIGRATION_AUDIT_2026-10.md`, `docs/RAPTORU_2_0_GLOBAL_CHECKPOINT_2026-10-16.md` | **privés** (exclus par `.git/info/exclude`)                                                                        |
 
 Autres worktrees : `sup-wt/docs/SUPERVISION_LOTS_1_2.md` (à committer avec `sup-wt`), `node-wt/docs/NODE_SECURITY_2026-10-23.md`
 (seule trace des CVE Node et de l'exposition), copies identiques ou périmées de `CHAT_COMMANDS.md` / `WORD_GAME_PARITY.md`

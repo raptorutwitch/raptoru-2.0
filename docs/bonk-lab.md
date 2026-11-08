@@ -1,5 +1,7 @@
 # Bonk V2 — local vertical slice awaiting OBS validation
 
+> **Note de consolidation (08/11/2026).** Historique (Bonk V2, tranche locale). Bonk VNext est en Production : [BONK_VNEXT_AUDIT_2026-10.md](BONK_VNEXT_AUDIT_2026-10.md), [ROADMAP.md](ROADMAP.md).
+
 > **Historique** : ce document décrit la tranche locale avant sa validation. Bonk V2 a depuis été validé
 > manuellement (27/09/2026, Studio 0.1.3). État courant : `Raptoru-2.0-HANDOFF.md`.
 > Le rendu et la cible décrits plus bas (impact fixe 960 × 400, une famille de trajectoire, pas de découverte de la

@@ -1,5 +1,7 @@
 # Matrice de migration des données : Studio 0.1.25 → `feat/studio-ux` (+ nouveau Core)
 
+> **État au 08/11/2026 (consolidation).** La refonte est **fusionnée** (PR #56 → `1b25f30`, puis PR #57 → `13ed6e8`) et **en Production** depuis le 07/11 : Core et bot `1b25f30`, Studio 0.1.27 installé. Bascule et retour arrière : [OPERATION_COULISSES.md](OPERATION_COULISSES.md) § 12 et § 6. État global : [../PROJECT_STATUS.md](../PROJECT_STATUS.md). Les migrations de données décrites ici ont été exécutées le 07/11 ; vérifications après installation : OPERATION_COULISSES § 12.
+
 Établie le 07/11/2026 pour la mission finale ([FINALISATION.md](FINALISATION.md)). Procédure de livraison et de retour arrière : [LIVRAISON.md](LIVRAISON.md) § 9.
 Aucune migration réelle n'a été faite : tout ceci prépare le GO d'Antoni.
 

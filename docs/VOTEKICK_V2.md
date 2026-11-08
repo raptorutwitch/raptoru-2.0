@@ -1,5 +1,7 @@
 # Votekick V2 + Caution
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 > **État au 24/10/2026 (fait foi ; le statut du 22/10 ci-dessous est historique)** : Votekick V2 **actif en
 > Production** depuis le 23/10 (flags `VOTEKICK_CHAT` / `VOTEKICK` à true) ; 4 votes au live du 23/10 et un vrai vote
 > hors live le 24/10 (mute du streamer concluant) ; overlay legacy SAMMI servi par Studio ; réglages durée + son de

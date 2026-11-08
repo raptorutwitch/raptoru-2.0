@@ -1,5 +1,7 @@
 # Caution (`!caution`)
 
+> **Note de consolidation (08/11/2026).** L'en-tête de statut ci-dessous est d'époque. L'état courant (en Production, validé ou non) est dans [ROADMAP.md](ROADMAP.md) § 1 ; versions : [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 > **État au 24/10/2026 (fait foi ; le statut ci-dessous est historique)** : Caution **active en Production** depuis le
 > 23/10 (`CAUTION_CHAT` / `CAUTION` à true), **validée en réel par Antoni le 23/10 19:19**. Incident `53949be1` (18:52,
 > 10 000 Jetons, journal du bot non inscriptible, corrigé) : perte acceptée, pas de remboursement. Suivi global :
