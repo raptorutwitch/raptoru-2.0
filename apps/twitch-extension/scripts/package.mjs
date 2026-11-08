@@ -273,6 +273,8 @@ export function packageExtension({
   const out = mkdtempSync(join(tmpdir(), `raptoru-ext-${target.name}-`));
   try {
     cpSync(src, out, { recursive: true });
+    // Lab-only modules (extension/lab-modules, docs/extension/SOCLE.md) never leave the machine.
+    rmSync(join(out, 'lab-modules'), { recursive: true, force: true });
     if (calibration) {
       mkdirSync(join(out, 'calibration'));
       for (const name of ['adapter.js', 'fixtures.js', 'hud.js', 'hud.css'])

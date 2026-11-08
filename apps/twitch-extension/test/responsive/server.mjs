@@ -2,6 +2,7 @@
 //   /calib/* -> extension/ with the calibration runtime-config (local fixtures, moderator, no network)
 //   /demo/*  -> extension/ with mode 'demo' (shared/demo-data.js, ?demoScenario=...)
 //   /calib-v2/*, /demo-v2/* (or -legacy) -> same, with RUNTIME.shell = 'v2' (or 'legacy')
+//   calib and demo allow the Lab-only modules (RUNTIME.labModules; a page adds ?labModules=1 to load them)
 //   /live/*  -> extension/ in 'test' mode (real connected client) against core.bench.invalid (never resolves):
 //              no helper -> grey-screen guard (F6); requests.mjs intercepts that host with a fake Core (F2)
 // The Twitch helper <script> is stripped from the HTML on the fly (no network to Twitch).
@@ -31,8 +32,8 @@ const runtime = (variant, shell) => {
 `;
   return variant === 'calib'
     ? `import { calibrationCall } from '../calibration/adapter.js';
-export const RUNTIME = Object.freeze({ mode: 'demo', environment: 'calibration', apiBase: '', siteUrl: '', buildId: 'bench'${shellField}, fixtureCall: calibrationCall });\n`
-    : `export const RUNTIME = Object.freeze({ mode: 'demo', apiBase: '', siteUrl: '', buildId: 'bench'${shellField} });\n`;
+export const RUNTIME = Object.freeze({ mode: 'demo', environment: 'calibration', apiBase: '', siteUrl: '', buildId: 'bench'${shellField}, labModules: true, fixtureCall: calibrationCall });\n`
+    : `export const RUNTIME = Object.freeze({ mode: 'demo', apiBase: '', siteUrl: '', buildId: 'bench'${shellField}, labModules: true });\n`;
 };
 
 export function startServer(port = Number(process.env.PORT || 4471)) {

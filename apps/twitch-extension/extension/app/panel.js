@@ -247,6 +247,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let hostViewId = null;
   /** The variant definition behind hostView (null: a session or host module view). */
   let hostVariant = null;
+  /** v2 : the registered definition behind hostView (session module or variant): its optional live hooks
+   * (rendered, onState) apply to a session module too, so a new module needs no host change to follow the session. */
+  let hostDef = null;
 
   /** What a registered view receives from the host (module-registry.js): no module-specific code here. */
   function variantContext(def, mod, body = null) {
@@ -508,8 +511,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     scopedError = null;
     syncViewerPreferenceIdentity(next);
     // The open module's own live update (module variants: TTS V2, Tombola V2…): absorbed, the host does not redraw.
-    if (render && !hadLoadError && hostView && hostViewId === openModule && hostVariant?.onState
-      && hostVariant.onState(hostView, next, previous, variantContext(hostVariant, (next?.modules ?? []).find((m) => m.id === openModule)))) {
+    // (v2 : only while the module is still offered — a module that disappears is closed by the redraw.)
+    if (render && !hadLoadError && hostView && hostViewId === openModule && hostDef?.onState && moduleById(openModule)
+      && hostDef.onState(hostView, next, previous, variantContext(hostDef, (next?.modules ?? []).find((m) => m.id === openModule) ?? hostDef.card?.(next)))) {
       return;
     }
     if (render && !unchanged) renderPreservingViewport();
@@ -538,6 +542,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       hostView = null;
       hostViewId = null;
       hostVariant = null;
+      hostDef = null;
     }
     captureScrollPositions();
     if (moduleId !== openModule) restrictionsSeen = new Set();
@@ -1337,6 +1342,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       hostView = null;
       hostViewId = null;
       hostVariant = null;
+      hostDef = null;
     }
     root.dataset.view = openModule ? 'module' : 'home';
 
@@ -1530,6 +1536,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           : viewerModuleView(mod.id)({ document, client, module: mod.server });
         hostViewId = mod.id;
         hostVariant = variant;
+        hostDef = registered;
         hostView.start?.(); // optional: TTS V2 has no start (it waits for the host's state)
         // The team's moderation of a MODULE-HOST module only (never a session module or a variant: no mod.server).
         const panel = !registered && canModerate() ? createModuleModerationPanel({ document, client, module: mod.server }) : null;
@@ -1602,7 +1609,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       } else if (hostedView) {
         Object.assign(body.dataset, registered?.bodyData ?? {});
         if (registered?.screenClass) screen.classList.add(registered.screenClass);
-        variant?.rendered?.(hostView, variantContext(variant, mod, body));
+        registered?.rendered?.(hostView, variantContext(registered, mod, body));
         // A view either has its own node, or draws into the module body (Soundboard).
         if (hostView.node) body.append(hostView.node);
         queueMicrotask(() => hostView?.attached?.());

@@ -1,0 +1,56 @@
+/* LAB ONLY — sheet of the fictitious module (lab-modules/demo). Loaded with its view, after every module sheet
+   (app/styles.js); scoped to .labdemo, on the socle's scale (--g) and text floors (--fs-N). */
+.labdemo {
+  display: grid;
+  gap: calc(10 * var(--g));
+  padding: calc(4 * var(--g)) 0;
+}
+.labdemo__note {
+  margin: 0;
+  color: #b9add0;
+  font-size: var(--fs-12);
+}
+.labdemo__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(120 * var(--g)), 1fr));
+  gap: calc(8 * var(--g));
+}
+.labdemo__stat {
+  display: grid;
+  gap: calc(2 * var(--g));
+  padding: calc(8 * var(--g)) calc(10 * var(--g));
+  border: 1px solid rgba(238, 228, 255, .08);
+  border-radius: calc(10 * var(--g));
+  background: rgba(255, 255, 255, .04);
+}
+.labdemo__stat span {
+  color: #9a92a6;
+  font-size: var(--fs-12);
+}
+.labdemo__stat strong {
+  color: #efeff1;
+  font-size: var(--fs-16);
+}
+.labdemo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8 * var(--g));
+}
+.labdemo__btn {
+  min-height: max(24px, calc(32 * var(--g)));
+  padding: 0 calc(12 * var(--g));
+  border: 1px solid rgba(238, 228, 255, .14);
+  border-radius: calc(9 * var(--g));
+  background: rgba(255, 255, 255, .06);
+  color: #efeff1;
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+.labdemo__btn--main {
+  border-color: rgba(173, 108, 255, .5);
+  background: rgba(173, 108, 255, .22);
+}
+.labdemo__btn--off {
+  color: #ffb4a0;
+}

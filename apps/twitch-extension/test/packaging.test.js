@@ -269,6 +269,47 @@ describe('verify-package', () => {
       /unknown target toString/,
     );
   });
+
+  it('refuses a Lab-only module or a runtime that allows them (extension/lab-modules)', () => {
+    const lab = entries({ 'lab-modules/demo/module.js': 'export {};' });
+    expect(verifyZip(zipStored(lab)).errors.join('\n')).toMatch(
+      /forbidden file lab-modules\/demo\/module\.js/,
+    );
+    const allowing = entries({
+      'shared/runtime-config.js': runtimeConfigSource(TARGETS.staging, {
+        buildId: 'b',
+        shell: 'v2',
+      }).replace('});', '  labModules: true,\n});'),
+    });
+    expect(verifyZip(zipStored(allowing)).errors.join('\n')).toMatch(
+      /not the staging config/,
+    );
+  });
+});
+
+describe('Lab-only modules never packaged', () => {
+  it('every target drops extension/lab-modules (the real packager, on a copy of the pages)', () => {
+    const root = fakeRoot();
+    const ext = join(root, 'extension');
+    const helper = `<!doctype html><head><script src="${TWITCH_HELPER}"></script><script type="module" src="app/boot.js"></script></head><body></body>`;
+    mkdirSync(join(ext, 'shared'), { recursive: true });
+    mkdirSync(join(ext, 'lab-modules', 'demo'), { recursive: true });
+    for (const name of ['panel.html', 'mobile.html', 'video_component.html', 'config.html'])
+      writeFileSync(join(ext, name), helper);
+    writeFileSync(join(ext, 'shared', 'runtime-config.js'), 'export const RUNTIME = {};');
+    writeFileSync(join(ext, 'lab-modules', 'demo', 'module.js'), 'export {};');
+    for (const target of ['staging', 'production']) {
+      const r = packageExtension({ target, shell: 'v2', check: true, root, git: fakeGit() });
+      expect(r.fileCount).toBe(6); // 4 pages, runtime-config, build-manifest: no lab-modules
+    }
+  });
+
+  it('the source runtime and the package runtimes never allow them', () => {
+    const source = readFileSync(join(APP, 'extension', 'shared', 'runtime-config.js'), 'utf8');
+    expect(source).not.toMatch(/labModules/);
+    for (const target of Object.values(TARGETS))
+      expect(runtimeConfigSource(target, { buildId: 'b', shell: 'v2' })).not.toMatch(/labModules/);
+  });
 });
 
 describe('source and runtime guard', () => {

@@ -25,7 +25,10 @@ const loaded = new Map();
 export function loadStyles(hrefs, order = V2_ORDER) {
   return Promise.all(hrefs.map((href) => {
     if (loaded.has(href)) return loaded.get(href);
-    const rank = order.indexOf(href);
+    // A sheet outside the canonical list (a new module's own sheet) comes after every module sheet, before the hit
+    // areas (targets.css stays last).
+    const known = order.indexOf(href);
+    const rank = known >= 0 ? known : order.length - 1.5;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = href;

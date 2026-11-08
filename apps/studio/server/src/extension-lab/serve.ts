@@ -41,6 +41,8 @@ export const RUNTIME = Object.freeze({
   buildId: 'extension-lab',
   labTwitchAuthorizePath: '/v1/ext/lab/twitch-authorize',
   shell: '${labShell()}',
+  // Lab-only modules (extension/lab-modules, never packaged): loaded by a page that adds ?labModules=1.
+  labModules: true,
 });
 `;
 

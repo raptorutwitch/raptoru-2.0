@@ -30,8 +30,9 @@ export const LEGACY = /raptoru\.fr\/api|(?<![\w.-])raptoru\.fr/i;
 export const CALIBRATION_FORBIDDEN =
   /raptoru\.fr|core-staging|\/v1\/ext|\/\/(localhost|127\.0\.0\.1)/i;
 export const TEXTUAL = /\.(js|mjs|html|css|json|txt|svg|md)$/i;
+// lab-modules/: Lab-only modules (extension/lab-modules), never in any package.
 const FORBIDDEN_FILE =
-  /(^|\/)(\.env[^/]*|twitch-ext-mock\.js|[^/]*\.map|[^/]*\.md)$/i;
+  /(^|\/)(\.env[^/]*|twitch-ext-mock\.js|[^/]*\.map|[^/]*\.md)$|^lab-modules\//i;
 
 /** Entries of a STORED zip (the only kind package.mjs writes). */
 export function unzipStored(zip) {
@@ -97,6 +98,7 @@ export function verifyZip(zip) {
       !runtime.includes(`apiBase: ${JSON.stringify(target.apiBase)}`) ||
       !runtime.includes(`mode: '${target.mode}'`) ||
       runtime.includes('environment:') !== Boolean(target.environment) ||
+      runtime.includes('labModules') ||
       (target.environment &&
         !runtime.includes(`environment: '${target.environment}'`))
     )
