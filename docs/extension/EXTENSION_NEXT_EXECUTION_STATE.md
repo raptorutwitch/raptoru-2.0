@@ -37,18 +37,23 @@
 | C — socle étape 2 | `a3158d5` | `app/main.js` (entrée unique), `app/store.js`, `app/panel.js` (vues lourdes à la demande), feuilles v2 générées (`--g`, `--fs-N`, `data-mq`), jetons et planchers | échelle 1 + planchers à 0 : styles = legacy ; 0 contrôle coupé ; requêtes = V1 ; Hub 857 Ko (dont 126 Ko de fixtures du banc) au lieu de 2 158–2 266 Ko |
 | C — étape 3 | `44f86c2` | seuils JS sur la boîte (`shared/box.js`), carrousel à l'échelle, zones de clic ≥ 24/32 px, Lab `RAPTORU_EXT_SHELL=v2`, `SOCLE.md` | vitest 124/124 |
 
+| Recette automatique | `5b9e2d4` + ce commit | E2E Studio (14 fichiers touchant l'extension) | legacy 64/64 (3 tests d'écrans Studio relancés après construction de `apps/studio/web`) ; v2 (`RAPTORU_EXT_SHELL=v2`) 64/64 — `v1-parity` impose sa propre config, donc legacy |
+| Matrices finales | — | 133 mesures × 2 shells | 0 contrôle coupé (V1 : 7) ; police min 10 px en v2 (legacy 8) ; cibles < 24 px : 200 (legacy 260) ; legacy après changements partagés = lot 1 (≤ 0,05 %) |
+| Poids | — | `payload.mjs` | Hub v2 855–861 Ko (dont 126 Ko de fixtures du banc ⇒ ≈ 730 Ko réels) au lieu de 2 159–2 267 Ko ; Hub en 139–166 ms au lieu de 175–209 ms |
+
 ## En cours
 
-- E2E Studio (shell legacy par défaut) sur les 14 fichiers qui touchent l'extension ; puis les mêmes avec
-  `RAPTORU_EXT_SHELL=v2`. `apps/studio/web` doit être construit dans le worktree (`npx turbo run build --filter=@raptoru/studio-web`),
-  sinon les tests qui ouvrent un écran Studio échouent par délai (cause des 3 premiers échecs, sans rapport avec l'extension).
-- Matrice complète legacy (contrôle : les changements partagés `box.js`/carrousel ne changent rien au legacy) et v2.
+Rien. Candidat local prêt pour la recette d'Antoni (Lab : ajouter `&shell=v2` à l'URL d'une page de l'extension, ou
+lancer le Studio de développement avec `RAPTORU_EXT_SHELL=v2`).
 
 ## Prochaine action
 
-1. Résultats E2E legacy + v2 ; corriger toute régression.
-2. Revue visuelle v2 (compact 377–521, large 867–1053, mobile paysage) ; ajustements par profil.
-3. Rapport final + `EXTENSION_NEXT_PUBLICATION.md` (Hosted Test, publication, retour arrière : préparés, non faits).
+1. Recette d'Antoni en Lab (legacy puis v2), puis décisions du plan § 13 (dont 13-1 publication, 13-3 interrupteur).
+2. Améliorations restantes, non bloquantes : Hub à < 0,6 (377×251) défile de ≈ 15 px ; TTS mobile paysage reste
+   empilée (deux colonnes possibles) ; 200 petites cibles restantes (champs de saisie, rangées D4) ; Coffre sur
+   `createPoller` ; vues encore dans `shared/` ; nettoyage du lot 6 (legacy) seulement sur accord.
+3. Avant toute publication : prouver la version servie (`PUBLISHED`), inventaire validé par Antoni, Hosted Test
+   (`EXTENSION_NEXT_PUBLICATION.md`).
 
 ## Écarts au plan (justifiés)
 
