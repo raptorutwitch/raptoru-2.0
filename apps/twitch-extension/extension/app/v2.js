@@ -1,7 +1,7 @@
-// Shell v2 entry (loaded by app/boot.js once its sheets are in): the single layout measurement, then the page's
-// viewer logic. Step by step the historical entries (overlay.js / mobile.js) are replaced by app/ modules.
+// Shell v2 entry (loaded by app/boot.js once its first sheets are in): the single layout measurement, then the one
+// viewer entry of every surface (app/main.js, which replaces overlay.js / mobile.js in this shell).
 import { startLayout } from './layout.js';
+import { startViewer } from './main.js';
 
 const layout = startLayout();
-if (layout.surface === 'video') await import('../overlay.js');
-else await import('../mobile.js');
+startViewer({ surface: layout.surface });

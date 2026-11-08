@@ -3,6 +3,8 @@
 // Compares in Chromium (canvas, no image library). A pixel differs when a channel moves by > 24/255.
 // Animated zones (carousel, sprites, timers) produce noise: read the ratio, then look at out/diff/<a>-<b>/.
 // Writes out/diff/<a>-<b>/<name>.png (differences in magenta over a dimmed B) and <a>-<b>.md.
+/* global document, Image -- evaluated in the page (Playwright) */
+import { Buffer } from 'node:buffer';
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

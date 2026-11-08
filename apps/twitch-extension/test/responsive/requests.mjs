@@ -4,6 +4,7 @@
 // The extension runs in its real connected client ('test' mode) against a FAKE Core on core.bench.invalid,
 // answered here by the calibration fixtures (GET) and a recorded refusal (writes): nothing leaves the machine.
 // A fake Twitch helper authorizes a viewer token. Scenarios drive the real UI.
+/* global localStorage -- evaluated in the page (Playwright) */
 import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

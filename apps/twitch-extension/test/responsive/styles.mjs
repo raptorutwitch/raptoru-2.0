@@ -4,6 +4,7 @@
 // a scenario exists, and with :hover/:focus on its first controls (forced via CDP).
 //   node test/responsive/styles.mjs [--views hub,tts] [--sizes 651x434,565x376,377x251] [--surface video]
 //        [--ignore prop1,prop2]
+/* global document, getComputedStyle, localStorage -- evaluated in the page (Playwright) */
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,7 @@ const SURFACES = { video: 'video_component.html?anchor=component', panel: 'panel
 const surfaces = opt('surface', 'video,panel,mobile').split(',');
 // Properties that legitimately differ between shells (none yet). Animation-driven values are frozen below.
 const IGNORE = new Set(opt('ignore', '').split(',').filter(Boolean));
+const FLOORS_OFF = opt('floors', 'on') === 'off';
 
 const server = await startServer(Number(process.env.PORT || 4481));
 const port = server.address().port;
@@ -29,6 +31,12 @@ const browser = await chromium.launch();
 async function snapshot(shell, surface, [w, h], view) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: 'reduce', isMobile: surface === 'mobile', hasTouch: surface === 'mobile' });
   await ctx.addInitScript(() => { try { localStorage.setItem('raptoru-live:tutorial-disabled:bonk:v1', '1'); } catch { /* */ } });
+  // --floors off: the v2 text floors at 0 px, to prove that the mechanical scaling alone changes nothing at scale 1.
+  if (FLOORS_OFF && shell === 'v2') await ctx.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+    const st = document.createElement('style');
+    st.textContent = ':root{--fl-strong:0px!important;--fl-body:0px!important;--fl-small:0px!important;--fl-micro:0px!important}';
+    document.head.append(st);
+  }));
   const page = await ctx.newPage();
   await page.route(/twitch\.tv|raptoru\.fr/, (r) => r.abort());
   await page.goto(`http://127.0.0.1:${port}/calib-${shell}/${SURFACES[surface]}${view === 'hub' ? '' : `&demoModule=${view}`}`);

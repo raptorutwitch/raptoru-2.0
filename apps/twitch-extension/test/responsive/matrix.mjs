@@ -4,6 +4,8 @@
 // Writes test/responsive/out/<tag>.json and <tag>.md (gitignored); exits 1 when an action control is cut.
 // Data: calibration fixtures (moderator, local, no network). Chromium; dpr ≠ 1 sizes emulate a browser zoom
 // (CSS viewport = iframe / zoom), which is what a zoomed page gives an iframe — not a real zoom.
+/* global document, localStorage -- evaluated in the page (Playwright) */
+import console from 'node:console';
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

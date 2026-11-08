@@ -12,7 +12,7 @@ const page = /(?:^|\/)(video_component|panel|mobile)\.html$/i.exec(window.locati
 const asked = new URLSearchParams(window.location.search).get('shell');
 export const SHELL = asked === 'v2' || asked === 'legacy' ? asked : RUNTIME.shell === 'v2' ? 'v2' : 'legacy';
 
-// Exact order of the historical <link> tags of each page (legacy) and their v2 equivalents.
+// Exact order of the historical <link> tags of each page (legacy shell).
 const MODULE_SHEETS = ['picker.css', 'bonk-chargeur.css', 'soundboard.css', 'currency-switch.css', 'hub.css',
   'events-shop.css', 'tts-v2.css', 'moderation-v2.css'];
 const LEGACY = {
@@ -20,10 +20,13 @@ const LEGACY = {
   panel: ['base.css', 'mobile.css', ...MODULE_SHEETS, 'tombola-v2.css'],
   mobile: ['base.css', 'mobile.css', ...MODULE_SHEETS, 'commands-v2.css', 'tombola-v2.css'],
 };
+// v2: what the Hub needs; module sheets come with their view (app/lazy-views.js), at their canonical place.
+const V2_HUB = ['app/css/tokens.css', 'app/css/tokens-fonts.css', 'app/css/shell-base.css', 'app/css/currency-switch.css',
+  'modules/hub/hub.css', 'modules/events/events.css', 'modules/tombola/tombola.css'];
 const V2 = {
-  video_component: ['app/css/shell-base.css', 'app/css/shell-video.css', ...MODULE_SHEETS, 'commands-v2.css', 'tombola-v2.css'],
-  panel: ['app/css/shell-base.css', 'app/css/shell-panel.css', ...MODULE_SHEETS, 'tombola-v2.css'],
-  mobile: ['app/css/shell-base.css', 'app/css/shell-panel.css', ...MODULE_SHEETS, 'commands-v2.css', 'tombola-v2.css'],
+  video_component: [...V2_HUB, 'app/css/shell-video.css'],
+  panel: [...V2_HUB, 'app/css/shell-panel.css'],
+  mobile: [...V2_HUB, 'app/css/shell-panel.css'],
 };
 
 function loadSheets(hrefs) {
@@ -33,15 +36,20 @@ function loadSheets(hrefs) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = href;
-    link.dataset.shell = SHELL;
     link.onload = resolve;
-    link.onerror = resolve; // a missing sheet must not leave the page hidden (grey-screen rule)
+    link.onerror = resolve; // a missing sheet must not block the entry (grey-screen rule)
     document.head.insertBefore(link, anchor);
   })));
 }
 
 document.documentElement.dataset.shell = SHELL;
-await loadSheets((SHELL === 'v2' ? V2 : LEGACY)[page]);
-if (SHELL === 'v2') await import('./v2.js');
+if (SHELL === 'v2') {
+  const { loadStyles } = await import('./styles.js');
+  await loadStyles(V2[page]);
+  await import('./v2.js');
+} else {
+  await loadSheets(LEGACY[page]);
+}
+if (SHELL === 'v2') { /* started by v2.js */ }
 else if (page === 'video_component') await import('../overlay.js');
 else await import('../mobile.js');

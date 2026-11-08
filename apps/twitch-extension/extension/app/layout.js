@@ -6,7 +6,11 @@
 //   --kt          text scale      clamp(0.95, min(W/651, H/434), 1.10)   (texts, above their per-role floors)
 //   --vw, --vh    the measured root size in px
 // CSS defaults (app/css/tokens.css) give the normal profile with --kg = --kt = 1 if this script never runs.
+//   data-mq       the legacy viewport media queries (app/mq.js) evaluated on the COMPOSITION BOX W/kg × H/kg: the
+//                 v2 sheets use them instead of @media, so a rule written for the 651 composition follows its scale
 // No module measures the window: they read these attributes and variables (or a local @container query).
+import { MEDIA } from './mq.js';
+import { boxTokens } from './mq-eval.js';
 
 export const REF_W = 651;
 export const REF_H = 434;
@@ -61,13 +65,14 @@ export function startLayout(root = document.documentElement) {
     const h = Math.round(root.clientHeight || window.innerHeight);
     if (!w || !h) return;
     const next = computeLayout({ w, h, prev: current?.profile });
-    if (current && next.profile === current.profile && next.kg === current.kg && next.kt === current.kt) return;
+    if (current && current.w === w && current.h === h) return;
     current = { ...next, w, h, surface, touch };
     root.dataset.profile = next.profile;
     root.style.setProperty('--kg', String(next.kg));
     root.style.setProperty('--kt', String(next.kt));
     root.style.setProperty('--vw', `${w}px`);
     root.style.setProperty('--vh', `${h}px`);
+    root.dataset.mq = boxTokens(MEDIA, w / next.kg, h / next.kg);
     for (const fn of listeners) fn(current);
   };
   apply();

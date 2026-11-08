@@ -1,6 +1,7 @@
 // F6 — « écran gris » guard: without the Twitch helper (blocker, browser shields) every surface shows a
 // recoverable error instead of staying empty. Connected mode, no helper, every request aborted.
 //   node test/responsive/grey-screen.mjs [--shell v2]
+/* global document -- evaluated in the page (Playwright) */
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

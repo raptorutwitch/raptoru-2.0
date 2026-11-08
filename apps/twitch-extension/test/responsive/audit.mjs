@@ -1,4 +1,5 @@
 // In-page audit (passed to page.evaluate). Shared by measure.mjs and resize.mjs.
+/* global document, getComputedStyle, innerWidth, innerHeight, devicePixelRatio -- evaluated in the page (Playwright) */
 export function audit() {
   const vw = innerWidth, vh = innerHeight;
   const de = document.documentElement;

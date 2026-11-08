@@ -1,5 +1,7 @@
 // Dev analysis: alive rules of the legacy sheets grouped by class family (prefix), bytes per family.
 // A rule is "provably dead" when one class of each of its selectors appears nowhere in extension JS/HTML.
+import console from 'node:console';
+import process from 'node:process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +12,8 @@ const prefixes = new Set([...CODE.matchAll(/([A-Za-z][\w-]*-)\$\{/g), ...CODE.ma
 const aliveCache = new Map();
 export const isAlive = (tok) => {
   if (aliveCache.has(tok)) return aliveCache.get(tok);
-  let ok = new RegExp(`(^|[^\w-])${tok.replace(/[-]/g, '\-')}($|[^\w-])`).test(CODE);
+  // The class must appear as a whole token (not inside a longer name) somewhere in the JS/HTML.
+  let ok = new RegExp(`(^|[^\\w-])${tok.replace(/-/g, '\\-')}($|[^\\w-])`).test(CODE);
   if (!ok) for (const p of prefixes) if (tok.startsWith(p)) { ok = true; break; }
   aliveCache.set(tok, ok); return ok;
 };
