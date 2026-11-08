@@ -10,6 +10,8 @@ Avant de retirer quoi que ce soit, il faut :
 
 ## 1. Worktrees
 
+Carte complète (rôle, importance) : [WORKSPACES.md](WORKSPACES.md). Ci-dessous, seulement les propositions.
+
 La colonne « non commités » compte les fichiers modifiés ou non suivis, hors dossiers `.runtime-*` laissés par des tests.
 
 | Dossier                                                                                                   | Branche                              | Fusionnée dans `origin/main`                        | Non commités                     | Proposition                                                                                                       |
@@ -41,10 +43,24 @@ La colonne « non commités » compte les fichiers modifiés ou non suivis, hors
   - `feat/extension-next`, `docs/extension-audit`, `docs/consolidation-2026-11` ;
   - `backup/roue-v2-wip-2026-10-25` ;
   - les branches des PR ouvertes.
-- **PR ouvertes à trier** :
-  - documents : #34, #36, #38, #40, #48 ;
-  - brouillons : #43, #44, #47 ;
-  - #54.
+- **PR ouvertes** : triage ci-dessous.
+
+### PR ouvertes (relevé du 08/11)
+
+Toutes sont **en conflit avec `main`**, avec 184 à 270 commits de retard. Aucune n'a été fermée, fusionnée ni modifiée.
+
+| PR  | Branche                               | Contenu                                                                                     | Situation                                                                                                                | Recommandation                                                              |
+| --- | ------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| #34 | `docs/handoff-2026-10-28`             | passation du 28/10 (Dock V1.2 clos et validé, état de Production)                           | dépassée par la consolidation ; sa seule information encore utile, la validation du Dock, est reprise dans `OBS_DOCK.md` | fermer sans fusion, sur accord                                              |
+| #36 | `docs/workspace`                      | « un seul dépôt », inventaire des dossiers, règle des worktrees (`docs/WORKSPACE.md`)       | dépassée par [WORKSPACES.md](WORKSPACES.md) et `REPRISE.md` § 3                                                          | fermer sans fusion                                                          |
+| #38 | `docs/halloween-delivered`            | Halloween livré le 29/10                                                                    | événement fermé ; état repris dans la roadmap                                                                            | fermer sans fusion                                                          |
+| #40 | `docs/progression-delivery`           | livraison de la progression du 29/10 (Core `7264de0`, site `7181298`)                       | reprise dans la roadmap                                                                                                  | fermer sans fusion                                                          |
+| #48 | `docs/reprise-halloween`              | état Halloween du 30/10, liste avant le live                                                | historique                                                                                                               | fermer sans fusion                                                          |
+| #43 | `feat/level-up-v2` (brouillon)        | Level Up V2 : 1 000 XP par niveau, normalisation WizeBot, notifications par viewer, inactif | **fonctionnel, non livré** ; 39 fichiers, conflits                                                                       | **garder** ; décision produit d'Antoni, puis rebase dans une mission dédiée |
+| #44 | `feat/cosmetic-shop` (brouillon)      | Boutique cosmétique V1                                                                      | la boutique a été **livrée par la PR #49** (fusionnée le 30/10) ; reste peut-être une différence de périmètre            | vérifier qu'aucun reste n'est voulu, puis fermer                            |
+| #47 | `feat/halloween-cauldron` (brouillon) | Chaudron des subs (subgoal OBS), Lab, éteint                                                | fonctionnel, non livré                                                                                                   | **garder** si l'idée revient pour un événement ; sinon fermer               |
+| #54 | `feat/studio-viewer-titles`           | Studio équipe et retire le titre d'un viewer                                                | fonctionnel ; **un commit local non poussé** (`5d24614`, historique des attributions)                                    | **garder** ; pousser `5d24614` et faire un rebase dans une mission dédiée   |
+
 - `docs/coulisses-execution` (`be3d17e`) : son contenu est repris dans cette consolidation (commit `37f47fe`). Supprimable après la fusion.
 
 ## 3. Documents

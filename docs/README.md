@@ -31,6 +31,7 @@ déplacer**.
 | [ROADMAP.md](ROADMAP.md)               | état de chaque module (livré, développé, à valider, à développer), chantiers, prochaines fonctionnalités     | Référence |
 | [../CLAUDE.md](../CLAUDE.md)           | règles de travail des agents                                                                                 | Référence |
 | [../SECURITY.md](../SECURITY.md)       | dépôt public : secrets, signalement                                                                          | Référence |
+| [WORKSPACES.md](WORKSPACES.md)         | carte des worktrees, branches et sauvegardes (avec leur risque de confidentialité)                           | Référence |
 | [CLEANUP_LATER.md](CLEANUP_LATER.md)   | nettoyage proposé, rien de supprimé                                                                          | Référence |
 
 ## 2. Architecture et exploitation

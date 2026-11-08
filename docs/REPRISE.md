@@ -83,15 +83,16 @@ Roadmap : [ROADMAP.md](ROADMAP.md). Index : [README.md](README.md).
 
 **À préserver absolument** (branches et worktrees)
 
-| Branche                                                                    | Worktree                           | Pourquoi                                              |
-| -------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------- |
-| `feat/extension-next`                                                      | `…Worktrees\extension-next`        | **Extension Next, seule copie** : locale, non poussée |
-| `docs/consolidation-2026-11`                                               | `…Worktrees\consolidation`         | cette documentation                                   |
-| `docs/extension-audit`                                                     | `…Worktrees\studio-ux`             | base des deux branches précédentes                    |
-| `backup/roue-v2-wip-2026-10-25` (`99157a3`)                                | `Documents\raptoru-roue-v2-backup` | sauvegarde, aussi conservée en bundle                 |
-| `feat/studio-viewer-titles`, `feat/level-up-v2`, `feat/halloween-cauldron` | —                                  | PR non fusionnées                                     |
+| Branche                                                                    | Worktree                           | Pourquoi                                                                  |
+| -------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `feat/extension-next`                                                      | `…Worktrees\extension-next`        | **Extension Next**, sur GitHub depuis le 08/11 (`2f45ac1`), non fusionnée |
+| `docs/consolidation-2026-11`                                               | `…Worktrees\consolidation`         | cette documentation                                                       |
+| `docs/extension-audit`                                                     | `…Worktrees\studio-ux`             | base des deux branches précédentes                                        |
+| `backup/roue-v2-wip-2026-10-25` (`99157a3`)                                | `Documents\raptoru-roue-v2-backup` | sauvegarde, aussi conservée en bundle                                     |
+| `feat/studio-viewer-titles`, `feat/level-up-v2`, `feat/halloween-cauldron` | —                                  | PR non fusionnées                                                         |
 
-Les anciens worktrees sont listés, sans aucune suppression, dans [CLEANUP_LATER.md](CLEANUP_LATER.md).
+Carte complète des worktrees, branches et sauvegardes : [WORKSPACES.md](WORKSPACES.md). Propositions de retrait :
+[CLEANUP_LATER.md](CLEANUP_LATER.md). Rien n'est supprimé sans accord.
 
 **Sauvegardes** : `C:\Users\Antoni\Documents\Sauvegarde Raptoru 2.0\`, à accès restreint. Ne jamais les déplacer ni les supprimer.
 
@@ -115,8 +116,18 @@ curl -s https://raptoru.fr/api/status           # build du site
 cat "$LOCALAPPDATA/Programs/Raptoru Studio/resources/app/build-info.json"
 ```
 
-La version de l'extension **servie par Twitch** ne se lit pas d'ici. Il faut la console Twitch, ou sur
-twitch.tv/raptoru_ : F12 › Sources › `shared/runtime-config.js` › `buildId`.
+La version de l'extension **servie par Twitch** ne se lit pas hors live : Raptoru Live n'est pas installée en panel, et
+le composant vidéo n'apparaît qu'en live, pour les viewers autorisés (vérifié le 08/11). Pour la prouver, Antoni a deux
+moyens :
+
+1. Console développeur Twitch › Extensions › Raptoru Live › Versions : relever la version « Released », sa date et son
+   numéro.
+2. Pendant un live, connecté avec un compte autorisé, sur twitch.tv/raptoru_ : F12 › Sources ›
+   `<client-id>.ext-twitch.tv` › `shared/runtime-config.js` › `buildId`. Il a la forme
+   `production-<12 caractères du commit>-<date>`.
+
+Reporter ensuite ce commit dans `apps/twitch-extension/PUBLISHED`, sur `feat/extension-next`, au début de la mission de
+publication.
 
 **Relevé du 08/11**
 
@@ -135,8 +146,18 @@ twitch.tv/raptoru_ : F12 › Sources › `shared/runtime-config.js` › `buildId
 **Extension Next**
 
 - **Développé, non livré.**
-- Branche `feat/extension-next`, commit de tête `38323bb`, basée sur `3834d6b` = `origin/main` + 4 commits de documents d'audit.
-- Recette visuelle d'Antoni en Lab : retour très positif (08/11).
+- Branche `feat/extension-next` @ `2f45ac1`, **sur GitHub** depuis le 08/11, non fusionnée. Elle part de `3834d6b`
+  (`origin/main` + 4 commits de documents d'audit).
+- Recette visuelle d'Antoni en Lab : **approuvée sur le principe et le ressenti général** (Antoni, 08/11). Ce n'est pas une validation de chaque vue, taille ou appareil.
+- Lancer et tester, dans `apps/twitch-extension` du worktree :
+  - `npx vitest run` ;
+  - `npm run test:requests` ;
+  - `npm run test:lab-module` ;
+  - `node test/responsive/matrix.mjs --shell v2` ;
+  - E2E Studio avec `RAPTORU_EXT_SHELL=v2`.
+- Hosted Test et retour arrière, préparés et non exécutés : `docs/extension/EXTENSION_NEXT_PUBLICATION.md`, sur la
+  branche. La remise en ligne d'une version précédente depuis la console Twitch **n'a jamais été vérifiée**. Le repli
+  sûr est une nouvelle soumission avec `--shell legacy` (review de 8 à 14 jours).
 - Ses documents de travail sont **sur la branche** :
   - `docs/extension/EXTENSION_NEXT_EXECUTION_STATE.md` : journal de reprise ;
   - `docs/extension/SOCLE.md` : guide développeur ;
@@ -162,17 +183,22 @@ twitch.tv/raptoru_ : F12 › Sources › `shared/runtime-config.js` › `buildId
 
 **Builds sûrs de Studio**
 
-- Développement : `npm run studio`.
-- Lab : `npm run studio:lab`.
+- Tester sans toucher au Studio installé : **toujours `npm run studio:lab`**. Il a son propre dossier `.lab-data`, sa
+  base Docker et son Core local, et refuse de démarrer si un Studio tourne déjà.
+- **Attention : `npm run studio` lit le dossier de données du checkout.** Lancé depuis le checkout principal, il ouvre
+  le profil de Production.
+- Médias et données locales du Studio installé : `apps/studio/server/.runtime` du checkout principal et
+  `%APPDATA%\Raptoru Studio`. Lecture seule ; sauvegardes : [WORKSPACES.md](WORKSPACES.md) § 4.
 - Release : `npm run studio:release`, **seulement sur demande d'Antoni**.
 - Le numéro de version des `package.json` du dépôt (0.1.6) n'est pas celui des releases : c'est l'étiquette `studio-v*` qui fait foi.
 
 ## 6. Prochain travail réalisable
 
-1. **Extension Next vers la publication** ([ROADMAP.md](ROADMAP.md) § 2.1).
-   Côté agent : les restes non bloquants, ou ce qu'Antoni relève en recette.
-   Côté Antoni : push et fusion, preuve de la version servie, inventaire, Hosted Test, soumission.
-2. Puis **une passe « expérience » sur des modules existants**, et la **Roulette visuelle** ([ROADMAP.md](ROADMAP.md) § 4).
+1. **Mission « modules »**, la prochaine proposée : passe expérience sur 2 ou 3 modules existants, en Lab, puis la
+   Roulette visuelle ([ROADMAP.md](ROADMAP.md) § 4.3). Méthode : § 4.4.
+2. **Mission « publication d'Extension Next »**, sur GO dédié ([ROADMAP.md](ROADMAP.md) § 2.1).
+   - Côté agent : passe Prettier sur 17 fichiers d'outils de la branche, zip staging, aide au Hosted Test.
+   - Côté Antoni : preuve de la version servie, inventaire, Hosted Test, fusion, soumission.
 3. **Avant toute publication de l'extension**, il faut :
    - la version servie prouvée ;
    - l'inventaire validé par Antoni ;
