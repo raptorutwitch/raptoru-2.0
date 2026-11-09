@@ -125,6 +125,8 @@ export const OverlaySettings = z.strictObject({
   }),
   animation: z.strictObject({
     enter: z.enum(['none', 'fade', 'slide', 'rise', 'scale']),
+    /** The exit at the end of an announce (or when hidden): `auto` = the entrance's movement, reversed. */
+    exit: z.enum(['auto', 'none', 'fade', 'slide', 'scale']),
     change: z.enum(['none', 'crossfade', 'slide', 'flip', 'pop']),
     intensity: z.enum(['subtle', 'normal', 'strong']),
     duration_ms: z.number().int().min(150).max(1500),
@@ -132,9 +134,12 @@ export const OverlaySettings = z.strictObject({
     ambient: z.boolean(),
   }),
   display: z.strictObject({
-    /** Always while music plays; an announce at each new track; or compact always + expanded at each new track. */
+    /**
+     * Always while music plays; an announce at each new track (« Afficher » arms it: nothing before the next track); or
+     * compact always + expanded at each new track.
+     */
     mode: z.enum(['always', 'announce', 'hybrid']),
-    announce_s: z.number().int().min(3).max(60),
+    announce_s: z.number().int().min(3).max(120),
     on_pause: z.enum(['show', 'dim', 'compact', 'hide']),
     /** Nothing playing / Spotify closed: hidden, or a quiet « Aucune musique ». */
     on_idle: z.enum(['hide', 'placeholder']),
@@ -272,6 +277,7 @@ const BASE: OverlaySettings = {
   },
   animation: {
     enter: 'slide',
+    exit: 'auto',
     change: 'crossfade',
     intensity: 'normal',
     duration_ms: 520,
@@ -467,7 +473,7 @@ export const BUILTINS: Builtin[] = [
     id: 'jeu',
     name: 'Jeu chargé',
     description:
-      'Pour les jeux très visuels : un petit bandeau contrasté, le titre puis l’artiste, la demande en languette.',
+      'Pour les jeux très visuels : un petit bandeau contrasté qui apparaît 30 s à chaque nouveau titre, la demande en languette.',
     settings: over({
       archetype: 'minimal',
       layout: 'stack',
@@ -490,8 +496,15 @@ export const BUILTINS: Builtin[] = [
       title_scale: 110,
       show: { label: false, progress: false, time: false, album: false },
       request_tab: { show: true, side: 'bottom', align: 'center' },
-      animation: { enter: 'fade', change: 'crossfade', intensity: 'subtle' },
-      display: { on_pause: 'hide' },
+      animation: {
+        enter: 'slide',
+        exit: 'auto',
+        change: 'crossfade',
+        intensity: 'subtle',
+        duration_ms: 600,
+      },
+      // The event strip: at each new track for 30 s, then it leaves (« Afficher » arms it).
+      display: { mode: 'announce', announce_s: 30, on_pause: 'hide' },
     }),
   },
 ];
@@ -582,7 +595,7 @@ export interface OverlayState {
  */
 export class OverlayStore {
   version = 1;
-  private s: OverlayState = { visible: false, active: 'clean', variants: [] };
+  private s: OverlayState = { visible: false, active: 'jeu', variants: [] };
   /** Fields repaired at load (an older or damaged variant) — told in the editor, never silent. */
   repaired: string[] = [];
   private constructor(
@@ -663,7 +676,7 @@ export class OverlayStore {
         typeof r.active === 'string' &&
         (builtin(r.active) || variants.some((v) => v.id === r.active))
           ? r.active
-          : 'clean',
+          : 'jeu',
       variants,
     };
     if (this.repaired.length || r.v !== STORE_VERSION) await this.save();

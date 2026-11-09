@@ -147,6 +147,8 @@ export const SpotifyReason = z.enum([
   'EXTENSION_DISABLED',
   // Lab with the broadcaster's real account (LAB_SPOTIFY=real): the session is read-only, nothing was sent to Spotify.
   'LAB_READ_ONLY',
+  // Music Hub: a paid skip aimed at a track that is no longer the one playing (nothing was skipped).
+  'TRACK_CHANGED',
 ]);
 export type SpotifyReason = z.infer<typeof SpotifyReason>;
 
@@ -161,6 +163,11 @@ export const SpotifyStudioStatus = z.strictObject({
   device: z.strictObject({ name: ShortText, type: ShortText }).nullable(),
   /** Calls to Spotify in the last minute (all kinds), for the panel. */
   calls_last_minute: z.number().int().min(0).max(100_000),
+  /**
+   * Music Hub, Lab on the broadcaster's real account only: writes (queue, skips, player) are refused by Studio this
+   * session. Absent everywhere else (an older Core never receives it from a Production Studio).
+   */
+  read_only: z.boolean().optional(),
 });
 export type SpotifyStudioStatus = z.infer<typeof SpotifyStudioStatus>;
 
@@ -271,6 +278,11 @@ export const SpotifyJob = z.discriminatedUnion('kind', [
     job_id: Uuid,
     /** The request this skip ends (a moderator's `!songskip`, a `!songcancel` within the grace…), or null. */
     request_id: Uuid.nullable(),
+    /**
+     * Music Hub (a viewer's paid skip): skip only if THIS track still plays — another one → `TRACK_CHANGED`, nothing
+     * sent (never a second track skipped by a late skip). Only on the jobs of a paid skip.
+     */
+    expect_uri: TrackUri.optional(),
   }),
   z.strictObject({ kind: z.literal('read_playback'), job_id: Uuid }),
   // Music Hub: a catalogue search for the extension (never queues anything) and a player control.
@@ -284,8 +296,16 @@ export const SpotifyJob = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('control'),
     job_id: Uuid,
-    action: z.enum(['pause', 'resume', 'volume']),
+    action: z.enum(['pause', 'resume', 'volume', 'seek']),
     volume_percent: z.number().int().min(0).max(100).nullable(),
+    /** Music Hub: `seek` — where to go in THIS track (`expect_uri`); another track playing → nothing is sent. */
+    position_ms: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 3_600_000)
+      .optional(),
+    expect_uri: TrackUri.optional(),
   }),
 ]);
 export type SpotifyJob = z.infer<typeof SpotifyJob>;
@@ -422,7 +442,47 @@ export const SpotifyPanelAction = z.discriminatedUnion('action', [
     action: z.literal('volume'),
     volume_percent: z.number().int().min(0).max(100),
   }),
+  // Music Hub: move in the track playing (a click on the timeline), never a skip.
+  z.strictObject({
+    action: z.literal('seek'),
+    position_ms: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 3_600_000),
+  }),
 ]);
 export type SpotifyPanelAction = z.infer<typeof SpotifyPanelAction>;
+
+/**
+ * Music Hub — the paid viewer skip and the Open Bar (docs/music/MUSIC_HUB_STATE.md). Rules validated by Antoni (09/11):
+ * one global progression per stream, never per viewer.
+ */
+export const MUSIC_RULES = {
+  /** A viewer's paid skip: this price, doubled for each paid skip that succeeded within the window of the previous. */
+  skipBasePriceTokens: 25_000,
+  /** The window restarts at every successful paid skip; past it without one, the price is back to the base. */
+  skipWindowMs: 30 * 60_000,
+  /** ponytail: the ledger's amounts are 32-bit — 25 000 × 2^15 = 819 200 000 at most (unreachable in a stream). */
+  skipMaxDoublings: 15,
+  /** Open Bar: requests from the extension free, no per-viewer count — one short frequency limit stays. */
+  openBarCooldownSeconds: 20,
+  /** Open Bar: the whole queue (waiting + being added) is capped at this many requests. */
+  openBarMaxQueue: 50,
+  /** `!song`: one answer at most per this delay on the channel (the asks in between are ignored, silently). */
+  songCooldownMs: 30_000,
+  /** A seek never lands in the first seconds (a restart: a new play for Spotify and Windows) nor in the last. */
+  seekMinMs: 6_000,
+  seekEndMarginMs: 8_000,
+} as const;
+
+/** Studio › Musique: the paid skip and the Open Bar (each field optional; Core keeps the others). */
+export const MusicRulesUpdate = z.strictObject({
+  viewer_skip_enabled: z.boolean().optional(),
+  /** On by default: a viewer can never pay to skip a request another viewer paid for (moderation still can). */
+  viewer_skip_protect_requests: z.boolean().optional(),
+  open_bar: z.boolean().optional(),
+});
+export type MusicRulesUpdate = z.infer<typeof MusicRulesUpdate>;
 
 export { ChannelId as SpotifyChannelId };

@@ -6,6 +6,13 @@
 
 ## 0. Où reprendre
 
+- **09/11 (nuit) — passe de finalisation** : § 14 ci-dessous. Lab seulement, non validé, rien de poussé ni déployé.
+  - Overlay OBS événementiel (30 s à chaque nouveau titre, « Afficher » = armé) : [MUSIC_OVERLAYS.md](MUSIC_OVERLAYS.md) § 3 ter.
+  - `!song` en annonce Twitch (repli en message normal), 30 s de délai global, réponse depuis Windows sans appel Spotify.
+  - Vue modérateur : Pause / Passer directement sur « en cours » (supermods, streamer), seek confirmé sur la barre.
+  - **Skip payant des viewers** (25 000 Jetons, doublé dans les 30 min, global au stream) et **Open Bar**.
+  - **Prochaine étape** : essai d’Antoni (§ 14.8), puis OBS réel.
+
 - **09/11 (soir) — Overlay musique OBS** : [MUSIC_OVERLAYS.md](MUSIC_OVERLAYS.md). Non validé, **jamais essayé dans OBS**.
   - **Studio.** Une page « Overlay musique » (Modules › Musique) : 6 archétypes et 2 presets, aperçu réel 16:9
     (démo isolée), variantes, Afficher / Masquer, assistant OBS qui ne fait qu'ajouter.
@@ -235,3 +242,141 @@ Rien n'utilise d'API privée, de scraping ni d'extraction audio. Aucun contourne
 - Messages de chat propres aux demandes de l'extension (aujourd'hui silencieuses, l'extension affiche le résultat).
 - Exceptions individuelles (`overrides`) : existantes côté Studio, pas encore affichées dans l'extension.
 - Carte OBS pour une demande de la récompense : déjà incluse (même file) ; Dock : la rédemption seule.
+
+## 14. Passe de finalisation (09/11, nuit)
+
+Lab seulement. Le Core décide tout ; Studio et l'extension montrent et demandent. Aucune migration : l'état vit dans les
+tables du socle de modules (`module_state`, `module_activity`).
+
+### 14.1 Skip payant des viewers (règle validée par Antoni)
+
+- **Prix** : 25 000 Jetons. Chaque skip payé **réussi** dans les 30 min du précédent double le prix suivant
+  (25 000 → 50 000 → 100 000 → 200 000…). La fenêtre repart à chaque skip payé réussi ; 30 min sans skip payé réussi :
+  retour à 25 000. **Global au stream**, jamais par viewer : changer de compte ne contourne rien.
+- **Ne comptent pas** :
+  - les skips de la modération et du streamer ;
+  - la récompense « Skip la musique » ;
+  - tout skip payé qui n'a pas eu lieu.
+- **Achat**, sous le verrou de la chaîne. Le Core vérifie dans l'ordre :
+  - interrupteur allumé, entrée extension active, demandes ouvertes ;
+  - Studio présent, pas de 429 en cours, pas de Lab en lecture seule ;
+  - un titre identifié (son uri exact) **en lecture**, pas en pause ;
+  - aucun autre skip en route (payé ou de modération) ;
+  - prix attendu = prix du Core, solde suffisant.
+
+  Le débit et le job de skip sont écrits ensemble. La même clé (double clic, réseau perdu) rend la même tentative,
+  jamais deux débits.
+
+- **Studio** ne passe que **ce titre-là** (`expect_uri`) : si un autre titre joue → `TRACK_CHANGED`, rien n'est envoyé.
+- **Règlement** :
+  - passé et prouvé par la relecture de Studio → `done`, le prix monte, un message dans le chat ;
+  - échec, 429, titre déjà changé, résultat incertain, Studio absent (job jamais pris, 15 s) ou perdu (bail expiré) →
+    **remboursé une fois**, le prix et sa fenêtre ne bougent pas ;
+  - jamais décidé sur la seule information de Windows (SMTC).
+- **Demandes payées protégées** (par défaut, interrupteur « Protéger les demandes payées » dans Studio). Un viewer ne
+  peut pas payer pour passer la demande d'un autre, qu'elle soit payée en points ou en Jetons. La modération garde son
+  skip gratuit. Raptoru n'éteint jamais l'interrupteur : c'est à Antoni d'arbitrer.
+- **Historique** :
+  - un skip payé réussi marque le titre « Skippé » (même chemin que la modération) ;
+  - « Interrompu » reste un changement manuel probable ;
+  - une fin normale n'a aucun badge.
+- **Stockage** : `module_activity` (module `music_skip`, une ligne par tentative : `queued` → `done` / `refunded`). Le
+  débit et le remboursement passent par le Wallet existant (module `music`), une seule fois par tentative.
+
+### 14.2 Open Bar
+
+- **Studio** : bouton « Ouvrir l'Open Bar » / « Fermer l'Open Bar » sur la page Spotify, avec une confirmation à
+  l'ouverture. L'état et l'heure d'ouverture sont visibles ; ouverture et fermeture sont journalisées (`module_activity`,
+  module `music_hub`).
+- **Ouvert** : les demandes **depuis l'extension** coûtent 0 Jeton et n'ont plus de limite de nombre par personne.
+- **Ce qui reste en place** :
+  - 20 s entre deux demandes d'une même personne (limite de fréquence courte, affichée) ;
+  - 50 musiques au plus dans la file (en file + en cours d'ajout) ;
+  - doublons refusés, recherches limitées ;
+  - modération et disponibilité de Spotify.
+- **Les skips payants restent payants.** La récompense de points de chaîne ne change pas : son coût est fixé par Twitch.
+- **Robustesse** :
+  - le Core relit l'état sous le même verrou que chaque demande : effet immédiat, et les demandes déjà payées gardent
+    leur prix ;
+  - une page restée sur « gratuit » après la fermeture reçoit `price_changed` : rien de gratuit après la fermeture ;
+  - l'état persiste (redémarrage du Core testé).
+- **Fermé** : prix et limites habituels reviennent. Le délai normal entre deux demandes compte depuis la dernière
+  demande, comme toujours.
+
+### 14.3 Vue modérateur
+
+- **Qui voit quoi** :
+  - supermods et streamer (permission existante `music.player`) : **Pause / Reprendre** et **Passer** directement sur
+    la ligne « en cours », le volume derrière l'icône de réglages ;
+  - un modérateur simple n'a pas ces boutons et garde le retrait des demandes ;
+  - un viewer voit le bouton du skip payant.
+- **Seek** : clic (ou flèches) sur la barre → « Aller à 1:36 ? » → « Aller ». C'est une vraie commande Spotify
+  (`PUT /me/player/seek`), sur **le titre vu** ; si un autre titre joue, rien n'est envoyé.
+  - Jamais dans les 6 premières ni les 8 dernières secondes : ce serait une nouvelle lecture ou un skip déguisé.
+  - Un seek n'est ni une nouvelle musique, ni un skip, ni une décision d'historique.
+  - Mêmes conditions que les autres commandes (« Commandes du lecteur » dans Studio).
+- **Indisponible** (Studio absent, commandes coupées, **Lab en lecture seule**) : boutons grisés, avec la raison écrite.
+- **Résultat affiché** : toujours la réponse de Studio, jamais « Pause demandée » comme un succès. La page Spotify de
+  Studio suit maintenant aussi la réponse réelle de ses propres boutons.
+- **Lab en lecture seule** : Studio le signale au Core (`read_only`, seulement en Lab réel). Le Core refuse alors pause,
+  skip, seek et skip payant (`lab_read_only`).
+
+### 14.4 `!song`
+
+- **Annonce Twitch** : le Core utilise le mode `announce` du bot, déjà en place (scope `moderator:manage:announcements`
+  de LeCroupier_, qui est modérateur). Aucune nouvelle permission demandée, aucune permission de Production élargie.
+- **Repli** : si le bot ne peut pas annoncer (scope absent, refus de Twitch), le Core réécrit **une fois** la même réponse
+  en message normal. Jamais après un envoi « incertain » : il a peut-être été vu.
+- **30 s de délai global** entre deux réponses : les `!song` entre-temps sont ignorés en silence (rien n'est écrit,
+  aucun job).
+- **Source** : Windows (SMTC via Studio) répond tout de suite, **sans appel Spotify** (« En cours » ou « En pause »). Le
+  demandeur n'est cité que sur l'attribution exacte du Core.
+  - Windows muet (90 s) ou état périmé : une lecture de Studio, comme avant.
+  - Rien ne joue : « Aucune musique en cours. »
+- ⚠ **Changement de comportement en Production** au prochain déploiement du Core (annonce, délai, réponse SMTC) : à
+  valider par Antoni avant tout GO.
+
+### 14.5 Historique par Daily
+
+Le principe du 09/11 ne change pas : un nouveau Daily = un historique visible vide. Le Daily est maintenant pris sur la
+**session** (son `stream_day`, l'identifiant du module Daily) quand un live canonique est en cours. Sinon, c'est la
+journée de stream de l'instant (fenêtre 16:00 → 16:00, Paris) : un live qui traverse minuit garde son historique.
+
+### 14.6 Tests (09/11)
+
+- **Core `music-rules.test.ts`** (nouveau) : 24/24.
+  - Prix : 25 000 → 200 000, retour au prix de base, fenêtre relancée, global, skips de modération exclus, prix changé.
+  - Achat : solde insuffisant, double clic, deux achats simultanés, skip de modération en route.
+  - Échecs (429, Spotify, titre changé, incertain) : remboursés une fois, prix et fenêtre inchangés ; Studio absent ou
+    perdu ; cible exacte.
+  - Refus : rien, pause, lecture seule, 429, Studio, fermé ; demande protégée.
+  - Open Bar : gratuit, sans limite, 20 s, retour aux prix, demande payée avant conservée, file plafonnée, doublon,
+    skip toujours payant, fermeture concurrente, redémarrage, journal.
+  - `!song` : SMTC, annonce, délai, Windows muet, repli en message.
+  - Seek : permissions, bornes, lecture seule.
+- **Studio `spotify-runtime.test.ts`** : skip ciblé (`TRACK_CHANGED`), seek prouvé par la relecture — 26/26.
+- **E2E `music-final.e2e.ts`** (nouveau, vrai Lab simulé) : vert.
+  - Pause / Passer directs, seek confirmé, modérateur sans lecteur.
+  - Skip payé 25 000 puis 50 000 : débit unique, « Skippé » dans l'historique.
+  - Open Bar depuis Studio (gratuit, retour à 500), panneau, contrôles coupés expliqués.
+- **E2E `music-hub`, `music-live`, `music-overlay` (×2)** : verts.
+
+Voir le rapport de livraison pour les suites globales.
+
+### 14.7 Limites
+
+- Rien n'a été essayé avec un vrai compte Spotify en écriture, sur Twitch, ni dans un vrai OBS.
+- L'annonce Twitch n'a pas été envoyée pour de vrai (bot de Production non touché) ; le repli est testé côté Core.
+- Le skip payant n'existe que depuis l'extension, comme les demandes en Jetons (pas de commande de chat).
+- Le prix est plafonné à 25 000 × 2^15 (limite des montants du Wallet), inatteignable en pratique.
+- Après la fermeture de l'Open Bar, le délai normal (10 min) compte depuis la dernière demande, même gratuite.
+
+### 14.8 Essayer (Lab simulé)
+
+1. `Ouvrir Music Hub (Lab).cmd` (il allume aussi le skip payant du Lab).
+2. Viewer : bouton ⏭◆ sur « en cours » → le prix (25 000) → « Passer ». Le prix suivant est 50 000.
+3. Supermod : Pause / Passer sur « en cours » ; clic sur la barre → « Aller ».
+4. Studio › Spotify : « Ouvrir l'Open Bar » → l'extension affiche « Open Bar », la demande est gratuite ;
+   « Fermer l'Open Bar » → 500 Jetons.
+5. Chat simulé : `!song` deux fois de suite → une seule réponse.
+6. Overlay : [MUSIC_OVERLAYS.md](MUSIC_OVERLAYS.md) § 3 ter.

@@ -892,6 +892,8 @@ export class SpotifyRuntime {
         quota_exceeded: api.quota_exceeded,
         device: this.device,
         calls_last_minute: Math.min(api.calls_last_minute, 100_000),
+        // Music Hub: the Lab on the real account tells Core its read-only session (the extension disables the controls).
+        ...(this.d.labReal ? { read_only: !this.d.labReal.writes } : {}),
       },
       ...(fresh ? { playback: fresh.playback } : {}),
     });
@@ -1162,7 +1164,11 @@ export class SpotifyRuntime {
         ...(await this.songRequest(job)),
       };
     else if (job.kind === 'skip')
-      report = { kind: 'skip', attempt_id, ...(await this.skip()) };
+      report = {
+        kind: 'skip',
+        attempt_id,
+        ...(await this.skip(job.expect_uri ?? null)),
+      };
     else if (job.kind === 'search')
       report = { kind: 'search', attempt_id, ...(await this.search(job)) };
     else if (job.kind === 'control')
@@ -1304,13 +1310,25 @@ export class SpotifyRuntime {
   }
 
   /** `!songskip` / the panel / a cancel within the grace: one next on the playing device; read back if unclear. */
-  private async skip(): Promise<
+  /**
+   * A skip. `expect`: a viewer's paid skip aims at THIS track — another one playing (it ended, someone skipped first) →
+   * `TRACK_CHANGED`, nothing sent: a late skip never takes the next track.
+   */
+  private async skip(
+    expect: string | null = null,
+  ): Promise<
     Omit<Extract<SpotifyJobReport, { kind: 'skip' }>, 'kind' | 'attempt_id'>
   > {
     let before: SpotifyTrack | null = null;
     try {
       const p = await this.d.api.playback(true);
       before = toPlayback(p.data, p.at).track;
+      if (expect && before?.uri !== expect)
+        return {
+          outcome: 'failed',
+          reason: 'TRACK_CHANGED',
+          skipped_track: before,
+        };
       const device =
         p.data?.device?.is_active && !p.data.device.is_restricted
           ? p.data.device
@@ -1382,13 +1400,25 @@ export class SpotifyRuntime {
           ? p.data.device
           : pickDevice(await this.d.api.devices(true));
       if (!device) return { outcome: 'failed', reason: 'NO_DEVICE' };
+      // A seek moves in THE track the moderator saw: another one playing → nothing sent.
+      if (
+        job.action === 'seek' &&
+        toPlayback(p.data, p.at).track?.uri !== job.expect_uri
+      )
+        return { outcome: 'failed', reason: 'TRACK_CHANGED' };
       const proven = (after: SpotifyPlayback) =>
         job.action === 'volume'
           ? after.volume_percent === job.volume_percent
-          : after.is_playing === (job.action === 'resume');
+          : job.action === 'seek'
+            ? after.track?.uri === job.expect_uri &&
+              after.progress_ms !== null &&
+              Math.abs(after.progress_ms - (job.position_ms ?? 0)) <= 5_000
+            : after.is_playing === (job.action === 'resume');
       try {
         if (job.action === 'volume')
           await this.d.api.setVolume(job.volume_percent ?? 0, device.id);
+        else if (job.action === 'seek')
+          await this.d.api.seek(job.position_ms ?? 0, device.id);
         else await this.d.api.setPlaying(job.action === 'resume', device.id);
       } catch (e) {
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
@@ -1646,6 +1676,15 @@ export class SpotifyRuntime {
         throw Object.assign(new Error('overlays_unavailable'), { status: 503 });
       return this.overlays.api(method, path, body);
     }
+    // Music Hub: the paid skip and the Open Bar (Core decides; the panel only switches), and what a player action
+    // really did (the panel tells Studio's answer, never « demandé » as a success).
+    if (path === '/music-rules')
+      return method === 'GET'
+        ? this.d.core(`${this.base}/music-rules`)
+        : this.d.core(`${this.base}/music-rules`, await body());
+    const control = /^\/controls\/([0-9a-f-]{36})$/.exec(path);
+    if (method === 'GET' && control)
+      return this.d.core(`${this.base}/controls/${control[1]}`);
     if (method !== 'POST')
       throw Object.assign(new Error('not_found'), { status: 404 });
     // Music Hub: the stream's music history (Core), newest first, 50 per page.

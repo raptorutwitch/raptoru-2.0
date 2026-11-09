@@ -583,6 +583,12 @@ export function createClient({
       idempotencyKey: key,
     }),
     musicControl: (jobId) => call('GET', `/music/controls/${encodeURIComponent(jobId)}`),
+    /** A viewer's paid skip: one key per intent (a retry never pays twice); the price is Core's (expected: a guard). */
+    musicSkip: (key, expectedPrice) => call('POST', '/music/skip', {
+      body: { expected_price: expectedPrice },
+      idempotencyKey: key,
+    }),
+    musicSkipResult: (id) => call('GET', `/music/skip/${encodeURIComponent(id)}`),
     /** Tombola V2 (Lab): Core's viewer state (phase, timer, entries, refusal, result, history). */
     raffleState: () => call('GET', '/raffle/state'),
     joinRaffle: () => call('POST', '/actions/raffle', {

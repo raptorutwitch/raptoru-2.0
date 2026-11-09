@@ -5,6 +5,8 @@
 // Performance: the DOM changes only when the track, the preset or the visibility changes; between two changes the
 // progress bar is ONE CSS transition to the track's end and the clock text moves once a second (only when shown).
 
+import { hasTrack, timeline } from './overlay-timing.js';
+
 const params = new URLSearchParams(location.search);
 const PREVIEW = params.has('preview') || params.has('card');
 const CARD = params.has('card');
@@ -158,11 +160,8 @@ const model = {
   pulse: 0,
   offline: false,
 };
-let shownGen = null;
-let announceUntil = 0;
-let announceTimer = null;
-let lastPulse = null;
-let wasVisible = false;
+const tl = timeline({ preview: PREVIEW, card: CARD });
+let untilTimer = null;
 let shellKey = '';
 let bodyKey = '';
 let timeTicker = null;
@@ -183,8 +182,6 @@ anchor.append(center);
 stage.append(anchor);
 
 const settings = () => model.preset?.settings;
-const hasTrack = (l) =>
-  !!l?.track && ['playing', 'paused', 'stale'].includes(l.state);
 const posNow = () => {
   const l = model.live;
   const d = l?.track?.duration_ms;
@@ -194,46 +191,6 @@ const posNow = () => {
     (l.state === 'playing' ? performance.now() - model.liveAt : 0);
   return d ? Math.min(Math.max(0, p), d) : Math.max(0, p);
 };
-
-/** What to show now: the full widget, its compact form, a quiet « aucune musique », or nothing. */
-function decideForm(now) {
-  const s = settings();
-  if (!s) return 'hidden';
-  const l = model.live;
-  if (CARD) return hasTrack(l) ? 'full' : 'idle';
-  if (!PREVIEW && (!model.visible || model.offline)) return 'hidden';
-  const mode = s.display.mode;
-  if (!hasTrack(l)) {
-    if (s.display.on_idle !== 'placeholder' || mode === 'announce')
-      return 'hidden';
-    return mode === 'hybrid' ? 'compact-idle' : 'idle';
-  }
-  const announcing = now < announceUntil;
-  let form =
-    mode === 'always'
-      ? 'full'
-      : mode === 'announce'
-        ? announcing
-          ? 'full'
-          : 'hidden'
-        : announcing
-          ? 'full'
-          : 'compact';
-  if (l.state === 'paused' && form !== 'hidden') {
-    if (s.display.on_pause === 'hide') form = 'hidden';
-    else if (s.display.on_pause === 'compact')
-      form = mode === 'announce' ? 'hidden' : 'compact';
-  }
-  return form;
-}
-
-function announce(now) {
-  const s = settings();
-  if (!s) return;
-  announceUntil = now + s.display.announce_s * 1000;
-  clearTimeout(announceTimer);
-  announceTimer = setTimeout(() => update(), s.display.announce_s * 1000 + 30);
-}
 
 // --- variables of the preset ------------------------------------------------------------------------------------------
 function paint(s) {
@@ -301,7 +258,6 @@ function paint(s) {
     vars[k] = v;
   for (const [k, v] of Object.entries(vars)) st.setProperty(k, String(v));
   anchor.dataset.pos = s.position;
-  anchor.dataset.enter = motionOk() ? s.animation.enter : 'fade';
 }
 
 // --- the widget's HTML ------------------------------------------------------------------------------------------------
@@ -639,28 +595,36 @@ function update() {
   }
   const now = performance.now();
   const l = model.live;
-  // A new occurrence, a test of the animation, the overlay just shown: an announce (announce / hybrid modes).
-  if (hasTrack(l) && l.gen !== shownGen) {
-    const first = shownGen === null;
-    shownGen = l.gen;
-    if (!first || PREVIEW) announce(now);
-    if (!first && s.display.request_spotlight && l.request) announce(now);
-  }
-  if (lastPulse !== null && model.pulse !== lastPulse) announce(now);
-  const pulsed = lastPulse !== null && model.pulse !== lastPulse;
-  lastPulse = model.pulse;
-  const visibleNow = PREVIEW || (model.visible && !model.offline);
-  if (visibleNow && !wasVisible && !PREVIEW) announce(now);
-  wasVisible = visibleNow;
+  const { form, pulsed } = tl.step(model, now);
+  clearTimeout(untilTimer);
+  if (tl.until > now) untilTimer = setTimeout(update, tl.until - now + 30);
 
   paint(s);
-  const form = decideForm(now);
+  const motion = motionOk();
   if (form === 'hidden') {
+    // The exit: its own movement (or the entrance's, reversed), from where the widget stands.
+    if (anchor.classList.contains('is-shown'))
+      anchor.dataset.enter = !motion
+        ? 'fade'
+        : s.animation.exit === 'auto'
+          ? s.animation.enter
+          : s.animation.exit;
     anchor.classList.remove('is-shown');
     hideTab();
     clearInterval(timeTicker);
     timeTicker = null;
     return;
+  }
+  const enter = motion ? s.animation.enter : 'fade';
+  if (anchor.dataset.enter !== enter) {
+    // Back to the entrance's starting point, without a movement of its own (only once fully gone).
+    const gone = getComputedStyle(anchor).visibility === 'hidden';
+    if (gone) anchor.style.transition = 'none';
+    anchor.dataset.enter = enter;
+    if (gone) {
+      void anchor.offsetWidth;
+      anchor.style.transition = '';
+    }
   }
   const p = parts(s, l, form);
   const sk = `${form === 'compact' || form === 'compact-idle' ? 'c' : 'f'}|${JSON.stringify(s)}`;
@@ -688,7 +652,9 @@ function update() {
     shellKey = sk;
     bodyKey = bk;
   } else if (bk !== bodyKey) {
-    const chg = changedTrack && motionOk() ? s.animation.change : 'none';
+    // Coming back from hidden: the entrance alone (the old track is not shown leaving).
+    const chg =
+      changedTrack && !appearing && motion ? s.animation.change : 'none';
     const oldBody = root.querySelector(':scope > .mo-body');
     const tmp = document.createElement('div');
     tmp.innerHTML = body(form === 'compact' ? 'minimal' : s.archetype, s, p);

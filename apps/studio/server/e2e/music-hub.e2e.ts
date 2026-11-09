@@ -220,9 +220,8 @@ test('Music Hub: search the Lab catalogue (text, pasted link), request in Jetons
   await request(viewer, 'velours', 'Velours');
   const sup = await music(browser, 'supermod');
   await expect(sup.locator('.mh-now')).toBeVisible({ timeout: 20_000 });
-  // The supermod (Core's grade: lab_staff, « Supermod Lab ») opens the player under « en cours », pauses, resumes.
-  await sup.locator('.mh-now [data-act="sup"]').click();
-  await sup.locator('.mh-sup [data-act="pause"]').click();
+  // The supermod (Core's grade: lab_staff, « Supermod Lab »): Pause / Passer right on « en cours » (09/11 final pass).
+  await sup.locator('.mh-now [data-act="pause"]').click();
   await expect
     .poll(async () => (await studio(admin, '/state')).sim?.playing, {
       timeout: 20_000,
@@ -231,7 +230,7 @@ test('Music Hub: search the Lab catalogue (text, pasted link), request in Jetons
   await expect(sup.locator('.mh-now.is-paused')).toContainText('En pause', {
     timeout: 20_000,
   });
-  await sup.locator('.mh-sup [data-act="resume"]').click();
+  await sup.locator('.mh-now [data-act="resume"]').click();
   await expect
     .poll(async () => (await studio(admin, '/state')).sim?.playing, {
       timeout: 20_000,
@@ -241,7 +240,7 @@ test('Music Hub: search the Lab catalogue (text, pasted link), request in Jetons
   for (let n = 0; n < 6; n++) {
     if ((await viewer.locator('.mh-now', { hasText: 'Velours' }).count()) > 0)
       break;
-    await sup.locator('.mh-sup [data-act="skip"]').click();
+    await sup.locator('.mh-now [data-act="skip"]').click();
     await expect(sup.locator('.mh-toast')).toContainText(
       /passée|répondu|confirmé/i,
       {
@@ -254,7 +253,7 @@ test('Music Hub: search the Lab catalogue (text, pasted link), request in Jetons
     'ta demande',
     { timeout: 20_000 },
   );
-  await sup.locator('.mh-sup [data-act="skip"]').click();
+  await sup.locator('.mh-now [data-act="skip"]').click();
   await expect(viewer.locator('.mh-now', { hasText: 'Velours' })).toHaveCount(
     0,
     {

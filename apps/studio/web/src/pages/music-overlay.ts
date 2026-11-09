@@ -169,20 +169,28 @@ export function mountMusicOverlayPage(root: HTMLElement) {
   // --- painting --------------------------------------------------------------------------------------------------------
   const paintHead = () => {
     const on = st?.visible ?? false;
+    // « Afficher » authorises; in announce mode it arms the overlay (it shows at the next track, not now).
+    const d = st?.preset.settings.display;
     patch(
       p.state,
       st
         ? stateChip(
             on ? 'live' : 'off',
-            on ? `Affiché · ${st.preset.name}` : `Masqué · ${st.preset.name}`,
+            !on
+              ? `Masqué · ${st.preset.name} · aucune apparition`
+              : d?.mode === 'announce'
+                ? `Armé · ${st.preset.name} · ${d.announce_s} s à chaque nouveau titre`
+                : d?.mode === 'hybrid'
+                  ? `Affiché · ${st.preset.name} · pastille, agrandie à chaque titre`
+                  : `Affiché en permanence · ${st.preset.name}`,
           )
         : stateChip('w', error || 'Lecture…'),
     );
     patch(
       p.actions,
       st
-        ? `<button type="button" class="d-btn ghost" data-act="mox-pulse" title="Rejoue l’apparition sur le stream avec le titre réel">${ic('sparkle')}Tester sur le stream</button>
-           <button type="button" class="d-btn ${on ? '' : 'pri'}" data-act="mox-visible" data-on="${on ? '0' : '1'}">${ic(on ? 'eye' : 'eye')}${on ? 'Masquer' : 'Afficher'}</button>
+        ? `<button type="button" class="d-btn ghost" data-act="mox-pulse" title="${d?.mode === 'announce' ? `Montre l’overlay maintenant, ${d.announce_s} s, avec le titre réel` : 'Rejoue l’apparition sur le stream avec le titre réel'}">${ic('sparkle')}${d?.mode === 'announce' ? 'Montrer maintenant' : 'Tester sur le stream'}</button>
+           <button type="button" class="d-btn ${on ? '' : 'pri'}" data-act="mox-visible" data-on="${on ? '0' : '1'}" title="${on ? 'Cache l’overlay tout de suite ; plus aucune apparition automatique' : d?.mode === 'announce' ? 'Arme l’overlay : il apparaîtra au prochain titre' : 'Affiche l’overlay sur le stream'}">${ic(on ? 'eye' : 'eye')}${on ? 'Masquer' : 'Afficher'}</button>
            ${panelBtn(p.panel.isOpen(), 'OBS')}`
         : '',
     );
@@ -387,7 +395,11 @@ export function mountMusicOverlayPage(root: HTMLElement) {
           lastVersion = st.version;
           paint();
         },
-        el.dataset.on === '1' ? 'Overlay affiché' : 'Overlay masqué',
+        el.dataset.on === '1'
+          ? st?.preset.settings.display.mode === 'announce'
+            ? 'Overlay armé : il apparaîtra au prochain titre'
+            : 'Overlay affiché'
+          : 'Overlay masqué : plus aucune apparition',
       ),
     'mox-pulse': (el) =>
       run(

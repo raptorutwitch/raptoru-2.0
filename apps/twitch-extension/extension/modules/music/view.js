@@ -10,11 +10,16 @@
 // 09/11 (docs/music/SMTC_STUDIO.md): « en cours » follows what Spotify Desktop plays as Windows tells Studio (the
 // broadcaster's music as much as a request), with a progress bar moved by the clock between two readings (never a
 // network call per second); the history lists every track that played during the lives, requests recognised by Core.
+// 09/11 (final pass, MUSIC_HUB_STATE.md § 14): the supermods' Pause / Passer sit right on the « en cours » row (volume
+// behind the sliders), a click on the timeline asks where to go before a seek (never sent without « Aller »); a viewer's
+// PAID skip (its price shown before the confirmation, Core's progressive price, refunded when it does not happen); the
+// Open Bar (free requests, no per-viewer count) shown in the band. Core decides each of them again.
 import { newIdempotencyKey } from '../../shared/api.js';
 import { createPoller, everySecond } from '../../app/store.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
+// The narrow no-break space of fr-FR is missing from some weights of the font (« 25000 »): a plain no-break space.
+const fmt = (n) => Number(n || 0).toLocaleString('fr-FR').replace(/\u202f/g, '\u00a0');
 const dur = (ms) => {
   if (ms === null || ms === undefined) return '';
   const s = Math.max(0, Math.round(ms / 1000));
@@ -72,7 +77,16 @@ function refusal(e, st) {
     case 'playing_use_skip': return 'Ce titre joue déjà : utilise « Passer ».';
     case 'not_removable': return 'Cette demande n’est plus dans la file.';
     case 'identity_required': return 'Partage ton identité Twitch pour demander une musique.';
-    case 'network_error': return 'Connexion perdue. Réessaie : ta demande ne sera jamais payée deux fois.';
+    case 'network_error': return 'Connexion perdue. Réessaie : rien ne sera jamais payé deux fois.';
+    case 'lab_read_only': return 'Lab en lecture seule : le lecteur Spotify n’est pas piloté, rien n’a été envoyé.';
+    case 'queue_full': return `Open Bar : la file est pleine (${d.max_queue ?? 50} musiques). Attends qu’une musique passe.`;
+    case 'viewer_skip_disabled': return 'Le skip payant est désactivé pour le moment.';
+    case 'skip_in_progress': return 'Un skip est déjà en cours : attends son résultat.';
+    case 'protected_request': return `Cette musique a été demandée${d.requested_by ? ` par @${d.requested_by}` : ''} : une demande payée ne peut pas être passée par un autre viewer.`;
+    case 'nothing_playing': return 'Aucune musique en cours.';
+    case 'paused': return 'La musique est en pause : rien à passer.';
+    case 'track_not_identified': return 'La musique en cours n’est pas encore identifiée : réessaie dans quelques secondes.';
+    case 'track_too_short': return 'Ce titre est trop court pour s’y déplacer.';
     default: return 'Action impossible pour le moment.';
   }
 }
@@ -118,6 +132,7 @@ export function view(ctx) {
   let dialog = null; // { id } — the withdrawal confirmation
   let sup = false; // the supermods' player card under « en cours »
   let ctlBusy = null; // the player action waiting for Studio's answer
+  let seekAt = null; // the position chosen on the timeline, waiting for « Aller » (never sent before)
   let tip = null; // the open explanation of the band
   let hist = false; // « Musiques de la soirée » shown instead of the list
   let evening = null; // { items, next, since, live, loading, error }
@@ -190,6 +205,15 @@ export function view(ctx) {
     const own = st.now_playing?.own ? st.now_playing.request_id : null;
     if (own && nowOwn !== null && own !== nowOwn) toast(`Ta musique passe maintenant : « ${st.now_playing.title} ».`);
     nowOwn = own ?? '';
+    const ls = me.last_skip;
+    if (ls && ls.status !== 'pending' && !told.has(`music:skip:${ls.id}`)) {
+      told.add(`music:skip:${ls.id}`);
+      const text = ls.status === 'done'
+        ? `Ton skip payé (◆ ${fmt(ls.price)}) a passé « ${ls.track.title} ».`
+        : `Ton skip de « ${ls.track.title} » n’a pas pu se faire : tes ◆ ${fmt(ls.price)} Jetons te sont rendus.`;
+      if (ls.ended_at && Date.parse(ls.ended_at) < openedAt - 2_000)
+        host.notify?.({ id: `music:skip:${ls.id}`, dedupe_key: `music:skip:${ls.id}`, type: ls.status === 'done' ? 'success' : 'warning', title: 'Pendant ton absence', message: text, created_at: ls.ended_at });
+    }
     for (const h of me.history ?? []) {
       const said = ending(h);
       if (!said || !h.ended_at) continue;
@@ -253,7 +277,10 @@ export function view(ctx) {
     const seg = (k, cls, inner) => `<button type="button" class="mh-seg ${cls}" data-act="tip" data-tip="${k}" data-key="tip-${k}" aria-expanded="${tip === k}" aria-controls="mh-tip">${inner}</button>`;
     let html = `<span class="mh-band__lab">${hist ? '' : `À suivre <b>· ${st.queue.length}</b>`}</span>`;
     if (!st.open) html += '<span class="mh-seg mh-seg--closed">Demandes fermées</span>';
-    else {
+    else if (st.open_bar) {
+      html += seg('bar', 'mh-seg--bar', '<b>Open Bar</b><span class="mh-long">demandes gratuites</span>');
+      if (cd > 0) html += seg('wait', 'mh-seg--wait', `${I.clock}<b>${dur(cd)}</b>`);
+    } else {
       html += seg('price', 'mh-seg--price', `<b>◆ ${fmt(st.price_tokens)}</b><span class="mh-long">par demande</span>`);
       if (me) html += seg('quota', `mh-seg--quota ${left ? '' : 'is-full'}`, `<b>${left} / ${me.max_pending}</b><span class="mh-long">disponible${left > 1 ? 's' : ''}</span>`);
       if (cd > 0) html += seg('wait', 'mh-seg--wait', `${I.clock}<b>${dur(cd)}</b>`);
@@ -261,8 +288,14 @@ export function view(ctx) {
     const T = {
       price: `<b>◆ ${fmt(st.price_tokens)} Jetons par demande.</b><small>Débités quand tu confirmes. Rendus une seule fois si tu retires ta demande avant qu’elle commence, ou si elle ne peut pas être ajoutée.</small>`,
       quota: me ? `<b>${left ? `Tu peux encore demander ${left} musique${left > 1 ? 's' : ''}.` : `Tu as déjà ${me.max_pending} demande${me.max_pending > 1 ? 's' : ''} en attente.`}</b><small>Au plus ${me.max_pending} demande${me.max_pending > 1 ? 's' : ''} en attente à la fois : cette limite évite qu’un même viewer monopolise la file. Une place se libère quand une de tes musiques commence.</small>` : '',
-      wait: `<b>Prochaine demande dans ${dur(cd)}.</b><small>Un délai sépare deux demandes, compté depuis l’ajout de ta dernière demande, même si tu l’as retirée ensuite.</small>`,
+      wait: st.open_bar
+        ? `<b>Prochaine demande dans ${dur(cd)}.</b><small>Open Bar : ${st.open_bar.cooldown_seconds} s entre deux demandes d’une même personne, pour que chacun puisse en profiter.</small>`
+        : `<b>Prochaine demande dans ${dur(cd)}.</b><small>Un délai sépare deux demandes, compté depuis l’ajout de ta dernière demande, même si tu l’as retirée ensuite.</small>`,
+      bar: st.open_bar
+        ? `<b>Open Bar : les demandes sont gratuites.</b><small>Aucune limite de demandes par personne tant qu’il est ouvert ; ${st.open_bar.cooldown_seconds} s entre deux demandes, ${st.open_bar.max_queue} musiques au plus dans la file. Les skips restent payants.</small>`
+        : '',
     };
+    if (tip === 'bar' && !st.open_bar) tip = null;
     if (tip) html += `<div class="mh-tip" id="mh-tip" role="note">${T[tip]}</div>`;
     put(box, html);
   }
@@ -279,13 +312,52 @@ export function view(ctx) {
     const playing = !!n.is_playing && !n.stale;
     const label = n.stale ? 'Non confirmé' : playing ? 'En cours' : 'En pause';
     const timed = n.duration_ms > 0 && Number.isFinite(n.progress_ms);
+    const pl = can().player;
+    const why = pl ? playerWhy() : '';
+    const seekable = pl && !why && timed && !n.stale;
+    const busy = (a) => (ctlBusy === a ? 'aria-busy="true"' : '');
+    const off = why || ctlBusy ? 'disabled' : '';
+    // Supermods and the streamer: Pause / Passer right here (the volume behind the sliders); a viewer: the paid skip.
+    const acts = pl
+      ? `<span class="mh-ctl" role="group" aria-label="Lecteur du stream">
+          <button type="button" class="mh-ico mh-ico--ctl" data-act="${playing ? 'pause' : 'resume'}" data-key="pp" ${off} ${busy(playing ? 'pause' : 'resume')} aria-label="${playing ? 'Mettre en pause' : 'Reprendre la lecture'}" title="${esc(why || (playing ? 'Pause' : 'Reprendre'))}">${playing ? I.pause : I.play}</button>
+          <button type="button" class="mh-ico mh-ico--ctl" data-act="skip" data-key="sk" ${off} ${busy('skip')} aria-label="Passer cette musique" title="${esc(why || 'Passer (modération, gratuit)')}">${I.next}</button>
+          <button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Volume du lecteur" title="Volume">${I.sliders}</button>
+        </span>`
+      : paidSkipHtml(n, playing);
     // The bar and the time move every second outside this HTML (paintProgress): the list is never rebuilt for them.
+    const bar = timed
+      ? `<span class="mh-now__bar">${seekable
+        ? `<span class="mh-prog is-seek" data-act="seek-pick" data-key="seek" role="slider" tabindex="0" aria-label="Position dans le titre : clique pour choisir où aller" aria-valuemin="0" aria-valuemax="${Math.round(n.duration_ms / 1000)}" title="Clique pour choisir où aller (confirmation ensuite)"><i data-k="prog"></i>${seekAt !== null ? `<b class="mh-prog__at" style="left:${(100 * seekAt) / n.duration_ms}%"></b>` : ''}</span>`
+        : '<span class="mh-prog" aria-hidden="true"><i data-k="prog"></i></span>'}<span class="mh-ptime" data-k="ptime"></span></span>`
+      : '';
+    const seekLine = seekable && seekAt !== null
+      ? `<div class="mh-seek" role="group" aria-label="Se déplacer dans le titre"><span>Aller à <b>${dur(seekAt)}</b> ?</span><button type="button" class="mh-btn mh-btn--go" data-act="seek-go" data-key="seek-go" ${ctlBusy ? 'disabled aria-busy="true"' : ''}>Aller</button><button type="button" class="mh-btn" data-act="seek-cancel" data-key="seek-cancel">Annuler</button></div>`
+      : '';
     return `<div class="mh-now ${playing ? '' : 'is-paused'}" role="group" aria-label="${label} : ${esc(n.title)}" data-now="${esc(nowKey(n))}">
       <span class="mh-now__ico">${playing ? EQ : I.pause}</span>${art(n.image_url, 'mh-art--now')}
       <span class="mh-tx"><span class="mh-tag">${label}</span><b>${esc(n.title)}</b><span>${artists(n.artists)}${by ? ` · ${by}` : ''}</span></span>
-      ${can().player ? `<button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Lecteur du stream (supermods)" title="Lecteur du stream (supermods)">${I.sliders}</button>` : '<span></span>'}
-      ${timed ? `<span class="mh-now__bar"><span class="mh-prog" aria-hidden="true"><i data-k="prog"></i></span><span class="mh-ptime" data-k="ptime"></span></span>` : ''}
-    </div>${sup && can().player ? supHtml() : ''}`;
+      ${acts}
+      ${bar}
+    </div>${seekLine}${pl && why ? `<p class="mh-sup__why">${esc(why)}</p>` : ''}${sup && pl ? supHtml() : ''}`;
+  }
+
+  /** Why the supermods' controls are off right now ('' : they work). Core refuses anyway; this only explains. */
+  function playerWhy() {
+    const p = st.player ?? {};
+    if (!p.connected) return 'Lecteur indisponible (Studio, Spotify fermé ou aucun appareil).';
+    if (p.read_only) return 'Lab en lecture seule : les commandes ne pilotent pas Spotify.';
+    if (!p.controls) return 'Commandes du lecteur désactivées dans Studio.';
+    return '';
+  }
+
+  /** A viewer's paid skip: a small button, its price in the confirmation; why it is not possible on a click. */
+  function paidSkipHtml(n, playing) {
+    const vs = st.viewer_skip;
+    if (!vs || !st.me || !playing || n.stale) return '<span></span>';
+    const blocked = vs.busy ? 'skip_in_progress' : vs.blocked;
+    const label = blocked ? refusal({ code: blocked }, st) : `Passer cette musique · ◆ ${fmt(vs.price)} Jetons`;
+    return `<button type="button" class="mh-ico mh-ico--paid ${blocked ? 'is-off' : ''}" data-act="vskip" data-key="vskip" ${blocked ? 'aria-disabled="true"' : ''} aria-label="${esc(label)}" title="${esc(label)}">${I.next}<span class="mh-ico__coin" aria-hidden="true">◆</span></button>`;
   }
 
   /**
@@ -316,19 +388,13 @@ export function view(ctx) {
     }
   }
 
-  /** The supermods' player: what Studio confirms, never a guess (a hidden button is not a right: Core checks it). */
+  /** The supermods' volume (behind the sliders): what Studio confirms, never a guess (Core checks the right). */
   function supHtml() {
     const p = st.player;
-    const on = p.controls && p.connected;
-    const playing = st.now_playing?.is_playing ?? p.is_playing;
-    const busy = (a) => (ctlBusy === a ? 'aria-busy="true"' : '');
-    const off = !on || !!ctlBusy;
-    const why = !p.connected ? 'Lecteur indisponible (Studio, Spotify fermé ou aucun appareil).' : !p.controls ? 'Commandes du lecteur désactivées dans Studio.' : ctlBusy ? 'En attente de la réponse du lecteur…' : '';
-    return `<div class="mh-sup" role="group" aria-label="Lecteur du stream (supermods)"><small>Lecteur du stream · supermods${p.connected && p.device ? ` · ${esc(p.device)}` : ''}</small>
-      <button type="button" class="mh-btn" data-act="${playing ? 'pause' : 'resume'}" data-key="pp" ${off ? 'disabled' : ''} ${busy(playing ? 'pause' : 'resume')}>${playing ? `${I.pause} Pause` : `${I.play} Reprendre`}</button>
-      <button type="button" class="mh-btn" data-act="skip" data-key="sk" ${off || !st.now_playing ? 'disabled' : ''} ${busy('skip')}>${I.next} Passer</button>
+    const off = !!playerWhy() || !!ctlBusy;
+    return `<div class="mh-sup" role="group" aria-label="Volume du lecteur (supermods)"><small>Volume${p.connected && p.device ? ` · ${esc(p.device)}` : ''}</small>
       <input type="range" min="0" max="100" step="5" value="${p.volume_percent ?? 50}" data-act="volume" data-key="vol" ${off ? 'disabled' : ''} aria-label="Volume du lecteur">
-      ${why ? `<p class="mh-sup__why">${esc(why)}</p>` : ''}</div>`;
+      <span class="mh-sup__v">${p.volume_percent ?? '—'} %</span></div>`;
   }
 
   function queueHtml() {
@@ -353,7 +419,7 @@ export function view(ctx) {
         : c.moderate && !own && e.position
           ? `<button type="button" class="mh-ico" data-act="menu" data-id="${esc(e.request_id)}" aria-haspopup="menu" aria-expanded="${menuFor === e.request_id}" aria-label="Modérer la demande de ${esc(e.requested_by)}">${I.dots}</button>`
           : '<span></span>';
-      const pay = team() && e.payment ? ` · ${e.payment === 'tokens' ? `◆ ${fmt(e.price_tokens)}` : 'points'}` : '';
+      const pay = team() && e.payment ? ` · ${e.payment === 'tokens' ? (e.price_tokens === 0 ? 'Open Bar' : `◆ ${fmt(e.price_tokens)}`) : 'points'}` : '';
       return `<li class="mh-row ${own ? 'is-mine' : ''} ${flash === e.request_id ? 'is-flash' : ''}" data-id="${esc(e.request_id)}">
         <span class="mh-num">${e.position ?? '…'}</span>${art(e.image_url)}
         <span class="mh-tx">${i === 0 && !now ? '<span class="mh-next">Prochaine musique</span>' : ''}<b>${esc(e.title ?? 'Titre en cours d’ajout')}</b><span>${who} · ${adding ? 'ajout en cours…' : artists(e.artists)}${pay}</span></span>
@@ -446,6 +512,8 @@ export function view(ctx) {
 
   let shownNow = null;
   function renderBody() {
+    // Another track: a position chosen on the previous one is dropped (never applied to the next).
+    if (seekAt !== null && (!st?.now_playing || nowKey(st.now_playing) !== shownNow)) seekAt = null;
     put($('body'), hist ? historyHtml() : queueHtml());
     node.querySelector('.mh-clock').setAttribute('aria-pressed', String(hist));
     renderBand();
@@ -511,14 +579,16 @@ export function view(ctx) {
     const after = bal === null || bal === undefined ? null : bal - price;
     const line = pick.error
       ? `<span class="mh-buy__err" role="alert">${esc(pick.error)}</span>`
-      : `<b>◆ ${fmt(price)}</b>${after !== null ? ` · il te restera ◆ ${fmt(after)}` : ''}`;
+      : price === 0 && st?.open_bar
+        ? '<b>Gratuit</b> · Open Bar'
+        : `<b>◆ ${fmt(price)}</b>${after !== null ? ` · il te restera ◆ ${fmt(after)}` : ''}`;
     // Spotify's display rules: a link back to the track on Spotify for its metadata and cover (real catalogue only).
     const back = results?.provider === 'spotify'
       ? `<a class="mh-open" href="https://open.spotify.com/track/${encodeURIComponent(i.id)}" target="_blank" rel="noopener noreferrer">Ouvrir dans Spotify</a>`
       : '';
     put($('buy'), `<div class="mh-buy" role="group" aria-label="Demander ce titre">${art(i.image_url)}<span class="mh-tx"><b>${esc(i.title)}</b><span>${line}</span>${back}</span>
       <span class="mh-buy__acts"><button type="button" class="mh-x" data-act="unpick" data-key="unpick" aria-label="Annuler la sélection">${I.x}</button>
-      <button type="button" class="mh-btn mh-btn--go" data-act="confirm" data-key="confirm" ${pick.busy ? 'disabled aria-busy="true"' : ''}>${pick.busy ? 'Envoi…' : `Demander · ◆ ${fmt(price)}`}</button></span></div>`);
+      <button type="button" class="mh-btn mh-btn--go" data-act="confirm" data-key="confirm" ${pick.busy ? 'disabled aria-busy="true"' : ''}>${pick.busy ? 'Envoi…' : price === 0 && st?.open_bar ? 'Demander · gratuit' : `Demander · ◆ ${fmt(price)}`}</button></span></div>`);
   }
 
   function openCurtain() {
@@ -597,8 +667,13 @@ export function view(ctx) {
     } catch (e) {
       // A lost answer keeps the SAME key (a retry can never pay twice); a decided refusal gets a new one.
       if (e?.code !== 'network_error') chosen.key = newIdempotencyKey();
-      if (e?.code === 'price_changed' && st) st.price_tokens = e.details?.price ?? st.price_tokens;
-      chosen.error = refusal(e, st);
+      if (e?.code === 'price_changed' && st) {
+        st.price_tokens = e.details?.price ?? e.details?.details?.price ?? st.price_tokens;
+        if ((e.details?.open_bar ?? e.details?.details?.open_bar) === false) st.open_bar = null;
+      }
+      chosen.error = e?.code === 'price_changed' && st?.price_tokens > 0 && !st.open_bar
+        ? `L’Open Bar est fermé : la demande coûte ◆ ${fmt(st.price_tokens)}. Confirme à nouveau.`
+        : refusal(e, st);
       chosen.busy = false;
       renderBuy();
       if (e?.code !== 'network_error') void poller.now();
@@ -609,6 +684,7 @@ export function view(ctx) {
 
   function renderDialog() {
     if (!dialog) { put($('dialog'), ''); return; }
+    if (dialog.kind === 'skip') { put($('dialog'), skipDialogHtml()); return; }
     const e = [...(st?.queue ?? []), ...(st?.pending ?? [])].find((x) => x.request_id === dialog.id);
     const r = (st?.me?.requests ?? []).find((x) => x.request_id === dialog.id);
     if (!e || !r?.cancellable) { dialog = null; put($('dialog'), ''); return; }
@@ -621,6 +697,65 @@ export function view(ctx) {
       <div class="mh-dialog__row">${art(e.image_url, 'mh-art--lg')}<div><h3 id="mh-wt">Retirer cette musique ?</h3><p><b>${esc(e.title ?? 'Titre en cours d’ajout')}</b>${e.artists?.length ? ` · ${esc(e.artists[0])}` : ''}</p></div></div>
       <p id="mh-wd">${esc(text)}</p>
       <div class="mh-dialog__acts"><button type="button" class="mh-btn" data-act="keep" data-key="keep">Conserver</button><button type="button" class="mh-btn mh-btn--danger" data-act="confirm-withdraw" data-key="cw">Retirer</button></div></div></div>`);
+  }
+
+  /** The paid skip's confirmation: what it costs NOW (Core's price), what is left, the rule, the refund. */
+  function skipDialogHtml() {
+    const n = st?.now_playing;
+    const vs = st?.viewer_skip;
+    if (!n || !vs) { dialog = null; return ''; }
+    const bal = st.me?.balance;
+    const after = bal === null || bal === undefined ? null : bal - vs.price;
+    const short = after !== null && after < 0;
+    const d = dialog;
+    return `<div class="mh-scrim" data-act="keep-out"><div class="mh-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mh-st" aria-describedby="mh-sd">
+      <div class="mh-dialog__row">${art(n.image_url, 'mh-art--lg')}<div><h3 id="mh-st">Passer cette musique ?</h3><p><b>${esc(n.title)}</b>${n.artists?.length ? ` · ${esc(n.artists[0])}` : ''}</p></div></div>
+      <p class="mh-dialog__price"><b>◆ ${fmt(vs.price)} Jetons</b>${after !== null ? `<span>${short ? `il te manque ◆ ${fmt(-after)}` : `il te restera ◆ ${fmt(after)}`}</span>` : ''}</p>
+      <p id="mh-sd">Le prix double à chaque skip payé dans les ${vs.window_minutes} minutes qui suivent le précédent (pour tout le stream), puis revient à ◆ ${fmt(vs.base_price)}. Si le skip ne se fait pas, tes Jetons te sont rendus.</p>
+      ${d.error ? `<p class="mh-buy__err" role="alert">${esc(d.error)}</p>` : ''}
+      <div class="mh-dialog__acts"><button type="button" class="mh-btn" data-act="keep" data-key="keep">Garder</button><button type="button" class="mh-btn mh-btn--danger" data-act="vskip-go" data-key="vskip-go" ${d.busy || short ? 'disabled' : ''} ${d.busy ? 'aria-busy="true"' : ''}>${d.busy ? 'Envoi…' : `Passer · ◆ ${fmt(vs.price)}`}</button></div></div></div>`;
+  }
+
+  /** Pays and follows the skip until Studio's reading proves it (done) or it is refunded — never an assumed success. */
+  async function paidSkip() {
+    const d = dialog;
+    if (d?.kind !== 'skip' || d.busy || !st?.viewer_skip) return;
+    d.busy = true;
+    d.error = null;
+    renderDialog();
+    let r;
+    try {
+      r = await client.musicSkip(d.key, st.viewer_skip.price);
+    } catch (e) {
+      // A lost answer keeps the SAME key (a retry never pays twice); a decided refusal gets a new one.
+      if (e?.code !== 'network_error') d.key = newIdempotencyKey();
+      const price = e?.details?.price ?? e?.details?.details?.price;
+      if (e?.code === 'price_changed' && price) st.viewer_skip.price = price;
+      d.busy = false;
+      d.error = e?.code === 'price_changed' ? `Le prix vient de changer : ◆ ${fmt(st.viewer_skip.price)}. Confirme à nouveau.` : refusal(e, st);
+      renderDialog();
+      void poller.now();
+      return;
+    }
+    dialog = null;
+    renderDialog();
+    toast(`Skip payé (◆ ${fmt(r.skip.price)}) : le lecteur passe la musique…`);
+    let out = r.skip;
+    let next = null;
+    for (let n = 0; n < 40 && out.status === 'pending' && !destroyed; n++) {
+      await sleep(500);
+      try {
+        const x = await client.musicSkipResult(out.id);
+        out = x.skip;
+        next = x.price;
+      } catch { /* the next try, or the state */ }
+    }
+    if (destroyed) return;
+    if (out.status !== 'pending') told.add(`music:skip:${out.id}`);
+    if (out.status === 'done') toast(`Musique passée. Prochain skip : ◆ ${fmt(next ?? st.viewer_skip?.price)}.`);
+    else if (out.status === 'refunded') toast(`Le skip n’a pas pu se faire${out.reason === 'TRACK_CHANGED' ? ' (le titre avait déjà changé)' : ''} : tes ◆ ${fmt(out.price)} Jetons te sont rendus.`, 'warn');
+    else toast('Le lecteur n’a pas encore confirmé : si le skip ne se fait pas, tes Jetons te seront rendus.', 'warn');
+    await poller.now();
   }
 
   async function withdraw(id) {
@@ -642,7 +777,7 @@ export function view(ctx) {
 
   /** A team action. A player action waits for Studio's answer: the view shows what really happened, never a guess. */
   async function moderate(command, success) {
-    const player = ['pause', 'resume', 'skip', 'volume'].includes(command.action);
+    const player = ['pause', 'resume', 'skip', 'volume', 'seek'].includes(command.action);
     if (player) { ctlBusy = command.action; renderBody(); }
     try {
       const r = await client.musicModerate(command);
@@ -658,6 +793,7 @@ export function view(ctx) {
           NO_DEVICE: 'Aucun appareil Spotify actif : rien n’a été envoyé.',
           RATE_LIMITED: 'Spotify limite les appels : réessaie dans un moment.',
           STUDIO_LOST: 'Studio n’a pas répondu : rien n’a été envoyé.',
+          TRACK_CHANGED: 'Le titre a changé entre-temps : rien n’a été envoyé.',
         }[out.reason];
         toast(out.status === 'done' ? success : out.status === 'pending' ? 'Le lecteur n’a pas encore répondu.' : why ?? 'Le lecteur n’a pas confirmé l’action.', out.status === 'done' ? 'ok' : 'warn');
       } else if (player && 'job_id' in r) toast('Le lecteur est indisponible : rien n’a été envoyé.', 'warn');
@@ -704,7 +840,16 @@ export function view(ctx) {
     }
     const a = t.dataset.act;
     const id = t.dataset.id;
-    if (a === 'keep-out') { if (event.target === t) { dialog = null; renderDialog(); } return; }
+    if (a === 'keep-out') { if (event.target === t && !dialog?.busy) { dialog = null; renderDialog(); } return; }
+    if (a === 'seek-pick') {
+      const n = st?.now_playing;
+      const r = t.getBoundingClientRect();
+      if (!n?.duration_ms || !r.width) return;
+      seekAt = Math.round((Math.min(1, Math.max(0, (event.clientX - r.left) / r.width)) * n.duration_ms) / 1000) * 1000;
+      renderBody();
+      node.querySelector('[data-act="seek-go"]')?.focus({ preventScroll: true });
+      return;
+    }
     if (a === 'clear') { closeCurtain(true); input.focus({ preventScroll: true }); }
     else if (a === 'retry') { if (typed()) { results = null; void runSearch(input.value.trim()); } }
     else if (a === 'unpick') { pick = null; renderCurtain(); }
@@ -716,7 +861,18 @@ export function view(ctx) {
     else if (a === 'sup') { sup = !sup; renderBody(); }
     else if (a === 'menu') { menuFor = menuFor === id ? null : id; renderBody(); }
     else if (a === 'withdraw') { dialog = { id, from: id }; renderDialog(); node.querySelector('[data-act="keep"]')?.focus({ preventScroll: true }); }
-    else if (a === 'keep') { const back = dialog?.from; dialog = null; renderDialog(); node.querySelector(`[data-act="withdraw"][data-id="${back}"]`)?.focus({ preventScroll: true }); }
+    else if (a === 'keep') { const d = dialog; if (d?.busy) return; dialog = null; renderDialog(); node.querySelector(d?.kind === 'skip' ? '[data-act="vskip"]' : `[data-act="withdraw"][data-id="${d?.from}"]`)?.focus({ preventScroll: true }); }
+    else if (a === 'vskip') {
+      const vs = st?.viewer_skip;
+      const blocked = vs?.busy ? 'skip_in_progress' : vs?.blocked;
+      if (!vs) return;
+      if (blocked) { toast(refusal({ code: blocked }, st), 'warn'); return; }
+      dialog = { kind: 'skip', key: newIdempotencyKey(), busy: false, error: null };
+      renderDialog();
+      node.querySelector('[data-act="keep"]')?.focus({ preventScroll: true });
+    } else if (a === 'vskip-go') void paidSkip();
+    else if (a === 'seek-cancel') { seekAt = null; renderBody(); node.querySelector('[data-act="seek-pick"]')?.focus({ preventScroll: true }); }
+    else if (a === 'seek-go') { const at = seekAt; if (at === null) return; seekAt = null; void moderate({ action: 'seek', position_ms: at }, `Lecture déplacée à ${dur(at)}.`); }
     else if (a === 'confirm-withdraw') { const d = dialog; dialog = null; renderDialog(); if (d) void withdraw(d.id); }
     else if (a === 'remove-refund') void moderate({ action: 'remove', request_id: id, refund: true }, 'Retirée et remboursée.');
     else if (a === 'remove-keep') {
@@ -734,17 +890,27 @@ export function view(ctx) {
   };
   const onKey = (event) => {
     if (event.key === 'Escape') {
-      const handled = dialog || menuFor || pick || curtain || tip || sup || hist;
+      const handled = dialog || menuFor || pick || curtain || tip || sup || hist || seekAt !== null;
       if (!handled) { if (event.target === input) event.preventDefault(); return; }
       event.preventDefault(); // Chrome would clear a type=search field
       event.stopPropagation();
-      if (dialog) { const back = dialog.from; dialog = null; renderDialog(); node.querySelector(`[data-act="withdraw"][data-id="${back}"]`)?.focus({ preventScroll: true }); }
+      if (dialog) { if (dialog.busy) return; const d = dialog; dialog = null; renderDialog(); node.querySelector(d.kind === 'skip' ? '[data-act="vskip"]' : `[data-act="withdraw"][data-id="${d.from}"]`)?.focus({ preventScroll: true }); }
+      else if (seekAt !== null) { seekAt = null; renderBody(); node.querySelector('[data-act="seek-pick"]')?.focus({ preventScroll: true }); }
       else if (menuFor) { menuFor = null; renderBody(); }
       else if (pick) { pick = null; renderCurtain(); }
       else if (curtain) { closeCurtain(false); quietFocus = true; input.focus({ preventScroll: true }); quietFocus = false; }
       else if (tip) { const k = tip; tip = null; renderBand(); node.querySelector(`[data-key="tip-${k}"]`)?.focus({ preventScroll: true }); }
       else if (sup) { sup = false; renderBody(); node.querySelector('[data-act="sup"]')?.focus({ preventScroll: true }); }
       else if (hist) { switchView(false); node.querySelector('.mh-clock')?.focus({ preventScroll: true }); }
+      return;
+    }
+    if (event.target?.dataset?.act === 'seek-pick' && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      const n = st?.now_playing;
+      if (!n?.duration_ms) return;
+      event.preventDefault();
+      const from = seekAt ?? Math.min(n.duration_ms, (n.progress_ms ?? 0) + (n.is_playing ? Date.now() - st.readAt : 0));
+      seekAt = Math.round(Math.min(n.duration_ms, Math.max(0, from + (event.key === 'ArrowRight' ? 10_000 : -10_000))) / 1000) * 1000;
+      renderBody();
       return;
     }
     if (event.target === input) {

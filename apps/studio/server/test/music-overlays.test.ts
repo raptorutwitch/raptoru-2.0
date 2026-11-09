@@ -117,10 +117,56 @@ describe('presets', () => {
     expect(file.variants[0].name).toBe('Ma vieille');
   });
 
+  it('a variant saved before the event strip: keeps its display (always), its exit is its entrance reversed; the new Jeu chargé announces 30 s', async () => {
+    const d = await dir();
+    const old = structuredClone(builtin('jeu')!.settings) as unknown as Record<
+      string,
+      Record<string, unknown>
+    >;
+    old.animation = {
+      enter: 'fade',
+      change: 'crossfade',
+      intensity: 'subtle',
+      duration_ms: 520,
+      ambient: false,
+    };
+    old.display = { ...old.display, mode: 'always', announce_s: 10 };
+    await writeFile(
+      join(d, 'music-overlays.json'),
+      JSON.stringify({
+        v: 2,
+        visible: true,
+        active: 'v-0a1b2c3e',
+        variants: [
+          {
+            id: 'v-0a1b2c3e',
+            name: 'Mon bandeau',
+            base: 'jeu',
+            settings: old,
+            updated_at: '2026-11-09T10:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    const st = await OverlayStore.open(d);
+    expect(st.repaired).toEqual([]);
+    const v = st.onAir.settings;
+    expect(v.display).toMatchObject({ mode: 'always', announce_s: 10 });
+    expect(v.animation).toMatchObject({ enter: 'fade', exit: 'auto' });
+    expect(builtin('jeu')!.settings.display).toMatchObject({
+      mode: 'announce',
+      announce_s: 30,
+    });
+    // A fresh Studio: the event strip is the one on air (still hidden until « Afficher »).
+    const fresh = await OverlayStore.open(await dir());
+    expect(fresh.onAir.id).toBe('jeu');
+    expect(fresh.state.visible).toBe(false);
+  });
+
   it('variants: created, renamed, duplicated, reset, deleted; saved across a restart; the one on air never vanishes', async () => {
     const d = await dir();
     const st = await OverlayStore.open(d);
-    expect(st.onAir.id).toBe('clean');
+    expect(st.onAir.id).toBe('jeu');
     expect(st.token).toMatch(/^[a-f0-9]{32}$/);
     const v = await st.saveVariant({
       base: 'glass',
@@ -268,7 +314,7 @@ describe('the OBS page', () => {
     const s = JSON.parse(ok.body);
     expect(s).toMatchObject({
       visible: false,
-      preset: { id: 'clean' },
+      preset: { id: 'jeu' },
       live: { track: { title: 'Tainted Love' } },
     });
     expect(ok.body).not.toContain(t.store.token);

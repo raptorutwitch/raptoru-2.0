@@ -72,10 +72,26 @@ const ModerateBody = z.strictObject({
       action: z.literal('volume'),
       volume_percent: z.number().int().min(0).max(100),
     }),
+    // Music Hub: a click on the timeline (supermods / broadcaster): a seek in the track playing, never a skip.
+    z.strictObject({
+      action: z.literal('seek'),
+      position_ms: z
+        .number()
+        .int()
+        .min(0)
+        .max(24 * 3_600_000),
+    }),
     z.strictObject({ action: z.literal('open') }),
     z.strictObject({ action: z.literal('close') }),
   ]),
 });
+
+const SkipBody = z.strictObject({
+  viewer: Viewer,
+  key: z.string().max(128),
+  expected_price: z.number().int().min(0).nullable(),
+});
+const SkipResultBody = z.strictObject({ viewer_id: Id, id: z.uuid() });
 
 export function musicExtRoutes(spotify: SpotifyService): Route[] {
   const base = '/v1/lab/spotify-ext';
@@ -167,6 +183,27 @@ export function musicExtRoutes(spotify: SpotifyService): Route[] {
             b.command,
             b.key,
           );
+        }),
+    },
+    {
+      // Music Hub: a viewer's paid skip (the price is Core's, never the body's: `expected_price` only guards a change).
+      method: 'POST',
+      pattern: at(`/${ch}/viewer-skip`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const b = parse(SkipBody, body);
+          return spotify.viewerSkip({ channel_id: params[0]!, ...b });
+        }),
+    },
+    {
+      method: 'POST',
+      pattern: at(`/${ch}/viewer-skip/result`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() => {
+          const b = parse(SkipResultBody, body);
+          return spotify.viewerSkipResult(params[0]!, b.viewer_id, b.id);
         }),
     },
     {

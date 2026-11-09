@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { activeSession } from '../stream/stream-sessions.js';
 import {
+  MUSIC_RULES,
   SPOTIFY_RULES,
+  type MusicRulesUpdate,
   type SpotifyAutoSkipReport,
   type SpotifyJob,
   type SpotifyJobReport,
@@ -33,6 +35,13 @@ import {
 } from '../lab-moderation/store.js';
 import { LiveMusic } from './live-music.js';
 import { MSG, trackLabel } from './messages.js';
+import {
+  loadRules,
+  saveRules,
+  SKIP_MODULE,
+  skipPrice,
+  takeSongTurn,
+} from './music-rules.js';
 import { parseTrackReference } from './reference.js';
 
 // Spotify V2 — Core side (docs/SPOTIFY_V2.md). The authority on « Choisi la prochaine musique ! »: requests and their
@@ -175,12 +184,49 @@ interface JobRow {
   updated_at: Date;
 }
 
+/** Music Hub: one paid skip (module_activity, module `music_skip`). */
+interface SkipRow {
+  activity_id: string;
+  viewer_id: string;
+  viewer_name: string;
+  amount: number;
+  status: 'queued' | 'done' | 'refunded';
+  input: {
+    price: number;
+    doublings: number;
+    job_id: string;
+    track: { title: string; artists: string[]; uri: string };
+  };
+  result: { outcome: string; reason?: string | null; at: string } | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+const skipView = (r: SkipRow, team: boolean) => ({
+  id: r.activity_id,
+  /** pending: paid, Studio is skipping · done: proven by Studio's reading · refunded: not done, given back once. */
+  status: r.status === 'queued' ? ('pending' as const) : r.status,
+  price: r.amount,
+  reason: r.result?.reason ?? null,
+  track: { title: r.input.track.title, artists: r.input.track.artists },
+  at: new Date(r.created_at).toISOString(),
+  ended_at: r.result?.at ?? null,
+  ...(team ? { viewer_name: r.viewer_name } : {}),
+});
+
 /** Who to answer when a job ends. */
 type Reply =
   | { kind: 'song'; viewer: string }
   | { kind: 'songskip'; moderator: string; tombstone?: 'canceled' | 'removed' }
   | { kind: 'panel_skip' }
   | { kind: 'cancel_current' }
+  /** Music Hub: a viewer's paid skip (its row in module_activity, debited under `activity_id`). */
+  | {
+      kind: 'viewer_skip';
+      activity_id: string;
+      price: number;
+      viewer: { id: string; login: string; name: string };
+    }
   | {
       kind: 'reward_skip';
       viewer: { id: string; login: string; name: string };
@@ -371,6 +417,8 @@ export class SpotifyService {
       'max_pending_per_viewer' | 'viewer_cooldown_seconds'
     >,
     excludeRequestId: string | null,
+    /** Music Hub Open Bar (the extension's entry): no count per viewer, one short frequency limit instead. */
+    openBar = false,
   ) {
     const mine = await q.query<RequestRow>(
       `select * from spotify_requests where channel_id = $1 and viewer_id = $2 and request_id <> $3
@@ -383,7 +431,13 @@ export class SpotifyService {
       ],
     );
     const limits = await this.limitsFor(q, channelId, viewer.login, settings);
-    const cooldownMs = limits.viewer_cooldown_seconds * 1000;
+    const cooldownMs =
+      (openBar
+        ? Math.min(
+            limits.viewer_cooldown_seconds,
+            MUSIC_RULES.openBarCooldownSeconds,
+          )
+        : limits.viewer_cooldown_seconds) * 1000;
     const since = mine
       .map((r) =>
         r.state === 'QUEUED' && r.queued_at
@@ -412,6 +466,8 @@ export class SpotifyService {
           isUncertainAddition(r),
       ).length,
       max_pending: limits.max_pending_per_viewer,
+      /** Open Bar: the count above is shown, never a limit. */
+      unlimited: openBar,
       cooldown_left_ms: cooldownMs > 0 ? Math.max(0, left) : 0,
       override: limits.override,
     };
@@ -519,7 +575,13 @@ export class SpotifyService {
     await this.db.tx((q) => this.say(q, channelId, key, text));
   }
 
-  private say(q: Queryable, channelId: string, key: string, text: string) {
+  private say(
+    q: Queryable,
+    channelId: string,
+    key: string,
+    text: string,
+    mode: 'normal' | 'announce' = 'normal',
+  ) {
     return insertWordGameSteps(q, {
       channelId,
       now: this.clock.now(),
@@ -527,11 +589,16 @@ export class SpotifyService {
       drafts: [
         {
           idempotencyKey: key.slice(0, 200),
-          mode: 'normal',
+          mode,
           text: text.slice(0, 500),
         },
       ],
     });
+  }
+
+  /** `!song`'s answer: a Twitch announcement (a plain message if the bot cannot announce — commands/steps.ts). */
+  private announce(q: Queryable, channelId: string, key: string, text: string) {
+    return this.say(q, channelId, key, text, 'announce');
   }
 
   private async studio(
@@ -558,6 +625,13 @@ export class SpotifyService {
     if (st.status.limited_until && ms(st.status.limited_until) > now)
       return 'RATE_LIMITED';
     return null;
+  }
+
+  /** Why a write to the player (skip, pause, seek…) cannot be sent now: Studio's refusal, or the Lab read-only. */
+  private writeRefusal(st: StudioRow | null): SpotifyReason | null {
+    return (
+      this.studioRefusal(st) ?? (st?.status.read_only ? 'LAB_READ_ONLY' : null)
+    );
   }
 
   private async request(q: Queryable, requestId: string) {
@@ -1022,7 +1096,15 @@ export class SpotifyService {
         max_duration_ms: Number(j.payload.max_duration_ms),
       };
     if (j.kind === 'skip')
-      return { kind: 'skip', job_id: j.job_id, request_id: j.request_id };
+      return {
+        kind: 'skip',
+        job_id: j.job_id,
+        request_id: j.request_id,
+        // Only a paid skip carries it (an older Studio never receives one: the paid skip is off by default).
+        ...(typeof j.payload.expect_uri === 'string'
+          ? { expect_uri: j.payload.expect_uri }
+          : {}),
+      };
     if (j.kind === 'search')
       return {
         kind: 'search',
@@ -1037,12 +1119,18 @@ export class SpotifyService {
       return {
         kind: 'control',
         job_id: j.job_id,
-        action: j.payload.action as 'pause' | 'resume' | 'volume',
+        action: j.payload.action as 'pause' | 'resume' | 'volume' | 'seek',
         volume_percent:
           j.payload.volume_percent === null ||
           j.payload.volume_percent === undefined
             ? null
             : Number(j.payload.volume_percent),
+        ...(j.payload.action === 'seek'
+          ? {
+              position_ms: Number(j.payload.position_ms),
+              expect_uri: String(j.payload.expect_uri),
+            }
+          : {}),
       };
     return { kind: 'read_playback', job_id: j.job_id };
   }
@@ -1222,7 +1310,7 @@ export class SpotifyService {
       const by =
         reply?.kind === 'songskip'
           ? reply.moderator
-          : reply?.kind === 'reward_skip'
+          : reply?.kind === 'reward_skip' || reply?.kind === 'viewer_skip'
             ? reply.viewer.login
             : 'studio';
       await this.update(q, target.request_id, {
@@ -1268,6 +1356,8 @@ export class SpotifyService {
                 : (r.reason ?? 'SPOTIFY_UNAVAILABLE'),
             );
       await this.say(q, job.channel_id, key, text);
+    } else if (reply.kind === 'viewer_skip') {
+      await this.settleViewerSkip(q, job.channel_id, reply, r);
     } else if (reply.kind === 'reward_skip') {
       if (r.outcome === 'skipped') {
         await this.say(
@@ -1302,9 +1392,9 @@ export class SpotifyService {
     playback: SpotifyPlayback | null,
   ) {
     if (job.reply?.kind !== 'song') return;
-    const key = `spotify:job:${job.job_id}`;
+    const key = `spotify:song:job:${job.job_id}`;
     if (!playback?.track) {
-      await this.say(q, job.channel_id, key, MSG.noPlayback);
+      await this.announce(q, job.channel_id, key, MSG.noPlayback);
       return;
     }
     const st = await this.studio(q, job.channel_id);
@@ -1315,11 +1405,11 @@ export class SpotifyService {
       current?.state === 'PLAYING' && current.track?.uri === playback.track.uri
         ? current.viewer_login
         : null;
-    await this.say(
+    await this.announce(
       q,
       job.channel_id,
       key,
-      MSG.nowPlaying(playback.track, requester),
+      MSG.nowPlaying(playback.track, requester, !playback.is_playing),
     );
   }
 
@@ -1623,18 +1713,49 @@ export class SpotifyService {
 
   // ---------------------------------------------------------------- chat commands (spotify/chat.ts) and panel
 
-  /** `!song`: one playback read by Studio (its cache shares it), answered when Studio reports. */
+  /**
+   * `!song`, as a Twitch announcement (a plain message when LeCroupier_ cannot announce: the bot's refusal is final,
+   * then Core writes it again as a message — commands/steps.ts). One answer per 30 s on the channel: the asks in
+   * between are ignored, silently. What Windows says plays (SMTC via Studio) answers at once, with no Spotify call;
+   * otherwise one playback read by Studio (its cache shares it), answered when Studio reports.
+   */
   async askNowPlaying(channelId: string, messageId: string, viewer: string) {
     return this.db.tx(async (q) => {
       const settings = await this.lock(q, channelId);
+      if (!(await takeSongTurn(q, channelId, this.clock.now())))
+        return 'song_cooldown';
+      const key = `spotify:song:${messageId}`;
       const st = await this.studio(q, channelId);
-      if (!settings.enabled || this.studioRefusal(st)) {
-        await this.say(
+      if (!settings.enabled) {
+        await this.announce(q, channelId, key, MSG.noPlayback);
+        return 'song_unavailable';
+      }
+      // Fresh by construction (view() is null once Studio is silent); stale / lost / off are never told as current.
+      const live = await this.music.view(q, channelId);
+      if (
+        live?.track &&
+        (live.state === 'playing' || live.state === 'paused')
+      ) {
+        const current = st?.current_request_id
+          ? await this.request(q, st.current_request_id)
+          : null;
+        // The requester only on Core's exact attribution of this occurrence (its Web API track), never a title.
+        const requester =
+          current?.state === 'PLAYING' &&
+          !!live.uri &&
+          current.track?.uri === live.uri
+            ? current.viewer_login
+            : null;
+        await this.announce(
           q,
           channelId,
-          `spotify:msg:${messageId}`,
-          MSG.noPlayback,
+          key,
+          MSG.nowPlaying(live.track, requester, live.state === 'paused'),
         );
+        return 'song_live';
+      }
+      if (this.studioRefusal(st)) {
+        await this.announce(q, channelId, key, MSG.noPlayback);
         return 'song_unavailable';
       }
       await this.queueJob(
@@ -2032,7 +2153,7 @@ export class SpotifyService {
       const settings = await this.lock(q, channelId);
       const st = await this.studio(q, channelId);
       const reason = settings.enabled
-        ? this.studioRefusal(st)
+        ? this.writeRefusal(st)
         : 'MODULE_DISABLED';
       if (reason) {
         if (moderator)
@@ -2122,6 +2243,323 @@ export class SpotifyService {
         });
     });
     await this.told(channelId, { request_id: requestId });
+  }
+
+  // ---------------------------------------------------------------- Music Hub: paid skip, Open Bar (§ 14)
+
+  /**
+   * What plays now, for a write aimed at it (a paid skip, a seek): Windows' track (SMTC via Studio) with the exact uri
+   * Studio linked to it, else Studio's fresh Web API reading. Null: nothing plays (or nothing current is known).
+   */
+  private async playingNow(
+    q: Queryable,
+    channelId: string,
+    st: StudioRow | null,
+  ) {
+    const live = await this.music.view(q, channelId);
+    if (live?.track && (live.state === 'playing' || live.state === 'paused'))
+      return {
+        uri: live.uri,
+        title: live.track.title,
+        artists: live.track.artists,
+        duration_ms: live.track.duration_ms,
+        is_playing: live.is_playing,
+      };
+    const fresh =
+      !!st &&
+      this.clock.now().getTime() - ms(st.seen_at) <=
+        SPOTIFY_RULES.studioFreshMs;
+    const pb = fresh ? st!.playback : null;
+    return pb?.track
+      ? {
+          uri: pb.track.uri,
+          title: pb.track.title,
+          artists: pb.track.artists,
+          duration_ms: pb.track.duration_ms,
+          is_playing: pb.is_playing,
+        }
+      : null;
+  }
+
+  /** The paid skip and the Open Bar as Studio (team: names, recent decisions) or the extension sees them. */
+  private async musicRulesView(q: Queryable, channelId: string, team: boolean) {
+    const rules = await loadRules(q, channelId);
+    const pricing = await skipPrice(q, channelId, this.clock.now());
+    const recent = await q.query<SkipRow>(
+      `select * from module_activity where channel_id = $1 and module_id = $2 order by created_at desc limit $3`,
+      [channelId, SKIP_MODULE, team ? 8 : 1],
+    );
+    return {
+      viewer_skip: {
+        enabled: rules.viewer_skip.enabled,
+        protect_requests: rules.viewer_skip.protect_requests,
+        base_price: MUSIC_RULES.skipBasePriceTokens,
+        window_minutes: MUSIC_RULES.skipWindowMs / 60_000,
+        ...pricing,
+        /** A paid skip is on its way (the next one waits for its outcome). */
+        busy: recent[0]?.status === 'queued',
+        ...(team ? { recent: recent.map((r) => skipView(r, true)) } : {}),
+      },
+      open_bar: {
+        ...rules.open_bar,
+        cooldown_seconds: MUSIC_RULES.openBarCooldownSeconds,
+        max_queue: MUSIC_RULES.openBarMaxQueue,
+      },
+    };
+  }
+
+  async musicRules(channelId: string) {
+    return this.musicRulesView(this.db, channelId, true);
+  }
+
+  /**
+   * Studio › Musique: the paid skip's switches and the Open Bar. Opening / closing the Open Bar applies to the next
+   * request at once (read under the same lock as each request) and is journaled; requests already paid keep their price.
+   */
+  async saveMusicRules(channelId: string, u: MusicRulesUpdate, by: string) {
+    await this.db.tx(async (q) => {
+      await this.lock(q, channelId);
+      const now = this.clock.now();
+      const r = await loadRules(q, channelId);
+      if (u.viewer_skip_enabled !== undefined)
+        r.viewer_skip.enabled = u.viewer_skip_enabled;
+      if (u.viewer_skip_protect_requests !== undefined)
+        r.viewer_skip.protect_requests = u.viewer_skip_protect_requests;
+      if (u.open_bar !== undefined && u.open_bar !== r.open_bar.on) {
+        r.open_bar = u.open_bar
+          ? { on: true, since: now.toISOString(), by: by.slice(0, 64) }
+          : { on: false, since: null, by: null };
+        await q.query(
+          `insert into module_activity (activity_id, channel_id, module_id, action, amount, status, created_at,
+             updated_at, ended_by)
+           values ($1, $2, 'music_hub', $3, 0, 'done', $4, $4, $5)`,
+          [
+            randomUUID(),
+            channelId,
+            u.open_bar ? 'open_bar_on' : 'open_bar_off',
+            now,
+            by.slice(0, 64),
+          ],
+        );
+      }
+      await saveRules(q, channelId, r, now);
+    });
+    return this.musicRules(channelId);
+  }
+
+  /**
+   * Music Hub — a viewer pays to skip the track playing. Core decides everything under the channel's lock: the switch,
+   * the player (and the Lab read-only), what plays (an exact track, never a guess), the protection of paid requests,
+   * one skip at a time (a moderator's skip on its way too), and the price of now, global to the stream — the client's
+   * expected price must match or nothing is debited. The debit and the skip job commit together (the same retry key
+   * gives the same attempt, never a second debit). Studio's report settles it: proven → `done` (the price climbs);
+   * failed, uncertain or never taken → refunded once, the price and its window do not move.
+   */
+  async viewerSkip(e: {
+    channel_id: string;
+    viewer: { id: string; login: string; name: string };
+    key: string;
+    expected_price: number | null;
+  }) {
+    if (!/^[A-Za-z0-9_:-]{8,128}$/.test(e.key))
+      throw new SpotifyError(400, 'idempotency_key_required');
+    const intent = `${e.viewer.id}:${e.key}`;
+    const out = await this.db.tx(async (q) => {
+      const settings = await this.lock(q, e.channel_id);
+      const prior = (
+        await q.query<SkipRow>(
+          `select * from module_activity where channel_id = $1 and module_id = $2 and idempotency_key = $3`,
+          [e.channel_id, SKIP_MODULE, intent],
+        )
+      )[0];
+      if (prior) return { row: prior, duplicate: true };
+      const rules = await loadRules(q, e.channel_id);
+      if (
+        !rules.viewer_skip.enabled ||
+        !settings.extension_enabled ||
+        !this.economy
+      )
+        throw new SpotifyError(409, 'viewer_skip_disabled');
+      if (!settings.enabled) throw new SpotifyError(409, 'requests_closed');
+      const st = await this.studio(q, e.channel_id);
+      const refusal = this.writeRefusal(st);
+      if (refusal) throw new SpotifyError(409, refusal.toLowerCase());
+      const busy = await q.query(
+        `select 1 from module_activity where channel_id = $1 and module_id = $2 and status = 'queued'
+         union all
+         select 1 from spotify_jobs where channel_id = $1 and kind = 'skip' and status in ('queued', 'running')
+         limit 1`,
+        [e.channel_id, SKIP_MODULE],
+      );
+      if (busy.length) throw new SpotifyError(409, 'skip_in_progress');
+      const t = await this.playingNow(q, e.channel_id, st);
+      if (!t) throw new SpotifyError(409, 'nothing_playing');
+      if (!t.is_playing) throw new SpotifyError(409, 'paused');
+      if (!t.uri) throw new SpotifyError(409, 'track_not_identified');
+      const current = st?.current_request_id
+        ? await this.request(q, st.current_request_id)
+        : null;
+      const request =
+        current?.state === 'PLAYING' && current.track?.uri === t.uri
+          ? current
+          : null;
+      // Decided 09/11 for this delivery: a request a viewer paid for (points or Jetons) is never skipped by another
+      // viewer's purchase — the moderation keeps its free skip. The switch exists, it is not turned off by Core.
+      if (request && rules.viewer_skip.protect_requests)
+        throw new SpotifyError(409, 'protected_request', {
+          requested_by: request.viewer_name,
+        });
+      const now = this.clock.now();
+      const pricing = await skipPrice(q, e.channel_id, now);
+      if (e.expected_price !== null && e.expected_price !== pricing.price)
+        throw new SpotifyError(409, 'price_changed', { price: pricing.price });
+      const id = randomUUID();
+      try {
+        await this.economy.debit(q, now, {
+          channelId: e.channel_id,
+          viewer: { id: e.viewer.id, display_name: e.viewer.name },
+          currency: 'tokens',
+          amount: pricing.price,
+          module: 'music',
+          interactionId: id,
+        });
+      } catch (err) {
+        if (err instanceof LabWalletError)
+          throw new SpotifyError(409, err.code, {
+            price: pricing.price,
+            ...err.details,
+          });
+        throw err;
+      }
+      const jobId = randomUUID();
+      await q.query(
+        `insert into module_activity (activity_id, channel_id, module_id, action, viewer_id, viewer_name,
+           idempotency_key, amount, status, input, created_at, updated_at)
+         values ($1, $2, $3, 'viewer_skip', $4, $5, $6, $7, 'queued', $8, $9, $9)`,
+        [
+          id,
+          e.channel_id,
+          SKIP_MODULE,
+          e.viewer.id,
+          e.viewer.name,
+          intent,
+          pricing.price,
+          JSON.stringify({
+            price: pricing.price,
+            doublings: pricing.doublings,
+            job_id: jobId,
+            viewer_login: e.viewer.login,
+            track: { title: t.title, artists: t.artists, uri: t.uri },
+          }),
+          now,
+        ],
+      );
+      const reply: Reply = {
+        kind: 'viewer_skip',
+        activity_id: id,
+        price: pricing.price,
+        viewer: e.viewer,
+      };
+      await q.query(
+        `insert into spotify_jobs (job_id, channel_id, kind, request_id, payload, status, reply, created_at, updated_at)
+         values ($1, $2, 'skip', $3, $4, 'queued', $5, $6, $6)`,
+        [
+          jobId,
+          e.channel_id,
+          request?.request_id ?? null,
+          JSON.stringify({ ref: `viewer-skip:${id}`, expect_uri: t.uri }),
+          JSON.stringify(reply),
+          now,
+        ],
+      );
+      return {
+        row: (
+          await q.query<SkipRow>(
+            'select * from module_activity where activity_id = $1',
+            [id],
+          )
+        )[0]!,
+        duplicate: false,
+      };
+    });
+    return { duplicate: out.duplicate, skip: skipView(out.row, false) };
+  }
+
+  /** Studio's report (or the expiry) of a paid skip: proven → done; anything else → given back once. */
+  private async settleViewerSkip(
+    q: Queryable,
+    channelId: string,
+    reply: Extract<Reply, { kind: 'viewer_skip' }>,
+    r: Extract<SpotifyJobReport, { kind: 'skip' }>,
+  ) {
+    const row = (
+      await q.query<SkipRow>(
+        `select * from module_activity where activity_id = $1 and channel_id = $2 for update`,
+        [reply.activity_id, channelId],
+      )
+    )[0];
+    if (!row || row.status !== 'queued') return;
+    const now = this.clock.now();
+    if (r.outcome === 'skipped') {
+      await q.query(
+        `update module_activity set status = 'done', result = $2, updated_at = $3 where activity_id = $1`,
+        [
+          row.activity_id,
+          JSON.stringify({ outcome: 'skipped', at: now.toISOString() }),
+          now,
+        ],
+      );
+      await this.say(
+        q,
+        channelId,
+        `spotify:vskip:${row.activity_id}`,
+        MSG.viewerSkipped(
+          reply.viewer.name,
+          reply.price,
+          r.skipped_track ?? row.input.track,
+        ),
+      );
+      return;
+    }
+    // Never charged for a skip nobody can prove: Spotify refused, the track changed first, Studio lost it or never took
+    // it. Studio's own reading (or its silence) decides, never Windows' (SMTC) alone.
+    const reason =
+      r.outcome === 'unknown'
+        ? 'SKIP_RESULT_UNKNOWN'
+        : (r.reason ?? 'SPOTIFY_UNAVAILABLE');
+    if (this.economy)
+      await this.economy.refund(
+        q,
+        now,
+        row.activity_id,
+        'system',
+        'skip payant non effectué',
+      );
+    await q.query(
+      `update module_activity set status = 'refunded', result = $2, reason = $3, ended_by = 'system', updated_at = $4
+        where activity_id = $1`,
+      [
+        row.activity_id,
+        JSON.stringify({ outcome: r.outcome, reason, at: now.toISOString() }),
+        reason,
+        now,
+      ],
+    );
+  }
+
+  /** The extension follows its paid skip (its own only), and the price after it. */
+  async viewerSkipResult(channelId: string, viewerId: string, id: string) {
+    const row = (
+      await this.db.query<SkipRow>(
+        `select * from module_activity where channel_id = $1 and module_id = $2 and activity_id = $3 and viewer_id = $4`,
+        [channelId, SKIP_MODULE, id, viewerId],
+      )
+    )[0];
+    if (!row) throw new SpotifyError(404, 'skip_not_found');
+    return {
+      skip: skipView(row, false),
+      price: (await skipPrice(this.db, channelId, this.clock.now())).price,
+    };
   }
 
   // ---------------------------------------------------------------- reads
@@ -2245,6 +2683,8 @@ export class SpotifyService {
       ),
       twitch_actions: actions,
       managed_rewards: managed,
+      // Music Hub: the paid skip (price now, window, recent decisions) and the Open Bar.
+      music_rules: await this.musicRulesView(this.db, channelId, true),
     };
   }
 
@@ -2289,12 +2729,14 @@ export class SpotifyService {
     )[0];
     if (!s?.extension_enabled || !this.economy) return { offered: false };
     const st = await this.studio(this.db, channelId);
+    const openBar = (await loadRules(this.db, channelId)).open_bar.on;
     return {
       offered: true,
       open: s.enabled,
       admission: this.extensionClosed(s, st) ?? 'ready',
       queue_count: this.future(await this.live(this.db, channelId)).length,
-      price_tokens: s.extension_price_tokens,
+      price_tokens: openBar ? 0 : s.extension_price_tokens,
+      open_bar: openBar,
     };
   }
 
@@ -2482,9 +2924,15 @@ export class SpotifyService {
       );
       if (closed || !this.economy)
         throw new SpotifyError(409, closed ?? 'extension_disabled');
-      const price = settings.extension_price_tokens;
+      // Music Hub Open Bar: free and no count per viewer while it is open — read here, under the lock, never from the
+      // client (a page still showing « 0 » after the closing gets `price_changed`, nothing is debited).
+      const openBar = (await loadRules(q, e.channel_id)).open_bar.on;
+      const price = openBar ? 0 : settings.extension_price_tokens;
       if (e.expected_price !== null && e.expected_price !== price)
-        throw new SpotifyError(409, 'price_changed', { price });
+        throw new SpotifyError(409, 'price_changed', {
+          price,
+          open_bar: openBar,
+        });
       const picked = await this.pickedItem(q, e.channel_id, e.track_id);
       if (!picked) throw new SpotifyError(409, 'track_unknown');
       if (!picked.item.playable) throw new SpotifyError(409, 'not_playable');
@@ -2492,15 +2940,34 @@ export class SpotifyService {
         throw new SpotifyError(409, 'too_long', {
           max_duration_seconds: settings.max_duration_seconds,
         });
-      const use = await this.usage(q, e.channel_id, e.viewer, settings, null);
+      const use = await this.usage(
+        q,
+        e.channel_id,
+        e.viewer,
+        settings,
+        null,
+        openBar,
+      );
       if (use.cooldown_left_ms > 0)
         throw new SpotifyError(409, 'viewer_cooldown', {
           cooldown_left_ms: use.cooldown_left_ms,
+          open_bar: openBar,
         });
-      if (use.pending >= use.max_pending)
+      if (!openBar && use.pending >= use.max_pending)
         throw new SpotifyError(409, 'viewer_limit', {
           max_pending: use.max_pending,
         });
+      if (openBar) {
+        const rows = await this.live(q, e.channel_id);
+        const waiting =
+          this.future(rows).length +
+          rows.filter((r) => r.state === 'RECEIVED' || r.state === 'SEARCHING')
+            .length;
+        if (waiting >= MUSIC_RULES.openBarMaxQueue)
+          throw new SpotifyError(409, 'queue_full', {
+            max_queue: MUSIC_RULES.openBarMaxQueue,
+          });
+      }
       if (settings.no_duplicates) {
         const waiting = (await this.live(q, e.channel_id)).some(
           (r) =>
@@ -2551,6 +3018,7 @@ export class SpotifyService {
             album: picked.item.album,
             image_url: picked.item.image_url,
             provider: picked.provider,
+            ...(openBar ? { open_bar: true } : {}),
           }),
         ],
       );
@@ -2611,6 +3079,7 @@ export class SpotifyService {
       | { action: 'pause' }
       | { action: 'resume' }
       | { action: 'volume'; volume_percent: number }
+      | { action: 'seek'; position_ms: number }
       | { action: 'open' }
       | { action: 'close' },
     key: string,
@@ -2660,22 +3129,45 @@ export class SpotifyService {
       a.action,
       a.action === 'volume' ? a.volume_percent : null,
       name,
+      a.action === 'seek' ? a.position_ms : null,
     );
   }
 
-  /** A player control (pause / resume / volume): a job for Studio, only with « Commandes du lecteur » on. */
+  /**
+   * A player control (pause / resume / volume / seek): a job for Studio, only with « Commandes du lecteur » on. A seek
+   * moves inside THE track playing (its exact uri, checked again by Studio before it sends): never in its first seconds
+   * (a restart would be a new play) nor its last (a disguised skip) — a seek is never a new track nor a skip.
+   */
   async control(
     channelId: string,
-    action: 'pause' | 'resume' | 'volume',
+    action: 'pause' | 'resume' | 'volume' | 'seek',
     volume: number | null,
     actor: string,
+    position: number | null = null,
   ) {
     return this.db.tx(async (q) => {
       const settings = await this.lock(q, channelId);
       if (!settings.player_controls)
         throw new SpotifyError(409, 'player_controls_disabled');
-      const reason = this.studioRefusal(await this.studio(q, channelId));
+      const st = await this.studio(q, channelId);
+      const reason = this.writeRefusal(st);
       if (reason) throw new SpotifyError(409, reason.toLowerCase());
+      let seek: { position_ms: number; expect_uri: string } | null = null;
+      if (action === 'seek') {
+        const t = await this.playingNow(q, channelId, st);
+        if (!t) throw new SpotifyError(409, 'nothing_playing');
+        if (!t.uri || !t.duration_ms)
+          throw new SpotifyError(409, 'track_not_identified');
+        const max = t.duration_ms - MUSIC_RULES.seekEndMarginMs;
+        if (max < MUSIC_RULES.seekMinMs)
+          throw new SpotifyError(409, 'track_too_short');
+        seek = {
+          position_ms: Math.round(
+            Math.min(max, Math.max(MUSIC_RULES.seekMinMs, position ?? 0)),
+          ),
+          expect_uri: t.uri,
+        };
+      }
       const jobId = randomUUID();
       const now = this.clock.now();
       await q.query(
@@ -2688,12 +3180,29 @@ export class SpotifyService {
             action,
             volume_percent: action === 'volume' ? volume : null,
             actor: actor.slice(0, 64),
+            ...(seek ?? {}),
           }),
           now,
         ],
       );
-      return { outcome: 'requested', job_id: jobId };
+      return {
+        outcome: 'requested',
+        job_id: jobId,
+        ...(seek ? { position_ms: seek.position_ms } : {}),
+      };
     });
+  }
+
+  /** The skip / control job a command created (by its key), to follow Studio's answer; null when none was created. */
+  async jobOf(channelId: string, ref: string) {
+    return (
+      (
+        await this.db.query<{ job_id: string }>(
+          `select job_id from spotify_jobs where channel_id = $1 and payload->>'ref' = $2`,
+          [channelId, ref],
+        )
+      )[0]?.job_id ?? null
+    );
   }
 
   /** A control's result (the extension and Studio show what really happened, never an assumed success). */
@@ -2807,6 +3316,8 @@ export class SpotifyService {
     const st = await this.studio(this.db, channelId);
     const now = this.clock.now().getTime();
     const fresh = !!st && now - ms(st.seen_at) <= SPOTIFY_RULES.studioFreshMs;
+    const music = await this.musicRulesView(this.db, channelId, false);
+    const openBar = music.open_bar.on;
     const rows = await this.live(this.db, channelId);
     const entries = this.future(rows);
     const current =
@@ -2870,11 +3381,23 @@ export class SpotifyService {
           viewer_cooldown_seconds: view.viewer_cooldown_seconds,
         },
         null,
+        openBar,
       );
+      const lastSkip = (
+        await this.db.query<SkipRow>(
+          `select * from module_activity where channel_id = $1 and module_id = $2 and viewer_id = $3
+             and created_at > $4 order by created_at desc limit 1`,
+          [channelId, SKIP_MODULE, viewer.id, new Date(now - 30 * 60_000)],
+        )
+      )[0];
       me = {
         pending: usage.pending,
         max_pending: usage.max_pending,
+        /** Open Bar: no count per viewer (the count stays shown, never blocking). */
+        unlimited: usage.unlimited,
         cooldown_left_ms: usage.cooldown_left_ms,
+        /** The viewer's last paid skip (30 min): its outcome, told once by the extension. */
+        last_skip: lastSkip ? skipView(lastSkip, false) : null,
         balance: this.economy
           ? (await this.economy.balances(this.db, channelId, viewer.id)).tokens
           : null,
@@ -2935,11 +3458,40 @@ export class SpotifyService {
       settings ?? (this.settingsView(undefined) as unknown as SettingsRow),
       st,
     );
+    // The paid skip as the viewer may use it now (Core refuses anyway when it is not; this only explains why).
+    const protectedNow =
+      !!current &&
+      music.viewer_skip.protect_requests &&
+      !!live?.uri &&
+      current.track?.uri === live.uri;
     return {
       admission: closed ?? 'ready',
       open: view.enabled,
       extension_enabled: view.extension_enabled && !!this.economy,
-      price_tokens: view.extension_price_tokens,
+      price_tokens: openBar ? 0 : view.extension_price_tokens,
+      /** Music Hub Open Bar: requests free, no count per viewer (a short frequency limit, a global queue cap). */
+      open_bar: openBar
+        ? {
+            since: music.open_bar.since,
+            cooldown_seconds: music.open_bar.cooldown_seconds,
+            max_queue: music.open_bar.max_queue,
+          }
+        : null,
+      viewer_skip:
+        music.viewer_skip.enabled && view.extension_enabled && !!this.economy
+          ? {
+              price: music.viewer_skip.price,
+              base_price: music.viewer_skip.base_price,
+              window_minutes: music.viewer_skip.window_minutes,
+              resets_at: music.viewer_skip.resets_at,
+              busy: music.viewer_skip.busy,
+              /** Why it cannot be used now (null: it can): Core decides again at the purchase. */
+              blocked: !fresh
+                ? 'studio_unavailable'
+                : (this.writeRefusal(st)?.toLowerCase() ??
+                  (protectedNow ? 'protected_request' : null)),
+            }
+          : null,
       rules: {
         max_pending_per_viewer: view.max_pending_per_viewer,
         viewer_cooldown_seconds: view.viewer_cooldown_seconds,
@@ -2950,6 +3502,8 @@ export class SpotifyService {
       player: {
         connected: fresh && st!.status.auth === 'ok',
         reason: fresh ? (this.studioRefusal(st) ?? null) : 'STUDIO_UNAVAILABLE',
+        /** Lab on the real account, read-only this session: the controls are shown disabled, with this reason. */
+        read_only: fresh && !!st!.status.read_only,
         device: fresh ? (st!.status.device?.name ?? null) : null,
         controls: view.player_controls,
         is_playing: pb?.is_playing ?? null,

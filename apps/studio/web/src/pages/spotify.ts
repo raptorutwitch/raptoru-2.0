@@ -9,6 +9,7 @@ import {
   poller,
   run,
   scrub,
+  toast,
   seg,
   viewersSeg,
   stateChip,
@@ -38,6 +39,7 @@ import {
   quotasView,
   queueRows,
   stateView,
+  musicRulesView,
   timeView,
   verifyNote,
   type SpLive,
@@ -86,6 +88,7 @@ export function mountSpotifyPage(root: HTMLElement) {
       <div class="spo-alerts d-tags" data-z="alerts"></div>
       <div data-z="open"></div>
       <div data-z="ovl"></div>
+      <div data-z="rules"></div>
       <section class="spo-now" data-z="now" aria-label="Lecture en cours"><div class="d-skel" style="height:200px;grid-column:1/-1"></div></section>
       <div class="spo-quotas" data-z="quotas"></div>
       <div data-z="simbar"></div>
@@ -176,6 +179,7 @@ export function mountSpotifyPage(root: HTMLElement) {
     patch(z('now'), nowView(s, ui));
     paintProgress();
     patch(z('quotas'), quotasView(s));
+    patch(z('rules'), musicRulesView(s, ui.now));
     patch(z('time'), timeView(s, ui));
     patch(z('counts'), countsView(s));
     if (!z('simbar').contains(document.activeElement))
@@ -386,6 +390,37 @@ export function mountSpotifyPage(root: HTMLElement) {
     return out as Record<string, unknown> | null;
   };
 
+  /**
+   * What the player really did (Studio's answer to the job), told once — never « demandé » as if it had worked.
+   * No job: Core refused before anything was sent (its reason is already shown by `post`).
+   */
+  const follow = async (jobId: unknown, done: string) => {
+    if (typeof jobId !== 'string') return;
+    let r: { status: string; reason: string | null } = {
+      status: 'pending',
+      reason: null,
+    };
+    for (let n = 0; n < 20 && r.status === 'pending'; n++) {
+      await new Promise((ok) => setTimeout(ok, 400));
+      r = (await tryGetJson<typeof r>(`/api/spotify/controls/${jobId}`)) ?? r;
+    }
+    const why: Record<string, string> = {
+      LAB_READ_ONLY: 'Lab en lecture seule : rien n’a été envoyé à Spotify',
+      NO_DEVICE: 'Aucun appareil Spotify actif : rien n’a été envoyé',
+      RATE_LIMITED: 'Spotify limite les appels : réessaie dans un moment',
+      STUDIO_LOST: 'Studio n’a pas répondu',
+    };
+    toast(
+      r.status === 'done'
+        ? done
+        : r.status === 'pending'
+          ? 'Le lecteur n’a pas encore répondu'
+          : (why[r.reason ?? ''] ?? 'Le lecteur n’a pas confirmé l’action'),
+      { bad: r.status !== 'done' },
+    );
+    await read();
+  };
+
   const field = (f: string) =>
     (
       ui.fields[f] ??
@@ -413,6 +448,13 @@ export function mountSpotifyPage(root: HTMLElement) {
         null,
         '/settings',
         { [t.dataset.spFlag]: t.checked },
+        'Réglage enregistré',
+      );
+    else if (t.dataset.spRule)
+      void post(
+        null,
+        '/music-rules',
+        { [t.dataset.spRule]: t.checked },
         'Réglage enregistré',
       );
     else if (t.dataset.ov) {
@@ -504,7 +546,9 @@ export function mountSpotifyPage(root: HTMLElement) {
           danger: false,
         })
       )
-        void post(el, '/actions', { action: 'skip' }, 'Passage demandé');
+        void post(el, '/actions', { action: 'skip' }, '').then((out) =>
+          follow(out?.job_id, 'Musique passée'),
+        );
     },
     'sp-remove': async (el) => {
       const keep = el.dataset.keep === '1';
@@ -528,13 +572,33 @@ export function mountSpotifyPage(root: HTMLElement) {
           keep ? 'Demande retirée, Jetons gardés' : 'Demande retirée',
         );
     },
-    'sp-play': (el) =>
-      post(
+    'sp-play': async (el) => {
+      const out = await post(el, '/actions', { action: el.dataset.play }, '');
+      await follow(
+        out?.job_id,
+        el.dataset.play === 'pause' ? 'Lecteur en pause' : 'Lecture reprise',
+      );
+    },
+    'sp-bar': async (el) => {
+      const on = el.dataset.on === '1';
+      if (
+        on &&
+        !(await confirmBox({
+          title: 'Ouvrir l’Open Bar ?',
+          body: 'Jusqu’à ce que tu le fermes : les demandes depuis l’extension sont gratuites et sans limite par personne (20 s entre deux demandes, 50 musiques au plus en file). Les demandes déjà payées gardent leur prix. Les skips payants restent payants. La récompense de points de chaîne ne change pas.',
+          yes: 'Ouvrir l’Open Bar',
+          no: 'Annuler',
+          danger: false,
+        }))
+      )
+        return;
+      await post(
         el,
-        '/actions',
-        { action: el.dataset.play },
-        el.dataset.play === 'pause' ? 'Pause demandée' : 'Reprise demandée',
-      ),
+        '/music-rules',
+        { open_bar: on },
+        on ? 'Open Bar ouvert' : 'Open Bar fermé : prix et limites habituels',
+      );
+    },
     'sp-ov-preview': (el) =>
       run(
         el,
@@ -736,7 +800,9 @@ export function mountSpotifyPage(root: HTMLElement) {
           });
           await readOvl();
         },
-        el.dataset.on === '1' ? 'Overlay musique affiché' : 'Overlay musique masqué',
+        el.dataset.on === '1'
+          ? 'Overlay musique affiché'
+          : 'Overlay musique masqué',
         ERRORS,
       ),
     // Lab : le live simulé (le même que la page Simulation) — l'historique ne note que pendant un live.

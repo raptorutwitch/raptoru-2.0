@@ -190,6 +190,18 @@ export class LiveMusic {
     return { live: !!at, since: at ? new Date(at).toISOString() : null };
   }
 
+  /**
+   * The Daily of the live (its `stream_day`, the identifier the Daily module uses), else the nominal day of `at`: a live
+   * across midnight keeps its Daily until the next one.
+   */
+  private async dailyOf(q: Queryable, at: Date | string | null) {
+    if (!this.labSessions()) {
+      const s = await activeSession(q);
+      if (s) return s.streamDay;
+    }
+    return nominalStreamDay(at ? new Date(at) : this.clock.now());
+  }
+
   private async liveStart(q: Queryable, channelId: string) {
     if (this.labSessions())
       return (await liveChannelSession(q, channelId))?.started_at ?? null;
@@ -291,7 +303,7 @@ export class LiveMusic {
             duration_ms: body.track.duration_ms,
             session_started_at: new Date(liveAt).toISOString(),
             // The Daily of this live (the project's stream-day: its window opens at 16:00, Paris), never a calendar day.
-            stream_day: nominalStreamDay(new Date(liveAt)),
+            stream_day: await this.dailyOf(q, liveAt),
           }),
           started,
           now,
@@ -511,7 +523,7 @@ export class LiveMusic {
     // window (16:00 → 16:00, Paris): a stream across midnight keeps its history, the next Daily starts empty. Older rows
     // stay stored (never deleted).
     const liveAt = await this.liveStart(q, channelId);
-    const day = nominalStreamDay(liveAt ? new Date(liveAt) : now);
+    const day = await this.dailyOf(q, liveAt);
     const win = streamDayWindow(day);
     const reqFrom =
       liveAt && new Date(liveAt) < win.start ? new Date(liveAt) : win.start;

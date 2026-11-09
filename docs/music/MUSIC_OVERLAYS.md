@@ -13,28 +13,29 @@ Une seule source navigateur OBS montre le titre en cours dans le look du preset 
 
 ## 2. Les modèles (vraies compositions, pas des couleurs)
 
-| Modèle | Archétype | Pour quoi |
-| ------ | --------- | --------- |
-| **Flottant** | `minimal` | Pastille d'une ligne (titre — artiste), pochette ronde, progression en filet. Permanent et discret. Composition « Deux lignes » possible (titre, puis artiste). |
-| **Cartouche** | `clean` | Pochette, « En cours », titre, artiste, progression, temps, badge « Demande de X ». Lisibilité maximale. |
-| **Verre** | `glass` | La pochette floutée en fond (sa propre image, jamais la scène derrière), reflet, bords fins. Haut de gamme. |
-| **Néon** | `neon` | Cadre lumineux, bande d'accent, titre condensé en capitales, éclat qui balaie le cadre à chaque titre, lueur qui respire (**décorative** : aucune donnée audio). |
-| **Éditorial** | `editorial` | Typographie d'abord : grand titre à empattements sur 2 lignes équilibrées, filet-progression, « par Artiste » en italique, pochette en retrait. |
-| **Projecteur** | `focus` | Grande pochette, tout le détail, temps aux deux bouts, bandeau « Demandée par X ». Fait pour annoncer. |
+| Modèle         | Archétype   | Pour quoi                                                                                                                                                        |
+| -------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Flottant**   | `minimal`   | Pastille d'une ligne (titre — artiste), pochette ronde, progression en filet. Permanent et discret. Composition « Deux lignes » possible (titre, puis artiste).  |
+| **Cartouche**  | `clean`     | Pochette, « En cours », titre, artiste, progression, temps, badge « Demande de X ». Lisibilité maximale.                                                         |
+| **Verre**      | `glass`     | La pochette floutée en fond (sa propre image, jamais la scène derrière), reflet, bords fins. Haut de gamme.                                                      |
+| **Néon**       | `neon`      | Cadre lumineux, bande d'accent, titre condensé en capitales, éclat qui balaie le cadre à chaque titre, lueur qui respire (**décorative** : aucune donnée audio). |
+| **Éditorial**  | `editorial` | Typographie d'abord : grand titre à empattements sur 2 lignes équilibrées, filet-progression, « par Artiste » en italique, pochette en retrait.                  |
+| **Projecteur** | `focus`     | Grande pochette, tout le détail, temps aux deux bouts, bandeau « Demandée par X ». Fait pour annoncer.                                                           |
 
 Deux presets prêts à l'emploi en plus :
 
 - **Hybride** : un Cartouche agrandi à chaque titre, puis une pastille.
-- **Jeu chargé** (le modèle compact de référence) : un petit bandeau contrasté de 380 × 58 px en haut au centre, le titre
-  (gras, blanc) puis l'artiste en dessous, une marque d'accent à gauche, la demande en languette dessous. Ni pochette, ni
-  progression, ni temps, ni album par défaut (activables).
+- **Jeu chargé** (le modèle compact de référence, **à l'antenne par défaut** sur un Studio neuf) : un petit bandeau
+  contrasté de 380 × 58 px en haut au centre, le titre (gras, blanc) puis l'artiste en dessous, une marque d'accent à
+  gauche, la demande en languette dessous. Ni pochette, ni progression, ni temps, ni album par défaut (activables).
+  **Événementiel** : il apparaît 30 s à chaque nouveau titre (§ 3 ter).
 
 ## 3. Réglages
 
 - **Essentiel** :
   - taille (compacte / standard / grande) ;
   - position (grille 3 × 3) ;
-  - affichage (Toujours / Annonce / Hybride, et la durée de l'annonce) ;
+  - affichage (Toujours / Annonce / Hybride, et la durée d'affichage : 3 à 120 s) ;
   - en pause (montrer « En pause », estomper, réduire, cacher) ;
   - rien ne joue (cacher, ou « Aucune musique ») ;
   - mettre en avant une demande ;
@@ -81,6 +82,36 @@ Deux presets prêts à l'emploi en plus :
   texte se lit mal (contraste insuffisant, fond transparent sans ombre, languette illisible), avec « Corriger ».
   Couleurs en détail : titre, artiste, texte secondaire, accent, fond, contraste de la bordure.
 
+## 3 ter. L’overlay événementiel (mode « Annonce », 09/11)
+
+Le comportement par défaut du bandeau « Jeu chargé ». Tout vient de ce que Studio sait déjà (Windows + l'attribution
+du Core) : **aucun appel Spotify** pour les animations. La logique est un petit module pur, testé seul
+(`music-overlay/overlay-timing.js`, `test/music-overlay-timing.test.js`).
+
+| Événement                                                                                            | Ce que fait l'overlay                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nouveau titre (nouvelle occurrence SMTC)                                                             | Entrée douce (glissement léger + fondu), titre et artiste, **30 s**, puis sortie douce.                                                                                                                                           |
+| Autre titre pendant les 30 s                                                                         | Contenu remplacé (fondu enchaîné), les 30 s repartent.                                                                                                                                                                            |
+| Même titre vraiment rejoué (SMTC : nouvelle occurrence)                                              | Nouvelle annonce.                                                                                                                                                                                                                 |
+| Pause / reprise                                                                                      | Jamais de nouvelle annonce. « En pause : Cacher » : il disparaît, et revient à la reprise seulement si les 30 s ne sont pas finies.                                                                                               |
+| Simple actualisation (position, Studio qui revient après une coupure, rechargement de la source OBS) | Rien ne bouge, rien n'est rejoué. Le titre déjà en cours à l'ouverture de la page n'est pas annoncé.                                                                                                                              |
+| Demande confirmée par le Core avec le titre                                                          | La languette sort après l'entrée du bandeau.                                                                                                                                                                                      |
+| Demandeur confirmé un peu après le titre                                                             | La languette sort **sans relancer l'annonce** ; le bandeau reste au moins 8 s de plus pour qu'on la lise. Confirmé après la fin de l'annonce : le bandeau revient pour elle (si « Mettre en avant une demande »), une seule fois. |
+| Demande seulement en file                                                                            | Jamais présentée comme la musique en cours (le Core n'attribue que la demande qui joue, à son titre exact).                                                                                                                       |
+| Spotify fermé                                                                                        | Sortie douce, rien ne reste.                                                                                                                                                                                                      |
+
+- **Afficher = armer.** En mode Annonce, « Afficher » autorise l'overlay : il apparaîtra **au prochain titre**, pas
+  tout de suite. L'en-tête le dit (« Armé · Jeu chargé · 30 s à chaque nouveau titre ») ; « Montrer maintenant »
+  le montre 30 s avec le titre réel. En Toujours : « Affiché en permanence ». **« Masquer »** le cache tout de suite et
+  coupe toute apparition (un titre passé pendant qu'il était masqué n'est jamais annoncé ensuite).
+- **Réglages** : mode (Toujours / Annonce / Hybride), durée d'affichage (30 s par défaut, 3 à 120), apparition,
+  **disparition** (nouveau : « Comme l'apparition », fondu, glissement, zoom léger, aucune), languette, et tous les
+  réglages visuels du bandeau.
+- **Dans l'éditeur**, changer un réglage remontre l'aperçu (on voit ce qu'on règle, même après une annonce).
+- **Compatibilité.** Les variantes enregistrées gardent leur mode (une variante de Jeu chargé en « Toujours » le
+  reste) ; leur disparition est « Comme l'apparition », c'est-à-dire leur comportement d'avant. Flottant reste
+  permanent. Format inchangé (v2).
+
 ## 4. Presets et variantes
 
 - **Les modèles ne changent jamais.** Le premier réglage modifié crée « Mon <modèle> » : la variante est créée et
@@ -95,7 +126,7 @@ Deux presets prêts à l'emploi en plus :
   - **Format v2 (09/11 soir).** Une variante enregistrée avant garde son aspect : artiste dans sa couleur secondaire
     d'avant, texte sans ombre, une ligne, demande dans le texte (la languette est à un interrupteur). Une option qui
     n'existait pas prend sa valeur par défaut sans être annoncée comme « réparée ».
-  Un fichier illisible est mis de côté (`.unreadable-…`), jamais effacé.
+    Un fichier illisible est mis de côté (`.unreadable-…`), jamais effacé.
 
 ## 5. L'éditeur
 
@@ -142,7 +173,7 @@ Deux presets prêts à l'emploi en plus :
 
 ## 7. Données et performance
 
-- **Ce que la page reçoit de Studio.** La page interroge Studio en attente longue (*long poll*) : Studio répond dès que
+- **Ce que la page reçoit de Studio.** La page interroge Studio en attente longue (_long poll_) : Studio répond dès que
   quelque chose change, et au plus tard au bout de 25 s.
   - **Source** : le titre de Windows (SMTC), puis son titre Spotify exact s'il a été lu, sinon la dernière lecture de
     l'API Web.
@@ -178,7 +209,8 @@ Deux presets prêts à l'emploi en plus :
   2. Clique un modèle : l'aperçu change.
   3. « Démo » et ses cas, « Zoom », un fond.
   4. Change un réglage : « Mon … » apparaît dans « Mes variantes ».
-  5. « Mettre à l'antenne », puis « Afficher ».
+  5. « Mettre à l'antenne », puis « Afficher » (Jeu chargé : « Armé », il apparaît au prochain titre ; « Montrer
+     maintenant » pour le voir tout de suite).
 - **OBS** : bouton « OBS » › « Installer dans OBS » (scène à part), puis « Ajouter à cette scène » pour ta scène de jeu.
   Ou une source navigateur à la main avec l'adresse copiée.
 - **Musique réelle** : lance Spotify Desktop (mode réel). L'overlay suit chaque changement de titre.
@@ -193,6 +225,9 @@ Deux presets prêts à l'emploi en plus :
 - **OBS.** Jamais essayé dans un vrai OBS. Ses sources navigateur utilisent Chromium (CEF) : le rendu devrait être le
   même, mais c'est à vérifier par Antoni.
 - **Raccourcis.** Aucun raccourci clavier ni action « Stream Deck ».
+- **Événementiel.** Vérifié en Chromium sur une page OBS simulée (cycle de 30 s, changements rapides, demandeur tardif,
+  pause, Spotify fermé, Masquer : `.lab-data/music-overlay-captures/event/`), pas avec Spotify Desktop réel ni dans OBS.
+  Un nouveau titre qui arrive pendant la sortie (≈ 0,6 s) reprend l'entrée depuis l'état en cours.
 - **Animation de changement de titre.** Sur les modèles en 2 lignes de titre (Éditorial, « 2 lignes »), la hauteur du
   widget saute (sans animation) quand le nouveau titre en demande une autre. Le bandeau compact a une hauteur fixe.
 - **Languette.** Pensée pour le bandeau compact ; elle marche sur les autres modèles mais n'y a pas été peaufinée

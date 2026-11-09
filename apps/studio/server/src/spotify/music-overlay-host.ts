@@ -37,6 +37,7 @@ const FILES: Record<string, string> = {
   'overlay.html': 'text/html; charset=utf-8',
   'overlay.css': 'text/css; charset=utf-8',
   'overlay.js': 'text/javascript; charset=utf-8',
+  'overlay-timing.js': 'text/javascript; charset=utf-8',
 };
 const PAGE_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.scdn.co; connect-src 'self'; frame-ancestors 'self'";

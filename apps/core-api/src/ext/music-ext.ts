@@ -98,6 +98,25 @@ export async function musicExt(
         command: body?.command,
       });
     }
+    // Music Hub: a viewer's paid skip — any identified viewer (the team too: its own free skip is the moderation's).
+    if (method === 'POST' && path === '/music/skip') {
+      if (!idempotencyKey || !KEY.test(idempotencyKey))
+        return fail(400, 'idempotency_key_required');
+      return await ok(`${base}/viewer-skip`, {
+        viewer,
+        key: idempotencyKey,
+        expected_price:
+          typeof body?.expected_price === 'number' ? body.expected_price : null,
+      });
+    }
+    const skip = /^\/music\/skip\/([^/]+)$/.exec(path);
+    if (method === 'GET' && skip) {
+      if (!UUID.test(skip[1]!)) return fail(400, 'invalid_skip');
+      return await ok(`${base}/viewer-skip/result`, {
+        viewer_id: caller.id,
+        id: skip[1],
+      });
+    }
     const control = /^\/music\/controls\/([^/]+)$/.exec(path);
     if (method === 'GET' && control) {
       if (!team) return fail(403, 'team_only');

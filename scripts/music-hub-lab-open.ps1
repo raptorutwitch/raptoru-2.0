@@ -42,6 +42,9 @@ if (-not $Real -and $mode -eq 'lab_real') {
 try {
   Invoke-RestMethod "$Base/api/spotify/settings" -Method Post -Headers $headers -ContentType 'application/json' `
     -Body '{"enabled":true,"extension_enabled":true,"player_controls":true}' | Out-Null
+  # Le skip payant des viewers (Lab seulement) : allume pour l'essai, l'Open Bar reste ferme.
+  Invoke-RestMethod "$Base/api/spotify/music-rules" -Method Post -Headers $headers -ContentType 'application/json' `
+    -Body '{"viewer_skip_enabled":true}' | Out-Null
 } catch {
   Write-Output "Reglages musique du Lab non appliques : $($_.Exception.Message)"
 }

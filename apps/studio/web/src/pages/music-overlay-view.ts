@@ -71,6 +71,7 @@ export interface MoSettings {
   >;
   animation: {
     enter: 'none' | 'fade' | 'slide' | 'rise' | 'scale';
+    exit: 'auto' | 'none' | 'fade' | 'slide' | 'scale';
     change: 'none' | 'crossfade' | 'slide' | 'flip' | 'pop';
     intensity: 'subtle' | 'normal' | 'strong';
     duration_ms: number;
@@ -609,10 +610,10 @@ export function settingsView(
         s.display.mode === 'always'
           ? 'Visible tant que la musique joue.'
           : s.display.mode === 'announce'
-            ? 'Apparaît à chaque nouveau titre, puis s’efface.'
+            ? `${s.display.announce_s} s à chaque nouveau titre. « Afficher » ne fait que l’armer.`
             : 'Compact en permanence, agrandi à chaque nouveau titre.',
       )}
-      ${s.display.mode === 'always' ? '' : line('Durée de l’annonce', range('display.announce_s', s.display.announce_s, 3, 60, 1, ' s', 'Durée de l’annonce'))}
+      ${s.display.mode === 'always' ? '' : line(s.display.mode === 'announce' ? 'Durée d’affichage' : 'Durée agrandie', range('display.announce_s', s.display.announce_s, 3, 120, 1, ' s', 'Durée d’affichage'))}
       ${line(
         'En pause',
         select(
@@ -878,6 +879,21 @@ export function settingsView(
           'Apparition',
         ),
       )}
+       ${line(
+         'Disparition',
+         select(
+           'animation.exit',
+           [
+             ['auto', 'Comme l’apparition'],
+             ['fade', 'Fondu'],
+             ['slide', 'Glissement'],
+             ['scale', 'Zoom léger'],
+             ['none', 'Aucune'],
+           ],
+           s.animation.exit,
+           'Disparition',
+         ),
+       )}
        ${line(
          'Nouveau titre',
          select(

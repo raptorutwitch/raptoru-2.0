@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   CpTwitchActionReport,
+  MusicRulesUpdate,
   SpotifyAutoSkipReport,
   SpotifyJobReport,
   SpotifyJobStart,
@@ -231,16 +232,41 @@ export function spotifyRoutes(
                 { refund: a.refund !== false },
               ),
             };
-          if (a.action === 'skip')
-            return { outcome: await spotify.skip(id, key, null) };
+          if (a.action === 'skip') {
+            const outcome = await spotify.skip(id, key, null);
+            // The job to follow (Studio's real answer); none: refused before anything was sent.
+            return { outcome, job_id: await spotify.jobOf(id, key) };
+          }
           // Music Hub: the player (Studio is the broadcaster's console; « Commandes du lecteur » must be on).
           return spotify.control(
             id,
             a.action,
             a.action === 'volume' ? a.volume_percent : null,
             'studio',
+            a.action === 'seek' ? a.position_ms : null,
           );
         }),
+    },
+    {
+      // Music Hub: the paid skip (switch, protection of paid requests) and the Open Bar — the broadcaster's console.
+      method: 'GET',
+      pattern: at(base, `/${ch}/music-rules`),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => spotify.musicRules(channel(params[0]!))),
+    },
+    {
+      method: 'POST',
+      pattern: at(base, `/${ch}/music-rules`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          spotify.saveMusicRules(
+            channel(params[0]!),
+            parse(MusicRulesUpdate, body),
+            'studio',
+          ),
+        ),
     },
     {
       // Music Hub: what a player control really did (done / failed / unknown / pending).

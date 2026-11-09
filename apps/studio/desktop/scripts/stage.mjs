@@ -52,6 +52,8 @@ const copies = [
   // Dock OBS V1 page (OBS custom browser dock served by Studio's dock server, docs/OBS_DOCK.md).
   'apps/studio/server/dock-page',
   'apps/studio/server/halloween-overlay',
+  // Music Hub: the OBS music overlay page (docs/music/MUSIC_OVERLAYS.md), served by the Studio server.
+  'apps/studio/server/music-overlay',
   'apps/studio/server/package.json',
   'apps/studio/web/dist',
   'apps/studio/desktop/dist',
@@ -94,6 +96,10 @@ const runtimeFiles = [
   'apps/studio/server/halloween-overlay/overlay.html',
   'apps/studio/server/halloween-overlay/overlay.js',
   'apps/studio/server/halloween-overlay/overlay.css',
+  'apps/studio/server/music-overlay/overlay.html',
+  'apps/studio/server/music-overlay/overlay.js',
+  'apps/studio/server/music-overlay/overlay-timing.js',
+  'apps/studio/server/music-overlay/overlay.css',
   'apps/studio/web/dist/index.html',
   'apps/studio/desktop/static/status.html',
   'apps/twitch-extension/extension/panel.html',

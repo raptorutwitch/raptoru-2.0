@@ -224,6 +224,35 @@ body.component-view .jdm-module[data-module="music"] .jdm-module__body,
 @container (max-width: 340px) {
   .mh-ptime { display: none; }
 }
+/* 09/11 final pass (MUSIC_HUB_STATE.md § 14): the supermods' Pause / Passer on the row, a seek asked before it is sent,
+   the viewer's paid skip (gold, like the prices), the Open Bar in the band. */
+.mh-ctl { display: inline-flex; gap: calc(2 * var(--g)); align-items: center; }
+.mh-ico--ctl { background: rgba(255, 255, 255, 0.06); color: var(--mh-text); }
+.mh-ico--ctl:hover:not(:disabled) { background: rgba(52, 211, 153, 0.18); color: var(--mh-acc); }
+.mh-ico:disabled { opacity: 0.4; cursor: not-allowed; }
+.mh-ico[aria-busy='true'] { animation: mh-breathe 1s ease-in-out infinite alternate; }
+@keyframes mh-breathe { to { opacity: 0.45; } }
+.mh-ico--paid { position: relative; background: rgba(242, 198, 95, 0.1); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.4); color: #ffe7a8; }
+.mh-ico--paid:hover { background: rgba(242, 198, 95, 0.2); color: #fff3cf; }
+.mh-ico--paid.is-off { background: none; box-shadow: inset 0 0 0 1px var(--mh-line); color: var(--mh-faint); }
+.mh-ico__coin { position: absolute; right: calc(3 * var(--g)); bottom: calc(1 * var(--g)); font-size: max(8px, calc(8 * var(--g))); line-height: 1; }
+.mh-prog.is-seek { position: relative; height: calc(14 * var(--g)); background: none; overflow: visible; cursor: pointer; }
+.mh-prog.is-seek::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: calc(3 * var(--g)); border-radius: 2px; background: rgba(255, 255, 255, 0.12); transform: translateY(-50%); transition: height 0.15s; }
+.mh-prog.is-seek i { position: absolute; left: 0; right: 0; top: 50%; height: calc(3 * var(--g)); margin-top: calc(-1.5 * var(--g)); }
+.mh-prog.is-seek:hover::before, .mh-prog.is-seek:focus-visible::before { height: calc(6 * var(--g)); background: rgba(255, 255, 255, 0.2); }
+.mh-prog.is-seek:focus-visible { outline-offset: 2px; }
+.mh-prog__at { position: absolute; top: 50%; width: calc(11 * var(--g)); height: calc(11 * var(--g)); margin: calc(-5.5 * var(--g)) 0 0 calc(-5.5 * var(--g)); border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.55); }
+.mh-seek { display: flex; flex-wrap: wrap; gap: calc(6 * var(--g)); align-items: center; margin: calc(-2 * var(--g)) 0 calc(8 * var(--g)) calc(36 * var(--g)); padding: calc(6 * var(--g)) calc(8 * var(--g)) calc(6 * var(--g)) calc(12 * var(--g)); border-radius: calc(12 * var(--g)); background: var(--mh-s3); box-shadow: inset 0 0 0 1px var(--mh-line-2); font-size: var(--fs-12); animation: mh-up 0.18s var(--mh-ease); }
+.mh-seek > span { margin-right: auto; color: var(--mh-mute); }
+.mh-seek b { color: var(--mh-text); font-variant-numeric: tabular-nums; }
+.mh-seek .mh-btn { height: max(26px, calc(30 * var(--g))); padding: 0 calc(12 * var(--g)); font-size: var(--fs-12); }
+p.mh-sup__why { width: auto; margin: calc(-2 * var(--g)) 0 calc(8 * var(--g)) calc(36 * var(--g)); }
+.mh-sup__v { color: var(--mh-mute); font-size: var(--fs-11); font-variant-numeric: tabular-nums; }
+.mh-seg--bar { background: rgba(52, 211, 153, 0.12); box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.5); color: #b7f5d8; }
+.mh-seg--bar b { color: var(--mh-acc); letter-spacing: 0.02em; }
+.mh-seg--bar:hover, .mh-seg--bar:focus-visible, .mh-seg--bar[aria-expanded='true'] { background: rgba(52, 211, 153, 0.2); color: #dcfbec; }
+.mh-dialog__price { display: flex; flex-wrap: wrap; gap: calc(4 * var(--g)) calc(10 * var(--g)); align-items: baseline; }
+.mh-dialog .mh-dialog__price b { color: #ffe7a8; font-size: var(--fs-15); }
 @media (prefers-reduced-motion: reduce) {
   .mh-curtain, .mh-curtain.is-open { clip-path: none; opacity: 0; transition: visibility 0s, opacity 0.15s; }
   .mh-curtain.is-open { opacity: 1; }
@@ -232,5 +261,6 @@ body.component-view .jdm-module[data-module="music"] .jdm-module__body,
   .mh-eqs i { animation: none; height: 70%; }
   .mh-prog i { transition: none; }
   .mh-now.is-new .mh-art--now, .mh-now.is-new .mh-tx { animation: none; }
-  .mh-skel, .mh-row.is-flash, .mh-tip, .mh-sup, .mh-buy, .mh-dialog, .mh-scrim { animation: none; }
+  .mh-skel, .mh-row.is-flash, .mh-tip, .mh-sup, .mh-buy, .mh-dialog, .mh-scrim, .mh-seek, .mh-ico[aria-busy='true'] { animation: none; }
+  .mh-prog.is-seek::before { transition: none; }
 }

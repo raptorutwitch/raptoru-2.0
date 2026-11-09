@@ -657,6 +657,18 @@ export class SpotifyApi {
       throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', true, r.status);
   }
 
+  /** Music Hub: PUT /me/player/seek?position_ms= (same « maybe sent » rule: the caller reads the playback back). */
+  async seek(positionMs: number, deviceId: string | null) {
+    this.forget('playback');
+    const r = await this.call('PUT', 'me/player/seek', {
+      position_ms: Math.max(0, Math.round(positionMs)),
+      device_id: deviceId ?? undefined,
+    });
+    this.forget('playback');
+    if (r.status !== 204 && r.status !== 200)
+      throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', true, r.status);
+  }
+
   /** POST /me/player/next. Anything but 204 is « maybe sent »: read the playback back. */
   async next(deviceId: string | null) {
     this.forget('playback', 'queue');

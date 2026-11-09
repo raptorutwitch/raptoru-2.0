@@ -681,6 +681,75 @@ describe('Music Hub — search and player jobs (docs/music/MUSIC_HUB_STATE.md)',
       reason: 'NO_DEVICE',
     });
   });
+
+  it('a paid skip aims at ONE track: another one playing → TRACK_CHANGED, nothing sent; the right one → skipped', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'skip',
+      job_id: id(11),
+      request_id: null,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    const missed = h.report() as { skipped_track: { uri: string } };
+    expect(missed).toMatchObject({
+      outcome: 'failed',
+      reason: 'TRACK_CHANGED',
+    });
+    expect(h.sim.view().current).toContain('Lofi Stream Beat');
+    h.job({
+      kind: 'skip',
+      job_id: id(12),
+      request_id: null,
+      expect_uri: missed.skipped_track.uri,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'skipped' });
+    expect(h.sim.view().current).toContain('Chill Loop');
+  });
+
+  it('seek: in THE track the moderator saw (PUT /me/player/seek), proven by the reading after; another track → nothing sent', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'skip',
+      job_id: id(13),
+      request_id: null,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    const uri = (h.report() as { skipped_track: { uri: string } }).skipped_track
+      .uri;
+    h.job({
+      kind: 'control',
+      job_id: id(14),
+      action: 'seek',
+      volume_percent: null,
+      position_ms: 60_000,
+      expect_uri: uri,
+    });
+    await h.rt.once();
+    const done = h.report() as {
+      outcome: string;
+      playback: { progress_ms: number; track: { uri: string } };
+    };
+    expect(done.outcome).toBe('done');
+    expect(done.playback.track.uri).toBe(uri);
+    expect(Math.abs(done.playback.progress_ms - 60_000)).toBeLessThan(5_000);
+    h.job({
+      kind: 'control',
+      job_id: id(15),
+      action: 'seek',
+      volume_percent: null,
+      position_ms: 90_000,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'failed',
+      reason: 'TRACK_CHANGED',
+    });
+    expect(h.sim.view().current).toContain('Lofi Stream Beat');
+  });
 });
 
 describe('Music Hub V2 — pasted links, many versions, the withdrawn request skipped (latency in the simulator)', () => {

@@ -492,6 +492,16 @@ export class SpotifySim {
       }
       return new Response(null, { status: 204 });
     }
+    if (method === 'PUT' && path === 'me/player/seek') {
+      const p = Number(url.searchParams.get('position_ms'));
+      if (!Number.isInteger(p) || p < 0)
+        return json(400, {
+          error: { status: 400, message: 'Invalid position' },
+        });
+      if (this.playing) this.startedAt = this.now() - p;
+      else this.pausedProgress = p;
+      return new Response(null, { status: 204 });
+    }
     if (method === 'PUT' && path === 'me/player/volume') {
       const v = Number(url.searchParams.get('volume_percent'));
       if (!Number.isInteger(v) || v < 0 || v > 100)

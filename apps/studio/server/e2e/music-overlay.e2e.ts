@@ -131,6 +131,21 @@ test('Overlay musique: the OBS page follows the real track, shown / hidden and r
   await expect(obs.locator('.mo-anchor.is-shown')).toHaveCount(0, {
     timeout: 8_000,
   });
+  // « Afficher » in announce mode arms it: told so, nothing shows before the next track (a Masquer / Afficher is not
+  // a new track); the next track shows it.
+  await expect(
+    admin.getByText(/Armé · .* 3 s à chaque nouveau titre/),
+  ).toBeVisible();
+  await admin.locator('[data-act="mox-visible"]').click();
+  await expect(admin.getByText(/Masqué · .* aucune apparition/)).toBeVisible();
+  await admin.locator('[data-act="mox-visible"]').click();
+  await expect(admin.getByText(/Armé ·/)).toBeVisible();
+  await obs.waitForTimeout(2_000);
+  await expect(obs.locator('.mo-anchor.is-shown')).toHaveCount(0);
+  await api(admin, '/api/spotify/sim/skip', {});
+  await expect(obs.locator('.mo-anchor.is-shown')).toHaveCount(1, {
+    timeout: 8_000,
+  });
 
   // Spotify closed: nothing shown (« Rien ne joue : Cacher »).
   await admin.locator('[data-seg="display.mode"][data-v="always"]').click();

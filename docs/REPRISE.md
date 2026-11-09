@@ -95,7 +95,11 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   dans Studio et l'extension, plus « Musiques du stream » (`docs/music/SMTC_STUDIO.md`). Overlay musique OBS, 6 modèles,
   éditeur Studio (`docs/music/MUSIC_OVERLAYS.md`) ; 09/11 soir : bandeau compact « Jeu chargé » en deux lignes,
   défilement aller-retour / continu, languette « Demandé par », réglages de lisibilité, sections de l'éditeur qui
-  restent ouvertes. Prochaine étape : essai d'Antoni, puis un vrai OBS.
+  restent ouvertes. 09/11 nuit (passe de finalisation) : overlay événementiel 30 s (« Afficher » = armé), `!song` en
+  annonce Twitch (repli en message, 30 s de délai global, Windows d'abord), Pause / Passer directs pour les supermods
+  et seek confirmé sur la barre, **skip payant des viewers** (25 000 Jetons doublés dans les 30 min, global,
+  remboursé s'il échoue, demandes payées protégées), **Open Bar** (demandes gratuites sans limite par personne).
+  Prochaine étape : essai d'Antoni (`docs/music/MUSIC_HUB_STATE.md` § 14.8), puis un vrai OBS.
   État et reprise : `docs/music/MUSIC_HUB_STATE.md` § 0.
 - Profil d'alertes Halloween `halloween_alerts` : **encore actif** le 02/11, à couper sur GO d'Antoni.
 - Un achat Halloween d’un viewer (125 Jetons, non remboursé) attend une décision d’Antoni ; le détail est conservé hors du dépôt public.

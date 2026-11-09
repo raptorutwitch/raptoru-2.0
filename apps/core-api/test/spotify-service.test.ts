@@ -776,10 +776,19 @@ describe('Spotify V2 — chat commands (historical texts)', () => {
     await t.sync(t.playing(track(1)));
     await t.say(5, '!song');
     await t.runJob('read_playback', { playback: t.playing(track(1), 5_000) });
+    // Music Hub: one `!song` answer per 30 s on the channel (music-rules.test.ts); an ask in between is ignored.
+    await t.say(6, '!song');
+    expect((await t.sync()).jobs.some((j) => j.kind === 'read_playback')).toBe(
+      false,
+    );
+    t.core.clock.advance(30_000);
+    await t.sync();
     await t.say(5, '!song');
     await t.runJob('read_playback', {
       playback: t.playing(track(9, 'Autre', ['Quelqu’un'])),
     });
+    t.core.clock.advance(30_000);
+    await t.sync();
     await t.say(5, '!song');
     await t.runJob('read_playback', { playback: null });
     expect((await t.replies()).slice(-3)).toEqual([

@@ -610,3 +610,46 @@
   gap: 6px;
   margin-right: auto;
 }
+
+/* Music Hub : l'Open Bar (son état et son bouton) et le prix du skip payant maintenant. */
+.spo-bar,
+.spo-vskip {
+  justify-content: flex-start;
+}
+.spo-rl {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+.spo-rl small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.spo-bar,
+.spo-vskip {
+  margin-top: 6px;
+}
+.spo-bar.is-on {
+  background: var(--green-a, rgba(52, 211, 153, 0.14));
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.45);
+}
+.spo-vs {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.spo-vs time {
+  font-variant-numeric: tabular-nums;
+}
+.spo-vs-done {
+  color: var(--ink);
+}
+.spo-vs-refunded {
+  color: var(--amber);
+}

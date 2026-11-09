@@ -180,9 +180,21 @@ export function musicState(startedAt, clock, role = 'moderator') {
       cancel_grace_seconds: 10,
       no_duplicates: true,
     },
+    // 09/11 final pass: the Open Bar (closed here) and the paid skip — the track playing is Viewer_A's request:
+    // protected (a paid request is never skipped by another viewer's purchase).
+    open_bar: null,
+    viewer_skip: {
+      price: 25_000,
+      base_price: 25_000,
+      window_minutes: 30,
+      resets_at: null,
+      busy: false,
+      blocked: 'protected_request',
+    },
     player: {
       connected: true,
       reason: null,
+      read_only: false,
       device: 'PC du stream (simulé)',
       controls: true,
       is_playing: true,
@@ -225,6 +237,8 @@ export function musicState(startedAt, clock, role = 'moderator') {
     me: {
       pending: 2,
       max_pending: 3,
+      unlimited: false,
+      last_skip: null,
       cooldown_left_ms: 0,
       balance: 12_000,
       requests: [

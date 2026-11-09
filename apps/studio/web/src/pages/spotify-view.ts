@@ -1,4 +1,4 @@
-import { clock, esc, hhmm, ic, pp, stateChip } from '../ds/ds.js';
+import { clock, esc, fmt, hhmm, ic, pp, stateChip } from '../ds/ds.js';
 
 // Spotify, partie pure et testée (docs/SPOTIFY_V2.md § 6) : ce qui joue, la file, ses décisions, la frise du temps. Le Core décide,
 // Studio est le seul à parler à Spotify, cette page montre et transmet. La file suit l'ordre réel de Spotify : ni le Core ni l'API
@@ -86,6 +86,38 @@ export interface SpPlayback {
   volume_percent?: number | null;
 }
 
+/** Music Hub (MUSIC_HUB_STATE.md § 14): the viewers' paid skip, global to the stream, and the Open Bar. */
+export interface SpMusicRules {
+  viewer_skip: {
+    enabled: boolean;
+    protect_requests: boolean;
+    base_price: number;
+    window_minutes: number;
+    price: number;
+    doublings: number;
+    last_success_at: string | null;
+    resets_at: string | null;
+    busy: boolean;
+    recent?: {
+      id: string;
+      status: 'pending' | 'done' | 'refunded';
+      price: number;
+      reason: string | null;
+      track: { title: string; artists: string[] };
+      at: string;
+      ended_at: string | null;
+      viewer_name?: string;
+    }[];
+  };
+  open_bar: {
+    on: boolean;
+    since: string | null;
+    by: string | null;
+    cooldown_seconds: number;
+    max_queue: number;
+  };
+}
+
 export interface SpState {
   environment: 'lab' | 'production';
   settings: SpSettings;
@@ -116,6 +148,8 @@ export interface SpState {
     created_at: string;
   }[];
   managed_rewards: { reward_id: string; title: string; cost: number }[];
+  /** Music Hub: the paid skip and the Open Bar (Core's rules; absent from an older Core). */
+  music_rules?: SpMusicRules;
   connection: {
     auth: 'ok' | 'not_configured' | 'needs_reauth';
     client_id: string | null;
@@ -320,7 +354,9 @@ export const REASONS: Record<string, string> = {
 /** Ce qu'a coûté une demande : des points de la récompense, ou des Jetons depuis l'extension (Music Hub). */
 export const paidWith = (r: SpRequest) =>
   r.payment === 'tokens'
-    ? `<span class="d-tag" title="Demandée depuis l’extension">◆ ${r.price_tokens ?? '?'} Jetons</span>`
+    ? r.price_tokens === 0
+      ? '<span class="d-tag" title="Demandée depuis l’extension pendant l’Open Bar">Open Bar · gratuite</span>'
+      : `<span class="d-tag" title="Demandée depuis l’extension">◆ ${fmt(r.price_tokens ?? '?')} Jetons</span>`
     : r.source === 'twitch'
       ? '<span class="d-tag off" title="Récompense de points de chaîne">points</span>'
       : '';
@@ -565,6 +601,29 @@ export function nowView(s: SpState, ui: SpUi) {
         ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
       </div>${readOnly(s) ? `<p class="spo-ro">${ic('lock')}Lecture seule : passer, pause et volume sont coupés tant que les ajouts ne sont pas autorisés pour cette session.</p>` : ''}
     </div>`;
+}
+
+/**
+ * Music Hub : l'Open Bar (un bouton évident, son état et ce qu'il change) et, quand il est actif, le prix du skip payant
+ * maintenant (le Core le décide ; ici il est seulement montré).
+ */
+export function musicRulesView(s: SpState, now: number) {
+  const m = s.music_rules;
+  if (!m || !s.settings.extension_enabled) return '';
+  const bar = m.open_bar;
+  const since = bar.since ? hhmm(bar.since) : '';
+  const vs = m.viewer_skip;
+  const back = vs.resets_at
+    ? Math.max(1, Math.ceil((Date.parse(vs.resets_at) - now) / 60_000))
+    : 0;
+  const skip = vs.enabled
+    ? `<div class="spo-line spo-vskip">${ic('skip')}<span class="spo-rl"><span>Skip payant : <b>◆ ${fmt(vs.price)}</b>${vs.busy ? ' · <b>un skip en cours…</b>' : ''}</span><small>${back ? `Revient à ◆ ${fmt(vs.base_price)} dans ${back} min sans autre skip payé` : 'Prix de base'}${vs.last_success_at ? ` · dernier skip payé à ${hhmm(vs.last_success_at)}` : ''}</small></span></div>`
+    : '';
+  return `<div class="spo-line spo-bar ${bar.on ? 'is-on' : ''}">${ic('gift')}<span class="spo-rl"><span>Open Bar : <b>${bar.on ? `ouvert${since ? ` depuis ${since}` : ''}` : 'fermé'}</b></span><small>${
+    bar.on
+      ? `Demandes gratuites, sans limite par personne (${bar.cooldown_seconds} s entre deux, ${bar.max_queue} au plus en file). Les skips restent payants.`
+      : `Demandes à ◆ ${fmt(s.settings.extension_price_tokens ?? 500)}, ${s.settings.max_pending_per_viewer} en attente par personne.`
+  }</small></span><button type="button" class="d-btn sm ${bar.on ? '' : 'pri'}" data-act="sp-bar" data-on="${bar.on ? '0' : '1'}">${bar.on ? 'Fermer l’Open Bar' : 'Ouvrir l’Open Bar'}</button></div>${skip}`;
 }
 
 // --- La file ---------------------------------------------------------------------------------------------------------------
