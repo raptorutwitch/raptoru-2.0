@@ -54,6 +54,7 @@ interface Upstream {
 
 async function setup(
   core: (path: string, body?: unknown) => Promise<unknown> = async () => STATE,
+  idleMs?: number,
 ) {
   dir = await mkdtemp(join(tmpdir(), 'word-game-'));
   const calls: { path: string; body?: unknown }[] = [];
@@ -92,6 +93,7 @@ async function setup(
       origin,
       dir: join(dir, 'word-game'),
       playerDir: PLAYER_DIR,
+      ...(idleMs ? { idleMs } : {}),
     });
   let rt = await make();
   server.on('request', (req, res) => {
@@ -302,6 +304,18 @@ describe('OBS sound source', () => {
     s.upstreams[1]!.push(win('tw-2'));
     await obs.until('tw-2');
     expect(obs.wins()).toEqual(['tw-1', 'tw-2']);
+    obs.close();
+  });
+
+  it('a silent half-open stream (no ping) is taken for dead and Core is called again (audit 09/11)', async () => {
+    const s = await setup(undefined, 300);
+    const obs = await listen(s);
+    await until(() => s.upstreams.length === 1);
+    // Nothing at all, not even a ping: aborted after the idle delay, then the usual 1 s reconnection.
+    await until(() => s.upstreams[0]!.signal.aborted, 3000);
+    await until(() => s.upstreams.length === 2, 3000);
+    s.upstreams[1]!.push(win('tw-after'));
+    await obs.until('tw-after');
     obs.close();
   });
 
