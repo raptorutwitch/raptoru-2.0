@@ -81,6 +81,9 @@ export function createClient({
     && demoQuery.get('demoCatalog') === 'large';
   const demo = createDemoSession(demoScenario, { studioCatalog });
   let lastSession = null;
+  // Audit 09/11 (P1): bumped by resetSession() (a new Twitch token): a /state read in flight across a reset is never
+  // merged into the emptied session (it used to leave a session without identity, role or channel until a reload).
+  let sessionGeneration = 0;
   let serverConfirmedTestMode = false;
   const browserTestMode = () => RUNTIME.mode === 'test'
     || RUNTIME.testMode === true
@@ -477,11 +480,14 @@ export function createClient({
     }),
     refresh: async () => {
       if (!lastSession) return call('GET', '/session');
+      const generation = sessionGeneration;
       const dynamic = await call('GET', '/state');
+      if (generation !== sessionGeneration || !lastSession) return call('GET', '/session');
       lastSession = { ...lastSession, ...dynamic };
       return structuredClone(lastSession);
     },
     resetSession: () => {
+      sessionGeneration += 1;
       lastSession = null;
       serverConfirmedTestMode = false;
     },
