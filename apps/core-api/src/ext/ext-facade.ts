@@ -732,7 +732,8 @@ export class ExtFacade {
     return ok({
       tts_v2: tts?.tts_v2 ?? null,
       wallet: s.wallet,
-      pending_actions: [],
+      // Audit 09/11 (P1): the TTS view counts its credits here (polled every 2 s) — an empty list read as 0 credits.
+      pending_actions: s.pending_actions,
     });
   }
 

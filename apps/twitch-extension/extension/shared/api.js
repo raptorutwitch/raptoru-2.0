@@ -82,6 +82,9 @@ export function createClient({
     && demoQuery.get('demoCatalog') === 'large';
   const demo = createDemoSession(demoScenario, { studioCatalog });
   let lastSession = null;
+  // Audit 09/11 (P1): bumped by resetSession() (a new Twitch token): a /state read in flight across a reset is never
+  // merged into the emptied session (it used to leave a session without identity, role or channel until a reload).
+  let sessionGeneration = 0;
   let serverConfirmedTestMode = false;
   const browserTestMode = () => RUNTIME.mode === 'test'
     || RUNTIME.testMode === true
@@ -480,11 +483,14 @@ export function createClient({
     }),
     refresh: async () => {
       if (!lastSession) return call('GET', '/session');
+      const generation = sessionGeneration;
       const dynamic = await call('GET', '/state');
+      if (generation !== sessionGeneration || !lastSession) return call('GET', '/session');
       lastSession = { ...lastSession, ...dynamic };
       return structuredClone(lastSession);
     },
     resetSession: () => {
+      sessionGeneration += 1;
       lastSession = null;
       serverConfirmedTestMode = false;
     },
@@ -492,13 +498,14 @@ export function createClient({
     refreshEmotes: () => call('POST', '/emotes/refresh', { body: {} }),
     startEmoteOAuth: () => call('POST', '/emotes/oauth/start', { body: {} }),
     disconnectEmotes: () => call('POST', '/emotes/oauth/disconnect', { body: {} }),
-    useRedemption: (redemptionId, moduleId, payload) => call('POST', '/actions/redemption', {
+    // `key`: the purchase's Idempotency-Key when the view keeps it across a lost answer (purchase.js createRetryKeys).
+    useRedemption: (redemptionId, moduleId, payload, key = newIdempotencyKey()) => call('POST', '/actions/redemption', {
       body: { redemption_id: redemptionId, module_id: moduleId, payload },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
-    spendTokens: (moduleId, payload) => call('POST', '/actions/tokens', {
+    spendTokens: (moduleId, payload, key = newIdempotencyKey()) => call('POST', '/actions/tokens', {
       body: { module_id: moduleId, payload },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
     /**
      * Bonk salve (lot 5, mode Auto): every shot admitted and paid by Core at once, or nothing. The key is
@@ -558,13 +565,13 @@ export function createClient({
     eventsState: () => call('GET', '/events/state'),
     /** Halloween « Titres »: the cosmetic shop's titles sold in Bonbons (absent on an older Core: the tab hides). */
     eventsTitles: () => call('GET', '/events/titles'),
-    eventsBuyTitle: (offerId) => call('POST', '/actions/events/titles/purchase', {
+    eventsBuyTitle: (offerId, key = newIdempotencyKey()) => call('POST', '/actions/events/titles/purchase', {
       body: { offer_id: offerId },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
-    eventsBuy: (itemId) => call('POST', '/actions/events/purchase', {
+    eventsBuy: (itemId, key = newIdempotencyKey()) => call('POST', '/actions/events/purchase', {
       body: { item_id: itemId },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
     /** Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests from the extension — Core decides everything. */
     musicState: () => call('GET', '/music/state'),

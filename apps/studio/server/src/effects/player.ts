@@ -176,6 +176,8 @@ export class EffectsPlayer {
     current: boolean;
   } | null = null;
   private served: { at: number; version: string } | null = null;
+  /** When each page (player id) last called: a page that went silent while ANOTHER one calls was reloaded. */
+  private readonly seen = new Map<string, number>();
 
   private constructor(
     private readonly d: EffectsPlayerDeps,
@@ -582,6 +584,26 @@ export class EffectsPlayer {
     }
   }
 
+  /**
+   * Audit 09/11 (P2): the effects held by a page that is gone — silent for heartbeatMs while another page calls (the
+   * OBS source was reloaded: a new page id) — end now (« unknown », never replayed) instead of after endMs (120 s): a Random
+   * Ban or a Sub Wheel waiting for that end, and the effects slots, are free again. A live page playing a long effect is
+   * never touched (it keeps calling).
+   */
+  private sweepGone(current: string) {
+    const now = this.now();
+    this.seen.set(current, now);
+    for (const [id, at] of this.seen)
+      if (now - at > 10 * 60_000) this.seen.delete(id);
+    for (const x of [...this.deliveries.values()]) {
+      if (!x.player || x.player === current) continue;
+      if (now - (this.seen.get(x.player) ?? 0) < this.rules.heartbeatMs)
+        continue;
+      if (x.started) this.finish(x, { event: 'unknown', error: 'player_gone' });
+      else this.fail(x, 'player_gone');
+    }
+  }
+
   /** Effects not taken yet, handed to this page only. */
   private take(player: string) {
     const out = [];
@@ -714,6 +736,7 @@ export class EffectsPlayer {
     }
     const version = await this.playerVersion();
     const current = body.version === version || body.stale_ok === true;
+    this.sweepGone(player);
     if (name === 'player/heartbeat') {
       this.page = {
         player,

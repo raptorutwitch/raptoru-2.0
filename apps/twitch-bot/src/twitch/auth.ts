@@ -279,8 +279,24 @@ export class TwitchAuth {
     if (
       token.pendingRefreshToken ||
       token.expiresAt - this.now() <= this.margin
-    )
-      return (await this.refresh()).accessToken;
+    ) {
+      try {
+        return (await this.refresh()).accessToken;
+      } catch (error) {
+        // Audit 09/11 (P2): a PROACTIVE refresh that fails for now (Twitch 5xx or 429, token store busy) never blocks a token
+        // that is still valid: it used to turn every Helix call into a fake 401 (chat answers lost, timeouts refused) for
+        // up to the 10 min margin. The next call tries the refresh again.
+        const t = this.token;
+        if (
+          !this.failure &&
+          t &&
+          !t.pendingRefreshToken &&
+          t.expiresAt - this.now() > 30_000
+        )
+          return t.accessToken;
+        throw error;
+      }
+    }
     return token.accessToken;
   }
 

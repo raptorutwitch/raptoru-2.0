@@ -213,6 +213,12 @@ export function createPublicFrontier(
               .catch((e: Error) =>
                 console.error(`[core-api] ${name} expiry failed`, e.message),
               );
+          // Audit 09/11 (P2): a chat !rb owed after a restart or a failed settle is refunded within 15 s.
+          await core.chat.randomBanChat
+            ?.settleAll()
+            .catch((e: Error) =>
+              console.error('[core-api] !rb refund sweep failed', e.message),
+            );
         })().finally(() => (sweeping = false));
       }, 15_000);
       // Jeu des mots: the 5–15 min cycle of a live channel (one word when due), like the Lab Core process.

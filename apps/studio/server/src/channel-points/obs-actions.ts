@@ -35,6 +35,13 @@ type Revert =
   (Target & { set: boolean; restore: boolean; at: number }) | SceneRevert;
 
 const STALE_MS = 60 * 60_000;
+/** OBS did not answer or went away during the request (raw or made readable): a revert is tried again later. */
+const TRANSIENT = new Set([
+  'obs_request_timeout',
+  'obs_offline',
+  'OBS ne répond pas',
+  'OBS non connecté',
+]);
 const key = (t: Target) =>
   t.kind === 'source'
     ? `source|${t.scene}|${t.source}`
@@ -403,7 +410,6 @@ export class ObsActions {
           if (this.now() - r.at >= STALE_MS) done.add(r);
           continue;
         }
-        done.add(r);
         try {
           if (r.kind === 'scene') {
             if ((await this.currentScene()) === r.scene)
@@ -412,8 +418,15 @@ export class ObsActions {
               });
           } else if ((await this.read(obs, r)) === r.set)
             await this.write(obs, r, r.restore);
-        } catch {
-          /* item gone or OBS refused: nothing to restore */
+          done.add(r);
+        } catch (e) {
+          // Audit 09/11 (P2): OBS busy (no answer within 3 s) or the socket dropped during the request — kept, tried
+          // again at the next tick (until stale). Item gone or OBS refused: nothing to restore.
+          if (
+            !TRANSIENT.has((e as Error).message) ||
+            this.now() - r.at >= STALE_MS
+          )
+            done.add(r);
         }
       }
       // Only what was handled leaves: a revert added meanwhile (an action run during this tick) is kept.

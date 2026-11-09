@@ -787,6 +787,9 @@ export function coreWalletEconomy(wallet: WalletService): EconomyPort {
     },
 
     async debit(q, _now, d) {
+      // Audit 09/11 (P2): a free item (a sound or a TTS tier priced 0 in Studio — the schemas allow it): nothing to
+      // debit, as the Lab wallet does. The Wallet refuses an amount of 0, which refused every purchase of that item.
+      if (d.amount === 0) return;
       // The currency the viewer chose (Jetons, Crédits TTS, Crédits Soundboard): debited in it, never another one.
       const currencyId = await canonicalCurrency(q, d.currency);
       const r = await wallet.spendIn(q, {

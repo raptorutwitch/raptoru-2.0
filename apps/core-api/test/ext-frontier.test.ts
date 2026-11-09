@@ -252,6 +252,9 @@ describe('public Core: viewer frontier /v1/ext', () => {
         { module_id: 'soundboard', credits_remaining: 3 },
       ],
     });
+    // Audit 09/11 (P1): the TTS view polls /tts/state for its credits — the same as the session, never 0.
+    const tts = await ext('/tts/state', viewer());
+    expect(tts.body.pending_actions).toEqual(r.body.pending_actions);
     expect(r.body.modules.map((m: { id: string }) => m.id)).toEqual([
       'tts',
       'soundboard',

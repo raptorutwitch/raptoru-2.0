@@ -383,3 +383,20 @@ describe('MUTED V2: determinism', () => {
     await expect(readFile(l.file, 'utf8')).rejects.toThrow();
   });
 });
+
+describe('MUTED when Studio closes (audit 09/11)', () => {
+  it('restoreNow(): zoom, band and drive off, the mic back, nothing left on disk', async () => {
+    const l = await lab();
+    const mic = l.obs.inputs.get('Micro (Obsolète)')!.muted;
+    await l.mute.muteStart('mute:exit', 60);
+    expect(l.obs.bandFilter.enabled).toBe(true);
+    expect(await l.mute.restoreNow()).toMatchObject({ ok: true });
+    expect(l.obs.zoomFilter.enabled).toBe(false);
+    expect(l.obs.bandFilter.enabled).toBe(false);
+    expect(l.obs.driveFilter.enabled).toBe(false);
+    expect(l.obs.inputs.get('Micro (Obsolète)')!.muted).toBe(mic);
+    await expect(readFile(l.file, 'utf8')).rejects.toThrow();
+    // Nothing running: nothing to do.
+    expect(await l.mute.restoreNow()).toBeNull();
+  });
+});

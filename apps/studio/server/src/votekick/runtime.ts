@@ -64,7 +64,15 @@ export class VotekickRuntime {
     this.d.mute.start();
     const loop = async () => {
       if (this.stopped) return;
-      await this.tick();
+      try {
+        await this.tick();
+      } catch (e) {
+        // Audit 09/11 (P3): one failing tick (disk save, a malformed task) never ends the loop (no more mutes, overlay
+        // frozen until a restart): logged, tried again.
+        this.d.log?.(
+          `[votekick] tick failed: ${String((e as Error)?.message ?? e)}`,
+        );
+      }
       this.timer = setTimeout(() => void loop(), 400);
     };
     void loop();

@@ -639,3 +639,58 @@ describe('Effects player — the music card (Music Hub V2)', () => {
     expect(loud).toMatchObject({ kind: 'music', url: 'media/eren-scream' });
   });
 });
+
+describe('Effects player: a reloaded OBS source (audit 09/11)', () => {
+  it('an effect started by a page that is gone ends as « unknown » as soon as the new page calls, not after endMs', async () => {
+    const { p, origin, token } = await player({
+      heartbeatMs: 150,
+      endMs: 60_000,
+    });
+    const old = page(origin, token);
+    await old.heartbeat();
+    const playing = p.play({
+      kind: 'sound',
+      id: 'eren-scream',
+      volume: 100,
+    });
+    const [x] = await taken(old);
+    await old.report(x!.delivery_id, 'started');
+    const played = await playing;
+    // The source reloads: the old page never calls again, a new one does.
+    const fresh = page(origin, token);
+    await fresh.heartbeat();
+    await new Promise((r) => setTimeout(r, 200));
+    await fresh.heartbeat();
+    await expect(played.end).resolves.toEqual({
+      event: 'unknown',
+      error: 'player_gone',
+    });
+    expect(p.status().playing).toBe(0);
+  });
+
+  it('a live page playing a long effect is never ended by another page calling', async () => {
+    const { p, origin, token } = await player({
+      heartbeatMs: 150,
+      endMs: 60_000,
+    });
+    const a = page(origin, token);
+    await a.heartbeat();
+    const playing = p.play({
+      kind: 'sound',
+      id: 'eren-scream',
+      volume: 100,
+    });
+    const [x] = await taken(a);
+    await a.report(x!.delivery_id, 'started');
+    const played = await playing;
+    const b = page(origin, token);
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      await a.heartbeat();
+      await b.heartbeat();
+    }
+    expect(p.status().playing).toBe(1);
+    await a.report(x!.delivery_id, 'completed');
+    await expect(played.end).resolves.toEqual({ event: 'completed' });
+  });
+});

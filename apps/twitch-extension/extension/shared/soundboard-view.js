@@ -16,6 +16,7 @@ import { walletPaymentMethods, walletCanPayTokens } from './wallet-payment.js';
 import { createSoundPreview, soundPreviewUrls } from './soundboard-preview.js';
 import { createSoundboardFeedback } from './soundboard-feedback.js';
 import { readStoredIds, writeStoredIds, rememberStoredId } from './stored-ids.js';
+import { createRetryKeys, withRetryKey } from './purchase.js';
 import {
   SOUNDBOARD_ALIAS_MAX_LENGTH,
   SOUNDBOARD_ALIASES_KEY,
@@ -1013,13 +1014,15 @@ export function createSoundboardView({ document, client, host, root }) {
 
     // The outcome of a send is the Soundboard's own toast (the host stays quiet: feedbackScope).
     const settled = (ok, error) => feedback.set(ok ? 'success' : 'error', error);
+    // A lost answer, then « Envoyer » again on the same sound: the same purchase (never paid twice).
+    const keys = (drafts.soundboardKeys ??= createRetryKeys());
     send.addEventListener('click', () => {
       const sound = soundById.get(String(selectedSound || ''));
       const method = host.payment.get();
       if (!sound || send.disabled || !supportsPaymentMethod(method)) return;
       if (method === 'credits') {
         return host.run(body, () => selectedCreditRedemption
-          ? client.useRedemption(selectedCreditRedemption.redemption_id, 'soundboard', { sound_id: selectedSound })
+          ? withRetryKey(keys, `credits:${selectedSound}`, (key) => client.useRedemption(selectedCreditRedemption.redemption_id, 'soundboard', { sound_id: selectedSound }, key))
           : Promise.reject(Object.assign(new Error('insufficient_credits'), { code: 'insufficient_credits' })), {
           feedbackScope: 'soundboard',
           onSuccess: clearSound,
@@ -1027,7 +1030,7 @@ export function createSoundboardView({ document, client, host, root }) {
         });
       }
       if (!walletCanPayTokens(state.wallet, tokenCostOf(sound))) return;
-      return host.run(body, () => client.spendTokens('soundboard', { sound_id: selectedSound }), {
+      return host.run(body, () => withRetryKey(keys, `tokens:${selectedSound}`, (key) => client.spendTokens('soundboard', { sound_id: selectedSound }, key)), {
         feedbackScope: 'soundboard',
         onSuccess: clearSound,
         onSettled: settled,

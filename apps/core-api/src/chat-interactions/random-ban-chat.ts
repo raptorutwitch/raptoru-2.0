@@ -159,6 +159,18 @@ export class RandomBanChat {
       });
   }
 
+  /**
+   * Audit 09/11 (P2): what is still owed on every channel, from the 15 s sweep. settle() above runs after an executor
+   * result only: a Core restart (or a failed settle) between the request's end and its refund left the Jetons owed until
+   * some other Random Ban ended. Idempotent (row lock + keyed refund): a second pass moves nothing.
+   */
+  async settleAll() {
+    const channels = await this.db.query<{ channel_id: string }>(
+      `select distinct channel_id from rb_requests where source = 'chat' and refund = 'needed'`,
+    );
+    for (const c of channels) await this.settle(c.channel_id);
+  }
+
   /** One chat message per key (a replayed event or a second settle writes nothing new). */
   private say(q: Queryable, channelId: string, key: string, text: string) {
     return insertWordGameSteps(q, {
