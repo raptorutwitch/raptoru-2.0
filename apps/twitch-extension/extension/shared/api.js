@@ -489,13 +489,14 @@ export function createClient({
     refreshEmotes: () => call('POST', '/emotes/refresh', { body: {} }),
     startEmoteOAuth: () => call('POST', '/emotes/oauth/start', { body: {} }),
     disconnectEmotes: () => call('POST', '/emotes/oauth/disconnect', { body: {} }),
-    useRedemption: (redemptionId, moduleId, payload) => call('POST', '/actions/redemption', {
+    // `key`: the purchase's Idempotency-Key when the view keeps it across a lost answer (purchase.js createRetryKeys).
+    useRedemption: (redemptionId, moduleId, payload, key = newIdempotencyKey()) => call('POST', '/actions/redemption', {
       body: { redemption_id: redemptionId, module_id: moduleId, payload },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
-    spendTokens: (moduleId, payload) => call('POST', '/actions/tokens', {
+    spendTokens: (moduleId, payload, key = newIdempotencyKey()) => call('POST', '/actions/tokens', {
       body: { module_id: moduleId, payload },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
     /**
      * Bonk salve (lot 5, mode Auto): every shot admitted and paid by Core at once, or nothing. The key is
@@ -555,13 +556,13 @@ export function createClient({
     eventsState: () => call('GET', '/events/state'),
     /** Halloween « Titres »: the cosmetic shop's titles sold in Bonbons (absent on an older Core: the tab hides). */
     eventsTitles: () => call('GET', '/events/titles'),
-    eventsBuyTitle: (offerId) => call('POST', '/actions/events/titles/purchase', {
+    eventsBuyTitle: (offerId, key = newIdempotencyKey()) => call('POST', '/actions/events/titles/purchase', {
       body: { offer_id: offerId },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
-    eventsBuy: (itemId) => call('POST', '/actions/events/purchase', {
+    eventsBuy: (itemId, key = newIdempotencyKey()) => call('POST', '/actions/events/purchase', {
       body: { item_id: itemId },
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey: key,
     }),
     /** Tombola V2 (Lab): Core's viewer state (phase, timer, entries, refusal, result, history). */
     raffleState: () => call('GET', '/raffle/state'),

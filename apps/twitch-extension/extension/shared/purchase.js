@@ -28,6 +28,46 @@ export const isRetryable = (e) =>
   !e?.status || e.status >= 500 || e?.code === 'timeout' || e?.code === 'network_error';
 
 /**
+ * Audit 09/11 (P1): keys for purchases a viewer may repeat ON PURPOSE (a Bonk per click, a sound, an event item). Each
+ * click is its own purchase — except the click that follows a failure with no answer for the same thing (lost response,
+ * timeout, network): it re-sends THAT key, so Core answers the first purchase (maybe already paid and played) instead
+ * of charging a second time. A success or a decided refusal leaves nothing behind.
+ */
+export function createRetryKeys() {
+  const unanswered = new Map();
+  return {
+    /** The key of this click: the unanswered one of the same thing, else a new one. */
+    take(id) {
+      const key = unanswered.get(id) ?? newIdempotencyKey();
+      unanswered.delete(id);
+      return key;
+    },
+    /** How the click ended: kept for the next click only when the server's answer is unknown. */
+    settle(id, key, error) {
+      if (error && isRetryable(error)) unanswered.set(id, key);
+    },
+  };
+}
+
+/** `task(key)` with the key of this click, settled from its outcome (the promise is returned unchanged). */
+export function withRetryKey(keys, id, task) {
+  const key = keys.take(id);
+  let run;
+  try {
+    run = Promise.resolve(task(key));
+  } catch (error) {
+    run = Promise.reject(error);
+  }
+  return run.then(
+    (out) => (keys.settle(id, key, null), out),
+    (error) => {
+      keys.settle(id, key, error);
+      throw error;
+    },
+  );
+}
+
+/**
  * Two-tap purchase button. `run(key)` performs the request; the button never sends twice in parallel.
  * `update({ label, price, available, reason })` redraws it from the server's state.
  */

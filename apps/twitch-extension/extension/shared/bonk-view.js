@@ -10,6 +10,7 @@
 // refresh and the notification centre. Core stays the authority on every shot (price, delay, admission).
 
 import { newIdempotencyKey, errorLabel } from './api.js';
+import { createRetryKeys, withRetryKey } from './purchase.js';
 import { registerModuleVariant } from './module-registry.js';
 import { createFeedbackSlot, createIconButton, providerPresentation, UI_ICONS } from './ui-primitives.js';
 import { UNICODE_EMOJI_GROUPS } from './unicode-emojis.js';
@@ -414,7 +415,9 @@ export function createBonkView({ document, client, host }) {
   const fire = (emote) => {
     const payload = shotPayload(emote);
     if (!payload) return Promise.resolve(false);
-    return send.send(() => client.spendTokens('bonk', payload));
+    // Each click is its own Bonk; the click after a lost answer for the same emote re-sends that one (never paid twice).
+    const keys = (memory.bonkKeys ??= createRetryKeys());
+    return send.send(() => withRetryKey(keys, payload.emotes.join(','), (key) => client.spendTokens('bonk', payload, key)));
   };
   const salve = (emotes, cadenceMs, key) => {
     const shots = [];
