@@ -350,3 +350,22 @@ describe('Refonte H1: `!rb` only during the canonical live', () => {
     );
   });
 });
+
+describe('!rb owed refund after a restart (audit 09/11)', () => {
+  it('a request ended « refund needed » with no settle after it (Core restarted): the sweep refunds it once', async () => {
+    const l = await lab();
+    await l.poll();
+    await l.router.message(msg('!rb'));
+    expect(await l.tokensOf()).toBe(75_000);
+    // The request ended with nothing done and its settle never ran (the in-memory callback lost at a restart).
+    await l.core.db.query(
+      `update rb_requests set status = 'failed', error = 'test', refund = 'needed', ended_at = now() where channel_id = $1`,
+      [CH],
+    );
+    await l.core.chat.randomBanChat!.settleAll();
+    expect(await l.tokensOf()).toBe(100_000);
+    await l.core.chat.randomBanChat!.settleAll();
+    expect(await l.tokensOf()).toBe(100_000);
+    expect(await l.replies()).toHaveLength(1);
+  });
+});
