@@ -585,6 +585,26 @@ export class CommandSteps {
           break;
         }
       }
+      // Music Hub `!song`: an announcement LeCroupier_ could not send (no moderator:manage:announcements, not a
+      // moderator…) is written again once as a plain message — never after an `unknown` send (it may have been seen).
+      if (
+        row.status === 'failed' &&
+        cur.origin === 'music' &&
+        cur.params.mode === 'announce' &&
+        !cur.idempotency_key.endsWith(':plain')
+      )
+        await insertWordGameSteps(q, {
+          channelId,
+          now,
+          origin: 'music',
+          drafts: [
+            {
+              idempotencyKey: `${cur.idempotency_key.slice(0, 190)}:plain`,
+              mode: 'normal',
+              text: String(cur.params.text ?? ''),
+            },
+          ],
+        });
       return { step: stepView(row), replayed: false };
     });
   }

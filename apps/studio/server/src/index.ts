@@ -1295,10 +1295,45 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             'votekick-overlay',
           ),
           // Spotify V2: the Lab plays on the simulator; Production on the broadcaster's account (panel « Musique »).
+          // LAB_SPOTIFY=real (explicit at each Lab launch, never saved): the Lab on the broadcaster's real account, in
+          // its own folder, read-only until allowed in the panel for the session (docs/music/SPOTIFY_REEL_LAB.md).
           spotifyDir:
             alertsEnv === 'lab'
-              ? labModuleDir('spotify-lab')
+              ? labModuleDir(
+                  process.env.LAB_SPOTIFY === 'real'
+                    ? 'spotify-lab-real'
+                    : 'spotify-lab',
+                )
               : join(paths.runtimeDir, 'production', 'spotify'),
+          spotifyLabReal:
+            alertsEnv === 'lab' && process.env.LAB_SPOTIFY === 'real',
+          // Music Hub (docs/music/SMTC_STUDIO.md): Windows' media session of Spotify Desktop, for the live display and the
+          // stream's history — the Lab on the real account only (the simulator has its simulated Windows). Its own build
+          // of the probe (a test window may hold the other exe). LAB_SMTC=off: none.
+          // Music Hub: the OBS music overlays (docs/music/MUSIC_OVERLAYS.md), one page served by this Studio.
+          musicOverlayDir: join(
+            REPO_ROOT,
+            'apps',
+            'studio',
+            'server',
+            'music-overlay',
+          ),
+          spotifySmtc:
+            alertsEnv === 'lab' &&
+            process.env.LAB_SPOTIFY === 'real' &&
+            process.env.LAB_SMTC !== 'off'
+              ? {
+                  exe: join(
+                    REPO_ROOT,
+                    '.lab-data',
+                    'smtc-probe',
+                    'studio',
+                    'SmtcProbe.exe',
+                  ),
+                  script: join(REPO_ROOT, 'tools', 'smtc-probe', 'run.ps1'),
+                  out: join(REPO_ROOT, '.lab-data', 'smtc-probe', 'studio'),
+                }
+              : null,
           twitch: () => ({
             scope: hasTwitchScope(
               readTokenSummary(broadcasterTokenFile).scopes,

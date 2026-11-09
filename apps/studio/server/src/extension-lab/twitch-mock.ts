@@ -13,20 +13,22 @@ export const LAB_TOKEN_PATH = '/ext-lab/token';
 export const TWITCH_EXT_MOCK_JS = String.raw`(() => {
   'use strict';
   const query = new URLSearchParams(location.search);
-  const role = ['viewer', 'moderator', 'broadcaster'].includes(query.get('labRole'))
+  // « supermod » (Music Hub V2): a moderator for Twitch, a supermod for the main Core's Lab (its team, lab_staff).
+  const asked = ['viewer', 'moderator', 'supermod', 'broadcaster'].includes(query.get('labRole'))
     ? query.get('labRole') : 'viewer';
+  const role = asked === 'supermod' ? 'moderator' : asked;
   const identityShared = query.get('labIdentity') !== '0';
   const layout = query.get('labLayout') || 'normal';
   const channelId = '900100';
   const labToken = 'lab.' + btoa(JSON.stringify({ role, identity_shared: identityShared }))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   // The JWT of the main Core's Lab when Studio offers one (404 otherwise: the historical Lab EBS and its lab token).
-  const tokenReady = fetch('/ext-lab/token?role=' + role + '&identity=' + (identityShared ? '1' : '0'), { cache: 'no-store' })
+  const tokenReady = fetch('/ext-lab/token?role=' + asked + '&identity=' + (identityShared ? '1' : '0'), { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => (j && typeof j.token === 'string' ? j.token : labToken))
     .catch(() => labToken);
   const token = labToken;
-  const opaqueUserId = 'U' + ({ viewer: '900101', moderator: '900102', broadcaster: '900100' })[role];
+  const opaqueUserId = 'U' + ({ viewer: '900101', moderator: '900102', supermod: '900103', broadcaster: '900100' })[asked];
   const auth = {
     channelId,
     clientId: 'raptoru-lab',

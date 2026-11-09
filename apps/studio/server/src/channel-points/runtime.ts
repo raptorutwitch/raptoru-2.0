@@ -56,6 +56,12 @@ export interface ChannelPointsRuntimeDeps {
   votekickOverlayDir?: string;
   /** Spotify V2: its storage; absent: no Spotify in this Studio. */
   spotifyDir?: string;
+  /** Lab only: Spotify V2 on the broadcaster's real account (LAB_SPOTIFY=real), read-only until allowed. */
+  spotifyLabReal?: boolean;
+  /** Music Hub: the SMTC probe Studio builds and runs (Windows' media session); absent: none. */
+  spotifySmtc?: { exe: string; script: string; out: string } | null;
+  /** Music Hub: the OBS music overlay's page folder (apps/studio/server/music-overlay); absent: none. */
+  musicOverlayDir?: string | null;
 }
 
 export class ChannelPointsRuntime {
@@ -151,6 +157,12 @@ export class ChannelPointsRuntime {
             dir: d.spotifyDir,
             origin: d.origin,
             log: (line) => console.log(line),
+            // Music Hub V2: the music card of the overlay goes through the effects player (never its own source).
+            effects: d.effects ?? null,
+            labReal: d.spotifyLabReal === true,
+            smtc: d.spotifySmtc ?? null,
+            overlayDir: d.musicOverlayDir ?? null,
+            obs: d.obs,
           })
         : null,
     );
@@ -388,6 +400,18 @@ export class ChannelPointsRuntime {
             req.method ?? 'GET',
             url.pathname.slice('/api/spotify'.length),
             () => this.body(req),
+            // Music Hub V2: an alert sound imported for the overlay (same checks as the Votekick sounds).
+            async () => {
+              let name = 'son';
+              try {
+                name = decodeURIComponent(
+                  String(req.headers['x-sound-name'] ?? 'son'),
+                );
+              } catch {
+                /* keep the default */
+              }
+              return { body: await this.raw(req, SOUND_MAX_BYTES), name };
+            },
           ),
         );
       else if (rb)

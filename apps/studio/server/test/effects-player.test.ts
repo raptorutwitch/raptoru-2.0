@@ -584,3 +584,58 @@ describe('Effects player: a sound imported from Studio (Votekick launch sound)',
     ).rejects.toThrow('uploads_unavailable');
   });
 });
+
+describe('Effects player — the music card (Music Hub V2)', () => {
+  it('a silent card plays even on a muted page (no media); with an alert sound it needs sound and its file; the page gets the card', async () => {
+    const { p, origin, token } = await player();
+    const pg = page(origin, token);
+    await pg.heartbeat(false);
+    const card = {
+      kind: 'music' as const,
+      card: {
+        event: 'request' as const,
+        title: 'Néon Sauvage (Remix)',
+        artists: ['Lune Rouge'],
+        requested_by: 'Viewer_Lab',
+      },
+      volume: 50,
+      duration_ms: 99_000,
+      position: 'top-right' as const,
+    };
+    await expect(p.play({ ...card, sound: 'eren-scream' })).rejects.toThrow(
+      'effects_player_muted',
+    );
+    const silent = p.play({ ...card, sound: null });
+    const [got] = (await taken(pg)) as unknown as {
+      delivery_id: string;
+      url: string;
+      kind: string;
+      music: Record<string, unknown>;
+    }[];
+    expect(got).toMatchObject({
+      kind: 'music',
+      url: '',
+      music: {
+        event: 'request',
+        title: 'Néon Sauvage (Remix)',
+        requested_by: 'Viewer_Lab',
+        duration_ms: 15_000, // capped
+        position: 'top-right',
+      },
+    });
+    await pg.report(got!.delivery_id, 'started');
+    const { end } = await silent;
+    await pg.report(got!.delivery_id, 'completed');
+    expect(await end).toMatchObject({ event: 'completed' });
+    await pg.heartbeat(true);
+    await expect(p.play({ ...card, sound: 'nope' })).rejects.toThrow(
+      'effect_unknown',
+    );
+    await expect(p.play({ ...card, sound: 'glory-holes' })).rejects.toThrow(
+      'effect_media_missing',
+    );
+    void p.play({ ...card, sound: 'eren-scream' });
+    const [loud] = await taken(pg);
+    expect(loud).toMatchObject({ kind: 'music', url: 'media/eren-scream' });
+  });
+});

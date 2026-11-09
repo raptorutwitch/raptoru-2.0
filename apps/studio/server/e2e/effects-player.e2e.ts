@@ -693,3 +693,64 @@ test.describe('Effects player — Roue du Sub (as in OBS)', () => {
     }
   });
 });
+
+test.describe('Effects player — Music Hub V2 music card (as in OBS)', () => {
+  test('the card (title, artist, requester) slides in a corner with its alert sound, stays its time, leaves; never the music itself', async () => {
+    const s = await studio();
+    const { page, close } = await obsLike();
+    try {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.goto(s.player.url);
+      await connected(s.player, true);
+      const t0 = Date.now();
+      const played = await s.player.play({
+        kind: 'music',
+        card: {
+          event: 'request',
+          title: 'Néon Sauvage (Remix)',
+          artists: ['Lune Rouge', 'DJ Orbite'],
+          requested_by: 'Viewer_Lab',
+        },
+        sound: 'tiens-bon',
+        volume: 60,
+        duration_ms: 3_000,
+        position: 'top-right',
+      });
+      const card = page.locator('#stage .mh-card.on');
+      await expect(card).toBeVisible();
+      await expect(card).toContainText('Nouvelle demande');
+      await expect(card).toContainText('Néon Sauvage (Remix)');
+      await expect(card).toContainText('Lune Rouge, DJ Orbite');
+      await expect(card).toContainText('demandé par Viewer_Lab');
+      const box = (await card.boundingBox())!;
+      expect(box.x + box.width).toBeGreaterThan(1800); // top right
+      expect(box.y).toBeLessThan(120);
+      if (process.env.MH_SHOT)
+        await page.screenshot({ path: process.env.MH_SHOT });
+      expect(await played.end).toEqual({ event: 'completed' });
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(3_000);
+      await expect(page.locator('#stage .mh-card')).toHaveCount(0);
+      // A silent card (no alert sound) at the bottom left, the request starting.
+      const silent = await s.player.play({
+        kind: 'music',
+        card: {
+          event: 'start',
+          title: 'Comète',
+          artists: ['Ava Solène'],
+          requested_by: null,
+        },
+        sound: null,
+        volume: 0,
+        duration_ms: 3_000,
+        position: 'bottom-left',
+      });
+      await expect(page.locator('#stage .mh-card.on')).toContainText(
+        'À l’écoute',
+      );
+      expect(await silent.end).toEqual({ event: 'completed' });
+    } finally {
+      await close();
+      await s.close();
+    }
+  });
+});

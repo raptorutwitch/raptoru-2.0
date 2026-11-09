@@ -155,10 +155,19 @@
   color: var(--ink3);
   font-size: 12.5px;
 }
-.spo-sub > span {
+.spo-sub > span,
+.spo-vol {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+.spo-vol input {
+  width: 110px;
+}
+.spo-vol b {
+  min-width: 2.2em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .spo-sim {
@@ -531,4 +540,116 @@
       );
     gap: 16px;
   }
+}
+
+/* Music Hub — le titre en cours selon Windows (SMTC) et les musiques du stream (docs/music/SMTC_STUDIO.md). */
+.spo-src {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink3);
+}
+.spo-album {
+  color: var(--ink3);
+}
+/* La barre glisse d'une seconde à l'autre (un retour en arrière saute : la page coupe la transition). */
+.spo-now .d-prog i {
+  transition: width 1s linear;
+}
+.spo-trans[data-paused] .d-prog i {
+  opacity: 0.55;
+}
+/* Un nouveau titre apparaît doucement (une fois, pas à chaque relevé). */
+.spo-now.is-new .spo-art,
+.spo-now.is-new .spo-meta {
+  animation: spo-in 0.45s ease-out both;
+}
+.spo-now.is-new .spo-meta {
+  animation-delay: 0.06s;
+}
+@keyframes spo-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.spo-p {
+  grid-template-columns: 42px 38px minmax(0, 1fr) auto;
+}
+.spo-ptags {
+  display: flex;
+  gap: 5px;
+  justify-content: flex-end;
+}
+.spo-pby {
+  color: var(--ink3);
+}
+.spo-psess {
+  padding: 12px 6px 6px;
+  border-bottom: 1px solid var(--hair);
+}
+.spo-pmore {
+  margin: 10px auto;
+  display: block;
+}
+
+/* Lab sur le vrai compte, lecture seule : pourquoi le lecteur n'est pas piloté. */
+.spo-ro {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+
+/* Le contrôle rapide de l'overlay musique (OBS). */
+.spo-ovl > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+
+/* Music Hub : l'Open Bar (son état et son bouton) et le prix du skip payant maintenant. */
+.spo-bar,
+.spo-vskip {
+  justify-content: flex-start;
+}
+.spo-rl {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+.spo-rl small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.spo-bar,
+.spo-vskip {
+  margin-top: 6px;
+}
+.spo-bar.is-on {
+  background: var(--green-a, rgba(52, 211, 153, 0.14));
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.45);
+}
+.spo-vs {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink3);
+  font-size: 12px;
+}
+.spo-vs time {
+  font-variant-numeric: tabular-nums;
+}
+.spo-vs-done {
+  color: var(--ink);
+}
+.spo-vs-refunded {
+  color: var(--amber);
 }

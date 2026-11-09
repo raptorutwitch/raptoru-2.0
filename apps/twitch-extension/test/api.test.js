@@ -25,7 +25,7 @@ function client(...replies) {
   return {
     api: createClient({
       getToken: () => 'tok',
-      apiBase: 'http://ebs',
+      apiBase: '/ext-lab/api', // an allowed base (shared/runtime-guard.js)
       demoMode: false,
       fetchImpl,
     }),

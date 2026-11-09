@@ -46,6 +46,8 @@ const PATHS = {
   ticket:
     '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/>',
   dot: '<circle cx="12" cy="12" r="4"/>',
+  // Music Hub V2: a double note.
+  note: '<path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -90,6 +92,7 @@ export const FAMILIES = {
   random_ban: { icon: 'gavel', label: 'Random Ban' },
   raffle: { icon: 'ticket', label: 'Tombola' },
   halloween: { icon: 'bat', label: 'Halloween' },
+  music: { icon: 'note', label: 'Musique' },
   other: { icon: 'dot', label: 'Événement' },
 };
 
@@ -110,6 +113,7 @@ const FAMILY_OF = {
   random_ban: 'random_ban',
   raffle: 'raffle',
   halloween: 'halloween',
+  music: 'music',
 };
 /** The family of an activity — also its filter. */
 export const familyOf = (a) => FAMILY_OF[a.type] ?? 'other';
@@ -125,7 +129,7 @@ export const FILTER_GROUPS = [
   {
     id: 'raptoru',
     label: 'Interactions Raptoru',
-    filters: ['tts', 'soundboard', 'bonk', 'random_ban', 'raffle'],
+    filters: ['tts', 'soundboard', 'bonk', 'random_ban', 'raffle', 'music'],
   },
   { id: 'event', label: 'Événements', filters: ['halloween'] },
 ];
@@ -145,6 +149,7 @@ const FILTER_LABEL = {
   random_ban: 'Random Ban',
   raffle: 'Tombola',
   halloween: 'Halloween (effets achetés)',
+  music: 'Musique (demandes depuis l’extension)',
 };
 export const filterLabel = (id) => FILTER_LABEL[id] ?? id;
 
@@ -423,6 +428,21 @@ export function labelOf(a, prefs = DEFAULT_PREFS) {
         label: 'Random Ban',
         note: d.target ? `cible : ${d.target}` : '',
       };
+    case 'music':
+      // Music Hub V2: the requested track (title — artist); the price in Jetons when costs are shown.
+      return {
+        label: 'Musique',
+        note: [
+          d.track?.title
+            ? `${d.track.title}${d.track.artists?.length ? ` — ${d.track.artists.join(', ')}` : ''}`
+            : 'titre en cours d’ajout',
+          prefs.costs && typeof d.price === 'number'
+            ? plural(d.price, 'Jeton', 'Jetons')
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      };
     default:
       return { label: FAMILIES.other.label };
   }
@@ -468,6 +488,16 @@ const IX = {
   uncertain: ['Résultat incertain', 'bad'],
   cancelled: ['Annulée', 'muted'],
   unknown: ['Résultat inconnu', 'bad'],
+  // Music Hub V2: one row per request, its status following it.
+  music_received: ['Demande reçue', 'wait'],
+  music_queued: ['En file', 'wait'],
+  music_playing: ['En lecture', 'ok'],
+  music_played: ['Jouée', 'ok'],
+  music_canceled: ['Retirée par le viewer', 'muted'],
+  music_removed: ['Retirée par l’équipe', 'muted'],
+  music_skipped: ['Passée', 'muted'],
+  music_unknown: ['À vérifier', 'bad'],
+  music_failed: ['Échec', 'bad'],
 };
 
 /**

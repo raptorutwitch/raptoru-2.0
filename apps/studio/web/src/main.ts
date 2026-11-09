@@ -7,6 +7,7 @@ import './mod/mod.css';
 import './pages/tts.css';
 import './pages/alerts.css';
 import './pages/spotify.css';
+import './pages/music-overlay.css';
 import './pages/sub-wheel.css';
 import './pages/commands.css';
 import './pages/word-game.css';
@@ -34,6 +35,7 @@ import { mountBonkPage } from './pages/bonk.js';
 import { mountSoundboardPage } from './pages/soundboard.js';
 import { mountTtsPage } from './pages/tts.js';
 import { mountSpotifyPage } from './pages/spotify.js';
+import { mountMusicOverlayPage } from './pages/music-overlay.js';
 import { mountSubWheelPage } from './pages/sub-wheel.js';
 import { mountUpdateWidget } from './update.js';
 import { mountSysteme } from './pages/systeme.js';
@@ -102,6 +104,7 @@ if (app) {
     soundboard: mountSoundboardPage(el('soundboard')),
     tts: mountTtsPage(el('tts')),
     spotify: mountSpotifyPage(el('spotify')),
+    'music-overlay': mountMusicOverlayPage(el('music-overlay')),
     'sub-wheel': mountSubWheelPage(el('sub-wheel')),
     bonk: mountBonkPage(el('bonk')),
     modules: mountModuleHost(el('modules')),

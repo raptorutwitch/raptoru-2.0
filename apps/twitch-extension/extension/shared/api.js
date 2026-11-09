@@ -5,6 +5,7 @@
 
 import { createDemoSession } from './demo-data.js';
 import { RUNTIME } from './runtime-config.js';
+import { isAllowedApiBase } from './runtime-guard.js';
 import { traceTimeoutDebug } from './timeout-debug.js';
 
 export const API_BASE = RUNTIME.apiBase;
@@ -114,9 +115,11 @@ export function createClient({
       if (sessionRoute(path) === '/session') rememberSession(responsePayload);
       return responsePayload;
     }
-    if (!apiBase) {
-      traceTimeoutDebug('api.request.blocked', { method, route: diagnosticRoute(path), reason: 'api_not_configured' });
-      throw Object.assign(new Error('api_not_configured'), { code: 'api_not_configured' });
+    // Défense en profondeur : une source non emballée (apiBase vide) ou un paquet fabriqué hors de
+    // scripts/package.mjs (ancien serveur, hôte inconnu) n'appelle jamais le réseau.
+    if (!isAllowedApiBase(apiBase)) {
+      traceTimeoutDebug('api.request.blocked', { method, route: diagnosticRoute(path), reason: 'unconfigured_build' });
+      throw Object.assign(new Error('unconfigured_build'), { code: 'unconfigured_build' });
     }
 
     testLog('request', {
@@ -563,6 +566,29 @@ export function createClient({
       body: { item_id: itemId },
       idempotencyKey: newIdempotencyKey(),
     }),
+    /** Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests from the extension — Core decides everything. */
+    musicState: () => call('GET', '/music/state'),
+    /** « Musiques de la soirée »: 20 per page, `before` = the previous page's `next`. */
+    musicHistory: (before = null) => call('GET', `/music/history${before ? `?before=${encodeURIComponent(before)}` : ''}`),
+    musicSearch: (query) => call('POST', '/music/search', { body: { query } }),
+    musicSearchResult: (id) => call('GET', `/music/search/${encodeURIComponent(id)}`),
+    /** One key per intent (chosen by the view, reused on a retry): a request is never paid twice. */
+    musicRequest: (key, trackId, expectedPrice) => call('POST', '/music/request', {
+      body: { track_id: trackId, expected_price: expectedPrice },
+      idempotencyKey: key,
+    }),
+    musicCancel: (requestId) => call('POST', '/music/cancel', { body: { request_id: requestId } }),
+    musicModerate: (command, key = newIdempotencyKey()) => call('POST', '/music/moderate', {
+      body: { command },
+      idempotencyKey: key,
+    }),
+    musicControl: (jobId) => call('GET', `/music/controls/${encodeURIComponent(jobId)}`),
+    /** A viewer's paid skip: one key per intent (a retry never pays twice); the price is Core's (expected: a guard). */
+    musicSkip: (key, expectedPrice) => call('POST', '/music/skip', {
+      body: { expected_price: expectedPrice },
+      idempotencyKey: key,
+    }),
+    musicSkipResult: (id) => call('GET', `/music/skip/${encodeURIComponent(id)}`),
     /** Tombola V2 (Lab): Core's viewer state (phase, timer, entries, refusal, result, history). */
     raffleState: () => call('GET', '/raffle/state'),
     joinRaffle: () => call('POST', '/actions/raffle', {
@@ -699,6 +725,7 @@ export const ERROR_LABELS = {
   network_error: 'Connexion au service impossible — réessaie dans un instant.',
   login_unavailable: 'Ton compte Twitch n’est pas encore reconnu — réessaie dans un instant.',
   api_not_configured: 'L’extension est momentanément indisponible.',
+  unconfigured_build: 'Version non configurée : cette extension n’a pas été emballée par scripts/package.mjs.',
   rate_limited: 'Un peu trop de demandes à la fois — attends quelques secondes.',
   // Bonk : emote Twitch refusée par Core (compte Twitch non lié / emote hors du catalogue du viewer).
   viewer_not_linked: 'Emotes Twitch indisponibles : aucun compte Twitch lié à cette identité.',

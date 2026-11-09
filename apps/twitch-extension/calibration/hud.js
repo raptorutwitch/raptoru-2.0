@@ -1,5 +1,5 @@
 // Calibration HUD (Video Component geometry, docs/TWITCH_GEOMETRY_CALIBRATION_2026-10.md).
-// Injected by scripts/build-calibration.mjs into the packaged video_component.html only. Fixed overlay:
+// Injected by scripts/package.mjs --target calibration into the packaged video_component.html only. Fixed overlay:
 // it reserves no space in the page flow and never touches the Raptoru UI. Reads the viewport, the
 // Twitch helper's context (only the fields it actually sends: n/a otherwise) and counts resizes.
 // Nothing leaves the page: values are shown here and logged to the console ([CALIBRATION]).

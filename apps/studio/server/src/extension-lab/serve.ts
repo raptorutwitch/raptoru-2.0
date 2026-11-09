@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import { extname, join, normalize } from 'node:path';
 import { TWITCH_EXT_MOCK_PATH } from './twitch-mock.js';
 
@@ -26,6 +27,12 @@ const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
 };
 
+// Shell of the served extension (apps/twitch-extension/extension/app/boot.js): legacy unless RAPTORU_EXT_SHELL=v2
+// (Lab and E2E only; `?shell=v2` on a page also works). Read once at start.
+function labShell(): 'legacy' | 'v2' {
+  return process.env.RAPTORU_EXT_SHELL === 'v2' ? 'v2' : 'legacy';
+}
+
 export const LAB_RUNTIME_CONFIG_JS = `// Extension Lab (Raptoru Studio): local Lab EBS, fictitious jetons. Never uploaded.
 export const RUNTIME = Object.freeze({
   mode: 'connected',
@@ -33,6 +40,9 @@ export const RUNTIME = Object.freeze({
   siteUrl: '',
   buildId: 'extension-lab',
   labTwitchAuthorizePath: '/v1/ext/lab/twitch-authorize',
+  shell: '${labShell()}',
+  // Lab-only modules (extension/lab-modules, never packaged): loaded by a page that adds ?labModules=1.
+  labModules: true,
 });
 `;
 
@@ -40,8 +50,10 @@ export const EXTENSION_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  // Twitch CDN images only (emotes/avatars of the Bonk Lab catalog); still no network calls.
-  "img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com",
+  // Twitch CDN images (emotes/avatars of the Bonk Lab catalog) and Spotify's covers (Music Hub: the real catalogue's
+  // https://i.scdn.co — to declare in the Twitch console's « Allowlist for Image Domains » the day the extension is
+  // hosted, like on Twitch). Still no network calls.
+  "img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com https://i.scdn.co",
   "media-src 'self' blob:",
   "connect-src 'self'",
   "frame-ancestors 'self'",

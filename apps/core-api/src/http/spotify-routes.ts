@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   CpTwitchActionReport,
+  MusicRulesUpdate,
   SpotifyAutoSkipReport,
   SpotifyJobReport,
   SpotifyJobStart,
+  SpotifyLiveNow,
   SpotifyPanelAction,
   SpotifySettingsUpdate,
   SpotifyStudioSync,
@@ -26,7 +28,12 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    if (e instanceof SpotifyError || e instanceof CpTwitchError)
+    if (e instanceof SpotifyError)
+      throw new HttpError(e.status, {
+        error: e.code,
+        ...(e.details ? { details: e.details } : {}),
+      });
+    if (e instanceof CpTwitchError)
       throw new HttpError(e.status, { error: e.code });
     throw e;
   }
@@ -51,6 +58,10 @@ const LabSimulate = z.strictObject({
   viewer_id: z.string().regex(/^\d{1,32}$/),
   viewer_login: z.string().regex(/^[a-z0-9_]{1,25}$/),
   user_input: z.string().max(500),
+});
+
+const MusicHistoryPage = z.strictObject({
+  before: z.iso.datetime({ offset: true }).nullable().default(null),
 });
 
 export function spotifyRoutes(
@@ -129,6 +140,29 @@ export function spotifyRoutes(
         ),
     },
     {
+      // Music Hub: the live track as Windows tells Studio (SMTC) — display and the stream's music history only.
+      method: 'POST',
+      pattern: at(base, `/${ch}/now`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          spotify.liveNow(channel(params[0]!), parse(SpotifyLiveNow, body)),
+        ),
+    },
+    {
+      // Music Hub: the stream's music history for Studio (50 per page, `before` = the previous page's last `at`).
+      method: 'POST',
+      pattern: at(base, `/${ch}/music-history`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          spotify.musicHistory(
+            channel(params[0]!),
+            parse(MusicHistoryPage, body).before,
+          ),
+        ),
+    },
+    {
       // Studio's sync (status + last playback reading) → its jobs and the logical queue.
       method: 'POST',
       pattern: at(base, `/${ch}/studio`),
@@ -188,18 +222,59 @@ export function spotifyRoutes(
           const id = channel(params[0]!);
           const a = parse(SpotifyPanelAction, body);
           const key = `spotify:panel:${randomUUID()}`;
-          return {
-            outcome:
-              a.action === 'remove'
-                ? await spotify.remove(
-                    id,
-                    key,
-                    { request_id: a.request_id },
-                    'studio',
-                  )
-                : await spotify.skip(id, key, null),
-          };
+          if (a.action === 'remove')
+            return {
+              outcome: await spotify.remove(
+                id,
+                key,
+                { request_id: a.request_id },
+                'studio',
+                { refund: a.refund !== false },
+              ),
+            };
+          if (a.action === 'skip') {
+            const outcome = await spotify.skip(id, key, null);
+            // The job to follow (Studio's real answer); none: refused before anything was sent.
+            return { outcome, job_id: await spotify.jobOf(id, key) };
+          }
+          // Music Hub: the player (Studio is the broadcaster's console; « Commandes du lecteur » must be on).
+          return spotify.control(
+            id,
+            a.action,
+            a.action === 'volume' ? a.volume_percent : null,
+            'studio',
+            a.action === 'seek' ? a.position_ms : null,
+          );
         }),
+    },
+    {
+      // Music Hub: the paid skip (switch, protection of paid requests) and the Open Bar — the broadcaster's console.
+      method: 'GET',
+      pattern: at(base, `/${ch}/music-rules`),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => spotify.musicRules(channel(params[0]!))),
+    },
+    {
+      method: 'POST',
+      pattern: at(base, `/${ch}/music-rules`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          spotify.saveMusicRules(
+            channel(params[0]!),
+            parse(MusicRulesUpdate, body),
+            'studio',
+          ),
+        ),
+    },
+    {
+      // Music Hub: what a player control really did (done / failed / unknown / pending).
+      method: 'GET',
+      pattern: at(base, `/${ch}/controls/${uuid}`),
+      auth,
+      handle: ({ params }) =>
+        mapped(() => spotify.controlResult(channel(params[0]!), params[1]!)),
     },
     {
       // A viewer's exception to the global limits (null = global; both null = back to the global settings).

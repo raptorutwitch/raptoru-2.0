@@ -1,8 +1,9 @@
 // Calibration data source (Video Component geometry, docs/TWITCH_GEOMETRY_CALIBRATION_2026-10.md).
-// Packaged only by scripts/build-calibration.mjs, which hands `calibrationCall` to the extension client
+// Packaged only by scripts/package.mjs --target calibration, which hands `calibrationCall` to the extension client
 // through the generated runtime-config (RUNTIME.fixtureCall): the real client, views and DOM run
 // unchanged, only their answers come from local fixtures. No network, no write, no Twitch action.
 import { CAPTURED_AT, FIXTURES } from './fixtures.js';
+import { MUSIC_SUMMARY, musicHistory, musicSearch, musicState } from './music-fixtures.js';
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 
@@ -17,6 +18,16 @@ export function rebase(value, shiftMs) {
     );
   return value;
 }
+
+const calibRole = () => {
+  try {
+    return new URLSearchParams(globalThis.location?.search ?? '').get(
+      'calibRole',
+    );
+  } catch {
+    return null;
+  }
+};
 
 const refuse = (code) =>
   Promise.reject(Object.assign(new Error(code), { code }));
@@ -45,10 +56,31 @@ export function createCalibrationSource(now = Date.now(), clock = Date.now) {
       });
   }
 
-  return function calibrationCall(method, rawPath) {
+  // Music Hub (docs/music/MUSIC_HUB_STATE.md): the module offered, its state and its catalogue (reads only).
+  data.session.music = MUSIC_SUMMARY;
+  data.state.music = MUSIC_SUMMARY;
+  // The role looked at (?calibRole=viewer|moderator|supermod, the comparison tool's « Rôle »): moderator by default,
+  // as captured. A viewer is not of the team: no moderation module, no team fields.
+  const role = ['viewer', 'moderator', 'supermod'].includes(calibRole())
+    ? calibRole()
+    : 'moderator';
+  if (role === 'viewer')
+    for (const s of [data.session, data.state])
+      if (s.moderation?.tts) s.moderation.tts.can_moderate = false;
+
+  return function calibrationCall(method, rawPath, body) {
     const [path, query = ''] = String(rawPath).split('?');
     const qs = new URLSearchParams(query);
     if (['/session', '/state', '/raffle/state'].includes(path)) liveRaffle();
+    if (method === 'GET' && path === '/music/state')
+      return answer(musicState(now, clock, role));
+    if (method === 'GET' && path === '/music/history')
+      return answer(musicHistory(now, qs.get('before')));
+    // A catalogue search is a read (nothing is asked, paid or queued); a pasted link: that track, or refused.
+    if (method === 'POST' && path === '/music/search') {
+      const found = musicSearch(body?.query);
+      return found instanceof Promise ? found : answer(found);
+    }
     if (method === 'GET') {
       if (path === '/session') return answer(data.session);
       if (path === '/state') return answer(data.state);

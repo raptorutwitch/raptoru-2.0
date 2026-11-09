@@ -1,4 +1,4 @@
-/* Calibration HUD and grid (build-calibration only). Everything is position: fixed: nothing here
+/* Calibration HUD and grid (package.mjs --target calibration only). Everything is position: fixed: nothing here
    takes space in the page flow or changes the Raptoru UI underneath. */
 .calib-hud,
 .calib-pill {

@@ -67,7 +67,7 @@ type Presentation = {
 
 interface Delivery {
   delivery_id: string;
-  kind: 'sound' | 'video' | 'wbrb' | 'ban' | 'flop' | 'wheel';
+  kind: 'sound' | 'video' | 'wbrb' | 'ban' | 'flop' | 'wheel' | 'music';
   /** Catalogue id (the page groups the plays of one video for its ducking). */
   effect_id: string;
   label: string;
@@ -81,6 +81,8 @@ interface Delivery {
   ban: Record<string, unknown> | null;
   /** Roue du Sub: the recorded spin (result decided by Core) and the wheel sounds. */
   wheel: Record<string, unknown> | null;
+  /** Music Hub V2: the music card (title, artist, requester, how long, where), never the music itself. */
+  music: Record<string, unknown> | null;
   player: string | null;
   started: boolean;
   onStart: (ok: true | EffectError) => void;
@@ -357,6 +359,20 @@ export class EffectsPlayer {
             segment: number;
             amount: number;
           };
+        }
+      | {
+          kind: 'music';
+          card: {
+            event: 'request' | 'start';
+            title: string;
+            artists: string[];
+            requested_by: string | null;
+          };
+          /** A short alert sound (catalogue or imported), or null: a silent card. */
+          sound: string | null;
+          volume: number;
+          duration_ms: number;
+          position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
         },
   ) {
     const anim =
@@ -373,14 +389,24 @@ export class EffectsPlayer {
             ? CATALOGUE.find((c) => c.id === RANDOM_BAN_FLOP.media)
             : effect.kind === 'wheel'
               ? CATALOGUE.find((c) => c.id === 'sw-incr')
-              : (CATALOGUE.find(
-                  (c) => c.kind === effect.kind && c.id === effect.id,
-                ) ??
-                (effect.kind === 'sound'
-                  ? (this.upload(effect.id)?.item ?? null)
-                  : null));
-    if (!item) throw new EffectError('effect_unknown');
-    if (!this.d.media.path(item.file) && !this.upload(item.id))
+              : effect.kind === 'music'
+                ? effect.sound
+                  ? (CATALOGUE.find(
+                      (c) => c.kind === 'sound' && c.id === effect.sound,
+                    ) ??
+                    this.upload(effect.sound)?.item ??
+                    undefined)
+                  : null
+                : (CATALOGUE.find(
+                    (c) => c.kind === effect.kind && c.id === effect.id,
+                  ) ??
+                  (effect.kind === 'sound'
+                    ? (this.upload(effect.id)?.item ?? null)
+                    : null));
+    // A silent music card has no media (item null); anything else needs its file.
+    if (item === undefined || (item === null && effect.kind !== 'music'))
+      throw new EffectError('effect_unknown');
+    if (item && !this.d.media.path(item.file) && !this.upload(item.id))
       throw new EffectError('effect_media_missing');
     // The wheel needs its two sounds.
     if (
@@ -388,9 +414,11 @@ export class EffectsPlayer {
       SUB_WHEEL_MEDIA.some((m) => !this.d.media.path(m.file))
     )
       throw new EffectError('effect_media_missing');
-    const video = EFFECT_VIDEOS.find((v) => v.id === item.id);
+    const video = item
+      ? EFFECT_VIDEOS.find((v) => v.id === item.id)
+      : undefined;
     const presentation: Presentation | null =
-      item.kind === 'video' && video
+      item?.kind === 'video' && video
         ? {
             mirror: video.mirror,
             rise: video.rise,
@@ -399,7 +427,9 @@ export class EffectsPlayer {
         : null;
     const page = this.status();
     if (!page.connected) throw new EffectError('effects_player_offline');
-    if (!page.audio) throw new EffectError('effects_player_muted');
+    // A silent music card needs no sound allowed on the page.
+    if (!page.audio && !(effect.kind === 'music' && !item))
+      throw new EffectError('effects_player_muted');
     if (!page.current) throw new EffectError('effects_player_outdated');
     if (this.deliveries.size >= this.rules.maxActive)
       throw new EffectError('effects_busy');
@@ -442,15 +472,26 @@ export class EffectsPlayer {
             sounds: { incr: 'media/sw-incr', fin: 'media/sw-fin' },
           }
         : null;
+    const music: Delivery['music'] =
+      effect.kind === 'music'
+        ? {
+            event: effect.card.event,
+            title: effect.card.title.slice(0, 120),
+            artists: effect.card.artists.slice(0, 4).map((a) => a.slice(0, 60)),
+            requested_by: effect.card.requested_by?.slice(0, 40) ?? null,
+            duration_ms: Math.min(15_000, Math.max(3_000, effect.duration_ms)),
+            position: effect.position,
+          }
+        : null;
     let end!: Promise<EffectEnd>;
     const started = new Promise<true | EffectError>((onStart) => {
       end = new Promise<EffectEnd>((onEnd) => {
         const x: Delivery = {
           delivery_id: randomUUID(),
           kind: effect.kind,
-          effect_id: item.id,
-          label: item.label,
-          url: `media/${item.id}`,
+          effect_id: item?.id ?? 'music-card',
+          label: item?.label ?? 'Carte musique',
+          url: item ? `media/${item.id}` : '',
           // BRB: the legacy video element's volume (never set: 1).
           volume:
             effect.kind === 'wbrb'
@@ -462,6 +503,7 @@ export class EffectsPlayer {
                   : effect.kind === 'wheel'
                     ? 1
                     : Math.min(100, Math.max(0, effect.volume)) / 100,
+          music,
           presentation,
           images,
           ban,
@@ -567,6 +609,7 @@ export class EffectsPlayer {
           : {}),
         ...(x.ban ? { ban: x.ban } : {}),
         ...(x.wheel ? { wheel: x.wheel } : {}),
+        ...(x.music ? { music: x.music } : {}),
       });
     }
     return out;

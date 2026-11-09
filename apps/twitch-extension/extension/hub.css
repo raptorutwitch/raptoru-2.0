@@ -16,7 +16,9 @@ html body .m-refresh {
   box-sizing: border-box;
   /* Hauteur disponible sous le haut du Hub (mesurée au rendu) : pas de défilement parasite. */
   height: calc(100dvh - var(--rh-top, 8px) - var(--rh-bottom, 8px));
-  min-height: 330px;
+  /* Lot 1 (08/11) : plus de 330 px fixes ; le minimum est le contenu (en-tête, carte ≥ 198 px, barre du bas).
+     Sous ce minimum, le corps du composant défile au lieu de couper la barre du bas. */
+  min-height: min-content;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(196, 164, 255, 0.12);
@@ -83,7 +85,8 @@ html body .m-refresh {
   position: relative;
   z-index: 1;
   flex: 1 1 auto;
-  min-height: 0;
+  /* Lot 1 : la carte active fait au moins 180 px + 18 px de marge (hub-carousel.js measure()). */
+  min-height: 198px;
 }
 .rh-car {
   position: absolute;

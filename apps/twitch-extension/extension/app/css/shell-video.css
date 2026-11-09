@@ -1,0 +1,949 @@
+/* Socle v2 — généré une fois par scripts/dev/css-v2.mjs depuis extension/overlay.css (règles prouvées mortes retirées),
+   puis édité à la main. Échelles : --g (géométrie), var(--fs-N) (texte avec plancher), data-mq (requêtes sur la boîte
+   de composition, app/mq.js). La feuille d'origine reste inchangée pour le shell legacy. */
+/* Overlay desktop : discret par défaut.
+   Le <body> couvre tout le player, donc il DOIT être transparent et laisser
+   passer les clics ; seuls le dock et le tiroir sont interactifs. */
+
+html, body.overlay {
+  height: 100%;
+  background: transparent;
+  pointer-events: none;   /* la vidéo dessous reste cliquable */
+  overflow: hidden;
+}
+
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- bouton au repos : un petit carré collé au bord droit --- */
+.dock {
+  position: absolute;
+  /* Twitch réserve le milieu du bord droit à son bouton Extensions natif. */
+  top: 30%;
+  right: 0;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+
+.dock__btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(36 * var(--g));
+  height: calc(36 * var(--g));
+  border: 1px solid var(--jdm-line);
+  border-right: 0;
+  border-radius: var(--jdm-radius) 0 0 var(--jdm-radius);
+  background: rgba(20, 16, 28, .72);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  opacity: .52;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.dock__btn:hover,
+.dock__btn:focus-visible { opacity: 1; transform: translateX(-3px); }
+.dock__icon { color: #d8b4fe; font-size: var(--fs-18); line-height: 1; }
+
+/* pastille « tu as des actions payées en attente » */
+.dock__count {
+  position: absolute;
+  top: calc(-5 * var(--g)); right: calc(-5 * var(--g));
+  min-width: calc(17 * var(--g));
+  padding: 1px calc(4 * var(--g));
+  border-radius: calc(999 * var(--g));
+  background: var(--jdm-accent);
+  color: var(--jdm-accent-ink);
+  font-size: var(--fsm-10);
+  font-weight: 700;
+  text-align: center;
+}
+/* une action en attente rend l'onglet visible sans le rendre envahissant */
+.dock__btn:has(.dock__count:not([hidden])) { opacity: .85; }
+.dock__btn:has(.dock__count:not([hidden])) .dock__count {
+  animation: badge-pulse 1.8s ease-in-out infinite;
+}
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(169, 112, 255, .55); }
+  50% { box-shadow: 0 0 0 5px rgba(169, 112, 255, 0); }
+}
+
+/* --- tiroir déplié --- */
+.drawer {
+  position: absolute;
+  top: 50%;
+  /* Laisse libre la barre d’outils verticale native du player Twitch. */
+  right: calc(54 * var(--g));
+  transform: translateY(-50%);
+  width: min(calc(300 * var(--g)), calc(100vw - calc(62 * var(--g))));
+  height: min(64%, calc(360 * var(--g)));
+  max-height: calc(100% - calc(16 * var(--g)));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--jdm-line);
+  border-radius: calc(14 * var(--g));
+  background: rgba(14, 14, 18, .78);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+  pointer-events: auto;
+}
+
+/* Un display:flex auteur peut prendre le dessus sur le style navigateur du
+   booléen hidden. Le bouton X doit toujours fermer le tiroir immédiatement. */
+.drawer[hidden] { display: none; }
+
+/* Vue "Composant" hébergée par Twitch : le player fournit déjà le bouton
+   violet, le cadre et sa croix. Notre contenu remplit directement ce cadre. */
+body.component-view .dock { display: none; }
+body.component-view .drawer {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 100% 0, rgba(124, 58, 237, .1), transparent 42%),
+    rgba(10, 10, 14, .62);
+  backdrop-filter: blur(14px) saturate(115%);
+  box-shadow: none;
+}
+/* Twitch fournit déjà le titre, la roue dentée et la croix autour de l'iframe. */
+body.component-view .drawer__head { display: none; }
+body.component-view .drawer__body {
+  position: relative;
+  gap: calc(6 * var(--g));
+  padding: 0 calc(6 * var(--g)) calc(6 * var(--g));
+  overflow: hidden;
+}
+body.component-view .jdm-actions .jdm-btn { min-height: clamp(calc(32 * var(--g)), 8vh, calc(44 * var(--g))); }
+body.component-view .jdm-module {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+body.component-view .jdm-module__body {
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.drawer__head {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--g));
+  padding: calc(7 * var(--g)) calc(9 * var(--g));
+  border-bottom: 1px solid var(--jdm-line);
+}
+.drawer__mark,
+.m-mark {
+  display: grid;
+  width: calc(24 * var(--g));
+  height: calc(24 * var(--g));
+  place-items: center;
+  border-radius: calc(7 * var(--g));
+  background: linear-gradient(135deg, #a970ff, #7c3aed);
+  color: #fff;
+  font-size: var(--fs-13);
+  font-weight: 800;
+}
+.drawer__title { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.drawer__title strong { font-size: var(--fs-13); }
+.drawer__title small { overflow: hidden; color: var(--jdm-muted); font-size: var(--fs-10); text-overflow: ellipsis; white-space: nowrap; }
+.drawer__close {
+  border: 0;
+  background: none;
+  color: var(--jdm-muted);
+  font-size: var(--fs-14);
+  cursor: pointer;
+  padding: 2px calc(4 * var(--g));
+}
+.drawer__close:hover { color: var(--jdm-text); }
+
+.drawer__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: calc(6 * var(--g));
+  padding: calc(7 * var(--g)) calc(9 * var(--g)) calc(9 * var(--g));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(169, 112, 255, .7) transparent;
+}
+
+.drawer__body .jdm-module {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Dans l'overlay, chaque pixel vertical compte : les contrôles partagés restent
+   confortables sur mobile mais sont plus denses dans le tiroir vidéo. */
+.drawer__body .jdm-wallet { padding: calc(6 * var(--g)) calc(9 * var(--g)); }
+.drawer__body .jdm-wallet__value { font-size: clamp(calc(12px * var(--kt)), 3vw, calc(16px * var(--kt))); }
+.drawer__body .jdm-module__body { gap: calc(6 * var(--g)); padding: calc(7 * var(--g)); }
+.drawer__body textarea.jdm-input { min-height: calc(56 * var(--g)); max-height: calc(72 * var(--g)); }
+.drawer__body .jdm-module__body > .jdm-hint { display: none; }
+.drawer__body .jdm-actions { flex: 0 0 auto; padding-top: 2px; }
+.drawer__body .jdm-actions .jdm-btn { min-height: calc(30 * var(--g)); padding: calc(5 * var(--g)) calc(13 * var(--g)); }
+
+/* Player étroit (théâtre réduit, fenêtre partagée) : on rétrécit le tiroir
+   plutôt que de déborder. */
+:where(:root[data-mq~="m9"]) .drawer{
+    width: min(calc(100vw - calc(62 * var(--g))), calc(300 * var(--g)));
+    height: min(70%, calc(340 * var(--g)));
+  }
+:where(:root[data-mq~="m13"]) .drawer{ height: calc(100% - calc(24 * var(--g))); max-height: calc(100% - calc(24 * var(--g))); }
+  :where(:root[data-mq~="m13"]) .drawer__head{ padding-block: calc(6 * var(--g)); }
+
+/* --- finition du composant Twitch ---------------------------------------- */
+body.component-view .drawer {
+  border: 1px solid rgba(216, 180, 254, .2);
+  border-radius: calc(18 * var(--g));
+  background:
+    radial-gradient(circle at 100% 0, rgba(168, 85, 247, .22), transparent 38%),
+    radial-gradient(circle at 0 100%, rgba(76, 29, 149, .14), transparent 42%),
+    rgba(10, 8, 18, .88);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+body.component-view .drawer::before {
+  position: absolute;
+  inset: 0 16% auto 16%;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(216, 180, 254, .85), transparent);
+  pointer-events: none;
+}
+body.component-view .drawer__body {
+  gap: calc(10 * var(--g));
+  padding: calc(10 * var(--g)) calc(12 * var(--g)) calc(12 * var(--g));
+  background: linear-gradient(180deg, rgba(255, 255, 255, .018), transparent 48%);
+}
+body.component-view .jdm-module__body { gap: calc(9 * var(--g)); padding: calc(10 * var(--g)); }
+body.component-view .jdm-actions .jdm-btn { min-height: calc(40 * var(--g)); }
+
+/* --- finition du tiroir overlay ------------------------------------------ */
+.drawer {
+  width: min(calc(336 * var(--g)), calc(100vw - calc(62 * var(--g))));
+  border-radius: calc(16 * var(--g));
+  background:
+    radial-gradient(circle at 100% 0, rgba(168, 85, 247, .18), transparent 40%),
+    rgba(10, 8, 18, .86);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .54), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.dock__btn {
+  border-color: rgba(216, 180, 254, .38);
+  background: linear-gradient(145deg, rgba(20, 12, 34, .9), rgba(76, 29, 149, .72));
+  box-shadow: 0 0 18px rgba(168, 85, 247, .2);
+}
+.dock__icon { color: #f0d9ff; font-size: var(--fs-20); font-weight: 700; }
+
+/* v6 : ces règles sont volontairement en dernier car overlay.css est chargé
+   après base.css dans la véritable extension Twitch. */
+body.component-view .drawer {
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 8% 0, rgba(142, 66, 237, .13), transparent 34%),
+    linear-gradient(180deg, rgba(20, 17, 27, .91), rgba(9, 8, 13, .93));
+  backdrop-filter: blur(18px) saturate(118%);
+}
+body.component-view .drawer::before { display: none; }
+body.component-view .drawer__body {
+  gap: 0;
+  padding: 0;
+  background: none;
+}
+body.component-view .jdm-module {
+  min-height: 0;
+  overflow: hidden;
+}
+/* Le tiroir Twitch varie réellement de taille (ratio 3:2, hauteur cible 40 %
+   du player) : ces valeurs sont fluides pour remplir la boîte sur un grand
+   player sans se tasser sur un player étroit (chat ouvert, mobile). */
+body.component-view .jdm-module__body {
+  gap: clamp(calc(6 * var(--g)), 1.5vw, calc(10 * var(--g)));
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: clamp(calc(8 * var(--g)), 2vw, calc(14 * var(--g))) clamp(calc(9 * var(--g)), 2.2vw, calc(16 * var(--g))) clamp(calc(36 * var(--g)), 8vh, calc(52 * var(--g)));
+  overflow-y: auto;
+}
+body.component-view .jdm-input { min-height: clamp(calc(56 * var(--g)), 16vh, calc(96 * var(--g))); max-height: none; }
+body.component-view .jdm-module__body > .jdm-input {
+  min-height: clamp(calc(56 * var(--g)), 16vh, calc(96 * var(--g)));
+  flex: 1 1 clamp(calc(80 * var(--g)), 22vh, calc(140 * var(--g)));
+}
+body.component-view .jdm-actions .jdm-btn { min-height: clamp(calc(32 * var(--g)), 8vh, calc(44 * var(--g))); }
+body.component-view .jdm-wallet { right: clamp(calc(7 * var(--g)), 2vw, calc(12 * var(--g))); bottom: clamp(calc(6 * var(--g)), 2vh, calc(12 * var(--g))); }
+
+/* Le picker Bonk gère lui-même son défilement. On évite donc un second
+   ascenseur sur le corps du module, surtout dans un composant étroit. */
+body.component-view .jdm-module[data-module="bonk"] .jdm-module__body {
+  padding: clamp(calc(6 * var(--g)), 1.7vw, calc(11 * var(--g))) clamp(calc(7 * var(--g)), 2vw, calc(14 * var(--g))) clamp(calc(34 * var(--g)), 7.5vh, calc(48 * var(--g)));
+  overflow: hidden;
+}
+
+
+/* La pastille rouge existe sur notre dock d’overlay. Le bouton extérieur d’un
+   Video Component est rendu par Twitch et ne peut pas recevoir un compteur
+   dynamique depuis l’iframe. */
+.dock__count {
+  background: #ed3f53;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(8, 7, 12, .9), 0 3px 10px rgba(237, 63, 83, .36);
+}
+.dock__btn:has(.dock__count:not([hidden])) .dock__count {
+  animation-name: badge-pulse-red;
+}
+@keyframes badge-pulse-red {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(8, 7, 12, .9), 0 0 0 0 rgba(237, 63, 83, .5); }
+  50% { box-shadow: 0 0 0 2px rgba(8, 7, 12, .9), 0 0 0 5px rgba(237, 63, 83, 0); }
+}
+
+/* v7 : densité réelle du Video Component.
+   Twitch fixe la taille de l'iframe ; chaque pixel doit donc servir au module
+   actif. Le Panel optionnel (`panel.html`) garde au contraire la mise en page
+   tactile pleine hauteur. */
+body.component-view .jdm-module__intro { display: none; }
+body.component-view .jdm-module__body {
+  gap: calc(6 * var(--g));
+  padding: calc(6 * var(--g)) calc(8 * var(--g)) calc(34 * var(--g));
+}
+body.component-view .jdm-actions { gap: calc(5 * var(--g)); }
+body.component-view .jdm-actions .jdm-btn {
+  min-height: calc(32 * var(--g));
+  padding: calc(5 * var(--g)) calc(8 * var(--g));
+  font-size: var(--fs-9);
+}
+
+/* La zone TTS ne doit pas s'étirer pour remplir une iframe haute : le texte
+   reste lisible, mais les boutons restent immédiatement visibles sans grand
+   vide ni défilement artificiel. */
+body.component-view .jdm-module[data-module="tts"] .jdm-module__body > .jdm-input {
+  flex: 0 0 auto;
+  min-height: calc(64 * var(--g));
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-actions {
+  margin-top: auto;
+}
+
+/* TTS : surface de saisie dédiée. Le comportement d'envoi reste celui de
+   shared/ui.js ; ces règles ne concernent que la densité et les états visuels. */
+
+.jdm-tts-composer {
+  position: relative;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.jdm-tts-input {
+  display: block;
+  height: calc(104 * var(--g));
+  min-height: calc(104 * var(--g));
+  max-height: calc(104 * var(--g));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: calc(25 * var(--g));
+  resize: none;
+  scrollbar-color: rgba(183, 121, 255, .55) transparent;
+  scrollbar-width: thin;
+}
+.jdm-tts-composer > .jdm-row {
+  position: absolute;
+  right: calc(8 * var(--g));
+  bottom: calc(7 * var(--g));
+  z-index: 1;
+  margin: 0;
+  pointer-events: none;
+}
+.jdm-tts-help {
+  display: block !important;
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(226, 218, 238, .72);
+  font-size: var(--fs-9);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jdm-tts-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+  max-height: 0;
+  gap: calc(5 * var(--g));
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  visibility: hidden;
+  background: none;
+  transition: max-height .2s ease, opacity .16s ease, transform .2s ease, visibility 0s linear .2s;
+}
+.jdm-tts-actions.is-visible {
+  max-height: calc(44 * var(--g));
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.jdm-tts-action {
+  display: flex;
+  min-width: 0;
+  min-height: calc(38 * var(--g));
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: calc(5 * var(--g));
+  padding: calc(4 * var(--g)) calc(6 * var(--g));
+  overflow: hidden;
+  line-height: 1.05;
+}
+
+/* Dans le composant Twitch 3:2, le TTS est la seule vue sans barre basse. */
+body.component-view .jdm-module[data-module="tts"] .jdm-module__body {
+  gap: calc(5 * var(--g));
+  padding: calc(6 * var(--g)) calc(8 * var(--g)) calc(8 * var(--g));
+  overflow: hidden;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-tts-input {
+  height: calc(104 * var(--g));
+  min-height: calc(104 * var(--g));
+  max-height: calc(104 * var(--g));
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-tts-actions {
+  margin-top: 0;
+}
+body.component-view .jdm-module[data-module="tts"] .jdm-tts-credit-hint,
+body.component-view .jdm-module[data-module="tts"] .jdm-module__body > .jdm-hint:not(.jdm-tts-help) {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jdm-tts-actions { transition: none; }
+}
+
+/* --- Bonk UI/UX final : la vue composant ne réserve plus la barre basse --- */
+body.component-view .jdm-module[data-module="bonk"] .jdm-module__body {
+  position: relative;
+  padding: calc(6 * var(--g)) calc(8 * var(--g));
+  overflow: hidden;
+}
+body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  gap: calc(5 * var(--g));
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header {
+  position: static;
+  inset: auto;
+  height: calc(27 * var(--g));
+  min-height: calc(27 * var(--g));
+  padding: calc(3 * var(--g)) calc(7 * var(--g));
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__coin {
+  font-size: var(--fs-11);
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__label {
+  font-size: var(--fs-8);
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__value {
+  margin-left: 0;
+  font-size: var(--fs-13);
+}
+body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__hold {
+  display: none;
+}
+
+:where(:root[data-mq~="m0"]) body.component-view .jdm-module[data-module="bonk"] .jdm-module__body{ padding: calc(5 * var(--g)) calc(7 * var(--g)); }
+  :where(:root[data-mq~="m0"]) body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker{ gap: calc(4 * var(--g)); }
+
+/* --- UI/UX pass 4 : Bonk composant dense, sans dock permanent ------------ */
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- UI/UX pass 1 : l’overlay partage le shell contextuel ----------------- */
+body.overlay:not(.component-view) .drawer__head {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: calc(31 * var(--g));
+  min-height: calc(31 * var(--g));
+  padding: calc(3 * var(--g)) calc(6 * var(--g));
+  border: 0;
+  pointer-events: none;
+}
+body.overlay:not(.component-view) .drawer__mark,
+body.overlay:not(.component-view) .drawer__title { display: none; }
+body.overlay:not(.component-view) .drawer__close {
+  display: grid;
+  width: calc(25 * var(--g));
+  height: calc(25 * var(--g));
+  margin-left: auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(216, 180, 254, .18);
+  border-radius: 50%;
+  background: rgba(10, 8, 18, .5);
+  pointer-events: auto;
+}
+body.overlay:not(.component-view) .drawer__body { padding-top: 0; }
+body.overlay:not(.component-view) .jdm-home__topbar,
+body.overlay:not(.component-view) .jdm-module__screen-head { padding-right: calc(34 * var(--g)); }
+body.component-view .jdm-module__screen-head {
+  min-height: calc(34 * var(--g));
+  padding-inline: calc(7 * var(--g));
+}
+body.component-view .jdm-module-screen > .jdm-module > .jdm-module__body {
+  padding-bottom: calc(8 * var(--g));
+}
+body.component-view .jdm-module-screen .jdm-module[data-module="bonk"] .jdm-module__body {
+  padding-bottom: calc(6 * var(--g));
+}
+
+:where(:root[data-mq~="m0"]) body.component-view .jdm-module__screen-head{ min-height: calc(30 * var(--g)); padding-inline: calc(7 * var(--g)); }
+  :where(:root[data-mq~="m0"]) body.overlay:not(.component-view) .jdm-home__topbar,
+  :where(:root[data-mq~="m0"]) body.overlay:not(.component-view) .jdm-module__screen-head{ padding-right: calc(32 * var(--g)); }
+
+/* --- UI/UX pass 2 : priorité aux listes et aux docks contextuels ---------- */
+body.overlay .jdm-module[data-module="actions"] .jdm-module__body {
+  gap: calc(4 * var(--g));
+  padding: calc(4 * var(--g)) calc(6 * var(--g)) calc(6 * var(--g));
+  overflow: hidden;
+}
+
+:where(:root[data-mq~="m0"]) body.overlay .jdm-module[data-module="actions"] .jdm-module__body{ padding: calc(3 * var(--g)) calc(6 * var(--g)) calc(5 * var(--g)); }
+
+/* --- UI/UX pass 3 : la moderation prend toute la surface utile ------------ */
+body.overlay .jdm-module[data-module="moderation"] .jdm-module__body {
+  padding: 2px calc(6 * var(--g)) calc(4 * var(--g));
+  overflow: hidden;
+}
+body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__subpanel {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__subnav { padding-bottom: 2px; }
+body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__tab { height: calc(27 * var(--g)); min-height: calc(27 * var(--g)); }
+
+:where(:root[data-mq~="m0"]) body.overlay .jdm-module[data-module="moderation"] .jdm-module__body{ padding: 1px calc(5 * var(--g)) calc(3 * var(--g)); }
+  :where(:root[data-mq~="m0"]) body.overlay .jdm-module[data-module="moderation"] .jdm-moderation__tab{
+    height: calc(26 * var(--g));
+    min-height: calc(26 * var(--g));
+  }
+
+/* --- UI/UX pass 5 : chargeur Bonk dans le composant Twitch --------------- */
+
+
+/* --- UX-7 : final Soundboard overlay overrides -------------------------- */
+
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- UX-9 : même densité dans l'overlay, sans toucher au header ---------- */
+body.overlay .jdm-ui-wallet:not(.jdm-wallet--bonk-header) {
+  width: clamp(calc(104 * var(--g)), 21vw, calc(124 * var(--g)));
+  height: calc(32 * var(--g));
+  min-height: calc(32 * var(--g));
+  align-self: center;
+  margin-right: calc(4 * var(--g));
+  padding: 2px calc(6 * var(--g));
+}
+:where(:root[data-mq~="m0"]) body.overlay .jdm-ui-wallet:not(.jdm-wallet--bonk-header){
+    width: clamp(calc(104 * var(--g)), 30vw, calc(112 * var(--g)));
+    height: calc(32 * var(--g));
+    min-height: calc(32 * var(--g));
+    padding: 2px calc(5 * var(--g));
+  }
+
+/* --- UI/UX 1 : le Hub reste entièrement visible dans le composant --------
+   overlay.css est chargé après base.css : ces seules règles ajustent le
+   cadre fourni par Twitch sans réintroduire de surface ou de logique. */
+
+
+
+/* --- UI/UX finale overlay : priorité au rendu 3:2 ------------------------ */
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-composer {
+  display: grid;
+  gap: calc(3 * var(--g));
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-input {
+  height: calc(82 * var(--g));
+  min-height: calc(82 * var(--g));
+  max-height: calc(120 * var(--g));
+  padding: calc(10 * var(--g)) calc(11 * var(--g));
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-composer > .jdm-row {
+  position: static;
+  display: flex;
+  min-height: calc(14 * var(--g));
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0;
+  pointer-events: auto;
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-actions {
+  display: flex;
+  max-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+body.overlay .jdm-module[data-module="tts"] .jdm-tts-actions.is-visible {
+  max-height: calc(56 * var(--g));
+}
+
+:where(:root[data-mq~="m0"]) body.overlay .jdm-module[data-module="tts"] .jdm-tts-input{
+    height: calc(68 * var(--g));
+    min-height: calc(68 * var(--g));
+  }
+@media (prefers-reduced-motion: reduce) {
+  body.overlay .jdm-module[data-module="tts"] .jdm-tts-actions,
+  body.overlay .jdm-module[data-module="tts"] .jdm-tts-payment__cta,
+  body.overlay .jdm-module[data-module="tts"] .jdm-tts-payment__switch,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-soundboard-volume,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-soundboard-volume__popover,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-sound-search,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-sound-item,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-sound-payment,
+  body.overlay .jdm-module[data-module="soundboard"] .jdm-soundboard-help-handle {
+    transition: none;
+  }
+}
+
+/* --- Passe corrective visuelle : CTA intégrés et cartes Soundboard ------- */
+
+/* Le shell technique du wallet ne dessine jamais une troisième surface. */
+body.overlay .jdm-wallet-stack {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0;
+  overflow: visible;
+  padding: 2px 1px calc(4 * var(--g)) calc(7 * var(--g));
+}
+body.overlay .jdm-wallet-stack::before,
+body.overlay .jdm-wallet-stack::after {
+  display: none !important;
+  content: none !important;
+}
+body.overlay .jdm-wallet-stack > .jdm-wallet__face {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--wallet-tint) 42%, transparent),
+    0 3px 7px rgba(0, 0, 0, .38);
+}
+
+/* TTS : un seul bloc violet, avec le contrôle de monnaie intégré en bas. */
+
+/* Soundboard : l'icône du titre porte le volume, le toolbar ne le duplique pas. */
+body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  max-width: min(calc(220 * var(--g)), 100%);
+  overflow: visible;
+}
+
+/* Soundboard : cartes opaques, zone d'actions dans la carte sélectionnée. */
+
+/* CTA Soundboard dans son propre flux, avec la couleur du module. */
+
+/* La languette garde sa place propre sous le CTA ; le catalogue peut défiler. */
+
+
+
+
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* Priorité finale sur les anciennes variantes de couleur propres à la méthode. */
+/* --- Passe Soundboard V2 : catalogue compact, reflow centre ------------- */
+/*
+   La grille de repos reste volontairement en 2 x 2 sur le viewport Twitch
+   de reference. Avec une selection, elle devient un flux flex reel : la
+   carte active est centree dans sa propre rangee et les petites cartes
+   gardent une largeur et une hauteur communes dans les rangees suivantes.
+*/
+
+/* La selection est une vraie rangee centree, jamais une banniere span 2. */
+
+/* CTA principal : plus present a 60 %, toujours dans son propre flux. */
+
+
+
+
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* V2 final : le catalogue, le CTA et la languette suivent un ordre vertical
+   explicite ; la selection obtient sa propre rangee centree. */
+
+
+/* La carte active occupe une rangee de grille, mais sa silhouette reste
+   compacte et centree ; les trois cartes restantes tiennent ensemble a 60 %. */
+
+
+
+/* --- Soundboard carte blanche V3 : boutons sonores tactiles -----------------
+   Les hooks DOM restent ceux du catalogue existant ; cette couche reconstruit
+   la surface visible sans ajouter de carte interne ni de second contrôle. */
+
+/* La sélection devient un grand bouton du même langage, avec trois voisins. */
+
+/* CTA bleu opaque, dans le flux après le catalogue, puis Tutoriel. */
+
+
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* A 50/40 %, les trois sons secondaires restent sur une seule ligne :
+   la grille garde sa hauteur et le CTA ne peut jamais passer dessus. */
+
+
+
+
+
+/* Cible 40 % : le flux reste lisible dans la hauteur courte du player. */
+
+
+
+
+
+
+
+
+/* Le focus est porté par la carte entière : aucune fausse carte interne autour du titre. */
+
+/* --- Soundboard V3 catalogue : grille dense, selection in situ -------------
+   Le catalogue garde sa position et son propre scroll. Le CTA et le tutoriel
+   vivent dans un footer distinct afin de ne jamais recouvrir une carte. */
+
+
+
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Soundboard V3.1 polish : volume d'en-tête, navigation compacte et
+   accents de paiement ---------------------------------------------------- */
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard {
+  overflow: visible !important;
+}
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* Le titre et son icône vivent dans le header du screen, frère direct du
+   module. Ces sélecteurs gardent la capsule volume dans le même contexte. */
+html body.overlay .jdm-module__screen-head--soundboard,
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  overflow: visible !important;
+}
+
+/* V3.1 final scope overrides */
+
+/* V3.1 floating CTA composition */
+
+/* V3.1 keep scroll room above the floating CTA */
+
+/* --- Soundboard V3.2 polish : hiérarchie finale du catalogue ------------- */
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  column-gap: calc(3 * var(--g)) !important;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+:where(:root[data-mq~="m0"]) body.component-view .jdm-module__body{ padding: calc(6 * var(--g)) calc(7 * var(--g)) calc(34 * var(--g)); }
+
+/* V3.2 final cascade: keep the floating CTA clear of the last catalogue row. */
+
+
+
+/* --- Soundboard V3.3 : corrections chirurgicales finales ------------------ */
+@keyframes jdm-soundboard-select-pop {
+  0% { --jdm-soundboard-selected-scale: 1; }
+  38% { --jdm-soundboard-selected-scale: 1.18; }
+  68% { --jdm-soundboard-selected-scale: 1.12; }
+  100% { --jdm-soundboard-selected-scale: 1.15; }
+}
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  display: block !important;
+  width: calc(22 * var(--g)) !important;
+  height: calc(16 * var(--g)) !important;
+  overflow: visible !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  pointer-events: none !important;
+}
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  display: flex !important;
+  align-items: center !important;
+  line-height: 1.1 !important;
+  vertical-align: middle !important;
+}
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Soundboard V3.4 : micro-polish final -------------------------------- */
+@keyframes jdm-soundboard-select-pop-v34 {
+  0% { --jdm-soundboard-selected-scale: 1; }
+  38% { --jdm-soundboard-selected-scale: 1.22; }
+  70% { --jdm-soundboard-selected-scale: 1.13; }
+  100% { --jdm-soundboard-selected-scale: 1.17; }
+}
+@keyframes jdm-soundboard-switch-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(180deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Soundboard V3.5 : alignement et transitions finales ----------------- */
+@keyframes jdm-soundboard-select-pop-v35 {
+  0% { --jdm-soundboard-selected-scale-x: 1; --jdm-soundboard-selected-scale-y: 1; }
+  38% { --jdm-soundboard-selected-scale-x: 1.22; --jdm-soundboard-selected-scale-y: 1.25; }
+  70% { --jdm-soundboard-selected-scale-x: 1.13; --jdm-soundboard-selected-scale-y: 1.16; }
+  100% { --jdm-soundboard-selected-scale-x: 1.17; --jdm-soundboard-selected-scale-y: 1.2; }
+}
+html body.overlay .jdm-module[data-module="soundboard"] .jdm-multi-payment__switch-icon {
+  width: calc(20 * var(--g)) !important;
+  height: calc(15 * var(--g)) !important;
+  aspect-ratio: 4 / 3 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Soundboard V3.6 : volume plus discret, aide locale retirée --------- */
+
+
+/* --- Soundboard V3.6.2 : position unifiée speaker + volume ------------- */
+html body.overlay .jdm-module__screen-head--soundboard {
+  --soundboard-volume-offset-y: 4px;
+}
+html body.overlay .jdm-module__screen-head--soundboard .jdm-module__screen-title {
+  position: relative !important;
+  top: calc(3 * var(--g)) !important;
+}
+
+/* --- Soundboard V3.6.3 : retrait du speaker interne -------------------- */
+
+/* --- Soundboard favoris directs : état indépendant --------------------- */
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Soundboard V4 : micro-polish hover / selected ---------------------- */
+/* Older Soundboard cascades put an inset outline on the inner button. */
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* Bonk V4 component cascade: keep the sequence dock compact in the measured
+   Twitch surface while leaving the shared catalog and send contract intact. */
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  gap: calc(5 * var(--g)) !important;
+  overflow: hidden !important;
+}
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Bonk V4.1 component : rail vertical + dock monoligne --------------- */
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  display: grid !important;
+  grid-template-columns: calc(32 * var(--g)) minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto auto !important;
+  gap: calc(4 * var(--g)) !important;
+  min-width: 0 !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-feedback {
+  grid-column: 1 / span 2 !important;
+  grid-row: 3 !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header {
+  width: max-content !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  gap: calc(3 * var(--g)) !important;
+  height: calc(25 * var(--g)) !important;
+  min-height: calc(25 * var(--g)) !important;
+  padding: 2px calc(5 * var(--g)) !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__coin {
+  font-size: var(--fs-9) !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__label {
+  font-size: 7px !important;
+}
+html body.component-view .jdm-module__screen-head--bonk .jdm-wallet--bonk-header .jdm-wallet__value {
+  font-size: var(--fs-11) !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-emote-oauth-button {
+  width: calc(25 * var(--g)) !important;
+  height: calc(25 * var(--g)) !important;
+  min-width: calc(25 * var(--g)) !important;
+  min-height: calc(25 * var(--g)) !important;
+  padding: 0 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Bonk V4.2 : favoris de cartes et rail distinct --------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+}
+
+/* --- Bonk V4.3 component : cartes plus grandes, rail inchangé ----------- */
+
+
+/* --- Bonk V4.4 component : rail compacte et scrollbar quasi invisible --- */
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker {
+  grid-template-columns: calc(31 * var(--g)) minmax(0, 1fr) !important;
+  gap: calc(3 * var(--g)) !important;
+}
+html:where([data-mq~="m0"]) body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker{
+    grid-template-columns: calc(30 * var(--g)) minmax(0, 1fr) !important;
+  }
+
+/* --- Bonk V4.5 component : largeur utile de la rail ---------------------
+   La colonne reste fixe : seul l'inset gauche inutile est retiré et les
+   marques gagnent la place ainsi libérée. */
+
+/* --- Bonk V4.6 component : correction optique finale -------------------- */
+
+/* --- UX corrective : overlay Soundboard stable et compact ---------------- */
+
+
+
+@media (prefers-reduced-motion: reduce) {
+}

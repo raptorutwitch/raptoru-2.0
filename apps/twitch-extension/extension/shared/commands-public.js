@@ -6,6 +6,7 @@
 import { registerSessionModule } from './module-registry.js';
 import { ic } from './commands-v2-icons.js';
 import { publicCooldown, publicGroups, publicQuota, publicWho, WHEN_LABEL } from './commands-v2-model.js';
+import { boxWidth } from './box.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 /** Re-read Core at most this often when the host re-attaches the view on its own refreshes. */
@@ -19,7 +20,7 @@ export function createCommandsPublicView({ document, client }) {
   let failed = false;
   let q = '';
   let loadedAt = 0;
-  const mode = () => ((node.clientWidth || win.innerWidth) >= 520 ? 'video' : 'mobile');
+  const mode = () => (boxWidth(node, win) >= 520 ? 'video' : 'mobile');
 
   async function load() {
     loadedAt = Date.now();

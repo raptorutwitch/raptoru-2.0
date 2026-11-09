@@ -25,6 +25,8 @@ export default defineConfig(
       // Dock OBS V1 page (OBS custom browser dock).
       'apps/studio/server/dock-page/**/*.js',
       'apps/studio/server/halloween-overlay/**/*.js',
+      // Music Hub: the OBS music overlay page (also the editor's preview frame).
+      'apps/studio/server/music-overlay/**/*.js',
     ],
     languageOptions: {
       sourceType: 'module',
@@ -55,6 +57,12 @@ export default defineConfig(
           'clearInterval',
           'TextDecoder',
           'navigator',
+          'Image',
+          'matchMedia',
+          'innerWidth',
+          'innerHeight',
+          'addEventListener',
+          'parent',
         ].map((name) => [name, 'readonly']),
       ),
     },

@@ -3,11 +3,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
+  SPOTIFY_LIVE,
   SPOTIFY_RULES,
+  type SpotifyLiveNow,
   type SpotifyJob,
   type SpotifyJobReport,
   type SpotifyPlayback,
   type SpotifyReason,
+  type SpotifySearchItem,
   type SpotifySyncAnswer,
   type SpotifyTrack,
 } from '@raptoru/schemas';
@@ -19,8 +22,18 @@ import {
   type SpotifyPlaybackRaw,
 } from './api.js';
 import { SpotifyAuth, simulatedAuth } from './oauth.js';
-import { selectCandidate, type Candidate } from './search.js';
+import { normalizeText, selectCandidate, type Candidate } from './search.js';
 import { SpotifySim } from './sim.js';
+import { SimSmtc, SmtcProbe, SmtcTracker, type SmtcLine } from './smtc.js';
+import { MusicOverlayHost, type OverlayLive } from './music-overlay-host.js';
+import type { ObsLike } from './music-overlay-obs.js';
+import { OverlayStore } from './music-overlays.js';
+import {
+  MusicOverlay,
+  MusicOverlayConfig,
+  type MusicCardPlayer,
+  type MusicStateView,
+} from './overlay.js';
 
 // Spotify V2 in Studio (docs/SPOTIFY_V2.md § 2–6): the only Spotify caller, Core's hands. Every second Studio tells Core
 // its state (+ a playback reading when it took one) and gets the jobs and the logical queue back; it runs the jobs
@@ -34,7 +47,16 @@ const SYNC_OPEN_MS = 500;
 /** Module off: Studio still says it is there (Core's admission wants it seen within 15 s once switched on). */
 const IDLE_SYNC_MS = 5_000;
 const POLL = {
+  /** A request's first seconds (its `!songcancel` grace), a canceled request next, a track change just seen. */
   active: 2_500,
+  /** A request playing past its first seconds, nothing sensitive next (docs/music/SPOTIFY_QUOTA.md). */
+  steady: 6_000,
+  /** How long after a request starts it stays read at the `active` pace (the cancel grace, 10 s, and a margin). */
+  startWatch: 15_000,
+  /** One reading this long before a track's end: Core's « played to its end » needs one within 5 s of it. */
+  preEnd: 4_000,
+  /** Then one this long after the expected end (the next track, or the same one again), then `ending` until the change. */
+  postEnd: 700,
   ending: 1_000,
   endingWindow: 15_000,
   external: 30_000,
@@ -64,14 +86,62 @@ export interface SpotifyRuntimeDeps {
   channelId: string;
   api: SpotifyApi;
   auth: Auth;
-  /** The Lab's fake Spotify (null in Production). */
+  /** The Lab's fake Spotify (null in Production, and in the Lab with the real account). */
   sim: SpotifySim | null;
+  /**
+   * The Lab on the broadcaster's REAL account (LAB_SPOTIFY=real, explicit at each launch, never saved): reads only,
+   * until the panel allows writes for this session (`labWrites`, off at every start).
+   */
+  labReal?: { writes: boolean } | null;
   /** Auto-skip reservations (survive a restart: a reserved skip is never sent twice). */
   reservationsFile: string;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
+  /** Music Hub V2: the OBS music card (overlay.ts), and the effects player's sounds (catalogue, import). */
+  overlay?: MusicOverlay | null;
+  sounds?: {
+    list(): { id: string; label: string; available: boolean }[];
+    importSound(
+      body: Buffer,
+      name: string,
+    ): Promise<{ id: string; name: string }>;
+  } | null;
+  /**
+   * Music Hub: what Spotify Desktop plays as Windows tells it (SMTC, smtc.ts) — the display and the stream's music
+   * history, never a request's decision. `source` feeds the tracker (the probe, or the Lab's simulated Windows).
+   */
+  live?: {
+    tracker: SmtcTracker;
+    source: (
+      onLine: (line: SmtcLine) => void,
+      onDown: (reason: string) => void,
+    ) => { start(): void; stop(): void };
+  } | null;
+  /** Music Hub: the OBS music overlays (their setting, the page's folder, Studio's origin and OBS connection). */
+  overlays?: {
+    store: OverlayStore;
+    dir: string;
+    origin: string;
+    obs: () => ObsLike | null;
+  } | null;
 }
+
+/**
+ * Music Hub (SMTC): after a track change Windows announced, ONE Web API reading this much later (Spotify's API follows
+ * its app within ~1 s) gives the exact track (uri, cover) of that occurrence; once more 2 s later if it still showed the
+ * previous one. Never during a 429, never without a connected account, at most one every `LINK_SPACING_MS`.
+ */
+const LINK_DELAY_MS = 1_200;
+const LINK_RETRY_MS = 2_000;
+const LINK_SPACING_MS = 3_000;
+
+/** Music Hub V2: how often Core's state is read for the overlay (only while it is on). */
+const OVERLAY_READ_MS = 2_500;
+/** Music Hub searches run at once beside the loop (the catalogue lane of the API gate paces them anyway). */
+const SEARCH_POOL = 2;
+/** A search waiting longer than Core's own timeout is dropped (the viewer was already told « indisponible »). */
+const SEARCH_STALE_MS = 6_000;
 
 interface Reservation {
   request_id: string;
@@ -114,6 +184,22 @@ function toPlayback(
         ? Math.max(0, Math.round(raw!.progress_ms!))
         : null,
     is_playing: Boolean(raw?.is_playing && track),
+    volume_percent: Number.isInteger(raw?.device?.volume_percent)
+      ? Math.max(0, Math.min(100, raw!.device!.volume_percent!))
+      : null,
+  };
+}
+
+/** Music Hub: a catalogue result as the extension shows it (never sent anywhere else). */
+export function toSearchItem(c: Candidate): SpotifySearchItem | null {
+  const t = toTrack(c);
+  if (!t) return null;
+  const art = c.album?.images?.[0]?.url ?? null;
+  return {
+    ...t,
+    album: c.album?.name ? String(c.album.name).slice(0, 300) : null,
+    image_url: art && COVER_URL.test(art) && art.length <= 4_000 ? art : null,
+    playable: c.is_playable !== false,
   };
 }
 
@@ -143,6 +229,11 @@ export class SpotifyRuntime {
   private readonly covers = new Map<string, string>();
   /** Timing of the song job in progress (Studio log only: where the seconds go). */
   private marks: [string, number][] = [];
+  /** Music Hub searches: run beside the loop (never in it), at most `SEARCH_POOL` at once, dropped once stale. */
+  private readonly searches = new Map<string, number>();
+  private readonly searchWaiting: { job: SpotifyJob; at: number }[] = [];
+  /** Local counters of the playback watch and the searches (shown in the panel, never sent anywhere). */
+  readonly watchCounters = { searches_abandoned: 0, polls: 0 };
   private mark(label: string) {
     this.marks.push([label, this.now()]);
   }
@@ -163,6 +254,125 @@ export class SpotifyRuntime {
   private constructor(private readonly d: SpotifyRuntimeDeps) {
     this.now = d.now ?? Date.now;
     this.sleep = d.sleep ?? ((ms) => new Promise((ok) => setTimeout(ok, ms)));
+    this.overlays = d.overlays
+      ? new MusicOverlayHost({
+          store: d.overlays.store,
+          dir: d.overlays.dir,
+          origin: d.overlays.origin,
+          obs: d.overlays.obs,
+          live: () => this.overlayLive(),
+          now: this.now,
+        })
+      : null;
+  }
+
+  /** Music Hub: the OBS music overlays (null: none in this Studio). */
+  readonly overlays: MusicOverlayHost | null;
+  /** Requesters' display names by request (read from Core once per request, for the overlay). */
+  private readonly requesters = new Map<string, string | null>();
+  private requesterReading: string | null = null;
+  private lastCurrentId: string | null = null;
+
+  /**
+   * What the overlay shows: Windows' track (its exact Spotify track once read), else the Web API's last reading. The
+   * requester only when Core attributes the request playing to THIS exact track (its uri) — never a title.
+   */
+  overlayLive(): OverlayLive {
+    const t = this.d.live?.tracker;
+    const v = t?.view();
+    const cur = this.answer?.current_request_id
+      ? this.answer.queue.find(
+          (q) => q.request_id === this.answer!.current_request_id,
+        )
+      : null;
+    const requestOf = (uri: string | null | undefined) =>
+      cur && uri && cur.track_uri === uri
+        ? this.requesterOf(cur.request_id)
+        : null;
+    if (v && v.state !== 'off') {
+      const link = this.link?.gen === v.gen ? this.link : null;
+      return {
+        state: v.state === 'waiting' ? 'lost' : v.track ? v.state : 'none',
+        gen: v.gen,
+        track: v.track
+          ? {
+              ...v.track,
+              artists: link?.artists.length ? link.artists : v.track.artists,
+            }
+          : null,
+        position_ms: v.position_ms,
+        cover: v.cover
+          ? `/api/spotify/live/cover?v=${v.cover}`
+          : (link?.cover_url ?? null),
+        request: requestOf(link?.uri),
+      };
+    }
+    // No Windows source (another PC, the probe off): the Web API's last reading while it is fresh.
+    const p = this.reading?.playback;
+    const age = p ? this.now() - Date.parse(p.observed_at) : Infinity;
+    if (!p?.track || age > 30_000)
+      return {
+        state: 'none',
+        gen: 0,
+        track: null,
+        position_ms: null,
+        cover: null,
+        request: null,
+      };
+    return {
+      state: p.is_playing ? 'playing' : 'paused',
+      gen: this.apiGen(p.track.uri),
+      track: {
+        title: p.track.title,
+        artists: p.track.artists,
+        album: null,
+        duration_ms: p.track.duration_ms,
+      },
+      position_ms:
+        p.progress_ms === null
+          ? null
+          : Math.min(
+              p.track.duration_ms,
+              p.progress_ms + (p.is_playing ? Math.max(0, age) : 0),
+            ),
+      cover: this.covers.get(p.track.id) ?? null,
+      request: requestOf(p.track.uri),
+    };
+  }
+
+  private apiTrack: { uri: string; gen: number } = { uri: '', gen: 0 };
+  private apiGen(uri: string) {
+    if (this.apiTrack.uri !== uri)
+      this.apiTrack = { uri, gen: this.apiTrack.gen + 1 };
+    return this.apiTrack.gen;
+  }
+
+  /** A requester's display name (read once from Core's state; null meanwhile, then the overlay is told). */
+  private requesterOf(id: string) {
+    if (this.requesters.has(id)) return { by: this.requesters.get(id)! };
+    if (this.requesterReading !== id) {
+      this.requesterReading = id;
+      void this.d
+        .core<{
+          current?: {
+            request_id: string;
+            viewer?: { name?: string; login?: string };
+          } | null;
+        }>(`${this.base}/state`)
+        .then((st) => {
+          const c = st.current;
+          if (c?.request_id !== id) return;
+          this.requesters.set(id, c.viewer?.name || c.viewer?.login || null);
+          if (this.requesters.size > 50)
+            this.requesters.delete(this.requesters.keys().next().value!);
+          this.overlays?.bump();
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (this.requesterReading === id) this.requesterReading = null;
+        });
+    }
+    return { by: null };
   }
 
   /** Studio's profile: the Lab plays on the simulator (never the real account); Production on the broadcaster's
@@ -176,8 +386,55 @@ export class SpotifyRuntime {
     /** This Studio's origin (http://127.0.0.1:4100). */
     origin: string;
     log?: (line: string) => void;
+    /** Music Hub V2: the effects player (the music card of the overlay, its sounds). */
+    effects?: {
+      sounds(): { id: string; label: string; available: boolean }[];
+      importSound(
+        body: Buffer,
+        name: string,
+      ): Promise<{ id: string; name: string }>;
+      play: MusicCardPlayer['play'];
+    } | null;
+    /**
+     * Lab only: the broadcaster's REAL Spotify account instead of the simulator (LAB_SPOTIFY=real at this launch, never
+     * saved). Its own folder (token, rate limit) apart from the simulator's; read-only until allowed for the session.
+     */
+    labReal?: boolean;
+    /**
+     * Music Hub: the SMTC probe built for Studio (tools/smtc-probe). Absent: no live display from Windows (the Lab on
+     * the simulator always has its simulated Windows instead).
+     */
+    smtc?: { exe: string; script: string; out: string } | null;
+    /** Music Hub: the OBS music overlays' page folder (apps/studio/server/music-overlay); absent: none. */
+    overlayDir?: string | null;
+    /** Studio's one OBS connection (the overlays' install assistant only ever adds, on a click). */
+    obs?: (() => ObsLike | null) | null;
   }) {
-    const sim = p.environment === 'lab' ? new SpotifySim() : null;
+    const labReal = p.environment === 'lab' && p.labReal === true;
+    const sim = p.environment === 'lab' && !labReal ? new SpotifySim() : null;
+    const lab = labReal ? { writes: false } : null;
+    const smtc = p.smtc ?? null;
+    const live: SpotifyRuntimeDeps['live'] = sim
+      ? {
+          tracker: new SmtcTracker('sim'),
+          source: (onLine) => {
+            const s = new SimSmtc(() => sim.local(), onLine);
+            return { start: () => s.start(), stop: () => s.stop() };
+          },
+        }
+      : smtc
+        ? {
+            tracker: new SmtcTracker('smtc'),
+            source: (onLine, onDown) =>
+              new SmtcProbe({
+                exe: smtc.exe,
+                build: { script: smtc.script, out: smtc.out },
+                onLine,
+                onDown,
+                ...(p.log ? { log: p.log } : {}),
+              }),
+          }
+        : null;
     const auth = sim
       ? simulatedAuth
       : await SpotifyAuth.open({
@@ -192,11 +449,33 @@ export class SpotifyRuntime {
         auth,
         stateFile: join(p.dir, 'spotify-rate-limit.json'),
         ...(sim ? { fetch: sim.fetch } : {}),
+        ...(lab ? { writesAllowed: () => lab.writes } : {}),
       }),
       auth,
       sim,
+      labReal: lab,
       reservationsFile: join(p.dir, 'spotify-auto-skips.json'),
       ...(p.log ? { log: p.log } : {}),
+      overlay: await MusicOverlay.open(
+        join(p.dir, 'music-overlay.json'),
+        p.effects ?? null,
+        p.log,
+      ),
+      sounds: p.effects
+        ? {
+            list: () => p.effects!.sounds(),
+            importSound: (b, n) => p.effects!.importSound(b, n),
+          }
+        : null,
+      live,
+      overlays: p.overlayDir
+        ? {
+            store: await OverlayStore.open(p.dir),
+            dir: p.overlayDir,
+            origin: p.origin,
+            obs: p.obs ?? (() => null),
+          }
+        : null,
     });
   }
 
@@ -231,6 +510,8 @@ export class SpotifyRuntime {
   start() {
     const loop = async () => {
       if (this.stopped) return;
+      this.running = true;
+      this.wakeup = false;
       let delay = SYNC_MS;
       try {
         delay = await this.once();
@@ -240,27 +521,267 @@ export class SpotifyRuntime {
         // A Core without the Spotify routes (not deployed yet): ask again rarely.
         if ((e as { status?: number }).status === 404) delay = IDLE_SYNC_MS * 6;
       }
-      this.timer = setTimeout(() => void loop(), delay);
+      this.running = false;
+      if (this.stopped) return;
+      this.timer = setTimeout(() => void loop(), this.wakeup ? 0 : delay);
       this.timer.unref?.();
     };
+    this.loop = loop;
     void loop();
+    // Music Hub: Windows' media session (the probe, or the Lab's simulated Windows) — a change wakes the loop.
+    const live = this.d.live;
+    if (live) {
+      this.liveSource = live.source(
+        (line) => this.onSmtc(line),
+        (reason) => {
+          live.tracker.off(reason);
+          this.overlays?.bump();
+          this.wake();
+        },
+      );
+      this.liveSource.start();
+    }
+    // Music Hub V2: the overlay follows Core's queue on its own pace, only while it is on (no read otherwise).
+    const overlay = this.d.overlay;
+    if (overlay) {
+      const follow = async () => {
+        if (this.stopped) return;
+        if (overlay.following)
+          try {
+            overlay.observe(
+              await this.d.core<MusicStateView>(`${this.base}/state`),
+            );
+          } catch {
+            /* Core unreachable: the next reading after the gap only notes (never a late card) */
+          }
+        this.overlayTimer = setTimeout(() => void follow(), OVERLAY_READ_MS);
+        this.overlayTimer.unref?.();
+      };
+      void follow();
+    }
   }
+
+  private overlayTimer: ReturnType<typeof setTimeout> | null = null;
+  private loop: (() => Promise<void>) | null = null;
+  private running = false;
+  private wakeup = false;
+  private liveSource: { start(): void; stop(): void } | null = null;
 
   stop() {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
+    if (this.overlayTimer) clearTimeout(this.overlayTimer);
+    this.liveSource?.stop();
+  }
+
+  /** The next cycle now (a change from Windows): never two cycles at once. */
+  private wake() {
+    if (this.stopped || !this.loop) return;
+    if (this.running) {
+      this.wakeup = true;
+      return;
+    }
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => void this.loop!(), 0);
+    this.timer.unref?.();
+  }
+
+  // ------------------------------------------------------------------ Music Hub: the live track (SMTC)
+
+  /** This Studio process, for Core's ordering of the live messages (a restart is a new boot). */
+  private readonly boot = randomUUID();
+  private readonly bootAt = new Date().toISOString();
+  private liveSeq = 0;
+  private liveSent: string | null = null;
+  private liveSentAt = 0;
+  /** Core without the live route (older Core): asked again later, never in a loop. */
+  private liveOffUntil = 0;
+  /** The exact Spotify track of an occurrence (Web API reading taken after Windows announced it). */
+  private link: {
+    gen: number;
+    uri: string;
+    cover_url: string | null;
+    artists: string[];
+  } | null = null;
+  private linkAt = 0;
+  private linkTries = 0;
+  private lastLinkRead = 0;
+  /** Local counters of the live track (panel only). */
+  readonly liveCounters = {
+    link_reads: 0,
+    linked: 0,
+    link_misses: 0,
+    posts: 0,
+  };
+
+  /** One line from Windows: a track change asks for its exact identity (one reading), any change wakes the loop. */
+  onSmtc(line: SmtcLine) {
+    const tracker = this.d.live?.tracker;
+    if (!tracker) return;
+    const change = tracker.feed(line);
+    if (change === 'none') return;
+    this.overlays?.bump();
+    if (change === 'track' || change === 'replay') {
+      this.link = null;
+      this.linkTries = 0;
+      this.linkAt = this.now() + LINK_DELAY_MS;
+      // Watching anyway (a request in play): the scheduled reading comes at that instant instead of an extra one.
+      if (this.watching())
+        this.nextPollAt = Math.min(this.nextPollAt, this.linkAt);
+    }
+    this.wake();
+  }
+
+  /** The link reading is due (and allowed): only for an occurrence without its exact track yet. */
+  private linkDue() {
+    const t = this.d.live?.tracker;
+    if (!t || !this.linkAt || this.now() < this.linkAt) return false;
+    const v = t.view();
+    // Nothing to link, or no reading allowed (no account, Spotify limiting us): given up for this occurrence — the
+    // scheduled readings may still link it. Never a waiting link that would make the loop spin.
+    if (
+      !v.track ||
+      this.link?.gen === v.gen ||
+      this.d.auth.view().auth !== 'ok' ||
+      this.d.api.limited()
+    ) {
+      this.linkAt = 0;
+      return false;
+    }
+    // Too soon after the previous link reading: the same link, later (the loop waits for it).
+    const spaced = this.lastLinkRead + LINK_SPACING_MS;
+    if (this.now() < spaced) {
+      this.linkAt = spaced;
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * A Web API reading → the exact track of the occurrence Windows shows, when the reading is of THAT occurrence: taken
+   * after it started, same title, same duration (± 2.5 s). The title only rejects a reading of the previous track (the
+   * API is ~1 s behind the app); the identity is the API's uri, never a title.
+   */
+  private noteLink(
+    raw: SpotifyPlaybackRaw | null,
+    at: number,
+    linkRead: boolean,
+  ) {
+    const t = this.d.live?.tracker;
+    if (!t) return;
+    const v = t.view();
+    if (!v.track || this.link?.gen === v.gen) return;
+    const item = raw?.currently_playing_type === 'episode' ? null : raw?.item;
+    const track = toTrack(item);
+    const ok =
+      !!track &&
+      at >= t.genAt &&
+      normalizeText(track.title) === normalizeText(v.track.title) &&
+      (v.track.duration_ms === null ||
+        Math.abs(track.duration_ms - v.track.duration_ms) <= 2_500);
+    if (ok) {
+      const images = item?.album?.images ?? [];
+      const url = (images[1] ?? images[0])?.url ?? null;
+      this.link = {
+        gen: v.gen,
+        uri: track.uri,
+        cover_url:
+          url && COVER_URL.test(url) && url.length <= 4_000 ? url : null,
+        artists: track.artists,
+      };
+      this.linkAt = 0;
+      this.liveCounters.linked++;
+      this.overlays?.bump();
+      this.wake();
+      return;
+    }
+    if (!linkRead) return; // a scheduled reading only tries
+    // The API still showed the previous track: once more a bit later, then the scheduled readings only.
+    if (this.linkTries < 1) {
+      this.linkTries++;
+      this.linkAt = this.now() + LINK_RETRY_MS;
+    } else this.liveCounters.link_misses++;
+  }
+
+  /** The live state to Core, on a change and every `heartbeatMs` (never a message per second for the bar). */
+  private async pushLive() {
+    const t = this.d.live?.tracker;
+    if (!t) return;
+    const now = this.now();
+    if (this.liveOffUntil > now) return;
+    const v = t.view();
+    // Nothing heard from Windows yet (Studio just started): nothing to say — Core keeps what it knows.
+    if (v.state === 'off' && v.reason === 'starting') return;
+    const link = this.link?.gen === v.gen ? this.link : null;
+    const state = v.state === 'waiting' ? 'lost' : v.state;
+    const sig = `${state}|${v.gen}|${v.seq}|${link?.uri ?? ''}|${t.ended?.gen ?? ''}`;
+    if (
+      sig === this.liveSent &&
+      now - this.liveSentAt < SPOTIFY_LIVE.heartbeatMs
+    )
+      return;
+    const ended = t.ended;
+    const body: SpotifyLiveNow = {
+      boot: this.boot,
+      boot_at: this.bootAt,
+      seq: ++this.liveSeq,
+      gen: v.gen,
+      state,
+      track: v.track,
+      position_ms: v.position_ms,
+      link: link
+        ? { uri: link.uri, cover_url: link.cover_url, artists: link.artists }
+        : null,
+      ended,
+    };
+    try {
+      await this.d.core(`${this.base}/now`, body);
+      this.liveSent = sig;
+      this.liveSentAt = now;
+      this.liveCounters.posts++;
+      if (ended && t.ended === ended) t.ended = null;
+    } catch (e) {
+      if ((e as { status?: number }).status === 404)
+        this.liveOffUntil = now + 10 * 60_000;
+      // Otherwise (Core unreachable): the next cycle sends it again.
+    }
+  }
+
+  /** The live track as Studio's page shows it (local: no Core, no Spotify). */
+  liveView() {
+    const t = this.d.live?.tracker;
+    if (!t) return null;
+    const v = t.view();
+    return {
+      ...v,
+      link: this.link?.gen === v.gen ? this.link : null,
+      counters: { ...this.liveCounters },
+    };
   }
 
   /** One cycle: maybe a playback reading, the sync, the auto-skip, the jobs. Returns the delay to the next one. */
   async once(): Promise<number> {
     let polled = false;
-    if (this.watching() && this.now() >= this.nextPollAt)
+    // A link reading due while watching: the scheduled reading comes now (it carries the link).
+    if (this.linkAt && this.now() >= this.linkAt && this.watching())
+      this.nextPollAt = Math.min(this.nextPollAt, this.now());
+    if (this.watching() && this.now() >= this.nextPollAt) {
+      // The scheduled reading, at the link's instant when Windows just announced a track (no extra reading).
+      const linkRead = this.linkDue();
+      if (linkRead) this.startLinkRead();
       // A failed reading (429, network…) never blocks the sync: Core must still see Studio and its state.
-      polled = await this.poll(false).then(
+      polled = await this.poll(linkRead, linkRead).then(
         () => true,
         (e: Error) => ((this.lastError = e.message), false),
       );
-    else if (
+    } else if (!this.watching() && this.linkDue()) {
+      // Music Hub: nothing to watch, a track change announced by Windows — its one reading (exact track, cover).
+      this.startLinkRead();
+      polled = await this.poll(true, true).then(
+        () => true,
+        (e: Error) => ((this.lastError = e.message), false),
+      );
+    } else if (
       this.readAt &&
       this.now() >= this.readAt &&
       this.d.auth.view().auth === 'ok' &&
@@ -284,15 +805,71 @@ export class SpotifyRuntime {
       await this.autoSkip(this.reading.playback, this.reading.raw, true);
     this.answer = await this.sync();
     this.answerAt = this.now();
+    // A request starts or ends (Core's attribution): the overlay's requester follows.
+    if (this.answer.current_request_id !== this.lastCurrentId) {
+      this.lastCurrentId = this.answer.current_request_id;
+      this.overlays?.bump();
+    }
     if (this.reading?.sent)
       await this.autoSkip(this.reading.playback, this.reading.raw);
     await this.reportPending();
-    for (const job of this.answer.jobs) await this.run(job);
+    // The essential jobs in the loop, in Core's order; the catalogue searches beside it (a wave of searches never
+    // holds a skip, an addition or the next sync behind it).
+    for (const job of this.answer.jobs)
+      if (job.kind === 'search') this.queueSearch(job);
+      else await this.run(job);
     if (!this.answer.watch) this.fastUntil = 0;
-    if (!this.answer.enabled) return IDLE_SYNC_MS;
-    return this.watching()
-      ? Math.max(0, Math.min(SYNC_OPEN_MS, this.nextPollAt - this.now()))
-      : SYNC_OPEN_MS;
+    // Music Hub: the live track to Core (a change, or the heartbeat).
+    await this.pushLive();
+    const delay = !this.answer.enabled
+      ? IDLE_SYNC_MS
+      : this.watching()
+        ? Math.max(0, Math.min(SYNC_OPEN_MS, this.nextPollAt - this.now()))
+        : SYNC_OPEN_MS;
+    // A link reading waiting: the next cycle at its instant (never a cycle at once: a due link was handled above).
+    const wait = this.linkAt - this.now();
+    return this.linkAt && wait > 0 ? Math.min(delay, wait) : delay;
+  }
+
+  private startLinkRead() {
+    this.linkAt = 0;
+    this.lastLinkRead = this.now();
+    this.liveCounters.link_reads++;
+  }
+
+  private queueSearch(job: SpotifyJob) {
+    if (
+      this.searches.has(job.job_id) ||
+      this.searchWaiting.some((w) => w.job.job_id === job.job_id)
+    )
+      return;
+    this.searchWaiting.push({ job, at: this.now() });
+    this.pumpSearches();
+  }
+
+  private pumpSearches() {
+    while (this.searches.size < SEARCH_POOL && this.searchWaiting.length) {
+      const { job, at } = this.searchWaiting.shift()!;
+      if (this.now() - at > SEARCH_STALE_MS) {
+        this.watchCounters.searches_abandoned++;
+        continue;
+      }
+      this.searches.set(job.job_id, this.now());
+      const run = this.run(job)
+        .catch(() => {})
+        .finally(() => {
+          this.searches.delete(job.job_id);
+          this.searchRuns.delete(run);
+          this.pumpSearches();
+        });
+      this.searchRuns.add(run);
+    }
+  }
+
+  private readonly searchRuns = new Set<Promise<unknown>>();
+  /** Every search started beside the loop has reported (tests, and a clean stop). */
+  async searchesSettled() {
+    while (this.searchRuns.size) await Promise.all([...this.searchRuns]);
   }
 
   /** Spotify is read only when Core says there is something to watch (a request queued / playing, a tombstone). */
@@ -315,6 +892,8 @@ export class SpotifyRuntime {
         quota_exceeded: api.quota_exceeded,
         device: this.device,
         calls_last_minute: Math.min(api.calls_last_minute, 100_000),
+        // Music Hub: the Lab on the real account tells Core its read-only session (the extension disables the controls).
+        ...(this.d.labReal ? { read_only: !this.d.labReal.writes } : {}),
       },
       ...(fresh ? { playback: fresh.playback } : {}),
     });
@@ -347,7 +926,8 @@ export class SpotifyRuntime {
   }
 
   /** One playback reading (forced: fresh) and the next reading's time (historical cadence). */
-  private async poll(force: boolean) {
+  private async poll(force: boolean, linkRead = false) {
+    this.watchCounters.polls++;
     let r: { data: SpotifyPlaybackRaw | null; at: number };
     try {
       r = await this.d.api.playback(force || this.fastUntil > this.now());
@@ -359,6 +939,7 @@ export class SpotifyRuntime {
     }
     const playback = toPlayback(r.data, r.at);
     this.noteCover(r.data?.item);
+    this.noteLink(r.data, r.at, linkRead);
     if (r.data?.device)
       this.device = {
         name: r.data.device.name.slice(0, 300),
@@ -384,8 +965,17 @@ export class SpotifyRuntime {
     return playback;
   }
 
-  /** Historical scheduler: 2.5 s on a request, 1 s near an end, 30 s on a track outside the requests (but 1 s for its
-   *  last 15 s), the fast lane (200 ms for 5 s) when the next request is a canceled one about to start. */
+  /**
+   * The playback watch's pace (docs/music/SPOTIFY_QUOTA.md). Spotify's Web API stays the only source of every decision;
+   * this only chooses WHEN to read it. Kept close where Core's rules need it:
+   * - a canceled request next (it may start any time): the historical pace — 2.5 s, 1 s over the last 15 s, and the
+   *   200 ms fast lane just before it starts (the auto-skip);
+   * - a request's first 15 s (its `!songcancel` grace is judged on a reading under 10 s old): 2.5 s;
+   * - every track's end: one reading 4 s before it (« played to its end » needs one within 5 s), one 0.7 s after it,
+   *   then 1 s until the change is seen;
+   * - after a skip or a player action: read at once (unchanged).
+   * Otherwise 6 s on a request, 30 s on a track outside the requests (the broadcaster's music), 10 s when paused.
+   */
   private cadence(p: SpotifyPlayback) {
     const now = this.now();
     if (this.fastUntil > now && !this.d.api.limited()) return POLL.fast;
@@ -407,14 +997,25 @@ export class SpotifyRuntime {
       this.fastUntil = now + POLL.fastFor;
       return Math.max(POLL.fast, remaining - 200);
     }
-    if (remaining <= POLL.endingWindow)
-      return Math.min(POLL.ending, Math.max(POLL.fast, remaining));
     const known =
       queue.some((q) => q.track_uri === p.track!.uri) ||
       this.answer?.current_request_id;
-    // A canceled request next: it may start at any time (a skip by hand in Spotify), read at the active pace.
-    if (known || this.nextTombstone()) return POLL.active;
-    return Math.min(POLL.external, remaining - POLL.endingWindow);
+    // A canceled request next: it may start at any time (a skip by hand in Spotify) — the historical pace, unchanged.
+    if (this.nextTombstone()) {
+      if (remaining <= POLL.endingWindow)
+        return Math.min(POLL.ending, Math.max(POLL.fast, remaining));
+      return POLL.active;
+    }
+    // Around the end: just after it, then every second until Spotify shows the next track (or the same one again).
+    if (remaining <= POLL.preEnd)
+      return Math.max(POLL.ending, remaining + POLL.postEnd);
+    const pace = known
+      ? (p.progress_ms ?? 0) < POLL.startWatch
+        ? POLL.active
+        : POLL.steady
+      : POLL.external;
+    // Never past the reading 4 s before the end.
+    return Math.max(POLL.fast, Math.min(pace, remaining - POLL.preEnd));
   }
 
   /** The next request of the logical queue, when it is a canceled one not skipped yet (about to be skipped). */
@@ -545,7 +1146,8 @@ export class SpotifyRuntime {
 
   private async run(job: SpotifyJob) {
     const attempt_id = randomUUID();
-    this.marks = [['début', this.now()]];
+    // A search runs beside the loop: it never touches the song job's timing log.
+    if (job.kind !== 'search') this.marks = [['début', this.now()]];
     try {
       await this.d.core(`${this.base}/jobs/${job.job_id}/start`, {
         attempt_id,
@@ -553,7 +1155,7 @@ export class SpotifyRuntime {
     } catch {
       return; // taken / unknown: never run twice
     }
-    this.mark('Core (prise)');
+    if (job.kind !== 'search') this.mark('Core (prise)');
     let report: SpotifyJobReport;
     if (job.kind === 'song_request')
       report = {
@@ -562,7 +1164,15 @@ export class SpotifyRuntime {
         ...(await this.songRequest(job)),
       };
     else if (job.kind === 'skip')
-      report = { kind: 'skip', attempt_id, ...(await this.skip()) };
+      report = {
+        kind: 'skip',
+        attempt_id,
+        ...(await this.skip(job.expect_uri ?? null)),
+      };
+    else if (job.kind === 'search')
+      report = { kind: 'search', attempt_id, ...(await this.search(job)) };
+    else if (job.kind === 'control')
+      report = { kind: 'control', attempt_id, ...(await this.control(job)) };
     else
       report = {
         kind: 'read_playback',
@@ -657,6 +1267,14 @@ export class SpotifyRuntime {
       } catch (e) {
         if (e instanceof SpotifyApiError && !e.maybeSent && e.status === 404)
           return { outcome: 'refused', reason: 'NO_DEVICE', track, ...extra };
+        // Lab on the real account, read-only: the exact track WAS resolved (shown to Core), nothing was queued.
+        if (e instanceof SpotifyApiError && e.code === 'LAB_READ_ONLY')
+          return {
+            outcome: 'refused',
+            reason: 'LAB_READ_ONLY',
+            track,
+            ...extra,
+          };
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
         this.mark('ajout (réponse non 204)');
         // No clear answer: read the queue back (historical 250/500/750/1000 ms), never resend.
@@ -692,13 +1310,33 @@ export class SpotifyRuntime {
   }
 
   /** `!songskip` / the panel / a cancel within the grace: one next on the playing device; read back if unclear. */
-  private async skip(): Promise<
+  /**
+   * A skip. `expect`: a viewer's paid skip aims at THIS track — another one playing (it ended, someone skipped first) →
+   * `TRACK_CHANGED`, nothing sent: a late skip never takes the next track.
+   */
+  private async skip(
+    expect: string | null = null,
+  ): Promise<
     Omit<Extract<SpotifyJobReport, { kind: 'skip' }>, 'kind' | 'attempt_id'>
   > {
     let before: SpotifyTrack | null = null;
     try {
       const p = await this.d.api.playback(true);
-      before = toPlayback(p.data, p.at).track;
+      const reading = toPlayback(p.data, p.at);
+      before = reading.track;
+      // A paid skip aims at THIS track — another one playing, or this one in its last seconds (it may be over when the
+      // skip lands: the next one would be skipped): nothing sent.
+      if (
+        expect &&
+        (before?.uri !== expect ||
+          (reading.progress_ms !== null &&
+            before.duration_ms - reading.progress_ms < 5_000))
+      )
+        return {
+          outcome: 'failed',
+          reason: 'TRACK_CHANGED',
+          skipped_track: before,
+        };
       const device =
         p.data?.device?.is_active && !p.data.device.is_restricted
           ? p.data.device
@@ -727,6 +1365,81 @@ export class SpotifyRuntime {
     }
   }
 
+  /**
+   * Music Hub: a catalogue search for the extension. The same gate as everything else (pacing, cache of 5 min per text,
+   * 429). Never queues anything. The provider says whose catalogue it is: the Lab's simulator or the connected account.
+   */
+  private async search(
+    job: Extract<SpotifyJob, { kind: 'search' }>,
+  ): Promise<
+    Omit<Extract<SpotifyJobReport, { kind: 'search' }>, 'kind' | 'attempt_id'>
+  > {
+    const provider = this.d.sim ? ('lab' as const) : ('spotify' as const);
+    try {
+      // Music Hub V2: a pasted link names one track — read by its id, as the reward reads an exact reference.
+      const found = job.track_id
+        ? [await this.d.api.track(job.track_id, 'catalog')].filter(
+            (c): c is NonNullable<typeof c> => !!c,
+          )
+        : await this.d.api.search(job.query, 'catalog');
+      const items = found
+        .map(toSearchItem)
+        .filter((i): i is SpotifySearchItem => i !== null)
+        .slice(0, 10);
+      return { outcome: 'done', provider, items };
+    } catch (e) {
+      return { outcome: 'failed', reason: reasonOf(e), provider, items: [] };
+    }
+  }
+
+  /**
+   * Music Hub: pause / resume / volume on the playing device. The result is what Spotify says after (a fresh reading),
+   * never an assumed success; « maybe sent » → read back, `unknown` when the reading does not prove it.
+   */
+  private async control(
+    job: Extract<SpotifyJob, { kind: 'control' }>,
+  ): Promise<
+    Omit<Extract<SpotifyJobReport, { kind: 'control' }>, 'kind' | 'attempt_id'>
+  > {
+    try {
+      const p = await this.d.api.playback(true);
+      const device =
+        p.data?.device?.is_active && !p.data.device.is_restricted
+          ? p.data.device
+          : pickDevice(await this.d.api.devices(true));
+      if (!device) return { outcome: 'failed', reason: 'NO_DEVICE' };
+      // A seek moves in THE track the moderator saw: another one playing → nothing sent.
+      if (
+        job.action === 'seek' &&
+        toPlayback(p.data, p.at).track?.uri !== job.expect_uri
+      )
+        return { outcome: 'failed', reason: 'TRACK_CHANGED' };
+      const proven = (after: SpotifyPlayback) =>
+        job.action === 'volume'
+          ? after.volume_percent === job.volume_percent
+          : job.action === 'seek'
+            ? after.track?.uri === job.expect_uri &&
+              after.progress_ms !== null &&
+              Math.abs(after.progress_ms - (job.position_ms ?? 0)) <= 5_000
+            : after.is_playing === (job.action === 'resume');
+      try {
+        if (job.action === 'volume')
+          await this.d.api.setVolume(job.volume_percent ?? 0, device.id);
+        else if (job.action === 'seek')
+          await this.d.api.seek(job.position_ms ?? 0, device.id);
+        else await this.d.api.setPlaying(job.action === 'resume', device.id);
+      } catch (e) {
+        if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
+      }
+      this.nextPollAt = 0;
+      const after = await this.d.api.playback(true);
+      const playback = toPlayback(after.data, after.at);
+      return { outcome: proven(playback) ? 'done' : 'unknown', playback };
+    } catch (e) {
+      return { outcome: 'failed', reason: reasonOf(e) };
+    }
+  }
+
   /** `!song`: at most one reading (the cache shares a fresh one). */
   private async readPlayback(): Promise<
     Omit<
@@ -749,6 +1462,32 @@ export class SpotifyRuntime {
     res: ServerResponse,
     url: URL,
   ): Promise<boolean> {
+    // Music Hub: the cover Windows gave for the track playing (an <img> of Studio's own page: no Studio header).
+    // Local bytes only, never sent to Core nor to the viewers (they get Spotify's image URL).
+    // Music Hub: the OBS music overlay's page and its state (token, long poll).
+    if (this.overlays && (await this.overlays.handle(req, res, url)))
+      return true;
+    if (url.pathname === '/api/spotify/live/cover' && req.method === 'GET') {
+      const cover = this.d.live?.tracker.cover ?? null;
+      if (!cover) {
+        res.writeHead(404, { 'cache-control': 'no-store' });
+        res.end();
+        return true;
+      }
+      res.writeHead(200, {
+        'content-type': cover.type,
+        // Versioned by its hash (?v=): the page never downloads the same cover twice.
+        'cache-control':
+          url.searchParams.get('v') === cover.hash
+            ? 'private, max-age=86400, immutable'
+            : 'no-store',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy':
+          "default-src 'none'; style-src 'unsafe-inline'",
+      });
+      res.end(cover.bytes);
+      return true;
+    }
     if (url.pathname !== '/api/spotify/oauth/callback' || req.method !== 'GET')
       return false;
     let ok = false;
@@ -840,13 +1579,64 @@ export class SpotifyRuntime {
     };
   }
 
+  private async overlayApi(
+    method: string,
+    path: string,
+    body: () => Promise<Record<string, unknown>>,
+    upload?: () => Promise<{ body: Buffer; name: string }>,
+  ) {
+    const o = this.d.overlay;
+    if (!o)
+      throw Object.assign(new Error('overlay_unavailable'), { status: 503 });
+    const view = () => ({
+      config: o.config,
+      available: o.available,
+      sounds: this.d.sounds?.list() ?? [],
+    });
+    if (method === 'GET' && path === '/overlay') return view();
+    if (method === 'POST' && path === '/overlay') {
+      const next = MusicOverlayConfig.safeParse(await body());
+      if (!next.success)
+        throw Object.assign(new Error('invalid_overlay'), {
+          status: 400,
+          body: { issues: next.error.issues.map((i) => i.path.join('.')) },
+        });
+      await o.save(next.data);
+      return view();
+    }
+    if (method === 'POST' && path === '/overlay/preview') {
+      try {
+        return await o.preview();
+      } catch (e) {
+        throw Object.assign(e as Error, {
+          status: (e as { status?: number }).status ?? 409,
+        });
+      }
+    }
+    if (method === 'POST' && path === '/overlay/sounds') {
+      if (!this.d.sounds || !upload)
+        throw Object.assign(new Error('effects_unavailable'), { status: 503 });
+      const { body: raw, name } = await upload();
+      try {
+        return await this.d.sounds.importSound(raw, name);
+      } catch (e) {
+        throw Object.assign(e as Error, { status: 400 });
+      }
+    }
+    throw Object.assign(new Error('not_found'), { status: 404 });
+  }
+
   /** /api/spotify/* behind Studio's origin check. */
   async api(
     method: string,
     path: string,
     body: () => Promise<Record<string, unknown>>,
+    upload?: () => Promise<{ body: Buffer; name: string }>,
   ) {
     const auth = this.d.auth;
+    // Music Hub V2: the OBS music card (overlay.ts): its setting, a preview, an imported alert sound.
+    if (path === '/overlay' || path.startsWith('/overlay/'))
+      return this.overlayApi(method, path, body, upload);
     if (method === 'GET' && path === '/state') {
       const core = await this.d.core<Record<string, unknown>>(
         `${this.base}/state`,
@@ -854,8 +1644,19 @@ export class SpotifyRuntime {
       return {
         ...core,
         environment: this.d.environment,
-        connection: { ...auth.view(), simulated: Boolean(this.d.sim) },
+        connection: {
+          ...auth.view(),
+          simulated: Boolean(this.d.sim),
+          // Lab: the simulator, or the broadcaster's real account (read-only unless allowed for this session).
+          mode: this.d.sim
+            ? 'lab_sim'
+            : this.d.labReal
+              ? 'lab_real'
+              : 'production',
+          lab_writes: this.d.labReal ? this.d.labReal.writes : null,
+        },
         api: await this.d.api.status(),
+        watch: { ...this.watchCounters },
         local: {
           error: this.lastError,
           watching: Boolean(this.answer?.watch),
@@ -871,11 +1672,53 @@ export class SpotifyRuntime {
         },
         sim: this.d.sim?.view() ?? null,
         covers: Object.fromEntries(this.covers),
+        // Music Hub: what Windows says plays (SMTC) and its exact track once read (absent: no live source).
+        live: this.liveView(),
       };
     }
+    // Music Hub: the live track alone, every second from the page (local: no Core, no Spotify).
+    if (method === 'GET' && path === '/live') return { live: this.liveView() };
+    // Music Hub: the OBS music overlays' editor (presets, variants, show / hide, OBS assistant).
+    if (path === '/overlays' || path.startsWith('/overlays/')) {
+      if (!this.overlays)
+        throw Object.assign(new Error('overlays_unavailable'), { status: 503 });
+      return this.overlays.api(method, path, body);
+    }
+    // Music Hub: the paid skip and the Open Bar (Core decides; the panel only switches), and what a player action
+    // really did (the panel tells Studio's answer, never « demandé » as a success).
+    if (path === '/music-rules')
+      return method === 'GET'
+        ? this.d.core(`${this.base}/music-rules`)
+        : this.d.core(`${this.base}/music-rules`, await body());
+    const control = /^\/controls\/([0-9a-f-]{36})$/.exec(path);
+    if (method === 'GET' && control)
+      return this.d.core(`${this.base}/controls/${control[1]}`);
     if (method !== 'POST')
       throw Object.assign(new Error('not_found'), { status: 404 });
+    // Music Hub: the stream's music history (Core), newest first, 50 per page.
+    if (path === '/history') {
+      const before = (await body()).before;
+      return this.d.core(`${this.base}/music-history`, {
+        before:
+          typeof before === 'string' && !Number.isNaN(Date.parse(before))
+            ? new Date(before).toISOString()
+            : null,
+      });
+    }
     if (path === '/diagnostic/search') return this.diagnosticSearch(body);
+    // Lab with the real account only: allow (or stop) the writes — the queue, the skips, the player — for this session.
+    if (path === '/lab-writes') {
+      if (!this.d.labReal)
+        throw Object.assign(new Error('not_lab_real'), { status: 409 });
+      const b = await body();
+      if (typeof b.enabled !== 'boolean')
+        throw Object.assign(new Error('enabled_required'), { status: 400 });
+      this.d.labReal.writes = b.enabled;
+      this.d.log?.(
+        `[spotify] Lab réel : écritures ${b.enabled ? 'AUTORISÉES pour cette session' : 'coupées (lecture seule)'}`,
+      );
+      return { lab_writes: b.enabled };
+    }
     if (path === '/settings')
       return this.d.core(`${this.base}/settings`, await body());
     if (path === '/actions')
@@ -921,16 +1764,26 @@ export class SpotifyRuntime {
       return { ok: true };
     }
     const sim =
-      /^\/sim\/(near-end|external|no-device|device|rate-limit|answer-200|answer-500)$/.exec(
+      /^\/sim\/(near-end|external|no-device|device|rate-limit|quota|skip|answer-200|answer-500|end|app-close|app-open|replay|pause-hand)$/.exec(
         path,
       );
     if (sim && this.d.sim) {
       const s = this.d.sim;
-      if (sim[1] === 'near-end') s.seekNearEnd();
+      // Music Hub (SMTC): Spotify Desktop closed / reopened, the same track again, a pause in the app.
+      if (sim[1] === 'app-close' || sim[1] === 'app-open')
+        s.closeApp(sim[1] === 'app-close');
+      else if (sim[1] === 'replay') s.replay();
+      else if (sim[1] === 'pause-hand') s.pauseByHand();
+      else if (sim[1] === 'near-end') s.seekNearEnd();
       else if (sim[1] === 'external') s.playExternal();
       else if (sim[1] === 'no-device') s.deviceActive = false;
       else if (sim[1] === 'device') s.deviceActive = true;
       else if (sim[1] === 'rate-limit') s.rateLimit(30);
+      // A Development Mode quota (July 2026: `QUOTA_EXCEEDED`, waits of hours): one hour here.
+      else if (sim[1] === 'quota') s.rateLimit(3_600, true);
+      // The broadcaster skips in the Spotify app (Raptoru only sees it at its next reading).
+      else if (sim[1] === 'skip') s.skipByHand();
+      else if (sim[1] === 'end') s.seekNearEnd(0);
       else s.queueAnswer = sim[1] === 'answer-200' ? 200 : 500;
       this.nextPollAt = 0;
       return s.view();

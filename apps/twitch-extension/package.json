@@ -3,10 +3,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "node -e \"console.log('Rien \u00e0 construire : l\u2019extension est servie telle quelle. Emballage : npm run package:production | package:staging | package:calibration')\"",
     "test": "vitest run",
-    "build:staging": "node scripts/build-staging.mjs",
-    "build:calibration": "node scripts/build-calibration.mjs",
-    "build:production": "node scripts/build-staging.mjs --production"
+    "test:responsive": "node test/responsive/matrix.mjs",
+    "test:requests": "node test/responsive/requests.mjs --compare test/responsive/reference/requests-v1.json",
+    "test:lab-module": "node test/responsive/lab-module.mjs",
+    "test:music-stability": "node test/responsive/music-stability.mjs",
+    "lab:compare": "node test/responsive/compare-shells.mjs",
+    "test:grey-screen": "node test/responsive/grey-screen.mjs",
+    "package": "node scripts/package.mjs",
+    "package:production": "node scripts/package.mjs --target production",
+    "package:staging": "node scripts/package.mjs --target staging",
+    "package:calibration": "node scripts/package.mjs --target calibration",
+    "verify:package": "node scripts/verify-package.mjs"
   }
 }

@@ -20,7 +20,7 @@ type Answer = {
 
 async function harness(
   answers: (url: URL, method: string) => Answer,
-  opts: { stateFile?: string } = {},
+  opts: { stateFile?: string; writesAllowed?: () => boolean } = {},
 ) {
   let t = 1_000_000;
   const calls: {
@@ -41,6 +41,7 @@ async function harness(
     now: () => t,
     sleep: async (ms) => void (t += ms),
     random: () => 0.5,
+    ...(opts.writesAllowed ? { writesAllowed: opts.writesAllowed } : {}),
     fetch: (async (input: URL, init: RequestInit) => {
       const url = new URL(String(input));
       calls.push({
@@ -306,5 +307,109 @@ describe('Spotify OAuth (PKCE, sealed refresh token)', () => {
     // Survives a restart.
     const reopened = await SpotifyAuth.open({ file, redirectUri: 'x', box });
     expect(reopened.view().auth).toBe('needs_reauth');
+  });
+});
+
+describe('Spotify V2 — two lanes and local counters (docs/music/SPOTIFY_QUOTA.md)', () => {
+  const ok = (url: URL): Answer =>
+    url.pathname.endsWith('/search')
+      ? { status: 200, body: { tracks: { items: [ITEM] } } }
+      : url.pathname.endsWith('/me/player/queue')
+        ? { status: 204 }
+        : { status: 200, body: { is_playing: true } };
+
+  it('an essential call queued behind a wave of catalogue searches is sent next, not after them', async () => {
+    const h = await harness(ok);
+    const waves = Array.from({ length: 8 }, (_, n) =>
+      h.api.search(`recherche ${n}`, 'catalog'),
+    );
+    const add = h.api.addToQueue('spotify:track:4cOdK2wGLETKBW3PvgPWqT', null);
+    await Promise.all([...waves, add]);
+    const order = h.calls.map((c) => c.path);
+    // The first search was already on its way; the addition goes right after it.
+    expect(order.indexOf('me/player/queue')).toBe(1);
+    expect(order.filter((p) => p === 'search')).toHaveLength(8);
+  });
+
+  it("the catalogue lane's budget: 30 a minute, refused at once beyond (never held), the essential lane untouched", async () => {
+    const h = await harness(ok);
+    const out = await Promise.allSettled(
+      Array.from({ length: 34 }, (_, n) =>
+        h.api.search(`texte ${n}`, 'catalog'),
+      ),
+    );
+    const refused = out.filter((r) => r.status === 'rejected');
+    expect(refused).toHaveLength(4);
+    expect((refused[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+      SpotifyApiError,
+    );
+    expect(h.calls.filter((c) => c.path === 'search')).toHaveLength(30);
+    // The reward's search (essential) still goes at once.
+    await h.api.search('numb', 'essential');
+    expect(h.calls.at(-1)!.path).toBe('search');
+    const st = await h.api.status();
+    expect(st.counters.catalog_deferred).toBe(4);
+    expect(st.usage.endpoints['GET /search']!.calls).toBe(31);
+  });
+
+  it('the Music Hub searches ask Spotify for availability (market=from_token); the reward search is unchanged', async () => {
+    const urls: string[] = [];
+    const h = await harness((url) => (urls.push(url.search), ok(url)));
+    await h.api.search('nuit', 'catalog');
+    await h.api.search('nuit', 'essential');
+    expect(urls[0]).toContain('market=from_token');
+    expect(urls[1]).not.toContain('market');
+    expect(h.calls).toHaveLength(2); // two lanes, two caches: never one waiting on the other
+  });
+
+  it('Lab on the real account, read-only: every write refused before the network (LAB_READ_ONLY), reads go on', async () => {
+    let writes = false;
+    const h = await harness(ok, { writesAllowed: () => writes });
+    for (const w of [
+      () => h.api.addToQueue('spotify:track:4cOdK2wGLETKBW3PvgPWqT', null),
+      () => h.api.next(null),
+      () => h.api.setPlaying(false, null),
+      () => h.api.setVolume(40, null),
+    ]) {
+      const e = await w().catch((x: unknown) => x);
+      expect(e).toBeInstanceOf(SpotifyApiError);
+      expect((e as SpotifyApiError).code).toBe('LAB_READ_ONLY');
+      expect((e as SpotifyApiError).maybeSent).toBe(false);
+    }
+    expect(h.calls).toHaveLength(0);
+    await h.api.playback(true);
+    expect(h.calls).toHaveLength(1);
+    writes = true;
+    await h.api.addToQueue('spotify:track:4cOdK2wGLETKBW3PvgPWqT', null);
+    expect(h.calls.at(-1)!.path).toBe('me/player/queue');
+    expect((await h.api.status()).counters.blocked_writes).toBe(4);
+  });
+
+  it('per-endpoint counters, cache hits per kind, waits per lane, a 429 counted on its endpoint', async () => {
+    let limited = false;
+    const h = await harness((url) =>
+      limited
+        ? {
+            status: 429,
+            headers: { 'retry-after': '5' },
+            body: { reason: 'QUOTA_EXCEEDED' },
+          }
+        : ok(url),
+    );
+    await h.api.playback(true);
+    await h.api.playback();
+    await h.api.search('numb');
+    await h.api.search('numb');
+    limited = true;
+    await h.api.playback(true).catch(() => {});
+    const st = await h.api.status();
+    expect(st.usage.endpoints['GET /me/player']).toEqual({
+      calls: 2,
+      r429: 1,
+      errors: 0,
+    });
+    expect(st.usage.cache_hits).toEqual({ playback: 1, search: 1 });
+    expect(st.quota_exceeded).toBe(true);
+    expect(st.usage.waits.essential.count).toBe(3);
   });
 });

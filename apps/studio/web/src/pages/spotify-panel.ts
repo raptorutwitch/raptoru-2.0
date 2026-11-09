@@ -1,4 +1,4 @@
-import { esc, fld, grp, hhmm, row } from '../ds/ds.js';
+import { esc, fld, fmt, grp, hhmm, row, sw } from '../ds/ds.js';
 import {
   REASONS,
   STATES,
@@ -84,6 +84,101 @@ function exceptions(s: SpState, ui: SpUi) {
   );
 }
 
+/** Music Hub : la même file depuis l'extension, payée en Jetons ; et les commandes du lecteur (pause, volume). */
+function extension(s: SpState, ui: SpUi) {
+  const v = s.settings;
+  if (v.extension_enabled === undefined) return '';
+  return grp(
+    'Extension',
+    'music',
+    `<div class="d-row col" data-k="extension jetons music hub demandes prix lecteur pause volume doublon">
+      ${row('Demandes depuis l’extension', sw(v.extension_enabled, 'data-sp-flag="extension_enabled"', 'Demandes depuis l’extension'))}
+      ${row('Prix d’une demande', `${fld('data-f="ext-price" min="1" max="1000000"', val(ui, 'ext-price', v.extension_price_tokens ?? 500), 'Jetons')}<button type="button" class="d-btn sm" data-act="sp-ext-price">Enregistrer</button>`, 'prix jetons')}
+      ${row('Refuser un titre déjà en file', sw(v.no_duplicates ?? true, 'data-sp-flag="no_duplicates"', 'Refuser un titre déjà en file'), 'doublon')}
+      ${row('Commandes du lecteur', sw(v.player_controls ?? false, 'data-sp-flag="player_controls"', 'Commandes du lecteur'), 'pause reprendre passer volume supermods')}
+      ${paidSkip(s)}
+      <small>Même file, mêmes quotas et mêmes commandes du chat que la récompense ; seul le paiement change : des Jetons, rendus une seule fois si la demande est refusée, retirée ou annulée. La récompense de points n’est pas touchée.</small>
+      <small>Commandes du lecteur : pause, reprise et volume ici ; dans l’extension, pause, reprise, passer et volume pour les supermods seulement (les modérateurs gardent le retrait des demandes). Elles agissent sur ton appareil Spotify, et tu gardes la main ici.</small>
+      ${s.environment === 'production' ? '<p class="spo-state warn">En Production, l’extension n’a pas encore accès à la musique : ces réglages n’ont d’effet que dans le Lab.</p>' : ''}
+    </div>`,
+    'jetons music hub',
+  );
+}
+
+const SKIP_STATUS: Record<string, string> = {
+  pending: 'en cours',
+  done: 'passée',
+  refunded: 'remboursé',
+};
+const SKIP_REASON: Record<string, string> = {
+  TRACK_CHANGED: 'le titre avait changé',
+  RATE_LIMITED: 'Spotify limitait les appels',
+  SKIP_RESULT_UNKNOWN: 'résultat non prouvé',
+  SPOTIFY_UNAVAILABLE: 'Spotify indisponible',
+  NO_DEVICE: 'aucun appareil',
+  LAB_READ_ONLY: 'Lab en lecture seule',
+};
+
+/** Le skip payant des viewers : interrupteurs, règle validée (fixe), dernières décisions. */
+function paidSkip(s: SpState) {
+  const m = s.music_rules;
+  if (!m) return '';
+  const vs = m.viewer_skip;
+  const recent = (vs.recent ?? [])
+    .map(
+      (r) =>
+        `<li><time>${hhmm(r.at)}</time> <b>${esc(r.viewer_name ?? '')}</b> · ◆ ${fmt(r.price)} · « ${esc(r.track.title)} » · <span class="spo-vs-${r.status}">${SKIP_STATUS[r.status] ?? r.status}${r.status === 'refunded' && r.reason ? ` (${SKIP_REASON[r.reason] ?? esc(r.reason)})` : ''}</span></li>`,
+    )
+    .join('');
+  return `${row('Skip payant par les viewers', sw(vs.enabled, 'data-sp-rule="viewer_skip_enabled"', 'Skip payant par les viewers'), 'skip payant jetons viewers passer progressif')}
+      ${row('Protéger les demandes payées', sw(vs.protect_requests, 'data-sp-rule="viewer_skip_protect_requests"', 'Protéger les demandes payées'), 'protéger demandes skip payant')}
+      <small>◆ ${fmt(vs.base_price)} Jetons, doublé à chaque skip payé dans les ${vs.window_minutes} min du précédent (pour tout le stream), puis retour au prix de base. Tes skips et ceux de la modération sont gratuits et ne comptent pas. Un skip qui ne se fait pas est remboursé et ne fait pas monter le prix.</small>
+      ${recent ? `<ul class="spo-vs">${recent}</ul>` : ''}`;
+}
+
+const POSITIONS: [string, string][] = [
+  ['top-right', 'En haut à droite'],
+  ['top-left', 'En haut à gauche'],
+  ['bottom-right', 'En bas à droite'],
+  ['bottom-left', 'En bas à gauche'],
+];
+
+/** Music Hub V2 : la carte musique de l'overlay OBS (une brève carte par demande, par la source « Effets »). */
+function overlay(ui: SpUi) {
+  const o = ui.overlay;
+  if (!o) return '';
+  const c = o.config;
+  const sounds = o.sounds.filter((x) => x.available);
+  const imported =
+    c.sound?.startsWith('upload:') && c.sound
+      ? `<option value="${esc(c.sound)}" selected>${esc(c.sound_name ?? 'Son importé')}</option>`
+      : '';
+  const soundSel = `<select class="d-in" data-ov="sound" aria-label="Son d’alerte">
+      <option value="" ${c.sound ? '' : 'selected'}>Aucun son (carte silencieuse)</option>
+      ${sounds.map((x) => `<option value="${esc(x.id)}" ${x.id === c.sound ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}
+      ${imported}
+    </select>
+    <label class="d-btn sm" title="Importer un son (mp3, wav, ogg, 5 Mo max)">Importer…<input type="file" accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg" data-ov-file hidden></label>`;
+  return grp(
+    'Carte « nouvelle demande » (OBS)',
+    'music',
+    `<div class="d-row col" data-k="overlay obs carte alerte son demande lecture effets">
+      <p class="d-note">Une brève carte par la source « Effets ». Le titre en cours en permanence : <a href="/?p=music-overlay">Overlay musique</a>.</p>
+      ${row('Carte musique sur OBS', sw(c.enabled, 'data-ov="enabled"', 'Carte musique sur OBS'))}
+      ${row('À chaque nouvelle demande', sw(c.on_request, 'data-ov="on_request"', 'À chaque nouvelle demande'), 'demande file')}
+      ${row('Au début de la lecture', sw(c.on_start, 'data-ov="on_start"', 'Au début de la lecture'), 'lecture debut')}
+      ${row('Son d’alerte', soundSel, 'son alerte importer')}
+      ${row('Volume du son', `<input type="range" min="0" max="100" step="5" value="${c.volume}" data-ov="volume" aria-label="Volume du son d’alerte" ${c.sound ? '' : 'disabled'}><b>${c.volume} %</b>`, 'volume')}
+      ${row('Durée d’affichage', `<select class="d-in" data-ov="duration_s" aria-label="Durée d’affichage">${[3, 4, 5, 6, 8, 10, 12, 15].map((n) => `<option value="${n}" ${n === c.duration_s ? 'selected' : ''}>${n} s</option>`).join('')}</select>`, 'duree')}
+      ${row('Position', `<select class="d-in" data-ov="position" aria-label="Position de la carte">${POSITIONS.map(([k, l]) => `<option value="${k}" ${k === c.position ? 'selected' : ''}>${l}</option>`).join('')}</select>`, 'position coin')}
+      <div class="d-acts"><button type="button" class="d-btn sm" data-act="sp-ov-preview" ${o.available ? '' : 'disabled'}>Prévisualiser</button></div>
+      <small>Une brève carte (titre, artiste, viewer) sur la source OBS « Effets », la même que les effets des points de chaîne. Elle ne diffuse jamais la musique ; seul le son d’alerte choisi est joué. Les cartes passent une par une.</small>
+      ${o.available ? '' : '<p class="spo-state warn">Lecteur d’effets indisponible : ajoute la source « Effets » dans OBS (Points de chaîne).</p>'}
+    </div>`,
+    'overlay obs',
+  );
+}
+
 const endOfLive = () =>
   grp(
     'Fin du live',
@@ -154,6 +249,23 @@ function reward(s: SpState, ui: SpUi) {
   );
 }
 
+/** Lab with the broadcaster's real account: read-only until allowed here, for this session only. */
+function labReal(s: SpState) {
+  const c = s.connection;
+  if (c.mode !== 'lab_real') return '';
+  const on = c.lab_writes === true;
+  return `<div class="d-note ${on ? 'bad' : ''}" data-k="lab réel spotify écriture">
+    <p><b>Lab sur ton vrai compte Spotify.</b> Recherches et lectures réelles ; le Lab, ses viewers et ses Jetons restent fictifs.
+    ${on ? '<b>Ajouts à la file, passages et lecteur AUTORISÉS pour cette session.</b>' : 'Lecture seule : aucun ajout, aucun passage, aucune commande du lecteur n’est envoyé (les demandes sont refusées et remboursées).'}</p>
+    <div class="spo-btns">${
+      on
+        ? '<button type="button" class="d-btn sm" data-act="sp-lab-writes" data-on="0">Revenir en lecture seule</button>'
+        : '<button type="button" class="d-btn bad sm" data-act="sp-lab-writes" data-on="1">Autoriser les ajouts pour cette session</button>'
+    }</div>
+    <small>Coupé à chaque démarrage. Fais ces essais hors live : le quota Spotify est celui de ton compte développeur.</small>
+  </div>`;
+}
+
 function connection(s: SpState, ui: SpUi) {
   const c = s.connection;
   const body = c.simulated
@@ -191,11 +303,29 @@ function technical(s: SpState, ui: SpUi) {
       ${fact('Appels Spotify', `${a.calls_last_minute} dans la dernière minute${a.rate_high ? ', <b>au-dessus du seuil d’alerte (60)</b>' : ''} · plafond 90 / min · ${n.calls ?? 0} depuis le démarrage (${n.writes ?? 0} ajouts ou passages, ${n.cache_hits ?? 0} lectures évitées par le cache)`)}
       ${fact('Suivi de la lecture', s.local.fast_lane ? 'rapide (passage d’une demande annulée)' : s.local.watching ? `actif${s.local.next_poll_in_ms != null ? ` · prochaine lecture dans ${Math.ceil(s.local.next_poll_in_ms / 1000)} s` : ''}` : 'en pause : rien à suivre (aucune demande en file, en cours ou à passer)')}
       ${fact('Dernière lecture', p ? esc(`${hhmm(p.observed_at)} (${agoMs(ui.now - Date.parse(p.observed_at))}) · ${p.track ? `${trackLabel(p.track)}${p.is_playing ? '' : ' (en pause)'}` : 'rien ne joue'}`) : 'aucune')}
+      ${fact('Consommation', usage(s))}
       ${fact('Erreur Studio', s.local.error ? esc(s.local.error) : 'aucune')}
     </dl>${refresh}
     <small>Commandes du chat : <code>!song</code>, <code>!songqueue</code>, <code>!mysong</code>, <code>!songcancel</code> ; modérateurs : <code>!songremove</code>, <code>!songskip</code>.</small></div>`,
     'diagnostic commandes',
   );
+}
+
+/** Local counters since Studio started: the biggest endpoints, the cache, the waits, the Music Hub searches. */
+function usage(s: SpState) {
+  const u = s.api.usage;
+  if (!u) return 'indisponible';
+  const top = Object.entries(u.endpoints)
+    .sort((a, b) => b[1].calls - a[1].calls)
+    .slice(0, 4)
+    .map(
+      ([e, v]) => `${esc(e)} ${v.calls}${v.r429 ? ` (${v.r429} × 429)` : ''}`,
+    )
+    .join(' · ');
+  const hits = Object.values(u.cache_hits).reduce((a, b) => a + b, 0);
+  const n = s.api.counters ?? {};
+  const w = u.waits.essential;
+  return `depuis ${esc(hhmm(u.since))} : ${top || 'aucun appel'} · ${hits} lectures évitées par le cache · attente des commandes : max ${(w.max_ms / 1000).toFixed(1)} s · recherches Music Hub : ${u.catalog_last_minute} / min, ${n.catalog_deferred ?? 0} refusées (budget), ${s.watch?.searches_abandoned ?? 0} abandonnées${n.blocked_writes ? ` · ${n.blocked_writes} écritures bloquées (Lab réel)` : ''}`;
 }
 
 const TRIES: [string, string][] = [
@@ -240,8 +370,15 @@ export function simBar(s: SpState, ui: SpUi) {
     <div class="spo-btns">
       ${btn('near-end', 'Fin du titre')}${btn('external', 'Titre hors demandes')}
       ${btn(m.device_active ? 'no-device' : 'device', m.device_active ? 'Couper l’appareil' : 'Rallumer l’appareil')}
-      ${btn('rate-limit', 'Limite 429')}${btn('answer-200', 'Ajout incertain')}${btn('answer-500', 'Ajout en erreur')}
+      ${btn('rate-limit', 'Limite 429')}${btn('quota', 'Quota dépassé (1 h)')}${btn('skip', 'Skip à la main')}${btn('answer-200', 'Ajout incertain')}${btn('answer-500', 'Ajout en erreur')}
     </div>
+    <p class="d-lb">Musique en cours (Windows simulé) et musiques du stream</p>
+    <div class="spo-btns">
+      <button type="button" class="d-btn sm ${s.music_session?.live ? '' : 'pri'}" data-act="sp-live" data-on="${s.music_session?.live ? '0' : '1'}">${s.music_session?.live ? 'Terminer le live simulé' : 'Démarrer un live simulé'}</button>
+      ${btn('pause-hand', m.playing === false ? 'Reprendre dans Spotify' : 'Pause dans Spotify')}${btn('replay', 'Rejouer le titre')}
+      ${btn(m.app_closed ? 'app-open' : 'app-close', m.app_closed ? 'Rouvrir Spotify' : 'Fermer Spotify')}
+    </div>
+    <p class="d-note">${s.music_session?.live ? `Live simulé depuis ${esc(new Date(s.music_session.since!).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))} : chaque titre joué entre dans « Musiques du stream ».` : 'Hors live : rien n’entre dans « Musiques du stream » (le titre en cours s’affiche quand même).'}</p>
     <p class="d-note">${
       last
         ? `Dernière décision : <b>${esc(last.viewer.name)}</b>, ${esc(`« ${last.input} »`)} → ${esc(REASONS[last.reason ?? ''] ?? STATES[last.state] ?? last.state)}.`
@@ -253,4 +390,4 @@ export function simBar(s: SpState, ui: SpUi) {
 }
 
 export const spotifyPanel = (s: SpState, ui: SpUi) =>
-  `${quotas(s, ui)}${exceptions(s, ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;
+  `${labReal(s)}${quotas(s, ui)}${exceptions(s, ui)}${extension(s, ui)}${overlay(ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;

@@ -219,6 +219,49 @@
       #stage .rb-flop.on {
         opacity: 1;
       }
+      /* Music Hub V2: the music card (a corner of the 1920×1080 frame, slid in, then out). Raptoru's emerald. */
+      #stage .mh-card {
+        position: absolute;
+        z-index: 7500;
+        display: flex;
+        gap: 22px;
+        align-items: center;
+        max-width: 720px;
+        padding: 22px 30px 22px 22px;
+        border: 2px solid rgba(52, 211, 153, 0.55);
+        border-radius: 26px;
+        background: rgba(14, 12, 22, 0.9);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+        color: #f3f1f7;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        opacity: 0;
+        transition: opacity 0.45s ease, transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      #stage .mh-card--top-right { top: 48px; right: 48px; transform: translateX(60px); }
+      #stage .mh-card--top-left { top: 48px; left: 48px; transform: translateX(-60px); }
+      #stage .mh-card--bottom-right { right: 48px; bottom: 48px; transform: translateX(60px); }
+      #stage .mh-card--bottom-left { bottom: 48px; left: 48px; transform: translateX(-60px); }
+      #stage .mh-card.on { opacity: 1; transform: none; }
+      #stage .mh-card__note {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: 84px;
+        height: 84px;
+        border-radius: 20px;
+        background: linear-gradient(145deg, #34d399, #0f766e);
+        color: #04170f;
+      }
+      #stage .mh-card__note svg { width: 50px; height: 50px; }
+      #stage .mh-card__body { display: grid; gap: 4px; min-width: 0; }
+      #stage .mh-card__kicker { color: #6ee7b7; font-size: 22px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+      #stage .mh-card__title, #stage .mh-card__artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #stage .mh-card__title { font-size: 38px; font-weight: 800; line-height: 1.15; }
+      #stage .mh-card__artist { color: #c9c3d6; font-size: 28px; }
+      #stage .mh-card__by { color: #a7f3d0; font-size: 24px; font-weight: 600; }
+      @media (prefers-reduced-motion: reduce) {
+        #stage .mh-card { transition: opacity 0.3s; transform: none; }
+      }
       /* Roue du Sub: the legacy wheel styles of Alerte_system.html (« === ROUE === »), copied as they are. */
       /* === ROUE === */
       .wheel-container {
