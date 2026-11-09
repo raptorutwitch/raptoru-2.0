@@ -3,6 +3,7 @@
 **Mis à jour le 08/11/2026** (consolidation générale). À lire **en premier**, puis vérifier soi-même l'état (§ 4).
 
 - La période précédente (04 → 07/11) est archivée dans [archive/REPRISE_2026-11-04_2026-11-07.md](archive/REPRISE_2026-11-04_2026-11-07.md).
+- **09/11/2026 (nuit) — audit de fiabilité avant live** : branche locale `audit/fiabilite-2026-11-09` (worktree `Raptoru 2.0 - Worktrees/audit-fiabilite`, partie de `origin/main`), 15 corrections avec tests (3 P1, 10 P2, 2 P3), rien de poussé ni déployé. Rapport, corrections proposées non appliquées et checklist GO / NO-GO Music Hub : [AUDIT_FIABILITE_2026-11-09.md](AUDIT_FIABILITE_2026-11-09.md).
 - Les règles complètes sont dans [`../CLAUDE.md`](../CLAUDE.md) : elles priment sur tout outil ou plugin.
 
 ## 1. Le projet en dix lignes
