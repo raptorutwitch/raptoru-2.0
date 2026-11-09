@@ -15,7 +15,7 @@ Une seule source navigateur OBS montre le titre en cours dans le look du preset 
 
 | Modèle | Archétype | Pour quoi |
 | ------ | --------- | --------- |
-| **Flottant** | `minimal` | Pastille d'une ligne (titre — artiste), pochette ronde, progression en filet. Permanent et discret. |
+| **Flottant** | `minimal` | Pastille d'une ligne (titre — artiste), pochette ronde, progression en filet. Permanent et discret. Composition « Deux lignes » possible (titre, puis artiste). |
 | **Cartouche** | `clean` | Pochette, « En cours », titre, artiste, progression, temps, badge « Demande de X ». Lisibilité maximale. |
 | **Verre** | `glass` | La pochette floutée en fond (sa propre image, jamais la scène derrière), reflet, bords fins. Haut de gamme. |
 | **Néon** | `neon` | Cadre lumineux, bande d'accent, titre condensé en capitales, éclat qui balaie le cadre à chaque titre, lueur qui respire (**décorative** : aucune donnée audio). |
@@ -25,7 +25,9 @@ Une seule source navigateur OBS montre le titre en cours dans le look du preset 
 Deux presets prêts à l'emploi en plus :
 
 - **Hybride** : un Cartouche agrandi à chaque titre, puis une pastille.
-- **Jeu chargé** : minuscule, en haut, à demi transparent, sans mouvement inutile.
+- **Jeu chargé** (le modèle compact de référence) : un petit bandeau contrasté de 380 × 58 px en haut au centre, le titre
+  (gras, blanc) puis l'artiste en dessous, une marque d'accent à gauche, la demande en languette dessous. Ni pochette, ni
+  progression, ni temps, ni album par défaut (activables).
 
 ## 3. Réglages
 
@@ -53,6 +55,32 @@ Deux presets prêts à l'emploi en plus :
 - **Valeurs impossibles** : les curseurs et listes les empêchent ; le serveur refuse le reste (« Non enregistré : … »).
 - **Mouvement réduit** : si le système demande moins de mouvement, les animations s'arrêtent.
 
+## 3 bis. Le bandeau compact (09/11 soir)
+
+- **Défilement d'un texte trop long** (réglage « Textes trop longs : Défiler », Typographie) : mesuré sur la largeur réelle
+  ; un texte qui tient ne bouge jamais. Une seule animation par texte, lancée quand le titre change (jamais relancée par
+  un simple rafraîchissement de l'état).
+  - **Aller-retour** : le début visible, pause 1,8 s, glissement régulier jusqu'à la fin, pause 1,3 s, retour en
+    douceur (plus lent qu'avant, sans à-coup), et ainsi de suite.
+  - **Continu** : bandeau d'information ; le texte est suivi de sa copie après un espace, la boucle est invisible.
+  - Vitesse lente / normale / rapide (26, 40, 62 px/s du canevas). Fondus aux deux bords, hors de la zone du texte.
+  - Mouvement réduit demandé par le système : « … » au lieu du défilement.
+- **Languette « Demandé par @pseudo »** (Essentiel › Demande viewer ; détails dans « Languette de demande ») : une petite
+  étiquette qui glisse de derrière le bandeau, collée à son bord, en haut ou en bas, à gauche, au centre ou à droite.
+  - Hors du bandeau : ne l'agrandit pas, ne décale pas le titre, jamais coupée ; elle est cachée dans une découpe au
+    bord du bandeau (rien ne transparaît à travers un fond semi-transparent).
+  - Elle sort après l'apparition du bandeau ; au changement de titre, elle rentre puis ressort avec le nouveau nom, ou
+    reste rentrée pour une musique personnelle. Changements rapides : toujours l'état du dernier titre.
+  - Un pseudo très long finit en « … » (au plus ~ 3/4 de la largeur du bandeau).
+  - Taille, fond, texte, opacité, arrondis, animation et durée réglables. Avec la languette, la demande n'est plus
+    répétée dans la ligne du titre.
+  - **Seulement** si le Core a attribué la demande à ce titre exact (le champ `request` de l'état) ; sans pseudo connu
+    ou si « Pseudo du viewer » est décoché : « Demande viewer ».
+- **Lisibilité** (Essentiel) : trois looks en un clic (Contraste maximal, Clair, Sans fond), l'ombre du texte (aucune,
+  douce, forte, contour), l'opacité du fond et celle du texte (séparées ; jamais sous 50 %). Une alerte dit quand le
+  texte se lit mal (contraste insuffisant, fond transparent sans ombre, languette illisible), avec « Corriger ».
+  Couleurs en détail : titre, artiste, texte secondaire, accent, fond, contraste de la bordure.
+
 ## 4. Presets et variantes
 
 - **Les modèles ne changent jamais.** Le premier réglage modifié crée « Mon <modèle> » : la variante est créée et
@@ -64,9 +92,16 @@ Deux presets prêts à l'emploi en plus :
 - **Persistance.** Les réglages et les variantes sont gardés au redémarrage de Studio, dans
   `<dossier Spotify>/music-overlays.json`, format versionné.
 - **Robustesse.** Un réglage ancien ou abîmé est réparé champ par champ (les autres choix restent), et Studio l'annonce.
+  - **Format v2 (09/11 soir).** Une variante enregistrée avant garde son aspect : artiste dans sa couleur secondaire
+    d'avant, texte sans ombre, une ligne, demande dans le texte (la languette est à un interrupteur). Une option qui
+    n'existait pas prend sa valeur par défaut sans être annoncée comme « réparée ».
   Un fichier illisible est mis de côté (`.unreadable-…`), jamais effacé.
 
 ## 5. L'éditeur
+
+- **Réglages mis à jour en place** : une section avancée ouverte le reste (plusieurs à la fois), le champ en cours garde
+  le focus, un curseur tenu ou un sélecteur de couleur ouvert ne sont pas interrompus, le défilement ne bouge pas
+  pendant l'enregistrement automatique (vérifié dans Chromium par un test bout en bout).
 
 - **Galerie.** Une vraie miniature de chaque modèle : la page d'overlay elle-même, en petit.
 - **Aperçu 16:9.** C'est la vraie page OBS dans un cadre, donc le même code que l'overlay.
@@ -158,8 +193,10 @@ Deux presets prêts à l'emploi en plus :
 - **OBS.** Jamais essayé dans un vrai OBS. Ses sources navigateur utilisent Chromium (CEF) : le rendu devrait être le
   même, mais c'est à vérifier par Antoni.
 - **Raccourcis.** Aucun raccourci clavier ni action « Stream Deck ».
-- **Animation de changement de titre.** La hauteur du widget saute (sans animation) quand le nouveau titre en demande
-  une autre (2 lignes).
+- **Animation de changement de titre.** Sur les modèles en 2 lignes de titre (Éditorial, « 2 lignes »), la hauteur du
+  widget saute (sans animation) quand le nouveau titre en demande une autre. Le bandeau compact a une hauteur fixe.
+- **Languette.** Pensée pour le bandeau compact ; elle marche sur les autres modèles mais n'y a pas été peaufinée
+  (désactivée par défaut sur eux).
 - **Accent de la pochette.** Pour une pochette Spotify (`i.scdn.co`), il dépend de l'autorisation CORS du CDN ; à
   défaut, l'accent de la palette est gardé.
 - **Production.** La sonde Windows n'est pas embarquée dans Studio installé. Sans elle, l'overlay utilise la lecture de

@@ -93,7 +93,9 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   `docs/music/SPOTIFY_QUOTA.md`) et vrai catalogue Spotify prêt en Lab, lecture seule par défaut
   (`Ouvrir Music Hub (Lab, Spotify reel).cmd`, `docs/music/SPOTIFY_REEL_LAB.md`). Musique en cours par Windows (SMTC)
   dans Studio et l'extension, plus « Musiques du stream » (`docs/music/SMTC_STUDIO.md`). Overlay musique OBS, 6 modèles,
-  éditeur Studio (`docs/music/MUSIC_OVERLAYS.md`). Prochaine étape : essai d'Antoni, puis un vrai OBS.
+  éditeur Studio (`docs/music/MUSIC_OVERLAYS.md`) ; 09/11 soir : bandeau compact « Jeu chargé » en deux lignes,
+  défilement aller-retour / continu, languette « Demandé par », réglages de lisibilité, sections de l'éditeur qui
+  restent ouvertes. Prochaine étape : essai d'Antoni, puis un vrai OBS.
   État et reprise : `docs/music/MUSIC_HUB_STATE.md` § 0.
 - Profil d'alertes Halloween `halloween_alerts` : **encore actif** le 02/11, à couper sur GO d'Antoni.
 - Un achat Halloween d’un viewer (125 Jetons, non remboursé) attend une décision d’Antoni ; le détail est conservé hors du dépôt public.

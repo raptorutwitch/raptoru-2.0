@@ -11,9 +11,11 @@ import {
   toast,
 } from '../ds/ds.js';
 import { esc, getJson, postJson } from '../http.js';
+import { morph } from './morph.js';
 import {
   DEMOS,
   OBS_ERRORS,
+  READABILITY,
   libraryView,
   obsView,
   settingsView,
@@ -192,34 +194,13 @@ export function mountMusicOverlayPage(root: HTMLElement) {
       return;
     }
     const s = selected()!;
-    if (!z('lib').dataset.done || z('lib').dataset.sig !== libSig()) {
-      z('lib').innerHTML = libraryView(st, s.id);
-      z('lib').dataset.done = '1';
-      z('lib').dataset.sig = libSig();
-    } else {
-      for (const b of z('lib').querySelectorAll<HTMLElement>('[data-pick]')) {
-        b.classList.toggle('is-sel', b.dataset.pick === s.id);
-        b.setAttribute('aria-pressed', String(b.dataset.pick === s.id));
-      }
-    }
+    // Updated in place (never rebuilt): the gallery's frames stay loaded; in the settings, the open sections stay open,
+    // the field in use keeps its focus, a slider held or a colour picker open is not interrupted, the scroll stays.
+    morph(z('lib'), libraryView(st, s.id));
     patch(z('bar'), stageBar({ source, demo, backdrop, zoom, live: st.live }));
     scale();
     z('screen').dataset.bg = backdrop;
-    const typing =
-      z('set').contains(document.activeElement) &&
-      (document.activeElement as HTMLElement).matches(
-        'input[type=range], input[type=color]',
-      );
-    if (!typing) patch(z('set'), settingsView(st, s, save));
-    else {
-      const badge = z('set').querySelector('.mox-sethead');
-      if (badge) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = settingsView(st, s, save);
-        const fresh = tmp.querySelector('.mox-sethead');
-        if (fresh) badge.replaceWith(fresh);
-      }
-    }
+    morph(z('set'), settingsView(st, s, save));
     patch(
       z('foot'),
       source === 'demo'
@@ -229,11 +210,6 @@ export function mountMusicOverlayPage(root: HTMLElement) {
     if (p.panel.isOpen()) p.panel.set(obsView(obs, st.url, st.visible));
     feed();
   };
-  const libSig = () =>
-    JSON.stringify([
-      st?.preset.id,
-      st?.variants.map((v) => [v.id, v.name, v.settings.colors.accent]),
-    ]);
 
   // --- data -------------------------------------------------------------------------------------------------------------
   let lastVersion = 0;
@@ -285,16 +261,27 @@ export function mountMusicOverlayPage(root: HTMLElement) {
   const HUES = new Set([
     'colors.accent',
     'colors.text',
+    'colors.artist',
     'colors.muted',
     'colors.background',
   ]);
+  const getPath = (obj: Record<string, unknown>, path: string) =>
+    path
+      .split('.')
+      .reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], obj);
   const change = (path: string, value: unknown, repaint = true) =>
     changeAll([[path, value]], repaint);
   async function changeAll(updates: [string, unknown][], repaint = true) {
     const s = selected();
     if (!s || !st) return;
     const next = structuredClone(s.settings) as MoSettings;
-    for (const [path, value] of updates) {
+    for (const [path, raw] of updates) {
+      // A choice made by a button carries text: a numeric setting gets its number back.
+      const value =
+        typeof getPath(next as unknown as Record<string, unknown>, path) ===
+          'number' && typeof raw === 'string'
+          ? Number(raw)
+          : raw;
       setPath(next as unknown as Record<string, unknown>, path, value);
       // A colour changed by hand: the palette becomes « Perso ».
       if (HUES.has(path)) next.palette = 'custom';
@@ -608,12 +595,28 @@ export function mountMusicOverlayPage(root: HTMLElement) {
         ...s.settings.colors,
         accent: c.accent,
         text: c.text,
+        artist: c.artist,
         muted: c.muted,
         background: c.background,
       };
       void changeAll([
         ['colors', colors],
         ['palette', pal.dataset.palette!],
+        // The request tab in the palette's accent.
+        ['request_tab.background', c.accent],
+        ['request_tab.text', c.on_accent],
+      ]);
+      return;
+    }
+    const look = t.closest<HTMLElement>('[data-look]');
+    if (look) {
+      const r = READABILITY[look.dataset.look!];
+      if (!r) return;
+      void changeAll([
+        ...Object.entries(r.colors).map(
+          ([k, v]) => [`colors.${k}`, v] as [string, unknown],
+        ),
+        ['palette', 'custom'],
       ]);
       return;
     }

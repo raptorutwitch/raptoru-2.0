@@ -165,3 +165,162 @@ test('Overlay musique: the OBS page follows the real track, shown / hidden and r
   await api(admin, '/api/spotify/overlays/active', { id: 'clean' });
   await Promise.all([obs.close(), admin.close()]);
 });
+
+test('Overlay musique editor: open sections stay open, focus, slider and scroll kept while it saves; the request tab in the preview; variants kept', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const page = await browser.newPage({
+    viewport: { width: 1600, height: 920 },
+  });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  const API = '/api/spotify/overlays';
+  type Settings = Record<string, unknown> & {
+    font?: string;
+    weight?: string;
+  };
+  type St = {
+    variants: { id: string; name: string; settings: Settings }[];
+    builtins: { id: string; settings: Settings }[];
+  };
+  const clean = async () => {
+    for (const v of (await api<St>(page, API)).variants)
+      await api(page, `${API}/variant/delete`, { id: v.id });
+  };
+  await clean();
+  await page.goto('/?p=music-overlay');
+  await expect(page.locator('.mox-sethead')).toBeVisible({ timeout: 20_000 });
+  await page.locator('[data-pick="jeu"]').click();
+  await expect(page.locator('.mox-sethead h2')).toHaveText('Jeu chargé');
+
+  const set = page.locator('[data-z="set"]');
+  const saved = page.locator('.mox-saved');
+  const section = (name: string) =>
+    set.locator('details.mox-adv', {
+      has: page.locator('summary', { hasText: name }),
+    });
+  const openOnes = () =>
+    set.locator('details.mox-adv[open] > summary').allTextContents();
+  const FOUR = [
+    'Couleurs en détail',
+    'Typographie',
+    'Disposition',
+    'Animation',
+  ];
+  // Several sections open at once.
+  for (const n of FOUR) await section(n).locator('summary').click();
+  expect((await openOnes()).sort()).toEqual([...FOUR].sort());
+
+  // 1. A choice on a model: « Mon Jeu chargé » is created and saved — the sections stay open.
+  await section('Typographie')
+    .locator('[data-seg="weight"][data-v="black"]')
+    .click();
+  await expect(page.locator('.mox-sethead h2')).toHaveText('Mon Jeu chargé');
+  await expect(saved).toContainText('Enregistré', { timeout: 8_000 });
+  expect((await openOnes()).sort()).toEqual([...FOUR].sort());
+
+  // 2. A list: its value and its focus stay through the save.
+  const font = section('Typographie').locator('select[data-pick-set="font"]');
+  await font.focus(); // as a click on the list does (selectOption alone does not focus)
+  await font.selectOption('condensee');
+  await expect(saved).toContainText('Enregistré', { timeout: 8_000 });
+  await page.waitForTimeout(600);
+  await expect(font).toBeFocused();
+  await expect(font).toHaveValue('condensee');
+
+  // 3. A slider held: six steps one after another, the saves in between never take it away.
+  const ts = section('Typographie').locator('input[data-num="title_scale"]');
+  await ts.focus();
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(260);
+  }
+  await expect(saved).toContainText('Enregistré', { timeout: 8_000 });
+  await page.waitForTimeout(600);
+  await expect(ts).toBeFocused();
+  await expect(ts).toHaveValue('140');
+
+  // 4. A colour, the panel scrolled: the scroll does not move, the sections stay open, the preview follows.
+  const artist = section('Couleurs en détail').locator(
+    'input[data-color="colors.artist"]',
+  );
+  await artist.scrollIntoViewIfNeeded();
+  const top = await set.evaluate((e) => e.scrollTop);
+  expect(top).toBeGreaterThan(0);
+  await artist.fill('#ffcc00');
+  await expect(saved).toContainText('Enregistré', { timeout: 8_000 });
+  await page.waitForTimeout(600);
+  expect(await set.evaluate((e) => e.scrollTop)).toBe(top);
+  expect((await openOnes()).sort()).toEqual([...FOUR].sort());
+  const frame = page.frameLocator('.mox-screen iframe');
+  await expect
+    .poll(() =>
+      frame
+        .locator('.mo-anchor')
+        .evaluate((e) =>
+          (e as HTMLElement).style.getPropertyValue('--mo-artist'),
+        ),
+    )
+    .toBe('rgba(255,204,0,1)');
+
+  // 5. Readability in one click: « Contraste maximal » applies, nothing closes.
+  await set.getByRole('button', { name: 'Contraste maximal' }).click();
+  await expect(saved).toContainText('Enregistré', { timeout: 8_000 });
+  expect((await openOnes()).sort()).toEqual([...FOUR].sort());
+
+  // 6. The request tab, in the preview (demo: never sent to the stream): out with the name, absent for a personal track.
+  await page.getByRole('button', { name: 'Démo' }).click();
+  await page.locator('[data-demo="request"]').click();
+  await expect(frame.locator('.mo-tabclip.is-out')).toHaveCount(1, {
+    timeout: 5_000,
+  });
+  await expect(frame.locator('.mo-tab')).toContainText('@Viewer_Lab');
+  await expect(frame.locator('.mo .mo-req')).toHaveCount(0); // never also in the text
+  await page.locator('[data-demo="normal"]').click();
+  await expect(frame.locator('.mo-tabclip.is-out')).toHaveCount(0, {
+    timeout: 5_000,
+  });
+
+  // (The shell's TTS stage is not served by this test stack: its import error is not the editor's.)
+  expect(errors.filter((e) => !e.includes('/tts-lab/'))).toEqual([]);
+  // 7. Saved: after a reload, the variant holds every change; the model is untouched.
+  await page.reload();
+  await expect(page.locator('.mox-sethead')).toBeVisible({ timeout: 20_000 });
+  let st = await api<St>(page, API);
+  const v = st.variants.find((x) => x.name === 'Mon Jeu chargé')!;
+  const jeu = st.builtins.find((b) => b.id === 'jeu')!.settings;
+  expect(v.settings).toMatchObject({
+    weight: 'black',
+    font: 'condensee',
+    title_scale: 140,
+    colors: { opacity: 90, text: '#ffffff' },
+  });
+  expect(jeu.weight).toBe('bold');
+
+  // 8. Rename, duplicate, back to the defaults.
+  await page.locator('.mox-var', { hasText: 'Mon Jeu chargé' }).click();
+  page.once('dialog', (d) => void d.accept('Mon bandeau'));
+  await set.getByRole('button', { name: 'Renommer' }).click();
+  await expect(page.locator('.mox-sethead h2')).toHaveText('Mon bandeau');
+  await set.getByRole('button', { name: 'Dupliquer' }).click();
+  await expect(page.locator('.mox-sethead h2')).toHaveText(
+    'Mon bandeau (copie)',
+  );
+  await set.getByRole('button', { name: 'Valeurs par défaut' }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Revenir aux valeurs par défaut' })
+    .click();
+  await expect
+    .poll(async () => {
+      st = await api<St>(page, API);
+      return st.variants.find((x) => x.name === 'Mon bandeau (copie)')
+        ?.settings;
+    })
+    .toEqual(jeu);
+  expect(st.variants.find((x) => x.name === 'Mon bandeau')!.settings.font).toBe(
+    'condensee',
+  );
+  await clean();
+});

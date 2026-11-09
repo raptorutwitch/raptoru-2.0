@@ -40,6 +40,8 @@ const SPACE = { tight: 0.78, normal: 1, airy: 1.3 };
 /** Cover sizes (em) per archetype. */
 const COVER = {
   minimal: { small: 1.7, medium: 2, large: 2.4 },
+  /** Flottant in two lines: the cover spans both. */
+  stack: { small: 2.3, medium: 2.7, large: 3.1 },
   clean: { small: 3.3, medium: 4.2, large: 5.3 },
   glass: { small: 3.8, medium: 4.8, large: 6 },
   neon: { small: 3.1, medium: 3.9, large: 4.8 },
@@ -55,6 +57,8 @@ const SHADOW = [
   '0 18px 50px rgba(0,0,0,.5)',
 ];
 const ORIENTABLE = new Set(['clean', 'glass', 'focus']);
+/** Scrolling speed of a long text, px of the 1920 × 1080 canvas per second (× the size). */
+const MQ_SPEED = { slow: 26, normal: 40, fast: 62 };
 
 const esc = (v) =>
   String(v ?? '').replace(
@@ -91,6 +95,16 @@ const lum = (hex) => {
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 };
 const onColor = (hex) => (lum(hex) > 0.42 ? '#141018' : '#ffffff');
+/** The text's shadow: none, soft, strong, an outline (dark under a light text, light under a dark one). */
+const textShadow = (c) => {
+  const k = lum(c.text) > 0.4 ? '0,0,0' : '255,255,255';
+  return [
+    'none',
+    `0 1px 2px rgba(${k},.55)`,
+    `0 1px 2px rgba(${k},.8), 0 0 10px rgba(${k},.45)`,
+    `0 0 1px rgba(${k},1), 0 0 2px rgba(${k},.95), 0 1px 3px rgba(${k},.9), 0 0 8px rgba(${k},.5)`,
+  ][c.text_shadow];
+};
 
 /** The cover's accent (once per cover; the palette's when it cannot be read — e.g. a CDN refusing CORS). */
 const accents = new Map();
@@ -152,11 +166,19 @@ let wasVisible = false;
 let shellKey = '';
 let bodyKey = '';
 let timeTicker = null;
+let coverKey = '';
 
 const anchor = document.createElement('div');
 anchor.className = 'mo-anchor';
 const center = document.createElement('div');
 center.className = 'mo-center';
+// The request tab: outside the widget (never cut by its overflow), behind it, in a clip at its edge it slides out of.
+const tabclip = document.createElement('div');
+tabclip.className = 'mo-tabclip';
+const tab = document.createElement('div');
+tab.className = 'mo-tab';
+tabclip.append(tab);
+center.append(tabclip);
 anchor.append(center);
 stage.append(anchor);
 
@@ -228,14 +250,16 @@ function paint(s) {
   const vars = {
     '--mo-accent': acc,
     '--mo-on-accent': onColor(acc),
-    '--mo-text': c.text,
-    '--mo-muted': c.muted,
+    '--mo-text': rgba(c.text, c.text_opacity / 100),
+    '--mo-artist': rgba(c.artist, c.text_opacity / 100),
+    '--mo-muted': rgba(c.muted, c.text_opacity / 100),
+    '--mo-tshadow': textShadow(c),
     '--mo-bgc': c.background,
     '--mo-bg': c.gradient
       ? `linear-gradient(135deg, ${rgba(c.background, bg)}, ${rgba(shade, bg)})`
       : rgba(c.background, bg),
     '--mo-glass-fallback': `linear-gradient(135deg, ${acc}, ${shade})`,
-    '--mo-line': rgba(c.text, 0.14),
+    '--mo-line': rgba(c.text, c.border_opacity / 100),
     '--mo-trackc': rgba(c.text, 0.16),
     '--mo-rulec': rgba(c.text, 0.28),
     '--mo-scrim': rgba(c.background, 0.82),
@@ -254,7 +278,15 @@ function paint(s) {
     '--mo-dur': motionOk() ? `${s.animation.duration_ms}ms` : '1ms',
     '--mo-dist': `${dist}px`,
     '--mo-scl': scl,
-    '--mo-cover': `${COVER[s.archetype][s.cover.size]}em`,
+    '--mo-cover': `${COVER[layoutOf(s) === 'stack' ? 'stack' : s.archetype][s.cover.size]}em`,
+    '--mo-tab-bg': rgba(s.request_tab.background, s.request_tab.opacity / 100),
+    '--mo-tab-fg': s.request_tab.text,
+    '--mo-tab-r': `${s.request_tab.radius}px`,
+    '--mo-tab-fs': s.request_tab.size === 'small' ? '0.68em' : '0.8em',
+    '--mo-tab-dur':
+      s.request_tab.animate && motionOk()
+        ? `${s.request_tab.duration_ms}ms`
+        : '0ms',
     '--mo-cover-r':
       s.cover.shape === 'circle'
         ? '50%'
@@ -273,11 +305,18 @@ function paint(s) {
 }
 
 // --- the widget's HTML ------------------------------------------------------------------------------------------------
+/** Flottant's composition (the compact form of the other models is always one line). */
+const layoutOf = (s) => (s.archetype === 'minimal' ? s.layout : 'line');
+
 function parts(s, l, form) {
   const t = l?.track;
   const paused = l?.state === 'paused';
   const stale = l?.state === 'stale';
-  const req = l?.request && s.show.request_badge ? l.request : null;
+  // With the tab on, the request is told by the tab only (never also in the text's flow).
+  const req =
+    l?.request && s.show.request_badge && !s.request_tab.show
+      ? l.request
+      : null;
   const by = req?.by && s.show.requester ? req.by : null;
   // A request: « ♥ Demande de X » (the pill: « ♥ X »); X only when its name is known and shown.
   const chip = req
@@ -342,6 +381,15 @@ function body(arch, s, p) {
   if (p.form === 'idle' || p.form === 'compact-idle') return idleBody();
   switch (arch) {
     case 'minimal': {
+      if (layoutOf(s) === 'stack') {
+        // Two lines: the title, then the artist, each scrolling on its own when too long.
+        const lead =
+          p.cover ||
+          (p.paused && s.show.pause_state
+            ? `<span class="mo-note">${ICON.pause}</span>`
+            : '<span class="mo-mark"></span>');
+        return `<div class="mo-body">${lead}<div class="mo-text">${p.title}${p.artist}</div>${p.pill}</div>${p.hair}`;
+      }
       const line = `${p.title ? `<b>${esc(p.t.title)}</b>` : ''}${p.title && p.artist ? '<i>—</i>' : ''}${p.artist ? `<em>${esc((p.t.artists ?? []).join(', '))}</em>` : ''}`;
       const lead =
         p.cover ||
@@ -393,6 +441,8 @@ function shell(arch, s, p, form) {
   el.dataset.long = CARD ? 'ellipsis' : s.long_text;
   el.dataset.align = s.align;
   el.dataset.orient = ORIENTABLE.has(a) ? s.orientation : 'horizontal';
+  el.dataset.layout =
+    compact && s.archetype !== 'minimal' ? 'line' : layoutOf(s);
   el.classList.toggle('has-border', s.colors.border);
   el.classList.toggle('no-cover', !s.cover.show);
   el.classList.toggle('is-ambient', s.animation.ambient && motionOk());
@@ -403,7 +453,7 @@ function shell(arch, s, p, form) {
       s.colors.opacity === 0 && s.colors.gradient,
     );
   }
-  if (compact) {
+  if (compact && s.archetype !== 'minimal') {
     el.style.width = `min(var(--mo-w), ${Math.round(Math.min(s.width, 440) * SIZE[s.size])}px)`;
     el.style.setProperty('--mo-cover', `${COVER.minimal[s.cover.size]}em`);
   }
@@ -474,21 +524,110 @@ function tickTime() {
   }
 }
 
-/** A text longer than its room: it scrolls (once measured), wraps or ends in « … » as the preset says. */
-function fitTexts(root) {
-  if (root.dataset.long !== 'scroll') return;
-  for (const el of root.querySelectorAll('.mo-fit')) {
-    el.classList.remove('is-marquee');
-    const span = el.firstElementChild;
-    if (!span || span.scrollWidth - el.clientWidth <= 4) continue;
-    el.classList.add('is-marquee');
-    const over = span.scrollWidth - el.clientWidth;
-    el.style.setProperty('--mo-shift', `${-over}px`);
-    el.style.setProperty(
-      '--mo-mq',
-      `${Math.max(9, over / 38 + 6).toFixed(1)}s`,
-    );
+/**
+ * A text longer than its room (measured): it scrolls, wraps or ends in « … » as the preset says. Scrolling is ONE
+ * animation per text, started when the text is built (never again at a mere refresh of the state):
+ * - back and forth: the start shown, a pause, a steady glide to the end, a pause, a smooth return, again;
+ * - continuous: a ticker, the text followed by its copy after a gap, so the loop never jumps.
+ * Less motion asked by the system: an ellipsis instead. A text that fits never moves.
+ */
+function fitTexts(root, s) {
+  for (const el of root.querySelectorAll('.mo-fit')) marquee(el, s, root);
+}
+
+function marquee(el, s, root) {
+  const span = el.firstElementChild;
+  if (!span) return;
+  el._mq?.cancel();
+  el._mq = null;
+  if (el.dataset.orig !== undefined) {
+    span.innerHTML = el.dataset.orig;
+    delete el.dataset.orig;
   }
+  el.classList.remove('is-marquee', 'is-loop', 'is-clip');
+  if (root.dataset.long !== 'scroll' || el.scrollWidth - el.clientWidth <= 2)
+    return;
+  if (!motionOk() || !span.animate) {
+    el.classList.add('is-clip');
+    return;
+  }
+  const speed = MQ_SPEED[s.marquee.speed] * SIZE[s.size];
+  el.classList.add('is-marquee');
+  if (s.marquee.mode === 'loop') {
+    el.classList.add('is-loop');
+    el.dataset.orig = span.innerHTML;
+    span.innerHTML = `<span class="mo-mq">${el.dataset.orig}</span><span class="mo-mq" aria-hidden="true">${el.dataset.orig}</span>`;
+    const dist = span.firstElementChild.getBoundingClientRect().width;
+    el._mq = span.animate(
+      [{ transform: 'translateX(0)' }, { transform: `translateX(${-dist}px)` }],
+      { duration: (dist / speed) * 1000, iterations: Infinity, delay: 1500 },
+    );
+    return;
+  }
+  const over = span.offsetWidth - el.clientWidth;
+  const go = (over / speed) * 1000;
+  const back = Math.max(1100, go * 0.6);
+  const [rest, end] = [1800, 1300];
+  const T = rest + go + end + back;
+  el._mq = span.animate(
+    [
+      { transform: 'translateX(0)', offset: 0 },
+      {
+        transform: 'translateX(0)',
+        offset: rest / T,
+        easing: 'cubic-bezier(.4,0,.6,1)',
+      },
+      { transform: `translateX(${-over}px)`, offset: (rest + go) / T },
+      {
+        transform: `translateX(${-over}px)`,
+        offset: (rest + go + end) / T,
+        easing: 'cubic-bezier(.4,0,.3,1)',
+      },
+      { transform: 'translateX(0)', offset: 1 },
+    ],
+    { duration: T, iterations: Infinity },
+  );
+}
+
+// --- the request tab --------------------------------------------------------------------------------------------------
+let tabKey = null;
+let tabTimer = null;
+/**
+ * The tab follows the request of the track shown: out (after `delay`, the strip first) when there is one, in when
+ * there is none; another request: in, then out with the new name. Only from `live.request` (Core's exact attribution).
+ */
+function syncTab(s, l, form, delay) {
+  const t = s.request_tab;
+  tabclip.dataset.side = t.side;
+  tabclip.dataset.align = t.align;
+  const on =
+    t.show &&
+    s.show.request_badge &&
+    !!l?.request &&
+    hasTrack(l) &&
+    (form === 'full' || form === 'compact');
+  const by = on && s.show.requester && l.request.by ? l.request.by : '';
+  const key = on ? `${l.gen}|${by}` : null;
+  if (key === tabKey) return;
+  tabKey = key;
+  clearTimeout(tabTimer);
+  const out = () => {
+    tab.innerHTML = by
+      ? `<span>Demandé par</span><b>@${esc(by)}</b>`
+      : '<b>Demande viewer</b>';
+    void tab.offsetWidth;
+    tabclip.classList.add('is-out');
+  };
+  const dur = t.animate && motionOk() ? t.duration_ms : 0;
+  if (tabclip.classList.contains('is-out')) {
+    tabclip.classList.remove('is-out');
+    if (key) tabTimer = setTimeout(out, dur + 80);
+  } else if (key) tabTimer = setTimeout(out, delay);
+}
+function hideTab() {
+  clearTimeout(tabTimer);
+  tabKey = null;
+  tabclip.classList.remove('is-out');
 }
 
 // --- the frame --------------------------------------------------------------------------------------------------------
@@ -518,14 +657,18 @@ function update() {
   const form = decideForm(now);
   if (form === 'hidden') {
     anchor.classList.remove('is-shown');
+    hideTab();
     clearInterval(timeTicker);
     timeTicker = null;
     return;
   }
   const p = parts(s, l, form);
   const sk = `${form === 'compact' || form === 'compact-idle' ? 'c' : 'f'}|${JSON.stringify(s)}`;
-  const bk = `${form}|${l?.gen}|${p.t?.title}|${p.t?.artists}|${p.t?.album}|${l?.cover}|${l?.state}|${p.req ? `r:${p.by}` : ''}`;
+  // The cover is not in the key: arriving a moment after the title, it is put in place (no rebuild, no restart).
+  const bk = `${form}|${l?.gen}|${p.t?.title}|${p.t?.artists}|${p.t?.album}|${l?.state}|${p.req ? `r:${p.by}` : ''}`;
   const changedTrack = bodyKey && bk.split('|')[1] !== bodyKey.split('|')[1];
+  const appearing = !anchor.classList.contains('is-shown') || pulsed;
+  let built = false;
   let root = center.querySelector(':scope > .mo');
   if (sk !== shellKey || !root) {
     // A new preset or form: built at once (the editor's changes show without an animation).
@@ -533,7 +676,9 @@ function update() {
     el.innerHTML = body(form === 'compact' ? 'minimal' : s.archetype, s, p);
     const old = root;
     const swap = old && shellKey && shellKey[0] !== sk[0] && motionOk();
-    center.replaceChildren(el);
+    if (old) old.replaceWith(el);
+    else center.append(el);
+    built = true;
     if (swap) {
       // Compact ↔ full (hybrid): one form fades into the other.
       el.classList.add('mo-swap-in');
@@ -567,10 +712,32 @@ function update() {
       setTimeout(() => oldBody.remove(), s.animation.duration_ms + 80);
     }
     bodyKey = bk;
+    built = true;
+  } else if (coverKey !== `${l?.cover}`) {
+    const old = root.querySelector(
+      ':scope > .mo-body:not(.mo-swap-out) .mo-cover',
+    );
+    if (old && p.cover) {
+      const t = document.createElement('div');
+      t.innerHTML = p.cover;
+      old.replaceWith(t.firstElementChild);
+    }
   }
+  coverKey = `${l?.cover}`;
   stateClasses(root, s, p);
   glassLayers(root, l);
-  if (!anchor.classList.contains('is-shown') || pulsed) {
+  if (pulsed) hideTab();
+  syncTab(
+    s,
+    l,
+    form,
+    appearing
+      ? s.animation.duration_ms * 0.6
+      : changedTrack
+        ? s.animation.duration_ms * 0.5
+        : 0,
+  );
+  if (appearing) {
     if (pulsed && motionOk()) {
       // « Tester l'animation »: the entrance again, from hidden.
       anchor.classList.remove('is-shown');
@@ -584,9 +751,14 @@ function update() {
     requestAnimationFrame(() => anchor.classList.add('is-shown'));
   }
   syncProgress();
-  requestAnimationFrame(() => fitTexts(root));
+  if (built) requestAnimationFrame(() => fitTexts(root, s));
   if (CARD) fitCard(root);
 }
+// The fonts loaded after the first measure: measured again (a text may now fit, or not).
+document.fonts?.ready.then(() => {
+  const root = center.querySelector(':scope > .mo');
+  if (root && settings()) fitTexts(root, settings());
+});
 
 /** Gallery card: the widget alone, centred, scaled to fit the card (its layout size, never a transformed one). */
 function fitCard(root) {

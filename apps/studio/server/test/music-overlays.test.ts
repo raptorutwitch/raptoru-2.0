@@ -61,6 +61,62 @@ describe('presets', () => {
     expect(OverlaySettings.safeParse(settings).success).toBe(true);
   });
 
+  it('a variant saved before the new options (v1): kept as it was, the new options take their defaults, nothing « repaired »', async () => {
+    const d = await dir();
+    const old = structuredClone(builtin('jeu')!.settings) as Record<
+      string,
+      unknown
+    >;
+    const colors = old.colors as Record<string, unknown>;
+    // The v1 shape: no artist colour (the artist had the secondary one), no text opacity / shadow / border strength,
+    // no layout, no scrolling mode, no request tab.
+    for (const k of ['artist', 'text_opacity', 'text_shadow', 'border_opacity'])
+      delete colors[k];
+    colors.muted = '#a1b2c3';
+    colors.opacity = 37;
+    for (const k of ['layout', 'marquee', 'request_tab']) delete old[k];
+    await writeFile(
+      join(d, 'music-overlays.json'),
+      JSON.stringify({
+        v: 1,
+        visible: true,
+        active: 'v-0a1b2c3d',
+        variants: [
+          {
+            id: 'v-0a1b2c3d',
+            name: 'Ma vieille',
+            base: 'jeu',
+            settings: old,
+            updated_at: '2026-11-09T10:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    const st = await OverlayStore.open(d);
+    expect(st.repaired).toEqual([]);
+    const v = st.onAir.settings;
+    expect(v.colors.opacity).toBe(37);
+    expect(v.colors.muted).toBe('#a1b2c3');
+    expect(v.colors.artist).toBe('#a1b2c3'); // its artist keeps the colour it had
+    expect(v.colors).toMatchObject({
+      text_shadow: 0,
+      text_opacity: 100,
+      border_opacity: 14,
+    });
+    // Its former look: one line, the request in the text (the new tab one switch away, with the model's colours).
+    expect(v.layout).toBe('line');
+    expect(v.request_tab).toEqual({
+      ...builtin('jeu')!.settings.request_tab,
+      show: false,
+    });
+    expect(v.marquee).toEqual({ mode: 'bounce', speed: 'normal' });
+    const file = JSON.parse(
+      await readFile(join(d, 'music-overlays.json'), 'utf8'),
+    );
+    expect(file.v).toBe(2);
+    expect(file.variants[0].name).toBe('Ma vieille');
+  });
+
   it('variants: created, renamed, duplicated, reset, deleted; saved across a restart; the one on air never vanishes', async () => {
     const d = await dir();
     const st = await OverlayStore.open(d);

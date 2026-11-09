@@ -43,6 +43,8 @@ export const OverlaySettings = z.strictObject({
   /** Which side the cover sits on, and the text's alignment. */
   align: z.enum(['start', 'center', 'end']),
   orientation: z.enum(['horizontal', 'vertical']),
+  /** Flottant (minimal): « titre — artiste » on one line, or the title over the artist (a compact two-line strip). */
+  layout: z.enum(['line', 'stack']),
   radius: z.number().int().min(0).max(48),
   spacing: z.enum(['tight', 'normal', 'airy']),
   cover: z.strictObject({
@@ -62,12 +64,21 @@ export const OverlaySettings = z.strictObject({
   ]),
   colors: z.strictObject({
     accent: Hex,
+    /** The title (and the main text). */
     text: Hex,
+    artist: Hex,
+    /** Secondary text: « En cours », album, time. */
     muted: Hex,
     background: Hex,
     /** Background opacity, %. */
     opacity: z.number().int().min(0).max(100),
+    /** Text opacity, % (independent of the background's; never below 50: the text never vanishes). */
+    text_opacity: z.number().int().min(50).max(100),
+    /** 0 none, 1 soft, 2 strong, 3 outline (a game behind a transparent background). */
+    text_shadow: z.number().int().min(0).max(3),
     border: z.boolean(),
+    /** The border's strength, %. */
+    border_opacity: z.number().int().min(5).max(100),
     /** 0 none … 3 deep. */
     shadow: z.number().int().min(0).max(3),
     gradient: z.boolean(),
@@ -80,6 +91,27 @@ export const OverlaySettings = z.strictObject({
   artist_scale: z.number().int().min(70).max(160),
   weight: z.enum(['regular', 'bold', 'black']),
   long_text: z.enum(['scroll', 'wrap', 'ellipsis']),
+  /** A text too long for its room (long_text « scroll »): back and forth with pauses, or a continuous ticker. */
+  marquee: z.strictObject({
+    mode: z.enum(['bounce', 'loop']),
+    speed: z.enum(['slow', 'normal', 'fast']),
+  }),
+  /**
+   * A confirmed viewer request: a small tab sliding out from behind the strip (« Demandé par @pseudo »), never in the
+   * text's flow. Only from Core's exact attribution (the page gets `request` only then).
+   */
+  request_tab: z.strictObject({
+    show: z.boolean(),
+    side: z.enum(['top', 'bottom']),
+    align: z.enum(['start', 'center', 'end']),
+    size: z.enum(['small', 'normal']),
+    background: Hex,
+    text: Hex,
+    opacity: z.number().int().min(30).max(100),
+    radius: z.number().int().min(0).max(16),
+    animate: z.boolean(),
+    duration_ms: z.number().int().min(150).max(1200),
+  }),
   show: z.strictObject({
     label: z.boolean(),
     title: z.boolean(),
@@ -114,14 +146,16 @@ export type OverlaySettings = z.infer<typeof OverlaySettings>;
 
 export const PALETTES: Record<
   Exclude<OverlaySettings['palette'], 'custom'>,
-  { label: string } & Pick<
+  { label: string; on_accent: string } & Pick<
     OverlaySettings['colors'],
-    'accent' | 'text' | 'muted' | 'background'
+    'accent' | 'text' | 'artist' | 'muted' | 'background'
   >
 > = {
   nuit: {
     label: 'Nuit',
     accent: '#34d399',
+    on_accent: '#0d1512',
+    artist: '#d9d3ea',
     text: '#f5f3ff',
     muted: '#b8b0d0',
     background: '#120f1d',
@@ -129,6 +163,8 @@ export const PALETTES: Record<
   aurore: {
     label: 'Aurore',
     accent: '#f472b6',
+    on_accent: '#1f0a16',
+    artist: '#f3d9e6',
     text: '#fff7fb',
     muted: '#e5c3d6',
     background: '#2a1030',
@@ -136,6 +172,8 @@ export const PALETTES: Record<
   givre: {
     label: 'Givre',
     accent: '#7dd3fc',
+    on_accent: '#06131d',
+    artist: '#d4e5f2',
     text: '#f0f9ff',
     muted: '#b5cde0',
     background: '#0b1726',
@@ -143,6 +181,8 @@ export const PALETTES: Record<
   braise: {
     label: 'Braise',
     accent: '#fb923c',
+    on_accent: '#1f0d03',
+    artist: '#f4dcc8',
     text: '#fff7ed',
     muted: '#e8c4a8',
     background: '#1f0f08',
@@ -150,6 +190,8 @@ export const PALETTES: Record<
   menthe: {
     label: 'Menthe',
     accent: '#a3e635',
+    on_accent: '#0f1a04',
+    artist: '#dde9cc',
     text: '#f7fee7',
     muted: '#c6d6b0',
     background: '#0f1a0c',
@@ -157,17 +199,24 @@ export const PALETTES: Record<
   papier: {
     label: 'Papier',
     accent: '#e11d48',
+    on_accent: '#ffffff',
+    artist: '#3a3632',
     text: '#1c1917',
     muted: '#57534e',
     background: '#faf7f2',
   },
 };
 
-/** A palette's four colours (never its label: the setting is strict). */
+/** A palette's colours (never its label: the setting is strict). */
 const hues = (k: keyof typeof PALETTES) => {
-  const { accent, text, muted, background } = PALETTES[k];
-  return { accent, text, muted, background };
+  const { accent, text, artist, muted, background } = PALETTES[k];
+  return { accent, text, artist, muted, background };
 };
+/** The request tab in a palette's accent. */
+const tabOf = (k: keyof typeof PALETTES) => ({
+  background: PALETTES[k].accent,
+  text: PALETTES[k].on_accent,
+});
 
 const BASE: OverlaySettings = {
   archetype: 'clean',
@@ -177,6 +226,7 @@ const BASE: OverlaySettings = {
   margin: 48,
   align: 'start',
   orientation: 'horizontal',
+  layout: 'line',
   radius: 16,
   spacing: 'normal',
   cover: { show: true, size: 'medium', shape: 'rounded' },
@@ -184,7 +234,10 @@ const BASE: OverlaySettings = {
   colors: {
     ...hues('nuit'),
     opacity: 82,
+    text_opacity: 100,
+    text_shadow: 0,
     border: true,
+    border_opacity: 14,
     shadow: 2,
     gradient: false,
     auto_accent: false,
@@ -194,6 +247,18 @@ const BASE: OverlaySettings = {
   artist_scale: 100,
   weight: 'bold',
   long_text: 'scroll',
+  marquee: { mode: 'bounce', speed: 'normal' },
+  request_tab: {
+    show: false,
+    side: 'bottom',
+    align: 'start',
+    size: 'normal',
+    ...tabOf('nuit'),
+    opacity: 100,
+    radius: 8,
+    animate: true,
+    duration_ms: 420,
+  },
   show: {
     label: true,
     title: true,
@@ -221,10 +286,18 @@ const BASE: OverlaySettings = {
   },
 };
 
+type Nested =
+  | 'cover'
+  | 'colors'
+  | 'show'
+  | 'animation'
+  | 'display'
+  | 'marquee'
+  | 'request_tab';
 const over = (
-  o: Partial<
-    Omit<OverlaySettings, 'cover' | 'colors' | 'show' | 'animation' | 'display'>
-  > & {
+  o: Partial<Omit<OverlaySettings, Nested>> & {
+    marquee?: Partial<OverlaySettings['marquee']>;
+    request_tab?: Partial<OverlaySettings['request_tab']>;
     cover?: Partial<OverlaySettings['cover']>;
     colors?: Partial<OverlaySettings['colors']>;
     show?: Partial<OverlaySettings['show']>;
@@ -239,6 +312,8 @@ const over = (
   show: { ...BASE.show, ...o.show },
   animation: { ...BASE.animation, ...o.animation },
   display: { ...BASE.display, ...o.display },
+  marquee: { ...BASE.marquee, ...o.marquee },
+  request_tab: { ...BASE.request_tab, ...o.request_tab },
 });
 
 export interface Builtin {
@@ -257,14 +332,21 @@ export const BUILTINS: Builtin[] = [
       'Une pastille discrète, toujours là sans gêner : titre et artiste sur une ligne.',
     settings: over({
       archetype: 'minimal',
-      width: 420,
+      width: 440,
       radius: 48,
       position: 'top-right',
       margin: 36,
       cover: { size: 'small', shape: 'circle' },
-      colors: { opacity: 70, shadow: 1, border: false },
-      title_scale: 100,
+      colors: {
+        opacity: 84,
+        shadow: 1,
+        border: true,
+        border_opacity: 12,
+        text_shadow: 1,
+      },
+      title_scale: 105,
       show: { label: false, album: false, progress: true, time: false },
+      request_tab: { show: true, side: 'bottom', align: 'end' },
       animation: { enter: 'fade', change: 'crossfade', duration_ms: 420 },
     }),
   },
@@ -293,6 +375,7 @@ export const BUILTINS: Builtin[] = [
         auto_accent: true,
       },
       cover: { size: 'large', shape: 'rounded' },
+      request_tab: tabOf('givre'),
       animation: { enter: 'rise', change: 'crossfade', duration_ms: 700 },
     }),
   },
@@ -314,6 +397,7 @@ export const BUILTINS: Builtin[] = [
         shadow: 2,
       },
       font: 'condensee',
+      request_tab: tabOf('aurore'),
       title_scale: 110,
       weight: 'black',
       animation: {
@@ -383,17 +467,29 @@ export const BUILTINS: Builtin[] = [
     id: 'jeu',
     name: 'Jeu chargé',
     description:
-      'Pour les jeux très visuels : minuscule, en haut, à demi transparent, sans mouvement inutile.',
+      'Pour les jeux très visuels : un petit bandeau contrasté, le titre puis l’artiste, la demande en languette.',
     settings: over({
       archetype: 'minimal',
-      size: 'compact',
-      width: 340,
-      radius: 48,
+      layout: 'stack',
+      width: 380,
+      radius: 12,
       position: 'top-center',
       margin: 18,
-      cover: { show: false, size: 'small', shape: 'circle' },
-      colors: { opacity: 55, shadow: 0, border: false },
+      cover: { show: false, size: 'small', shape: 'rounded' },
+      palette: 'custom',
+      colors: {
+        background: '#0c0a12',
+        text: '#ffffff',
+        artist: '#ddd8ea',
+        opacity: 84,
+        text_shadow: 1,
+        border: true,
+        border_opacity: 14,
+        shadow: 1,
+      },
+      title_scale: 110,
       show: { label: false, progress: false, time: false, album: false },
+      request_tab: { show: true, side: 'bottom', align: 'center' },
       animation: { enter: 'fade', change: 'crossfade', intensity: 'subtle' },
       display: { on_pause: 'hide' },
     }),
@@ -404,41 +500,62 @@ export const builtin = (id: string) => BUILTINS.find((b) => b.id === id);
 
 /**
  * A setting read from disk (any age) → a valid one: each field checked on its own, a missing or invalid field takes the
- * preset's default (an update never breaks a saved variant; the streamer's other choices are kept).
+ * preset's default (an update never breaks a saved variant; the streamer's other choices are kept). `repaired` only
+ * when a saved value was invalid: an option that did not exist yet simply takes its default.
  */
 export function repairSettings(raw: unknown, defaults: OverlaySettings) {
   const shape = OverlaySettings.shape as Record<string, z.ZodType>;
-  const src = (raw && typeof raw === 'object' ? raw : {}) as Record<
-    string,
-    unknown
-  >;
+  const src = migrate(
+    (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>,
+  );
   const out: Record<string, unknown> = {};
   let repaired = false;
+  const check = (field: z.ZodType, v: unknown, def: unknown) => {
+    if (v === undefined) return def;
+    const ok = field.safeParse(v);
+    if (!ok.success) repaired = true;
+    return ok.success ? ok.data : def;
+  };
   for (const [k, def] of Object.entries(defaults)) {
     const field = shape[k]!;
-    let v = src[k];
+    const v = src[k];
     if (def && typeof def === 'object' && !Array.isArray(def)) {
       const inner = (field as unknown as { shape: Record<string, z.ZodType> })
         .shape;
+      if (v !== undefined && (!v || typeof v !== 'object')) repaired = true;
       const s = (v && typeof v === 'object' ? v : {}) as Record<
         string,
         unknown
       >;
       const o: Record<string, unknown> = {};
-      for (const [ik, idef] of Object.entries(def)) {
-        const ok = inner[ik]!.safeParse(s[ik]);
-        o[ik] = ok.success ? ok.data : idef;
-        if (!ok.success) repaired = true;
-      }
-      v = o;
-    } else {
-      const ok = field.safeParse(v);
-      if (!ok.success) repaired = true;
-      v = ok.success ? ok.data : def;
-    }
-    out[k] = v;
+      for (const [ik, idef] of Object.entries(def))
+        o[ik] = check(inner[ik]!, s[ik], idef);
+      out[k] = o;
+    } else out[k] = check(field, v, def);
   }
   return { settings: OverlaySettings.parse(out), repaired };
+}
+
+/**
+ * v1 → v2 (09/11): a saved variant keeps the look it had — its artist in its secondary colour, the text without shadow
+ * at full opacity, the border at its former strength, one line, the request in the text (the tab off: one switch away).
+ */
+function migrate(src: Record<string, unknown>) {
+  const c = src.colors as Record<string, unknown> | undefined;
+  if (!c || typeof c !== 'object' || c.artist !== undefined) return src;
+  const tab = src.request_tab as Record<string, unknown> | undefined;
+  return {
+    layout: 'line',
+    ...src,
+    colors: {
+      text_opacity: 100,
+      text_shadow: 0,
+      border_opacity: 14,
+      ...c,
+      artist: c.muted,
+    },
+    request_tab: tab === undefined ? { show: false } : tab,
+  };
 }
 
 export const Variant = z.strictObject({
@@ -451,7 +568,7 @@ export const Variant = z.strictObject({
 });
 export type Variant = z.infer<typeof Variant>;
 
-const STORE_VERSION = 1;
+const STORE_VERSION = 2;
 
 export interface OverlayState {
   visible: boolean;

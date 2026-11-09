@@ -15,6 +15,7 @@ export interface MoSettings {
   margin: number;
   align: 'start' | 'center' | 'end';
   orientation: 'horizontal' | 'vertical';
+  layout: 'line' | 'stack';
   radius: number;
   spacing: 'tight' | 'normal' | 'airy';
   cover: {
@@ -26,10 +27,14 @@ export interface MoSettings {
   colors: {
     accent: string;
     text: string;
+    artist: string;
     muted: string;
     background: string;
     opacity: number;
+    text_opacity: number;
+    text_shadow: number;
     border: boolean;
+    border_opacity: number;
     shadow: number;
     gradient: boolean;
     auto_accent: boolean;
@@ -39,6 +44,19 @@ export interface MoSettings {
   artist_scale: number;
   weight: 'regular' | 'bold' | 'black';
   long_text: 'scroll' | 'wrap' | 'ellipsis';
+  marquee: { mode: 'bounce' | 'loop'; speed: 'slow' | 'normal' | 'fast' };
+  request_tab: {
+    show: boolean;
+    side: 'top' | 'bottom';
+    align: 'start' | 'center' | 'end';
+    size: 'small' | 'normal';
+    background: string;
+    text: string;
+    opacity: number;
+    radius: number;
+    animate: boolean;
+    duration_ms: number;
+  };
   show: Record<
     | 'label'
     | 'title'
@@ -107,7 +125,9 @@ export interface MoState {
     {
       label: string;
       accent: string;
+      on_accent: string;
       text: string;
+      artist: string;
       muted: string;
       background: string;
     }
@@ -188,6 +208,22 @@ export const DEMOS = {
       position_ms: 9_000,
       cover: cover(20, 350),
       request: { by: 'Viewer_Lab' },
+    },
+  },
+  request_long: {
+    label: 'Pseudo très long',
+    live: {
+      state: 'playing',
+      gen: 106,
+      track: {
+        title: 'Midnight City',
+        artists: ['M83', 'Anthony Gonzalez', 'The Midnight Orchestra'],
+        album: 'Hurry Up, We’re Dreaming',
+        duration_ms: 243_000,
+      },
+      position_ms: 30_000,
+      cover: cover(250, 300),
+      request: { by: 'UnPseudoVraimentTresLongPourTester_42' },
     },
   },
   paused: {
@@ -330,7 +366,7 @@ const segOf = (
     )
     .join('')}</span>`;
 const line = (label: string, ctl: string, hint = '') =>
-  `<div class="mox-row"><span>${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</span>${ctl}</div>`;
+  `<div class="mox-row" data-k="${esc(label)}"><span>${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</span>${ctl}</div>`;
 const range = (
   path: string,
   v: number,
@@ -382,6 +418,99 @@ const SHOWS: [keyof MoSettings['show'], string][] = [
   ['pause_state', 'État pause'],
 ];
 
+// --- Lisibilité ----------------------------------------------------------------------------------------------------------
+
+const SHADOWS = [
+  ['0', 'Aucune'],
+  ['1', 'Douce'],
+  ['2', 'Forte'],
+  ['3', 'Contour'],
+] as const;
+
+const lum = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+};
+/** WCAG contrast ratio of two colours. */
+export const contrast = (a: string, b: string) => {
+  const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m) as [number, number];
+  return (x + 0.05) / (y + 0.05);
+};
+
+/** Quick readability looks: a few clicks to a text that reads on any game. */
+export const READABILITY: Record<
+  string,
+  { label: string; hint: string; colors: Partial<MoSettings['colors']> }
+> = {
+  max: {
+    label: 'Contraste maximal',
+    hint: 'Fond presque noir, texte blanc : se lit sur tout.',
+    colors: {
+      background: '#0b0a10',
+      opacity: 90,
+      text: '#ffffff',
+      artist: '#e2deec',
+      muted: '#b4aec4',
+      text_opacity: 100,
+      text_shadow: 1,
+      border: true,
+      border_opacity: 16,
+    },
+  },
+  light: {
+    label: 'Clair',
+    hint: 'Fond clair, texte foncé : pour un jeu sombre.',
+    colors: {
+      background: '#f6f4f9',
+      opacity: 94,
+      text: '#121016',
+      artist: '#3b3546',
+      muted: '#5d5670',
+      text_opacity: 100,
+      text_shadow: 0,
+      border: true,
+      border_opacity: 10,
+    },
+  },
+  bare: {
+    label: 'Sans fond',
+    hint: 'Aucun fond, texte blanc détouré : le jeu reste visible.',
+    colors: {
+      opacity: 0,
+      text: '#ffffff',
+      artist: '#f1eef7',
+      muted: '#d6d1e2',
+      text_opacity: 100,
+      text_shadow: 3,
+      border: false,
+    },
+  },
+};
+
+/** What makes the text hard to read, in words (null: fine). */
+export function readabilityIssue(s: MoSettings) {
+  const c = s.colors;
+  if (c.opacity >= 50) {
+    if (contrast(c.text, c.background) < 4.5)
+      return 'Le titre ressort mal sur le fond.';
+    if (contrast(c.artist, c.background) < 3)
+      return 'L’artiste ressort mal sur le fond.';
+  } else if (c.text_shadow === 0)
+    return 'Fond très transparent : le texte dépend du jeu derrière. Ajoute une ombre au texte.';
+  if (c.text_opacity < 75) return 'Texte très transparent.';
+  if (
+    s.request_tab.show &&
+    s.request_tab.opacity >= 60 &&
+    contrast(s.request_tab.text, s.request_tab.background) < 4.5
+  )
+    return 'La languette se lit mal (texte et fond trop proches).';
+  return null;
+}
+
 /** Les réglages d'un preset : l'essentiel, puis les détails repliés (la recherche du navigateur les retrouve). */
 export function settingsView(
   st: MoState,
@@ -408,6 +537,14 @@ export function settingsView(
     s.archetype === 'clean' ||
     s.archetype === 'glass' ||
     s.archetype === 'focus';
+  const issue = readabilityIssue(s);
+  const looks = Object.entries(READABILITY)
+    .map(
+      ([k, r]) =>
+        `<button type="button" class="d-btn sm" data-look="${k}" title="${esc(r.hint)}">${esc(r.label)}</button>`,
+    )
+    .join('');
+  const t = s.request_tab;
   const saved =
     save.state === 'saving'
       ? '<span class="mox-saved">Enregistrement…</span>'
@@ -416,17 +553,35 @@ export function settingsView(
         : save.state === 'error'
           ? `<span class="mox-saved bad">${ic('warn')}Non enregistré : ${esc(save.error ?? 'erreur')}</span>`
           : '';
-  const head = `<div class="mox-sethead">
+  const head = `<div class="mox-sethead" data-k="head">
       <div><span class="d-lb">${sel.builtin ? 'Modèle' : 'Ma variante'} · ${esc(ARCH_LABEL[s.archetype])}</span><h2>${esc(sel.name)}</h2></div>
       ${saved}
     </div>
-    ${sel.builtin ? '<p class="mox-note">Modèle prêt à l’emploi. Change un réglage : une variante à ton nom est créée, le modèle reste intact.</p>' : ''}
-    <div class="mox-actions">
+    ${sel.builtin ? '<p class="mox-note" data-k="builtin">Modèle prêt à l’emploi. Change un réglage : une variante à ton nom est créée, le modèle reste intact.</p>' : ''}
+    <div class="mox-actions" data-k="actions">
       ${st.preset.id === sel.id ? '<span class="d-tag ok">À l’antenne</span>' : `<button type="button" class="d-btn pri sm" data-act="mox-onair">${ic('play')}Mettre à l’antenne</button>`}
       <button type="button" class="d-btn ghost sm" data-act="mox-dup">Dupliquer</button>
       ${sel.builtin ? '' : '<button type="button" class="d-btn ghost sm" data-act="mox-rename">Renommer</button><button type="button" class="d-btn ghost sm" data-act="mox-reset">Valeurs par défaut</button><button type="button" class="d-btn ghost sm danger" data-act="mox-delete">Supprimer</button>'}
     </div>`;
-  const essentials = `<section class="mox-grp"><h3>Essentiel</h3>
+  const essentials = `<section class="mox-grp" data-k="ess"><h3>Essentiel</h3>
+      ${
+        s.archetype === 'minimal'
+          ? line(
+              'Composition',
+              segOf(
+                'layout',
+                [
+                  ['line', 'Une ligne'],
+                  ['stack', 'Deux lignes'],
+                ],
+                s.layout,
+              ),
+              s.layout === 'stack'
+                ? 'Le titre, puis l’artiste en dessous.'
+                : '« Titre — Artiste » sur une ligne.',
+            )
+          : ''
+      }
       ${line(
         'Taille',
         segOf(
@@ -483,27 +638,86 @@ export function settingsView(
           s.display.on_idle,
         ),
       )}
-      ${line('Mettre en avant une demande', toggle('display.request_spotlight', s.display.request_spotlight, 'Mettre en avant une demande'), 'Une demande qui commence est toujours annoncée.')}
       ${line('Pochette', toggle('cover.show', s.cover.show, 'Pochette'))}
     </section>
-    <section class="mox-grp"><h3>Couleurs</h3>
+    <section class="mox-grp" data-k="colors"><h3>Couleurs</h3>
       <div class="mox-swatches">${pal}${s.palette === 'custom' ? '<span class="mox-swatch on is-custom"><i></i><span>Perso</span></span>' : ''}</div>
       ${line('Accent tiré de la pochette', toggle('colors.auto_accent', s.colors.auto_accent, 'Accent tiré de la pochette'), 'Change à chaque titre ; sinon l’accent de la palette.')}
     </section>
-    <section class="mox-grp"><h3>Contenu</h3><div class="mox-chks">${shows}</div></section>`;
+    <section class="mox-grp" data-k="read"><h3>Lisibilité</h3>
+      <div class="mox-looks">${looks}</div>
+      ${issue ? `<p class="mox-warn" role="status">${ic('warn')}<span>${esc(issue)}</span><button type="button" class="d-btn sm" data-look="max">Corriger</button></p>` : '<p class="mox-note">Texte lisible sur ce fond.</p>'}
+      ${line('Ombre du texte', segOf('colors.text_shadow', SHADOWS, String(s.colors.text_shadow)), 'Détache le texte du jeu.')}
+      ${line('Opacité du fond', range('colors.opacity', s.colors.opacity, 0, 100, 1, ' %', 'Opacité du fond'))}
+      ${line('Opacité du texte', range('colors.text_opacity', s.colors.text_opacity, 50, 100, 1, ' %', 'Opacité du texte'), 'Indépendante du fond.')}
+    </section>
+    <section class="mox-grp" data-k="req"><h3>Demande viewer</h3>
+      ${line('Languette « Demandé par »', toggle('request_tab.show', t.show, 'Languette de demande'), 'Sort de derrière le bandeau quand la musique est une demande confirmée.')}
+      ${
+        t.show
+          ? `${line(
+              'Côté',
+              segOf(
+                'request_tab.side',
+                [
+                  ['top', 'En haut'],
+                  ['bottom', 'En bas'],
+                ],
+                t.side,
+              ),
+            )}
+      ${line(
+        'Alignement',
+        segOf(
+          'request_tab.align',
+          [
+            ['start', 'Gauche'],
+            ['center', 'Centre'],
+            ['end', 'Droite'],
+          ],
+          t.align,
+        ),
+      )}`
+          : ''
+      }
+      ${line('Mettre en avant une demande', toggle('display.request_spotlight', s.display.request_spotlight, 'Mettre en avant une demande'), 'Une demande qui commence est toujours annoncée.')}
+    </section>
+    <section class="mox-grp" data-k="content"><h3>Contenu</h3><div class="mox-chks">${shows}</div></section>`;
   const adv = (title: string, bodyHtml: string) =>
-    `<details class="mox-adv"><summary>${esc(title)}</summary><div>${bodyHtml}</div></details>`;
-  const advanced = `<h3 class="mox-advh">Réglages avancés</h3>
+    `<details class="mox-adv" data-k="${esc(title)}"><summary>${esc(title)}</summary><div>${bodyHtml}</div></details>`;
+  const advanced = `<h3 class="mox-advh" data-k="advh">Réglages avancés</h3>
     ${adv(
       'Couleurs en détail',
-      `${line('Accent', color('colors.accent', s.colors.accent, 'Accent'))}
-       ${line('Texte', color('colors.text', s.colors.text, 'Texte'))}
-       ${line('Texte secondaire', color('colors.muted', s.colors.muted, 'Texte secondaire'))}
+      `${line('Titre', color('colors.text', s.colors.text, 'Couleur du titre'))}
+       ${line('Artiste', color('colors.artist', s.colors.artist, 'Couleur de l’artiste'))}
+       ${line('Texte secondaire', color('colors.muted', s.colors.muted, 'Texte secondaire'), '« En cours », album, temps.')}
+       ${line('Accent', color('colors.accent', s.colors.accent, 'Accent'))}
        ${line('Fond', color('colors.background', s.colors.background, 'Fond'))}
-       ${line('Opacité du fond', range('colors.opacity', s.colors.opacity, 0, 100, 1, ' %', 'Opacité du fond'))}
        ${line('Dégradé', toggle('colors.gradient', s.colors.gradient, 'Dégradé'))}
        ${line('Bordure', toggle('colors.border', s.colors.border, 'Bordure'))}
-       ${line('Ombre', range('colors.shadow', s.colors.shadow, 0, 3, 1, '', 'Ombre'))}`,
+       ${s.colors.border ? line('Contraste de la bordure', range('colors.border_opacity', s.colors.border_opacity, 5, 100, 1, ' %', 'Contraste de la bordure')) : ''}
+       ${line('Ombre portée', range('colors.shadow', s.colors.shadow, 0, 3, 1, '', 'Ombre portée'))}`,
+    )}
+    ${adv(
+      'Languette de demande',
+      `${line(
+        'Taille',
+        segOf(
+          'request_tab.size',
+          [
+            ['small', 'Petite'],
+            ['normal', 'Normale'],
+          ],
+          t.size,
+        ),
+      )}
+       ${line('Fond', color('request_tab.background', t.background, 'Fond de la languette'))}
+       ${line('Texte', color('request_tab.text', t.text, 'Texte de la languette'))}
+       ${line('Opacité', range('request_tab.opacity', t.opacity, 30, 100, 1, ' %', 'Opacité de la languette'))}
+       ${line('Arrondis', range('request_tab.radius', t.radius, 0, 16, 1, ' px', 'Arrondis de la languette'))}
+       ${line('Animation', toggle('request_tab.animate', t.animate, 'Animation de la languette'), 'Elle glisse hors du bandeau ; sinon elle apparaît.')}
+       ${t.animate ? line('Durée', range('request_tab.duration_ms', t.duration_ms, 150, 1200, 10, ' ms', 'Durée de la languette')) : ''}
+       ${t.show ? '' : '<p class="mox-note">La languette est désactivée (Essentiel › Demande viewer).</p>'}`,
     )}
     ${adv(
       'Typographie',
@@ -546,7 +760,37 @@ export function settingsView(
            ],
            s.long_text,
          ),
-       )}`,
+       )}
+       ${
+         s.long_text === 'scroll'
+           ? `${line(
+               'Défilement',
+               segOf(
+                 'marquee.mode',
+                 [
+                   ['bounce', 'Aller-retour'],
+                   ['loop', 'Continu'],
+                 ],
+                 s.marquee.mode,
+               ),
+               s.marquee.mode === 'bounce'
+                 ? 'Pause au début, glisse jusqu’à la fin, pause, revient en douceur.'
+                 : 'Comme un bandeau d’information, en boucle sans à-coup.',
+             )}
+       ${line(
+         'Vitesse',
+         segOf(
+           'marquee.speed',
+           [
+             ['slow', 'Lente'],
+             ['normal', 'Normale'],
+             ['fast', 'Rapide'],
+           ],
+           s.marquee.speed,
+         ),
+       )}`
+           : ''
+       }`,
     )}
     ${adv(
       'Disposition',
@@ -664,7 +908,7 @@ export function settingsView(
        ${line('Durée', range('animation.duration_ms', s.animation.duration_ms, 150, 1500, 10, ' ms', 'Durée'))}
        ${line('Lueur décorative', toggle('animation.ambient', s.animation.ambient, 'Lueur décorative'), 'Une respiration lente, décorative : elle ne suit pas l’audio.')}`,
     )}
-    <p class="mox-note">Les animations s’arrêtent si le système demande moins de mouvement.</p>`;
+    <p class="mox-note" data-k="motion">Les animations s’arrêtent si le système demande moins de mouvement.</p>`;
   return `${head}${essentials}${advanced}`;
 }
 

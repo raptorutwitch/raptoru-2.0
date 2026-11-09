@@ -90,9 +90,15 @@ body {
 .mo-anchor[data-enter='none'] {
   transition: none;
 }
-/* Centred anchors keep their centring under the entrance (a wrapper does the centring). */
+/* Centred anchors keep their centring under the entrance (a wrapper does the centring). The wrapper also holds the
+   request tab, behind the widget. */
 .mo-center {
+  position: relative;
   display: flex;
+  isolation: isolate;
+}
+.mo-center > .mo {
+  z-index: 1;
 }
 .mo-anchor[data-pos$='center'] > .mo-center {
   transform: translateX(-50%);
@@ -114,6 +120,7 @@ body {
   border-radius: var(--mo-radius);
   background: var(--mo-bg);
   box-shadow: var(--mo-shadow);
+  text-shadow: var(--mo-tshadow, none);
   transition:
     opacity 0.4s ease,
     filter 0.4s ease;
@@ -173,6 +180,7 @@ body {
   letter-spacing: 0.02em;
   text-transform: none;
   white-space: nowrap;
+  text-shadow: none;
 }
 .mo-req b {
   overflow: hidden;
@@ -196,7 +204,7 @@ body {
 }
 .mo-artist {
   font-size: calc(0.92em * var(--mo-as));
-  color: var(--mo-muted);
+  color: var(--mo-artist);
 }
 .mo-album {
   font-size: 0.78em;
@@ -231,33 +239,41 @@ body {
 .mo[data-long='wrap'] .mo-fit > span {
   display: inline;
 }
+/* A scrolling text (overlay.js marquee()): its box widened by the fades on both sides, so at rest the text starts
+   exactly where a still one would, and the fades fall outside the text's room. */
 .mo-fit.is-marquee {
+  --mo-fade: 0.75em;
+  margin-inline: calc(-1 * var(--mo-fade));
+  text-align: left;
   -webkit-mask-image: linear-gradient(
     90deg,
-    #000 0,
-    #000 calc(100% - 1.6em),
+    transparent,
+    #000 var(--mo-fade),
+    #000 calc(100% - var(--mo-fade)),
     transparent
   );
   mask-image: linear-gradient(
     90deg,
-    #000 0,
-    #000 calc(100% - 1.6em),
+    transparent,
+    #000 var(--mo-fade),
+    #000 calc(100% - var(--mo-fade)),
     transparent
   );
 }
 .mo-fit.is-marquee > span {
-  padding-right: 2.4em;
-  animation: mo-marquee var(--mo-mq) linear infinite;
+  padding-inline: var(--mo-fade);
+  will-change: transform;
 }
-@keyframes mo-marquee {
-  0%,
-  18% {
-    transform: translateX(0);
-  }
-  82%,
-  100% {
-    transform: translateX(var(--mo-shift));
-  }
+.mo-fit .mo-mq {
+  display: inline-block;
+  padding-right: 3em;
+}
+/* Less motion asked: the end of a long text in « … ». */
+.mo-fit.is-clip {
+  text-overflow: ellipsis;
+}
+.mo-fit.is-clip > span {
+  display: inline;
 }
 
 /* Cover. */
@@ -435,7 +451,7 @@ body {
   height: 1.1em;
 }
 .mo--minimal .mo-line {
-  font-size: 0.95em;
+  font-size: 1.02em;
 }
 .mo--minimal .mo-line b {
   font-weight: var(--mo-weight);
@@ -443,7 +459,8 @@ body {
 }
 .mo--minimal .mo-line em {
   font-style: normal;
-  color: var(--mo-muted);
+  font-weight: 600;
+  color: var(--mo-artist);
   font-size: calc(1em * var(--mo-as));
 }
 .mo--minimal .mo-line i {
@@ -454,6 +471,37 @@ body {
 }
 .mo--minimal .mo-req {
   font-size: 0.66em;
+}
+/* Flottant in two lines (« Jeu chargé »): a small strip, the title over the artist, an accent mark or the cover. */
+.mo--minimal[data-layout='stack'] {
+  padding: calc(0.5em * var(--mo-s)) calc(1em * var(--mo-s))
+    calc(0.55em * var(--mo-s)) calc(0.7em * var(--mo-s));
+}
+.mo--minimal[data-layout='stack'].no-cover {
+  padding-left: calc(0.7em * var(--mo-s));
+}
+.mo--minimal[data-layout='stack'] .mo-body {
+  gap: calc(0.65em * var(--mo-s));
+}
+.mo--minimal[data-layout='stack'] .mo-text {
+  gap: calc(0.06em * var(--mo-s));
+}
+.mo--minimal[data-layout='stack'] .mo-title {
+  font-size: calc(1.12em * var(--mo-ts));
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+}
+.mo--minimal[data-layout='stack'] .mo-artist {
+  font-size: calc(0.86em * var(--mo-as));
+  font-weight: 600;
+  line-height: 1.22;
+}
+.mo-mark {
+  align-self: stretch;
+  width: 0.24em;
+  margin: 0.2em 0;
+  border-radius: 99px;
+  background: var(--mo-accent);
 }
 .mo--minimal .mo-hair {
   position: absolute;
@@ -727,8 +775,7 @@ body {
 .mo--editorial .mo-artist {
   font-size: calc(1.05em * var(--mo-as));
   font-style: italic;
-  color: var(--mo-text);
-  opacity: 0.86;
+  color: var(--mo-artist);
 }
 .mo--editorial .mo-artist::before {
   content: 'par ';
@@ -790,6 +837,7 @@ body {
 }
 .mo--focus .mo-banner {
   display: flex;
+  text-shadow: none;
   align-items: center;
   justify-content: center;
   gap: 0.45em;
@@ -847,6 +895,84 @@ body {
   color: var(--mo-accent);
 }
 
+/* --- The request tab: slides out from behind the widget's edge (a clip at that edge hides it while it is in) -------- */
+.mo-tabclip {
+  --mo-tab-inset: clamp(0.75em, var(--mo-radius), 1.5em);
+  position: absolute;
+  z-index: 0;
+  display: flex;
+  /* A tab, never a second strip: a long name ends in « … ». */
+  max-width: calc(76% + 1em);
+  padding: 0 0.5em;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--mo-font);
+  font-size: var(--mo-u);
+}
+.mo-tabclip[data-side='top'] {
+  bottom: 100%;
+  padding-top: 0.5em;
+}
+.mo-tabclip[data-side='bottom'] {
+  top: 100%;
+  padding-bottom: 0.5em;
+}
+.mo-tabclip[data-align='start'] {
+  left: calc(var(--mo-tab-inset) - 0.5em);
+}
+.mo-tabclip[data-align='end'] {
+  right: calc(var(--mo-tab-inset) - 0.5em);
+}
+.mo-tabclip[data-align='center'] {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.mo-tab {
+  display: flex;
+  align-items: baseline;
+  gap: 0.32em;
+  min-width: 0;
+  padding: 0.3em 0.75em 0.34em;
+  font-size: var(--mo-tab-fs);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--mo-tab-fg);
+  background: var(--mo-tab-bg);
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  visibility: hidden;
+  transition:
+    transform var(--mo-tab-dur) cubic-bezier(0.25, 0.9, 0.3, 1),
+    visibility 0s linear var(--mo-tab-dur);
+}
+.mo-tabclip[data-side='top'] .mo-tab {
+  border-radius: var(--mo-tab-r) var(--mo-tab-r) 0 0;
+  transform: translateY(105%);
+}
+.mo-tabclip[data-side='bottom'] .mo-tab {
+  border-radius: 0 0 var(--mo-tab-r) var(--mo-tab-r);
+  transform: translateY(-105%);
+}
+.mo-tabclip.is-out .mo-tab {
+  transform: none;
+  visibility: visible;
+  transition:
+    transform var(--mo-tab-dur) cubic-bezier(0.25, 0.9, 0.3, 1),
+    visibility 0s;
+}
+.mo-tab > span {
+  flex: none;
+  opacity: 0.86;
+}
+.mo-tab > b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 800;
+}
+
 /* Gallery card (Studio): the widget alone, centred. */
 .mo-card .mo-anchor {
   inset: auto;
@@ -872,9 +998,11 @@ body {
   .mo-swap-out,
   .mo-swap-in *,
   .mo.is-ambient,
-  .mo-flash,
-  .mo-fit.is-marquee > span {
+  .mo-flash {
     animation: none !important;
+  }
+  .mo-tab {
+    transition: none !important;
   }
   .mo-swap-out {
     display: none;

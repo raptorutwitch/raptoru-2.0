@@ -517,3 +517,30 @@
     max-height: none;
   }
 }
+
+/* Lisibilité : looks en un clic, alerte quand le texte se lit mal (avec sa correction). */
+.mox-looks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.mox-warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--amber, #f59e0b) 14%, transparent);
+  color: var(--ink, inherit);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.mox-warn > svg {
+  flex: none;
+  color: var(--amber, #f59e0b);
+}
+.mox-warn > span {
+  flex: 1;
+}
