@@ -498,6 +498,14 @@ function liveNowView(s: SpState, ui: SpUi, l: SpLive) {
     </div>`;
 }
 
+/** Lab sur le vrai compte, en lecture seule : le lecteur n'est pas piloté (aucun faux « demandé »). */
+export const readOnly = (s: SpState) =>
+  s.connection.mode === 'lab_real' && !s.connection.lab_writes;
+const RO_TITLE =
+  'Lab en lecture seule : autorise les ajouts pour cette session (panneau › Lab sur ton compte) pour piloter le lecteur.';
+const roAttr = (s: SpState, title: string) =>
+  readOnly(s) ? `disabled title="${esc(RO_TITLE)}"` : `title="${esc(title)}"`;
+
 /** Les commandes sous le titre en cours (passer, pause, volume, appareil, actualiser). */
 function nowSub(s: SpState, ui: SpUi, playing: boolean, hasTrack: boolean) {
   const read = reading(s, ui.now);
@@ -506,13 +514,13 @@ function nowSub(s: SpState, ui: SpUi, playing: boolean, hasTrack: boolean) {
   const refresh = `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>`;
   const vol = read?.p.volume_percent ?? null;
   const controls = s.settings.player_controls
-    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${playing ? 'pause' : 'resume'}">${playing ? 'Pause' : 'Reprendre'}</button>
-        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume"><b>${vol ?? '—'}</b></label>`
+    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${playing ? 'pause' : 'resume'}" ${roAttr(s, playing ? 'Pause' : 'Reprendre')}>${playing ? 'Pause' : 'Reprendre'}</button>
+        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume" ${readOnly(s) ? 'disabled' : ''}><b>${vol ?? '—'}</b></label>`
     : '';
   return `<div class="spo-sub">
-        <button type="button" class="d-btn" data-act="sp-skip" title="Passe le titre en cours sur Spotify, même hors demandes">${ic('skip')}Passer la musique</button>
+        <button type="button" class="d-btn" data-act="sp-skip" ${roAttr(s, 'Passe le titre en cours sur Spotify, même hors demandes')}>${ic('skip')}Passer la musique</button>
         ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${hasTrack ? '' : refresh}
-      </div>`;
+      </div>${readOnly(s) ? `<p class="spo-ro">${ic('lock')}Lecture seule : passer, pause et volume sont coupés tant que les ajouts ne sont pas autorisés pour cette session.</p>` : ''}`;
 }
 
 /** La demande qui joue et son demandeur ; un titre hors demandes n'a jamais de demandeur. */
@@ -542,8 +550,8 @@ export function nowView(s: SpState, ui: SpUi) {
     : '';
   const vol = read?.p.volume_percent ?? null;
   const controls = s.settings.player_controls
-    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${read?.p.is_playing ? 'pause' : 'resume'}">${read?.p.is_playing ? 'Pause' : 'Reprendre'}</button>
-        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume"><b>${vol ?? '—'}</b></label>`
+    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${read?.p.is_playing ? 'pause' : 'resume'}" ${roAttr(s, read?.p.is_playing ? 'Pause' : 'Reprendre')}>${read?.p.is_playing ? 'Pause' : 'Reprendre'}</button>
+        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume" ${readOnly(s) ? 'disabled' : ''}><b>${vol ?? '—'}</b></label>`
     : '';
   return `<div class="spo-art">${cover(s, track)}${playing ? '<span class="spo-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}</div>
     <div class="spo-meta">
@@ -553,7 +561,7 @@ export function nowView(s: SpState, ui: SpUi) {
       ${by}
       <div class="spo-trans"><span class="spo-t" data-t0></span><span class="d-prog"><i data-prog></i></span><span class="spo-t" data-t1></span></div>
       <div class="spo-sub">
-        <button type="button" class="d-btn" data-act="sp-skip" title="Passe le titre en cours sur Spotify, même hors demandes">${ic('skip')}Passer la musique</button>
+        <button type="button" class="d-btn" data-act="sp-skip" ${roAttr(s, 'Passe le titre en cours sur Spotify, même hors demandes')}>${ic('skip')}Passer la musique</button>
         ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
       </div>
     </div>`;

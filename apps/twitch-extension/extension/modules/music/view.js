@@ -652,7 +652,14 @@ export function view(ctx) {
           await sleep(350);
           out = await client.musicControl(r.job_id);
         }
-        toast(out.status === 'done' ? success : out.status === 'pending' ? 'Le lecteur n’a pas encore répondu.' : 'Le lecteur n’a pas confirmé l’action.', out.status === 'done' ? 'ok' : 'warn');
+        // What really happened, with Studio's reason when it refused (never a success it did not confirm).
+        const why = {
+          LAB_READ_ONLY: 'Lab en lecture seule : le lecteur n’est pas piloté, rien n’a été envoyé.',
+          NO_DEVICE: 'Aucun appareil Spotify actif : rien n’a été envoyé.',
+          RATE_LIMITED: 'Spotify limite les appels : réessaie dans un moment.',
+          STUDIO_LOST: 'Studio n’a pas répondu : rien n’a été envoyé.',
+        }[out.reason];
+        toast(out.status === 'done' ? success : out.status === 'pending' ? 'Le lecteur n’a pas encore répondu.' : why ?? 'Le lecteur n’a pas confirmé l’action.', out.status === 'done' ? 'ok' : 'warn');
       } else if (player && 'job_id' in r) toast('Le lecteur est indisponible : rien n’a été envoyé.', 'warn');
       else toast(success);
     } catch (e) {

@@ -1,0 +1,881 @@
+/* Raptoru — music overlay (docs/music/MUSIC_OVERLAYS.md). One page, six compositions. Everything is driven by custom
+   properties set from the preset (overlay.js): colours, sizes, radius, spacing, durations. Transparent by design: only
+   the widget paints. Cheap for OBS: no blur of the scene behind (the Glass look blurs its OWN cover image), the progress
+   bar is one transform transition per track, decorative motion stops when the system asks for less motion. */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+* {
+  box-sizing: border-box;
+}
+.mo-stage {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* --- Anchor: position on the canvas, show / hide ------------------------------------------------------------------ */
+.mo-anchor {
+  --mo-dist: 18px;
+  --mo-scl: 0.94;
+  position: absolute;
+  display: flex;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--mo-dur) ease,
+    transform var(--mo-dur) cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s linear var(--mo-dur);
+}
+.mo-anchor.is-shown {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity var(--mo-dur) ease,
+    transform var(--mo-dur) cubic-bezier(0.2, 0.8, 0.2, 1),
+    visibility 0s;
+}
+.mo-anchor[data-pos^='top'] {
+  top: var(--mo-margin);
+}
+.mo-anchor[data-pos^='bottom'] {
+  bottom: var(--mo-margin);
+}
+.mo-anchor[data-pos^='middle'] {
+  top: 50%;
+}
+.mo-anchor[data-pos$='left'] {
+  left: var(--mo-margin);
+}
+.mo-anchor[data-pos$='right'] {
+  right: var(--mo-margin);
+}
+.mo-anchor[data-pos$='center'] {
+  left: 50%;
+}
+/* Entrances (the hidden state), per side. */
+.mo-anchor[data-enter='slide']:not(.is-shown)[data-pos$='left'] {
+  transform: translateX(calc(-1 * var(--mo-dist)));
+}
+.mo-anchor[data-enter='slide']:not(.is-shown)[data-pos$='right'] {
+  transform: translateX(var(--mo-dist));
+}
+.mo-anchor[data-enter='slide']:not(
+    .is-shown
+  )[data-pos^='top'][data-pos$='center'] {
+  transform: translateY(calc(-1 * var(--mo-dist)));
+}
+.mo-anchor[data-enter='slide']:not(
+    .is-shown
+  )[data-pos^='bottom'][data-pos$='center'],
+.mo-anchor[data-enter='rise']:not(.is-shown) {
+  transform: translateY(var(--mo-dist));
+}
+.mo-anchor[data-enter='scale']:not(.is-shown) {
+  transform: scale(var(--mo-scl));
+}
+.mo-anchor[data-enter='none'] {
+  transition: none;
+}
+/* Centred anchors keep their centring under the entrance (a wrapper does the centring). */
+.mo-center {
+  display: flex;
+}
+.mo-anchor[data-pos$='center'] > .mo-center {
+  transform: translateX(-50%);
+}
+.mo-anchor[data-pos^='middle'] > .mo-center {
+  transform: translateY(-50%);
+}
+
+/* --- Widget: shared ------------------------------------------------------------------------------------------------ */
+.mo {
+  --mo-u: 16px;
+  --mo-s: 1;
+  position: relative;
+  display: grid;
+  font-family: var(--mo-font);
+  font-size: var(--mo-u);
+  color: var(--mo-text);
+  line-height: 1.2;
+  width: var(--mo-w);
+  max-width: calc(100vw - 2 * var(--mo-margin));
+  border-radius: var(--mo-radius);
+  background: var(--mo-bg);
+  box-shadow: var(--mo-shadow);
+  transition:
+    opacity 0.4s ease,
+    filter 0.4s ease;
+  isolation: isolate;
+}
+.mo.has-border {
+  box-shadow:
+    var(--mo-shadow),
+    inset 0 0 0 1px var(--mo-line);
+}
+.mo.is-dim {
+  opacity: 0.55;
+}
+.mo.is-stale {
+  opacity: 0.7;
+  filter: saturate(0.6);
+}
+.mo-body {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+.mo-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(0.18em * var(--mo-s));
+}
+.mo-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-width: 0;
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mo-accent);
+  white-space: nowrap;
+}
+.mo-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mo-req {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.18em 0.6em 0.18em 0.45em;
+  border-radius: 999px;
+  background: var(--mo-accent);
+  color: var(--mo-on-accent);
+  font-size: 0.68em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+}
+.mo-req b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 800;
+}
+.mo-req > span {
+  font-weight: 600;
+  opacity: 0.85;
+}
+.mo-req svg {
+  flex: none;
+  width: 1em;
+  height: 1em;
+}
+.mo-title {
+  font-size: calc(1.22em * var(--mo-ts));
+  font-weight: var(--mo-weight);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.mo-artist {
+  font-size: calc(0.92em * var(--mo-as));
+  color: var(--mo-muted);
+}
+.mo-album {
+  font-size: 0.78em;
+  color: var(--mo-muted);
+  opacity: 0.85;
+}
+/* Long texts: one line that scrolls (only when it overflows), two lines, or an ellipsis. */
+.mo-fit {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.mo-fit > span {
+  display: inline-block;
+  padding-right: 0;
+}
+.mo[data-long='ellipsis'] .mo-fit {
+  text-overflow: ellipsis;
+}
+.mo[data-long='ellipsis'] .mo-fit > span {
+  display: inline;
+}
+.mo[data-long='wrap'] .mo-fit {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.mo[data-long='wrap'] .mo-fit > span {
+  display: inline;
+}
+.mo-fit.is-marquee {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(100% - 1.6em),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(100% - 1.6em),
+    transparent
+  );
+}
+.mo-fit.is-marquee > span {
+  padding-right: 2.4em;
+  animation: mo-marquee var(--mo-mq) linear infinite;
+}
+@keyframes mo-marquee {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+  82%,
+  100% {
+    transform: translateX(var(--mo-shift));
+  }
+}
+
+/* Cover. */
+.mo-cover {
+  position: relative;
+  flex: none;
+  width: var(--mo-cover);
+  height: var(--mo-cover);
+  border-radius: var(--mo-cover-r);
+  overflow: hidden;
+  background: var(--mo-cover-bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.mo-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mo-cover--none {
+  display: grid;
+  place-items: center;
+  color: var(--mo-accent);
+}
+.mo-cover--none svg {
+  width: 42%;
+  height: 42%;
+  opacity: 0.85;
+}
+
+/* Progress. */
+.mo-prog {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  min-width: 0;
+  margin-top: calc(0.25em * var(--mo-s));
+}
+.mo-bar {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 0.24em;
+  border-radius: 999px;
+  background: var(--mo-trackc);
+  overflow: hidden;
+}
+.mo-bar > i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--mo-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+.mo.is-paused .mo-bar > i {
+  background: var(--mo-muted);
+}
+.mo-time {
+  flex: none;
+  font-size: 0.72em;
+  font-variant-numeric: tabular-nums;
+  color: var(--mo-muted);
+}
+.mo-pause {
+  display: inline-grid;
+  place-items: center;
+  width: 1.1em;
+  height: 1.1em;
+}
+.mo-pause svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* --- Track change (content swap) ---------------------------------------------------------------------------------- */
+.mo-swap-out {
+  position: absolute !important;
+  inset: 0;
+  pointer-events: none;
+}
+.mo-swap-in[data-chg='crossfade'] {
+  animation: mo-fade-in var(--mo-dur) ease both;
+}
+.mo-swap-out[data-chg='crossfade'] {
+  animation: mo-fade-out var(--mo-dur) ease both;
+}
+.mo-swap-in[data-chg='slide'] {
+  animation: mo-slide-in var(--mo-dur) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.mo-swap-out[data-chg='slide'] {
+  animation: mo-slide-out calc(var(--mo-dur) * 0.8) ease both;
+}
+.mo-swap-in[data-chg='pop'] {
+  animation: mo-pop var(--mo-dur) cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.mo-swap-out[data-chg='pop'] {
+  animation: mo-fade-out calc(var(--mo-dur) * 0.5) ease both;
+}
+.mo-swap-in[data-chg='flip'] .mo-cover {
+  animation: mo-flip var(--mo-dur) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.mo-swap-in[data-chg='flip'] .mo-text {
+  animation: mo-fade-in var(--mo-dur) ease both;
+}
+.mo-swap-out[data-chg='flip'] {
+  animation: mo-fade-out calc(var(--mo-dur) * 0.45) ease both;
+}
+@keyframes mo-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes mo-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes mo-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(0.6 * var(--mo-dist)));
+  }
+}
+@keyframes mo-slide-out {
+  to {
+    opacity: 0;
+    transform: translateY(calc(-0.6 * var(--mo-dist)));
+  }
+}
+@keyframes mo-pop {
+  from {
+    opacity: 0;
+    transform: scale(var(--mo-scl));
+  }
+}
+@keyframes mo-flip {
+  from {
+    transform: perspective(600px) rotateY(-90deg);
+    opacity: 0.2;
+  }
+}
+
+/* ======================================================================================================== Archetypes */
+
+/* --- A. Flottant (minimal): one line, a pill --------------------------------------------------------------------- */
+.mo--minimal {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(0.6em * var(--mo-s));
+  padding: calc(0.42em * var(--mo-s)) calc(0.95em * var(--mo-s))
+    calc(0.42em * var(--mo-s)) calc(0.42em * var(--mo-s));
+  overflow: hidden;
+}
+.mo--minimal.no-cover {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding-left: calc(0.95em * var(--mo-s));
+}
+.mo--minimal .mo-body {
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(0.6em * var(--mo-s));
+}
+.mo--minimal .mo-note {
+  display: grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  color: var(--mo-accent);
+}
+.mo--minimal .mo-note svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+.mo--minimal .mo-line {
+  font-size: 0.95em;
+}
+.mo--minimal .mo-line b {
+  font-weight: var(--mo-weight);
+  font-size: calc(1em * var(--mo-ts));
+}
+.mo--minimal .mo-line em {
+  font-style: normal;
+  color: var(--mo-muted);
+  font-size: calc(1em * var(--mo-as));
+}
+.mo--minimal .mo-line i {
+  font-style: normal;
+  color: var(--mo-accent);
+  opacity: 0.8;
+  margin: 0 0.45em;
+}
+.mo--minimal .mo-req {
+  font-size: 0.66em;
+}
+.mo--minimal .mo-hair {
+  position: absolute;
+  left: 1.6em;
+  right: 1.6em;
+  bottom: 0.2em;
+  height: 2px;
+  margin: 0;
+  border-radius: 2px;
+  background: var(--mo-trackc);
+}
+
+/* --- B. Cartouche (clean): cover + three lines + progress -------------------------------------------------------- */
+.mo--clean {
+  padding: calc(0.75em * var(--mo-s));
+}
+.mo--clean .mo-body,
+.mo--glass .mo-body {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: calc(0.9em * var(--mo-s));
+}
+.mo--clean.no-cover .mo-body,
+.mo--glass.no-cover .mo-body,
+.mo--neon.no-cover .mo-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.mo[data-align='end'] .mo-body {
+  direction: rtl;
+}
+.mo[data-align='end'] .mo-body > * {
+  direction: ltr;
+}
+.mo[data-align='end'] .mo-text {
+  text-align: right;
+  align-items: flex-end;
+}
+.mo[data-align='end'] .mo-prog,
+.mo[data-align='end'] .mo-text > * {
+  width: 100%;
+}
+.mo[data-align='end'] .mo-label {
+  justify-content: flex-end;
+}
+.mo[data-orient='vertical'] .mo-body {
+  grid-template-columns: minmax(0, 1fr) !important;
+  justify-items: center;
+}
+.mo[data-orient='vertical'] .mo-text,
+.mo[data-align='center'] .mo-text {
+  text-align: center;
+  align-items: center;
+  width: 100%;
+}
+.mo[data-orient='vertical'] .mo-label,
+.mo[data-align='center'] .mo-label {
+  justify-content: center;
+}
+.mo[data-orient='vertical'] .mo-prog,
+.mo[data-align='center'] .mo-prog {
+  width: 100%;
+}
+
+/* --- C. Verre (glass): its own blurred cover behind, depth, fine edges ------------------------------------------ */
+.mo--glass {
+  padding: calc(0.95em * var(--mo-s));
+  overflow: hidden;
+  background: transparent;
+}
+.mo-glass-bg {
+  position: absolute;
+  inset: -30%;
+  z-index: -2;
+  background: var(--mo-glass-fallback);
+  background-size: cover;
+  background-position: center;
+  filter: blur(26px) saturate(1.5);
+  transform: scale(1.05);
+  transition: background-image 0.6s ease;
+}
+.mo-glass-tint {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--mo-bg);
+  border-radius: inherit;
+}
+.mo--glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0) 38%
+  );
+}
+.mo--glass .mo-title,
+.mo--glass .mo-artist {
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+}
+.mo--glass .mo-cover {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.mo--glass .mo-bar {
+  height: 0.28em;
+  background: rgba(255, 255, 255, 0.18);
+}
+.mo--glass .mo-bar > i {
+  background: linear-gradient(90deg, var(--mo-alight), var(--mo-accent));
+  box-shadow: 0 0 10px var(--mo-a70);
+}
+
+/* --- D. Néon (neon): glowing frame, accent stripe, a flash at each new track ------------------------------------- */
+.mo--neon {
+  padding: calc(0.7em * var(--mo-s)) calc(0.85em * var(--mo-s))
+    calc(0.85em * var(--mo-s)) calc(1.15em * var(--mo-s));
+  overflow: hidden;
+  box-shadow:
+    var(--mo-shadow),
+    0 0 0 1.5px var(--mo-accent),
+    0 0 18px var(--mo-a55),
+    inset 0 0 22px var(--mo-a18);
+}
+.mo--neon.has-border {
+  box-shadow:
+    var(--mo-shadow),
+    0 0 0 1.5px var(--mo-accent),
+    0 0 18px var(--mo-a55),
+    inset 0 0 22px var(--mo-a18);
+}
+.mo--neon::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 0.22em;
+  border-radius: 0 4px 4px 0;
+  background: var(--mo-accent);
+  box-shadow: 0 0 14px var(--mo-accent);
+}
+.mo--neon .mo-body {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: calc(0.85em * var(--mo-s));
+}
+.mo--neon .mo-title {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 14px var(--mo-a60);
+}
+.mo--neon .mo-cover {
+  box-shadow:
+    0 0 0 1.5px var(--mo-a70),
+    0 0 16px var(--mo-a45);
+}
+.mo--neon .mo-hair {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  margin: 0;
+  border-radius: 0;
+  background: var(--mo-a18);
+}
+.mo--neon .mo-hair > i {
+  border-radius: 0;
+  box-shadow: 0 0 10px var(--mo-accent);
+}
+.mo--neon .mo-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    var(--mo-alight) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  opacity: 0;
+}
+.mo--neon .mo-swap-in .mo-flash,
+.mo--neon.is-flash .mo-flash {
+  animation: mo-sweep calc(var(--mo-dur) * 1.6) ease-out 1;
+}
+@keyframes mo-sweep {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+/* Decorative only (no audio data drives it): a slow breathing glow while playing. */
+.mo.is-ambient.is-playing {
+  animation: mo-breathe 4.2s ease-in-out infinite;
+}
+@keyframes mo-breathe {
+  50% {
+    filter: drop-shadow(0 0 14px var(--mo-a55));
+  }
+}
+
+/* --- E. Éditorial (editorial): type first, a rule, the cover aside ----------------------------------------------- */
+.mo--editorial {
+  padding: calc(0.4em * var(--mo-s)) calc(0.2em * var(--mo-s));
+  background: transparent;
+  box-shadow: none;
+}
+.mo--editorial.has-scrim::before {
+  content: '';
+  position: absolute;
+  inset: -2.2em -3.5em -2.2em -2.8em;
+  z-index: -1;
+  background: radial-gradient(
+    ellipse at 30% 60%,
+    var(--mo-scrim),
+    transparent 70%
+  );
+}
+.mo--editorial.has-box {
+  padding: calc(1em * var(--mo-s)) calc(1.25em * var(--mo-s));
+  background: var(--mo-bg);
+  box-shadow: var(--mo-shadow);
+}
+.mo--editorial .mo-body {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: calc(1.1em * var(--mo-s));
+}
+.mo--editorial[data-align='end'] .mo-body {
+  direction: rtl;
+}
+.mo--editorial .mo-label {
+  gap: 0.7em;
+  font-size: 0.68em;
+  letter-spacing: 0.22em;
+  color: var(--mo-accent);
+}
+.mo--editorial .mo-rule {
+  position: relative;
+  flex: 1;
+  min-width: 2em;
+  height: 1px;
+  background: var(--mo-rulec);
+  overflow: hidden;
+}
+.mo--editorial .mo-rule > i {
+  position: absolute;
+  inset: 0;
+  background: var(--mo-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.mo--editorial .mo-title {
+  font-size: calc(2.35em * var(--mo-ts));
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin-top: 0.12em;
+}
+.mo--editorial .mo-artist {
+  font-size: calc(1.05em * var(--mo-as));
+  font-style: italic;
+  color: var(--mo-text);
+  opacity: 0.86;
+}
+.mo--editorial .mo-artist::before {
+  content: 'par ';
+  color: var(--mo-muted);
+}
+.mo--editorial .mo-album {
+  font-size: 0.66em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.mo--editorial .mo-cover {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+
+/* --- F. Projecteur (focus): a big cover, all the detail, a banner for a request --------------------------------- */
+.mo--focus {
+  padding: calc(1em * var(--mo-s));
+  overflow: hidden;
+}
+.mo--focus .mo-body {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: calc(0.85em * var(--mo-s));
+}
+.mo--focus[data-orient='horizontal'] .mo-body {
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: stretch;
+  align-items: center;
+}
+.mo--focus .mo-cover {
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.5),
+    0 0 46px var(--mo-a30);
+}
+.mo--focus .mo-title {
+  font-size: calc(1.5em * var(--mo-ts));
+}
+.mo--focus .mo-text {
+  width: 100%;
+}
+.mo--focus .mo-prog {
+  flex-wrap: wrap;
+  gap: 0.35em 0.6em;
+}
+.mo--focus .mo-prog .mo-bar {
+  flex-basis: 100%;
+}
+.mo--focus .mo-prog .mo-time {
+  flex: 1;
+}
+.mo--focus .mo-prog .mo-time {
+  text-align: left;
+}
+.mo--focus .mo-prog .mo-time + .mo-time {
+  text-align: right;
+}
+.mo-banner {
+  display: none;
+}
+.mo--focus .mo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  margin: calc(0.2em * var(--mo-s)) calc(-1em * var(--mo-s))
+    calc(-1em * var(--mo-s));
+  padding: 0.55em 1em;
+  background: var(--mo-accent);
+  color: var(--mo-on-accent);
+  font-size: 0.82em;
+  font-weight: 700;
+}
+.mo--focus .mo-banner b {
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mo--focus .mo-banner svg {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+}
+
+/* A request, in words (editorial): under the artist. */
+.mo-reqline {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-top: 0.3em;
+  font-size: 0.8em;
+  font-style: italic;
+  color: var(--mo-accent);
+}
+.mo-reqline svg {
+  width: 0.95em;
+  height: 0.95em;
+  flex: none;
+}
+.mo-reqline b {
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* Idle placeholder. */
+.mo-idle {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  color: var(--mo-muted);
+  font-size: 0.9em;
+}
+.mo-idle svg {
+  width: 1.2em;
+  height: 1.2em;
+  color: var(--mo-accent);
+}
+
+/* Gallery card (Studio): the widget alone, centred. */
+.mo-card .mo-anchor {
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  transition: none;
+  transform-origin: center;
+}
+.mo-card .mo-anchor > .mo-center {
+  transform: none !important;
+}
+.mo-card .mo {
+  max-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mo-anchor,
+  .mo-anchor.is-shown {
+    transition: opacity 0.25s ease !important;
+    transform: none !important;
+  }
+  .mo-swap-in,
+  .mo-swap-out,
+  .mo-swap-in *,
+  .mo.is-ambient,
+  .mo-flash,
+  .mo-fit.is-marquee > span {
+    animation: none !important;
+  }
+  .mo-swap-out {
+    display: none;
+  }
+}

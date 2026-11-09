@@ -60,6 +60,8 @@ export interface ChannelPointsRuntimeDeps {
   spotifyLabReal?: boolean;
   /** Music Hub: the SMTC probe Studio builds and runs (Windows' media session); absent: none. */
   spotifySmtc?: { exe: string; script: string; out: string } | null;
+  /** Music Hub: the OBS music overlay's page folder (apps/studio/server/music-overlay); absent: none. */
+  musicOverlayDir?: string | null;
 }
 
 export class ChannelPointsRuntime {
@@ -159,6 +161,8 @@ export class ChannelPointsRuntime {
             effects: d.effects ?? null,
             labReal: d.spotifyLabReal === true,
             smtc: d.spotifySmtc ?? null,
+            overlayDir: d.musicOverlayDir ?? null,
+            obs: d.obs,
           })
         : null,
     );

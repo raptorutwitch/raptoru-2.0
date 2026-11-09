@@ -7,6 +7,7 @@ import {
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { liveChannelSession } from '../stream/channel-sessions.js';
+import { nominalStreamDay, streamDayWindow } from '../stream/stream-day.js';
 import { activeSession } from '../stream/stream-sessions.js';
 
 // Music Hub — the live track and the stream's music history (docs/music/SMTC_STUDIO.md). What Spotify Desktop plays,
@@ -22,6 +23,11 @@ const MODULE = 'music_history';
 const HISTORY_DAYS = 30;
 /** A request whose Core-observed start is this close to the occurrence's start is that occurrence (same exact uri). */
 const SAME_OCCURRENCE_MS = 30_000;
+/**
+ * A request Core saw start this close to an occurrence Windows announced WITHOUT its exact track (Studio could not read
+ * it): the same play — the anonymous line is not listed twice. Hidden only, never attributed (one player plays one track).
+ */
+const SAME_START_MS = 4_000;
 /** A skip reported this long after the change still marks the track it skipped (the report may come second). */
 const LATE_SKIP_MS = 15_000;
 
@@ -96,6 +102,7 @@ interface EntryRow {
     uri?: string | null;
     request_id?: string | null;
     session_started_at?: string | null;
+    stream_day?: string | null;
   };
   result: {
     end: EndKind;
@@ -283,6 +290,8 @@ export class LiveMusic {
             album: body.track.album,
             duration_ms: body.track.duration_ms,
             session_started_at: new Date(liveAt).toISOString(),
+            // The Daily of this live (the project's stream-day: its window opens at 16:00, Paris), never a calendar day.
+            stream_day: nominalStreamDay(new Date(liveAt)),
           }),
           started,
           now,
@@ -498,6 +507,14 @@ export class LiveMusic {
   ) {
     const now = this.clock.now();
     const since = new Date(now.getTime() - HISTORY_DAYS * 86_400_000);
+    // Decided 09/11: a new Daily = an empty visible history. The Daily is the live's (its stream-day), else today's
+    // window (16:00 → 16:00, Paris): a stream across midnight keeps its history, the next Daily starts empty. Older rows
+    // stay stored (never deleted).
+    const liveAt = await this.liveStart(q, channelId);
+    const day = nominalStreamDay(liveAt ? new Date(liveAt) : now);
+    const win = streamDayWindow(day);
+    const reqFrom =
+      liveAt && new Date(liveAt) < win.start ? new Date(liveAt) : win.start;
     // « En cours » only while Studio is heard (a Studio closed at the end of a live leaves no track « playing »).
     const st = await this.load(q, channelId);
     const openId =
@@ -508,21 +525,47 @@ export class LiveMusic {
       `select activity_id, viewer_id, viewer_name, input, result, created_at from module_activity
         where channel_id = $1 and module_id = $2 and reason is distinct from 'brief' and created_at > $3
           and ($4::timestamptz is null or created_at < $4)
+          and (input->>'stream_day' = $6
+               or (input->>'stream_day' is null and (input->>'session_started_at')::timestamptz >= $7
+                   and (input->>'session_started_at')::timestamptz < $8))
         order by created_at desc limit $5`,
-      [channelId, MODULE, since, o.before, o.limit + 1],
+      [
+        channelId,
+        MODULE,
+        since,
+        o.before,
+        o.limit + 1,
+        day,
+        win.start,
+        win.end,
+      ],
     );
     const requests = await q.query<RequestLite & { viewer_login: string }>(
       `select request_id, viewer_id, viewer_name, viewer_login, state, track, display, playback_started_at
          from spotify_requests r
         where channel_id = $1 and state in ('PLAYED', 'SKIPPED') and playback_started_at is not null
           and playback_started_at > $2 and ($3::timestamptz is null or playback_started_at < $3)
+          and playback_started_at >= $6 and playback_started_at < $7
           and not exists (select 1 from module_activity m where m.channel_id = $1 and m.module_id = $4
                             and m.input->>'request_id' = r.request_id::text)
         order by playback_started_at desc limit $5`,
-      [channelId, since, o.before, MODULE, o.limit + 1],
+      [channelId, since, o.before, MODULE, o.limit + 1, reqFrom, win.end],
+    );
+    // The same play twice (an anonymous occurrence + the request Core saw start with it): the request's line only.
+    const starts = requests.map((r) =>
+      new Date(r.playback_started_at).getTime(),
+    );
+    const shown = entries.filter(
+      (e) =>
+        e.input.uri ||
+        e.input.request_id ||
+        !starts.some(
+          (t) =>
+            Math.abs(new Date(e.created_at).getTime() - t) <= SAME_START_MS,
+        ),
     );
     // The requests the occurrences carry: their outcome (Core's) wins over the guess.
-    const ids = entries
+    const ids = shown
       .map((e) => e.input.request_id)
       .filter((x): x is string => !!x);
     const carried = new Map(
@@ -536,7 +579,7 @@ export class LiveMusic {
       ).map((r) => [r.request_id, r]),
     );
     const items: HistoryItem[] = [
-      ...entries.map((e) => {
+      ...shown.map((e) => {
         const r = e.input.request_id
           ? (carried.get(e.input.request_id) ?? null)
           : null;
@@ -584,10 +627,11 @@ export class LiveMusic {
     ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
     const page = items.slice(0, o.limit);
     const more = items.length > o.limit;
-    const liveAt = await this.liveStart(q, channelId);
     return {
       live: !!liveAt,
       since: liveAt ? new Date(liveAt).toISOString() : null,
+      /** The Daily shown (YYYY-MM-DD, the stream-day): the next one starts empty. */
+      daily: day,
       items: page,
       next: more ? page[page.length - 1]!.at : null,
     };

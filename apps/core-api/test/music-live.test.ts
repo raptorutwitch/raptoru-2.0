@@ -528,6 +528,85 @@ describe('the stream music history', () => {
   });
 });
 
+describe('the history per Daily (decided 09/11: a new Daily = an empty visible history)', () => {
+  it('a stream across midnight keeps its history; the next Daily starts empty, the old rows stay stored', async () => {
+    const s = await studio(); // live from 21:00 Paris, Daily 2026-11-09
+    await s.say({ gen: 1 });
+    s.wait(60_000);
+    await s.say({
+      gen: 2,
+      ended: { gen: 1, position_ms: 60_000, playing: true, cause: 'change' },
+    });
+    // 00:30 Paris, the same live: still the Daily of 09/11.
+    s.core.clock.set(new Date('2026-11-09T23:30:00Z'));
+    await s.say({
+      gen: 3,
+      ended: { gen: 2, position_ms: 60_000, playing: true, cause: 'change' },
+    });
+    let h = await s.history();
+    expect(h.daily).toBe('2026-11-09');
+    expect(h.items.map((i) => i.title)).toEqual([
+      'Titre 3',
+      'Titre 2',
+      'Titre 1',
+    ]);
+    // The live ends; the next afternoon after 16:00 Paris: a new Daily, nothing visible.
+    s.wait(60_000);
+    await s.core.streams.offline();
+    await s.say({ gen: 3, position_ms: 120_000 });
+    s.core.clock.set(new Date('2026-11-10T15:30:00Z'));
+    h = await s.history();
+    expect(h.daily).toBe('2026-11-10');
+    expect(h.items).toEqual([]);
+    // Before 16:00 the previous Daily is still the one shown (its window runs until then).
+    s.core.clock.set(new Date('2026-11-10T14:00:00Z'));
+    expect((await s.history()).items).toHaveLength(3);
+    // A new live of the new Daily: only its own tracks.
+    s.core.clock.set(new Date('2026-11-10T18:00:00Z'));
+    await s.core.streams.online({
+      streamId: 'live-2',
+      startedAt: s.core.clock.now(),
+    });
+    await s.spotify.sync(CH, { status: OK });
+    await s.say({ gen: 4, track: s.track('Nouveau Daily') });
+    h = await s.history();
+    expect(h.items.map((i) => i.title)).toEqual(['Nouveau Daily']);
+    const stored = await s.core.db.query(
+      `select count(*)::int as n from module_activity where module_id = 'music_history'`,
+    );
+    expect((stored[0] as { n: number }).n).toBe(4);
+  });
+});
+
+describe('one play, one line', () => {
+  it('an occurrence Studio could not identify and the request Core saw start with it: the request only — never attributed', async () => {
+    const s = await studio();
+    await s.request(5, sp(5));
+    await s.spotify.sync(CH, { status: OK, playback: s.playing(sp(5), 1_000) });
+    // Windows announced it, but Studio never read its exact track (no link).
+    await s.say({ gen: 1, track: s.track('Titre 5'), position_ms: 1_000 });
+    s.wait(196_000);
+    await s.spotify.sync(CH, {
+      status: OK,
+      playback: s.playing(sp(5), 197_000),
+    });
+    s.wait(3_500);
+    await s.spotify.sync(CH, { status: OK, playback: s.playing(sp(6), 500) });
+    await s.say({
+      gen: 2,
+      track: s.track('Autre'),
+      position_ms: 500,
+      ended: { gen: 1, position_ms: 199_000, playing: true, cause: 'change' },
+    });
+    const h = await s.history();
+    expect(h.items.map((i) => [i.title, i.kind, i.requested_by])).toEqual([
+      ['Autre', 'track', null],
+      ['Titre 5', 'request', 'Fan5'],
+    ]);
+    // A track of the broadcaster that merely started near a request (different start): kept.
+  });
+});
+
 describe('the live track in the extension', () => {
   it('position extrapolated on Core’s clock, frozen in pause, stale flagged, dropped after 90 s of silence', async () => {
     const s = await studio({ live: false });

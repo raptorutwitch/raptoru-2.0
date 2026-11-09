@@ -289,6 +289,7 @@ async function harness(o: { coreLive?: 'ok' | '404' } = {}) {
       watch: false,
     } as SpotifySyncAnswer,
     live: [] as SpotifyLiveNow[],
+    state: {} as Record<string, unknown>,
     syncs: 0,
   };
   const call = async (path: string, body?: unknown): Promise<unknown> => {
@@ -296,6 +297,7 @@ async function harness(o: { coreLive?: 'ok' | '404' } = {}) {
       core.syncs++;
       return core.answer;
     }
+    if (path.endsWith('/state')) return core.state;
     if (path.endsWith('/now')) {
       if (o.coreLive === '404')
         throw Object.assign(new Error('not_found'), { status: 404 });
@@ -459,6 +461,44 @@ describe('Studio: the live track', () => {
     h.src.step();
     await h.rt.once();
     expect(h.core.live.at(-1)).toMatchObject({ state: 'playing', gen: 1 });
+  });
+
+  it('the overlay: the requester only when Core’s request is THIS exact track (its uri), its name read once', async () => {
+    const h = await harness();
+    await h.run(3_000);
+    const uri = h.rt.liveView()!.link!.uri;
+    const entry = (request_id: string, track_uri: string) => ({
+      request_id,
+      track_uri,
+      state: 'PLAYING' as const,
+      auto_skip: false,
+      queued_at: new Date(0).toISOString(),
+    });
+    // Core attributes ANOTHER track to the request playing: no requester on the overlay.
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry('r-1', 'spotify:track:0000000000000000000000')],
+      current_request_id: 'r-1',
+    };
+    await h.run(1_000);
+    expect(h.rt.overlayLive()).toMatchObject({
+      state: 'playing',
+      request: null,
+      track: { title: 'Lofi Stream Beat' },
+    });
+    // This exact track: a request, its name once Core's state is read.
+    h.core.state = {
+      current: { request_id: 'r-2', viewer: { name: 'Fan2', login: 'fan2' } },
+    };
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry('r-2', uri)],
+      current_request_id: 'r-2',
+    };
+    await h.run(1_000);
+    expect(h.rt.overlayLive().request).toEqual({ by: null });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.rt.overlayLive().request).toEqual({ by: 'Fan2' });
   });
 
   it('an older Core without the live route: not asked again for 10 min (never a loop)', async () => {

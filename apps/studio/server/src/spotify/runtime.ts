@@ -25,6 +25,9 @@ import { SpotifyAuth, simulatedAuth } from './oauth.js';
 import { normalizeText, selectCandidate, type Candidate } from './search.js';
 import { SpotifySim } from './sim.js';
 import { SimSmtc, SmtcProbe, SmtcTracker, type SmtcLine } from './smtc.js';
+import { MusicOverlayHost, type OverlayLive } from './music-overlay-host.js';
+import type { ObsLike } from './music-overlay-obs.js';
+import { OverlayStore } from './music-overlays.js';
 import {
   MusicOverlay,
   MusicOverlayConfig,
@@ -114,6 +117,13 @@ export interface SpotifyRuntimeDeps {
       onLine: (line: SmtcLine) => void,
       onDown: (reason: string) => void,
     ) => { start(): void; stop(): void };
+  } | null;
+  /** Music Hub: the OBS music overlays (their setting, the page's folder, Studio's origin and OBS connection). */
+  overlays?: {
+    store: OverlayStore;
+    dir: string;
+    origin: string;
+    obs: () => ObsLike | null;
   } | null;
 }
 
@@ -244,6 +254,125 @@ export class SpotifyRuntime {
   private constructor(private readonly d: SpotifyRuntimeDeps) {
     this.now = d.now ?? Date.now;
     this.sleep = d.sleep ?? ((ms) => new Promise((ok) => setTimeout(ok, ms)));
+    this.overlays = d.overlays
+      ? new MusicOverlayHost({
+          store: d.overlays.store,
+          dir: d.overlays.dir,
+          origin: d.overlays.origin,
+          obs: d.overlays.obs,
+          live: () => this.overlayLive(),
+          now: this.now,
+        })
+      : null;
+  }
+
+  /** Music Hub: the OBS music overlays (null: none in this Studio). */
+  readonly overlays: MusicOverlayHost | null;
+  /** Requesters' display names by request (read from Core once per request, for the overlay). */
+  private readonly requesters = new Map<string, string | null>();
+  private requesterReading: string | null = null;
+  private lastCurrentId: string | null = null;
+
+  /**
+   * What the overlay shows: Windows' track (its exact Spotify track once read), else the Web API's last reading. The
+   * requester only when Core attributes the request playing to THIS exact track (its uri) — never a title.
+   */
+  overlayLive(): OverlayLive {
+    const t = this.d.live?.tracker;
+    const v = t?.view();
+    const cur = this.answer?.current_request_id
+      ? this.answer.queue.find(
+          (q) => q.request_id === this.answer!.current_request_id,
+        )
+      : null;
+    const requestOf = (uri: string | null | undefined) =>
+      cur && uri && cur.track_uri === uri
+        ? this.requesterOf(cur.request_id)
+        : null;
+    if (v && v.state !== 'off') {
+      const link = this.link?.gen === v.gen ? this.link : null;
+      return {
+        state: v.state === 'waiting' ? 'lost' : v.track ? v.state : 'none',
+        gen: v.gen,
+        track: v.track
+          ? {
+              ...v.track,
+              artists: link?.artists.length ? link.artists : v.track.artists,
+            }
+          : null,
+        position_ms: v.position_ms,
+        cover: v.cover
+          ? `/api/spotify/live/cover?v=${v.cover}`
+          : (link?.cover_url ?? null),
+        request: requestOf(link?.uri),
+      };
+    }
+    // No Windows source (another PC, the probe off): the Web API's last reading while it is fresh.
+    const p = this.reading?.playback;
+    const age = p ? this.now() - Date.parse(p.observed_at) : Infinity;
+    if (!p?.track || age > 30_000)
+      return {
+        state: 'none',
+        gen: 0,
+        track: null,
+        position_ms: null,
+        cover: null,
+        request: null,
+      };
+    return {
+      state: p.is_playing ? 'playing' : 'paused',
+      gen: this.apiGen(p.track.uri),
+      track: {
+        title: p.track.title,
+        artists: p.track.artists,
+        album: null,
+        duration_ms: p.track.duration_ms,
+      },
+      position_ms:
+        p.progress_ms === null
+          ? null
+          : Math.min(
+              p.track.duration_ms,
+              p.progress_ms + (p.is_playing ? Math.max(0, age) : 0),
+            ),
+      cover: this.covers.get(p.track.id) ?? null,
+      request: requestOf(p.track.uri),
+    };
+  }
+
+  private apiTrack: { uri: string; gen: number } = { uri: '', gen: 0 };
+  private apiGen(uri: string) {
+    if (this.apiTrack.uri !== uri)
+      this.apiTrack = { uri, gen: this.apiTrack.gen + 1 };
+    return this.apiTrack.gen;
+  }
+
+  /** A requester's display name (read once from Core's state; null meanwhile, then the overlay is told). */
+  private requesterOf(id: string) {
+    if (this.requesters.has(id)) return { by: this.requesters.get(id)! };
+    if (this.requesterReading !== id) {
+      this.requesterReading = id;
+      void this.d
+        .core<{
+          current?: {
+            request_id: string;
+            viewer?: { name?: string; login?: string };
+          } | null;
+        }>(`${this.base}/state`)
+        .then((st) => {
+          const c = st.current;
+          if (c?.request_id !== id) return;
+          this.requesters.set(id, c.viewer?.name || c.viewer?.login || null);
+          if (this.requesters.size > 50)
+            this.requesters.delete(this.requesters.keys().next().value!);
+          this.overlays?.bump();
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (this.requesterReading === id) this.requesterReading = null;
+        });
+    }
+    return { by: null };
   }
 
   /** Studio's profile: the Lab plays on the simulator (never the real account); Production on the broadcaster's
@@ -276,6 +405,10 @@ export class SpotifyRuntime {
      * the simulator always has its simulated Windows instead).
      */
     smtc?: { exe: string; script: string; out: string } | null;
+    /** Music Hub: the OBS music overlays' page folder (apps/studio/server/music-overlay); absent: none. */
+    overlayDir?: string | null;
+    /** Studio's one OBS connection (the overlays' install assistant only ever adds, on a click). */
+    obs?: (() => ObsLike | null) | null;
   }) {
     const labReal = p.environment === 'lab' && p.labReal === true;
     const sim = p.environment === 'lab' && !labReal ? new SpotifySim() : null;
@@ -335,6 +468,14 @@ export class SpotifyRuntime {
           }
         : null,
       live,
+      overlays: p.overlayDir
+        ? {
+            store: await OverlayStore.open(p.dir),
+            dir: p.overlayDir,
+            origin: p.origin,
+            obs: p.obs ?? (() => null),
+          }
+        : null,
     });
   }
 
@@ -394,6 +535,7 @@ export class SpotifyRuntime {
         (line) => this.onSmtc(line),
         (reason) => {
           live.tracker.off(reason);
+          this.overlays?.bump();
           this.wake();
         },
       );
@@ -478,6 +620,7 @@ export class SpotifyRuntime {
     if (!tracker) return;
     const change = tracker.feed(line);
     if (change === 'none') return;
+    this.overlays?.bump();
     if (change === 'track' || change === 'replay') {
       this.link = null;
       this.linkTries = 0;
@@ -548,6 +691,7 @@ export class SpotifyRuntime {
       };
       this.linkAt = 0;
       this.liveCounters.linked++;
+      this.overlays?.bump();
       this.wake();
       return;
     }
@@ -661,6 +805,11 @@ export class SpotifyRuntime {
       await this.autoSkip(this.reading.playback, this.reading.raw, true);
     this.answer = await this.sync();
     this.answerAt = this.now();
+    // A request starts or ends (Core's attribution): the overlay's requester follows.
+    if (this.answer.current_request_id !== this.lastCurrentId) {
+      this.lastCurrentId = this.answer.current_request_id;
+      this.overlays?.bump();
+    }
     if (this.reading?.sent)
       await this.autoSkip(this.reading.playback, this.reading.raw);
     await this.reportPending();
@@ -1277,6 +1426,9 @@ export class SpotifyRuntime {
   ): Promise<boolean> {
     // Music Hub: the cover Windows gave for the track playing (an <img> of Studio's own page: no Studio header).
     // Local bytes only, never sent to Core nor to the viewers (they get Spotify's image URL).
+    // Music Hub: the OBS music overlay's page and its state (token, long poll).
+    if (this.overlays && (await this.overlays.handle(req, res, url)))
+      return true;
     if (url.pathname === '/api/spotify/live/cover' && req.method === 'GET') {
       const cover = this.d.live?.tracker.cover ?? null;
       if (!cover) {
@@ -1445,7 +1597,7 @@ export class SpotifyRuntime {
   ) {
     const auth = this.d.auth;
     // Music Hub V2: the OBS music card (overlay.ts): its setting, a preview, an imported alert sound.
-    if (path.startsWith('/overlay'))
+    if (path === '/overlay' || path.startsWith('/overlay/'))
       return this.overlayApi(method, path, body, upload);
     if (method === 'GET' && path === '/state') {
       const core = await this.d.core<Record<string, unknown>>(
@@ -1488,6 +1640,12 @@ export class SpotifyRuntime {
     }
     // Music Hub: the live track alone, every second from the page (local: no Core, no Spotify).
     if (method === 'GET' && path === '/live') return { live: this.liveView() };
+    // Music Hub: the OBS music overlays' editor (presets, variants, show / hide, OBS assistant).
+    if (path === '/overlays' || path.startsWith('/overlays/')) {
+      if (!this.overlays)
+        throw Object.assign(new Error('overlays_unavailable'), { status: 503 });
+      return this.overlays.api(method, path, body);
+    }
     if (method !== 'POST')
       throw Object.assign(new Error('not_found'), { status: 404 });
     // Music Hub: the stream's music history (Core), newest first, 50 per page.

@@ -1310,6 +1310,14 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           // Music Hub (docs/music/SMTC_STUDIO.md): Windows' media session of Spotify Desktop, for the live display and the
           // stream's history — the Lab on the real account only (the simulator has its simulated Windows). Its own build
           // of the probe (a test window may hold the other exe). LAB_SMTC=off: none.
+          // Music Hub: the OBS music overlays (docs/music/MUSIC_OVERLAYS.md), one page served by this Studio.
+          musicOverlayDir: join(
+            REPO_ROOT,
+            'apps',
+            'studio',
+            'server',
+            'music-overlay',
+          ),
           spotifySmtc:
             alertsEnv === 'lab' &&
             process.env.LAB_SPOTIFY === 'real' &&

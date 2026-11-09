@@ -1,0 +1,519 @@
+/* Overlay musique : la bibliothèque à gauche, l'aperçu 16:9 au centre, les réglages à droite. */
+.mox {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(
+      300px,
+      360px
+    );
+  gap: 18px;
+  height: 100%;
+  min-height: 560px;
+}
+.mox-lib,
+.mox-set {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.mox-lib h2.d-lb {
+  margin: 4px 0 8px;
+}
+.mox-lib h2.d-lb ~ h2.d-lb {
+  margin-top: 18px;
+}
+.mox-note {
+  margin: 4px 0 10px;
+  color: var(--ink3);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Modèles : une vraie miniature de l'overlay par carte. */
+.mox-cards {
+  display: grid;
+  gap: 10px;
+}
+.mox-card {
+  display: grid;
+  gap: 4px;
+  padding: 6px 6px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--raise);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--hair);
+  transition:
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.mox-card:hover {
+  box-shadow: inset 0 0 0 1px var(--ink3);
+}
+.mox-card.is-sel {
+  box-shadow: inset 0 0 0 2px var(--mod);
+}
+.mox-card__frame {
+  position: relative;
+  display: block;
+  height: 92px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: radial-gradient(circle at 70% 30%, #34503f, #141c26 60%, #0b0f14);
+}
+.mox-card__frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+}
+.mox-card__t {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+.mox-card small {
+  padding: 0 4px;
+  color: var(--ink3);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+/* Variantes. */
+.mox-vars {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mox-var {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mox-var:hover {
+  background: var(--raise);
+}
+.mox-var.is-sel {
+  background: var(--raise);
+  box-shadow: inset 0 0 0 2px var(--mod);
+}
+.mox-var__t {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.mox-var__t b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mox-var__t small {
+  color: var(--ink3);
+  font-size: 11.5px;
+}
+.mox-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 25%, transparent);
+}
+
+/* L'aperçu. */
+.mox-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.mox-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mox-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mox-chips .d-tag.on {
+  outline: 2px solid var(--mod);
+  outline-offset: 1px;
+}
+.mox-real {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink2);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mox-screen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.mox-screen iframe,
+.mox-card__frame iframe {
+  /* The overlay page is transparent: same colour scheme as its frame, or Chrome paints it opaque. */
+  color-scheme: light;
+}
+.mox-screen iframe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  border: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.mox-screen[data-bg='dark'] {
+  background:
+    radial-gradient(
+      ellipse at 72% 28%,
+      rgba(122, 196, 160, 0.35),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse at 20% 80%,
+      rgba(80, 60, 150, 0.35),
+      transparent 50%
+    ),
+    linear-gradient(160deg, #1b2a33, #0c1117 70%);
+}
+.mox-screen[data-bg='light'] {
+  background:
+    radial-gradient(ellipse at 30% 20%, #fff7d6, transparent 60%),
+    linear-gradient(160deg, #a8d8f0, #e7f1d4 55%, #9fc98a);
+}
+.mox-screen[data-bg='busy'] {
+  background:
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.08) 0 14px,
+      transparent 14px 36px
+    ),
+    radial-gradient(circle at 25% 70%, #f43f5e, transparent 30%),
+    radial-gradient(circle at 75% 35%, #22d3ee, transparent 28%),
+    radial-gradient(circle at 55% 85%, #facc15, transparent 25%),
+    linear-gradient(135deg, #3b0764, #0f172a);
+}
+.mox-screen[data-bg='check'] {
+  background: conic-gradient(
+      #2a2a30 25%,
+      #1e1e24 0 50%,
+      #2a2a30 0 75%,
+      #1e1e24 0
+    )
+    0 0 / 24px 24px;
+}
+.mox-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+
+/* Réglages. */
+.mox-sethead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mox-sethead h2 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+.mox-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.mox-saved.ok {
+  color: var(--mod);
+}
+.mox-saved.bad {
+  color: var(--red, #f87171);
+  white-space: normal;
+}
+.mox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+.mox-grp,
+.mox-adv {
+  padding: 12px 0;
+  border-top: 1px solid var(--hair);
+}
+.mox-grp h3,
+.mox-advh {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+.mox-advh {
+  margin-top: 14px;
+  color: var(--ink2);
+}
+.mox-adv summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.mox-adv > div {
+  padding-top: 8px;
+}
+.mox-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 6px 0;
+}
+.mox-row > span {
+  display: grid;
+  font-size: 13.5px;
+}
+.mox-row > span small {
+  color: var(--ink3);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.mox-seg {
+  font-size: 12.5px;
+}
+.mox-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mox-range input {
+  width: 120px;
+  accent-color: var(--mod);
+}
+.mox-range b {
+  min-width: 52px;
+  font: 600 12.5px var(--num);
+  text-align: right;
+}
+.mox-sel select {
+  max-width: 190px;
+}
+.mox-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mox-color input {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.mox-color code {
+  font-size: 12px;
+  color: var(--ink2);
+}
+.mox-pos {
+  display: grid;
+  grid-template-columns: repeat(3, 26px);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--raise);
+}
+.mox-pos button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--fill2);
+  cursor: pointer;
+}
+.mox-pos button i {
+  width: 8px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--ink3);
+}
+.mox-pos button.on {
+  background: var(--mod);
+}
+.mox-pos button.on i {
+  background: var(--back);
+}
+.mox-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.mox-swatch {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.mox-swatch i {
+  width: 38px;
+  height: 24px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--b) 0 55%, var(--a) 55%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+.mox-swatch.is-custom i {
+  background: conic-gradient(
+    #f472b6,
+    #fb923c,
+    #a3e635,
+    #7dd3fc,
+    #c084fc,
+    #f472b6
+  );
+}
+.mox-swatch.on {
+  background: var(--raise);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--mod);
+}
+.mox-chks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mox-chk {
+  position: relative;
+  cursor: pointer;
+}
+.mox-chk input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.mox-chk span {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--fill2);
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.mox-chk input:checked + span {
+  background: var(--mod);
+  color: var(--back);
+  font-weight: 600;
+}
+.mox-chk input:focus-visible + span {
+  outline: 2px solid var(--mod);
+  outline-offset: 2px;
+}
+
+/* OBS. */
+.mox-steps {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+.mox-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+}
+.mox-step > div {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.mox-step small {
+  color: var(--ink3);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.mox-step__n {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px var(--hair);
+  color: var(--back);
+}
+.mox-step.is-done .mox-step__n {
+  background: var(--mod);
+  box-shadow: none;
+}
+.mox-addrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.mox-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mox-url code {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--raise);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+@media (max-width: 1280px) {
+  .mox {
+    grid-template-columns: minmax(200px, 230px) minmax(0, 1fr);
+  }
+  .mox-set {
+    grid-column: 1 / -1;
+    max-height: none;
+  }
+}
