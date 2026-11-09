@@ -56,6 +56,8 @@ export interface ChannelPointsRuntimeDeps {
   votekickOverlayDir?: string;
   /** Spotify V2: its storage; absent: no Spotify in this Studio. */
   spotifyDir?: string;
+  /** Lab only: Spotify V2 on the broadcaster's real account (LAB_SPOTIFY=real), read-only until allowed. */
+  spotifyLabReal?: boolean;
 }
 
 export class ChannelPointsRuntime {
@@ -153,6 +155,7 @@ export class ChannelPointsRuntime {
             log: (line) => console.log(line),
             // Music Hub V2: the music card of the overlay goes through the effects player (never its own source).
             effects: d.effects ?? null,
+            labReal: d.spotifyLabReal === true,
           })
         : null,
     );

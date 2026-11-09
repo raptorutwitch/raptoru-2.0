@@ -93,6 +93,8 @@ test.afterAll(async ({ browser }) => {
 test('Music Hub: search the Lab catalogue (text, pasted link), request in Jetons, one list with « en cours » first, withdrawal confirmed and refunded once, a moderator removes (the viewer is told), the supermod drives the player, the evening history', async ({
   browser,
 }) => {
+  // The whole journey (three roles, several track changes, the readings' count): longer than the default 60 s.
+  test.setTimeout(240_000);
   const admin = await browser.newPage();
   await studio(admin, '/settings', {
     enabled: true,

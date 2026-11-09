@@ -29,6 +29,9 @@ export const SPOTIFY_RULES = {
   searchMinChars: 2,
   /** The extension's searches of one viewer per minute (Core refuses beyond, the catalogue API is shared). */
   searchesPerViewerPerMinute: 20,
+  /** New catalogue searches of the whole channel per minute (a text already searched is reused, free). Matches Studio's
+   *  catalogue lane: a wave of searches never eats the budget of the queue, the skips and the reward. */
+  searchesPerChannelPerMinute: 30,
   /** A search job Studio has not answered within this delay: « catalogue indisponible ». */
   searchTimeoutMs: 6_000,
   /** A finished search stays reusable this long (same text): no second job, no second catalogue call. */
@@ -142,6 +145,8 @@ export const SpotifyReason = z.enum([
   'DUPLICATE_TRACK',
   'NOT_PLAYABLE',
   'EXTENSION_DISABLED',
+  // Lab with the broadcaster's real account (LAB_SPOTIFY=real): the session is read-only, nothing was sent to Spotify.
+  'LAB_READ_ONLY',
 ]);
 export type SpotifyReason = z.infer<typeof SpotifyReason>;
 

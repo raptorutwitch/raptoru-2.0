@@ -216,6 +216,23 @@ function reward(s: SpState, ui: SpUi) {
   );
 }
 
+/** Lab with the broadcaster's real account: read-only until allowed here, for this session only. */
+function labReal(s: SpState) {
+  const c = s.connection;
+  if (c.mode !== 'lab_real') return '';
+  const on = c.lab_writes === true;
+  return `<div class="d-note ${on ? 'bad' : ''}" data-k="lab réel spotify écriture">
+    <p><b>Lab sur ton vrai compte Spotify.</b> Recherches et lectures réelles ; le Lab, ses viewers et ses Jetons restent fictifs.
+    ${on ? '<b>Ajouts à la file, passages et lecteur AUTORISÉS pour cette session.</b>' : 'Lecture seule : aucun ajout, aucun passage, aucune commande du lecteur n’est envoyé (les demandes sont refusées et remboursées).'}</p>
+    <div class="spo-btns">${
+      on
+        ? '<button type="button" class="d-btn sm" data-act="sp-lab-writes" data-on="0">Revenir en lecture seule</button>'
+        : '<button type="button" class="d-btn bad sm" data-act="sp-lab-writes" data-on="1">Autoriser les ajouts pour cette session</button>'
+    }</div>
+    <small>Coupé à chaque démarrage. Fais ces essais hors live : le quota Spotify est celui de ton compte développeur.</small>
+  </div>`;
+}
+
 function connection(s: SpState, ui: SpUi) {
   const c = s.connection;
   const body = c.simulated
@@ -253,11 +270,29 @@ function technical(s: SpState, ui: SpUi) {
       ${fact('Appels Spotify', `${a.calls_last_minute} dans la dernière minute${a.rate_high ? ', <b>au-dessus du seuil d’alerte (60)</b>' : ''} · plafond 90 / min · ${n.calls ?? 0} depuis le démarrage (${n.writes ?? 0} ajouts ou passages, ${n.cache_hits ?? 0} lectures évitées par le cache)`)}
       ${fact('Suivi de la lecture', s.local.fast_lane ? 'rapide (passage d’une demande annulée)' : s.local.watching ? `actif${s.local.next_poll_in_ms != null ? ` · prochaine lecture dans ${Math.ceil(s.local.next_poll_in_ms / 1000)} s` : ''}` : 'en pause : rien à suivre (aucune demande en file, en cours ou à passer)')}
       ${fact('Dernière lecture', p ? esc(`${hhmm(p.observed_at)} (${agoMs(ui.now - Date.parse(p.observed_at))}) · ${p.track ? `${trackLabel(p.track)}${p.is_playing ? '' : ' (en pause)'}` : 'rien ne joue'}`) : 'aucune')}
+      ${fact('Consommation', usage(s))}
       ${fact('Erreur Studio', s.local.error ? esc(s.local.error) : 'aucune')}
     </dl>${refresh}
     <small>Commandes du chat : <code>!song</code>, <code>!songqueue</code>, <code>!mysong</code>, <code>!songcancel</code> ; modérateurs : <code>!songremove</code>, <code>!songskip</code>.</small></div>`,
     'diagnostic commandes',
   );
+}
+
+/** Local counters since Studio started: the biggest endpoints, the cache, the waits, the Music Hub searches. */
+function usage(s: SpState) {
+  const u = s.api.usage;
+  if (!u) return 'indisponible';
+  const top = Object.entries(u.endpoints)
+    .sort((a, b) => b[1].calls - a[1].calls)
+    .slice(0, 4)
+    .map(
+      ([e, v]) => `${esc(e)} ${v.calls}${v.r429 ? ` (${v.r429} × 429)` : ''}`,
+    )
+    .join(' · ');
+  const hits = Object.values(u.cache_hits).reduce((a, b) => a + b, 0);
+  const n = s.api.counters ?? {};
+  const w = u.waits.essential;
+  return `depuis ${esc(hhmm(u.since))} : ${top || 'aucun appel'} · ${hits} lectures évitées par le cache · attente des commandes : max ${(w.max_ms / 1000).toFixed(1)} s · recherches Music Hub : ${u.catalog_last_minute} / min, ${n.catalog_deferred ?? 0} refusées (budget), ${s.watch?.searches_abandoned ?? 0} abandonnées${n.blocked_writes ? ` · ${n.blocked_writes} écritures bloquées (Lab réel)` : ''}`;
 }
 
 const TRIES: [string, string][] = [
@@ -302,7 +337,7 @@ export function simBar(s: SpState, ui: SpUi) {
     <div class="spo-btns">
       ${btn('near-end', 'Fin du titre')}${btn('external', 'Titre hors demandes')}
       ${btn(m.device_active ? 'no-device' : 'device', m.device_active ? 'Couper l’appareil' : 'Rallumer l’appareil')}
-      ${btn('rate-limit', 'Limite 429')}${btn('answer-200', 'Ajout incertain')}${btn('answer-500', 'Ajout en erreur')}
+      ${btn('rate-limit', 'Limite 429')}${btn('quota', 'Quota dépassé (1 h)')}${btn('skip', 'Skip à la main')}${btn('answer-200', 'Ajout incertain')}${btn('answer-500', 'Ajout en erreur')}
     </div>
     <p class="d-note">${
       last
@@ -315,4 +350,4 @@ export function simBar(s: SpState, ui: SpUi) {
 }
 
 export const spotifyPanel = (s: SpState, ui: SpUi) =>
-  `${quotas(s, ui)}${exceptions(s, ui)}${extension(s, ui)}${overlay(ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;
+  `${labReal(s)}${quotas(s, ui)}${exceptions(s, ui)}${extension(s, ui)}${overlay(ui)}${endOfLive()}${reward(s, ui)}${connection(s, ui)}${technical(s, ui)}`;

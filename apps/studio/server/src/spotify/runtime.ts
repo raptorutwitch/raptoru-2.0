@@ -41,7 +41,16 @@ const SYNC_OPEN_MS = 500;
 /** Module off: Studio still says it is there (Core's admission wants it seen within 15 s once switched on). */
 const IDLE_SYNC_MS = 5_000;
 const POLL = {
+  /** A request's first seconds (its `!songcancel` grace), a canceled request next, a track change just seen. */
   active: 2_500,
+  /** A request playing past its first seconds, nothing sensitive next (docs/music/SPOTIFY_QUOTA.md). */
+  steady: 6_000,
+  /** How long after a request starts it stays read at the `active` pace (the cancel grace, 10 s, and a margin). */
+  startWatch: 15_000,
+  /** One reading this long before a track's end: Core's « played to its end » needs one within 5 s of it. */
+  preEnd: 4_000,
+  /** Then one this long after the expected end (the next track, or the same one again), then `ending` until the change. */
+  postEnd: 700,
   ending: 1_000,
   endingWindow: 15_000,
   external: 30_000,
@@ -71,8 +80,13 @@ export interface SpotifyRuntimeDeps {
   channelId: string;
   api: SpotifyApi;
   auth: Auth;
-  /** The Lab's fake Spotify (null in Production). */
+  /** The Lab's fake Spotify (null in Production, and in the Lab with the real account). */
   sim: SpotifySim | null;
+  /**
+   * The Lab on the broadcaster's REAL account (LAB_SPOTIFY=real, explicit at each launch, never saved): reads only,
+   * until the panel allows writes for this session (`labWrites`, off at every start).
+   */
+  labReal?: { writes: boolean } | null;
   /** Auto-skip reservations (survive a restart: a reserved skip is never sent twice). */
   reservationsFile: string;
   now?: () => number;
@@ -91,6 +105,10 @@ export interface SpotifyRuntimeDeps {
 
 /** Music Hub V2: how often Core's state is read for the overlay (only while it is on). */
 const OVERLAY_READ_MS = 2_500;
+/** Music Hub searches run at once beside the loop (the catalogue lane of the API gate paces them anyway). */
+const SEARCH_POOL = 2;
+/** A search waiting longer than Core's own timeout is dropped (the viewer was already told « indisponible »). */
+const SEARCH_STALE_MS = 6_000;
 
 interface Reservation {
   request_id: string;
@@ -178,6 +196,11 @@ export class SpotifyRuntime {
   private readonly covers = new Map<string, string>();
   /** Timing of the song job in progress (Studio log only: where the seconds go). */
   private marks: [string, number][] = [];
+  /** Music Hub searches: run beside the loop (never in it), at most `SEARCH_POOL` at once, dropped once stale. */
+  private readonly searches = new Map<string, number>();
+  private readonly searchWaiting: { job: SpotifyJob; at: number }[] = [];
+  /** Local counters of the playback watch and the searches (shown in the panel, never sent anywhere). */
+  readonly watchCounters = { searches_abandoned: 0, polls: 0 };
   private mark(label: string) {
     this.marks.push([label, this.now()]);
   }
@@ -220,8 +243,15 @@ export class SpotifyRuntime {
       ): Promise<{ id: string; name: string }>;
       play: MusicCardPlayer['play'];
     } | null;
+    /**
+     * Lab only: the broadcaster's REAL Spotify account instead of the simulator (LAB_SPOTIFY=real at this launch, never
+     * saved). Its own folder (token, rate limit) apart from the simulator's; read-only until allowed for the session.
+     */
+    labReal?: boolean;
   }) {
-    const sim = p.environment === 'lab' ? new SpotifySim() : null;
+    const labReal = p.environment === 'lab' && p.labReal === true;
+    const sim = p.environment === 'lab' && !labReal ? new SpotifySim() : null;
+    const lab = labReal ? { writes: false } : null;
     const auth = sim
       ? simulatedAuth
       : await SpotifyAuth.open({
@@ -236,9 +266,11 @@ export class SpotifyRuntime {
         auth,
         stateFile: join(p.dir, 'spotify-rate-limit.json'),
         ...(sim ? { fetch: sim.fetch } : {}),
+        ...(lab ? { writesAllowed: () => lab.writes } : {}),
       }),
       auth,
       sim,
+      labReal: lab,
       reservationsFile: join(p.dir, 'spotify-auto-skips.json'),
       ...(p.log ? { log: p.log } : {}),
       overlay: await MusicOverlay.open(
@@ -363,12 +395,51 @@ export class SpotifyRuntime {
     if (this.reading?.sent)
       await this.autoSkip(this.reading.playback, this.reading.raw);
     await this.reportPending();
-    for (const job of this.answer.jobs) await this.run(job);
+    // The essential jobs in the loop, in Core's order; the catalogue searches beside it (a wave of searches never
+    // holds a skip, an addition or the next sync behind it).
+    for (const job of this.answer.jobs)
+      if (job.kind === 'search') this.queueSearch(job);
+      else await this.run(job);
     if (!this.answer.watch) this.fastUntil = 0;
     if (!this.answer.enabled) return IDLE_SYNC_MS;
     return this.watching()
       ? Math.max(0, Math.min(SYNC_OPEN_MS, this.nextPollAt - this.now()))
       : SYNC_OPEN_MS;
+  }
+
+  private queueSearch(job: SpotifyJob) {
+    if (
+      this.searches.has(job.job_id) ||
+      this.searchWaiting.some((w) => w.job.job_id === job.job_id)
+    )
+      return;
+    this.searchWaiting.push({ job, at: this.now() });
+    this.pumpSearches();
+  }
+
+  private pumpSearches() {
+    while (this.searches.size < SEARCH_POOL && this.searchWaiting.length) {
+      const { job, at } = this.searchWaiting.shift()!;
+      if (this.now() - at > SEARCH_STALE_MS) {
+        this.watchCounters.searches_abandoned++;
+        continue;
+      }
+      this.searches.set(job.job_id, this.now());
+      const run = this.run(job)
+        .catch(() => {})
+        .finally(() => {
+          this.searches.delete(job.job_id);
+          this.searchRuns.delete(run);
+          this.pumpSearches();
+        });
+      this.searchRuns.add(run);
+    }
+  }
+
+  private readonly searchRuns = new Set<Promise<unknown>>();
+  /** Every search started beside the loop has reported (tests, and a clean stop). */
+  async searchesSettled() {
+    while (this.searchRuns.size) await Promise.all([...this.searchRuns]);
   }
 
   /** Spotify is read only when Core says there is something to watch (a request queued / playing, a tombstone). */
@@ -424,6 +495,7 @@ export class SpotifyRuntime {
 
   /** One playback reading (forced: fresh) and the next reading's time (historical cadence). */
   private async poll(force: boolean) {
+    this.watchCounters.polls++;
     let r: { data: SpotifyPlaybackRaw | null; at: number };
     try {
       r = await this.d.api.playback(force || this.fastUntil > this.now());
@@ -460,8 +532,17 @@ export class SpotifyRuntime {
     return playback;
   }
 
-  /** Historical scheduler: 2.5 s on a request, 1 s near an end, 30 s on a track outside the requests (but 1 s for its
-   *  last 15 s), the fast lane (200 ms for 5 s) when the next request is a canceled one about to start. */
+  /**
+   * The playback watch's pace (docs/music/SPOTIFY_QUOTA.md). Spotify's Web API stays the only source of every decision;
+   * this only chooses WHEN to read it. Kept close where Core's rules need it:
+   * - a canceled request next (it may start any time): the historical pace — 2.5 s, 1 s over the last 15 s, and the
+   *   200 ms fast lane just before it starts (the auto-skip);
+   * - a request's first 15 s (its `!songcancel` grace is judged on a reading under 10 s old): 2.5 s;
+   * - every track's end: one reading 4 s before it (« played to its end » needs one within 5 s), one 0.7 s after it,
+   *   then 1 s until the change is seen;
+   * - after a skip or a player action: read at once (unchanged).
+   * Otherwise 6 s on a request, 30 s on a track outside the requests (the broadcaster's music), 10 s when paused.
+   */
   private cadence(p: SpotifyPlayback) {
     const now = this.now();
     if (this.fastUntil > now && !this.d.api.limited()) return POLL.fast;
@@ -483,14 +564,25 @@ export class SpotifyRuntime {
       this.fastUntil = now + POLL.fastFor;
       return Math.max(POLL.fast, remaining - 200);
     }
-    if (remaining <= POLL.endingWindow)
-      return Math.min(POLL.ending, Math.max(POLL.fast, remaining));
     const known =
       queue.some((q) => q.track_uri === p.track!.uri) ||
       this.answer?.current_request_id;
-    // A canceled request next: it may start at any time (a skip by hand in Spotify), read at the active pace.
-    if (known || this.nextTombstone()) return POLL.active;
-    return Math.min(POLL.external, remaining - POLL.endingWindow);
+    // A canceled request next: it may start at any time (a skip by hand in Spotify) — the historical pace, unchanged.
+    if (this.nextTombstone()) {
+      if (remaining <= POLL.endingWindow)
+        return Math.min(POLL.ending, Math.max(POLL.fast, remaining));
+      return POLL.active;
+    }
+    // Around the end: just after it, then every second until Spotify shows the next track (or the same one again).
+    if (remaining <= POLL.preEnd)
+      return Math.max(POLL.ending, remaining + POLL.postEnd);
+    const pace = known
+      ? (p.progress_ms ?? 0) < POLL.startWatch
+        ? POLL.active
+        : POLL.steady
+      : POLL.external;
+    // Never past the reading 4 s before the end.
+    return Math.max(POLL.fast, Math.min(pace, remaining - POLL.preEnd));
   }
 
   /** The next request of the logical queue, when it is a canceled one not skipped yet (about to be skipped). */
@@ -621,7 +713,8 @@ export class SpotifyRuntime {
 
   private async run(job: SpotifyJob) {
     const attempt_id = randomUUID();
-    this.marks = [['début', this.now()]];
+    // A search runs beside the loop: it never touches the song job's timing log.
+    if (job.kind !== 'search') this.marks = [['début', this.now()]];
     try {
       await this.d.core(`${this.base}/jobs/${job.job_id}/start`, {
         attempt_id,
@@ -629,7 +722,7 @@ export class SpotifyRuntime {
     } catch {
       return; // taken / unknown: never run twice
     }
-    this.mark('Core (prise)');
+    if (job.kind !== 'search') this.mark('Core (prise)');
     let report: SpotifyJobReport;
     if (job.kind === 'song_request')
       report = {
@@ -737,6 +830,14 @@ export class SpotifyRuntime {
       } catch (e) {
         if (e instanceof SpotifyApiError && !e.maybeSent && e.status === 404)
           return { outcome: 'refused', reason: 'NO_DEVICE', track, ...extra };
+        // Lab on the real account, read-only: the exact track WAS resolved (shown to Core), nothing was queued.
+        if (e instanceof SpotifyApiError && e.code === 'LAB_READ_ONLY')
+          return {
+            outcome: 'refused',
+            reason: 'LAB_READ_ONLY',
+            track,
+            ...extra,
+          };
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
         this.mark('ajout (réponse non 204)');
         // No clear answer: read the queue back (historical 250/500/750/1000 ms), never resend.
@@ -820,10 +921,10 @@ export class SpotifyRuntime {
     try {
       // Music Hub V2: a pasted link names one track — read by its id, as the reward reads an exact reference.
       const found = job.track_id
-        ? [await this.d.api.track(job.track_id)].filter(
+        ? [await this.d.api.track(job.track_id, 'catalog')].filter(
             (c): c is NonNullable<typeof c> => !!c,
           )
-        : await this.d.api.search(job.query);
+        : await this.d.api.search(job.query, 'catalog');
       const items = found
         .map(toSearchItem)
         .filter((i): i is SpotifySearchItem => i !== null)
@@ -1048,8 +1149,19 @@ export class SpotifyRuntime {
       return {
         ...core,
         environment: this.d.environment,
-        connection: { ...auth.view(), simulated: Boolean(this.d.sim) },
+        connection: {
+          ...auth.view(),
+          simulated: Boolean(this.d.sim),
+          // Lab: the simulator, or the broadcaster's real account (read-only unless allowed for this session).
+          mode: this.d.sim
+            ? 'lab_sim'
+            : this.d.labReal
+              ? 'lab_real'
+              : 'production',
+          lab_writes: this.d.labReal ? this.d.labReal.writes : null,
+        },
         api: await this.d.api.status(),
+        watch: { ...this.watchCounters },
         local: {
           error: this.lastError,
           watching: Boolean(this.answer?.watch),
@@ -1070,6 +1182,19 @@ export class SpotifyRuntime {
     if (method !== 'POST')
       throw Object.assign(new Error('not_found'), { status: 404 });
     if (path === '/diagnostic/search') return this.diagnosticSearch(body);
+    // Lab with the real account only: allow (or stop) the writes — the queue, the skips, the player — for this session.
+    if (path === '/lab-writes') {
+      if (!this.d.labReal)
+        throw Object.assign(new Error('not_lab_real'), { status: 409 });
+      const b = await body();
+      if (typeof b.enabled !== 'boolean')
+        throw Object.assign(new Error('enabled_required'), { status: 400 });
+      this.d.labReal.writes = b.enabled;
+      this.d.log?.(
+        `[spotify] Lab réel : écritures ${b.enabled ? 'AUTORISÉES pour cette session' : 'coupées (lecture seule)'}`,
+      );
+      return { lab_writes: b.enabled };
+    }
     if (path === '/settings')
       return this.d.core(`${this.base}/settings`, await body());
     if (path === '/actions')
@@ -1115,7 +1240,7 @@ export class SpotifyRuntime {
       return { ok: true };
     }
     const sim =
-      /^\/sim\/(near-end|external|no-device|device|rate-limit|answer-200|answer-500|end)$/.exec(
+      /^\/sim\/(near-end|external|no-device|device|rate-limit|quota|skip|answer-200|answer-500|end)$/.exec(
         path,
       );
     if (sim && this.d.sim) {
@@ -1125,6 +1250,10 @@ export class SpotifyRuntime {
       else if (sim[1] === 'no-device') s.deviceActive = false;
       else if (sim[1] === 'device') s.deviceActive = true;
       else if (sim[1] === 'rate-limit') s.rateLimit(30);
+      // A Development Mode quota (July 2026: `QUOTA_EXCEEDED`, waits of hours): one hour here.
+      else if (sim[1] === 'quota') s.rateLimit(3_600, true);
+      // The broadcaster skips in the Spotify app (Raptoru only sees it at its next reading).
+      else if (sim[1] === 'skip') s.skipByHand();
       else if (sim[1] === 'end') s.seekNearEnd(0);
       else s.queueAnswer = sim[1] === 'answer-200' ? 200 : 500;
       this.nextPollAt = 0;

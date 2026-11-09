@@ -220,6 +220,8 @@ export class SpotifySim {
   /** Next POST /me/player/queue answers this (Spotify used to answer 200: « maybe sent »). */
   queueAnswer: 204 | 200 | 403 | 500 = 204;
   private limitedUntil = 0;
+  /** The 429 says `QUOTA_EXCEEDED` (Development Mode's quota, July 2026), not a short rate limit. */
+  private limitQuota = false;
   readonly calls: string[] = [];
   /** Music Hub: the player (pause keeps the progress where it was). */
   playing = true;
@@ -264,6 +266,12 @@ export class SpotifySim {
       this.startedAt =
         this.now() - Math.max(0, (this.current.duration_ms ?? 0) - msBeforeEnd);
   }
+  /** The broadcaster presses « next » in the Spotify app: the queue, then the playlist, as Spotify would. */
+  skipByHand() {
+    this.tick();
+    this.advance();
+    if (!this.playing) this.pausedProgress = 0;
+  }
   /** The broadcaster plays a track by hand (outside the requests). */
   playExternal() {
     this.current =
@@ -272,8 +280,9 @@ export class SpotifySim {
       ]!;
     this.startedAt = this.now();
   }
-  rateLimit(seconds: number) {
+  rateLimit(seconds: number, quota = false) {
     this.limitedUntil = this.now() + seconds * 1000;
+    this.limitQuota = quota;
   }
   view() {
     this.tick();
@@ -312,7 +321,12 @@ export class SpotifySim {
     if (this.limitedUntil > this.now())
       return json(
         429,
-        { error: { status: 429, message: 'API rate limit exceeded' } },
+        this.limitQuota
+          ? {
+              error: { status: 429, message: 'Quota exceeded' },
+              reason: 'QUOTA_EXCEEDED',
+            }
+          : { error: { status: 429, message: 'API rate limit exceeded' } },
         {
           'retry-after': String(
             Math.ceil((this.limitedUntil - this.now()) / 1000),

@@ -52,6 +52,10 @@ Chaque étape demande un GO ; aucune ne doit être faite tant que les autorisati
 
 ## 5. Procédure de connexion réelle (préparée le 08/11, rien d'activé)
 
+> **09/11** : étapes 1 (disponibilité `market=from_token` pour les recherches du Hub), 2 (budget de recherches séparé)
+> et une partie de 3 (attribution texte + lien « Ouvrir dans Spotify ») faites ; étape 4 outillée en Lab, en lecture
+> seule par défaut : [SPOTIFY_REEL_LAB.md](SPOTIFY_REEL_LAB.md). Étape 5 (hors Lab) inchangée : fermée dans le code.
+
 État : l'extension publique n'a **aucun** compte réel. Le module ne vit qu'en Lab (`config.lab`), sur le catalogue
 fictif du simulateur. Aucun secret dans les maquettes, les fixtures ni les journaux : le compte du streamer reste
 celui de Studio (jeton chiffré DPAPI, jamais transmis à l'extension ni à Core).

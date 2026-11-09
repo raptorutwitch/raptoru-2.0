@@ -89,7 +89,9 @@ En Production, relevé du 30/10 (non revérifié module par module le 04/11) :
   Jetons. Branche locale `feat/music-hub`, worktree `Raptoru 2.0 - Worktrees\music-hub`. Lab seulement, non validé.
   Design final (« une seule liste » : rideau de recherche, bandeau prix / demandes / délai, « en cours » en tête,
   notifications, « Musiques de la soirée » réelles) **intégré dans le vrai module**, tests verts. Lancement :
-  `Ouvrir Music Hub (Lab).cmd` à la racine du worktree. Prochaine étape : test à la main par Antoni.
+  `Ouvrir Music Hub (Lab).cmd` à la racine du worktree. 09/11 : Spotify V2 optimisé (quotas, priorités,
+  `docs/music/SPOTIFY_QUOTA.md`) et vrai catalogue Spotify prêt en Lab, lecture seule par défaut
+  (`Ouvrir Music Hub (Lab, Spotify reel).cmd`, `docs/music/SPOTIFY_REEL_LAB.md`). Prochaine étape : essai d'Antoni.
   État et reprise : `docs/music/MUSIC_HUB_STATE.md` § 0.
 - Profil d'alertes Halloween `halloween_alerts` : **encore actif** le 02/11, à couper sur GO d'Antoni.
 - Un achat Halloween d’un viewer (125 Jetons, non remboursé) attend une décision d’Antoni ; le détail est conservé hors du dépôt public.

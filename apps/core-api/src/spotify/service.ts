@@ -929,8 +929,21 @@ export class SpotifyService {
       if (s.playback)
         changed.push(...(await this.observe(q, channelId, prior, s.playback)));
       changed.push(...(await this.expire(q, channelId)));
+      // Music Hub: a catalogue search the viewer was already told is « indisponible » (older than its timeout) is
+      // never handed out — no Spotify call for an answer nobody waits for any more.
+      await q.query(
+        `update spotify_jobs set status = 'expired', updated_at = $2 where channel_id = $1 and kind = 'search'
+           and status = 'queued' and created_at < $3`,
+        [
+          channelId,
+          now,
+          new Date(now.getTime() - SPOTIFY_RULES.searchTimeoutMs),
+        ],
+      );
+      // The essential jobs (song requests, skips, player controls, `!song`) first; the catalogue searches after.
       const jobs = await q.query<JobRow>(
-        `select * from spotify_jobs where channel_id = $1 and status = 'queued' order by created_at limit 50`,
+        `select * from spotify_jobs where channel_id = $1 and status = 'queued'
+           order by (kind = 'search'), created_at limit 50`,
         [channelId],
       );
       const rows = await this.live(q, channelId);
@@ -951,8 +964,10 @@ export class SpotifyService {
           auto_skip: isTombstone(r) && !r.auto_skip_consumed_at,
           queued_at: iso(new Date(r.queued_at!)),
         }));
+      // A catalogue search never makes Studio watch the player (it reads nothing of the playback).
       const running = await q.query(
-        `select 1 from spotify_jobs where channel_id = $1 and status in ('queued', 'running') limit 1`,
+        `select 1 from spotify_jobs where channel_id = $1 and status in ('queued', 'running') and kind <> 'search'
+           limit 1`,
         [channelId],
       );
       return {
@@ -2296,6 +2311,25 @@ export class SpotifyService {
       );
       if (recent >= SPOTIFY_RULES.searchesPerViewerPerMinute)
         throw new SpotifyError(429, 'search_rate_limited');
+      // The whole channel: new catalogue searches per minute (reused texts above are free). Beyond: « réessaie ».
+      const channelRecent = Number(
+        (
+          await q.query<{ n: string }>(
+            `select count(*) as n from spotify_jobs where channel_id = $1 and kind = 'search' and created_at > $2
+               and status <> 'expired'`,
+            [channelId, new Date(now.getTime() - 60_000)],
+          )
+        )[0]!.n,
+      );
+      if (channelRecent >= SPOTIFY_RULES.searchesPerChannelPerMinute)
+        throw new SpotifyError(429, 'search_busy');
+      // A newer search of this viewer replaces their previous one still waiting for Studio (typing on): one call, not
+      // one per pause in the typing.
+      await q.query(
+        `update spotify_jobs set status = 'expired', updated_at = $3 where channel_id = $1 and kind = 'search'
+           and status = 'queued' and payload->>'viewer' = $2`,
+        [channelId, viewerId, now],
+      );
       const jobId = randomUUID();
       await q.query(
         `insert into spotify_jobs (job_id, channel_id, kind, payload, status, created_at, updated_at)

@@ -1,9 +1,12 @@
 # Music Hub (docs/music/MUSIC_HUB_STATE.md) - called by « Ouvrir Music Hub (Lab).cmd » while `npm run studio:lab` starts.
 # Waits for the Lab's Studio, opens the music in the LAB only (requests open, the extension's entry, the player's
 # controls), then the extension as a viewer, a moderator and a supermod. Never Production: the Lab's own address only.
+# -Real (« Ouvrir Music Hub (Lab, Spotify reel).cmd »): checks the Lab really runs on the real account in READ-ONLY mode
+# (docs/music/SPOTIFY_REEL_LAB.md) before opening anything.
 param(
   [string]$Base = 'http://127.0.0.1:4100',
   [int]$WaitSeconds = 480,
+  [switch]$Real,
   [switch]$DryRun
 )
 $headers = @{ 'x-raptoru-studio' = '1' }
@@ -25,6 +28,15 @@ if (-not $ready) {
 if ($state.environment -ne 'lab') {
   # Never touch anything else than the Lab (an installed Studio answering on this port is Production).
   Write-Output "Ce Studio n'est pas le Lab ($($state.environment)) : rien n'est change."
+  exit 1
+}
+$mode = $state.connection.mode
+if ($Real -and $mode -ne 'lab_real') {
+  Write-Output "Le Lab ne tourne pas sur le compte Spotify reel (mode : $mode) : pages non ouvertes."
+  exit 1
+}
+if (-not $Real -and $mode -eq 'lab_real') {
+  Write-Output "Le Lab tourne sur le compte Spotify reel : utilise 'Ouvrir Music Hub (Lab, Spotify reel).cmd'."
   exit 1
 }
 try {

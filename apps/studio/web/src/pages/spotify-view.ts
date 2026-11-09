@@ -122,6 +122,10 @@ export interface SpState {
     account: { name: string; product: string | null } | null;
     redirect_uri: string;
     simulated: boolean;
+    /** Lab: simulator, or the broadcaster's real account (LAB_SPOTIFY=real); Production otherwise. */
+    mode?: 'lab_sim' | 'lab_real' | 'production';
+    /** Lab with the real account: writes (queue, skips, player) allowed for this session. */
+    lab_writes?: boolean | null;
   };
   api: {
     limited_until: string | null;
@@ -130,7 +134,22 @@ export interface SpState {
     rate_high: boolean;
     backoff_until: string | null;
     counters?: Record<string, number>;
+    /** Local usage since Studio started (docs/music/SPOTIFY_QUOTA.md). */
+    usage?: {
+      since: string;
+      endpoints: Record<
+        string,
+        { calls: number; r429: number; errors: number }
+      >;
+      cache_hits: Record<string, number>;
+      waits: Record<
+        'essential' | 'catalog',
+        { count: number; total_ms: number; max_ms: number }
+      >;
+      catalog_last_minute: number;
+    };
   };
+  watch?: { searches_abandoned: number; polls: number };
   local: {
     error: string | null;
     watching: boolean;
@@ -208,6 +227,7 @@ const left = (ms: number) =>
 
 /** Pourquoi une demande n'est pas passée, dans les mots de la page. */
 export const REASONS: Record<string, string> = {
+  LAB_READ_ONLY: 'Lab en lecture seule (rien envoyé à Spotify)',
   INVALID_INPUT: 'texte vide',
   INVALID_REFERENCE: 'lien non Spotify ou pas un titre',
   NOT_FOUND: 'aucun titre assez proche',

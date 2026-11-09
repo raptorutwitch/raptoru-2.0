@@ -104,7 +104,7 @@ async function hub(
     }
   };
   /** Studio runs every queued song request: queued (or refused with `reason`). */
-  const runRequests = async (reason?: 'NOT_FOUND') => {
+  const runRequests = async (reason?: 'NOT_FOUND' | 'LAB_READ_ONLY') => {
     const a = await sync();
     for (const j of a.jobs.filter((x) => x.kind === 'song_request')) {
       if (j.kind !== 'song_request') continue;
@@ -919,5 +919,76 @@ describe('Music Hub final — « Musiques de la soirée » and the end of a requ
       ended_at: h.core.clock.now().toISOString(),
     });
     expect(typeof st.me!.history[0]!.reason).toBe('string');
+  });
+});
+
+describe('Spotify quota protection (docs/music/SPOTIFY_QUOTA.md) — the searches never hold the essential jobs', () => {
+  it('the whole channel: 30 new catalogue searches a minute, a text already searched stays free, then « réessaie »', async () => {
+    const h = await hub();
+    for (let n = 0; n < 30; n++) await h.search(viewer(n), `titre ${n}`);
+    expect(await h.code(h.search(viewer(40), 'encore un'))).toBe('search_busy');
+    // The same text as a running search: reused, no new catalogue call, never refused.
+    expect((await h.search(viewer(41), 'titre 3')).status).toBe('pending');
+    h.core.clock.set(new Date(h.core.clock.now().getTime() + 61_000));
+    await h.sync(); // Studio still there a minute later
+    expect(await h.code(h.search(viewer(40), 'encore un'))).toBe('ok');
+  });
+
+  it("a viewer's newer search replaces their previous one still waiting (typing on): one catalogue call", async () => {
+    const h = await hub();
+    const a = await h.search(viewer(1), 'nuit');
+    const b = await h.search(viewer(1), 'nuit blanche');
+    const jobs = (await h.sync()).jobs.filter((j) => j.kind === 'search');
+    expect(jobs.map((j) => j.job_id)).toEqual([b.search_id]);
+    expect((await h.spotify.searchResult(CH, a.search_id)).status).toBe(
+      'failed',
+    );
+  });
+
+  it('a search older than its timeout is never handed to Studio; the essential jobs come first; a search alone never makes Studio watch the player', async () => {
+    const h = await hub();
+    const old = await h.search(viewer(1), 'ancienne');
+    h.core.clock.set(new Date(h.core.clock.now().getTime() + 7_000));
+    const fresh = await h.search(viewer(2), 'nouvelle');
+    let a = await h.sync();
+    expect(a.jobs.map((j) => j.job_id)).toEqual([fresh.search_id]);
+    expect(a.jobs.map((j) => j.job_id)).not.toContain(old.search_id);
+    expect(a.watch).toBe(false);
+    // A song request asked after the search is handed out before it.
+    await h.fund(viewer(3), 1_000);
+    await h.search(viewer(3), 'titre');
+    await h.answerSearches([item(1)]);
+    await h.search(viewer(4), 'une autre');
+    await h.ask(viewer(3), 1);
+    a = await h.sync();
+    expect(a.jobs[0]!.kind).toBe('song_request');
+    expect(a.jobs.at(-1)!.kind).toBe('search');
+    expect(a.watch).toBe(true);
+  });
+
+  it('the Lab on the real account, read-only: the request is refused before Spotify (LAB_READ_ONLY) and refunded once', async () => {
+    const h = await hub();
+    await h.fund(viewer(1), 1_000);
+    await h.search(viewer(1), 'titre');
+    await h.answerSearches([item(1)]);
+    await h.ask(viewer(1), 1);
+    expect(await h.balance(viewer(1))).toBe(500);
+    await h.runRequests('LAB_READ_ONLY');
+    await h.runRequests('LAB_READ_ONLY');
+    expect(await h.balance(viewer(1))).toBe(1_000);
+    const r = (
+      await h.core.db.query<{
+        state: string;
+        reason: string;
+        refund_status: string;
+      }>(
+        `select state, reason, refund_status from spotify_requests where source = 'extension'`,
+      )
+    )[0]!;
+    expect(r).toEqual({
+      state: 'FAILED',
+      reason: 'LAB_READ_ONLY',
+      refund_status: 'refunded',
+    });
   });
 });

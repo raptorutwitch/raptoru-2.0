@@ -165,6 +165,8 @@ body.component-view .jdm-module[data-module="music"] .jdm-module__body,
 .mh-buy .mh-art { width: calc(36 * var(--g)); height: calc(36 * var(--g)); }
 .mh-buy .mh-tx > span b { color: #ffe7a8; }
 .mh-buy__err { color: #ffc2b5; white-space: normal; }
+.mh-open { justify-self: start; color: var(--mh-acc); font-size: var(--fs-11); font-weight: 700; text-decoration: none; }
+.mh-open:hover, .mh-open:focus-visible { text-decoration: underline; }
 .mh-buy__acts { display: flex; gap: calc(4 * var(--g)); align-items: center; }
 @keyframes mh-up { from { opacity: 0; transform: translateY(calc(8 * var(--g))); } }
 .mh-btn { display: inline-flex; gap: calc(6 * var(--g)); align-items: center; justify-content: center; height: max(30px, calc(36 * var(--g))); padding: 0 calc(14 * var(--g)); border: 0; border-radius: calc(11 * var(--g)); background: rgba(255, 255, 255, 0.07); font-weight: 750; white-space: nowrap; }

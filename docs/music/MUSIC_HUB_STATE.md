@@ -6,6 +6,15 @@
 
 ## 0. Où reprendre
 
+- **09/11 — optimisation Spotify V2 + catalogue réel prêt en Lab** :
+  - Consommation et priorités (voies essentielle / catalogue, recherches hors de la boucle, cadence de lecture,
+    compteurs locaux) : [SPOTIFY_QUOTA.md](SPOTIFY_QUOTA.md). Simulé : 1 400 → 630 lectures / h de demandes, skip
+    derrière 30 recherches 6,2 s → 0,8 s.
+  - **Mode B « Lab sur ton compte Spotify »** (lecture seule par défaut, ajouts sur autorisation par session) :
+    `Ouvrir Music Hub (Lab, Spotify reel).cmd`, procédure [SPOTIFY_REEL_LAB.md](SPOTIFY_REEL_LAB.md). Prêt, **pas encore
+    essayé avec le vrai compte** (action d'Antoni). Mode A (simulé) inchangé : `Ouvrir Music Hub (Lab).cmd`.
+  - Spotify V2 Production : rien de déployé ; ces changements n'y arriveront qu'avec un GO (Core + release Studio).
+
 - **Design final intégré dans le vrai module** (retour du 08/11 « une seule liste musicale ») :
   `apps/twitch-extension/extension/modules/music/view.js` + `music.css`. Référence visuelle : prototype
   `prototypes/music-hub/f3-hybride.html` (« F3 finale »). À tester par Antoni : `Ouvrir Music Hub (Lab).cmd`.

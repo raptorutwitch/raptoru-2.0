@@ -18,6 +18,8 @@ const SAFE: Partial<
   VIEWER_COOLDOWN: 'Cette demande est trop rapprochée de la précédente.',
   DUPLICATE_REDEEM: 'Cette demande a déjà été traitée.',
   NO_DEVICE: 'Aucun appareil Spotify actif et disponible n’a été trouvé.',
+  LAB_READ_ONLY:
+    'Test Lab en lecture seule : rien n’a été ajouté au Spotify du streamer.',
   AUTH_NOT_CONFIGURED: 'Spotify OAuth n’est pas configuré.',
   AUTH_REQUIRED: 'Spotify nécessite une nouvelle autorisation.',
   SPOTIFY_UNAVAILABLE: 'Spotify est momentanément indisponible.',

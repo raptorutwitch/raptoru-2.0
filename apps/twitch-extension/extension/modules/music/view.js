@@ -61,6 +61,8 @@ function refusal(e, st) {
     case 'price_changed': return `Le prix a changé : ${fmt(d.price ?? st?.price_tokens)} Jetons. Confirme à nouveau.`;
     case 'insufficient_tokens': return `Il te manque ${fmt(Math.max(0, (d.needed ?? 0) - (d.balance ?? 0)))} Jetons.`;
     case 'search_rate_limited': return 'Trop de recherches d’un coup : patiente quelques secondes.';
+    case 'search_busy': return 'Beaucoup de recherches en ce moment : réessaie dans quelques secondes.';
+    case 'search_limited': return 'Spotify limite les recherches pour le moment : réessaie dans un instant.';
     case 'forbidden': return d.permission === 'music.player' ? 'Le lecteur est réservé aux supermods.' : 'Action réservée à l’équipe (permission manquante).';
     case 'team_only': return 'Action réservée à l’équipe.';
     case 'player_controls_disabled': return 'Les commandes du lecteur sont désactivées dans Studio.';
@@ -386,13 +388,13 @@ export function view(ctx) {
     else if (results) {
       const waiting = queuedIds();
       const n = results.items.length;
-      html = `<p class="mh-rcap"><span>${LINK.test(results.query ?? '') ? 'Titre du lien' : 'Catalogue'}</span><span>${n} résultat${n > 1 ? 's' : ''}</span></p>` + results.items.map((i, k) => {
+      html = `<p class="mh-rcap"><span>${LINK.test(results.query ?? '') ? 'Titre du lien' : results.provider === 'spotify' ? 'Catalogue Spotify' : 'Catalogue'}</span><span>${n} résultat${n > 1 ? 's' : ''}</span></p>` + results.items.map((i, k) => {
         const flag = !i.playable ? 'Indisponible' : i.too_long ? 'Trop long' : waiting.has(i.id) ? 'Déjà en file' : '';
         const on = pick?.item.id === i.id;
         return `<button type="button" class="mh-hit ${flag ? 'is-off' : ''} ${on ? 'is-sel' : ''}" role="option" aria-selected="${on}" data-pick="${k}" ${flag ? 'aria-disabled="true"' : ''} aria-label="${esc(`${i.title}, ${i.artists.join(', ')}${i.album ? `, ${i.album}` : ''}, ${dur(i.duration_ms)}${flag ? `, ${flag}` : ''}`)}">
           ${art(i.image_url)}<span class="mh-tx"><b>${esc(i.title)}</b><span>${artists(i.artists)}${i.album ? ` · ${esc(i.album)}` : ''}</span></span>
           <span class="mh-end">${flag ? `<span class="mh-why">${flag}</span>` : `<span class="mh-d">${dur(i.duration_ms)}</span><span class="mh-add">${on ? I.check : I.plus}</span>`}</span></button>`;
-      }).join('') + `<p class="mh-src">${results.provider === 'lab' ? 'Catalogue de démonstration du Lab : titres et artistes fictifs, aucun service musical réel.' : 'Catalogue : compte musical connecté au Studio du stream.'}</p>`;
+      }).join('') + `<p class="mh-src">${results.provider === 'lab' ? 'Catalogue de démonstration du Lab : titres et artistes fictifs, aucun service musical réel.' : 'Titres, artistes et pochettes fournis par Spotify (compte du streamer).'}</p>`;
     }
     put(box, html);
     if (searching) box.setAttribute('aria-busy', 'true');
@@ -409,7 +411,11 @@ export function view(ctx) {
     const line = pick.error
       ? `<span class="mh-buy__err" role="alert">${esc(pick.error)}</span>`
       : `<b>◆ ${fmt(price)}</b>${after !== null ? ` · il te restera ◆ ${fmt(after)}` : ''}`;
-    put($('buy'), `<div class="mh-buy" role="group" aria-label="Demander ce titre">${art(i.image_url)}<span class="mh-tx"><b>${esc(i.title)}</b><span>${line}</span></span>
+    // Spotify's display rules: a link back to the track on Spotify for its metadata and cover (real catalogue only).
+    const back = results?.provider === 'spotify'
+      ? `<a class="mh-open" href="https://open.spotify.com/track/${encodeURIComponent(i.id)}" target="_blank" rel="noopener noreferrer">Ouvrir dans Spotify</a>`
+      : '';
+    put($('buy'), `<div class="mh-buy" role="group" aria-label="Demander ce titre">${art(i.image_url)}<span class="mh-tx"><b>${esc(i.title)}</b><span>${line}</span>${back}</span>
       <span class="mh-buy__acts"><button type="button" class="mh-x" data-act="unpick" data-key="unpick" aria-label="Annuler la sélection">${I.x}</button>
       <button type="button" class="mh-btn mh-btn--go" data-act="confirm" data-key="confirm" ${pick.busy ? 'disabled aria-busy="true"' : ''}>${pick.busy ? 'Envoi…' : `Demander · ◆ ${fmt(price)}`}</button></span></div>`);
   }
@@ -442,7 +448,9 @@ export function view(ctx) {
         r = await client.musicSearchResult(r.search_id);
       }
       if (mine !== seq || destroyed) return; // a newer search replaced it
-      results = r.status === 'done' ? { items: r.items, provider: r.provider, query: q } : { error: 'unavailable' };
+      results = r.status === 'done'
+        ? { items: r.items, provider: r.provider, query: q }
+        : { error: r.reason === 'RATE_LIMITED' ? 'search_limited' : 'unavailable' };
     } catch (e) {
       if (mine !== seq || destroyed) return;
       results = { error: e?.code ?? 'unavailable' };

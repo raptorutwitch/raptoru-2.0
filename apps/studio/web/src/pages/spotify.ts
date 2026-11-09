@@ -602,6 +602,23 @@ export function mountSpotifyPage(root: HTMLElement) {
     },
     'sp-sim': (el) =>
       post(el, `/sim/${el.dataset.what}`, {}, 'Simulateur modifié'),
+    // Lab with the real account: allow (or stop) the writes for this session — a confirmation before allowing.
+    'sp-lab-writes': (el) => {
+      const on = el.dataset.on === '1';
+      if (
+        on &&
+        !window.confirm(
+          'Autoriser le Lab à ajouter des titres à TA file Spotify, à passer et à piloter ton lecteur pendant cette session ?',
+        )
+      )
+        return;
+      return post(
+        el,
+        '/lab-writes',
+        { enabled: on },
+        on ? 'Ajouts autorisés pour cette session' : 'Lab en lecture seule',
+      );
+    },
   };
 
   p.root.addEventListener('click', (ev) => {

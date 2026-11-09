@@ -1295,10 +1295,18 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             'votekick-overlay',
           ),
           // Spotify V2: the Lab plays on the simulator; Production on the broadcaster's account (panel « Musique »).
+          // LAB_SPOTIFY=real (explicit at each Lab launch, never saved): the Lab on the broadcaster's real account, in
+          // its own folder, read-only until allowed in the panel for the session (docs/music/SPOTIFY_REEL_LAB.md).
           spotifyDir:
             alertsEnv === 'lab'
-              ? labModuleDir('spotify-lab')
+              ? labModuleDir(
+                  process.env.LAB_SPOTIFY === 'real'
+                    ? 'spotify-lab-real'
+                    : 'spotify-lab',
+                )
               : join(paths.runtimeDir, 'production', 'spotify'),
+          spotifyLabReal:
+            alertsEnv === 'lab' && process.env.LAB_SPOTIFY === 'real',
           twitch: () => ({
             scope: hasTwitchScope(
               readTokenSummary(broadcasterTokenFile).scopes,

@@ -602,6 +602,7 @@ describe('Music Hub — search and player jobs (docs/music/MUSIC_HUB_STATE.md)',
     const h = await harness();
     h.job({ kind: 'search', job_id: id(1), query: 'nuit bl' });
     await h.rt.once();
+    await h.rt.searchesSettled();
     const r = h.report() as unknown as {
       outcome: string;
       provider: string;
@@ -624,10 +625,12 @@ describe('Music Hub — search and player jobs (docs/music/MUSIC_HUB_STATE.md)',
     expect(r.items[0]!.image_url).toMatch(/^data:image\/svg\+xml,/);
     h.job({ kind: 'search', job_id: id(2), query: 'comete acoustique' });
     await h.rt.once();
+    await h.rt.searchesSettled();
     const c = h.report() as unknown as typeof r;
     expect(c.items[0]!.image_url).toBeNull();
     h.job({ kind: 'search', job_id: id(3), query: 'session perdue' });
     await h.rt.once();
+    await h.rt.searchesSettled();
     expect((h.report() as unknown as typeof r).items[0]!.playable).toBe(false);
     expect(h.sim.view().queue).toEqual([]);
   });
@@ -693,12 +696,14 @@ describe('Music Hub V2 — pasted links, many versions, the withdrawn request sk
       track_id: lab(29),
     });
     await h.rt.once();
+    await h.rt.searchesSettled();
     const one = h.report() as unknown as Items;
     expect(one.outcome).toBe('done');
     expect(one.items.map((i) => i.title)).toEqual(['Néon Sauvage (Nightcore)']);
     expect(h.events).toContain(`spotify GET tracks/${lab(29)}`);
     h.job({ kind: 'search', job_id: id(2), query: 'neon sauv' });
     await h.rt.once();
+    await h.rt.searchesSettled();
     const all = h.report() as unknown as Items;
     expect(all.items).toHaveLength(10);
     expect(all.items.map((i) => i.title)).toEqual(
@@ -716,6 +721,7 @@ describe('Music Hub V2 — pasted links, many versions, the withdrawn request sk
       track_id: 'LABMUSIC99999999999999',
     });
     await h.rt.once();
+    await h.rt.searchesSettled();
     expect((h.report() as unknown as Items).items).toEqual([]);
     expect(h.sim.view().queue).toEqual([]);
   });
@@ -765,5 +771,80 @@ describe('Music Hub V2 — pasted links, many versions, the withdrawn request sk
     console.log(
       `Music Hub V2 — latence du skip automatique (simulateur) : ${latency} ms`,
     );
+  });
+});
+
+describe('Lab on the real account, read-only (docs/music/SPOTIFY_REEL_LAB.md)', () => {
+  it('a request resolves the EXACT track, then is refused before Spotify (LAB_READ_ONLY): nothing queued; allowed for the session, it is queued', async () => {
+    const lab = { writes: false };
+    const clock = { t: 1_000_000 };
+    const sim = new SpotifySim(() => clock.t);
+    const calls: string[] = [];
+    const api = new SpotifyApi({
+      auth: simulatedAuth,
+      stateFile: join(await mkdtemp(join(tmpdir(), 'sp-real-')), 'l.json'),
+      fetch: ((input: URL | string, init?: RequestInit) => {
+        calls.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        );
+        return sim.fetch(input, init);
+      }) as typeof fetch,
+      now: () => clock.t,
+      sleep: async (ms) => void (clock.t += ms),
+      writesAllowed: () => lab.writes,
+    });
+    const reports: Record<string, unknown>[] = [];
+    let jobs: SpotifyJob[] = [];
+    const rt = await SpotifyRuntime.open({
+      core: (async (path: string, body?: unknown) => {
+        if (path.endsWith('/studio')) {
+          const a = {
+            enabled: true,
+            jobs,
+            queue: [],
+            current_request_id: null,
+            watch: false,
+          };
+          jobs = [];
+          return a;
+        }
+        if (path.endsWith('/report'))
+          reports.push(body as Record<string, unknown>);
+        return {};
+      }) as never,
+      environment: 'lab',
+      channelId: '1',
+      api,
+      auth: simulatedAuth,
+      sim: null,
+      labReal: lab,
+      reservationsFile: join(
+        await mkdtemp(join(tmpdir(), 'sp-real-r-')),
+        'r.json',
+      ),
+      now: () => clock.t,
+      sleep: async (ms) => void (clock.t += ms),
+    });
+    const ask = (n: number): SpotifyJob => ({
+      kind: 'song_request',
+      job_id: id(n),
+      request_id: id(100 + n),
+      reference: { kind: 'exact', track_id: NUMB.id! },
+      max_duration_ms: 600_000,
+    });
+    jobs = [ask(1)];
+    await rt.once();
+    expect(reports[0]).toMatchObject({
+      outcome: 'refused',
+      reason: 'LAB_READ_ONLY',
+      track: { id: NUMB.id, title: 'Numb' },
+    });
+    expect(calls.some((c) => c.startsWith('POST'))).toBe(false);
+    expect(sim.view().queue).toEqual([]);
+    lab.writes = true;
+    jobs = [ask(2)];
+    await rt.once();
+    expect(reports[1]).toMatchObject({ outcome: 'queued' });
+    expect(sim.view().queue).toEqual(['Numb']);
   });
 });
