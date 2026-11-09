@@ -275,10 +275,24 @@ export class ChannelPointsRuntime {
         });
       }
     }
-    await ack('completed', { results });
-    // The ends, after the job's report (Core needs the « playing » first); never awaited by the loop.
-    for (const { index, end } of ends)
-      void end.then((r) => this.reportEffect(job.job_id, index, r));
+    try {
+      // Audit 09/11 (P2): the actions ran — their report is retried like an effect's end (a single lost POST used to
+      // leave the job « running » until its lease, holding every next redemption, then « execution_unknown »).
+      for (let n = 0; ; n++) {
+        try {
+          await ack('completed', { results });
+          break;
+        } catch (e) {
+          // Answered by Core (already settled, lease over…) or still failing after 5 tries: Core's lease decides.
+          if ((e as { status?: number }).status || n >= 4) throw e;
+          await new Promise((ok) => setTimeout(ok, 500 * (n + 1)));
+        }
+      }
+    } finally {
+      // The ends, after the job's report (Core needs the « playing » first); never awaited by the loop.
+      for (const { index, end } of ends)
+        void end.then((r) => this.reportEffect(job.job_id, index, r));
+    }
     return true;
   }
 
