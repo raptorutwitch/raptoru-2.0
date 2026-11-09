@@ -563,7 +563,7 @@ export function nowView(s: SpState, ui: SpUi) {
       <div class="spo-sub">
         <button type="button" class="d-btn" data-act="sp-skip" ${roAttr(s, 'Passe le titre en cours sur Spotify, même hors demandes')}>${ic('skip')}Passer la musique</button>
         ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
-      </div>
+      </div>${readOnly(s) ? `<p class="spo-ro">${ic('lock')}Lecture seule : passer, pause et volume sont coupés tant que les ajouts ne sont pas autorisés pour cette session.</p>` : ''}
     </div>`;
 }
 

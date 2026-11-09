@@ -490,7 +490,7 @@ describe('Spotify page — the OBS music card settings (Music Hub V2)', () => {
       await import('../../web/src/pages/spotify-panel.ts');
     const base = { fields: {}, who: [], now: Date.now() };
     const s = state();
-    expect(spotifyPanel(s, base)).not.toContain('Overlay OBS');
+    expect(spotifyPanel(s, base)).not.toContain('Carte « nouvelle demande »');
     const html = spotifyPanel(s, {
       ...base,
       overlay: {
@@ -508,7 +508,7 @@ describe('Spotify page — the OBS music card settings (Music Hub V2)', () => {
         sounds: [{ id: 'tiens-bon', label: 'Tiens bon !', available: true }],
       },
     });
-    expect(html).toContain('Overlay OBS');
+    expect(html).toContain('Carte « nouvelle demande » (OBS)');
     for (const k of [
       'enabled',
       'on_request',
@@ -718,5 +718,22 @@ describe('the live track from Windows and the stream history (Studio page)', () 
         ui(),
       ),
     ).toContain('Terminer le live simulé');
+  });
+});
+
+describe('the Lab on the real account, read-only (no fake « demandé »)', () => {
+  it('skip, pause and volume are disabled with the reason; allowed again once writes are on', () => {
+    const lab = (writes: boolean) =>
+      state({
+        settings: { ...state().settings, player_controls: true },
+        connection: { ...state().connection, mode: 'lab_real', lab_writes: writes },
+      });
+    const ro = nowView(lab(false), ui());
+    expect(ro).toMatch(/data-act="sp-skip" disabled/);
+    expect(ro).toMatch(/data-act="sp-play"[^>]*disabled/);
+    expect(ro).toContain('Lecture seule');
+    const rw = nowView(lab(true), ui());
+    expect(rw).not.toMatch(/data-act="sp-skip" disabled/);
+    expect(rw).not.toContain('Lecture seule');
   });
 });

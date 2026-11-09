@@ -6,6 +6,13 @@
 
 ## 0. Où reprendre
 
+- **09/11 (soir) — Overlay musique OBS** : [MUSIC_OVERLAYS.md](MUSIC_OVERLAYS.md). Non validé, **jamais essayé dans OBS**.
+  - **Studio.** Une page « Overlay musique » (Modules › Musique) : 6 archétypes et 2 presets, aperçu réel 16:9
+    (démo isolée), variantes, Afficher / Masquer, assistant OBS qui ne fait qu'ajouter.
+  - **Historique.** Remis à zéro à chaque nouveau Daily (`stream_day`), plus de doublon d'une demande non identifiée.
+  - **Lab en lecture seule.** Le lecteur est grisé, avec sa raison.
+  - **Prochaine étape.** Essai d'Antoni : § 9 de MUSIC_OVERLAYS.md, puis un vrai OBS.
+
 - **09/11 — musique en cours (Windows SMTC) et musiques du stream** : [SMTC_STUDIO.md](SMTC_STUDIO.md). Non validé.
   - **Studio.** La page Spotify affiche ce que joue Spotify Desktop (pochette, titre, album, barre fluide, état), et
     un onglet « Musiques du stream ».

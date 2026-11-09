@@ -128,9 +128,10 @@ function overlay(ui: SpUi) {
     </select>
     <label class="d-btn sm" title="Importer un son (mp3, wav, ogg, 5 Mo max)">Importer…<input type="file" accept="audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg" data-ov-file hidden></label>`;
   return grp(
-    'Overlay OBS',
+    'Carte « nouvelle demande » (OBS)',
     'music',
     `<div class="d-row col" data-k="overlay obs carte alerte son demande lecture effets">
+      <p class="d-note">Une brève carte par la source « Effets ». Le titre en cours en permanence : <a href="/?p=music-overlay">Overlay musique</a>.</p>
       ${row('Carte musique sur OBS', sw(c.enabled, 'data-ov="enabled"', 'Carte musique sur OBS'))}
       ${row('À chaque nouvelle demande', sw(c.on_request, 'data-ov="on_request"', 'À chaque nouvelle demande'), 'demande file')}
       ${row('Au début de la lecture', sw(c.on_start, 'data-ov="on_start"', 'Au début de la lecture'), 'lecture debut')}

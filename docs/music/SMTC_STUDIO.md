@@ -78,7 +78,8 @@ Spotify Desktop ─► Windows (SMTC) ─► sonde --studio ─► Studio (suivi
 - **Redémarrage de Studio** sur le même titre commencé au même moment (± 20 s) : même entrée.
   - Sinon, l'ancienne se ferme « fin inconnue ».
   - Le Core garde tout en base (redémarrage du Core sans perte).
-- **Période.** 30 jours.
+- **Période.** Le Daily en cours seulement (décidé le 09/11 : un nouveau Daily = un historique visible vide ; stream_day
+  du projet, 16:00 → 16:00 Paris ; les lignes plus anciennes restent en base). 30 jours au plus.
   - Les demandes que le Core a vues jouer sans relevé de Windows y sont aussi, sans doublon (rattachées par l'id de
     demande, jamais par un titre).
 

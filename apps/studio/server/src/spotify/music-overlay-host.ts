@@ -177,6 +177,12 @@ export class MusicOverlayHost {
       return out;
     };
     if (method === 'GET' && path === '/overlays') return view();
+    // The Spotify page's quick control: shown or not, which preset (a few bytes, read with its state).
+    if (method === 'GET' && path === '/overlays/summary')
+      return {
+        visible: s.state.visible,
+        preset: { id: s.state.active, name: s.onAir.name },
+      };
     if (method === 'GET' && path === '/overlays/obs') return this.obs.status();
     if (method !== 'POST') throw httpError('not_found', 404);
     const b = await body();

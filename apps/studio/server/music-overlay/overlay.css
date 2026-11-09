@@ -25,6 +25,9 @@ body {
 
 /* --- Anchor: position on the canvas, show / hide ------------------------------------------------------------------ */
 .mo-anchor {
+  /* Defaults; the preset sets them all (overlay.js paint()). */
+  --mo-u: 16px;
+  --mo-s: 1;
   --mo-dist: 18px;
   --mo-scl: 0.94;
   position: absolute;
@@ -100,8 +103,6 @@ body {
 
 /* --- Widget: shared ------------------------------------------------------------------------------------------------ */
 .mo {
-  --mo-u: 16px;
-  --mo-s: 1;
   position: relative;
   display: grid;
   font-family: var(--mo-font);

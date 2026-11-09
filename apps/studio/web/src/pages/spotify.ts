@@ -13,6 +13,7 @@ import {
   viewersSeg,
   stateChip,
   esc,
+  ic,
 } from '../ds/ds.js';
 import { getJson, postJson, tryGetJson } from '../http.js';
 import { setNavCount } from '../shell/shell.js';
@@ -84,6 +85,7 @@ export function mountSpotifyPage(root: HTMLElement) {
     <div class="spo-main">
       <div class="spo-alerts d-tags" data-z="alerts"></div>
       <div data-z="open"></div>
+      <div data-z="ovl"></div>
       <section class="spo-now" data-z="now" aria-label="Lecture en cours"><div class="d-skel" style="height:200px;grid-column:1/-1"></div></section>
       <div class="spo-quotas" data-z="quotas"></div>
       <div data-z="simbar"></div>
@@ -315,6 +317,22 @@ export function mountSpotifyPage(root: HTMLElement) {
     }
     paint();
   }
+  // Overlay musique (OBS) : le contrôle rapide (affiché ou non, quel preset) et le lien vers l'éditeur.
+  let ovl: { visible: boolean; preset: { name: string } } | null = null;
+  const paintOvl = () =>
+    patch(
+      z('ovl'),
+      ovl
+        ? `<div class="spo-line spo-ovl"><span>${ic('film')}Overlay musique : <b>${ovl.visible ? 'affiché' : 'masqué'}</b> · ${esc(ovl.preset.name)}</span>
+            <button type="button" class="d-btn sm ${ovl.visible ? '' : 'pri'}" data-act="sp-ovl" data-on="${ovl.visible ? '0' : '1'}">${ovl.visible ? 'Masquer' : 'Afficher'}</button>
+            <a class="d-btn ghost sm" href="/?p=music-overlay">Régler</a></div>`
+        : '',
+    );
+  const readOvl = async () => {
+    ovl = await tryGetJson<typeof ovl>('/api/spotify/overlays/summary');
+    paintOvl();
+  };
+
   // Music Hub V2 : le réglage de la carte musique (lu une fois, puis à chaque enregistrement).
   async function readOverlay() {
     ui.overlay = await tryGetJson<SpOverlay>('/api/spotify/overlay');
@@ -336,7 +354,10 @@ export function mountSpotifyPage(root: HTMLElement) {
     );
     paint();
   }
-  const tick = poller(read, 3000);
+  const tick = poller(async () => {
+    await read();
+    await readOvl();
+  }, 3000);
   const clockTick = poller(paintProgress, 1000);
   const liveTick = poller(readLive, 1000);
 
@@ -706,6 +727,18 @@ export function mountSpotifyPage(root: HTMLElement) {
       post(el, `/sim/${el.dataset.what}`, {}, 'Simulateur modifié'),
     // Music Hub : les musiques du stream, page suivante.
     'sp-hmore': () => loadPlayed(true),
+    'sp-ovl': (el) =>
+      run(
+        el,
+        async () => {
+          await postJson('/api/spotify/overlays/visible', {
+            visible: el.dataset.on === '1',
+          });
+          await readOvl();
+        },
+        el.dataset.on === '1' ? 'Overlay musique affiché' : 'Overlay musique masqué',
+        ERRORS,
+      ),
     // Lab : le live simulé (le même que la page Simulation) — l'historique ne note que pendant un live.
     'sp-live': (el) =>
       run(
