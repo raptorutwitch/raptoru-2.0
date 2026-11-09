@@ -75,6 +75,18 @@ try {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   check(!(await page.locator('.mh-curtain.is-open').count()) && (await page.locator('.mh input[type="search"]').inputValue()) === 'neon sauv', 'Échap replie le rideau et garde la saisie');
+  // 3 bis. « En cours » alive: the bar and the time move with the clock between two readings, the list is not rebuilt.
+  const bar = () => page.evaluate(() => ({
+    t: document.querySelector('.mh-now [data-k="prog"]')?.style.transform ?? '',
+    time: document.querySelector('.mh-now [data-k="ptime"]')?.textContent ?? '',
+    html: document.querySelector('.mh [data-k="body"]')?.dataset.html ?? '',
+  }));
+  const b0 = await bar();
+  await page.waitForTimeout(2_100);
+  const b1 = await bar();
+  const scale = (t) => Number(/scaleX\(([\d.]+)\)/.exec(t)?.[1] ?? -1);
+  check(scale(b1.t) > scale(b0.t) && b1.time !== b0.time && /^\d+:\d\d \/ \d+:\d\d$/.test(b1.time), '« en cours » : la barre et le temps avancent seuls');
+  check(b1.html === b0.html, '« en cours » : la liste n’est pas reconstruite pour la barre');
   // 4. The evening history: loaded when asked, kept on return.
   await list(page).evaluate((s) => (s.scrollTop = 30));
   await page.locator('.mh-clock').click();
@@ -83,6 +95,13 @@ try {
   await list(page).evaluate((s) => (s.scrollTop = s.scrollHeight));
   await page.waitForTimeout(800);
   check((await page.locator('.mh-hrow').count()) === 26, 'la suite se charge en défilant (26)');
+  // 09/11 (SMTC_STUDIO.md): every track of the lives — a request carries its viewer, the broadcaster's none; how it
+  // left, discreetly; the previous live apart.
+  const rows = await page.locator('.mh-hrow').evaluateAll((els) => els.map((e) => e.innerText));
+  check(/En cours/.test(rows[0]), 'historique : le premier titre est « en cours »');
+  check(rows.some((r) => /Skippé/.test(r)) && rows.some((r) => /Interrompu/.test(r)), 'historique : « Skippé » et « Interrompu » discrets');
+  check(rows.filter((r) => !/@|toi/.test(r)).length > 0 && rows.filter((r) => /@Viewer_/.test(r)).length > 0, 'historique : musiques du streamer (sans pseudo) et demandes (avec pseudo)');
+  check((await page.locator('.mh-hsess').count()) === 1, 'historique : le live précédent séparé');
   await page.waitForTimeout(READING);
   check((await page.locator('.mh-hrow').count()) === 26, 'l’historique ne se recharge pas tout seul');
   await page.locator('.mh-back').click();

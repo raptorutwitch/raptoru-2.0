@@ -180,6 +180,7 @@ export function createCore(
   const cpTwitch = new CpTwitchActions(db, clock);
   const spotify = new SpotifyService(db, clock, cpTwitch);
   spotify.economy = economy; // Music Hub: the extension's requests are paid in Jetons on this Core's economy
+  spotify.labSessions = channel.lab === true; // Music Hub: the stream's music history follows the Lab's simulated live
   const channelPoints = new ChannelPointsService(
     db,
     clock,

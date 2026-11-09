@@ -12,6 +12,8 @@ echo   - Fais ce test HORS LIVE : le quota Spotify est celui de ton compte devel
 echo   - Dans Studio, page Musique : connecte Spotify (Client ID de ton application Spotify).
 echo   - Puis cherche un titre dans l'extension : les resultats viennent de Spotify.
 echo   - Rien n'est ajoute a ta file tant que tu n'as pas clique "Autoriser les ajouts pour cette session".
+echo   - Musique en cours : Studio ecoute aussi Windows (Spotify Desktop ouvert), sans appel a Spotify.
+echo     Pour l'historique "Musiques du stream" : Studio ^> Simulation ^> demarrer un live simule.
 echo.
 choice /c ON /m "Continuer avec ton compte Spotify reel (O = oui, N = non)"
 if errorlevel 2 exit /b 0

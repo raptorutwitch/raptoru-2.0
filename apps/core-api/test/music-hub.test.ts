@@ -852,7 +852,9 @@ describe('Music Hub final — « Musiques de la soirée » and the end of a requ
       is_playing: true,
     });
 
-  it('only the requests that really played, newest first, 20 per page, « toi » for the caller; nothing older than 12 h without a live', async () => {
+  // 09/11 (SMTC_STUDIO.md): the history became the stream's music history — the requests Core saw play are still all
+  // there (without any live track message, as here), with their end; kept 30 days instead of « 12 h without a live ».
+  it('the requests that really played, newest first, 20 per page, « toi » for the caller; nothing older than 30 days', async () => {
     const h = await hub();
     await h.spotify.saveSettings(CH, { viewer_cooldown_seconds: 0 }, 'test');
     await h.fund(viewer(1), 100_000);
@@ -874,7 +876,8 @@ describe('Music Hub final — « Musiques de la soirée » and the end of a requ
       title: `Titre de ${ID(22)}`,
       own: false,
       requested_by: 'Fan2',
-      state: 'PLAYED',
+      kind: 'request',
+      end: 'natural',
     });
     expect(first.items[1]).toMatchObject({
       title: `Titre de ${ID(21)}`,
@@ -889,6 +892,10 @@ describe('Music Hub final — « Musiques de la soirée » and the end of a requ
     expect(second.items.every((i) => !i.own)).toBe(true); // anonymous: no « toi »
     expect(second.next).toBeNull();
     h.core.clock.set(new Date(h.core.clock.now().getTime() + 13 * 3_600_000));
+    expect(
+      (await h.spotify.extensionHistory(CH, null, null)).items,
+    ).toHaveLength(20);
+    h.core.clock.set(new Date(h.core.clock.now().getTime() + 31 * 86_400_000));
     expect(
       (await h.spotify.extensionHistory(CH, null, null)).items,
     ).toHaveLength(0);

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { SpotifyApi } from '../src/spotify/api.js';
 import { simulatedAuth } from '../src/spotify/oauth.js';
 import { SpotifyRuntime } from '../src/spotify/runtime.js';
+import { SimSmtc, SmtcTracker } from '../src/spotify/smtc.js';
 import { SIM_CATALOG, SpotifySim } from '../src/spotify/sim.js';
 
 // Spotify V2 — what the playback watch COSTS in Spotify calls, and what it must keep (docs/music/SPOTIFY_QUOTA.md):
@@ -27,7 +28,7 @@ type Reading = {
   is_playing: boolean;
 };
 
-async function bench() {
+async function bench(o: { smtc?: boolean } = {}) {
   const clock = { t: 10_000_000 };
   const now = () => clock.t;
   const sleep = async (ms: number) => void (clock.t += ms);
@@ -124,8 +125,12 @@ async function bench() {
     }
     return {};
   };
+  const live: { posts: number } = { posts: 0 };
   const rt = await SpotifyRuntime.open({
-    core: core as never,
+    core: (async (path: string, body?: unknown) => {
+      if (path.endsWith('/now')) return void live.posts++;
+      return core(path, body);
+    }) as never,
     environment: 'lab',
     channelId: '1',
     api,
@@ -137,7 +142,23 @@ async function bench() {
     ),
     now,
     sleep,
+    // Music Hub (SMTC): the simulated Windows of the Lab, read at each step (local, never a Web API call).
+    ...(o.smtc
+      ? {
+          live: {
+            tracker: new SmtcTracker('sim', now),
+            source: () => ({ start() {}, stop() {} }),
+          },
+        }
+      : {}),
   });
+  const windows = o.smtc
+    ? new SimSmtc(
+        () => sim.local(),
+        (l) => rt.onSmtc(l),
+        now,
+      )
+    : null;
   /** Queues these catalogue tracks in the simulator as requests (setup: not counted). */
   const queue = async (n: number, from = 0, same = false) => {
     for (let k = 0; k < n; k++) {
@@ -159,7 +180,11 @@ async function bench() {
     const end = clock.t + ms;
     while (clock.t < end) {
       const delay = await rt.once();
-      clock.t += Math.max(50, delay);
+      // Windows tells its changes within ~250 ms (the simulated probe's step), whatever Studio's pace.
+      for (let left = Math.max(50, delay); left > 0; left -= 250) {
+        clock.t += Math.min(250, left);
+        windows?.step();
+      }
     }
   };
   const count = (pred: (w: string) => boolean, since = 0) =>
@@ -179,6 +204,7 @@ async function bench() {
     queue,
     run,
     count,
+    live,
     job: (j: SpotifyJob) => jobs.push(j),
   };
 }
@@ -367,5 +393,89 @@ describe('Spotify V2 — consumption of the playback watch (simulated, no networ
     expect((await again.status()).quota_exceeded).toBe(true);
     await expect(again.playback(true)).rejects.toBeInstanceOf(Error);
     expect(b.calls.filter((c) => c.at >= t0)).toHaveLength(1);
+  });
+});
+
+// Music Hub (docs/music/SMTC_STUDIO.md): the same hours with Windows telling Studio what plays (SMTC). The requests'
+// guarantees must stay exactly as above; the extra cost is at most one reading per track change (its exact track).
+describe('Spotify V2 — the same consumption with the live track from Windows (SMTC)', () => {
+  it('one hour of requests played one after the other: every end and every start still seen', async () => {
+    const b = await bench({ smtc: true });
+    await b.queue(40);
+    const uris = new Set(b.requests.map((r) => r.uri));
+    const t0 = b.clock.t;
+    await b.run(3_600_000);
+    const reads = b.count((w) => w === 'GET me/player', t0);
+    const ends = endsSeen(b.readings, uris);
+    const firstSeen = new Map<string, number>();
+    for (const r of b.readings)
+      if (r.track && uris.has(r.track.uri) && !firstSeen.has(r.track.uri))
+        firstSeen.set(r.track.uri, r.progress_ms ?? 0);
+    console.log(
+      `[conso+smtc] 1 h de demandes enchaînées : ${reads} lectures GET /me/player, ${b.live.posts} messages à Core (${ends.checked} fins, ${firstSeen.size} débuts)`,
+    );
+    expect(ends.misses).toEqual([]);
+    expect([...firstSeen].filter(([, p]) => p > 12_000)).toEqual([]);
+    expect(ends.checked).toBeGreaterThan(10);
+  });
+
+  it('two skips by hand 3 s apart: with Windows telling the change, the middle request is seen too', async () => {
+    for (const gap of [3_000, 2_000]) {
+      const b = await bench({ smtc: true });
+      await b.queue(4);
+      const uris = b.requests.map((r) => r.uri);
+      b.sim.skipByHand();
+      await b.run(40_000);
+      b.sim.skipByHand();
+      await b.run(gap);
+      b.sim.skipByHand();
+      await b.run(30_000);
+      const seen = new Set(b.readings.map((r) => r.track?.uri));
+      console.log(
+        `[conso+smtc] deux skips à la main à ${gap / 1000} s : demande du milieu ${seen.has(uris[1]) ? 'vue' : 'NON vue'}`,
+      );
+      expect(seen.has(uris[0])).toBe(true);
+      expect(seen.has(uris[2])).toBe(true);
+      if (gap >= 3_000) expect(seen.has(uris[1])).toBe(true);
+    }
+  });
+
+  it("one hour of the broadcaster's own music, a request waiting: at most one more reading per track", async () => {
+    const without = await bench();
+    const withSmtc = await bench({ smtc: true });
+    for (const b of [without, withSmtc])
+      b.requests.push({
+        request_id: id(9999),
+        uri: 'spotify:track:0000000000000000000000',
+        auto_skip: false,
+      });
+    const t0 = without.clock.t;
+    await without.run(3_600_000);
+    await withSmtc.run(3_600_000);
+    const before = without.count((w) => w === 'GET me/player', t0);
+    const after = withSmtc.count((w) => w === 'GET me/player', t0);
+    const tracks = Math.ceil(3_600_000 / 160_000); // the playlist's tracks are 160–200 s
+    console.log(
+      `[conso+smtc] 1 h de musique du streamer, une demande en attente : ${before} → ${after} lectures GET /me/player`,
+    );
+    expect(after - before).toBeLessThanOrEqual(tracks);
+  });
+
+  it("one hour of the broadcaster's own music, nothing to watch: one reading per track (none before), the same 30 s heartbeat", async () => {
+    const without = await bench();
+    const withSmtc = await bench({ smtc: true });
+    const t0 = without.clock.t;
+    await without.run(3_600_000);
+    await withSmtc.run(3_600_000);
+    const before = without.count((w) => w === 'GET me/player', t0);
+    const after = withSmtc.count((w) => w === 'GET me/player', t0);
+    console.log(
+      `[conso+smtc] 1 h de musique du streamer, rien à surveiller : ${before} → ${after} lectures GET /me/player, ${withSmtc.live.posts} messages à Core`,
+    );
+    expect(before).toBe(0);
+    expect(after).toBeGreaterThan(15);
+    expect(after).toBeLessThanOrEqual(25);
+    // One message per change and the 30 s heartbeat: never one per second for the bar.
+    expect(withSmtc.live.posts).toBeLessThan(200);
   });
 });

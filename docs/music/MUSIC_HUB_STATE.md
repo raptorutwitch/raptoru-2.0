@@ -6,6 +6,16 @@
 
 ## 0. Où reprendre
 
+- **09/11 — musique en cours (Windows SMTC) et musiques du stream** : [SMTC_STUDIO.md](SMTC_STUDIO.md). Non validé.
+  - **Studio.** La page Spotify affiche ce que joue Spotify Desktop (pochette, titre, album, barre fluide, état), et
+    un onglet « Musiques du stream ».
+  - **Extension.** Même « en cours » (barre et temps), plus l'historique de **tous** les titres des lives, demandes
+    reconnues par le Core seulement, « Skippé » seulement sur une commande.
+  - **Pochettes du vrai catalogue réparées** (CSP du Lab).
+  - **Coût.** Spotify V2 est inchangé ; +1 lecture par titre quand rien n'est surveillé.
+  - **Prochaine étape.** Test d'Antoni ([SMTC_STUDIO.md](SMTC_STUDIO.md) § 6). Restent à observer en réel : la
+    fermeture / réouverture de Spotify et le téléphone.
+
 - **09/11 — optimisation Spotify V2 + catalogue réel prêt en Lab** :
   - Consommation et priorités (voies essentielle / catalogue, recherches hors de la boucle, cadence de lecture,
     compteurs locaux) : [SPOTIFY_QUOTA.md](SPOTIFY_QUOTA.md). Simulé : 1 400 → 630 lectures / h de demandes, skip

@@ -45,5 +45,8 @@
 
 - Logo Spotify officiel (règles de marque) à ajouter avec l'attribution texte actuelle ; lien « Ouvrir dans Spotify »
   sur chaque résultat (aujourd'hui : sur la version choisie).
-- Domaine d'images `i.scdn.co` à déclarer dans la console Twitch le jour d'une extension hébergée (le Lab l'autorise).
+- Domaine d'images `i.scdn.co` à déclarer dans la console Twitch le jour d'une extension hébergée. **Corrigé le 09/11 :**
+  le Lab ne l'autorisait pas en réalité, et les pochettes du vrai catalogue étaient cassées. La CSP du Lab l'ajoute
+  désormais ([SMTC_STUDIO.md](SMTC_STUDIO.md) § 5).
+- En mode réel, Studio lance aussi la sonde Windows (musique en cours, musiques du stream) : [SMTC_STUDIO.md](SMTC_STUDIO.md).
 - Aucun branchement de l'extension publique ni du Hosted Test à Spotify : le module ne répond qu'en Lab (`config.lab`).

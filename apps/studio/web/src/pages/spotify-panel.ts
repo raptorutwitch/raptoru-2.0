@@ -339,6 +339,13 @@ export function simBar(s: SpState, ui: SpUi) {
       ${btn(m.device_active ? 'no-device' : 'device', m.device_active ? 'Couper l’appareil' : 'Rallumer l’appareil')}
       ${btn('rate-limit', 'Limite 429')}${btn('quota', 'Quota dépassé (1 h)')}${btn('skip', 'Skip à la main')}${btn('answer-200', 'Ajout incertain')}${btn('answer-500', 'Ajout en erreur')}
     </div>
+    <p class="d-lb">Musique en cours (Windows simulé) et musiques du stream</p>
+    <div class="spo-btns">
+      <button type="button" class="d-btn sm ${s.music_session?.live ? '' : 'pri'}" data-act="sp-live" data-on="${s.music_session?.live ? '0' : '1'}">${s.music_session?.live ? 'Terminer le live simulé' : 'Démarrer un live simulé'}</button>
+      ${btn('pause-hand', m.playing === false ? 'Reprendre dans Spotify' : 'Pause dans Spotify')}${btn('replay', 'Rejouer le titre')}
+      ${btn(m.app_closed ? 'app-open' : 'app-close', m.app_closed ? 'Rouvrir Spotify' : 'Fermer Spotify')}
+    </div>
+    <p class="d-note">${s.music_session?.live ? `Live simulé depuis ${esc(new Date(s.music_session.since!).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))} : chaque titre joué entre dans « Musiques du stream ».` : 'Hors live : rien n’entre dans « Musiques du stream » (le titre en cours s’affiche quand même).'}</p>
     <p class="d-note">${
       last
         ? `Dernière décision : <b>${esc(last.viewer.name)}</b>, ${esc(`« ${last.input} »`)} → ${esc(REASONS[last.reason ?? ''] ?? STATES[last.state] ?? last.state)}.`

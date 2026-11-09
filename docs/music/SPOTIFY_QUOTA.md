@@ -51,6 +51,28 @@ quota.
 
 ## 5. Encore possible plus tard (non fait)
 
-- Windows SMTC comme simple déclencheur de lecture (−70 % de plus en théorie) : seulement si les mesures réelles le
-  justifient. Jamais comme source d'identité (pas d'identifiant Spotify).
+- Réduire le suivi des demandes grâce à SMTC (milieu de titre de 6 s à ~30 s, −70 % en théorie) : **non fait**.
+  Il faudrait d'abord des mesures réelles prouvant que Windows annonce chaque changement (y compris téléphone et
+  fermeture), puis rejouer tout le banc. SMTC ne sera jamais une source d'identité (pas d'identifiant Spotify).
 - Alimenter le cache des titres avec les résultats de recherche (un appel de moins par demande du Hub).
+
+## 6. Musique en cours par Windows (SMTC, 09/11) — coût mesuré
+
+Le détail est dans [SMTC_STUDIO.md](SMTC_STUDIO.md). Le banc a été rejoué avec le Windows simulé du Lab
+(`spotify-consumption.test.ts`, bloc « with the live track from Windows »).
+
+| Scénario (1 h, simulé)                              | Sans SMTC | Avec SMTC | Pourquoi                                                                 |
+| --------------------------------------------------- | --------- | --------- | ------------------------------------------------------------------------ |
+| Demandes enchaînées                                 | 630       | **630**   | La lecture « titre exact » remplace la lecture déjà prévue (avancée).    |
+| Musique du streamer, une demande en attente         | 147       | **147**   | Idem.                                                                    |
+| Musique du streamer, rien à surveiller              | 0         | **21**    | Une lecture par titre (~17–21 titres / h) : uri et pochette exactes.     |
+| Deux skips à la main à 3 s (et 2 s) d'écart         | demande du milieu **non vue** | **vue**  | Windows annonce le changement, la lecture suit 1,2 s après.            |
+
+- **Toutes les garanties du § 3 sont tenues aussi avec SMTC** : chaque fin lue à moins de 5 s, chaque début avant
+  12 s.
+- **Quota dépassé.** Un seul appel le rencontre ; ensuite, aucune lecture de plus. L'affichage continue sans titre
+  exact ni pochette Spotify.
+- **Messages Studio → Core** : environ 150 à 170 par heure (chaque changement, plus 30 s de battement). Aucun ne part
+  vers Spotify.
+- **Estimation réelle.** Au plus **+1 lecture `GET /me/player` par changement de titre** quand rien n'est surveillé,
+  soit environ +20 par heure. Cela fait +3 % du scénario « demandes enchaînées », et 0 quand une demande est en jeu.

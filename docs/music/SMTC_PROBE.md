@@ -4,6 +4,18 @@
 > (aucun SDK, aucun paquet) dans `.lab-data/smtc-probe/`. **Pas branché à Studio.** Lecture seule : les métadonnées
 > locales de Windows ; jamais d'appel à l'API Spotify, jamais de commande au lecteur.
 
+> **09/11 — intégré dans Studio** (Lab, mode réel) : [SMTC_STUDIO.md](SMTC_STUDIO.md). Mode `--studio` de la sonde
+> (lignes JSON pour Studio). La fenêtre de test ci-dessous reste disponible telle quelle.
+
+## 0. Ton test du 09/11 (05:15, journal `.lab-data/smtc-probe/smtc-20261109-051543.jsonl`)
+
+- **Vu, par événement.** Changements de titre (Aventura → Eurythmics → Syd Matters → Soft Cell), pause et reprise,
+  doublons de Spotify reconnus.
+- **Délai côté sonde** : de 0 à 6 ms après l'événement Windows.
+- **Pas couvert par ce journal** : fermeture et réouverture de Spotify, changement depuis le téléphone, et le bilan
+  (pas de Ctrl+C).
+- **Non mesurée** : la latence totale de Spotify à Windows. Windows ne date pas ses événements.
+
 ## 1. Ce qui est déjà prouvé sur le PC du stream (09/11, 04:57, écoute passive)
 
 - Windows 11 (26200), Spotify Desktop **version classique** : session `Spotify.exe` trouvée, le navigateur (Brave)

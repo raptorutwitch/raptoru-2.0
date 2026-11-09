@@ -2,10 +2,11 @@
 # package) into .lab-data/smtc-probe, then runs it. Read-only: Windows' local media metadata, never Spotify's API.
 #   powershell -ExecutionPolicy Bypass -File tools\smtc-probe\run.ps1            (build if needed, then listen)
 #   powershell -ExecutionPolicy Bypass -File tools\smtc-probe\run.ps1 -BuildOnly
-param([switch]$BuildOnly)
+#   ... -BuildOnly -Out <folder>   (Studio builds its own copy: an open test window keeps its exe locked)
+param([switch]$BuildOnly, [string]$Out)
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
-$out = Join-Path $here '..\..\.lab-data\smtc-probe'
+$out = if ($Out) { $Out } else { Join-Path $here '..\..\.lab-data\smtc-probe' }
 New-Item -ItemType Directory -Force $out | Out-Null
 $out = (Resolve-Path $out).Path
 $exe = Join-Path $out 'SmtcProbe.exe'

@@ -166,9 +166,68 @@ export interface SpState {
     progress_ms: number | null;
     queue: string[];
     calls: number;
+    playing?: boolean;
+    app_closed?: boolean;
   } | null;
   /** Pochettes que Studio a vues passer, par titre (absent d'un Studio plus ancien). */
   covers?: Record<string, string>;
+  /** Music Hub : ce que Windows dit que Spotify Desktop joue (SMTC), et son titre exact une fois lu. */
+  live?: SpLive | null;
+  /** Music Hub : le live (Lab : simulé) qui ouvre les musiques du stream. */
+  music_session?: { live: boolean; since: string | null };
+}
+
+/** Music Hub (docs/music/SMTC_STUDIO.md) : le titre en cours selon Windows — affichage seulement, jamais une décision. */
+export interface SpLive {
+  source: 'smtc' | 'sim';
+  state: 'playing' | 'paused' | 'lost' | 'stale' | 'off' | 'waiting';
+  gen: number;
+  seq: number;
+  track: {
+    title: string;
+    artists: string[];
+    album: string | null;
+    duration_ms: number | null;
+  } | null;
+  position_ms: number | null;
+  /** La pochette que Windows a donnée (servie par Studio), ou null. */
+  cover: string | null;
+  reason: string | null;
+  /** Le titre exact de CETTE occurrence (une lecture de l'API Web), ou null tant qu'il n'est pas lu. */
+  link: {
+    gen: number;
+    uri: string;
+    cover_url: string | null;
+    artists: string[];
+  } | null;
+  counters?: {
+    link_reads: number;
+    linked: number;
+    link_misses: number;
+    posts: number;
+  };
+}
+
+/** Une entrée des musiques du stream (Core). */
+export interface SpPlayed {
+  id: string;
+  at: string;
+  title: string | null;
+  artists: string[];
+  album: string | null;
+  image_url: string | null;
+  kind: 'request' | 'track';
+  requested_by: string | null;
+  viewer_login?: string | null;
+  end: 'skipped' | 'interrupted' | 'natural' | 'unknown' | null;
+  listened_ms: number | null;
+  session_started_at: string | null;
+}
+export interface SpPlayedPage {
+  items: SpPlayed[];
+  next: string | null;
+  live: boolean;
+  since: string | null;
 }
 
 export interface SpIdentity {
@@ -187,6 +246,9 @@ export interface SpUi {
   simClosed?: boolean;
   /** Music Hub V2 : la carte musique de l'overlay OBS (absente d'un Studio sans lecteur d'effets). */
   overlay?: SpOverlay | null;
+  /** Music Hub : le titre en cours selon Windows, relu chaque seconde (local), et l'heure de ce relevé. */
+  live?: SpLive | null;
+  liveAt?: number;
 }
 
 /** Music Hub V2 : le réglage de la carte musique (Studio, music-overlay.json) et les sons du lecteur d'effets. */
@@ -364,8 +426,99 @@ export function position(s: SpState, now: number) {
   };
 }
 
+/** Où en est le titre selon Windows : sa dernière position + l'horloge (en lecture), jamais au-delà de sa fin. */
+export function livePosition(
+  l: SpLive | null | undefined,
+  at: number,
+  now: number,
+) {
+  if (!l?.track || l.position_ms === null) return null;
+  if (l.state !== 'playing' && l.state !== 'paused' && l.state !== 'stale')
+    return null;
+  const ms =
+    l.position_ms + (l.state === 'playing' ? Math.max(0, now - at) : 0);
+  const total = l.track.duration_ms;
+  return total
+    ? { ms: Math.min(ms, total), total, live: l.state === 'playing' }
+    : null;
+}
+
+/** La source du titre en cours : Windows (SMTC) quand elle est là, sinon la dernière lecture de l'API Web. */
+export const liveOf = (s: SpState, ui: SpUi) => {
+  const l = ui.live !== undefined ? ui.live : (s.live ?? null);
+  return l && l.state !== 'off' ? l : null;
+};
+
+/**
+ * Ce qui joue selon Windows : pochette, titre, artistes, album, progression, état. Le demandeur seulement quand le titre
+ * EXACT de cette occurrence (lecture de l'API Web) est celui de la demande que le Core attribue — jamais un titre.
+ */
+function liveNowView(s: SpState, ui: SpUi, l: SpLive) {
+  const t = l.track;
+  const link = l.link;
+  const r =
+    s.current && link && s.current.track?.uri === link.uri ? s.current : null;
+  const playing = l.state === 'playing';
+  const kicker = r
+    ? 'Demande en cours'
+    : !t
+      ? l.state === 'lost'
+        ? 'Spotify fermé'
+        : 'Rien ne joue'
+      : l.state === 'stale'
+        ? 'Lecture non confirmée'
+        : playing
+          ? 'En cours'
+          : 'En pause';
+  const none = `<span class="spo-cov spo-cov--none" aria-hidden="true">${ic('music')}</span>`;
+  const art = !t
+    ? none
+    : l.cover
+      ? `<img class="spo-cov" src="/api/spotify/live/cover?v=${esc(l.cover)}" alt="">`
+      : link?.cover_url
+        ? `<img class="spo-cov" src="${esc(link.cover_url)}" alt="" referrerpolicy="no-referrer">`
+        : none;
+  const artists = link?.artists.length ? link.artists : (t?.artists ?? []);
+  const by = r
+    ? `<p class="spo-by">${pp(r.viewer.name || r.viewer.login, 22)}<span>@${esc(r.viewer.login)} · demandée ${esc(agoMs(ui.now - Date.parse(r.received_at)))}</span></p>`
+    : '';
+  const src =
+    l.source === 'sim' ? 'Windows simulé (Lab)' : 'Windows · Spotify Desktop';
+  const album = t?.album
+    ? ` · <span class="spo-album">${esc(t.album)}</span>`
+    : '';
+  return `<div class="spo-art">${art}${playing ? '<span class="spo-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}</div>
+    <div class="spo-meta">
+      <span class="d-lb">${esc(kicker)}<small class="spo-src" title="Titre, artiste, pochette et position lus localement par Windows (sans appel à Spotify)"> · ${esc(src)}</small></span>
+      <h2 class="spo-title">${t ? esc(t.title) : l.state === 'lost' ? 'Spotify Desktop est fermé' : 'Aucune musique'}</h2>
+      <p class="spo-artists">${t ? `${esc(artists.join(', '))}${album}` : 'Lance une musique dans Spotify.'}</p>
+      ${by}
+      <div class="spo-trans"${t && !playing ? ' data-paused' : ''}><span class="spo-t" data-t0></span><span class="d-prog"><i data-prog></i></span><span class="spo-t" data-t1></span></div>
+      ${nowSub(s, ui, playing, !!t)}
+    </div>`;
+}
+
+/** Les commandes sous le titre en cours (passer, pause, volume, appareil, actualiser). */
+function nowSub(s: SpState, ui: SpUi, playing: boolean, hasTrack: boolean) {
+  const read = reading(s, ui.now);
+  const device = s.studio?.status.device;
+  const limited = !!s.api.limited_until;
+  const refresh = `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>`;
+  const vol = read?.p.volume_percent ?? null;
+  const controls = s.settings.player_controls
+    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${playing ? 'pause' : 'resume'}">${playing ? 'Pause' : 'Reprendre'}</button>
+        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume"><b>${vol ?? '—'}</b></label>`
+    : '';
+  return `<div class="spo-sub">
+        <button type="button" class="d-btn" data-act="sp-skip" title="Passe le titre en cours sur Spotify, même hors demandes">${ic('skip')}Passer la musique</button>
+        ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${hasTrack ? '' : refresh}
+      </div>`;
+}
+
 /** La demande qui joue et son demandeur ; un titre hors demandes n'a jamais de demandeur. */
 export function nowView(s: SpState, ui: SpUi) {
+  const live = liveOf(s, ui);
+  if (live) return liveNowView(s, ui, live);
   const r = s.current;
   const read = reading(s, ui.now);
   const track = r?.track ?? read?.track ?? null;
@@ -542,6 +695,60 @@ export function historyRows(s: SpState) {
         ${x.detail ? `<p>${esc(x.detail)}</p>` : ''}</div>`,
     };
   });
+}
+
+const END_TAG: Record<string, string> = {
+  skipped:
+    '<span class="d-tag warn" title="Passée par une commande (Studio, !songskip, lecteur de l’extension)">Skippé</span>',
+  interrupted:
+    '<span class="d-tag off" title="Un autre titre a commencé avant la fin, sans commande de Raptoru : interruption probable (à la main dans Spotify, un autre morceau choisi…)">Interrompu</span>',
+};
+
+/** Les musiques du stream (Core) : la plus récente d'abord, chaque live séparé, les demandes reconnues par le Core. */
+export function playedRows(h: SpPlayedPage) {
+  const rows: { key: string; html: string }[] = [];
+  let session: string | null | undefined;
+  for (const i of h.items) {
+    if (i.session_started_at !== session) {
+      session = i.session_started_at;
+      const d = session ? new Date(session) : null;
+      const day = d
+        ? d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+        : '';
+      rows.push({
+        key: `s:${session ?? 'none'}:${i.id}`,
+        html: `<div class="spo-psess d-lb">${
+          d
+            ? `Live du ${esc(day)} · depuis ${esc(hhmm(session!))}${h.live && session === h.since ? ' · en cours' : ''}`
+            : 'Demandes jouées (sans relevé Windows)'
+        }</div>`,
+      });
+    }
+    const who =
+      i.kind === 'request'
+        ? ` · <span class="spo-pby">demandée par ${esc(i.requested_by ?? '')}${i.viewer_login ? ` (@${esc(i.viewer_login)})` : ''}</span>`
+        : '';
+    const tags = [
+      i.kind === 'request' ? '<span class="d-tag">Demande</span>' : '',
+      i.end === null
+        ? '<span class="d-tag ok">En cours</span>'
+        : (END_TAG[i.end] ?? ''),
+    ].join('');
+    const heard =
+      i.listened_ms !== null
+        ? ` · écoutée ~${clock(i.listened_ms / 1000)}`
+        : '';
+    const cov = i.image_url
+      ? `<img class="spo-cov spo-cov--s" src="${esc(i.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+      : `<span class="spo-cov spo-cov--none spo-cov--s" aria-hidden="true">${ic('music')}</span>`;
+    rows.push({
+      key: i.id,
+      html: `<div class="spo-h spo-p" title="${esc(`${i.title ?? ''}${heard}`)}"><span class="spo-t">${esc(hhmm(i.at))}</span>${cov}
+        <div class="spo-r__m"><b>${esc(i.title ?? '—')}</b><small>${esc(i.artists.join(', '))}${who}</small></div>
+        <span class="spo-ptags">${tags}</span></div>`,
+    });
+  }
+  return rows;
 }
 
 /** La frise du temps : les titres de la file posés sur une règle graduée, à partir de maintenant. */

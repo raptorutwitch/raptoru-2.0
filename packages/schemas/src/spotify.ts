@@ -182,6 +182,70 @@ export const SpotifyStudioSync = z.strictObject({
 });
 export type SpotifyStudioSync = z.infer<typeof SpotifyStudioSync>;
 
+// Music Hub — what plays on the broadcaster's PC as WINDOWS tells it (SMTC, docs/music/SMTC_STUDIO.md). Display and the
+// stream's music history only: never a request's decision (those stay on SpotifyPlayback, the Web API's exact track).
+export const SPOTIFY_LIVE = {
+  /** Studio repeats the state this often without a change (its anchor, and it is alive). */
+  heartbeatMs: 30_000,
+  /** No word from Studio for this long: the live state is no longer shown (back to the Web API's reading). */
+  freshMs: 90_000,
+  /** A track that ends this close to its end ended normally (Spotify's crossfade is up to 12 s). */
+  naturalEndMs: 15_000,
+  /** Listened less than this: a glimpse (a quick skip through a playlist, a canceled request skipped), not listed. */
+  briefMs: 5_000,
+  /** A Studio that restarts finds the same track started within this margin: the same history entry goes on. */
+  sameStartMs: 20_000,
+} as const;
+
+export const SpotifyLiveTrack = z.strictObject({
+  title: z.string().min(1).max(300),
+  artists: z.array(ShortText).max(20),
+  album: ShortText.nullable(),
+  duration_ms: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 3_600_000)
+    .nullable(),
+});
+export type SpotifyLiveTrack = z.infer<typeof SpotifyLiveTrack>;
+
+/** Studio → Core on each change and every `heartbeatMs`. `seq` orders one Studio's messages; `gen` is one occurrence. */
+export const SpotifyLiveNow = z.strictObject({
+  /** This Studio process (a restart is a new boot), and when it started (an older boot never overwrites a newer). */
+  boot: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
+  boot_at: z.iso.datetime({ offset: true }),
+  seq: z.number().int().min(0),
+  gen: z.number().int().min(0),
+  state: z.enum(['playing', 'paused', 'lost', 'stale', 'off']),
+  track: SpotifyLiveTrack.nullable(),
+  /** Where the track is when Studio sends this (Studio extrapolates from Windows' last position). */
+  position_ms: z.number().int().min(0).nullable(),
+  /** The exact Spotify track of THIS occurrence, from a Web API reading taken after it started (never from a title). */
+  link: z
+    .strictObject({
+      uri: TrackUri,
+      // Spotify's image CDN (the Lab's simulator: its own SVG covers).
+      cover_url: z
+        .string()
+        .max(4_000)
+        .regex(/^(https:\/\/i\.scdn\.co\/|data:image\/svg\+xml,)/)
+        .nullable(),
+      artists: z.array(ShortText).max(20),
+    })
+    .nullable(),
+  /** How the previous occurrence ended, as Studio saw it at the change (position extrapolated at that instant). */
+  ended: z
+    .strictObject({
+      gen: z.number().int().min(0),
+      position_ms: z.number().int().min(0).nullable(),
+      playing: z.boolean(),
+      cause: z.enum(['change', 'replay', 'lost', 'off']),
+    })
+    .nullable(),
+});
+export type SpotifyLiveNow = z.infer<typeof SpotifyLiveNow>;
+
 /** A Spotify reference parsed by Core (historical spotify-v2/reference.js). */
 export const SpotifyReference = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('exact'), track_id: SpotifyId }),

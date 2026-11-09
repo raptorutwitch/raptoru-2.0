@@ -5,6 +5,7 @@ import {
   SpotifyAutoSkipReport,
   SpotifyJobReport,
   SpotifyJobStart,
+  SpotifyLiveNow,
   SpotifyPanelAction,
   SpotifySettingsUpdate,
   SpotifyStudioSync,
@@ -56,6 +57,10 @@ const LabSimulate = z.strictObject({
   viewer_id: z.string().regex(/^\d{1,32}$/),
   viewer_login: z.string().regex(/^[a-z0-9_]{1,25}$/),
   user_input: z.string().max(500),
+});
+
+const MusicHistoryPage = z.strictObject({
+  before: z.iso.datetime({ offset: true }).nullable().default(null),
 });
 
 export function spotifyRoutes(
@@ -130,6 +135,29 @@ export function spotifyRoutes(
             channel(params[0]!),
             parse(SpotifySettingsUpdate, body),
             'studio',
+          ),
+        ),
+    },
+    {
+      // Music Hub: the live track as Windows tells Studio (SMTC) — display and the stream's music history only.
+      method: 'POST',
+      pattern: at(base, `/${ch}/now`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          spotify.liveNow(channel(params[0]!), parse(SpotifyLiveNow, body)),
+        ),
+    },
+    {
+      // Music Hub: the stream's music history for Studio (50 per page, `before` = the previous page's last `at`).
+      method: 'POST',
+      pattern: at(base, `/${ch}/music-history`),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          spotify.musicHistory(
+            channel(params[0]!),
+            parse(MusicHistoryPage, body).before,
           ),
         ),
     },

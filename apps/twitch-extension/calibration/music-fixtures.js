@@ -200,6 +200,9 @@ export function musicState(startedAt, clock, role = 'moderator') {
       own: false,
       album: playing.album,
       image_url: playing.image_url,
+      // 09/11: « en cours » from Windows via Studio (SMTC_STUDIO.md) — a display estimate, never stale here.
+      stale: false,
+      source: 'live',
     },
     queue: team
       ? queue
@@ -277,19 +280,30 @@ export function musicState(startedAt, clock, role = 'moderator') {
   };
 }
 
-/** « Musiques de la soirée »: the requests played since the (calibration) live began, newest first, 20 per page. */
+/**
+ * « Musiques de la soirée » (09/11: the stream's music history, SMTC_STUDIO.md): every track of the lives — the
+ * broadcaster's and the requests (recognised by Core) — newest first, 20 per page; how each left (« Skippé » only on a
+ * command, « Interrompu » probable, nothing for a normal end); the first is playing; the last ones, a previous live.
+ */
 export function musicHistory(startedAt, before = null) {
   const live = startedAt - m(150, 0);
+  const previous = live - 24 * 3_600_000;
   const all = Array.from({ length: 26 }, (_, k) => {
     const c = MUSIC_CATALOG[(k + 3) % MUSIC_CATALOG.length];
+    const request = k % 3 !== 1;
     return {
+      id: `00000000-0000-4000-9000-${String(k).padStart(12, '0')}`,
       at: new Date(startedAt - m(4 + k * 5, 10)).toISOString(),
       title: c.title,
       artists: c.artists,
+      album: c.album ?? null,
       image_url: c.image_url,
-      requested_by: ['Viewer_B', 'Viewer_C', 'Toi (calibration)', 'Viewer_D'][k % 4],
-      own: k % 4 === 2,
-      state: 'PLAYED',
+      kind: request ? 'request' : 'track',
+      requested_by: request ? ['Viewer_B', 'Viewer_C', 'Toi (calibration)', 'Viewer_D'][k % 4] : null,
+      own: request && k % 4 === 2,
+      end: k === 0 ? null : k % 7 === 3 ? 'skipped' : k % 5 === 4 ? 'interrupted' : 'natural',
+      listened_ms: k === 0 ? null : 150_000,
+      session_started_at: new Date(k < 22 ? live : previous).toISOString(),
     };
   });
   const rest = before ? all.filter((h) => h.at < before) : all;

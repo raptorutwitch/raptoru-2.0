@@ -58,6 +58,8 @@ export interface ChannelPointsRuntimeDeps {
   spotifyDir?: string;
   /** Lab only: Spotify V2 on the broadcaster's real account (LAB_SPOTIFY=real), read-only until allowed. */
   spotifyLabReal?: boolean;
+  /** Music Hub: the SMTC probe Studio builds and runs (Windows' media session); absent: none. */
+  spotifySmtc?: { exe: string; script: string; out: string } | null;
 }
 
 export class ChannelPointsRuntime {
@@ -156,6 +158,7 @@ export class ChannelPointsRuntime {
             // Music Hub V2: the music card of the overlay goes through the effects player (never its own source).
             effects: d.effects ?? null,
             labReal: d.spotifyLabReal === true,
+            smtc: d.spotifySmtc ?? null,
           })
         : null,
     );

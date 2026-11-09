@@ -27,7 +27,10 @@ import {
   alertsView,
   countsView,
   historyRows,
+  livePosition,
+  liveOf,
   nowView,
+  playedRows,
   openingView,
   position,
   queueEmpty,
@@ -36,7 +39,9 @@ import {
   stateView,
   timeView,
   verifyNote,
+  type SpLive,
   type SpOverlay,
+  type SpPlayedPage,
   type SpState,
   type SpUi,
 } from './spotify-view.js';
@@ -96,7 +101,10 @@ export function mountSpotifyPage(root: HTMLElement) {
 
   let state: SpState | null = null;
   let error = '';
-  let list: 'file' | 'past' = 'file';
+  let list: 'file' | 'past' | 'played' = 'file';
+  // Music Hub : les musiques du stream (Core), chargées à l'ouverture de l'onglet, page par page.
+  let played: (SpPlayedPage & { loading?: boolean; error?: string }) | null =
+    null;
   const ui: SpUi = { fields: {}, who: [], now: Date.now() };
 
   z('simbar').addEventListener(
@@ -130,13 +138,22 @@ export function mountSpotifyPage(root: HTMLElement) {
       )}${panelBtn(p.panel.isOpen())}`,
     );
   };
+  let barMs = -1;
   const paintProgress = () => {
     if (!state) return;
-    const at = position(state, Date.now());
+    const live = liveOf(state, ui);
+    const at = live
+      ? livePosition(live, ui.liveAt ?? Date.now(), Date.now())
+      : position(state, Date.now());
     const bar = p.body.querySelector<HTMLElement>('[data-prog]');
     const t0 = p.body.querySelector<HTMLElement>('[data-t0]');
     const t1 = p.body.querySelector<HTMLElement>('[data-t1]');
     if (!bar || !t0 || !t1) return;
+    // Fluide : la barre glisse d'une seconde à l'autre ; un retour en arrière (titre suivant, recherche) saute sans glisser.
+    const ms = at?.ms ?? 0;
+    bar.style.transition =
+      at?.live && ms >= barMs && ms - barMs < 2_500 ? '' : 'none';
+    barMs = ms;
     bar.style.width = at ? `${(at.ms / at.total) * 100}%` : '0';
     t0.textContent = at ? clock(at.ms / 1000) : '';
     t1.textContent = at ? clock(at.total / 1000) : '';
@@ -168,12 +185,14 @@ export function mountSpotifyPage(root: HTMLElement) {
         [
           ['file', `File ${s.queue.length + s.in_progress.length}`],
           ['past', 'Dernières décisions'],
+          ['played', 'Musiques du stream'],
         ],
         list,
       ),
     );
     patch(z('note'), list === 'file' ? verifyNote(s) : '');
     if (list === 'file') keyed(z('qlist'), queueRows(s, ui), queueEmpty(s));
+    else if (list === 'played') paintPlayed();
     else
       keyed(
         z('qlist'),
@@ -182,6 +201,88 @@ export function mountSpotifyPage(root: HTMLElement) {
       );
     if (!typing()) p.panel.set(spotifyPanel(s, ui));
   };
+
+  // --- Music Hub : les musiques du stream ----------------------------------------------------------------------------------
+  function paintPlayed() {
+    const h = played;
+    const rows = h ? playedRows(h) : [];
+    const more = h?.next
+      ? [
+          {
+            key: 'more',
+            html: `<button type="button" class="d-btn ghost sm spo-pmore" data-act="sp-hmore" ${h.loading ? 'aria-busy="true" disabled' : ''}>Plus anciennes</button>`,
+          },
+        ]
+      : [];
+    keyed(
+      z('qlist'),
+      [...rows, ...more],
+      h?.error
+        ? `<div class="d-empty">${esc(h.error)}</div>`
+        : !h || h.loading
+          ? '<div class="d-skel" style="height:120px"></div>'
+          : `<div class="d-empty">Aucune musique relevée pendant un live pour l’instant.<br><small>Studio note chaque titre que Spotify Desktop joue pendant le live (y compris ta musique), avec les demandes reconnues par le Core.</small></div>`,
+    );
+  }
+  async function loadPlayed(more = false) {
+    if (played?.loading) return;
+    played = played
+      ? { ...played, loading: true }
+      : { items: [], next: null, live: false, since: null, loading: true };
+    if (list === 'played') paintPlayed();
+    try {
+      const page = await postJson<SpPlayedPage>('/api/spotify/history', {
+        before: more ? played.next : null,
+      });
+      // Une première page relue garde les plus anciennes déjà chargées (sans doublon).
+      const items = more
+        ? [...played.items, ...page.items]
+        : [
+            ...page.items,
+            ...played.items.filter(
+              (i) =>
+                !page.items.some((n) => n.id === i.id) &&
+                Date.parse(i.at) < Date.parse(page.items.at(-1)?.at ?? ''),
+            ),
+          ];
+      played = {
+        ...page,
+        items,
+        next: more || !played.items.length ? page.next : played.next,
+        loading: false,
+      };
+    } catch (e) {
+      played = { ...played, loading: false, error: errText(e) };
+    }
+    if (list === 'played') paintPlayed();
+  }
+
+  // --- Music Hub : le titre en cours selon Windows (local, chaque seconde) ------------------------------------------------
+  let liveSig = '';
+  async function readLive() {
+    const out = await tryGetJson<{ live: SpLive | null }>('/api/spotify/live');
+    if (!out) return;
+    ui.live = out.live;
+    ui.liveAt = Date.now();
+    const l = out.live;
+    const sig = l
+      ? `${l.state}|${l.gen}|${l.seq}|${l.link?.uri ?? ''}|${l.cover ?? ''}`
+      : '';
+    if (sig === liveSig || !state) return;
+    const newTrack = !!l && liveSig.split('|')[1] !== String(l.gen);
+    liveSig = sig;
+    ui.now = Date.now();
+    patch(z('now'), nowView(state, ui));
+    paintProgress();
+    // Le titre change : une apparition douce, et l'historique ouvert se met à jour.
+    if (newTrack) {
+      const box = z('now');
+      box.classList.remove('is-new');
+      void box.offsetWidth;
+      box.classList.add('is-new');
+      if (list === 'played') void loadPlayed(false);
+    }
+  }
 
   let reads = 0;
   async function read() {
@@ -237,6 +338,7 @@ export function mountSpotifyPage(root: HTMLElement) {
   }
   const tick = poller(read, 3000);
   const clockTick = poller(paintProgress, 1000);
+  const liveTick = poller(readLive, 1000);
 
   const post = async (
     btn: HTMLElement | null,
@@ -602,6 +704,23 @@ export function mountSpotifyPage(root: HTMLElement) {
     },
     'sp-sim': (el) =>
       post(el, `/sim/${el.dataset.what}`, {}, 'Simulateur modifié'),
+    // Music Hub : les musiques du stream, page suivante.
+    'sp-hmore': () => loadPlayed(true),
+    // Lab : le live simulé (le même que la page Simulation) — l'historique ne note que pendant un live.
+    'sp-live': (el) =>
+      run(
+        el,
+        async () => {
+          await postJson('/api/raffle/actions', {
+            command: {
+              action: el.dataset.on === '1' ? 'stream_start' : 'stream_end',
+            },
+          });
+          if (list === 'played') await loadPlayed(false);
+        },
+        el.dataset.on === '1' ? 'Live simulé démarré' : 'Live simulé terminé',
+        ERRORS,
+      ),
     // Lab with the real account: allow (or stop) the writes for this session — a confirmation before allowing.
     'sp-lab-writes': (el) => {
       const on = el.dataset.on === '1';
@@ -627,7 +746,8 @@ export function mountSpotifyPage(root: HTMLElement) {
     if (sw) return void setOpen(sw, sw.dataset.switch === 'on');
     const l = t.closest<HTMLElement>('[data-list]');
     if (l) {
-      list = l.dataset.list as 'file' | 'past';
+      list = l.dataset.list as 'file' | 'past' | 'played';
+      if (list === 'played') void loadPlayed(false);
       return paint();
     }
     const sim = t.closest<HTMLElement>('[data-sim-try]');
@@ -648,9 +768,11 @@ export function mountSpotifyPage(root: HTMLElement) {
       if (v) {
         tick.start();
         clockTick.start();
+        liveTick.start();
       } else {
         tick.stop();
         clockTick.stop();
+        liveTick.stop();
       }
     },
   };

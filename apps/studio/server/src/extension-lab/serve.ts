@@ -50,8 +50,10 @@ export const EXTENSION_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  // Twitch CDN images only (emotes/avatars of the Bonk Lab catalog); still no network calls.
-  "img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com",
+  // Twitch CDN images (emotes/avatars of the Bonk Lab catalog) and Spotify's covers (Music Hub: the real catalogue's
+  // https://i.scdn.co — to declare in the Twitch console's « Allowlist for Image Domains » the day the extension is
+  // hosted, like on Twitch). Still no network calls.
+  "img-src 'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com https://i.scdn.co",
   "media-src 'self' blob:",
   "connect-src 'self'",
   "frame-ancestors 'self'",

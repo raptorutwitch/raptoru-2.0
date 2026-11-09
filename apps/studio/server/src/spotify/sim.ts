@@ -280,6 +280,54 @@ export class SpotifySim {
       ]!;
     this.startedAt = this.now();
   }
+  /** Music Hub (SMTC): Spotify Desktop closed by hand — Windows has no session, the Web API no active device. */
+  closeApp(closed: boolean) {
+    this.tick();
+    this.appClosed = closed;
+    this.deviceActive = !closed;
+  }
+  appClosed = false;
+  /** The broadcaster plays the same track again from its start (a new occurrence). */
+  replay() {
+    this.tick();
+    if (!this.current) return;
+    this.startedAt = this.now();
+    if (!this.playing) this.pausedProgress = 0;
+  }
+  /** Pause / resume in the Spotify app (not through Raptoru). */
+  pauseByHand() {
+    this.tick();
+    if (this.playing) {
+      this.pausedProgress = this.now() - this.startedAt;
+      this.playing = false;
+    } else {
+      this.startedAt = this.now() - this.pausedProgress;
+      this.playing = true;
+    }
+  }
+  /**
+   * What Windows would say (SMTC, smtc.ts): read from this state, never through `fetch` (it is not a Web API call and is
+   * never counted as one). Spotify gives Windows the artists in one line and no track id.
+   */
+  local() {
+    this.tick();
+    if (this.appClosed || !this.current) return null;
+    const c = this.current;
+    return {
+      title: c.name,
+      artist: c.artists.map((a) => a.name).join(', '),
+      album: c.album?.name ?? null,
+      playing: this.playing,
+      position_ms: Math.min(this.progress(), c.duration_ms ?? 0),
+      end_ms: c.duration_ms ?? 0,
+      // The cover's bytes, as Windows hands them (here the simulated SVG).
+      cover: c.album?.images?.[0]?.url
+        ? decodeURIComponent(
+            c.album.images[0].url.replace(/^data:image\/svg\+xml,/, ''),
+          )
+        : null,
+    };
+  }
   rateLimit(seconds: number, quota = false) {
     this.limitedUntil = this.now() + seconds * 1000;
     this.limitQuota = quota;
@@ -296,6 +344,7 @@ export class SpotifySim {
       progress_ms: this.current ? this.progress() : null,
       playing: this.playing,
       volume: this.volume,
+      app_closed: this.appClosed,
       queue: this.userQueue.map((t) => t.name),
       calls: this.calls.length,
     };

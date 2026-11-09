@@ -206,11 +206,31 @@ body.component-view .jdm-module[data-module="music"] .jdm-module__body,
   .mh-band { gap: calc(4 * var(--g)); }
   .mh-seg { padding: 0 calc(8 * var(--g)); }
 }
+/* « En cours » alive (09/11, SMTC_STUDIO.md): a thin bar moved by the clock, the time, a soft entrance on a new track. */
+.mh-now__bar { grid-column: 3 / -1; display: flex; align-items: center; gap: calc(8 * var(--g)); margin-top: calc(-4 * var(--g)); padding-right: calc(4 * var(--g)); }
+.mh-prog { flex: 1; min-width: 0; height: calc(3 * var(--g)); border-radius: 2px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.mh-prog i { display: block; height: 100%; background: var(--mh-acc); border-radius: 2px; transform: scaleX(0); transform-origin: left; transition: transform 1s linear; }
+.mh-now.is-paused .mh-prog i { background: var(--mh-mute); }
+.mh-ptime { flex: none; color: var(--mh-faint); font-size: var(--fs-10); font-weight: 700; font-variant-numeric: tabular-nums; }
+.mh-now.is-new .mh-art--now, .mh-now.is-new .mh-tx { animation: mh-in 0.45s ease-out both; }
+.mh-now.is-new .mh-tx { animation-delay: 0.05s; }
+@keyframes mh-in { from { opacity: 0; transform: translateY(calc(4 * var(--g))); } }
+/* The history: every track of the lives; a request carries its viewer; how it left, discreetly. */
+.mh-hrow { grid-template-columns: calc(40 * var(--g)) auto minmax(0, 1fr) auto; }
+.mh-badge { justify-self: end; padding: calc(2 * var(--g)) calc(6 * var(--g)); border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--mh-mute); font-size: var(--fs-10); font-weight: 750; white-space: nowrap; }
+.mh-badge--skip { background: rgba(251, 191, 36, 0.12); color: #fcd34d; }
+.mh-badge--now { background: rgba(52, 211, 153, 0.14); color: var(--mh-acc); }
+.mh-hsess { margin: calc(12 * var(--g)) 0 calc(2 * var(--g)) calc(50 * var(--g)); padding-top: calc(8 * var(--g)); border-top: 1px solid rgba(255, 255, 255, 0.08); color: var(--mh-mute); font-size: var(--fs-10); font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+@container (max-width: 340px) {
+  .mh-ptime { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .mh-curtain, .mh-curtain.is-open { clip-path: none; opacity: 0; transition: visibility 0s, opacity 0.15s; }
   .mh-curtain.is-open { opacity: 1; }
   .mh-curtain__in { transform: none; transition: none; }
   .mh-field, .mh-toast { transition: none; }
   .mh-eqs i { animation: none; height: 70%; }
+  .mh-prog i { transition: none; }
+  .mh-now.is-new .mh-art--now, .mh-now.is-new .mh-tx { animation: none; }
   .mh-skel, .mh-row.is-flash, .mh-tip, .mh-sup, .mh-buy, .mh-dialog, .mh-scrim { animation: none; }
 }

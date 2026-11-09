@@ -541,3 +541,54 @@
     gap: 16px;
   }
 }
+
+/* Music Hub — le titre en cours selon Windows (SMTC) et les musiques du stream (docs/music/SMTC_STUDIO.md). */
+.spo-src {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink3);
+}
+.spo-album {
+  color: var(--ink3);
+}
+/* La barre glisse d'une seconde à l'autre (un retour en arrière saute : la page coupe la transition). */
+.spo-now .d-prog i {
+  transition: width 1s linear;
+}
+.spo-trans[data-paused] .d-prog i {
+  opacity: 0.55;
+}
+/* Un nouveau titre apparaît doucement (une fois, pas à chaque relevé). */
+.spo-now.is-new .spo-art,
+.spo-now.is-new .spo-meta {
+  animation: spo-in 0.45s ease-out both;
+}
+.spo-now.is-new .spo-meta {
+  animation-delay: 0.06s;
+}
+@keyframes spo-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.spo-p {
+  grid-template-columns: 42px 38px minmax(0, 1fr) auto;
+}
+.spo-ptags {
+  display: flex;
+  gap: 5px;
+  justify-content: flex-end;
+}
+.spo-pby {
+  color: var(--ink3);
+}
+.spo-psess {
+  padding: 12px 6px 6px;
+  border-bottom: 1px solid var(--hair);
+}
+.spo-pmore {
+  margin: 10px auto;
+  display: block;
+}

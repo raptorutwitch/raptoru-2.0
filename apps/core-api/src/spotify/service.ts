@@ -5,6 +5,7 @@ import {
   type SpotifyAutoSkipReport,
   type SpotifyJob,
   type SpotifyJobReport,
+  type SpotifyLiveNow,
   type SpotifyPlayback,
   type SpotifyQueueEntry,
   type SpotifyReason,
@@ -30,6 +31,7 @@ import {
   LabWalletError,
   type Actor as MusicActor,
 } from '../lab-moderation/store.js';
+import { LiveMusic } from './live-music.js';
 import { MSG, trackLabel } from './messages.js';
 import { parseTrackReference } from './reference.js';
 
@@ -246,12 +248,36 @@ export class SpotifyService {
 
   /** Music Hub: the economy the extension's requests are paid with (Jetons). Null: that entry is unavailable. */
   economy: EconomyPort | null = null;
+  /** Music Hub: the live of the Lab (its simulated sessions) instead of the canonical one, for the music history. */
+  labSessions = false;
+  /** Music Hub: the live track (Windows SMTC via Studio) and the stream's music history — display only. */
+  readonly music: LiveMusic;
 
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
     private readonly twitch: CpTwitchActions,
-  ) {}
+  ) {
+    this.music = new LiveMusic(db, clock, () => this.labSessions);
+  }
+
+  /** Studio's live track (SMTC): under the channel's lock, like the sync — never a request's decision. */
+  async liveNow(channelId: string, body: SpotifyLiveNow) {
+    return this.db.tx(async (q) => {
+      await this.lock(q, channelId);
+      return this.music.apply(q, channelId, body);
+    });
+  }
+
+  /** The stream's music history for Studio (team view: logins too). */
+  async musicHistory(channelId: string, before: string | null) {
+    return this.music.history(this.db, channelId, {
+      before,
+      limit: 50,
+      viewerId: null,
+      team: true,
+    });
+  }
 
   /** Points de chaîne follows its song requests / skips (their redemption's result). */
   onResult(
@@ -1189,6 +1215,9 @@ export class SpotifyService {
       ? await this.request(q, job.request_id)
       : null;
     const now = this.clock.now();
+    // Music Hub: a skip command took this exact track — its occurrence in the music history is a confirmed skip.
+    if (r.outcome === 'skipped' && r.skipped_track)
+      await this.music.noteSkip(q, job.channel_id, r.skipped_track.uri);
     if (r.outcome === 'skipped' && target?.state === 'PLAYING') {
       const by =
         reply?.kind === 'songskip'
@@ -1306,6 +1335,8 @@ export class SpotifyService {
         auto_skip_consumed_at: new Date(r.at),
         auto_skip_result: r.result,
       });
+      if (r.result === 'SKIPPED' && req.track)
+        await this.music.noteSkip(q, channelId, req.track.uri);
     });
     await this.told(channelId, { request_id: r.request_id });
   }
@@ -2204,6 +2235,9 @@ export class SpotifyService {
         .filter((r) => isUncertainAddition(r) && r.twitch_status === null)
         .map(requestView),
       recent: recent.map(requestView),
+      // Music Hub: the live track as Core holds it (Studio's SMTC messages), extrapolated to now.
+      live_core: await this.music.view(this.db, channelId),
+      music_session: await this.music.session(this.db, channelId),
       overrides: await this.overrides(channelId),
       viewers,
       today: Object.fromEntries(
@@ -2692,9 +2726,10 @@ export class SpotifyService {
    * guess: no fresh reading of Studio → the player is « indisponible » and nothing is said to play.
    */
   /**
-   * Music Hub — « Musiques de la soirée »: the requests that really played (PLAYED / SKIPPED, with their start), newest
-   * first, since the live began (else the last 12 h), 20 per page (`before` = the previous page's last `at`). Only the
-   * requests: the streamer's own tracks are never stored (docs/music/HISTORIQUE_SOIREE.md).
+   * Music Hub — « Musiques de la soirée »: the stream's music history (live-music.ts) — every track that really played
+   * during a live (the broadcaster's, a playlist's, a request's, from Windows via Studio) and the requests Core saw play,
+   * newest first, 20 per page (`before` = the previous page's last `at`). A requester only through Core's exact
+   * attribution, never a title.
    */
   async extensionHistory(
     channelId: string,
@@ -2702,34 +2737,40 @@ export class SpotifyService {
     before: string | null,
     limit = 20,
   ) {
-    const live = await activeSession(this.db);
-    const since = live
-      ? new Date(live.startedAt)
-      : new Date(this.clock.now().getTime() - 12 * 3_600_000);
-    const rows = await this.db.query<RequestRow>(
-      `select * from spotify_requests where channel_id = $1 and state in ('PLAYED', 'SKIPPED')
-         and playback_started_at is not null and playback_started_at >= $2
-         and ($3::timestamptz is null or playback_started_at < $3)
-       order by playback_started_at desc limit $4`,
-      [channelId, since, before, limit + 1],
-    );
-    const page = rows.slice(0, limit);
+    return this.music.history(this.db, channelId, {
+      before,
+      limit,
+      viewerId,
+      team: false,
+    });
+  }
+
+  /** The extension's « en cours » from the live track (display), with the request only on Core's exact attribution. */
+  private liveNowPlaying(
+    live: NonNullable<Awaited<ReturnType<LiveMusic['view']>>>,
+    current: RequestRow | null,
+    viewer: { id: string } | null,
+  ) {
+    if (!live.track) return null;
+    const req =
+      current && live.uri && current.track?.uri === live.uri ? current : null;
     return {
-      since: since.toISOString(),
-      live: !!live,
-      items: page.map((r) => ({
-        at: new Date(r.playback_started_at!).toISOString(),
-        title: r.track?.title ?? null,
-        artists: r.track?.artists ?? [],
-        image_url: r.display?.image_url ?? null,
-        requested_by: r.viewer_name,
-        own: !!viewerId && r.viewer_id === viewerId,
-        state: r.state,
-      })),
-      next:
-        rows.length > limit
-          ? new Date(page[page.length - 1]!.playback_started_at!).toISOString()
-          : null,
+      kind: req ? ('request' as const) : ('broadcaster' as const),
+      title: live.track.title,
+      artists: live.track.artists,
+      duration_ms: live.track.duration_ms,
+      progress_ms: live.position_ms,
+      is_playing: live.is_playing,
+      requested_by: req?.viewer_name ?? null,
+      request_id: req?.request_id ?? null,
+      own: !!req && !!viewer && req.viewer_id === viewer.id,
+      album: live.track.album ?? req?.display?.album ?? null,
+      image_url: live.cover_url ?? req?.display?.image_url ?? null,
+      // A display estimate (Windows' last position + the clock): stale when Windows stopped telling.
+      stale: live.state === 'stale',
+      // The occurrence (a replay of the same track is another one): the extension's « new track » cue.
+      occurrence: live.gen,
+      source: 'live' as const,
     };
   }
 
@@ -2775,6 +2816,10 @@ export class SpotifyService {
     const pb = fresh ? st!.playback : null;
     const progress = fresh ? this.progressNow(st) : null;
     const nowTrack = pb?.track ?? null;
+    // Music Hub: what Windows says plays (SMTC via Studio) is the DISPLAY when fresh — the requests' timing (waits,
+    // grace) stays on the Web API's reading above. The requester only when this occurrence's exact track (Studio's
+    // Web API reading) is the one Core attributes to the request playing.
+    const live = await this.music.view(this.db, channelId);
     let wait =
       nowTrack && progress !== null
         ? Math.max(0, nowTrack.duration_ms - progress)
@@ -2910,21 +2955,26 @@ export class SpotifyService {
         is_playing: pb?.is_playing ?? null,
         volume_percent: pb?.volume_percent ?? null,
       },
-      now_playing: nowTrack
-        ? {
-            kind: current ? ('request' as const) : ('broadcaster' as const),
-            title: nowTrack.title,
-            artists: nowTrack.artists,
-            duration_ms: nowTrack.duration_ms,
-            progress_ms: progress,
-            is_playing: pb!.is_playing,
-            requested_by: current?.viewer_name ?? null,
-            request_id: current?.request_id ?? null,
-            own: !!current && !!viewer && current.viewer_id === viewer.id,
-            album: current?.display?.album ?? null,
-            image_url: current?.display?.image_url ?? null,
-          }
-        : null,
+      // Windows names no track (probe missing, Spotify closed, another device): the Web API's reading, as before.
+      now_playing: live?.track
+        ? this.liveNowPlaying(live, current, viewer)
+        : nowTrack
+          ? {
+              kind: current ? ('request' as const) : ('broadcaster' as const),
+              title: nowTrack.title,
+              artists: nowTrack.artists,
+              duration_ms: nowTrack.duration_ms,
+              progress_ms: progress,
+              is_playing: pb!.is_playing,
+              requested_by: current?.viewer_name ?? null,
+              request_id: current?.request_id ?? null,
+              own: !!current && !!viewer && current.viewer_id === viewer.id,
+              album: current?.display?.album ?? null,
+              image_url: current?.display?.image_url ?? null,
+              stale: false,
+              source: 'api' as const,
+            }
+          : null,
       queue,
       pending,
       me,

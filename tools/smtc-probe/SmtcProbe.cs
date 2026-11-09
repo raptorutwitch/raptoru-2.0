@@ -4,6 +4,9 @@
 // Spotify Web API, never sends a command to the player, never reads the network: Windows' own local metadata only.
 // A local check every 5 s (Windows' state, not Spotify's API) counts the changes no event announced ("manqué").
 // Built on the spot by Windows' own C# compiler (no SDK, no package): see run.ps1. C# 5 (csc 4.8).
+// `--studio` (Raptoru Studio's child process, docs/music/SMTC_STUDIO.md): the same events as JSON lines on stdout (no
+// human text), the cover's bytes once per new cover, a local reading every 5 s ("CONTRÔLE": position drift, liveness),
+// position changes (seeks) at most once a second; it exits as soon as Studio closes its stdin (never an orphan).
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -23,6 +26,7 @@ static class SmtcProbe
         public double PositionMs, EndMs;
         public DateTimeOffset TimelineUpdated;
         public long ThumbBytes = -1;
+        public byte[] Thumb;
         public string Key { get { return Title + "\u001f" + Artist + "\u001f" + Album; } }
     }
 
@@ -49,11 +53,23 @@ static class SmtcProbe
     static StreamWriter log;
     /** Raw media + playback events already handled: the local check never judges while one is still on its way. */
     static int handledRaw;
+    /** Raptoru Studio's mode: JSON lines on stdout. */
+    static bool studio;
+    static string sentThumb;
+    static long lastTimelineMs = -10000;
 
     static int Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        string logPath = args.Length > 0 ? args[0] : null;
+        string logPath = null;
+        foreach (var a in args) { if (a == "--studio") studio = true; else logPath = a; }
+        if (studio)
+        {
+            // Studio gone (closed, crashed): its end of our stdin closes, we leave.
+            var watch = new Thread(delegate () { try { while (Console.In.ReadLine() != null) { } } catch { } Environment.Exit(0); });
+            watch.IsBackground = true;
+            watch.Start();
+        }
         if (logPath != null)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(logPath)));
@@ -127,6 +143,7 @@ static class SmtcProbe
             else if (why == "départ") Line("ATTENTE", "Aucune session Spotify pour l'instant (autres : " + (others.Count == 0 ? "aucune" : string.Join(", ", others)) + "). Lance Spotify Desktop.", null);
             session = null;
             last = null;
+            sentThumb = null;
             return;
         }
         if (ReferenceEquals(found, session)) return;
@@ -151,9 +168,13 @@ static class SmtcProbe
             {
                 if (!ReferenceEquals(s, session)) return;
                 Interlocked.Increment(ref rawTimeline);
+                // Studio: a seek moves the progress bar (at most once a second; the bar runs on the clock otherwise).
+                long t = Since.ElapsedMilliseconds;
+                if (studio && t - Interlocked.Read(ref lastTimelineMs) >= 1000) { Interlocked.Exchange(ref lastTimelineMs, t); Fire("timeline"); }
             }));
         Line("TROUVÉE", "Session Spotify : " + found.SourceAppUserModelId + " (" + why + ")" + (others.Count > 0 ? " · ignorées : " + string.Join(", ", others) : ""), null);
         last = null;
+        sentThumb = null;
         await Report("start", Since.ElapsedMilliseconds);
     }
 
@@ -172,6 +193,15 @@ static class SmtcProbe
                 {
                     var stream = await W(p.Thumbnail.OpenReadAsync());
                     st.ThumbBytes = (long)stream.Size;
+                    // Studio shows the cover itself (local page): its bytes, at most 600 KB.
+                    if (studio && stream.Size > 0 && stream.Size <= 600 * 1024)
+                    {
+                        var reader = new Windows.Storage.Streams.DataReader(stream.GetInputStreamAt(0));
+                        uint n = await W(reader.LoadAsync((uint)stream.Size));
+                        st.Thumb = new byte[n];
+                        reader.ReadBytes(st.Thumb);
+                        reader.Dispose();
+                    }
                     var closable = stream as IDisposable;
                     if (closable != null) closable.Dispose();
                 }
@@ -200,13 +230,14 @@ static class SmtcProbe
         if (s == null) return;
         var now = Since.ElapsedMilliseconds;
         handledRaw = Volatile.Read(ref rawMedia) + Volatile.Read(ref rawPlayback);
-        var st = await Read(s, what != "playback");
+        var st = await Read(s, what != "playback" && what != "timeline");
         var prev = last;
         string kind;
         if (st.Title.Length == 0) kind = "TRANSITION";
         else if (prev == null || prev.Key != st.Key) kind = what == "start" ? "EN COURS" : "PISTE";
         else if (prev.PositionMs > 10000 && st.PositionMs < 3000) kind = "REJOUÉ";
         else if (prev.Status != st.Status) kind = st.Status == "Playing" ? "LECTURE" : st.Status == "Paused" ? "PAUSE" : st.Status.ToUpperInvariant();
+        else if (what == "timeline") kind = "POSITION";
         else { duplicates++; kind = "DOUBLON"; }
         if (kind == "PISTE" || kind == "REJOUÉ") { tracks++; lastTrackMs = now; }
         if (kind != "TRANSITION") last = st;
@@ -244,7 +275,12 @@ static class SmtcProbe
                 Line("MANQUÉ", "Changement vu au contrôle local sans événement : " + Describe(st), null, st, "check");
                 last = st;
             }
-            else last.PositionMs = st.PositionMs;
+            else
+            {
+                last.PositionMs = st.PositionMs;
+                // Studio: the local reading every 5 s (drift of the position, and the probe is alive).
+                if (studio) Line("CONTRÔLE", Describe(st), null, st, "check");
+            }
         }
         catch (Exception e) { Line("ERREUR", "contrôle : " + e.Message, null); }
         finally { Gate.Release(); }
@@ -274,11 +310,12 @@ static class SmtcProbe
         string human = string.Format(CultureInfo.InvariantCulture, "{0:HH:mm:ss.fff}  {1,-10} {2}{3}", at, kind, text, string.IsNullOrEmpty(extra) ? "" : "  · " + extra);
         lock (Out)
         {
-            Console.WriteLine(human);
-            if (log != null)
+            if (!studio) Console.WriteLine(human);
+            if (log != null || studio)
             {
                 var j = new StringBuilder("{");
                 j.Append("\"at\":").Append(Q(at.ToString("o", CultureInfo.InvariantCulture)));
+                j.AppendFormat(CultureInfo.InvariantCulture, ",\"t\":{0}", Since.ElapsedMilliseconds);
                 j.Append(",\"kind\":").Append(Q(kind)).Append(",\"text\":").Append(Q(text));
                 if (source != null) j.Append(",\"source\":").Append(Q(source));
                 if (st != null)
@@ -288,8 +325,16 @@ static class SmtcProbe
                     j.AppendFormat(CultureInfo.InvariantCulture, ",\"position_ms\":{0:0},\"end_ms\":{1:0},\"thumb_bytes\":{2}", st.PositionMs, st.EndMs, st.ThumbBytes);
                 }
                 if (!string.IsNullOrEmpty(extra)) j.Append(",\"extra\":").Append(Q(extra));
-                j.Append("}");
-                log.WriteLine(j.ToString());
+                var line = j.ToString() + "}";
+                if (log != null) log.WriteLine(line);
+                if (studio)
+                {
+                    // The cover's bytes once per new cover (Studio keeps the last one).
+                    string thumb = st != null && st.Thumb != null ? Convert.ToBase64String(st.Thumb) : null;
+                    if (thumb != null && thumb != sentThumb) { sentThumb = thumb; line = line.Substring(0, line.Length - 1) + ",\"thumb\":" + Q(thumb) + "}"; }
+                    Console.Out.WriteLine(line);
+                    Console.Out.Flush();
+                }
             }
         }
     }

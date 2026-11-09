@@ -5,12 +5,15 @@ import {
   countsView,
   etas,
   historyRows,
+  livePosition,
   nowView,
+  playedRows,
   openingView,
   queueRows,
   stateView,
   timeView,
   verifyNote,
+  type SpLive,
   type SpRequest,
   type SpState,
   type SpUi,
@@ -522,5 +525,198 @@ describe('Spotify page — the OBS music card settings (Music Hub V2)', () => {
     expect(html).toContain('data-act="sp-ov-preview" disabled');
     expect(html).toContain('Lecteur d’effets indisponible');
     expect(html).toContain('ne diffuse jamais la musique');
+  });
+});
+
+// Music Hub (docs/music/SMTC_STUDIO.md): « en cours » from Windows (SMTC) and the stream's music history.
+describe('the live track from Windows and the stream history (Studio page)', () => {
+  const smtc = (over: Partial<SpLive> = {}): SpLive => ({
+    source: 'smtc',
+    state: 'playing',
+    gen: 3,
+    seq: 9,
+    track: {
+      title: 'Tainted <Love>',
+      artists: ['Soft Cell'],
+      album: 'Non-Stop Erotic Cabaret',
+      duration_ms: 153_800,
+    },
+    position_ms: 42_000,
+    cover: 'abcdef0123456789',
+    reason: null,
+    link: null,
+    ...over,
+  });
+
+  it('shows what Windows says, escaped, with its local cover; the requester only on the exact track of the request', () => {
+    const s = state();
+    const mine = nowView(s, ui({ live: smtc() }));
+    expect(mine).toContain('Tainted &lt;Love&gt;');
+    expect(mine).toContain('Non-Stop Erotic Cabaret');
+    expect(mine).toContain('/api/spotify/live/cover?v=abcdef0123456789');
+    expect(mine).toContain('En cours');
+    // Core attributes a request (Numb) — but this occurrence is not linked to it: no requester.
+    expect(mine).not.toContain('demandeur');
+    // Linked to the request's exact uri: its requester shows (whatever the title says).
+    const linked = nowView(
+      s,
+      ui({
+        live: smtc({
+          link: {
+            gen: 3,
+            uri: TRACK.uri,
+            cover_url: null,
+            artists: ['Linkin Park'],
+          },
+        }),
+      }),
+    );
+    expect(linked).toContain('Demande en cours');
+    expect(linked).toContain('@demandeur');
+    expect(linked).toContain('Linkin Park');
+    // Paused, stale, Spotify closed.
+    expect(nowView(s, ui({ live: smtc({ state: 'paused' }) }))).toContain(
+      'En pause',
+    );
+    expect(nowView(s, ui({ live: smtc({ state: 'stale' }) }))).toContain(
+      'Lecture non confirmée',
+    );
+    expect(
+      nowView(
+        s,
+        ui({ live: smtc({ state: 'lost', track: null, position_ms: null }) }),
+      ),
+    ).toContain('Spotify Desktop est fermé');
+    // No live source (off): the Web API's reading as before.
+    expect(
+      nowView(s, ui({ live: smtc({ state: 'off', track: null }) })),
+    ).toContain('Numb');
+  });
+
+  it('the bar: moves while playing, frozen in pause, never past the end, nothing without a duration', () => {
+    expect(livePosition(smtc(), NOW, NOW + 3_000)).toEqual({
+      ms: 45_000,
+      total: 153_800,
+      live: true,
+    });
+    expect(livePosition(smtc({ state: 'paused' }), NOW, NOW + 60_000)!.ms).toBe(
+      42_000,
+    );
+    expect(livePosition(smtc(), NOW, NOW + 600_000)!.ms).toBe(153_800);
+    expect(
+      livePosition(
+        smtc({
+          track: { title: 'x', artists: [], album: null, duration_ms: null },
+        }),
+        NOW,
+        NOW,
+      ),
+    ).toBeNull();
+    expect(livePosition(smtc({ state: 'lost' }), NOW, NOW)).toBeNull();
+  });
+
+  it('history rows: each live apart, a request with its viewer, « Skippé » only when Core says so, escaped', () => {
+    const at = (min: number) => new Date(NOW - min * 60_000).toISOString();
+    const base = {
+      album: null,
+      image_url: null,
+      listened_ms: 120_000,
+      session_started_at: at(60),
+      requested_by: null,
+      kind: 'track' as const,
+    };
+    const html = playedRows({
+      live: true,
+      since: at(60),
+      next: null,
+      items: [
+        {
+          ...base,
+          id: 'a',
+          at: at(1),
+          title: 'Maintenant',
+          artists: ['X'],
+          end: null,
+          listened_ms: null,
+        },
+        {
+          ...base,
+          id: 'b',
+          at: at(5),
+          title: '<i>Skip</i>',
+          artists: ['Y'],
+          end: 'skipped',
+          kind: 'request',
+          requested_by: 'Fan<1>',
+          viewer_login: 'fan1',
+        },
+        {
+          ...base,
+          id: 'c',
+          at: at(9),
+          title: 'Coupé',
+          artists: ['Z'],
+          end: 'interrupted',
+        },
+        {
+          ...base,
+          id: 'd',
+          at: at(14),
+          title: 'Entier',
+          artists: ['W'],
+          end: 'natural',
+        },
+        {
+          ...base,
+          id: 'e',
+          at: at(30 * 60),
+          title: 'Hier',
+          artists: ['V'],
+          end: 'unknown',
+          session_started_at: at(31 * 60),
+        },
+      ],
+    })
+      .map((r) => r.html)
+      .join('');
+    expect(html).toContain('&lt;i&gt;Skip&lt;/i&gt;');
+    expect(html).toContain('demandée par Fan&lt;1&gt; (@fan1)');
+    expect(html.match(/Skippé/g)).toHaveLength(1);
+    expect(html.match(/>Interrompu</g)).toHaveLength(1);
+    expect(html.match(/[Ee]n cours/g)).toHaveLength(2); // the live's header + the track playing
+    expect(html.match(/Live du/g)).toHaveLength(2);
+    // A normal end, or an unknown one (Spotify closed, restart): no badge at all.
+    expect(html).not.toMatch(/Entier[\s\S]*?(Skippé|Interrompu)[\s\S]*?Hier/);
+  });
+
+  it('the simulator bar: the simulated live and the simulated Windows', () => {
+    const s = state({
+      environment: 'lab',
+      music_session: { live: false, since: null },
+      sim: {
+        device_active: true,
+        queue_answer: 204,
+        limited: false,
+        current: 'Chill Loop',
+        progress_ms: 1_000,
+        queue: [],
+        calls: 0,
+        playing: true,
+        app_closed: false,
+      },
+    });
+    const bar = simBar(s, ui());
+    expect(bar).toContain('Démarrer un live simulé');
+    expect(bar).toContain('data-what="app-close"');
+    expect(bar).toContain('data-what="replay"');
+    expect(
+      simBar(
+        {
+          ...s,
+          music_session: { live: true, since: new Date(NOW).toISOString() },
+        },
+        ui(),
+      ),
+    ).toContain('Terminer le live simulé');
   });
 });

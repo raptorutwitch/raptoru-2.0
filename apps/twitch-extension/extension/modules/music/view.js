@@ -7,6 +7,9 @@
 // « en cours » row; « Musiques de la soirée » behind the clock (real played requests only, paginated by Core).
 // The view decides nothing: prices, limits, rights, refusals, refunds and the player's state are Core's (and Studio's),
 // shown as they are. Every team action is checked again by Core (a hidden button is not a right).
+// 09/11 (docs/music/SMTC_STUDIO.md): « en cours » follows what Spotify Desktop plays as Windows tells Studio (the
+// broadcaster's music as much as a request), with a progress bar moved by the clock between two readings (never a
+// network call per second); the history lists every track that played during the lives, requests recognised by Core.
 import { newIdempotencyKey } from '../../shared/api.js';
 import { createPoller, everySecond } from '../../app/store.js';
 
@@ -131,6 +134,7 @@ export function view(ctx) {
   const openedAt = Date.now();
   let states = null; // your requests' states at the previous reading (live « ajoutée à la file »)
   let nowOwn = null;
+  let polledNow; // « en cours » at the previous reading (undefined: none yet)
   let quietFocus = false; // the field gets the focus back from Escape: it must not reopen the curtain
 
   const can = () => st?.can ?? { moderate: false, refund: false, player: false, open_close: false };
@@ -152,6 +156,13 @@ export function view(ctx) {
         st = await client.musicState();
         st.readAt = Date.now(); // the cooldown moves from this reading, never beyond it
         failed = null;
+        // Another track: the history (open, or opened later) shows it, and the one that ended.
+        const k = st.now_playing ? nowKey(st.now_playing) : null;
+        if (polledNow !== undefined && k !== polledNow && evening) {
+          if (hist) void refreshEvening();
+          else evening.stale = true;
+        }
+        polledNow = k;
         notices();
         render();
         return true;
@@ -195,8 +206,18 @@ export function view(ctx) {
   }
 
   const art = (url, cls = '') => url
-    ? `<img class="mh-art ${cls}" src="${esc(url)}" alt="" loading="lazy" decoding="async">`
+    ? `<img class="mh-art ${cls}" src="${esc(url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`
     : `<span class="mh-art mh-art--none ${cls}" aria-hidden="true">${I.note}</span>`;
+  /** A cover that cannot load (blocked, gone): the same placeholder as a track without one (no inline handler: CSP). */
+  const onImgError = (event) => {
+    const img = event.target;
+    if (img?.tagName !== 'IMG' || !img.classList.contains('mh-art')) return;
+    const ph = document.createElement('span');
+    ph.className = `${img.className} mh-art--none`;
+    ph.setAttribute('aria-hidden', 'true');
+    ph.innerHTML = I.note;
+    img.replaceWith(ph);
+  };
   const artists = (a) => esc((a ?? []).join(', '));
 
   /**
@@ -248,16 +269,51 @@ export function view(ctx) {
 
   // ------------------------------------------------------------------ the list: « en cours » first, then the queue
 
+  /** One occurrence of « en cours » (a new one replays the soft entrance once). */
+  const nowKey = (n) => `${n.occurrence ?? ''}\u001f${n.title}\u001f${(n.artists ?? []).join(',')}\u001f${n.request_id ?? ''}`;
+
   function nowHtml() {
     const n = st.now_playing;
     if (!n) return '';
     const by = n.kind === 'request' ? (n.own ? '<span class="mh-who is-me">ta demande</span>' : n.requested_by ? `<span class="mh-who">@${esc(n.requested_by)}</span>` : '') : '';
-    const playing = !!n.is_playing;
-    return `<div class="mh-now ${playing ? '' : 'is-paused'}" role="group" aria-label="${playing ? 'En cours' : 'En pause'} : ${esc(n.title)}">
+    const playing = !!n.is_playing && !n.stale;
+    const label = n.stale ? 'Non confirmé' : playing ? 'En cours' : 'En pause';
+    const timed = n.duration_ms > 0 && Number.isFinite(n.progress_ms);
+    // The bar and the time move every second outside this HTML (paintProgress): the list is never rebuilt for them.
+    return `<div class="mh-now ${playing ? '' : 'is-paused'}" role="group" aria-label="${label} : ${esc(n.title)}" data-now="${esc(nowKey(n))}">
       <span class="mh-now__ico">${playing ? EQ : I.pause}</span>${art(n.image_url, 'mh-art--now')}
-      <span class="mh-tx"><span class="mh-tag">${playing ? 'En cours' : 'En pause'}</span><b>${esc(n.title)}</b><span>${artists(n.artists)}${by ? ` · ${by}` : ''}</span></span>
+      <span class="mh-tx"><span class="mh-tag">${label}</span><b>${esc(n.title)}</b><span>${artists(n.artists)}${by ? ` · ${by}` : ''}</span></span>
       ${can().player ? `<button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Lecteur du stream (supermods)" title="Lecteur du stream (supermods)">${I.sliders}</button>` : '<span></span>'}
+      ${timed ? `<span class="mh-now__bar"><span class="mh-prog" aria-hidden="true"><i data-k="prog"></i></span><span class="mh-ptime" data-k="ptime"></span></span>` : ''}
     </div>${sup && can().player ? supHtml() : ''}`;
+  }
+
+  /**
+   * The bar: Core's last position + the time since that reading (playing only), never past the end, frozen in pause.
+   * A display estimate, never a proof of play. Near the end, ONE reading right after it: the next track shows at once.
+   */
+  let barEl = null;
+  let barMs = 0;
+  let endRead = null;
+  function paintProgress() {
+    const n = st?.now_playing;
+    const bar = node.querySelector('[data-k="prog"]');
+    const time = node.querySelector('[data-k="ptime"]');
+    if (!n || !bar || !time || !(n.duration_ms > 0)) return;
+    const playing = !!n.is_playing && !n.stale;
+    const ms = Math.min(n.duration_ms, Math.max(0, (n.progress_ms ?? 0) + (playing ? Date.now() - st.readAt : 0)));
+    // A new bar (a new track, a rebuilt list) or a jump back: placed at once, never sliding.
+    bar.style.transition = bar !== barEl || !playing || ms < barMs - 500 ? 'none' : '';
+    barEl = bar;
+    barMs = ms;
+    bar.style.transform = `scaleX(${ms / n.duration_ms})`;
+    time.textContent = `${dur(ms)} / ${dur(n.duration_ms)}`;
+    const left = n.duration_ms - ms;
+    const key = nowKey(n);
+    if (playing && left > 0 && left <= 1_000 && endRead !== key) {
+      endRead = key;
+      setTimeout(() => { if (!destroyed) void poller.now(); }, left + 1_500);
+    }
   }
 
   /** The supermods' player: what Studio confirms, never a guess (a hidden button is not a right: Core checks it). */
@@ -312,6 +368,22 @@ export function view(ctx) {
 
   // ------------------------------------------------------------------ « Musiques de la soirée » (Core, 20 per page)
 
+  /** The first page again in the background (a new track): merged in place — older pages, scroll and rows stay. */
+  async function refreshEvening() {
+    if (!evening?.items?.length || evening.loading) return void loadEvening(false);
+    try {
+      const r = await client.musicHistory(null);
+      if (destroyed || !evening || evening.loading) return;
+      const fresh = new Set(r.items.map((i) => i.id));
+      const oldest = r.items.length ? r.items[r.items.length - 1].at : null;
+      const kept = evening.items.filter((i) => !fresh.has(i.id) && (!oldest || i.at < oldest));
+      evening = { ...evening, items: [...r.items, ...kept], since: r.since, live: r.live, stale: false };
+      if (hist) renderBody();
+    } catch {
+      /* the next track tries again; what is shown stays */
+    }
+  }
+
   async function loadEvening(more = false) {
     if (evening?.loading) return;
     evening = { items: [], next: null, ...(more ? evening : {}), loading: true, error: null };
@@ -326,20 +398,39 @@ export function view(ctx) {
     renderBody();
   }
 
+  /** How a track left: « Skippé » only on a skip command (Core), « Interrompu » for an early change (probable). */
+  const END = {
+    skipped: '<span class="mh-badge mh-badge--skip" title="Passée par une commande (streamer ou modération)">Skippé</span>',
+    interrupted: '<span class="mh-badge" title="Un autre titre a commencé avant la fin">Interrompu</span>',
+  };
+
   function historyHtml() {
     const ev = evening ?? { items: [], loading: true };
     let lastHour = null;
+    let session;
     const rows = ev.items.map((h) => {
-      const hour = new Date(h.at).getHours();
-      const sep = hour !== lastHour ? `<li class="mh-hhour">${hour} h</li>` : '';
+      const d = new Date(h.at);
+      const hour = d.getHours();
+      let sep = '';
+      // Each live apart (its date), then the hours within it.
+      if ((h.session_started_at ?? null) !== session) {
+        session = h.session_started_at ?? null;
+        lastHour = null;
+        if (session && session !== ev.since) sep += `<li class="mh-hsess">Live du ${new Date(session).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</li>`;
+      }
+      if (hour !== lastHour) sep += `<li class="mh-hhour">${hour} h</li>`;
       lastHour = hour;
-      return `${sep}<li class="mh-hrow ${h.own ? 'is-mine' : ''}"><time datetime="${esc(h.at)}">${hhmm(h.at)}</time>${art(h.image_url, 'mh-art--sm')}<span class="mh-tx"><b>${esc(h.title ?? '—')}</b><span>${artists(h.artists)} · ${h.own ? '<span class="mh-who is-me">toi</span>' : `<span class="mh-who">@${esc(h.requested_by)}</span>`}</span></span></li>`;
+      const who = h.kind === 'request'
+        ? ` · ${h.own ? '<span class="mh-who is-me">toi</span>' : `<span class="mh-who">@${esc(h.requested_by)}</span>`}`
+        : '';
+      const end = h.end === null ? '<span class="mh-badge mh-badge--now">En cours</span>' : (END[h.end] ?? '');
+      return `${sep}<li class="mh-hrow ${h.own ? 'is-mine' : ''} ${h.kind === 'request' ? 'is-request' : ''}"><time datetime="${esc(h.at)}">${hhmm(h.at)}</time>${art(h.image_url, 'mh-art--sm')}<span class="mh-tx"><b>${esc(h.title ?? '—')}</b><span>${artists(h.artists)}${who}</span></span>${end}</li>`;
     }).join('');
-    const head = `<div class="mh-hhead"><button type="button" class="mh-back" data-act="history" data-key="back">${I.left} Retour</button><b>Musiques de la soirée</b><small>${ev.since ? (ev.live ? `depuis ${hhmm(ev.since)}` : '12 dernières heures') : ''}</small></div>`;
+    const head = `<div class="mh-hhead"><button type="button" class="mh-back" data-act="history" data-key="back">${I.left} Retour</button><b>Musiques de la soirée</b><small>${ev.live && ev.since ? `live depuis ${hhmm(ev.since)}` : ''}</small></div>`;
     if (ev.error && !ev.items.length) return `${head}<div class="mh-empty"><small>${esc(refusal(ev.error))}</small><button type="button" class="mh-btn mh-btn--soft" data-act="hretry" data-key="hretry">Réessayer</button></div>`;
-    if (!ev.items.length) return `${head}${ev.loading ? '<div class="mh-skel"></div>'.repeat(4) : `<div class="mh-empty">${I.note}<b>Aucune demande jouée pour l’instant</b><small>Les musiques demandées s’afficheront ici une fois passées.</small></div>`}`;
+    if (!ev.items.length) return `${head}${ev.loading ? '<div class="mh-skel"></div>'.repeat(4) : `<div class="mh-empty">${I.note}<b>Aucune musique pour l’instant</b><small>Les musiques passées pendant le live s’afficheront ici, demandes comprises.</small></div>`}`;
     return `${head}<ol class="mh-hlist">${rows}</ol>
-      ${ev.next ? `<button type="button" class="mh-more" data-act="hmore" data-key="hmore" ${ev.loading ? 'aria-busy="true"' : ''}>Afficher les plus anciennes</button><span data-k="sentinel"></span>` : '<p class="mh-hnote">Seules les demandes sont listées (pas la musique du streamer).</p>'}`;
+      ${ev.next ? `<button type="button" class="mh-more" data-act="hmore" data-key="hmore" ${ev.loading ? 'aria-busy="true"' : ''}>Afficher les plus anciennes</button><span data-k="sentinel"></span>` : '<p class="mh-hnote">Toutes les musiques passées en live : celles du streamer et les demandes.</p>'}`;
   }
 
   function watchSentinel() {
@@ -353,11 +444,20 @@ export function view(ctx) {
     if (s) io.observe(s);
   }
 
+  let shownNow = null;
   function renderBody() {
     put($('body'), hist ? historyHtml() : queueHtml());
     node.querySelector('.mh-clock').setAttribute('aria-pressed', String(hist));
     renderBand();
     if (hist) watchSentinel();
+    // A new track: a soft entrance, once (a later rebuild of the list never replays it).
+    const now = node.querySelector('.mh-now');
+    if (now) {
+      const k = now.dataset.now;
+      if (shownNow !== null && k !== shownNow) now.classList.add('is-new');
+      shownNow = k;
+    }
+    paintProgress();
   }
 
   function switchView(toHist) {
@@ -367,6 +467,7 @@ export function view(ctx) {
     renderBody();
     $('scroll').scrollTop = scrolls[hist ? 'history' : 'queue'];
     if (hist && !evening?.items?.length) void loadEvening(false);
+    else if (hist && evening.stale) void refreshEvening();
   }
 
   // ------------------------------------------------------------------ the curtain: search, exact version, confirm
@@ -670,6 +771,7 @@ export function view(ctx) {
   node.addEventListener('click', onClick);
   node.addEventListener('change', onChange);
   node.addEventListener('keydown', onKey);
+  node.addEventListener('error', onImgError, true);
 
   render();
   return {
@@ -678,7 +780,7 @@ export function view(ctx) {
       // A draft kept by the host (data-draft-key) is searched again on return.
       if (typed()) onInput();
       void poller.now();
-      ticking = everySecond(renderBand);
+      ticking = everySecond(() => { renderBand(); paintProgress(); });
     },
     /** A session refresh: absorbed (no host redraw); the music summary changed (open / closed, queue size) → re-read. */
     onState(next, previous) {
@@ -699,6 +801,7 @@ export function view(ctx) {
       node.removeEventListener('click', onClick);
       node.removeEventListener('change', onChange);
       node.removeEventListener('keydown', onKey);
+      node.removeEventListener('error', onImgError, true);
     },
   };
 }
