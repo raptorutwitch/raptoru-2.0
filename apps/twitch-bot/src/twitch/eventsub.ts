@@ -131,19 +131,45 @@ export function runEventSub(handlers: EventSubHandlers): {
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     let replaced = false;
     let keepaliveSeconds = 10;
+    let gone = false;
+    /**
+     * Audit 09/11 (P2): this socket is over — once. The reconnection no longer waits for `onclose`: on a half-open TCP
+     * connection (silent network loss) close() only sends a Close frame and `onclose` may come minutes later, while the
+     * bot stayed « connected » and deaf (EventSub never replays: chat, alerts, redemptions lost).
+     */
+    const drop = (why: string) => {
+      if (gone) return;
+      gone = true;
+      clearTimeout(watchdog);
+      if (watchdog) timers.delete(watchdog);
+      sockets.delete(socket);
+      if (welcomed === socket) welcomed = null;
+      if (stopped || replaced) return;
+      log(`[eventsub] ${why}, reconnecting in 5s`);
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        connect(EVENTSUB_URL, true);
+      }, 5000);
+      timers.add(timer);
+    };
     const arm = () => {
       clearTimeout(watchdog);
       if (watchdog) timers.delete(watchdog);
       if (stopped) return;
       watchdog = setTimeout(
-        () => socket.close(),
+        () => {
+          socket.close();
+          drop('keepalive missed');
+        },
         (keepaliveSeconds + 5) * 1000,
       );
       timers.add(watchdog);
     };
+    // A socket that opens but never says welcome is watched too.
+    arm();
 
     socket.onmessage = async (ev) => {
-      if (stopped) return;
+      if (stopped || gone) return;
       try {
         const result = await route(String(ev.data), fresh);
         if (stopped) return;
@@ -161,21 +187,10 @@ export function runEventSub(handlers: EventSubHandlers): {
         // Subscription failure or malformed frame: start over with a fresh session.
         log('[eventsub] message handling failed, reconnecting', error);
         socket.close();
+        drop('message handling failed');
       }
     };
-    socket.onclose = () => {
-      clearTimeout(watchdog);
-      if (watchdog) timers.delete(watchdog);
-      sockets.delete(socket);
-      if (welcomed === socket) welcomed = null;
-      if (stopped || replaced) return;
-      log('[eventsub] connection closed, reconnecting in 5s');
-      const timer = setTimeout(() => {
-        timers.delete(timer);
-        connect(EVENTSUB_URL, true);
-      }, 5000);
-      timers.add(timer);
-    };
+    socket.onclose = () => drop('connection closed');
   };
 
   connect(EVENTSUB_URL, true);
