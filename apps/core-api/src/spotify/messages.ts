@@ -180,6 +180,9 @@ export const MSG = {
   /** http.js: the « Skip la musique » reward. */
   rewardSkipped: (viewer: string) =>
     `${at(viewer)} → La musique en cours a été passée !`,
+  /** Music Hub (audit 09/11): a moderator's skip while a viewer's paid skip is on its way (nothing sent). */
+  skipBusy: (moderator: string) =>
+    `${at(moderator)} → Un skip payé par un viewer est déjà en cours : rien de plus n’a été envoyé.`,
   /** Music Hub: a viewer's paid skip, proven by Studio's reading (never said before). */
   viewerSkipped: (
     viewer: string,

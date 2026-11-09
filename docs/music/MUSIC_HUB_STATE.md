@@ -363,6 +363,17 @@ journée de stream de l'instant (fenêtre 16:00 → 16:00, Paris) : un live qui 
 
 Voir le rapport de livraison pour les suites globales.
 
+### 14.6 bis Audit de fiabilité (09/11, nuit)
+
+Revue contradictoire de cafbf80 (rapport : docs/AUDIT_FIABILITE_2026-11-09.md sur la branche audit/fiabilite-2026-11-09). Corrigé ici :
+
+- **Skip de modération pendant un skip payé** (P1) : refusé (`songskip_busy`, dit dans le chat, Studio et l’extension) — sinon, les jobs passant dans l’ordre, il passait aussi le titre suivant. La récompense « Skip la musique » (désactivée) n’est pas modifiée.
+- **Fin de titre** (P2) : skip payé refusé dans les 10 dernières secondes (`track_ending`, avant tout débit) ; Studio refuse aussi à moins de 5 s de la fin (`TRACK_CHANGED`, remboursé).
+- **Fraîcheur** (P3) : la cible d’un skip payé ou d’un seek n’est prise que sur une lecture Studio de moins de 15 s ; prix attendu obligatoire pour un skip payé.
+- **`!song` en Production** (P2) : le nouveau `!song` (annonce, délai de 30 s, réponse Windows) est derrière `songV2`, allumé dans le Lab seulement. Un Core de Production garde le `!song` historique tant qu’Antoni n’a pas décidé.
+- Toast du seek : la position réellement appliquée (bornée par le Core).
+- Restent documentés (non corrigés) : skip payé exigeant un Studio à jour (un Studio 0.1.27 ferait un skip non ciblé) ; un skip réellement fait mais non prouvé (bail expiré) est remboursé ; réannonce de l’overlay après une coupure Windows ou un redémarrage de Studio sans recharger OBS ; coût du poll Musique (règles relues à chaque poll).
+
 ### 14.7 Limites
 
 - Rien n'a été essayé avec un vrai compte Spotify en écriture, sur Twitch, ni dans un vrai OBS.

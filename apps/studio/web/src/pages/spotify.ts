@@ -547,7 +547,12 @@ export function mountSpotifyPage(root: HTMLElement) {
         })
       )
         void post(el, '/actions', { action: 'skip' }, '').then((out) =>
-          follow(out?.job_id, 'Musique passée'),
+          out?.outcome === 'songskip_busy'
+            ? toast(
+                'Un skip payé par un viewer est déjà en cours : rien de plus n’a été envoyé',
+                { bad: true },
+              )
+            : follow(out?.job_id, 'Musique passée'),
         );
     },
     'sp-remove': async (el) => {

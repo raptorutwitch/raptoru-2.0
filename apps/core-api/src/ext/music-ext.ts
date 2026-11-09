@@ -102,11 +102,12 @@ export async function musicExt(
     if (method === 'POST' && path === '/music/skip') {
       if (!idempotencyKey || !KEY.test(idempotencyKey))
         return fail(400, 'idempotency_key_required');
+      if (typeof body?.expected_price !== 'number')
+        return fail(400, 'expected_price_required');
       return await ok(`${base}/viewer-skip`, {
         viewer,
         key: idempotencyKey,
-        expected_price:
-          typeof body?.expected_price === 'number' ? body.expected_price : null,
+        expected_price: body.expected_price,
       });
     }
     const skip = /^\/music\/skip\/([^/]+)$/.exec(path);

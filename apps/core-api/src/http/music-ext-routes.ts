@@ -89,7 +89,8 @@ const ModerateBody = z.strictObject({
 const SkipBody = z.strictObject({
   viewer: Viewer,
   key: z.string().max(128),
-  expected_price: z.number().int().min(0).nullable(),
+  // Audit 09/11 (P3): required — a client that shows no price is never charged the (maybe doubled) price of now.
+  expected_price: z.number().int().min(1),
 });
 const SkipResultBody = z.strictObject({ viewer_id: Id, id: z.uuid() });
 

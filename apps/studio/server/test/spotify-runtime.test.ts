@@ -708,6 +708,27 @@ describe('Music Hub — search and player jobs (docs/music/MUSIC_HUB_STATE.md)',
     expect(h.sim.view().current).toContain('Chill Loop');
   });
 
+  it('a paid skip in the last seconds of its track: nothing sent (it would land on the next one) — audit 09/11', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'skip',
+      job_id: id(16),
+      request_id: null,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    const uri = (h.report() as { skipped_track: { uri: string } }).skipped_track
+      .uri;
+    h.sim.seekNearEnd(3_000);
+    h.job({ kind: 'skip', job_id: id(17), request_id: null, expect_uri: uri });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'failed',
+      reason: 'TRACK_CHANGED',
+    });
+    expect(h.sim.view().current).toContain('Lofi Stream Beat');
+  });
+
   it('seek: in THE track the moderator saw (PUT /me/player/seek), proven by the reading after; another track → nothing sent', async () => {
     const h = await harness();
     h.job({

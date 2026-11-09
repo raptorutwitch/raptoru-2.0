@@ -217,10 +217,20 @@ test('Music Hub final pass: direct player controls, a confirmed seek, the paid s
     timeout: 15_000,
   });
 
-  // Studio's panel: the paid skip's switches and its last decisions.
+  // Clean first (the next specs share this Lab): the supermod withdraws its free request (nothing to refund, no notice).
+  await sup.locator('[data-act="withdraw"]').first().click();
+  await sup.locator('[data-act="confirm-withdraw"]').click();
+  await expect(sup.locator('.mh-row', { hasText: 'Velours' })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+
+  // Studio's panel: the paid skip's switches and its last decisions (the panel redraws: the scroll is retried).
   await admin.getByRole('button', { name: /Réglages/ }).click();
-  const skipRow = admin.locator('[data-sp-rule="viewer_skip_enabled"]');
-  await skipRow.scrollIntoViewIfNeeded();
+  await expect(async () => {
+    await admin
+      .locator('[data-sp-rule="viewer_skip_enabled"]')
+      .scrollIntoViewIfNeeded({ timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
   await expect(admin.locator('.spo-vs li').first()).toContainText('passée');
   await shot(admin, 'studio-panel-paid-skip');
 
@@ -235,12 +245,6 @@ test('Music Hub final pass: direct player controls, a confirmed seek, the paid s
   await expect(sup.locator('.mh-prog.is-seek')).toHaveCount(0);
   await shot(sup, 'ext-supermod-disabled');
 
-  // Clean: the supermod withdraws its free request (nothing to refund, no notice).
-  await sup.locator('[data-act="withdraw"]').first().click();
-  await sup.locator('[data-act="confirm-withdraw"]').click();
-  await expect(sup.locator('.mh-row', { hasText: 'Velours' })).toHaveCount(0, {
-    timeout: 15_000,
-  });
   await raffle('stream_end');
   await Promise.all([viewer.close(), sup.close(), admin.close()]);
 });

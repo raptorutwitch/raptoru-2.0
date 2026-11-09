@@ -296,6 +296,11 @@ export class SpotifyService {
   economy: EconomyPort | null = null;
   /** Music Hub: the live of the Lab (its simulated sessions) instead of the canonical one, for the music history. */
   labSessions = false;
+  /**
+   * Music Hub (audit 09/11): the new `!song` — a Twitch announcement, 30 s global cooldown, answered from Windows (SMTC).
+   * ON in the Lab only (set with labSessions): a Production Core keeps the historical `!song` until Antoni decides.
+   */
+  songV2 = false;
   /** Music Hub: the live track (Windows SMTC via Studio) and the stream's music history — display only. */
   readonly music: LiveMusic;
 
@@ -598,7 +603,13 @@ export class SpotifyService {
 
   /** `!song`'s answer: a Twitch announcement (a plain message if the bot cannot announce — commands/steps.ts). */
   private announce(q: Queryable, channelId: string, key: string, text: string) {
-    return this.say(q, channelId, key, text, 'announce');
+    return this.say(
+      q,
+      channelId,
+      key,
+      text,
+      this.songV2 ? 'announce' : 'normal',
+    );
   }
 
   private async studio(
@@ -1409,7 +1420,11 @@ export class SpotifyService {
       q,
       job.channel_id,
       key,
-      MSG.nowPlaying(playback.track, requester, !playback.is_playing),
+      MSG.nowPlaying(
+        playback.track,
+        requester,
+        this.songV2 && !playback.is_playing,
+      ),
     );
   }
 
@@ -1720,6 +1735,8 @@ export class SpotifyService {
    * otherwise one playback read by Studio (its cache shares it), answered when Studio reports.
    */
   async askNowPlaying(channelId: string, messageId: string, viewer: string) {
+    if (!this.songV2)
+      return this.askNowPlayingHistorical(channelId, messageId, viewer);
     return this.db.tx(async (q) => {
       const settings = await this.lock(q, channelId);
       if (!(await takeSongTurn(q, channelId, this.clock.now())))
@@ -1756,6 +1773,36 @@ export class SpotifyService {
       }
       if (this.studioRefusal(st)) {
         await this.announce(q, channelId, key, MSG.noPlayback);
+        return 'song_unavailable';
+      }
+      await this.queueJob(
+        q,
+        channelId,
+        'read_playback',
+        null,
+        { kind: 'song', viewer },
+        `msg:${messageId}`,
+      );
+      return 'song_asked';
+    });
+  }
+
+  /** The historical `!song` (Production until Antoni's GO): one playback read by Studio, a plain chat message. */
+  private askNowPlayingHistorical(
+    channelId: string,
+    messageId: string,
+    viewer: string,
+  ) {
+    return this.db.tx(async (q) => {
+      const settings = await this.lock(q, channelId);
+      const st = await this.studio(q, channelId);
+      if (!settings.enabled || this.studioRefusal(st)) {
+        await this.say(
+          q,
+          channelId,
+          `spotify:msg:${messageId}`,
+          MSG.noPlayback,
+        );
         return 'song_unavailable';
       }
       await this.queueJob(
@@ -2160,6 +2207,17 @@ export class SpotifyService {
           await this.say(q, channelId, key, MSG.skipFailed(moderator, reason));
         return 'songskip_unavailable';
       }
+      // Audit 09/11 (P1): a viewer's paid skip is on its way to Studio (jobs run in order): this skip, with no target,
+      // would then pass the NEXT track (maybe a protected request). Refused, said; the paid skip does the job.
+      const paid = await q.query(
+        `select 1 from module_activity where channel_id = $1 and module_id = $2 and status = 'queued' limit 1`,
+        [channelId, SKIP_MODULE],
+      );
+      if (paid.length) {
+        if (moderator)
+          await this.say(q, channelId, key, MSG.skipBusy(moderator));
+        return 'songskip_busy';
+      }
       const current = st?.current_request_id
         ? await this.request(q, st.current_request_id)
         : null;
@@ -2264,11 +2322,16 @@ export class SpotifyService {
         artists: live.track.artists,
         duration_ms: live.track.duration_ms,
         is_playing: live.is_playing,
+        position_ms: live.position_ms,
       };
+    // Audit 09/11 (P3): Studio's last READING must be fresh, not only Studio (a reading can be minutes old when nothing
+    // is watched): never aim a paid skip or a seek at a track that may have ended.
+    const now = this.clock.now().getTime();
     const fresh =
       !!st &&
-      this.clock.now().getTime() - ms(st.seen_at) <=
-        SPOTIFY_RULES.studioFreshMs;
+      now - ms(st.seen_at) <= SPOTIFY_RULES.studioFreshMs &&
+      !!st.playback_at &&
+      now - ms(st.playback_at) <= SPOTIFY_RULES.studioFreshMs;
     const pb = fresh ? st!.playback : null;
     return pb?.track
       ? {
@@ -2277,6 +2340,7 @@ export class SpotifyService {
           artists: pb.track.artists,
           duration_ms: pb.track.duration_ms,
           is_playing: pb.is_playing,
+          position_ms: this.progressNow(st),
         }
       : null;
   }
@@ -2396,6 +2460,15 @@ export class SpotifyService {
       if (!t) throw new SpotifyError(409, 'nothing_playing');
       if (!t.is_playing) throw new SpotifyError(409, 'paused');
       if (!t.uri) throw new SpotifyError(409, 'track_not_identified');
+      // Audit 09/11 (P2): in its last seconds the track may already be over when Studio sends the skip (the Web API is
+      // about a second behind): the NEXT one would be skipped and charged. Refused before any debit.
+      if (
+        t.duration_ms &&
+        t.position_ms !== null &&
+        t.position_ms !== undefined &&
+        t.duration_ms - t.position_ms < 10_000
+      )
+        throw new SpotifyError(409, 'track_ending');
       const current = st?.current_request_id
         ? await this.request(q, st.current_request_id)
         : null;

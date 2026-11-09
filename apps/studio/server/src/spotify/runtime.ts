@@ -1322,8 +1322,16 @@ export class SpotifyRuntime {
     let before: SpotifyTrack | null = null;
     try {
       const p = await this.d.api.playback(true);
-      before = toPlayback(p.data, p.at).track;
-      if (expect && before?.uri !== expect)
+      const reading = toPlayback(p.data, p.at);
+      before = reading.track;
+      // A paid skip aims at THIS track — another one playing, or this one in its last seconds (it may be over when the
+      // skip lands: the next one would be skipped): nothing sent.
+      if (
+        expect &&
+        (before?.uri !== expect ||
+          (reading.progress_ms !== null &&
+            before.duration_ms - reading.progress_ms < 5_000))
+      )
         return {
           outcome: 'failed',
           reason: 'TRACK_CHANGED',

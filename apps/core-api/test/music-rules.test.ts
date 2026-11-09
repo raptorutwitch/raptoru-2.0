@@ -50,6 +50,8 @@ async function music(o: { controls?: boolean } = {}) {
   const core = await setup();
   core.clock.set(new Date('2026-11-09T20:00:00Z'));
   const { spotify } = core;
+  // The new `!song` is the Lab's (app.ts / lab-core.ts set it there); a Production Core keeps the historical one.
+  spotify.songV2 = true;
   await spotify.saveSettings(
     CH,
     {
@@ -61,17 +63,23 @@ async function music(o: { controls?: boolean } = {}) {
     'test',
   );
   let track: SpotifyTrack | null = sp(1);
+  let progress = 30_000;
   let playing = true;
   let status = OK;
   const reading = (): SpotifyPlayback => ({
     observed_at: core.clock.now().toISOString(),
     track,
-    progress_ms: track ? 30_000 : null,
+    progress_ms: track ? progress : null,
     is_playing: !!track && playing,
   });
   const sync = () => spotify.sync(CH, { status, playback: reading() });
   await sync();
+  const at = async (ms: number) => {
+    progress = ms;
+    await sync();
+  };
   const play = async (n: number | null) => {
+    progress = 30_000;
     track = n === null ? null : sp(n);
     playing = true;
     await sync();
@@ -172,6 +180,7 @@ async function music(o: { controls?: boolean } = {}) {
     skipOk,
     skipRow,
     later,
+    at,
   };
 }
 
@@ -763,5 +772,64 @@ describe('Music Hub — `!song` and the seek', () => {
     expect(await m.code(m.spotify.control(CH, 'pause', null, 'studio'))).toBe(
       'lab_read_only',
     );
+  });
+});
+
+describe('Music Hub — audit 09/11', () => {
+  it('a moderator skip while a paid skip is on its way is refused (never the NEXT track skipped too)', async () => {
+    const m = await music();
+    await m.rules({ viewer_skip_enabled: true });
+    await m.fund(viewer(1), 100_000);
+    await m.buy(viewer(1));
+    expect(await m.spotify.skip(CH, 'spotify:test:mod-after', 'Lab_Modo')).toBe(
+      'songskip_busy',
+    );
+    expect(await m.runSkips('skipped')).toHaveLength(1);
+    // Once settled, the moderation skips again.
+    await m.play(2);
+    expect(await m.spotify.skip(CH, 'spotify:test:mod-next', 'Lab_Modo')).toBe(
+      'songskip',
+    );
+  });
+
+  it('a paid skip in the last 10 s of a track is refused before any debit', async () => {
+    const m = await music();
+    await m.rules({ viewer_skip_enabled: true });
+    await m.fund(viewer(1), 100_000);
+    await m.at(200_000 - 8_000);
+    expect(await m.code(m.buy(viewer(1)))).toBe('track_ending');
+    expect(await m.balance(viewer(1))).toBe(100_000);
+  });
+
+  it('a stale Studio reading (nothing watched) is never a target', async () => {
+    const m = await music();
+    await m.rules({ viewer_skip_enabled: true });
+    await m.fund(viewer(1), 100_000);
+    m.core.clock.advance(20_000);
+    // Studio alive (it syncs), its last reading of the player 20 s old.
+    await m.spotify.sync(CH, {
+      status: {
+        auth: 'ok',
+        limited_until: null,
+        quota_exceeded: false,
+        device: { name: 'PC', type: 'Computer' },
+        calls_last_minute: 1,
+      },
+    });
+    expect(await m.code(m.buy(viewer(1)))).toBe('nothing_playing');
+  });
+
+  it('Production (songV2 off): the historical !song — a plain message, no cooldown, a Studio reading', async () => {
+    const m = await music();
+    m.spotify.songV2 = false;
+    expect(await m.spotify.askNowPlaying(CH, 'h-1', 'Fan1')).toBe('song_asked');
+    expect(await m.spotify.askNowPlaying(CH, 'h-2', 'Fan2')).toBe('song_asked');
+    const songs = await m.core.db.query<{ params: { mode: string } }>(
+      `select params from cmd_steps where origin = 'music'`,
+    );
+    expect(songs).toHaveLength(0); // answered when Studio reports (read_playback jobs)
+    expect(
+      (await m.sync()).jobs.filter((j) => j.kind === 'read_playback'),
+    ).toHaveLength(2);
   });
 });

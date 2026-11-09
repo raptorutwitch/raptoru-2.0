@@ -181,6 +181,7 @@ export function createCore(
   const spotify = new SpotifyService(db, clock, cpTwitch);
   spotify.economy = economy; // Music Hub: the extension's requests are paid in Jetons on this Core's economy
   spotify.labSessions = channel.lab === true; // Music Hub: the stream's music history follows the Lab's simulated live
+  spotify.songV2 = channel.lab === true; // Music Hub: the new `!song` in the Lab only (Production: the historical one)
   const channelPoints = new ChannelPointsService(
     db,
     clock,

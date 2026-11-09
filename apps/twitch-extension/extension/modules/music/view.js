@@ -87,6 +87,7 @@ function refusal(e, st) {
     case 'paused': return 'La musique est en pause : rien à passer.';
     case 'track_not_identified': return 'La musique en cours n’est pas encore identifiée : réessaie dans quelques secondes.';
     case 'track_too_short': return 'Ce titre est trop court pour s’y déplacer.';
+    case 'track_ending': return 'Ce titre se termine dans quelques secondes : rien n’a été payé.';
     default: return 'Action impossible pour le moment.';
   }
 }
@@ -795,8 +796,9 @@ export function view(ctx) {
           STUDIO_LOST: 'Studio n’a pas répondu : rien n’a été envoyé.',
           TRACK_CHANGED: 'Le titre a changé entre-temps : rien n’a été envoyé.',
         }[out.reason];
-        toast(out.status === 'done' ? success : out.status === 'pending' ? 'Le lecteur n’a pas encore répondu.' : why ?? 'Le lecteur n’a pas confirmé l’action.', out.status === 'done' ? 'ok' : 'warn');
-      } else if (player && 'job_id' in r) toast('Le lecteur est indisponible : rien n’a été envoyé.', 'warn');
+        toast(out.status === 'done' ? (typeof success === 'function' ? success(r) : success) : out.status === 'pending' ? 'Le lecteur n’a pas encore répondu.' : why ?? 'Le lecteur n’a pas confirmé l’action.', out.status === 'done' ? 'ok' : 'warn');
+      } else if (r.outcome === 'songskip_busy') toast('Un skip payé par un viewer est déjà en cours : rien de plus n’a été envoyé.', 'warn');
+      else if (player && 'job_id' in r) toast('Le lecteur est indisponible : rien n’a été envoyé.', 'warn');
       else toast(success);
     } catch (e) {
       toast(refusal(e, st), 'err');
@@ -872,7 +874,7 @@ export function view(ctx) {
       node.querySelector('[data-act="keep"]')?.focus({ preventScroll: true });
     } else if (a === 'vskip-go') void paidSkip();
     else if (a === 'seek-cancel') { seekAt = null; renderBody(); node.querySelector('[data-act="seek-pick"]')?.focus({ preventScroll: true }); }
-    else if (a === 'seek-go') { const at = seekAt; if (at === null) return; seekAt = null; void moderate({ action: 'seek', position_ms: at }, `Lecture déplacée à ${dur(at)}.`); }
+    else if (a === 'seek-go') { const at = seekAt; if (at === null) return; seekAt = null; void moderate({ action: 'seek', position_ms: at }, (r) => `Lecture déplacée à ${dur(r.position_ms ?? at)}.`); }
     else if (a === 'confirm-withdraw') { const d = dialog; dialog = null; renderDialog(); if (d) void withdraw(d.id); }
     else if (a === 'remove-refund') void moderate({ action: 'remove', request_id: id, refund: true }, 'Retirée et remboursée.');
     else if (a === 'remove-keep') {
