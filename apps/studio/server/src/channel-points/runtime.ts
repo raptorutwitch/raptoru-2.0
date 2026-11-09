@@ -189,7 +189,9 @@ export class ChannelPointsRuntime {
   }
 
   /** Refonte F5: before Studio exits — OBS changes of the running effects and mutes restored now. */
-  restoreBeforeExit() {
+  async restoreBeforeExit() {
+    // Audit 09/11 (P2): the MUTED scene too (zoom, band, drive), before the mic holds and the reverts.
+    await this.muteFx.restoreNow().catch(() => null);
     return this.obs.restoreNow();
   }
 
