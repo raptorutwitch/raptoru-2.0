@@ -1,4 +1,5 @@
 import { musicExtRoutes } from '../http/music-ext-routes.js';
+import { parseMusicAudience } from './music-audience.js';
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
 import { modulesRoutes } from '../http/modules-routes.js';
 import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
@@ -149,6 +150,7 @@ export function createPublicFrontier(
       environment: config.CORE_ENVIRONMENT,
       wallet: core.economy.mode === 'canonical',
       lab,
+      music: parseMusicAudience(config.MUSIC_HUB_EXTENSION),
     },
     core.twitchViewers,
   );

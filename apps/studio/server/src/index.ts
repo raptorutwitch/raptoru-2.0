@@ -1318,22 +1318,37 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             'server',
             'music-overlay',
           ),
+          // Production (release 10/11, Music Hub): Spotify Desktop's Windows session for the live track, the stream's
+          // history and `!song` — read-only, built by Windows' own C# compiler into Studio's data folder. RAPTORU_SMTC=off:
+          // none (back to the Web API readings only).
           spotifySmtc:
-            alertsEnv === 'lab' &&
-            process.env.LAB_SPOTIFY === 'real' &&
-            process.env.LAB_SMTC !== 'off'
-              ? {
-                  exe: join(
-                    REPO_ROOT,
-                    '.lab-data',
-                    'smtc-probe',
-                    'studio',
-                    'SmtcProbe.exe',
-                  ),
-                  script: join(REPO_ROOT, 'tools', 'smtc-probe', 'run.ps1'),
-                  out: join(REPO_ROOT, '.lab-data', 'smtc-probe', 'studio'),
-                }
-              : null,
+            alertsEnv !== 'lab'
+              ? process.env.RAPTORU_SMTC === 'off'
+                ? null
+                : {
+                    exe: join(
+                      paths.runtimeDir,
+                      'production',
+                      'smtc-probe',
+                      'SmtcProbe.exe',
+                    ),
+                    script: join(REPO_ROOT, 'tools', 'smtc-probe', 'run.ps1'),
+                    out: join(paths.runtimeDir, 'production', 'smtc-probe'),
+                  }
+              : process.env.LAB_SPOTIFY === 'real' &&
+                  process.env.LAB_SMTC !== 'off'
+                ? {
+                    exe: join(
+                      REPO_ROOT,
+                      '.lab-data',
+                      'smtc-probe',
+                      'studio',
+                      'SmtcProbe.exe',
+                    ),
+                    script: join(REPO_ROOT, 'tools', 'smtc-probe', 'run.ps1'),
+                    out: join(REPO_ROOT, '.lab-data', 'smtc-probe', 'studio'),
+                  }
+                : null,
           twitch: () => ({
             scope: hasTwitchScope(
               readTokenSummary(broadcasterTokenFile).scopes,

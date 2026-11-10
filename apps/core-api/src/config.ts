@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseMusicAudience } from './ext/music-audience.js';
 
 const Env = z
   .object({
@@ -46,6 +47,20 @@ const Env = z
     // Spotify V2 (docs/SPOTIFY_V2.md): `!song`, `!songqueue`, `!mysong`, `!songcancel`, `!songremove`, `!songskip`
     // answered by this Core. OFF by default (the song requests themselves follow the channel points rule).
     SPOTIFY_CHAT: z.enum(['true', 'false']).default('false'),
+    // Music Hub (docs/RELEASE_2026-11-10.md § 6): the extension's music module in Production — off (default) |
+    // testers:<twitch id>,<twitch id> (the broadcaster + these, Hosted Test) | on. Also turns the new `!song` on.
+    MUSIC_HUB_EXTENSION: z
+      .string()
+      .max(4000)
+      .default('off')
+      .refine((v) => {
+        try {
+          parseMusicAudience(v);
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'off | on | testers:<id>,<id>'),
     // Défis (docs/CHALLENGES.md): the recount timer. OFF by default; even ON it does nothing without the tables or a
     // live challenge. Studio's « Recompter » and an activation count anyway.
     CHALLENGES_ENGINE: z.enum(['true', 'false']).default('false'),

@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import { parseMusicAudience } from './ext/music-audience.js';
 import { createCore, type Core } from './app.js';
 import { ThirdPartyEmotes } from './bonk-lab/third-party-emotes.js';
 import type { CreditProvider } from './daily/credits.js';
@@ -66,6 +67,7 @@ export function createMainCore(
       cautionChat: config.CAUTION_CHAT === 'true',
       votekickChat: config.VOTEKICK_CHAT === 'true',
       spotifyChat: config.SPOTIFY_CHAT === 'true',
+      musicHub: parseMusicAudience(config.MUSIC_HUB_EXTENSION).mode !== 'off',
       alertsMaxAgeMs: config.ALERTS_MAX_AGE_SECONDS
         ? config.ALERTS_MAX_AGE_SECONDS * 1000
         : null,

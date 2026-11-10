@@ -1,4 +1,5 @@
 import { eventTitlesView } from '@raptoru/schemas';
+import { type MusicAudience, musicOpenTo } from './music-audience.js';
 import { moduleFacade } from '@raptoru/schemas';
 import { commandsPublic, commandsTeam } from './commands-ext.js';
 import { subWheelExt } from './sub-wheel-ext.js';
@@ -83,6 +84,8 @@ export interface ExtConfig {
   wallet?: boolean;
   /** CORE_ENVIRONMENT=lab: what Production keeps hidden today is shown in the Lab (Commandes, Roue du Sub). */
   lab?: boolean;
+  /** Music Hub in Production (MUSIC_HUB_EXTENSION): who gets the music module. Absent: closed (the Lab: open). */
+  music?: MusicAudience;
 }
 
 /** Module descriptions when the payment is real (the canonical Wallet): what pays, never a price. */
@@ -250,9 +253,9 @@ export class ExtFacade {
         body,
         who.viewer ? this.actor(who) : null,
       );
-    // Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests' extension entry — the Lab environment only for
-    // now (its use with a real music service on Twitch is not cleared: Production stays closed in code, not by a flag).
-    if (this.config.lab && path.startsWith('/music/'))
+    // Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests' extension entry — the Lab, or Production for the
+    // audience of MUSIC_HUB_EXTENSION (Antoni's GO of 10/11, Hosted Test). Closed by default.
+    if (path.startsWith('/music/') && this.musicOpen(who))
       return musicExt(
         this.core,
         this.C,
@@ -428,6 +431,18 @@ export class ExtFacade {
 
   // --- session -----------------------------------------------------------------------------------
 
+  /** Music Hub for this caller: the Lab always; Production per MUSIC_HUB_EXTENSION (closed by default). */
+  private musicOpen(who: Who): boolean {
+    return musicOpenTo(
+      this.config.music ?? { mode: 'off' },
+      !!this.config.lab,
+      {
+        role: who.caller.role,
+        userId: who.viewer?.id ?? who.caller.userId,
+      },
+    );
+  }
+
   private async session(who: Who): Promise<Json> {
     const C = this.C;
     const v = who.viewer;
@@ -462,7 +477,7 @@ export class ExtFacade {
       ).catch(() => null),
       this.eventShop(who),
       // Music Hub (Lab only): the Hub card's summary — never fails the session.
-      this.config.lab
+      this.musicOpen(who)
         ? this.core<Json>(`/v1/lab/spotify-ext/${C}/summary`).catch(() => null)
         : null,
       v
