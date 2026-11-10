@@ -43,7 +43,8 @@ const I = {
   left: svg('<path d="m15 6-6 6 6 6"/>'),
   clock: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
   dots: svg('<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>'),
-  sliders: svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
+  // Retour du test réel (10/11) : le volume a son haut-parleur, plus d'icône de réglages ambiguë.
+  volume: svg('<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
   history: svg('<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5"/><path d="M4 4v4.5h4.5M12 8v4l3 2"/>'),
 };
 const EQ = '<span class="mh-eqs" aria-hidden="true"><i></i><i></i><i></i></span>';
@@ -327,12 +328,12 @@ export function view(ctx) {
     const seekable = pl && !why && timed && !n.stale;
     const busy = (a) => (ctlBusy === a ? 'aria-busy="true"' : '');
     const off = why || ctlBusy ? 'disabled' : '';
-    // Supermods and the streamer: Pause / Passer right here (the volume behind the sliders); a viewer: the paid skip.
+    // Supermods and the streamer: Pause / Passer right here (the volume behind its speaker); a viewer: the paid skip.
     const acts = pl
       ? `<span class="mh-ctl" role="group" aria-label="Lecteur du stream">
           <button type="button" class="mh-ico mh-ico--ctl" data-act="${playing ? 'pause' : 'resume'}" data-key="pp" ${off} ${busy(playing ? 'pause' : 'resume')} aria-label="${playing ? 'Mettre en pause' : 'Reprendre la lecture'}" title="${esc(why || (playing ? 'Pause' : 'Reprendre'))}">${playing ? I.pause : I.play}</button>
           <button type="button" class="mh-ico mh-ico--ctl" data-act="skip" data-key="sk" ${off} ${busy('skip')} aria-label="Passer cette musique" title="${esc(why || 'Passer (modération, gratuit)')}">${I.next}</button>
-          <button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Volume du lecteur" title="Volume">${I.sliders}</button>
+          <button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Volume du lecteur" title="Volume">${I.volume}</button>
         </span>`
       : paidSkipHtml(n, playing);
     // The bar and the time move every second outside this HTML (paintProgress): the list is never rebuilt for them.
