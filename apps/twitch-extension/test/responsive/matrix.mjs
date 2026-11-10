@@ -50,26 +50,57 @@ export const MOBILE = [
   ['grand', 430, 932, 3],
   ['paysage', 844, 390, 3],
 ];
-const QUICK = { video: [377, 452, 521, 565, 651, 1053], panel: [318], mobile: [360, 844] };
+const QUICK = {
+  video: [377, 452, 521, 565, 651, 1053],
+  panel: [318],
+  mobile: [360, 844],
+};
 const SURFACES = [
   ['video', 'video_component.html?anchor=component', VIDEO],
   ['panel', 'panel.html?anchor=panel', PANEL],
   ['mobile', 'mobile.html?anchor=panel&platform=mobile', MOBILE],
 ];
-const VIEWS = (arg('views') || 'hub,tts,soundboard,bonk,raffle_join,moderation,actions').split(',');
+const VIEWS = (
+  arg('views') || 'hub,tts,soundboard,bonk,raffle_join,moderation,actions'
+).split(',');
 
-export async function openView(browser, base, surface, page0, [w, h, dpr], view, { notour = true } = {}) {
+export async function openView(
+  browser,
+  base,
+  surface,
+  page0,
+  [w, h, dpr],
+  view,
+  { notour = true } = {},
+) {
   const ctx = await browser.newContext({
-    viewport: { width: w, height: h }, deviceScaleFactor: dpr,
-    isMobile: surface === 'mobile' && w < 600, hasTouch: surface === 'mobile',
+    viewport: { width: w, height: h },
+    deviceScaleFactor: dpr,
+    isMobile: surface === 'mobile' && w < 600,
+    hasTouch: surface === 'mobile',
   });
-  if (notour) await ctx.addInitScript(() => { try { localStorage.setItem('raptoru-live:tutorial-disabled:bonk:v1', '1'); } catch { /* */ } });
+  if (notour)
+    await ctx.addInitScript(() => {
+      try {
+        localStorage.setItem('raptoru-live:tutorial-disabled:bonk:v1', '1');
+      } catch {
+        /* */
+      }
+    });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route(/twitch\.tv|raptoru\.fr/, (r) => r.abort());
-  await page.goto(`${base}/${page0}${view === 'hub' ? '' : `&demoModule=${view}`}`);
-  await page.waitForFunction(() => document.querySelector('#panel')?.children.length > 0, null, { timeout: 8000 }).catch(() => {});
+  await page.goto(
+    `${base}/${page0}${view === 'hub' ? '' : `&demoModule=${view}`}`,
+  );
+  await page
+    .waitForFunction(
+      () => document.querySelector('#panel')?.children.length > 0,
+      null,
+      { timeout: 8000 },
+    )
+    .catch(() => {});
   await page.waitForTimeout(1500);
   return { ctx, page, errors };
 }
@@ -89,12 +120,36 @@ async function main() {
     for (const [label, w, h, dpr] of sizes) {
       if (flag('quick') && !QUICK[surface].includes(w)) continue;
       for (const view of VIEWS) {
-        const { ctx, page, errors } = await openView(browser, base, surface, page0, [w, h, dpr], view);
+        const { ctx, page, errors } = await openView(
+          browser,
+          base,
+          surface,
+          page0,
+          [w, h, dpr],
+          view,
+        );
         const r = await page.evaluate(audit);
-        Object.assign(r, { surface, label, size: `${w}x${h}`, dpr, req: view, errors });
-        if (flag('shots')) await page.screenshot({ path: join(out, 'shots', tag, `${surface}-${w}x${h}@${dpr}-${view}.png`) });
+        Object.assign(r, {
+          surface,
+          label,
+          size: `${w}x${h}`,
+          dpr,
+          req: view,
+          errors,
+        });
+        if (flag('shots'))
+          await page.screenshot({
+            path: join(
+              out,
+              'shots',
+              tag,
+              `${surface}-${w}x${h}@${dpr}-${view}.png`,
+            ),
+          });
         results.push(r);
-        process.stdout.write(`${surface} ${w}x${h}@${dpr} ${view}: cut=${r.cutInteractive.length} off=${r.offInteractive.length} cutTxt=${r.cutText.length} minFont=${r.minFont} t<24=${r.targetsLt24.length} overlap=${r.hitOverlaps.length} covered=${r.covered.length} hscroll=${r.doc.sw > r.doc.cw} err=${errors.length}\n`);
+        process.stdout.write(
+          `${surface} ${w}x${h}@${dpr} ${view}: cut=${r.cutInteractive.length} off=${r.offInteractive.length} cutTxt=${r.cutText.length} minFont=${r.minFont} t<24=${r.targetsLt24.length} overlap=${r.hitOverlaps.length} covered=${r.covered.length} hscroll=${r.doc.sw > r.doc.cw} err=${errors.length}\n`,
+        );
         await ctx.close();
       }
     }
@@ -104,7 +159,11 @@ async function main() {
   writeFileSync(join(out, `${tag}.json`), JSON.stringify(results, null, 1));
   const cell = (r) => {
     const bad = r.cutInteractive.length + r.offInteractive.length;
-    const s = bad ? `**✗ ${bad} ctl**` : r.cutText.length ? `⚠ ${r.cutText.length} txt` : 'ok';
+    const s = bad
+      ? `**✗ ${bad} ctl**`
+      : r.cutText.length
+        ? `⚠ ${r.cutText.length} txt`
+        : 'ok';
     return `${s} · f${r.minFont} · t${r.minTarget}${r.errors.length ? ' · ERR' : ''}${r.doc.sw > r.doc.cw ? ' · H-SCROLL' : ''}`;
   };
   let md = `# Matrice responsive — ${tag}\n\n✗ = contrôle coupé ou hors champ · ⚠ = texte coupé · f = plus petite police · t = plus petite cible\n`;
@@ -112,24 +171,40 @@ async function main() {
     const rows = results.filter((r) => r.surface === surface);
     if (!rows.length) continue;
     md += `\n## ${surface}\n\n| taille | ${VIEWS.join(' | ')} |\n|---|${VIEWS.map(() => '---').join('|')}|\n`;
-    for (const size of [...new Set(rows.map((r) => `${r.size}@${r.dpr}|${r.label}`))]) {
+    for (const size of [
+      ...new Set(rows.map((r) => `${r.size}@${r.dpr}|${r.label}`)),
+    ]) {
       const [sz, label] = size.split('|');
-      md += `| ${sz} ${label} | ${VIEWS.map((v) => { const r = rows.find((x) => `${x.size}@${x.dpr}` === sz && x.req === v); return r ? cell(r) : '—'; }).join(' | ')} |\n`;
+      md += `| ${sz} ${label} | ${VIEWS.map((v) => {
+        const r = rows.find((x) => `${x.size}@${x.dpr}` === sz && x.req === v);
+        return r ? cell(r) : '—';
+      }).join(' | ')} |\n`;
     }
   }
-  const cuts = results.filter((r) => r.cutInteractive.length + r.offInteractive.length);
+  const cuts = results.filter(
+    (r) => r.cutInteractive.length + r.offInteractive.length,
+  );
   const small = results.reduce((n, r) => n + r.targetsLt24.length, 0);
   const overlaps = results.filter((r) => r.hitOverlaps.length);
   const covered = results.filter((r) => r.covered.length);
   md += `\n${covered.length} mesures avec un contrôle recouvert (son centre ne reçoit pas le clic).\n`;
-  for (const r of covered) md += `- recouvert ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${r.covered.slice(0, 3).join(' ; ')}\n`;
+  for (const r of covered)
+    md += `- recouvert ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${r.covered.slice(0, 3).join(' ; ')}\n`;
   md += `\n${small} cibles < 24 px · ${overlaps.length} mesures avec zones de clic qui se chevauchent.\n`;
-  for (const r of overlaps) md += `- chevauchement ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${r.hitOverlaps.slice(0, 3).join(' ; ')}\n`;
+  for (const r of overlaps)
+    md += `- chevauchement ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${r.hitOverlaps.slice(0, 3).join(' ; ')}\n`;
   md += `\n${cuts.length} cas avec contrôle coupé.\n`;
-  for (const r of cuts) md += `- ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${[...r.cutInteractive, ...r.offInteractive].slice(0, 3).join(' ; ')}\n`;
+  for (const r of cuts)
+    md += `- ${r.surface} ${r.size}@${r.dpr} ${r.req}: ${[...r.cutInteractive, ...r.offInteractive].slice(0, 3).join(' ; ')}\n`;
   writeFileSync(join(out, `${tag}.md`), md);
-  console.log(`\n${results.length} mesures, ${cuts.length} avec contrôle coupé, ${small} cibles < 24 px, ${overlaps.length} avec chevauchement → ${join(out, tag + '.md')}`);
+  console.log(
+    `\n${results.length} mesures, ${cuts.length} avec contrôle coupé, ${small} cibles < 24 px, ${overlaps.length} avec chevauchement → ${join(out, tag + '.md')}`,
+  );
   process.exitCode = cuts.length || overlaps.length ? 1 : 0;
 }
 
-if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) await main();
+if (
+  process.argv[1] &&
+  resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])
+)
+  await main();

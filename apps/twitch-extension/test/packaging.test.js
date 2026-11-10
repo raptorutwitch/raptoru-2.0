@@ -294,21 +294,40 @@ describe('Lab-only modules never packaged', () => {
     const helper = `<!doctype html><head><script src="${TWITCH_HELPER}"></script><script type="module" src="app/boot.js"></script></head><body></body>`;
     mkdirSync(join(ext, 'shared'), { recursive: true });
     mkdirSync(join(ext, 'lab-modules', 'demo'), { recursive: true });
-    for (const name of ['panel.html', 'mobile.html', 'video_component.html', 'config.html'])
+    for (const name of [
+      'panel.html',
+      'mobile.html',
+      'video_component.html',
+      'config.html',
+    ])
       writeFileSync(join(ext, name), helper);
-    writeFileSync(join(ext, 'shared', 'runtime-config.js'), 'export const RUNTIME = {};');
+    writeFileSync(
+      join(ext, 'shared', 'runtime-config.js'),
+      'export const RUNTIME = {};',
+    );
     writeFileSync(join(ext, 'lab-modules', 'demo', 'module.js'), 'export {};');
     for (const target of ['staging', 'production']) {
-      const r = packageExtension({ target, shell: 'v2', check: true, root, git: fakeGit() });
+      const r = packageExtension({
+        target,
+        shell: 'v2',
+        check: true,
+        root,
+        git: fakeGit(),
+      });
       expect(r.fileCount).toBe(6); // 4 pages, runtime-config, build-manifest: no lab-modules
     }
   });
 
   it('the source runtime and the package runtimes never allow them', () => {
-    const source = readFileSync(join(APP, 'extension', 'shared', 'runtime-config.js'), 'utf8');
+    const source = readFileSync(
+      join(APP, 'extension', 'shared', 'runtime-config.js'),
+      'utf8',
+    );
     expect(source).not.toMatch(/labModules/);
     for (const target of Object.values(TARGETS))
-      expect(runtimeConfigSource(target, { buildId: 'b', shell: 'v2' })).not.toMatch(/labModules/);
+      expect(
+        runtimeConfigSource(target, { buildId: 'b', shell: 'v2' }),
+      ).not.toMatch(/labModules/);
   });
 });
 

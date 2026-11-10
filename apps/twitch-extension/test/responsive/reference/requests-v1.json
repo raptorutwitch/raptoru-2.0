@@ -1,361 +1,359 @@
 {
- "tts-tokens": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/tokens",
-    "body": {
-     "module_id": "tts",
-     "payload": {
-      "text": "Message de référence"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "tts-credits": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/redemption",
-    "body": {
-     "module_id": "tts",
-     "payload": {
-      "text": "Message de référence"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "tts-double-click": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/tokens",
-    "body": {
-     "module_id": "tts",
-     "payload": {
-      "text": "Message de référence"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "tts-retry-after-network-loss": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/tokens",
-    "body": {
-     "module_id": "tts",
-     "payload": {
-      "text": "Message de référence"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/tokens",
-    "body": {
-     "module_id": "tts",
-     "payload": {
-      "text": "Message de référence"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/tokens",
-    "body": {
-     "module_id": "tts",
-     "payload": {
-      "text": "Message de référence"
-     }
-    },
-    "idempotencyKey": "K2",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "raffle-join": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/raffle",
-    "body": {},
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "soundboard-first": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/tokens",
-    "body": {
-     "module_id": "soundboard",
-     "payload": {
-      "sound_id": "son-01"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "soundboard-credits": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/redemption",
-    "body": {
-     "redemption_id": "red-bench-sound",
-     "module_id": "soundboard",
-     "payload": {
-      "sound_id": "son-01"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "bonk-salve": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/actions/tokens",
-    "body": {
-     "module_id": "bonk",
-     "payload": {
-      "target_login": "streamer",
-      "emotes": [
-       "unicode:1f600"
-      ],
-      "emote_source": "unicode",
-      "emote_glyph": "😀"
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "mod-remove-refund": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/moderation/v2/actions",
-    "body": {
-     "command": {
-      "action": "cancel",
-      "module": "tts",
-      "interaction_id": "7ece65da-48bc-41f1-b350-0a061cd71036",
-      "refund": true
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "mod-stop-no-refund": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/moderation/v2/actions",
-    "body": {
-     "command": {
-      "action": "stop_current",
-      "module": "tts",
-      "refund": false
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "mod-credit": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/moderation/v2/actions",
-    "body": {
-     "command": {
-      "action": "wallet_adjust",
-      "viewer_id": "1002",
-      "currency": "tokens",
-      "delta": 500
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "mod-debit-double-click": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/moderation/v2/actions",
-    "body": {
-     "command": {
-      "action": "wallet_adjust",
-      "viewer_id": "1002",
-      "currency": "tokens",
-      "delta": -500
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- },
- "mod-block": {
-  "writes": [
-   {
-    "method": "POST",
-    "path": "/emotes/refresh",
-    "body": {},
-    "idempotencyKey": null,
-    "authorization": true
-   },
-   {
-    "method": "POST",
-    "path": "/moderation/v2/actions",
-    "body": {
-     "command": {
-      "action": "block_viewer",
-      "viewer_id": "1002",
-      "module": "tts",
-      "duration_s": 300
-     }
-    },
-    "idempotencyKey": "K1",
-    "authorization": true
-   }
-  ],
-  "errors": [],
-  "scenarioError": null
- }
+  "tts-tokens": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/tokens",
+        "body": {
+          "module_id": "tts",
+          "payload": {
+            "text": "Message de référence"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "tts-credits": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/redemption",
+        "body": {
+          "module_id": "tts",
+          "payload": {
+            "text": "Message de référence"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "tts-double-click": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/tokens",
+        "body": {
+          "module_id": "tts",
+          "payload": {
+            "text": "Message de référence"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "tts-retry-after-network-loss": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/tokens",
+        "body": {
+          "module_id": "tts",
+          "payload": {
+            "text": "Message de référence"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/tokens",
+        "body": {
+          "module_id": "tts",
+          "payload": {
+            "text": "Message de référence"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/tokens",
+        "body": {
+          "module_id": "tts",
+          "payload": {
+            "text": "Message de référence"
+          }
+        },
+        "idempotencyKey": "K2",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "raffle-join": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/raffle",
+        "body": {},
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "soundboard-first": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/tokens",
+        "body": {
+          "module_id": "soundboard",
+          "payload": {
+            "sound_id": "son-01"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "soundboard-credits": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/redemption",
+        "body": {
+          "redemption_id": "red-bench-sound",
+          "module_id": "soundboard",
+          "payload": {
+            "sound_id": "son-01"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "bonk-salve": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/actions/tokens",
+        "body": {
+          "module_id": "bonk",
+          "payload": {
+            "target_login": "streamer",
+            "emotes": ["unicode:1f600"],
+            "emote_source": "unicode",
+            "emote_glyph": "😀"
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "mod-remove-refund": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/moderation/v2/actions",
+        "body": {
+          "command": {
+            "action": "cancel",
+            "module": "tts",
+            "interaction_id": "7ece65da-48bc-41f1-b350-0a061cd71036",
+            "refund": true
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "mod-stop-no-refund": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/moderation/v2/actions",
+        "body": {
+          "command": {
+            "action": "stop_current",
+            "module": "tts",
+            "refund": false
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "mod-credit": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/moderation/v2/actions",
+        "body": {
+          "command": {
+            "action": "wallet_adjust",
+            "viewer_id": "1002",
+            "currency": "tokens",
+            "delta": 500
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "mod-debit-double-click": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/moderation/v2/actions",
+        "body": {
+          "command": {
+            "action": "wallet_adjust",
+            "viewer_id": "1002",
+            "currency": "tokens",
+            "delta": -500
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  },
+  "mod-block": {
+    "writes": [
+      {
+        "method": "POST",
+        "path": "/emotes/refresh",
+        "body": {},
+        "idempotencyKey": null,
+        "authorization": true
+      },
+      {
+        "method": "POST",
+        "path": "/moderation/v2/actions",
+        "body": {
+          "command": {
+            "action": "block_viewer",
+            "viewer_id": "1002",
+            "module": "tts",
+            "duration_s": 300
+          }
+        },
+        "idempotencyKey": "K1",
+        "authorization": true
+      }
+    ],
+    "errors": [],
+    "scenarioError": null
+  }
 }

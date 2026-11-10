@@ -233,7 +233,12 @@ export function musicState(startedAt, clock, role = 'moderator') {
         image_url: null,
         state: 'SEARCHING',
       },
-    ].map((e) => (team ? e : (({ viewer_id, viewer_login, payment, price_tokens, ...rest }) => rest)(e))),
+    ].map((e) =>
+      team
+        ? e
+        : (({ viewer_id, viewer_login, payment, price_tokens, ...rest }) =>
+            rest)(e),
+    ),
     me: {
       pending: 2,
       max_pending: 3,
@@ -313,9 +318,18 @@ export function musicHistory(startedAt, before = null) {
       album: c.album ?? null,
       image_url: c.image_url,
       kind: request ? 'request' : 'track',
-      requested_by: request ? ['Viewer_B', 'Viewer_C', 'Toi (calibration)', 'Viewer_D'][k % 4] : null,
+      requested_by: request
+        ? ['Viewer_B', 'Viewer_C', 'Toi (calibration)', 'Viewer_D'][k % 4]
+        : null,
       own: request && k % 4 === 2,
-      end: k === 0 ? null : k % 7 === 3 ? 'skipped' : k % 5 === 4 ? 'interrupted' : 'natural',
+      end:
+        k === 0
+          ? null
+          : k % 7 === 3
+            ? 'skipped'
+            : k % 5 === 4
+              ? 'interrupted'
+              : 'natural',
       listened_ms: k === 0 ? null : 150_000,
       session_started_at: new Date(k < 22 ? live : previous).toISOString(),
     };

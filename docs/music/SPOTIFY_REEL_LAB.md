@@ -6,14 +6,14 @@
 
 ## 1. Les deux modes
 
-| | Mode A — Lab simulé (défaut) | Mode B — Lab sur ton compte Spotify |
-| --- | --- | --- |
-| Lancement | `Ouvrir Music Hub (Lab).cmd` | `Ouvrir Music Hub (Lab, Spotify reel).cmd` (demande confirmation) |
-| Catalogue | fictif, signalé « Catalogue de démonstration du Lab » | **Spotify** (titres, artistes, albums, versions, pochettes, disponibilité), signalé « fournis par Spotify » + lien « Ouvrir dans Spotify » |
-| Lecteur | simulé | ton lecteur réel, **lu** seulement |
-| Ajout à ta file, skips, pause / volume | simulés | **bloqués** (refus « Lab en lecture seule », Jetons du Lab rendus une fois) tant que tu n'as pas cliqué « Autoriser les ajouts pour cette session » dans Studio |
-| Persistant ? | — | **non** : le mode est choisi à chaque lancement (variable `LAB_SPOTIFY=real` du lanceur), les ajouts sont recoupés à chaque démarrage |
-| Données | `.lab-data/…/spotify-lab` | dossier séparé `.lab-data/…/spotify-lab-real` (jeton chiffré Windows, jamais envoyé au navigateur ni à l'extension) |
+|                                        | Mode A — Lab simulé (défaut)                          | Mode B — Lab sur ton compte Spotify                                                                                                                             |
+| -------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lancement                              | `Ouvrir Music Hub (Lab).cmd`                          | `Ouvrir Music Hub (Lab, Spotify reel).cmd` (demande confirmation)                                                                                               |
+| Catalogue                              | fictif, signalé « Catalogue de démonstration du Lab » | **Spotify** (titres, artistes, albums, versions, pochettes, disponibilité), signalé « fournis par Spotify » + lien « Ouvrir dans Spotify »                      |
+| Lecteur                                | simulé                                                | ton lecteur réel, **lu** seulement                                                                                                                              |
+| Ajout à ta file, skips, pause / volume | simulés                                               | **bloqués** (refus « Lab en lecture seule », Jetons du Lab rendus une fois) tant que tu n'as pas cliqué « Autoriser les ajouts pour cette session » dans Studio |
+| Persistant ?                           | —                                                     | **non** : le mode est choisi à chaque lancement (variable `LAB_SPOTIFY=real` du lanceur), les ajouts sont recoupés à chaque démarrage                           |
+| Données                                | `.lab-data/…/spotify-lab`                             | dossier séparé `.lab-data/…/spotify-lab-real` (jeton chiffré Windows, jamais envoyé au navigateur ni à l'extension)                                             |
 
 ## 2. Une fois avant le premier essai (toi)
 

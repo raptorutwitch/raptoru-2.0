@@ -726,7 +726,11 @@ describe('the Lab on the real account, read-only (no fake « demandé »)', () =
     const lab = (writes: boolean) =>
       state({
         settings: { ...state().settings, player_controls: true },
-        connection: { ...state().connection, mode: 'lab_real', lab_writes: writes },
+        connection: {
+          ...state().connection,
+          mode: 'lab_real',
+          lab_writes: writes,
+        },
       });
     const ro = nowView(lab(false), ui());
     expect(ro).toMatch(/data-act="sp-skip" disabled/);

@@ -39,15 +39,15 @@
 
 ## 3. Lire le résultat
 
-| Ligne | Sens |
-| ----- | ---- |
-| `PISTE` / `REJOUÉ` | un changement de titre annoncé par un événement Windows (ce qu'on veut) |
-| `LECTURE` / `PAUSE` | changement d'état annoncé |
-| `DOUBLON` (compté dans le bilan) | Spotify envoie souvent 2 événements par changement : ignoré |
-| `TRANSITION` | titre vide un instant pendant un changement : ignoré |
-| **`MANQUÉ`** | un changement vu par le contrôle local (toutes les 5 s) **sans** événement : c'est ce qui disqualifierait SMTC |
-| `reçu +N ms après l'événement` | délai interne de la sonde (de l'événement Windows à sa lecture) |
-| `Spotify a mis à jour sa position il y a N ms` | indicateur du délai Spotify → Windows → sonde (approché : Windows ne date pas l'événement) |
+| Ligne                                          | Sens                                                                                                           |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `PISTE` / `REJOUÉ`                             | un changement de titre annoncé par un événement Windows (ce qu'on veut)                                        |
+| `LECTURE` / `PAUSE`                            | changement d'état annoncé                                                                                      |
+| `DOUBLON` (compté dans le bilan)               | Spotify envoie souvent 2 événements par changement : ignoré                                                    |
+| `TRANSITION`                                   | titre vide un instant pendant un changement : ignoré                                                           |
+| **`MANQUÉ`**                                   | un changement vu par le contrôle local (toutes les 5 s) **sans** événement : c'est ce qui disqualifierait SMTC |
+| `reçu +N ms après l'événement`                 | délai interne de la sonde (de l'événement Windows à sa lecture)                                                |
+| `Spotify a mis à jour sa position il y a N ms` | indicateur du délai Spotify → Windows → sonde (approché : Windows ne date pas l'événement)                     |
 
 Critère « concluant » : chaque manipulation du § 2 produit sa ligne en ~1 s, **zéro `MANQUÉ`**, et la session revient
 seule après fermeture / réouverture.

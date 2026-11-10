@@ -14,15 +14,26 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 4480);
 const server = await startServer(port, {
   csp: true,
-  pages: { '/': join(HERE, 'compare-shells.html'), '/compare-shells.js': join(HERE, 'compare-shells.js') },
+  pages: {
+    '/': join(HERE, 'compare-shells.html'),
+    '/compare-shells.js': join(HERE, 'compare-shells.js'),
+  },
 }).catch((e) => {
-  console.error(`Impossible d’ouvrir le port ${port} (${e.code ?? e.message}). Une comparaison est peut-être déjà ouverte.`);
+  console.error(
+    `Impossible d’ouvrir le port ${port} (${e.code ?? e.message}). Une comparaison est peut-être déjà ouverte.`,
+  );
   process.exit(1);
 });
 const url = `http://127.0.0.1:${server.address().port}/`;
-console.log(`Comparaison legacy ↔ v2 : ${url}\nFerme cette fenêtre (ou Ctrl+C) pour l’arrêter.`);
+console.log(
+  `Comparaison legacy ↔ v2 : ${url}\nFerme cette fenêtre (ou Ctrl+C) pour l’arrêter.`,
+);
 if (!process.argv.includes('--no-open')) {
-  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
-    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  const [cmd, args] =
+    process.platform === 'win32'
+      ? ['cmd', ['/c', 'start', '', url]]
+      : process.platform === 'darwin'
+        ? ['open', [url]]
+        : ['xdg-open', [url]];
   spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
 }

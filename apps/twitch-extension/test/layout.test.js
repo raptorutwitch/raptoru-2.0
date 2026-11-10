@@ -22,12 +22,20 @@ describe('computeLayout', () => {
   it('keeps the previous profile within 8 px of the boundary (no flicker while resizing)', () => {
     // 0.85 × 434 = 368.9: 365 px high is compact when fresh, normal when coming from normal.
     expect(computeLayout({ w: 600, h: 365 }).profile).toBe('compact');
-    expect(computeLayout({ w: 600, h: 365, prev: 'normal' }).profile).toBe('normal');
-    expect(computeLayout({ w: 600, h: 355, prev: 'normal' }).profile).toBe('compact');
+    expect(computeLayout({ w: 600, h: 365, prev: 'normal' }).profile).toBe(
+      'normal',
+    );
+    expect(computeLayout({ w: 600, h: 355, prev: 'normal' }).profile).toBe(
+      'compact',
+    );
   });
 
   it('a narrow or portrait root is « étroit » with unit scales', () => {
-    expect(computeLayout({ w: 359, h: 200 })).toEqual({ profile: 'etroit', kg: 1, kt: 1 });
+    expect(computeLayout({ w: 359, h: 200 })).toEqual({
+      profile: 'etroit',
+      kg: 1,
+      kt: 1,
+    });
     expect(computeLayout({ w: 500, h: 500 }).profile).toBe('etroit');
   });
 });

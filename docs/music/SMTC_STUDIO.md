@@ -29,7 +29,7 @@ Spotify Desktop ─► Windows (SMTC) ─► sonde --studio ─► Studio (suivi
 - **Suivi** (`apps/studio/server/src/spotify/smtc.ts`, `SmtcTracker`) : une **occurrence** (`gen`) par changement de
   titre ou par titre rejoué depuis le début.
   - Ignorés : les doublons de Spotify, le titre vide d'une transition, une ligne plus ancienne.
-  - Distingués : pause / reprise, recherche dans le titre (*seek*), Spotify fermé, source absente.
+  - Distingués : pause / reprise, recherche dans le titre (_seek_), Spotify fermé, source absente.
   - « Non confirmé » : 20 s sans nouvelle de Windows, ou titre 15 s au-delà de sa fin.
 - **Titre exact** : 1,2 s après un changement annoncé, **une** lecture `GET /me/player`.
   - Elle n'est retenue pour cette occurrence que si elle est postérieure au changement, avec le même titre et la même
@@ -53,12 +53,12 @@ Spotify Desktop ─► Windows (SMTC) ─► sonde --studio ─► Studio (suivi
 
 ## 3. Ce qui s'affiche
 
-| Où        | Quoi                                                                                                                                  |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Où        | Quoi                                                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Studio    | Bloc « En cours » : pochette de Windows (servie par Studio), titre, artistes, album, temps, barre fluide, état. Relu chaque seconde, sans appel au Core ni à Spotify. |
-| Studio    | Onglet « Musiques du stream » à côté de la file : par live, le plus récent d'abord, 50 par page.                                      |
-| Extension | Ligne « EN COURS » : la même, plus une barre fine et « 1:23 / 3:45 » (masqué sous 340 px), une entrée douce au changement de titre.   |
-| Extension | Horloge « Musiques de la soirée » : tous les titres des lives (ta musique comprise), 20 par page.                                      |
+| Studio    | Onglet « Musiques du stream » à côté de la file : par live, le plus récent d'abord, 50 par page.                                                                      |
+| Extension | Ligne « EN COURS » : la même, plus une barre fine et « 1:23 / 3:45 » (masqué sous 340 px), une entrée douce au changement de titre.                                   |
+| Extension | Horloge « Musiques de la soirée » : tous les titres des lives (ta musique comprise), 20 par page.                                                                     |
 
 - **Demandes.** Sans relevé de Windows (sonde absente, autre PC), on revient à l'ancien affichage, tiré de la lecture
   de l'API.
@@ -96,12 +96,12 @@ exact lu (API limitée), pas de demandeur.
 
 ### Statut de fin (`classifyEnd`, affichage seulement)
 
-| Classement interne                                             | Affiché                    | Quand                                                                                                  |
-| -------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Skip confirmé                                                  | **Skippé**                 | Une **commande** de Raptoru (Studio « Passer », `!songskip`, lecteur supermods) a passé **ce titre exact** ; ou le Core a fini la demande `SKIPPED`. |
-| Interruption probable                                          | « Interrompu » (discret)   | Un autre titre (ou le même depuis le début) a commencé plus de 15 s avant la fin, sans commande : skip à la main dans Spotify, autre morceau cliqué… |
-| Fin normale ou compatible                                      | rien                       | Changement dans les 15 dernières secondes (fin, fondu enchaîné, skip tout à la fin), ou demande `PLAYED` selon le Core. |
-| Fin inconnue                                                   | rien                       | Spotify fermé, sonde perdue, Studio redémarré sur un autre titre, fin du live, position inconnue.       |
+| Classement interne        | Affiché                  | Quand                                                                                                                                                |
+| ------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Skip confirmé             | **Skippé**               | Une **commande** de Raptoru (Studio « Passer », `!songskip`, lecteur supermods) a passé **ce titre exact** ; ou le Core a fini la demande `SKIPPED`. |
+| Interruption probable     | « Interrompu » (discret) | Un autre titre (ou le même depuis le début) a commencé plus de 15 s avant la fin, sans commande : skip à la main dans Spotify, autre morceau cliqué… |
+| Fin normale ou compatible | rien                     | Changement dans les 15 dernières secondes (fin, fondu enchaîné, skip tout à la fin), ou demande `PLAYED` selon le Core.                              |
+| Fin inconnue              | rien                     | Spotify fermé, sonde perdue, Studio redémarré sur un autre titre, fin du live, position inconnue.                                                    |
 
 - **Pause.** Une pause n'est jamais une fin.
 - **Interrompu.** Une interruption n'est jamais affichée « Skippé ».

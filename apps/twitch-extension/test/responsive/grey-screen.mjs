@@ -10,7 +10,9 @@ import console from 'node:console';
 import { startServer } from './server.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const { chromium } = createRequire(join(HERE, '../../../../package.json'))('@playwright/test');
+const { chromium } = createRequire(join(HERE, '../../../../package.json'))(
+  '@playwright/test',
+);
 const shellArg = process.argv.indexOf('--shell');
 const shell = shellArg > 0 ? `-${process.argv[shellArg + 1]}` : '';
 
@@ -25,13 +27,28 @@ for (const [surface, page0, w, h] of [
 ]) {
   const page = await browser.newPage({ viewport: { width: w, height: h } });
   const requests = [];
-  await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (r) => { requests.push(r.request().url()); return r.abort(); });
+  await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (r) => {
+    requests.push(r.request().url());
+    return r.abort();
+  });
   const t0 = Date.now();
   await page.goto(`${base}/${page0}`);
-  const ok = await page.waitForFunction(() => /Connexion à Twitch impossible/.test(document.body.innerText), null, { timeout: 3000 })
-    .then(() => true, () => false);
-  const retry = ok && await page.getByRole('button', { name: /réessayer|recharger/i }).count();
-  console.log(`${surface}: ${ok ? `message en ${Date.now() - t0} ms` : 'AUCUN MESSAGE'}${ok ? `, bouton de reprise ${retry ? 'présent' : 'absent'}` : ''}, requêtes sortantes ${requests.length}`);
+  const ok = await page
+    .waitForFunction(
+      () => /Connexion à Twitch impossible/.test(document.body.innerText),
+      null,
+      { timeout: 3000 },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
+  const retry =
+    ok &&
+    (await page.getByRole('button', { name: /réessayer|recharger/i }).count());
+  console.log(
+    `${surface}: ${ok ? `message en ${Date.now() - t0} ms` : 'AUCUN MESSAGE'}${ok ? `, bouton de reprise ${retry ? 'présent' : 'absent'}` : ''}, requêtes sortantes ${requests.length}`,
+  );
   if (!ok || requests.length) failures += 1;
   await page.close();
 }

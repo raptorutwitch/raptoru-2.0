@@ -5,14 +5,14 @@
 
 ## 1. Ce qui a changé
 
-| Sujet | Avant | Maintenant |
-| ----- | ----- | ---------- |
-| Porte d'appels (Studio `spotify/api.ts`) | une file unique : une recherche du Music Hub passait devant un skip | **deux voies** : *essentielle* (file, skips, lecteur, lectures de lecture, recherches de la récompense et de `!song`) toujours servie d'abord ; *catalogue* (recherches du Music Hub) avec son budget : **30 / min**, et seulement si la porte entière reste sous 60 / min. Au-delà : refusée tout de suite (jamais mise en attente) |
-| Recherches du Music Hub dans Studio | exécutées dans la boucle principale, une à une | **à côté de la boucle** (2 à la fois), abandonnées après 6 s d'attente ; la boucle (synchronisation avec Core, lecture, skips, ajouts) n'attend plus |
-| Core (`spotify/service.ts`) | tâches servies par ordre d'arrivée, recherches comprises ; une recherche en attente faisait lire le lecteur | demandes, skips, commandes du lecteur et `!song` **avant** les recherches ; une recherche de plus de 6 s n'est plus servie ; une nouvelle recherche d'un viewer remplace la précédente encore en attente ; plafond de chaîne **30 recherches nouvelles / min** (un texte déjà cherché reste gratuit) → « Beaucoup de recherches en ce moment » ; une recherche seule ne déclenche plus la surveillance du lecteur |
-| Recherches du Music Hub | sans disponibilité | `market=from_token` : Spotify dit si chaque version se lit sur le compte du streamer. La récompense et `!song` sont inchangées |
-| Suivi de la lecture (`cadence()`) | 2,5 s sur une demande, 1 s sur les 15 dernières secondes de chaque titre | voir § 2 |
-| Compteurs locaux | total des appels par minute | par endpoint (appels, 429, erreurs), lectures évitées par le cache par type, attente par voie, recherches refusées (budget) et abandonnées, écritures bloquées (Lab réel). Panneau Studio « Détails techniques › Consommation ». Rien ne sort du PC |
+| Sujet                                    | Avant                                                                                                       | Maintenant                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Porte d'appels (Studio `spotify/api.ts`) | une file unique : une recherche du Music Hub passait devant un skip                                         | **deux voies** : _essentielle_ (file, skips, lecteur, lectures de lecture, recherches de la récompense et de `!song`) toujours servie d'abord ; _catalogue_ (recherches du Music Hub) avec son budget : **30 / min**, et seulement si la porte entière reste sous 60 / min. Au-delà : refusée tout de suite (jamais mise en attente)                                                                              |
+| Recherches du Music Hub dans Studio      | exécutées dans la boucle principale, une à une                                                              | **à côté de la boucle** (2 à la fois), abandonnées après 6 s d'attente ; la boucle (synchronisation avec Core, lecture, skips, ajouts) n'attend plus                                                                                                                                                                                                                                                              |
+| Core (`spotify/service.ts`)              | tâches servies par ordre d'arrivée, recherches comprises ; une recherche en attente faisait lire le lecteur | demandes, skips, commandes du lecteur et `!song` **avant** les recherches ; une recherche de plus de 6 s n'est plus servie ; une nouvelle recherche d'un viewer remplace la précédente encore en attente ; plafond de chaîne **30 recherches nouvelles / min** (un texte déjà cherché reste gratuit) → « Beaucoup de recherches en ce moment » ; une recherche seule ne déclenche plus la surveillance du lecteur |
+| Recherches du Music Hub                  | sans disponibilité                                                                                          | `market=from_token` : Spotify dit si chaque version se lit sur le compte du streamer. La récompense et `!song` sont inchangées                                                                                                                                                                                                                                                                                    |
+| Suivi de la lecture (`cadence()`)        | 2,5 s sur une demande, 1 s sur les 15 dernières secondes de chaque titre                                    | voir § 2                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Compteurs locaux                         | total des appels par minute                                                                                 | par endpoint (appels, 429, erreurs), lectures évitées par le cache par type, attente par voie, recherches refusées (budget) et abandonnées, écritures bloquées (Lab réel). Panneau Studio « Détails techniques › Consommation ». Rien ne sort du PC                                                                                                                                                               |
 
 ## 2. Suivi de la lecture : quand Studio lit Spotify
 
@@ -30,12 +30,12 @@ qui démarre, `!songcancel`). Seul le moment des lectures change :
 
 ## 3. Mesures (simulateur, `apps/studio/server/test/spotify-consumption.test.ts`)
 
-| Scénario | Avant | Après |
-| -------- | ----- | ----- |
-| 1 h de demandes enchaînées | 1 400 lectures `GET /me/player` | **630** (−55 %) ; chaque fin vue à moins de 5 s, chaque début vu avant 12 s |
-| 1 h de musique du streamer, une demande en attente | 280 | **147** (−48 %) |
-| Vague de 30 recherches + un skip + une demande | skip traité en 6,2 s, demande en 6,4 s, Studio muet 6,9 s pour Core | skip **0,8 s**, demande **1,2 s**, silence max **1,9 s** ; 14 recherches réellement envoyées |
-| Quota d'une heure (`QUOTA_EXCEEDED`) | — | un seul appel le rencontre, aucun ensuite (même après redémarrage), Studio continue de parler à Core, les demandes sont refusées et remboursées une fois |
+| Scénario                                           | Avant                                                               | Après                                                                                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 h de demandes enchaînées                         | 1 400 lectures `GET /me/player`                                     | **630** (−55 %) ; chaque fin vue à moins de 5 s, chaque début vu avant 12 s                                                                              |
+| 1 h de musique du streamer, une demande en attente | 280                                                                 | **147** (−48 %)                                                                                                                                          |
+| Vague de 30 recherches + un skip + une demande     | skip traité en 6,2 s, demande en 6,4 s, Studio muet 6,9 s pour Core | skip **0,8 s**, demande **1,2 s**, silence max **1,9 s** ; 14 recherches réellement envoyées                                                             |
+| Quota d'une heure (`QUOTA_EXCEEDED`)               | —                                                                   | un seul appel le rencontre, aucun ensuite (même après redémarrage), Studio continue de parler à Core, les demandes sont refusées et remboursées une fois |
 
 **Limite connue (cas rare)** : deux skips faits **à la main dans l'appli Spotify** à moins de ~6 s d'écart en milieu
 de demande → la demande du milieu peut ne jamais être vue (avant : sous 2,5 s). Elle reste alors « en attente » et est
@@ -61,12 +61,12 @@ quota.
 Le détail est dans [SMTC_STUDIO.md](SMTC_STUDIO.md). Le banc a été rejoué avec le Windows simulé du Lab
 (`spotify-consumption.test.ts`, bloc « with the live track from Windows »).
 
-| Scénario (1 h, simulé)                              | Sans SMTC | Avec SMTC | Pourquoi                                                                 |
-| --------------------------------------------------- | --------- | --------- | ------------------------------------------------------------------------ |
-| Demandes enchaînées                                 | 630       | **630**   | La lecture « titre exact » remplace la lecture déjà prévue (avancée).    |
-| Musique du streamer, une demande en attente         | 147       | **147**   | Idem.                                                                    |
-| Musique du streamer, rien à surveiller              | 0         | **21**    | Une lecture par titre (~17–21 titres / h) : uri et pochette exactes.     |
-| Deux skips à la main à 3 s (et 2 s) d'écart         | demande du milieu **non vue** | **vue**  | Windows annonce le changement, la lecture suit 1,2 s après.            |
+| Scénario (1 h, simulé)                      | Sans SMTC                     | Avec SMTC | Pourquoi                                                              |
+| ------------------------------------------- | ----------------------------- | --------- | --------------------------------------------------------------------- |
+| Demandes enchaînées                         | 630                           | **630**   | La lecture « titre exact » remplace la lecture déjà prévue (avancée). |
+| Musique du streamer, une demande en attente | 147                           | **147**   | Idem.                                                                 |
+| Musique du streamer, rien à surveiller      | 0                             | **21**    | Une lecture par titre (~17–21 titres / h) : uri et pochette exactes.  |
+| Deux skips à la main à 3 s (et 2 s) d'écart | demande du milieu **non vue** | **vue**   | Windows annonce le changement, la lecture suit 1,2 s après.           |
 
 - **Toutes les garanties du § 3 sont tenues aussi avec SMTC** : chaque fin lue à moins de 5 s, chaque début avant
   12 s.
