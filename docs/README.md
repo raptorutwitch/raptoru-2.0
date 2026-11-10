@@ -51,6 +51,7 @@ déplacer**.
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [studio-refonte/](studio-refonte/CONTEXTE.md)                | Studio Coulisses : contexte et règles, design system, socle modulaire (`architecture/`), parité, recettes, bascule du 07/11 | [CONTEXTE.md](studio-refonte/CONTEXTE.md), [DESIGN_SYSTEM.md](studio-refonte/DESIGN_SYSTEM.md), [OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) (Exécuté) |
 | [extension/](extension/PLAN_REFONTE_EXTENSION_2026-11-08.md) | Extension Next : audit du 07/11 (et ses captures), plan et décisions du 08/11                                               | plan ; le journal, le guide du socle et la publication sont **sur la branche `feat/extension-next`** ([REPRISE.md](REPRISE.md) § 5)                                       |
+| [chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)                     | Chaos V2 (10/11) : audit de V1, recherche (performances, capture, curseur), architecture, catalogue, roadmap, questions     | [ARCHITECTURE_CHAOS_V2.md](chaos/ARCHITECTURE_CHAOS_V2.md) § 0 (verdict) ; recherche seulement, rien construit                                                            |
 
 `studio-refonte/` en détail :
 
