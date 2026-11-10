@@ -104,6 +104,14 @@ function ending(h) {
   return { kind: 'warning', text: `${t} n’a pas pu être ajoutée${back}.` };
 }
 
+/** La règle du skip payant, telle que le Core l'applique (multiplicateur réglé dans Studio ; absent : ×2). */
+function skipRule(vs) {
+  const m = typeof vs.multiplier === 'number' ? vs.multiplier : 2;
+  if (m === 1) return `Le prix est le même à chaque skip : ◆ ${fmt(vs.base_price)}.`;
+  const how = m === 2 ? 'Le prix double' : `Le prix est multiplié par ${String(m).replace('.', ',')}`;
+  return `${how} à chaque skip payé dans les ${vs.window_minutes} minutes qui suivent le précédent (pour tout le stream), puis revient à ◆ ${fmt(vs.base_price)}.`;
+}
+
 export function view(ctx) {
   const { document, client } = ctx;
   const host = ctx.host ?? {};
@@ -713,7 +721,7 @@ export function view(ctx) {
     return `<div class="mh-scrim" data-act="keep-out"><div class="mh-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mh-st" aria-describedby="mh-sd">
       <div class="mh-dialog__row">${art(n.image_url, 'mh-art--lg')}<div><h3 id="mh-st">Passer cette musique ?</h3><p><b>${esc(n.title)}</b>${n.artists?.length ? ` · ${esc(n.artists[0])}` : ''}</p></div></div>
       <p class="mh-dialog__price"><b>◆ ${fmt(vs.price)} Jetons</b>${after !== null ? `<span>${short ? `il te manque ◆ ${fmt(-after)}` : `il te restera ◆ ${fmt(after)}`}</span>` : ''}</p>
-      <p id="mh-sd">Le prix double à chaque skip payé dans les ${vs.window_minutes} minutes qui suivent le précédent (pour tout le stream), puis revient à ◆ ${fmt(vs.base_price)}. Si le skip ne se fait pas, tes Jetons te sont rendus.</p>
+      <p id="mh-sd">${skipRule(vs)} Si le skip ne se fait pas, tes Jetons te sont rendus.</p>
       ${d.error ? `<p class="mh-buy__err" role="alert">${esc(d.error)}</p>` : ''}
       <div class="mh-dialog__acts"><button type="button" class="mh-btn" data-act="keep" data-key="keep">Garder</button><button type="button" class="mh-btn mh-btn--danger" data-act="vskip-go" data-key="vskip-go" ${d.busy || short ? 'disabled' : ''} ${d.busy ? 'aria-busy="true"' : ''}>${d.busy ? 'Envoi…' : `Passer · ◆ ${fmt(vs.price)}`}</button></div></div></div>`;
   }

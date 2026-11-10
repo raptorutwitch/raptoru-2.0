@@ -2360,7 +2360,7 @@ export class SpotifyService {
   /** The paid skip and the Open Bar as Studio (team: names, recent decisions) or the extension sees them. */
   private async musicRulesView(q: Queryable, channelId: string, team: boolean) {
     const rules = await loadRules(q, channelId);
-    const pricing = await skipPrice(q, channelId, this.clock.now());
+    const pricing = await skipPrice(q, channelId, this.clock.now(), rules);
     const recent = await q.query<SkipRow>(
       `select * from module_activity where channel_id = $1 and module_id = $2 order by created_at desc limit $3`,
       [channelId, SKIP_MODULE, team ? 8 : 1],
@@ -2369,8 +2369,9 @@ export class SpotifyService {
       viewer_skip: {
         enabled: rules.viewer_skip.enabled,
         protect_requests: rules.viewer_skip.protect_requests,
-        base_price: MUSIC_RULES.skipBasePriceTokens,
-        window_minutes: MUSIC_RULES.skipWindowMs / 60_000,
+        base_price: rules.viewer_skip.base_price,
+        multiplier: rules.viewer_skip.multiplier,
+        window_minutes: rules.viewer_skip.window_minutes,
         ...pricing,
         /** A paid skip is on its way (the next one waits for its outcome). */
         busy: recent[0]?.status === 'queued',
@@ -2401,6 +2402,35 @@ export class SpotifyService {
         r.viewer_skip.enabled = u.viewer_skip_enabled;
       if (u.viewer_skip_protect_requests !== undefined)
         r.viewer_skip.protect_requests = u.viewer_skip_protect_requests;
+      // The progression: the next price follows at once (skipPrice reads the settings of now); journaled.
+      const before = { ...r.viewer_skip };
+      if (u.viewer_skip_base_price !== undefined)
+        r.viewer_skip.base_price = u.viewer_skip_base_price;
+      if (u.viewer_skip_multiplier !== undefined)
+        r.viewer_skip.multiplier = u.viewer_skip_multiplier;
+      if (u.viewer_skip_window_minutes !== undefined)
+        r.viewer_skip.window_minutes = u.viewer_skip_window_minutes;
+      if (
+        before.base_price !== r.viewer_skip.base_price ||
+        before.multiplier !== r.viewer_skip.multiplier ||
+        before.window_minutes !== r.viewer_skip.window_minutes
+      )
+        await q.query(
+          `insert into module_activity (activity_id, channel_id, module_id, action, amount, status, created_at,
+             updated_at, ended_by, result)
+           values ($1, $2, 'music_hub', 'skip_rules', 0, 'done', $3, $3, $4, $5)`,
+          [
+            randomUUID(),
+            channelId,
+            now,
+            by.slice(0, 64),
+            JSON.stringify({
+              base_price: r.viewer_skip.base_price,
+              multiplier: r.viewer_skip.multiplier,
+              window_minutes: r.viewer_skip.window_minutes,
+            }),
+          ],
+        );
       if (u.open_bar !== undefined && u.open_bar !== r.open_bar.on) {
         r.open_bar = u.open_bar
           ? { on: true, since: now.toISOString(), by: by.slice(0, 64) }

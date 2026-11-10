@@ -651,6 +651,31 @@ export function mountSpotifyPage(root: HTMLElement) {
           'Demande réglée',
         );
     },
+    // Music Hub : la progression du skip payant (le Core valide et recalcule le prix suivant tout de suite).
+    'sp-skip-rules': (el) =>
+      post(
+        el,
+        '/music-rules',
+        {
+          viewer_skip_base_price: Number(field('vs-base')),
+          viewer_skip_multiplier: Number(field('vs-mult').replace(',', '.')),
+          viewer_skip_window_minutes: Number(field('vs-window')),
+        },
+        'Progression du skip payant enregistrée',
+        ['vs-base', 'vs-mult', 'vs-window'],
+      ),
+    'sp-skip-defaults': (el) =>
+      post(
+        el,
+        '/music-rules',
+        {
+          viewer_skip_base_price: 25_000,
+          viewer_skip_multiplier: 2,
+          viewer_skip_window_minutes: 30,
+        },
+        'Valeurs d’origine remises (◆ 25 000, ×2, 30 min)',
+        ['vs-base', 'vs-mult', 'vs-window'],
+      ),
     'sp-save': (el) => {
       const min = (f: string) => Math.round(Number(field(f)) * 60);
       return post(

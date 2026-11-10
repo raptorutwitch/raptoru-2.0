@@ -92,6 +92,8 @@ export interface SpMusicRules {
     enabled: boolean;
     protect_requests: boolean;
     base_price: number;
+    /** Set in Studio (absent from an older Core: ×2). */
+    multiplier?: number;
     window_minutes: number;
     price: number;
     doublings: number;

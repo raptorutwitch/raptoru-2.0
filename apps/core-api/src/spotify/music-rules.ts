@@ -13,12 +13,25 @@ export const SKIP_MODULE = 'music_skip';
 const MODULE = 'music_hub';
 
 export interface MusicRules {
-  viewer_skip: { enabled: boolean; protect_requests: boolean };
+  viewer_skip: {
+    enabled: boolean;
+    protect_requests: boolean;
+    /** The progression, set in Studio (defaults: MUSIC_RULES). */
+    base_price: number;
+    multiplier: number;
+    window_minutes: number;
+  };
   open_bar: { on: boolean; since: string | null; by: string | null };
 }
 
 const DEFAULTS: MusicRules = {
-  viewer_skip: { enabled: false, protect_requests: true },
+  viewer_skip: {
+    enabled: false,
+    protect_requests: true,
+    base_price: MUSIC_RULES.skipBasePriceTokens,
+    multiplier: MUSIC_RULES.skipMultiplier,
+    window_minutes: MUSIC_RULES.skipWindowMs / 60_000,
+  },
   open_bar: { on: false, since: null, by: null },
 };
 
@@ -65,37 +78,56 @@ export const saveRules = (
   now: Date,
 ) => writeState(q, channelId, 'rules', r, now);
 
+/** The price after `n` chained successful skips: base × multiplier^n, rounded, never above the ledger's cap. */
+export function priceAfter(
+  vs: Pick<MusicRules['viewer_skip'], 'base_price' | 'multiplier'>,
+  n: number,
+) {
+  let p = vs.base_price;
+  for (let i = 0; i < n && p < MUSIC_RULES.skipMaxPriceTokens; i++)
+    p *= vs.multiplier;
+  return Math.min(Math.round(p), MUSIC_RULES.skipMaxPriceTokens);
+}
+
 /**
- * The price of the next paid skip (global to the stream): the base, doubled once per successful paid skip in a chain
- * where each came within the window of the next one — the most recent within the window of now.
+ * The price of the next paid skip (global to the stream), ALWAYS from the settings of now: `n` = the successful paid
+ * skips chained (each within the window — the current one — of the next, the most recent within the window of now),
+ * price = base × multiplier^n. A setting changed during a series applies to the next skip at once: a new base or
+ * multiplier reprices the same `n`; a shorter window may end the series (back to the base), a longer one may extend
+ * it. A page showing the old price is refused (`price_changed`), never charged the new one silently.
  */
-export async function skipPrice(q: Queryable, channelId: string, now: Date) {
+export async function skipPrice(
+  q: Queryable,
+  channelId: string,
+  now: Date,
+  rules?: MusicRules,
+) {
+  const vs = (rules ?? (await loadRules(q, channelId))).viewer_skip;
+  const windowMs = vs.window_minutes * 60_000;
+  // ponytail: the 64 most recent successes — past that the price sits at its cap (or does not move with ×1).
   const done = await q.query<{ at: string }>(
     `select result->>'at' as at from module_activity
       where channel_id = $1 and module_id = $2 and status = 'done' and result ? 'at'
-      order by (result->>'at')::timestamptz desc limit $3`,
-    [channelId, SKIP_MODULE, MUSIC_RULES.skipMaxDoublings + 1],
+      order by (result->>'at')::timestamptz desc limit 64`,
+    [channelId, SKIP_MODULE],
   );
   let doublings = 0;
   let prev = now.getTime();
   for (const r of done) {
     const t = Date.parse(r.at);
-    if (prev - t > MUSIC_RULES.skipWindowMs) break;
+    if (prev - t > windowMs) break;
     doublings++;
     prev = t;
   }
   const last = done[0] ? Date.parse(done[0].at) : null;
   const inWindow = doublings > 0 && last !== null;
   return {
-    price:
-      MUSIC_RULES.skipBasePriceTokens *
-      2 ** Math.min(doublings, MUSIC_RULES.skipMaxDoublings),
+    price: priceAfter(vs, doublings),
+    /** Successful paid skips in the series (the exponent; named before the multiplier was a setting). */
     doublings,
     last_success_at: last === null ? null : new Date(last).toISOString(),
     /** When the price falls back to the base (null: it is the base already). */
-    resets_at: inWindow
-      ? new Date(last + MUSIC_RULES.skipWindowMs).toISOString()
-      : null,
+    resets_at: inWindow ? new Date(last + windowMs).toISOString() : null,
   };
 }
 
