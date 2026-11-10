@@ -3,6 +3,7 @@ import {
   confirmBox,
   errText,
   keyed,
+  morph,
   page,
   panelBtn,
   patch,
@@ -176,7 +177,7 @@ export function mountSpotifyPage(root: HTMLElement) {
     ui.now = Date.now();
     patch(z('alerts'), alertsView(s));
     patch(z('open'), openingView(s));
-    patch(z('now'), nowView(s, ui));
+    morph(z('now'), nowView(s, ui));
     paintProgress();
     patch(z('quotas'), quotasView(s));
     patch(z('rules'), musicRulesView(s, ui.now));
@@ -278,7 +279,7 @@ export function mountSpotifyPage(root: HTMLElement) {
     const newTrack = !!l && liveSig.split('|')[1] !== String(l.gen);
     liveSig = sig;
     ui.now = Date.now();
-    patch(z('now'), nowView(state, ui));
+    morph(z('now'), nowView(state, ui));
     paintProgress();
     // Le titre change : une apparition douce, et l'historique ouvert se met à jour.
     if (newTrack) {
@@ -385,7 +386,10 @@ export function mountSpotifyPage(root: HTMLElement) {
       done,
       ERRORS,
     );
-    (document.activeElement as HTMLElement | null)?.blur();
+    // Un champ saisi est relâché pour que le relevé le réécrive ; un bouton du lecteur garde son focus (la carte n'est
+    // plus reconstruite).
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.matches('input,select,textarea')) active.blur();
     await read();
     return out as Record<string, unknown> | null;
   };
@@ -400,7 +404,8 @@ export function mountSpotifyPage(root: HTMLElement) {
       status: 'pending',
       reason: null,
     };
-    for (let n = 0; n < 20 && r.status === 'pending'; n++) {
+    // Studio prend la tâche (≈ 1 s), l'envoie, puis relit Spotify jusqu'à la preuve (≈ 4 s au plus) : 12 s de patience.
+    for (let n = 0; n < 30 && r.status === 'pending'; n++) {
       await new Promise((ok) => setTimeout(ok, 400));
       r = (await tryGetJson<typeof r>(`/api/spotify/controls/${jobId}`)) ?? r;
     }
@@ -409,13 +414,18 @@ export function mountSpotifyPage(root: HTMLElement) {
       NO_DEVICE: 'Aucun appareil Spotify actif : rien n’a été envoyé',
       RATE_LIMITED: 'Spotify limite les appels : réessaie dans un moment',
       STUDIO_LOST: 'Studio n’a pas répondu',
+      TEMPORARY_ERROR:
+        'Spotify indisponible un instant : rien n’est confirmé, regarde le lecteur',
+      TRACK_CHANGED: 'Le titre a changé entre-temps : rien n’a été envoyé',
     };
     toast(
       r.status === 'done'
         ? done
         : r.status === 'pending'
           ? 'Le lecteur n’a pas encore répondu'
-          : (why[r.reason ?? ''] ?? 'Le lecteur n’a pas confirmé l’action'),
+          : r.status === 'unknown'
+            ? 'Spotify n’a pas confirmé à temps : l’action a peut-être eu lieu, regarde le lecteur'
+            : (why[r.reason ?? ''] ?? 'Spotify a refusé l’action'),
       { bad: r.status !== 'done' },
     );
     await read();

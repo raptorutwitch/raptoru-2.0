@@ -529,7 +529,7 @@ function liveNowView(s: SpState, ui: SpUi, l: SpLive) {
       <h2 class="spo-title">${t ? esc(t.title) : l.state === 'lost' ? 'Spotify Desktop est fermé' : 'Aucune musique'}</h2>
       <p class="spo-artists">${t ? `${esc(artists.join(', '))}${album}` : 'Lance une musique dans Spotify.'}</p>
       ${by}
-      <div class="spo-trans"${t && !playing ? ' data-paused' : ''}><span class="spo-t" data-t0></span><span class="d-prog"><i data-prog></i></span><span class="spo-t" data-t1></span></div>
+      <div class="spo-trans"${t && !playing ? ' data-paused' : ''}><span class="spo-t" data-t0 data-own></span><span class="d-prog"><i data-prog data-own></i></span><span class="spo-t" data-t1 data-own></span></div>
       ${nowSub(s, ui, playing, !!t)}
     </div>`;
 }
@@ -595,7 +595,7 @@ export function nowView(s: SpState, ui: SpUi) {
       <h2 class="spo-title">${track ? esc(track.title) : 'Aucune lecture relevée'}</h2>
       <p class="spo-artists">${track ? esc(track.artists.join(', ')) : 'Lance Spotify, ou actualise la lecture.'}</p>
       ${by}
-      <div class="spo-trans"><span class="spo-t" data-t0></span><span class="d-prog"><i data-prog></i></span><span class="spo-t" data-t1></span></div>
+      <div class="spo-trans"><span class="spo-t" data-t0 data-own></span><span class="d-prog"><i data-prog data-own></i></span><span class="spo-t" data-t1 data-own></span></div>
       <div class="spo-sub">
         <button type="button" class="d-btn" data-act="sp-skip" ${roAttr(s, 'Passe le titre en cours sur Spotify, même hors demandes')}>${ic('skip')}Passer la musique</button>
         ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
