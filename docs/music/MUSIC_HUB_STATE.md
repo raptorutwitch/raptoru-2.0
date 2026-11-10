@@ -1,8 +1,11 @@
-# Music Hub — état (08/11/2026, design final intégré en Lab)
+# Music Hub — état
 
-> Branche `feat/music-hub` (worktree `Raptoru 2.0 - Worktrees\music-hub`, partie de `feat/extension-next` 2f45ac1).
-> **Lab uniquement.** Rien n'est poussé, fusionné, déployé ni publié. Non validé par Antoni.
-> V1 : commits 626d353 → 2722108. V2 : 006cfac, c9e88a8, 5860b81. Design final intégré : voir `git log`.
+> **État au 10/11/2026 (consolidation) : livré, ouvert aux testeurs seulement. Voir § 16.**
+>
+> - Core `bbce104`, Studio 0.1.29 installé, `MUSIC_HUB_EXTENSION=testers:1239040922`.
+> - Extension shell v2 en Hosted Test (ZIP `bbce1048a078`, Antoni).
+> - Les § 0 à 14 décrivent le chantier en Lab, du 08 au 09/11 : leurs mentions « Lab uniquement, rien de poussé ni
+>   déployé » sont **d'époque**.
 
 ## 0. Où reprendre
 
@@ -432,3 +435,70 @@ Livraison :
 - Studio 0.1.29, pour le clignotement, les confirmations et le panneau ;
 - nouveau ZIP, pour l'icône du volume et le texte du multiplicateur. Dans Twitch, il remplace les fichiers de la
   version en Hosted Test, sans nouveau numéro de version.
+
+## 16. État de clôture (10/11/2026, consolidation)
+
+### 16.1 Ce qui est en Production
+
+| Élément   | État                                                                                                                                                                       | Preuve                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Core      | `bbce104` déployé, sain ; migration `20261122130000_music_hub.sql`                                                                                                         | `coolify-deploy.mjs status core` le 10/11               |
+| Ouverture | `MUSIC_HUB_EXTENSION=testers:1239040922` : la façade `/v1/ext/music/*`, le résumé de session et le nouveau `!song` sont ouverts seulement pour LeCroupier_ et le diffuseur | [RELEASE_2026-11-10.md](../RELEASE_2026-11-10.md) § 6   |
+| Studio    | 0.1.29 installé (`bbce104`) ; Studio ≥ 0.1.28 déclare le skip ciblé (`?caps=targeted_skip`), sinon `studio_outdated` avant tout débit                                      | `build-info.json`                                       |
+| Extension | module Musique dans le shell v2, ZIP `bbce1048a078` en **Hosted Test** (Antoni) ; absent de l'extension publique                                                           | [INVENTAIRE_RELEASES.md](../INVENTAIRE_RELEASES.md) § 3 |
+
+### 16.2 Règles du skip payant progressif (décidées par le Core)
+
+- **Prix suivant** = base × multiplicateur^n, arrondi, plafonné à 1 000 000 000 Jetons. n = nombre de skips payés
+  **réussis** enchaînés, chacun dans la fenêtre du précédent, le plus récent dans la fenêtre de maintenant. Le prix est
+  global au stream.
+- **Défauts** : base 25 000 Jetons, multiplicateur ×2, retour à la base après 30 min sans skip payé.
+- **Bornes** (`MusicRulesUpdate`, `packages/schemas/src/spotify.ts`) : base de 100 à 10 000 000 (entier), multiplicateur
+  de 1 à 10 (deux décimales au plus), fenêtre de 1 à 720 min.
+- **Stockage et journal** : réglages dans `module_state`, sans migration. Chaque changement est journalisé
+  (`module_activity`, action `skip_rules`). Code : `apps/core-api/src/spotify/music-rules.ts` (`priceAfter`,
+  `skipPrice`), `service.ts` (`saveMusicRules`).
+- **Changement en cours de série** : il s'applique au skip suivant, sur le même n. Une page restée sur l'ancien prix
+  reçoit `price_changed`, sans débit.
+- **Inchangés** :
+  - un skip qui ne se fait pas est remboursé une fois et ne fait pas monter le prix ;
+  - les skips d'Antoni et de la modération sont gratuits et ne comptent pas ;
+  - la protection des demandes payées ;
+  - l'Open Bar.
+- **Réglage** : Studio › Spotify › Extension (prix de base, multiplicateur, retour au prix de base, « Valeurs
+  d'origine »).
+
+### 16.3 Ce qui est validé, et ce qui ne l'est pas
+
+| Parcours                                                                                                                            | État                                                             |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Commandes du lecteur depuis Studio 0.1.28 et le Hosted Test `5ee8623` (pause, reprise, skip, volume, affichage) sur le vrai Spotify | **testé par Antoni le 10/11**, avant la passe de finition (§ 15) |
+| Passe de finition (Studio 0.1.29 + ZIP `bbce104`) : clignotement, confirmations, réglages du skip, icône du volume                  | tests automatiques et CI verts ; **pas de test réel écrit**      |
+| Demande payante d'un viewer, retrait et remboursement, délai, quota                                                                 | Lab et tests automatiques seulement                              |
+| Skip payant progressif sur de vrais Jetons                                                                                          | **jamais exécuté en réel** (interdit sans contrôle d'Antoni)     |
+| Permissions : viewer, modérateur, supermod, diffuseur                                                                               | E2E `music-roles` (318 / 400 / 565 px) ; pas en réel             |
+| Overlays musique dans un vrai OBS                                                                                                   | **jamais essayés dans OBS**                                      |
+| Historique de la soirée, `!song` v2 en annonce                                                                                      | Lab seulement                                                    |
+
+### 16.4 Reprendre les tests sans redévelopper
+
+1. Vérifier les versions ([../REPRISE.md](../REPRISE.md) § 4).
+2. Voir les vues sans la Production : `Ouvrir Music Hub (Lab).cmd` (viewer, modérateur, supermod).
+3. Parcours réel, **à la main par Antoni** :
+   [extension/TWITCH_SUBMISSION_2026-11-10.md](../extension/TWITCH_SUBMISSION_2026-11-10.md) § 6.
+4. Overlays : [MUSIC_OVERLAYS.md](MUSIC_OVERLAYS.md) § 9.
+
+### 16.5 Arrêts
+
+| Arrêt                  | Comment                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Immédiat               | Studio › Spotify : « Demandes depuis l'extension » sur OFF                                                  |
+| Complet                | `MUSIC_HUB_EXTENSION=off`, puis redémarrage du Core (GO)                                                    |
+| Sonde Windows          | `RAPTORU_SMTC=off`                                                                                          |
+| Retour arrière du Core | `node scripts/coolify-deploy.mjs deploy core 900637f2b000cd9531970452cf11342876befe82 --rollback --go` (GO) |
+
+**Pour clore le chantier** :
+
+- Antoni teste 0.1.29 et le ZIP `bbce104`, puis le parcours § 16.4 ;
+- ensuite, décision : rester en testeurs, ouvrir à tous avec `on` (le module n'atteint le public qu'avec une
+  **soumission** de l'extension), ou fermer.
