@@ -53,7 +53,7 @@ describe('retry keys: one purchase per intent, repeated clicks stay separate', (
     const seen = [];
     const api = createClient({
       getToken: () => 'tok',
-      apiBase: 'http://ebs',
+      apiBase: '/ext-lab/api', // an allowed base (shared/runtime-guard.js)
       demoMode: false,
       fetchImpl: vi.fn(async (url, init) => {
         seen.push(init.headers['Idempotency-Key']);

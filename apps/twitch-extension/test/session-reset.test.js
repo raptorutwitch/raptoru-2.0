@@ -17,7 +17,7 @@ describe('session reset during a poll', () => {
     const paths = [];
     let releaseState;
     const fetchImpl = vi.fn(async (url) => {
-      const path = new URL(url).pathname;
+      const path = new URL(url, 'http://ebs').pathname;
       paths.push(path);
       if (path.endsWith('/state'))
         return new Promise(
@@ -32,7 +32,7 @@ describe('session reset during a poll', () => {
     });
     const api = createClient({
       getToken: () => 'tok',
-      apiBase: 'http://ebs',
+      apiBase: '/ext-lab/api', // an allowed base (shared/runtime-guard.js)
       demoMode: false,
       fetchImpl,
     });
