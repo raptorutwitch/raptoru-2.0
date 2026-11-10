@@ -428,15 +428,15 @@ describe('Studio Spotify — Music Hub (the extension on the same queue)', () =>
     expect(queueRows(s, ui())[0]!.html).not.toContain('data-keep');
   });
 
-  it('the panel: extension switch, price, duplicates, player controls; Production says the extension is not open yet', () => {
+  it('the panel: extension switch, price, duplicates, player controls; Production says who sees the module (MUSIC_HUB_EXTENSION)', () => {
     const html = spotifyPanel(state({ settings: MH }), ui());
     for (const f of ['extension_enabled', 'no_duplicates', 'player_controls'])
       expect(html).toContain(`data-sp-flag="${f}"`);
     expect(html).toContain('data-act="sp-ext-price"');
-    expect(html).toContain('n’ont d’effet que dans le Lab');
+    expect(html).toContain('comptes autorisés par le Core');
     expect(
       spotifyPanel(state({ settings: MH, environment: 'lab' }), ui()),
-    ).not.toContain('n’ont d’effet que dans le Lab');
+    ).not.toContain('comptes autorisés par le Core');
   });
 
   it('player controls: pause while it plays, resume when paused, the volume read from Spotify', () => {
