@@ -183,7 +183,13 @@ export function mountSpotifyPage(root: HTMLElement) {
     patch(z('rules'), musicRulesView(s, ui.now));
     patch(z('time'), timeView(s, ui));
     patch(z('counts'), countsView(s));
-    if (!z('simbar').contains(document.activeElement))
+    // Le simulateur n'est pas réécrit sous un champ en cours de saisie (un bouton qui garde le focus ne bloque rien).
+    const inSim = document.activeElement;
+    if (!(
+      inSim &&
+      z('simbar').contains(inSim) &&
+      inSim.matches('input,select,textarea')
+    ))
       patch(z('simbar'), simBar(s, ui));
     patch(
       z('qhead'),
