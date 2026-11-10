@@ -227,6 +227,14 @@ export class SpotifySim {
   playing = true;
   private pausedProgress = 0;
   volume = 60;
+  /**
+   * Like Spotify's Web API right after a player command: GET /me/player still answers the state from BEFORE the command
+   * this many times (0: always fresh, the default).
+   */
+  staleReads = 0;
+  private stale: { left: number; body: unknown } | null = null;
+  /** The next player command (next / pause / play / seek / volume) is applied but answers this (Spotify's 502). */
+  playerAnswer: 204 | 502 = 204;
 
   private progress() {
     return this.playing ? this.now() - this.startedAt : this.pausedProgress;
@@ -431,16 +439,46 @@ export class SpotifySim {
       });
     if (method === 'GET' && path === 'me/player/devices')
       return json(200, { devices: [device] });
+    const reading = () => ({
+      device,
+      is_playing: this.playing,
+      progress_ms: this.progress(),
+      currently_playing_type: 'track',
+      item: this.current,
+    });
     if (method === 'GET' && path === 'me/player') {
+      if (this.stale && this.stale.left > 0) {
+        this.stale.left--;
+        return json(200, this.stale.body);
+      }
       if (!this.deviceActive || !this.current)
         return new Response(null, { status: 204 });
-      return json(200, {
-        device,
-        is_playing: this.playing,
-        progress_ms: this.progress(),
-        currently_playing_type: 'track',
-        item: this.current,
-      });
+      return json(200, reading());
+    }
+    // A player command: the state before it stays visible for `staleReads` readings; `playerAnswer` once.
+    if (
+      this.deviceActive &&
+      ((method === 'POST' && path === 'me/player/next') ||
+        (method === 'PUT' &&
+          [
+            'me/player/pause',
+            'me/player/play',
+            'me/player/seek',
+            'me/player/volume',
+          ].includes(path)))
+    ) {
+      this.stale =
+        this.staleReads > 0 && this.current
+          ? { left: this.staleReads, body: reading() }
+          : null;
+      const answer = this.playerAnswer;
+      this.playerAnswer = 204;
+      if (answer === 502) {
+        // Applied once (the same command, not a second one: the call is recorded once).
+        await this.fetch(input, init);
+        this.calls.pop();
+        return json(502, { error: { status: 502, message: 'Bad gateway' } });
+      }
     }
     if (method === 'GET' && path === 'me/player/queue')
       return json(200, {

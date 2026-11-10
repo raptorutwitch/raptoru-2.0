@@ -72,6 +72,13 @@ const EARLY_ANSWER_MS = 1_500;
 const QUEUE_READBACK_MS = [250, 500, 750, 1_000];
 /** Same track again from its start (Core's rule): a new occurrence. */
 const RESTART_PROGRESS_MS = 5_000;
+/**
+ * Proof of a player command (pause, resume, volume, seek, an uncertain skip): Spotify's `/me/player` may still answer the
+ * state from before the command for a moment. Read again at these delays (cumulative ≈ 4 s) until the reading proves
+ * it — the command itself is NEVER sent twice. Not proven after the last one: `unknown`, never an assumed success.
+ */
+const CONFIRM_READS_MS = [0, 300, 700, 1_200, 1_800];
+/** After a skip, the next playback poll this much later. */
 const SKIP_READBACK_MS = 250;
 /** After a skip, one reading this much later (even with nothing left to watch): the panel never keeps the old track. */
 const AFTER_SKIP_READ_MS = 1_000;
@@ -1094,12 +1101,13 @@ export class SpotifyRuntime {
       result = 'SKIPPED';
     } catch (e) {
       if (e instanceof SpotifyApiError && e.maybeSent) {
-        await this.sleep(SKIP_READBACK_MS);
-        const after = await this.d.api.playback(true).catch(() => null);
-        result =
-          after && !sameTrack(after.data?.item, p.track.uri)
-            ? 'SKIPPED'
-            : 'UNKNOWN';
+        // Maybe sent: read until the track changed — never a second « next ».
+        const track = p.track;
+        const after = await this.readUntil(
+          (x) => !!x.data?.item && !sameTrack(x.data.item, track.uri),
+          true,
+        ).catch(() => null);
+        result = after?.proven ? 'SKIPPED' : 'UNKNOWN';
       } else if (
         e instanceof SpotifyApiError &&
         (e.code === 'RATE_LIMITED' || e.code === 'TEMPORARY_ERROR')
@@ -1358,9 +1366,15 @@ export class SpotifyRuntime {
         return { outcome: 'skipped', skipped_track: before };
       } catch (e) {
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
-        await this.sleep(SKIP_READBACK_MS);
-        const after = await this.d.api.playback(true).catch(() => null);
-        return after && before && !sameTrack(after.data?.item, before.uri)
+        // Maybe sent (a timeout, Spotify's 502): read until the track changed — never a second « next ».
+        const was = before;
+        const after = was
+          ? await this.readUntil(
+              (r) => !!r.data?.item && !sameTrack(r.data.item, was.uri),
+              true,
+            ).catch(() => null)
+          : null;
+        return after?.proven
           ? { outcome: 'skipped', skipped_track: before }
           : { outcome: 'unknown', skipped_track: before };
       }
@@ -1436,12 +1450,39 @@ export class SpotifyRuntime {
         if (!(e instanceof SpotifyApiError && e.maybeSent)) throw e;
       }
       this.nextPollAt = 0;
-      const after = await this.d.api.playback(true);
-      const playback = toPlayback(after.data, after.at);
-      return { outcome: proven(playback) ? 'done' : 'unknown', playback };
+      const playback = await this.readUntil((r) =>
+        proven(toPlayback(r.data, r.at)),
+      );
+      return {
+        outcome: playback.proven ? 'done' : 'unknown',
+        playback: playback.last
+          ? toPlayback(playback.last.data, playback.last.at)
+          : null,
+      };
     } catch (e) {
       return { outcome: 'failed', reason: reasonOf(e) };
     }
+  }
+
+  /** Fresh readings at CONFIRM_READS_MS until `ok` (the command is never re-sent); the last reading either way. */
+  private async readUntil(
+    ok: (r: Awaited<ReturnType<SpotifyApi['playback']>>) => boolean,
+    skipFirst = false,
+  ) {
+    let last = null as Awaited<ReturnType<SpotifyApi['playback']>> | null;
+    for (const [i, wait] of CONFIRM_READS_MS.entries()) {
+      if (skipFirst && i === 0) continue;
+      if (wait) await this.sleep(wait);
+      try {
+        last = await this.d.api.playback(true);
+      } catch (e) {
+        // Refused before reaching Spotify (the short pause after a 5xx, a 429): no reading yet — the next delay.
+        if (e instanceof SpotifyApiError && !e.maybeSent) continue;
+        throw e;
+      }
+      if (ok(last)) return { proven: true, last };
+    }
+    return { proven: false, last };
   }
 
   /** `!song`: at most one reading (the cache shares a fresh one). */
