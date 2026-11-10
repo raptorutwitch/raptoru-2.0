@@ -3,10 +3,7 @@
 **Mis à jour le 08/11/2026** (consolidation générale). À lire **en premier**, puis vérifier soi-même l'état (§ 4).
 
 - La période précédente (04 → 07/11) est archivée dans [archive/REPRISE_2026-11-04_2026-11-07.md](archive/REPRISE_2026-11-04_2026-11-07.md).
-- **10/11/2026 — livraison officielle préparée, non déployée** : PR #59 (`release/2026-11-10`, worktree
-  `Raptoru 2.0 - Worktrees/release-2026-11-10`). Elle regroupe l'audit, Music Hub (fermé en Production) et le socle
-  Extension Next. CI verte, **fusion à faire par Antoni**, puis Core, bot, Studio 0.1.28 et extension :
-  [RELEASE_2026-11-10.md](RELEASE_2026-11-10.md) § 4.
+- **10/11/2026 — livraison officielle** : PR #59 fusionnée (`900637f`), Core et bot déployés, Music Hub ouvert aux testeurs (`MUSIC_HUB_EXTENSION`), ZIP Hosted Test prêt, non téléversé. État et suite : [RELEASE_2026-11-10.md](RELEASE_2026-11-10.md).
 - **09/11/2026 (nuit) — audit de fiabilité avant live** : branche `audit/fiabilite-2026-11-09`, intégrée dans
   `release/2026-11-10` le 10/11. 15 corrections avec tests (3 P1, 10 P2, 2 P3). Rapport, corrections proposées non appliquées et checklist GO / NO-GO Music Hub : [AUDIT_FIABILITE_2026-11-09.md](AUDIT_FIABILITE_2026-11-09.md).
 - Les règles complètes sont dans [`../CLAUDE.md`](../CLAUDE.md) : elles priment sur tout outil ou plugin.
