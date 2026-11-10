@@ -292,6 +292,20 @@ export class MuteController {
     });
   }
 
+  /**
+   * Audit 09/11 (P2): Studio is closing — the running mute's scene (zoom, band, drive) and its mic holds are restored now,
+   * as a watchdog end would (they used to stay in OBS until Studio started again). OBS absent: kept on disk, restored
+   * at the next start.
+   */
+  restoreNow() {
+    return this.serial(async () => {
+      if (!this.active) return null;
+      this.active.ending ??= 'watchdog';
+      await this.save();
+      return this.restore();
+    });
+  }
+
   /** Watchdog (per owner: one Core never ended leaves; the last one restores) and pending restores (OBS was absent). */
   tick() {
     return this.serial(async () => {

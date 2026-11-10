@@ -171,6 +171,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Full history: packaging counts the extension commits since apps/twitch-extension/PUBLISHED.
+          fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
@@ -178,13 +180,16 @@ jobs:
       - run: npm ci
       - name: Tests de l'extension
         run: npm test -w @raptoru/twitch-extension
-      - name: Archive de production (vérifiée, jamais publiée ici)
-        run: npm run build:production -w @raptoru/twitch-extension
-      - name: Archive en artefact (à téléverser à la main sur Twitch, après accord)
+      - name: Archive Hosted Test staging (vérifiée, jamais publiée ici)
+        run: npm run package:staging -w @raptoru/twitch-extension
+      - name: Contrôle de l'emballage de production (aucune archive écrite ; écart et inventaire affichés)
+        working-directory: apps/twitch-extension
+        run: node scripts/package.mjs --target production --check
+      - name: Archive staging en artefact (Hosted Test uniquement, téléversée à la main après accord)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: extension-production-${{ github.sha }}
-          path: apps/twitch-extension/release/raptoru-live-PRODUCTION-*
+          name: extension-staging-${{ github.sha }}
+          path: apps/twitch-extension/release/raptoru-live-STAGING-*
           if-no-files-found: error
           retention-days: 30
 

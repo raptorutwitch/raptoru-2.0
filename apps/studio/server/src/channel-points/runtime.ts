@@ -56,6 +56,12 @@ export interface ChannelPointsRuntimeDeps {
   votekickOverlayDir?: string;
   /** Spotify V2: its storage; absent: no Spotify in this Studio. */
   spotifyDir?: string;
+  /** Lab only: Spotify V2 on the broadcaster's real account (LAB_SPOTIFY=real), read-only until allowed. */
+  spotifyLabReal?: boolean;
+  /** Music Hub: the SMTC probe Studio builds and runs (Windows' media session); absent: none. */
+  spotifySmtc?: { exe: string; script: string; out: string } | null;
+  /** Music Hub: the OBS music overlay's page folder (apps/studio/server/music-overlay); absent: none. */
+  musicOverlayDir?: string | null;
 }
 
 export class ChannelPointsRuntime {
@@ -151,6 +157,12 @@ export class ChannelPointsRuntime {
             dir: d.spotifyDir,
             origin: d.origin,
             log: (line) => console.log(line),
+            // Music Hub V2: the music card of the overlay goes through the effects player (never its own source).
+            effects: d.effects ?? null,
+            labReal: d.spotifyLabReal === true,
+            smtc: d.spotifySmtc ?? null,
+            overlayDir: d.musicOverlayDir ?? null,
+            obs: d.obs,
           })
         : null,
     );
@@ -189,7 +201,9 @@ export class ChannelPointsRuntime {
   }
 
   /** Refonte F5: before Studio exits — OBS changes of the running effects and mutes restored now. */
-  restoreBeforeExit() {
+  async restoreBeforeExit() {
+    // Audit 09/11 (P2): the MUTED scene too (zoom, band, drive), before the mic holds and the reverts.
+    await this.muteFx.restoreNow().catch(() => null);
     return this.obs.restoreNow();
   }
 
@@ -275,10 +289,24 @@ export class ChannelPointsRuntime {
         });
       }
     }
-    await ack('completed', { results });
-    // The ends, after the job's report (Core needs the « playing » first); never awaited by the loop.
-    for (const { index, end } of ends)
-      void end.then((r) => this.reportEffect(job.job_id, index, r));
+    try {
+      // Audit 09/11 (P2): the actions ran — their report is retried like an effect's end (a single lost POST used to
+      // leave the job « running » until its lease, holding every next redemption, then « execution_unknown »).
+      for (let n = 0; ; n++) {
+        try {
+          await ack('completed', { results });
+          break;
+        } catch (e) {
+          // Answered by Core (already settled, lease over…) or still failing after 5 tries: Core's lease decides.
+          if ((e as { status?: number }).status || n >= 4) throw e;
+          await new Promise((ok) => setTimeout(ok, 500 * (n + 1)));
+        }
+      }
+    } finally {
+      // The ends, after the job's report (Core needs the « playing » first); never awaited by the loop.
+      for (const { index, end } of ends)
+        void end.then((r) => this.reportEffect(job.job_id, index, r));
+    }
     return true;
   }
 
@@ -388,6 +416,18 @@ export class ChannelPointsRuntime {
             req.method ?? 'GET',
             url.pathname.slice('/api/spotify'.length),
             () => this.body(req),
+            // Music Hub V2: an alert sound imported for the overlay (same checks as the Votekick sounds).
+            async () => {
+              let name = 'son';
+              try {
+                name = decodeURIComponent(
+                  String(req.headers['x-sound-name'] ?? 'son'),
+                );
+              } catch {
+                /* keep the default */
+              }
+              return { body: await this.raw(req, SOUND_MAX_BYTES), name };
+            },
           ),
         );
       else if (rb)

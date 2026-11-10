@@ -1,7 +1,9 @@
 import { eventTitlesView } from '@raptoru/schemas';
+import { type MusicAudience, musicOpenTo } from './music-audience.js';
 import { moduleFacade } from '@raptoru/schemas';
 import { commandsPublic, commandsTeam } from './commands-ext.js';
 import { subWheelExt } from './sub-wheel-ext.js';
+import { musicExt } from './music-ext.js';
 import {
   BONK_LAB_RULES,
   bonkVolleyRules,
@@ -82,6 +84,8 @@ export interface ExtConfig {
   wallet?: boolean;
   /** CORE_ENVIRONMENT=lab: what Production keeps hidden today is shown in the Lab (Commandes, Roue du Sub). */
   lab?: boolean;
+  /** Music Hub in Production (MUSIC_HUB_EXTENSION): who gets the music module. Absent: closed (the Lab: open). */
+  music?: MusicAudience;
 }
 
 /** Module descriptions when the payment is real (the canonical Wallet): what pays, never a price. */
@@ -249,6 +253,19 @@ export class ExtFacade {
         body,
         who.viewer ? this.actor(who) : null,
       );
+    // Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests' extension entry — the Lab, or Production for the
+    // audience of MUSIC_HUB_EXTENSION (Antoni's GO of 10/11, Hosted Test). Closed by default.
+    if (path.startsWith('/music/') && this.musicOpen(who))
+      return musicExt(
+        this.core,
+        this.C,
+        method,
+        rawPath,
+        body as Record<string, unknown> | undefined,
+        who.viewer ? this.actor(who) : null,
+        who.team,
+        idempotencyKey,
+      );
     // Halloween shop (docs/HALLOWEEN.md): its state, a purchase, a conversion — the JWT's viewer, never a body field.
     if (method === 'GET' && path === '/events/state')
       return ok((await this.eventShop(who)) ?? { enabled: false });
@@ -414,6 +431,18 @@ export class ExtFacade {
 
   // --- session -----------------------------------------------------------------------------------
 
+  /** Music Hub for this caller: the Lab always; Production per MUSIC_HUB_EXTENSION (closed by default). */
+  private musicOpen(who: Who): boolean {
+    return musicOpenTo(
+      this.config.music ?? { mode: 'off' },
+      !!this.config.lab,
+      {
+        role: who.caller.role,
+        userId: who.viewer?.id ?? who.caller.userId,
+      },
+    );
+  }
+
   private async session(who: Who): Promise<Json> {
     const C = this.C;
     const v = who.viewer;
@@ -425,6 +454,7 @@ export class ExtFacade {
       ttsViewer,
       raffle,
       eventShop,
+      music,
       bonkRecent,
     ] = await Promise.all([
       this.core<Json>(`/v1/lab/moderation/${C}/overview`).catch(() => null),
@@ -446,6 +476,10 @@ export class ExtFacade {
         `/v1/lab/raffle/${C}/state${v ? `?viewer=${v.id}` : ''}`,
       ).catch(() => null),
       this.eventShop(who),
+      // Music Hub (Lab only): the Hub card's summary — never fails the session.
+      this.musicOpen(who)
+        ? this.core<Json>(`/v1/lab/spotify-ext/${C}/summary`).catch(() => null)
+        : null,
       v
         ? this.core<{ interactions: Json[] }>(
             `/v1/lab/bonk/channels/${C}/interactions?limit=10&viewer_id=${v.id}`,
@@ -626,6 +660,7 @@ export class ExtFacade {
       raffle: this.raffleSession(raffle, v),
       // Halloween: shown by the extension as its « Halloween » module only while the event is open.
       event_shop: eventShop,
+      music,
     };
   }
 
@@ -647,6 +682,7 @@ export class ExtFacade {
         // The extension only re-reads /state after its first load: live catalog and prices follow.
         'modules',
         'event_shop',
+        'music',
       ].map((k) => [k, s[k]]),
     );
   }
@@ -711,7 +747,8 @@ export class ExtFacade {
     return ok({
       tts_v2: tts?.tts_v2 ?? null,
       wallet: s.wallet,
-      pending_actions: [],
+      // Audit 09/11 (P1): the TTS view counts its credits here (polled every 2 s) — an empty list read as 0 credits.
+      pending_actions: s.pending_actions,
     });
   }
 

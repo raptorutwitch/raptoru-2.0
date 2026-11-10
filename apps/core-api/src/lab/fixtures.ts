@@ -7,6 +7,25 @@ import { LAB_CHANNEL, LAB_TWITCH_USERS } from './environment.js';
 
 export const LAB_VIEWER_TOKENS = 12_000;
 
+/** The Lab's supermod (« Supermod Lab », 900103): idempotent, kept when the streamer changed it in Studio. */
+export async function seedLabTeam(q: Queryable): Promise<void> {
+  const u = LAB_TWITCH_USERS.find((x) => x.id === '900103')!;
+  await q.query(
+    `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3) on conflict do nothing`,
+    [u.id, u.login, u.display_name],
+  );
+  await q.query(
+    `insert into lab_viewers (channel_id, viewer_id, display_name, first_seen, last_seen)
+     values ($1, $2, $3, now(), now()) on conflict do nothing`,
+    [LAB_CHANNEL.id, u.id, u.display_name],
+  );
+  await q.query(
+    `insert into lab_staff (channel_id, viewer_id, role, granted_by, created_at, login, display_name)
+     values ($1, $2, 'supermod', 'lab', now(), $3, $4) on conflict (channel_id, viewer_id) do nothing`,
+    [LAB_CHANNEL.id, u.id, u.login, u.display_name],
+  );
+}
+
 export async function seedLabFixtures(
   q: Queryable,
   o: { viewerTokens?: number } = {},
@@ -23,6 +42,7 @@ export async function seedLabFixtures(
       [LAB_CHANNEL.id, u.id, u.display_name],
     );
   }
+  await seedLabTeam(q);
   await q.query(
     `insert into lab_wallets (channel_id, viewer_id, tokens, credits_tts, credits_soundboard, updated_at)
      values ($1, '900101', $2, 0, 0, now())

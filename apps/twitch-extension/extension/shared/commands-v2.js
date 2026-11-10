@@ -44,6 +44,7 @@ import {
   WINDOWS,
   word,
 } from './commands-v2-model.js';
+import { boxWidth } from './box.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const clone = (x) => structuredClone(x);
@@ -87,7 +88,7 @@ export function createCommandsV2View({ document, client, onBack }) {
   };
   let started = false;
   let loadedAt = 0;
-  const mode = () => ((node.clientWidth || win.innerWidth) >= 520 ? 'video' : 'mobile');
+  const mode = () => (boxWidth(node, win) >= 520 ? 'video' : 'mobile');
   const cats = () => ui.list?.categories ?? [];
   const cur = () => ui.list?.commands.find((c) => c.command_id === ui.id) ?? null;
   const D = () => (ui.view === 'new' ? ui.nw : ui.view === 'page' ? ui.draft : null);

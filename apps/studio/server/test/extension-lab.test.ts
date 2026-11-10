@@ -2,7 +2,7 @@ import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { LabEbs, type LabRole } from '../src/extension-lab/lab-ebs.js';
-import { extensionFile } from '../src/extension-lab/serve.js';
+import { EXTENSION_CSP, extensionFile } from '../src/extension-lab/serve.js';
 import { TWITCH_EXT_MOCK_PATH } from '../src/extension-lab/twitch-mock.js';
 import { createStudioServer, EXTENSION_DIR } from '../src/index.js';
 
@@ -383,5 +383,16 @@ describe('Extension Lab: HTTP routes', () => {
     );
     expect(labPage.status).toBe(200);
     await new Promise((r) => labServer.close(r));
+  });
+});
+
+describe('the Lab extension CSP (as on Twitch: allowlisted image domains)', () => {
+  it("allows Spotify's cover CDN for images only, never a wildcard nor a network call", () => {
+    const img = EXTENSION_CSP.split('; ').find((d) => d.startsWith('img-src'))!;
+    // Music Hub: the real catalogue's covers (https://i.scdn.co) — blocked before 09/11 (broken covers in the Lab).
+    expect(img.split(' ')).toContain('https://i.scdn.co');
+    expect(img).not.toMatch(/(^| )(https:|\*)( |$)/);
+    expect(EXTENSION_CSP).toContain("connect-src 'self'");
+    expect(EXTENSION_CSP).not.toMatch(/connect-src[^;]*scdn/);
   });
 });

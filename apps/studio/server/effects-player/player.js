@@ -15,7 +15,9 @@
 //   variants), the phrase with both names shown at show_at / hidden at hide_at (slide 0.3 s); ends at the video's end or
 //   duration + 800 ms (the legacy watchdog), whichever first;
 // - flop (Random Ban V2): the trumpet and « X a flop cheh ! » (the legacy OBS text source: fade in, 2 s, fade out);
-// - wheel (Roue du Sub): the legacy wheel (wheel.js), showing the spin Core recorded; done once it slid out.
+// - wheel (Roue du Sub): the legacy wheel (wheel.js), showing the spin Core recorded; done once it slid out;
+// - music (Music Hub V2): a brief card (« Nouvelle demande » / « À l'écoute », title, artist, requester) in a corner,
+//   slid in and out, with an optional short alert sound — never the music itself; done when the card left.
 //
 // In OBS the page may play sound without a click. In a normal browser it shows « Activer le son » and takes no effect
 // until sound is allowed (Studio then reports the player as muted instead of handing effects to a silent page).
@@ -413,6 +415,76 @@ function wheelElement(effect) {
   return { el, doneEvent: 'effect-done', release() {} };
 }
 
+/** Music Hub V2: the music card (a stand-in element for the play cycle); its optional alert sound plays alongside. */
+function musicElement(effect) {
+  const m = effect.music;
+  const el = document.createElement('div');
+  const visible = Math.min(
+    15000,
+    Math.max(3000, Number(m.duration_ms) || 6000),
+  );
+  el.duration = visible / 1000 + 3;
+  el.pause = () => {};
+  el.load = () => {};
+  const card = document.createElement('div');
+  card.className = `mh-card mh-card--${['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(m.position) ? m.position : 'top-right'}`;
+  const kicker = document.createElement('span');
+  kicker.className = 'mh-card__kicker';
+  kicker.textContent = m.event === 'start' ? 'À l’écoute' : 'Nouvelle demande';
+  const title = document.createElement('strong');
+  title.className = 'mh-card__title';
+  title.textContent = String(m.title ?? '');
+  const artist = document.createElement('span');
+  artist.className = 'mh-card__artist';
+  artist.textContent = (Array.isArray(m.artists) ? m.artists : []).join(', ');
+  const body = document.createElement('div');
+  body.className = 'mh-card__body';
+  body.append(kicker, title, artist);
+  if (m.requested_by) {
+    const by = document.createElement('span');
+    by.className = 'mh-card__by';
+    by.textContent = `demandé par ${m.requested_by}`;
+    body.append(by);
+  }
+  const note = document.createElement('span');
+  note.className = 'mh-card__note';
+  note.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17.5V6.5l10-2v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.6" fill="currentColor"/><circle cx="16.6" cy="15.6" r="2.6" fill="currentColor"/></svg>';
+  card.append(note, body);
+  const sound = effect.url ? new Audio(effect.url) : null;
+  if (sound) sound.volume = clamp(effect.volume);
+  const timers = [];
+  el.play = () => {
+    stage.append(card);
+    requestAnimationFrame(() => {
+      card.classList.add('on');
+      el.dispatchEvent(new Event('playing'));
+    });
+    if (sound) sound.play().catch(() => {});
+    timers.push(
+      setTimeout(() => card.classList.remove('on'), visible),
+      setTimeout(
+        () => el.dispatchEvent(new Event('effect-done')),
+        visible + 600,
+      ),
+    );
+    return Promise.resolve();
+  };
+  return {
+    el,
+    doneEvent: 'effect-done',
+    release() {
+      timers.forEach(clearTimeout);
+      card.remove();
+      if (sound) {
+        sound.pause();
+        sound.removeAttribute('src');
+        sound.load();
+      }
+    },
+  };
+}
+
 function audioElement(effect) {
   const el = new Audio(effect.url);
   el.volume = clamp(effect.volume);
@@ -440,9 +512,19 @@ async function play(effect) {
     effect.kind === 'wheel' &&
     Array.isArray(effect.wheel?.spin?.layout) &&
     MEDIA_URL.test(effect.wheel?.sounds?.fin ?? '');
+  const music =
+    effect.kind === 'music' &&
+    typeof effect.music?.title === 'string' &&
+    (effect.url === '' || MEDIA_URL.test(effect.url));
   if (
-    (effect.kind !== 'sound' && !video && !wbrb && !ban && !flop && !wheel) ||
-    !MEDIA_URL.test(effect.url)
+    (effect.kind !== 'sound' &&
+      !video &&
+      !wbrb &&
+      !ban &&
+      !flop &&
+      !wheel &&
+      !music) ||
+    (!music && !MEDIA_URL.test(effect.url))
   ) {
     await report(effect, 'failed', 'invalid_effect');
     return;
@@ -455,9 +537,11 @@ async function play(effect) {
         ? flopElement(effect)
         : wheel
           ? wheelElement(effect)
-          : video
-            ? videoElement(effect)
-            : audioElement(effect);
+          : music
+            ? musicElement(effect)
+            : video
+              ? videoElement(effect)
+              : audioElement(effect);
   const el = media.el;
   let started = false;
   let endGuard = null;

@@ -607,3 +607,28 @@ describe('Refonte H12: Bonk price and delay from the module settings', () => {
     ).toBe('ok');
   });
 });
+
+describe('a free item on the canonical Wallet (audit 09/11)', () => {
+  it('a price of 0 debits nothing and refuses nothing; its refund gives back nothing', async () => {
+    const f = await canonical();
+    await f.fund(100);
+    const id = '00000000-0000-4000-8000-00000000f001';
+    await f.core.db.tx((q) =>
+      f.port.debit(q, f.core.clock.now(), {
+        channelId: CH,
+        viewer: V,
+        currency: 'tokens',
+        amount: 0,
+        module: 'soundboard',
+        interactionId: id,
+      }),
+    );
+    expect(await f.balance()).toBe(100);
+    const back = await f.core.db.tx((q) =>
+      f.port.refund(q, f.core.clock.now(), id, 'test', 'test'),
+    );
+    expect(back.amount).toBe(0);
+    expect(await f.balance()).toBe(100);
+    await consistent(f.core.db);
+  });
+});

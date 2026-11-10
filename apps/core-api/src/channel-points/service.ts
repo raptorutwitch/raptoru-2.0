@@ -959,7 +959,13 @@ export class ChannelPointsService {
     id: string,
     results: ResultUpdate[],
     q: Queryable = this.db,
-  ) {
+  ): Promise<void> {
+    // Audit 09/11 (P3): outside a transaction the row lock below ended at once (autocommit) and the merged results were
+    // written from a stale read — a result committed meanwhile (Studio's ack, an effect's end) could be put back.
+    if (q === this.db)
+      return this.db.tx((t) =>
+        this.setResults(channelId, source, id, results, t),
+      );
     const row = (
       await q.query<RedemptionRow>(
         'select * from cp_redemptions where channel_id = $1 and source = $2 and redemption_id = $3 for update',

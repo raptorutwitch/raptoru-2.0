@@ -10,6 +10,7 @@ import { moneyHtml } from './currency.js';
 import { freshRestrictionFilters, restrictionRows, restrictionsView } from './moderation-restrictions.js';
 // The module host's modules (architecture socle): the same generic panels as under each module, one implementation.
 import { createHostModerationSection } from './module-moderation.js';
+import { boxWidth } from './box.js';
 
 const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -242,7 +243,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
 
   // ------------------------------------------------------------------ navigation (prototype D4)
   const mode = () => {
-    const w = node.clientWidth || win.innerWidth;
+    const w = boxWidth(node, win);
     return w >= 900 ? 'window' : w >= 560 ? 'video' : 'compact';
   };
   const freshFilters = () => ({ module: 'all', status: 'all', period: 'all', viewer: '' });

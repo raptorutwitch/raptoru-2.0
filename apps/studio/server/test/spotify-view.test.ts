@@ -5,12 +5,15 @@ import {
   countsView,
   etas,
   historyRows,
+  livePosition,
   nowView,
+  playedRows,
   openingView,
   queueRows,
   stateView,
   timeView,
   verifyNote,
+  type SpLive,
   type SpRequest,
   type SpState,
   type SpUi,
@@ -396,5 +399,345 @@ describe('Studio Spotify — the panel', () => {
     expect(simBar(lab, ui())).toContain('data-act="sp-simulate"');
     expect(simBar(lab, ui())).toContain('data-act="sp-chat"');
     expect(spotifyPanel(lab, ui())).not.toContain('data-act="sp-connect"');
+  });
+});
+
+describe('Studio Spotify — Music Hub (the extension on the same queue)', () => {
+  const MH = {
+    enabled: true,
+    max_pending_per_viewer: 2,
+    viewer_cooldown_seconds: 600,
+    max_duration_seconds: 600,
+    cancel_grace_seconds: 10,
+    extension_enabled: true,
+    extension_price_tokens: 500,
+    no_duplicates: true,
+    player_controls: true,
+  };
+  const tokens = req({
+    request_id: '00000000-0000-4000-8000-000000000009',
+    source: 'extension',
+    payment: 'tokens',
+    price_tokens: 500,
+  });
+
+  it('a Core without Music Hub: no extension group, no player controls, the reward rows unchanged', () => {
+    const s = state();
+    expect(spotifyPanel(s, ui())).not.toContain('data-sp-flag');
+    expect(nowView(s, ui())).not.toContain('data-act="sp-play"');
+    expect(queueRows(s, ui())[0]!.html).not.toContain('data-keep');
+  });
+
+  it('the panel: extension switch, price, duplicates, player controls; Production says the extension is not open yet', () => {
+    const html = spotifyPanel(state({ settings: MH }), ui());
+    for (const f of ['extension_enabled', 'no_duplicates', 'player_controls'])
+      expect(html).toContain(`data-sp-flag="${f}"`);
+    expect(html).toContain('data-act="sp-ext-price"');
+    expect(html).toContain('n’ont d’effet que dans le Lab');
+    expect(
+      spotifyPanel(state({ settings: MH, environment: 'lab' }), ui()),
+    ).not.toContain('n’ont d’effet que dans le Lab');
+  });
+
+  it('player controls: pause while it plays, resume when paused, the volume read from Spotify', () => {
+    const s = state({ settings: MH });
+    s.studio!.playback!.volume_percent = 70;
+    expect(nowView(s, ui())).toContain('data-play="pause"');
+    expect(nowView(s, ui())).toMatch(/data-vol value="70"/);
+    s.studio!.playback!.is_playing = false;
+    expect(nowView(s, ui())).toContain('data-play="resume"');
+  });
+
+  it('the queue: what each request cost; « sans rembourser » only for Jetons, never for the reward’s points', () => {
+    const s = state({ settings: MH, queue: [req(), tokens], to_verify: [] });
+    const [points, ext] = queueRows(s, ui());
+    expect(points!.html).toContain('>points<');
+    expect(points!.html).not.toContain('data-keep');
+    expect(ext!.html).toContain('◆ 500 Jetons');
+    expect(ext!.html).toContain('data-keep="1"');
+  });
+
+  it('the history: the extension tag and what happened to the Jetons', () => {
+    const s = state({
+      recent: [
+        {
+          ...tokens,
+          state: 'REMOVED_BY_MOD',
+          removed_by: 'studio',
+          refund_status: 'kept',
+        },
+        {
+          ...tokens,
+          request_id: '00000000-0000-4000-8000-000000000010',
+          state: 'CANCELED',
+          canceled_by: '1',
+          refund_status: 'refunded',
+        },
+      ],
+    });
+    const html = historyRows(s)
+      .map((r) => r.html)
+      .join('');
+    expect(html).toContain('>Extension<');
+    expect(html).toContain('Jetons gardés');
+    expect(html).toContain('Jetons remboursés');
+  });
+});
+
+describe('Spotify page — the OBS music card settings (Music Hub V2)', () => {
+  it('« Overlay OBS »: on/off, per event, alert sound (or silent), volume, duration, position, preview; absent without the effects player', async () => {
+    const { spotifyPanel } =
+      await import('../../web/src/pages/spotify-panel.ts');
+    const base = { fields: {}, who: [], now: Date.now() };
+    const s = state();
+    expect(spotifyPanel(s, base)).not.toContain('Carte « nouvelle demande »');
+    const html = spotifyPanel(s, {
+      ...base,
+      overlay: {
+        config: {
+          enabled: true,
+          on_request: true,
+          on_start: false,
+          sound: 'tiens-bon',
+          sound_name: null,
+          volume: 40,
+          duration_s: 6,
+          position: 'bottom-left',
+        },
+        available: false,
+        sounds: [{ id: 'tiens-bon', label: 'Tiens bon !', available: true }],
+      },
+    });
+    expect(html).toContain('Carte « nouvelle demande » (OBS)');
+    for (const k of [
+      'enabled',
+      'on_request',
+      'on_start',
+      'sound',
+      'volume',
+      'duration_s',
+      'position',
+    ])
+      expect(html).toContain(`data-ov="${k}"`);
+    expect(html).toMatch(/<option value="tiens-bon" selected>/);
+    expect(html).toMatch(/<option value="bottom-left" selected>/);
+    expect(html).toContain('Aucun son (carte silencieuse)');
+    expect(html).toContain('data-act="sp-ov-preview" disabled');
+    expect(html).toContain('Lecteur d’effets indisponible');
+    expect(html).toContain('ne diffuse jamais la musique');
+  });
+});
+
+// Music Hub (docs/music/SMTC_STUDIO.md): « en cours » from Windows (SMTC) and the stream's music history.
+describe('the live track from Windows and the stream history (Studio page)', () => {
+  const smtc = (over: Partial<SpLive> = {}): SpLive => ({
+    source: 'smtc',
+    state: 'playing',
+    gen: 3,
+    seq: 9,
+    track: {
+      title: 'Tainted <Love>',
+      artists: ['Soft Cell'],
+      album: 'Non-Stop Erotic Cabaret',
+      duration_ms: 153_800,
+    },
+    position_ms: 42_000,
+    cover: 'abcdef0123456789',
+    reason: null,
+    link: null,
+    ...over,
+  });
+
+  it('shows what Windows says, escaped, with its local cover; the requester only on the exact track of the request', () => {
+    const s = state();
+    const mine = nowView(s, ui({ live: smtc() }));
+    expect(mine).toContain('Tainted &lt;Love&gt;');
+    expect(mine).toContain('Non-Stop Erotic Cabaret');
+    expect(mine).toContain('/api/spotify/live/cover?v=abcdef0123456789');
+    expect(mine).toContain('En cours');
+    // Core attributes a request (Numb) — but this occurrence is not linked to it: no requester.
+    expect(mine).not.toContain('demandeur');
+    // Linked to the request's exact uri: its requester shows (whatever the title says).
+    const linked = nowView(
+      s,
+      ui({
+        live: smtc({
+          link: {
+            gen: 3,
+            uri: TRACK.uri,
+            cover_url: null,
+            artists: ['Linkin Park'],
+          },
+        }),
+      }),
+    );
+    expect(linked).toContain('Demande en cours');
+    expect(linked).toContain('@demandeur');
+    expect(linked).toContain('Linkin Park');
+    // Paused, stale, Spotify closed.
+    expect(nowView(s, ui({ live: smtc({ state: 'paused' }) }))).toContain(
+      'En pause',
+    );
+    expect(nowView(s, ui({ live: smtc({ state: 'stale' }) }))).toContain(
+      'Lecture non confirmée',
+    );
+    expect(
+      nowView(
+        s,
+        ui({ live: smtc({ state: 'lost', track: null, position_ms: null }) }),
+      ),
+    ).toContain('Spotify Desktop est fermé');
+    // No live source (off): the Web API's reading as before.
+    expect(
+      nowView(s, ui({ live: smtc({ state: 'off', track: null }) })),
+    ).toContain('Numb');
+  });
+
+  it('the bar: moves while playing, frozen in pause, never past the end, nothing without a duration', () => {
+    expect(livePosition(smtc(), NOW, NOW + 3_000)).toEqual({
+      ms: 45_000,
+      total: 153_800,
+      live: true,
+    });
+    expect(livePosition(smtc({ state: 'paused' }), NOW, NOW + 60_000)!.ms).toBe(
+      42_000,
+    );
+    expect(livePosition(smtc(), NOW, NOW + 600_000)!.ms).toBe(153_800);
+    expect(
+      livePosition(
+        smtc({
+          track: { title: 'x', artists: [], album: null, duration_ms: null },
+        }),
+        NOW,
+        NOW,
+      ),
+    ).toBeNull();
+    expect(livePosition(smtc({ state: 'lost' }), NOW, NOW)).toBeNull();
+  });
+
+  it('history rows: each live apart, a request with its viewer, « Skippé » only when Core says so, escaped', () => {
+    const at = (min: number) => new Date(NOW - min * 60_000).toISOString();
+    const base = {
+      album: null,
+      image_url: null,
+      listened_ms: 120_000,
+      session_started_at: at(60),
+      requested_by: null,
+      kind: 'track' as const,
+    };
+    const html = playedRows({
+      live: true,
+      since: at(60),
+      next: null,
+      items: [
+        {
+          ...base,
+          id: 'a',
+          at: at(1),
+          title: 'Maintenant',
+          artists: ['X'],
+          end: null,
+          listened_ms: null,
+        },
+        {
+          ...base,
+          id: 'b',
+          at: at(5),
+          title: '<i>Skip</i>',
+          artists: ['Y'],
+          end: 'skipped',
+          kind: 'request',
+          requested_by: 'Fan<1>',
+          viewer_login: 'fan1',
+        },
+        {
+          ...base,
+          id: 'c',
+          at: at(9),
+          title: 'Coupé',
+          artists: ['Z'],
+          end: 'interrupted',
+        },
+        {
+          ...base,
+          id: 'd',
+          at: at(14),
+          title: 'Entier',
+          artists: ['W'],
+          end: 'natural',
+        },
+        {
+          ...base,
+          id: 'e',
+          at: at(30 * 60),
+          title: 'Hier',
+          artists: ['V'],
+          end: 'unknown',
+          session_started_at: at(31 * 60),
+        },
+      ],
+    })
+      .map((r) => r.html)
+      .join('');
+    expect(html).toContain('&lt;i&gt;Skip&lt;/i&gt;');
+    expect(html).toContain('demandée par Fan&lt;1&gt; (@fan1)');
+    expect(html.match(/Skippé/g)).toHaveLength(1);
+    expect(html.match(/>Interrompu</g)).toHaveLength(1);
+    expect(html.match(/[Ee]n cours/g)).toHaveLength(2); // the live's header + the track playing
+    expect(html.match(/Live du/g)).toHaveLength(2);
+    // A normal end, or an unknown one (Spotify closed, restart): no badge at all.
+    expect(html).not.toMatch(/Entier[\s\S]*?(Skippé|Interrompu)[\s\S]*?Hier/);
+  });
+
+  it('the simulator bar: the simulated live and the simulated Windows', () => {
+    const s = state({
+      environment: 'lab',
+      music_session: { live: false, since: null },
+      sim: {
+        device_active: true,
+        queue_answer: 204,
+        limited: false,
+        current: 'Chill Loop',
+        progress_ms: 1_000,
+        queue: [],
+        calls: 0,
+        playing: true,
+        app_closed: false,
+      },
+    });
+    const bar = simBar(s, ui());
+    expect(bar).toContain('Démarrer un live simulé');
+    expect(bar).toContain('data-what="app-close"');
+    expect(bar).toContain('data-what="replay"');
+    expect(
+      simBar(
+        {
+          ...s,
+          music_session: { live: true, since: new Date(NOW).toISOString() },
+        },
+        ui(),
+      ),
+    ).toContain('Terminer le live simulé');
+  });
+});
+
+describe('the Lab on the real account, read-only (no fake « demandé »)', () => {
+  it('skip, pause and volume are disabled with the reason; allowed again once writes are on', () => {
+    const lab = (writes: boolean) =>
+      state({
+        settings: { ...state().settings, player_controls: true },
+        connection: {
+          ...state().connection,
+          mode: 'lab_real',
+          lab_writes: writes,
+        },
+      });
+    const ro = nowView(lab(false), ui());
+    expect(ro).toMatch(/data-act="sp-skip" disabled/);
+    expect(ro).toMatch(/data-act="sp-play"[^>]*disabled/);
+    expect(ro).toContain('Lecture seule');
+    const rw = nowView(lab(true), ui());
+    expect(rw).not.toMatch(/data-act="sp-skip" disabled/);
+    expect(rw).not.toContain('Lecture seule');
   });
 });

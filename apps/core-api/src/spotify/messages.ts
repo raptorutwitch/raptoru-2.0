@@ -18,6 +18,8 @@ const SAFE: Partial<
   VIEWER_COOLDOWN: 'Cette demande est trop rapprochée de la précédente.',
   DUPLICATE_REDEEM: 'Cette demande a déjà été traitée.',
   NO_DEVICE: 'Aucun appareil Spotify actif et disponible n’a été trouvé.',
+  LAB_READ_ONLY:
+    'Test Lab en lecture seule : rien n’a été ajouté au Spotify du streamer.',
   AUTH_NOT_CONFIGURED: 'Spotify OAuth n’est pas configuré.',
   AUTH_REQUIRED: 'Spotify nécessite une nouvelle autorisation.',
   SPOTIFY_UNAVAILABLE: 'Spotify est momentanément indisponible.',
@@ -74,8 +76,12 @@ export const MSG = {
     return `${at(viewer)} → attends encore ${readable} avant une nouvelle demande${refunded ? ' ; récompense remboursée.' : '.'}`;
   },
   /** bridge.js `!song`. */
-  nowPlaying: (t: SpotifyTrack, requester: string | null) =>
-    `🎵 En cours : ${trackLabel(t)}${requester ? ` • demandé par @${requester.replace(/^@+/, '')}` : ''}`,
+  nowPlaying: (
+    t: Pick<SpotifyTrack, 'title' | 'artists'>,
+    requester: string | null,
+    paused = false,
+  ) =>
+    `🎵 ${paused ? 'En pause' : 'En cours'} : ${trackLabel(t)}${requester ? ` • demandé par @${requester.replace(/^@+/, '')}` : ''}`,
   noPlayback: '🎵 Aucune musique en cours.',
   unavailable: 'Spotify V2 est temporairement indisponible.',
   /** bridge.js `!songqueue`. */
@@ -118,6 +124,9 @@ export const MSG = {
     `🎵 ${at(viewer)}, cette demande est déjà annulée.`,
   cancelTooLate: (viewer: string) =>
     `🎵 ${at(viewer)}, trop tard pour annuler cette demande : la lecture a déjà commencée.`,
+  /** Music Hub V2: withdrawn while Studio was still adding it (skipped if Spotify takes it anyway). */
+  canceledInFlight: (viewer: string, refunded: boolean) =>
+    `🎵 ${at(viewer)}, ta demande en cours d’ajout${refunded ? ' est annulée et remboursée.' : ' est annulée.'}`,
   cancelUnsafe:
     '🎵 Cette demande ne peut pas encore être annulée de façon sûre.',
   canceled: (
@@ -171,4 +180,14 @@ export const MSG = {
   /** http.js: the « Skip la musique » reward. */
   rewardSkipped: (viewer: string) =>
     `${at(viewer)} → La musique en cours a été passée !`,
+  /** Music Hub (audit 09/11): a moderator's skip while a viewer's paid skip is on its way (nothing sent). */
+  skipBusy: (moderator: string) =>
+    `${at(moderator)} → Un skip payé par un viewer est déjà en cours : rien de plus n’a été envoyé.`,
+  /** Music Hub: a viewer's paid skip, proven by Studio's reading (never said before). */
+  viewerSkipped: (
+    viewer: string,
+    price: number,
+    t: Pick<SpotifyTrack, 'title' | 'artists'> | null,
+  ) =>
+    `⏭️ ${at(viewer)} a payé ${price.toLocaleString('fr-FR').replace(/\s/g, ' ')} Jetons pour passer${t ? ` ${trackLabel(t)}` : ' la musique'}.`,
 } as const;

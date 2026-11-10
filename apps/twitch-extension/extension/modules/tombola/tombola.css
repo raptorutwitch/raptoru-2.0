@@ -1,0 +1,1097 @@
+/* Socle v2 — généré une fois par scripts/dev/css-v2.mjs depuis extension/tombola-v2.css,
+   puis édité à la main. Échelles : --g (géométrie), var(--fs-N) (texte avec plancher), data-mq (requêtes sur la boîte
+   de composition, app/mq.js). La feuille d'origine reste inchangée pour le shell legacy. */
+/* Tombola V2 — extension viewer screen. Generated from the validated prototype
+
+   prototypes/tombola-v2/extension.html (+ shared/tokens.css): same tokens, components and layout,
+
+   scoped under .tmbx (the prototype .app); keyframes prefixed tmbx-. Data comes from Core only. */
+
+
+
+/* Host: the module body gives its whole height to the screen (it has its own header and a way back
+
+   to the Hub, like the prototype), no host header, no intro, no padding. */
+
+.jdm-module-screen--tmbv2 > .jdm-module__screen-head { display: none !important; }
+
+.jdm-module-screen--tmbv2 > .jdm-module { border-color: rgba(160, 220, 230, 0.12); background: #090c12 !important; }
+
+.jdm-module__body[data-tmb-v2] { display: flex !important; flex-direction: column; min-height: 0; gap: 0 !important; padding: 0 !important; overflow: hidden !important; }
+
+.jdm-module__body[data-tmb-v2] > .tmbx { flex: 1 1 auto; min-height: 0; }
+
+body.mobile:has(.tmbx) .m-body { height: 100vh; max-height: 100vh; overflow: hidden; }
+
+.jdm-module-screen:has(.tmbx), .jdm-module-screen:has(.tmbx) > .jdm-module, .jdm-module-screen:has(.tmbx) > .jdm-module > .jdm-module__body { min-height: 0; }
+
+.tmbx {
+  --t-bg: #0a0d13;
+  --t-bg-2: #0f141c;
+  --t-surface: rgba(18, 24, 33, 0.92);
+  --t-surface-2: rgba(26, 34, 46, 0.92);
+  --t-line: rgba(160, 220, 230, 0.12);
+  --t-line-2: rgba(160, 220, 230, 0.22);
+  --t-ink: #eef3f8;
+  --t-muted: #93a0b2;
+  --t-faint: #5f6b7c;
+  --t-teal: #2fd8c4;
+  --t-teal-2: #12b5a6;
+  --t-teal-soft: rgba(47, 216, 196, 0.14);
+  --t-teal-glow: rgba(47, 216, 196, 0.35);
+  --t-ext: #f47e98;
+  --t-ext-soft: rgba(244, 126, 152, 0.14);
+  --t-gold: #e9c46a;
+  --t-gold-2: #c99a3c;
+  --t-gold-soft: rgba(233, 196, 106, 0.14);
+  --t-gold-glow: rgba(233, 196, 106, 0.32);
+  --t-hot: #ffb35c;
+  --t-ok: #5ee6a0;
+  --t-r-s: 8px;
+  --t-r: 12px;
+  --t-r-l: 18px;
+  --t-pill: 999px;
+  --t-1: 4px;
+  --t-2: 8px;
+  --t-3: 12px;
+  --t-4: 16px;
+  --t-5: 24px;
+  --t-6: 32px;
+  --t-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --t-num: 'Bahnschrift', 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  --t-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --t-fast: 160ms;
+  --t-mid: 280ms;
+  --t-slow: 520ms;
+}
+
+.tmbx .t-num {
+  font-family: var(--t-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.tmbx .t-caps {
+  font-family: var(--t-num);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tmbx .t-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--g));
+  height: calc(26 * var(--g));
+  padding: 0 calc(11 * var(--g));
+  border: 1px solid var(--t-line-2);
+  border-radius: var(--t-pill);
+  background: var(--t-surface-2);
+  color: var(--t-ink);
+  font: 600 13px/1 var(--t-font);
+  white-space: nowrap;
+}
+
+.tmbx .t-pill svg {
+  width: calc(14 * var(--g));
+  height: calc(14 * var(--g));
+  flex: none;
+}
+
+.tmbx .t-pill--chat {
+  border-color: rgba(47, 216, 196, 0.4);
+  background: var(--t-teal-soft);
+  color: #b9f5ec;
+}
+
+.tmbx .t-pill--ext {
+  border-color: rgba(244, 126, 152, 0.42);
+  background: var(--t-ext-soft);
+  color: #ffd0da;
+}
+
+.tmbx .t-pill--gold {
+  border-color: rgba(233, 196, 106, 0.55);
+  background: var(--t-gold-soft);
+  color: #f7e2ac;
+}
+
+.tmbx .t-full svg,
+.tmbx .t-super svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+}
+
+.tmbx .t-dot {
+  width: calc(7 * var(--g));
+  height: calc(7 * var(--g));
+  flex: none;
+  border-radius: 50%;
+  background: var(--t-teal);
+}
+
+.tmbx .t-dot--ext {
+  background: var(--t-ext);
+}
+
+.tmbx .t-full {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--g));
+  padding: calc(4 * var(--g)) calc(10 * var(--g)) calc(3 * var(--g));
+  border-radius: calc(6 * var(--g));
+  background: linear-gradient(180deg, #f4d98a, #d9aa48);
+  color: #1d1406;
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  box-shadow: 0 0 0 1px rgba(255, 236, 180, 0.5) inset, 0 6px 18px rgba(233, 196, 106, 0.28);
+}
+
+.tmbx .t-super {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--g));
+  padding: calc(4 * var(--g)) calc(10 * var(--g)) calc(3 * var(--g));
+  border: 1px solid rgba(233, 196, 106, 0.7);
+  border-radius: calc(6 * var(--g));
+  color: var(--t-gold);
+  font: 700 13px/1 var(--t-num);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, rgba(233, 196, 106, 0.14), rgba(233, 196, 106, 0.04));
+}
+
+.tmbx .t-ring circle {
+  fill: none;
+  stroke-width: 6;
+}
+
+.tmbx .t-ring .bg {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.tmbx .t-ring .fg {
+  stroke: var(--t-teal);
+  stroke-linecap: round;
+  transition:
+  stroke-dashoffset 1s linear,
+  stroke 0.3s;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.tmbx .is-hot .t-ring .fg {
+  stroke: var(--t-hot);
+}
+
+.tmbx .is-super .t-ring .fg {
+  stroke: var(--t-gold);
+}
+
+.tmbx .t-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8 * var(--g));
+  height: calc(38 * var(--g));
+  padding: 0 calc(16 * var(--g));
+  border: 1px solid var(--t-line-2);
+  border-radius: var(--t-r);
+  background: var(--t-surface-2);
+  color: var(--t-ink);
+  font: 600 14px/1 var(--t-font);
+  cursor: pointer;
+  transition:
+  background var(--t-fast),
+  border-color var(--t-fast),
+  transform var(--t-fast);
+}
+
+.tmbx .t-btn:hover {
+  border-color: var(--t-teal);
+}
+
+.tmbx .t-btn:active {
+  transform: translateY(1px);
+}
+
+.tmbx .t-btn svg {
+  width: calc(16 * var(--g));
+  height: calc(16 * var(--g));
+}
+
+.tmbx .t-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, #3fe3cf, #16b3a3);
+  color: #032420;
+  box-shadow: 0 6px 20px rgba(47, 216, 196, 0.25);
+}
+
+.tmbx .t-btn--primary:hover {
+  border-color: transparent;
+  filter: brightness(1.06);
+}
+
+.tmbx .t-btn--ext {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f8909f, #e46a85);
+  color: #2a0710;
+  box-shadow: 0 6px 20px rgba(244, 126, 152, 0.22);
+}
+
+.tmbx .t-btn--gold {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f2d483, #cf9f43);
+  color: #231805;
+}
+
+.tmbx .t-btn--ghost {
+  background: none;
+}
+
+.tmbx .t-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tmbx .t-amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(6 * var(--g));
+  font-family: var(--t-num);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.005em;
+}
+
+.tmbx .t-amount small {
+  color: var(--t-muted);
+  font-weight: 600;
+  font-size: 0.48em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tmbx .t-amount.is-gold {
+  color: var(--t-gold);
+}
+
+@keyframes tmbx-t-in-up {
+  from {
+  opacity: 0;
+  transform: translateY(8px);
+  }
+}
+
+@keyframes tmbx-t-in-scale {
+  from {
+  opacity: 0;
+  transform: scale(0.96);
+  }
+}
+
+@keyframes tmbx-t-sweep {
+  from {
+  transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+  transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+@keyframes tmbx-t-tick {
+  0% {
+  transform: scale(1.12);
+  }
+  100% {
+  transform: scale(1);
+  }
+}
+
+@keyframes tmbx-t-spin {
+  to {
+  transform: rotate(360deg);
+  }
+}
+
+@keyframes tmbx-t-breathe {
+  50% {
+  opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tmbx * { animation-duration: 1ms !important;
+  transition-duration: 1ms !important; }
+}
+
+.tmbx .pp {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--s, calc(40 * var(--g)));
+  height: var(--s, calc(40 * var(--g)));
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 26%, hsl(var(--h) 72% 74%), hsl(var(--h) 52% 44%) 72%);
+  box-shadow:
+  0 0 0 2px var(--pp-gap, #0b0f16),
+  0 0 0 calc(2px + var(--pp-ring-w, 2px)) var(--pp-ring, rgba(47, 216, 196, 0.9));
+  color: rgba(8, 10, 14, 0.8);
+  font: 800 calc(var(--s, 40px) * 0.36) / 1 var(--t-num);
+  letter-spacing: 0.02em;
+}
+
+.tmbx .pp.ext {
+  --pp-ring: rgba(244, 126, 152, 0.95);
+}
+
+.tmbx .pp i {
+  font-style: normal;
+}
+
+.tmbx * {
+  box-sizing: border-box;
+}
+
+.tmbx button {
+  font: inherit; color: inherit;
+}
+
+.tmbx {
+  position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden; background: radial-gradient(420px 260px at 50% -40px, rgba(47,216,196,0.10), transparent 70%), linear-gradient(180deg, #0d121a, #090c12);
+}
+
+.tmbx .head {
+  display: flex; align-items: center; gap: calc(8 * var(--g)); height: calc(46 * var(--g)); padding: 0 calc(10 * var(--g)); border-bottom: 1px solid var(--t-line); flex: none;
+}
+
+.tmbx .ib {
+  display: grid; place-items: center; width: calc(32 * var(--g)); height: calc(32 * var(--g)); border: 1px solid var(--t-line); border-radius: calc(10 * var(--g)); background: rgba(255,255,255,0.03); cursor: pointer;
+}
+
+.tmbx .ib svg {
+  width: calc(16 * var(--g)); height: calc(16 * var(--g));
+}
+
+.tmbx .ib.on {
+  border-color: var(--t-teal); color: var(--t-teal);
+}
+
+.tmbx .head .ttl {
+  display: flex; align-items: center; gap: calc(7 * var(--g)); font: 700 15px/1 var(--t-font);
+}
+
+.tmbx .head .ttl svg {
+  width: calc(17 * var(--g)); height: calc(17 * var(--g)); color: var(--t-teal);
+}
+
+.tmbx .head .grow {
+  flex: 1;
+}
+
+.tmbx .wallet {
+  display: inline-flex; align-items: center; gap: calc(6 * var(--g)); height: calc(28 * var(--g)); padding: 0 calc(10 * var(--g)); border: 1px solid var(--t-line); border-radius: calc(999 * var(--g)); font: 700 13px/1 var(--t-num);
+}
+
+.tmbx .wallet svg {
+  width: calc(14 * var(--g)); height: calc(14 * var(--g)); color: var(--t-gold);
+}
+
+.tmbx .body {
+  flex: 1; min-height: 0; overflow: auto; padding: calc(14 * var(--g)); scrollbar-width: thin;
+}
+
+.tmbx .body.is-new > * {
+  animation: tmbx-t-in-up var(--t-mid) var(--t-ease) both;
+}
+
+.tmbx .sec {
+  margin: calc(16 * var(--g)) 0 calc(8 * var(--g)); color: var(--t-muted); font: 600 11px/1 var(--t-num); letter-spacing: 0.16em; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;
+}
+
+.tmbx .sec a {
+  color: var(--t-teal); font: 600 12px var(--t-font); letter-spacing: 0; text-transform: none; cursor: pointer;
+}
+
+.tmbx .muted {
+  color: var(--t-muted);
+}
+
+.tmbx .fine {
+  color: var(--t-faint); font-size: var(--fs-12);
+}
+
+.tmbx .hero {
+  display: flex; flex-direction: column; align-items: center; gap: calc(12 * var(--g)); padding: calc(18 * var(--g)) calc(14 * var(--g)) calc(16 * var(--g)); border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .hero.is-super {
+  border-color: rgba(233,196,106,0.45); box-shadow: 0 0 30px rgba(233,196,106,0.10) inset;
+}
+
+.tmbx .ringbig {
+  position: relative; width: calc(132 * var(--g)); height: calc(132 * var(--g));
+}
+
+.tmbx .ringbig svg {
+  width: calc(132 * var(--g)); height: calc(132 * var(--g));
+}
+
+.tmbx .ringbig .t-ring circle {
+  stroke-width: 7;
+}
+
+.tmbx .ringbig .in {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+
+.tmbx .ringbig .in b {
+  font: 700 34px/1 var(--t-num); font-variant-numeric: tabular-nums;
+}
+
+.tmbx .ringbig .in span {
+  color: var(--t-muted); font: 600 10px/1 var(--t-num); letter-spacing: 0.16em; text-transform: uppercase;
+}
+
+.tmbx .hero .amt {
+  font-size: var(--fs-32);
+}
+
+.tmbx .hero .amt small {
+  font-size: var(--fs-13);
+}
+
+.tmbx .hero .lbl {
+  display: flex; align-items: center; gap: calc(8 * var(--g)); color: var(--t-teal); font: 600 12px/1 var(--t-num); letter-spacing: 0.18em; text-transform: uppercase;
+}
+
+.tmbx .hero .join {
+  width: 100%; height: calc(44 * var(--g)); font-size: var(--fs-15);
+}
+
+.tmbx .hero .alt {
+  display: flex; align-items: center; gap: calc(6 * var(--g)); color: var(--t-muted); font-size: var(--fs-12_5);
+}
+
+.tmbx .hero .alt code {
+  padding: 2px calc(7 * var(--g)); border-radius: calc(6 * var(--g)); background: var(--t-teal-soft); color: #b9f5ec; font: 700 12.5px var(--t-num);
+}
+
+.tmbx .joined {
+  display: flex; align-items: center; justify-content: center; gap: calc(8 * var(--g)); width: 100%; height: calc(44 * var(--g)); border: 1px solid rgba(94,230,160,0.4); border-radius: var(--t-r); background: rgba(94,230,160,0.08); color: var(--t-ok); font-weight: 700;
+}
+
+.tmbx .joined svg {
+  width: calc(17 * var(--g)); height: calc(17 * var(--g)); stroke-width: 3;
+}
+
+.tmbx .meta-row {
+  display: flex; align-items: center; justify-content: space-between; width: 100%; padding-top: calc(10 * var(--g)); border-top: 1px solid var(--t-line); font-size: var(--fs-12_5);
+}
+
+.tmbx .meta-row .who {
+  display: flex; align-items: center; gap: calc(6 * var(--g)); color: var(--t-muted);
+}
+
+.tmbx .meta-row .who b {
+  color: var(--t-ink); font-family: var(--t-num);
+}
+
+.tmbx .split {
+  display: flex; gap: calc(6 * var(--g));
+}
+
+.tmbx .split .t-pill {
+  height: calc(22 * var(--g)); padding: 0 calc(8 * var(--g)); font-size: var(--fsm-11_5);
+}
+
+.tmbx .ticket {
+  position: relative; display: grid; grid-template-columns: 1fr auto; border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); overflow: hidden;
+}
+
+.tmbx .ticket.is-super {
+  border-color: rgba(233,196,106,0.45);
+}
+
+.tmbx .ticket .l {
+  display: flex; flex-direction: column; gap: calc(8 * var(--g)); padding: calc(14 * var(--g)) calc(16 * var(--g));
+}
+
+.tmbx .ticket .r {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(4 * var(--g)); width: calc(96 * var(--g)); border-left: 2px dashed var(--t-line-2); background: rgba(47,216,196,0.05);
+}
+
+.tmbx .ticket .r b {
+  font: 700 30px/1 var(--t-num);
+}
+
+.tmbx .ticket .r span {
+  color: var(--t-muted); font: 600 10px/1 var(--t-num); letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+.tmbx .ticket::before,
+.tmbx .ticket::after {
+  content: ''; position: absolute; right: calc(89 * var(--g)); width: calc(14 * var(--g)); height: calc(14 * var(--g)); border-radius: 50%; background: var(--t-bg); border: 1px solid var(--t-line);
+}
+
+.tmbx .ticket::before {
+  top: calc(-8 * var(--g));
+}
+
+.tmbx .ticket::after {
+  bottom: calc(-8 * var(--g));
+}
+
+.tmbx .ticket .amt {
+  font-size: var(--fs-30);
+}
+
+.tmbx .ticket .bar {
+  position: relative; height: calc(4 * var(--g)); border-radius: calc(4 * var(--g)); background: rgba(255,255,255,0.07); overflow: hidden;
+}
+
+.tmbx .ticket .bar i {
+  position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--t-teal);
+}
+
+.tmbx .below {
+  display: flex; flex-direction: column; gap: calc(8 * var(--g)); margin-top: calc(10 * var(--g));
+}
+
+.tmbx .is-hot .t-ring .fg {
+  stroke: var(--t-hot);
+}
+
+.tmbx .is-hot .ringbig .in b,
+.tmbx .is-hot .ticket .r b {
+  color: var(--t-hot);
+}
+
+.tmbx .rows {
+  display: flex; flex-direction: column; gap: calc(4 * var(--g));
+}
+
+.tmbx .row {
+  display: flex; align-items: center; gap: calc(10 * var(--g)); min-height: calc(38 * var(--g)); padding: calc(6 * var(--g)) calc(10 * var(--g)); border: 1px solid transparent; border-radius: calc(10 * var(--g)); background: rgba(255,255,255,0.025);
+}
+
+.tmbx .row.me {
+  border-color: rgba(47,216,196,0.35); background: var(--t-teal-soft);
+}
+
+.tmbx .row .name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;
+}
+
+.tmbx .row .t-pill {
+  height: calc(22 * var(--g)); padding: 0 calc(8 * var(--g)); font-size: var(--fsm-11_5);
+}
+
+.tmbx .av {
+  display: grid; place-items: center; width: calc(26 * var(--g)); height: calc(26 * var(--g)); flex: none; border-radius: 50%; background: var(--c, #2a3446); color: #0b0f16; font: 800 11px/1 var(--t-num);
+}
+
+.tmbx .chips {
+  display: flex; gap: calc(6 * var(--g)); margin-bottom: calc(8 * var(--g));
+}
+
+.tmbx .chip {
+  height: calc(28 * var(--g)); padding: 0 calc(11 * var(--g)); border: 1px solid var(--t-line); border-radius: calc(999 * var(--g)); background: none; color: var(--t-muted); font: 600 12.5px var(--t-font); cursor: pointer;
+}
+
+.tmbx .chip.on {
+  border-color: var(--t-teal); color: var(--t-ink); background: var(--t-teal-soft);
+}
+
+.tmbx .drawing {
+  display: flex; flex-direction: column; align-items: center; gap: calc(12 * var(--g)); padding: calc(26 * var(--g)) calc(16 * var(--g)); border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .drawing .spin {
+  width: calc(64 * var(--g)); height: calc(64 * var(--g)); animation: tmbx-t-spin 1.1s linear infinite;
+}
+
+.tmbx .drawing h3 {
+  margin: 0; font: 700 18px/1.2 var(--t-font);
+}
+
+.tmbx .drawing p {
+  margin: 0; color: var(--t-muted); font-size: var(--fs-13);
+}
+
+.tmbx .reveal {
+  display: flex; align-items: center; gap: calc(8 * var(--g)); color: var(--t-muted); font: 600 12px var(--t-num); letter-spacing: 0.06em;
+}
+
+.tmbx .reveal .barw {
+  width: calc(120 * var(--g)); height: calc(4 * var(--g)); border-radius: calc(4 * var(--g)); background: rgba(255,255,255,0.08); overflow: hidden;
+}
+
+.tmbx .reveal .barw i {
+  display: block; height: 100%; background: var(--t-teal); transition: width 1s linear;
+}
+
+.tmbx .result {
+  display: flex; flex-direction: column; align-items: center; gap: calc(8 * var(--g)); padding: calc(18 * var(--g)) calc(16 * var(--g)); border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .result.win {
+  border-color: rgba(47,216,196,0.5); background: linear-gradient(180deg, rgba(47,216,196,0.12), var(--t-surface) 70%);
+}
+
+.tmbx .result.win.gold {
+  border-color: rgba(233,196,106,0.55); background: linear-gradient(180deg, rgba(233,196,106,0.14), var(--t-surface) 70%);
+}
+
+.tmbx .result .big {
+  font-size: var(--fs-36);
+}
+
+.tmbx .result h3 {
+  margin: 0; font: 700 17px/1.2 var(--t-font);
+}
+
+.tmbx .result p {
+  margin: 0; color: var(--t-muted); font-size: var(--fs-13);
+}
+
+.tmbx .won-gain {
+  color: var(--t-teal);
+}
+
+.tmbx .gold .won-gain {
+  color: var(--t-gold);
+}
+
+.tmbx .row .gain {
+  color: var(--t-teal); font: 700 13px var(--t-num);
+}
+
+.tmbx .row .gain.gold {
+  color: var(--t-gold);
+}
+
+.tmbx .empty {
+  display: flex; flex-direction: column; align-items: center; gap: calc(10 * var(--g)); padding: calc(26 * var(--g)) calc(16 * var(--g)); border: 1px dashed var(--t-line-2); border-radius: var(--t-r-l); text-align: center;
+}
+
+.tmbx .empty .ic {
+  display: grid; place-items: center; width: calc(50 * var(--g)); height: calc(50 * var(--g)); border-radius: 50%; background: var(--t-teal-soft); color: var(--t-teal);
+}
+
+.tmbx .empty .ic svg {
+  width: calc(24 * var(--g)); height: calc(24 * var(--g));
+}
+
+.tmbx .empty h3 {
+  margin: 0; font: 700 16px/1.2 var(--t-font);
+}
+
+.tmbx .empty p {
+  margin: 0; color: var(--t-muted); font-size: var(--fs-13);
+}
+
+.tmbx .hist {
+  display: flex; flex-direction: column; gap: calc(6 * var(--g));
+}
+
+.tmbx .h {
+  display: grid; grid-template-columns: calc(44 * var(--g)) 1fr auto; align-items: center; gap: calc(10 * var(--g)); padding: calc(9 * var(--g)) calc(10 * var(--g)); border: 1px solid var(--t-line); border-radius: calc(12 * var(--g)); background: rgba(255,255,255,0.02);
+}
+
+.tmbx .h .t {
+  color: var(--t-faint); font: 600 12px var(--t-num);
+}
+
+.tmbx .h .w {
+  min-width: 0;
+}
+
+.tmbx .h .w b {
+  display: block; font: 700 14px/1.2 var(--t-num);
+}
+
+.tmbx .h .w span {
+  display: block; overflow: hidden; color: var(--t-muted); font-size: var(--fs-12); text-overflow: ellipsis; white-space: nowrap;
+}
+
+.tmbx .h .me {
+  color: var(--t-ok); font: 700 11px var(--t-num); letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+.tmbx .h .t-full,
+.tmbx .h .t-super {
+  font-size: var(--fs-10); padding: calc(3 * var(--g)) calc(7 * var(--g)) 2px;
+}
+
+.tmbx .lbl svg {
+  width: calc(15 * var(--g)); height: calc(15 * var(--g)); flex: none;
+}
+
+.tmbx .ticket .amt {
+  white-space: nowrap; font-size: var(--fs-27);
+}
+
+.tmbx .ticket .l {
+  min-width: 0;
+}
+
+:where(:root[data-mq~="m20"]) .tmbx .hero{ gap: calc(9 * var(--g)); padding: calc(14 * var(--g)) calc(12 * var(--g)) calc(12 * var(--g)); }
+  :where(:root[data-mq~="m20"]) .tmbx .ringbig,
+:where(:root[data-mq~="m20"]) .tmbx .ringbig svg{ width: calc(104 * var(--g)); height: calc(104 * var(--g)); }
+  :where(:root[data-mq~="m20"]) .tmbx .ringbig .in b{ font-size: var(--fs-28); }
+  :where(:root[data-mq~="m20"]) .tmbx .hero .amt{ font-size: var(--fs-28); }
+  :where(:root[data-mq~="m20"]) .tmbx .hero .join,
+:where(:root[data-mq~="m20"]) .tmbx .joined{ height: calc(40 * var(--g)); }
+  :where(:root[data-mq~="m20"]) .tmbx .body{ padding: calc(12 * var(--g)); }
+
+.tmbx .stage {
+  display: flex; flex-direction: column; align-items: center; gap: calc(10 * var(--g)); width: 100%; max-width: calc(360 * var(--g)); margin: 0 auto; padding: calc(22 * var(--g)) calc(18 * var(--g)) calc(20 * var(--g)); border: 1px solid var(--t-line); border-radius: var(--t-r-l); background: var(--t-surface); text-align: center;
+}
+
+.tmbx .stage .orb {
+  position: relative; display: grid; place-items: center; width: calc(92 * var(--g)); height: calc(92 * var(--g)); margin: calc(4 * var(--g)) 0 2px; border-radius: 50%;
+}
+
+.tmbx .stage .orb.quiet {
+  border: 2px dashed var(--t-line-2); background: radial-gradient(circle, rgba(47,216,196,0.10), transparent 70%); color: var(--t-teal);
+}
+
+.tmbx .stage .orb.quiet svg {
+  width: calc(34 * var(--g)); height: calc(34 * var(--g));
+}
+
+.tmbx .stage .orb .pp {
+  --s: 92px; --pp-ring: var(--t-gold); --pp-ring-w: 3px; --pp-gap: #121821; font-size: var(--fs-32);
+}
+
+.tmbx .stage .orb.glow::before {
+  content: ''; position: absolute; inset: calc(-14 * var(--g)); border-radius: 50%; background: radial-gradient(circle, rgba(233,196,106,0.38), transparent 68%); animation: tmbx-orb-glow 2.4s ease-in-out infinite;
+}
+
+.tmbx .stage .orb.glow .pp {
+  animation: tmbx-orb-in 620ms var(--t-ease) both;
+}
+
+@keyframes tmbx-orb-glow {
+  50% { opacity: 0.45; transform: scale(0.94); }
+}
+
+@keyframes tmbx-orb-in {
+  from { opacity: 0; transform: scale(0.7); }
+}
+
+.tmbx .stage .orb.cancel {
+  border: 3px solid #ff6b6b; background: rgba(255,107,107,0.08); box-shadow: 0 0 22px rgba(255,107,107,0.18);
+}
+
+.tmbx .stage .orb.cancel svg {
+  width: calc(36 * var(--g)); height: calc(36 * var(--g));
+}
+
+.tmbx .stage .orb.cancel path {
+  fill: none; stroke: #ff6b6b; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 30; stroke-dashoffset: 30; animation: tmbx-x-draw 340ms var(--t-ease) 200ms both;
+}
+
+.tmbx .stage .orb.cancel path + path {
+  animation-delay: 340ms;
+}
+
+@keyframes tmbx-x-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.tmbx .stage h3 {
+  margin: 0; font: 700 18px/1.2 var(--t-font);
+}
+
+.tmbx .stage .who {
+  font: 700 22px/1.15 var(--t-font);
+}
+
+.tmbx .stage p {
+  margin: 0; color: var(--t-muted); font-size: var(--fs-13);
+}
+
+.tmbx .stage .kick {
+  color: var(--t-gold); font: 700 11.5px/1 var(--t-num); letter-spacing: 0.2em; text-transform: uppercase;
+}
+
+.tmbx .stage .gainbig {
+  color: var(--t-gold); font-size: var(--fs-32);
+}
+
+.tmbx .stage .gainbig small {
+  color: rgba(233,196,106,0.75);
+}
+
+.tmbx .stage .rule {
+  width: 60%; height: 1px; margin: calc(4 * var(--g)) 0; background: var(--t-line);
+}
+
+.tmbx .stage.gold {
+  border-color: rgba(233,196,106,0.5); background: radial-gradient(300px 150px at 50% 0%, rgba(233,196,106,0.13), transparent 70%), var(--t-surface);
+}
+
+.tmbx .stage.gold.win {
+  border-color: rgba(233,196,106,0.75); box-shadow: 0 0 34px rgba(233,196,106,0.14);
+}
+
+.tmbx .stage .last {
+  display: flex; flex-direction: column; align-items: center; gap: calc(4 * var(--g)); width: 100%; margin-top: calc(6 * var(--g)); padding-top: calc(12 * var(--g)); border-top: 1px solid var(--t-line);
+}
+
+.tmbx .stage .last span {
+  color: var(--t-faint); font: 600 11px/1 var(--t-num); letter-spacing: 0.14em; text-transform: uppercase;
+}
+
+.tmbx .stage .last b {
+  font: 700 13.5px/1.3 var(--t-font);
+}
+
+.tmbx .stage .last a {
+  color: var(--t-teal); font: 600 12.5px var(--t-font); cursor: pointer;
+}
+
+.tmbx .body.soft > * {
+  animation: tmbx-soft-in 420ms var(--t-ease) both;
+}
+
+@keyframes tmbx-soft-in {
+  from { opacity: 0; }
+}
+
+.tmbx .body {
+  transition: opacity 260ms var(--t-ease);
+}
+
+.tmbx .body.leaving {
+  opacity: 0;
+}
+
+:where(:root[data-mq~="m20"]) .tmbx .stage{ gap: calc(8 * var(--g)); padding: calc(16 * var(--g)) calc(14 * var(--g)); }
+  :where(:root[data-mq~="m20"]) .tmbx .stage .orb,
+:where(:root[data-mq~="m20"]) .tmbx .stage .orb .pp{ width: calc(80 * var(--g)); height: calc(80 * var(--g)); --s: 80px; }
+
+:where(:root[data-mq~="m14"]) .tmbx .grid2{ display: grid; grid-template-columns: calc(250 * var(--g)) minmax(0, 1fr); gap: calc(14 * var(--g)); align-items: start; }
+  :where(:root[data-mq~="m14"]) .tmbx .grid2 .sec:first-child{ margin-top: 0; }
+
+/* Root of the screen (the prototype's html / body; its background is the .app one above). */
+.tmbx {
+  color: var(--t-ink);
+  font: 14px/1.4 var(--t-font);
+}
+.tmbx *, .tmbx *::before, .tmbx *::after { box-sizing: border-box; }
+.tmbx button { font: inherit; color: inherit; }
+
+/* Additions for the real Core states the prototype implies (no new art direction): why a join is
+   refused, the paused round, real Twitch pictures, the screen with no participant. */
+.tmbx .refusal { display: flex; align-items: center; justify-content: center; gap: calc(8 * var(--g)); width: 100%; min-height: calc(44 * var(--g)); padding: calc(8 * var(--g)) calc(12 * var(--g)); border: 1px dashed var(--t-line-2); border-radius: var(--t-r); color: var(--t-muted); font-size: var(--fs-13); font-weight: 600; text-align: center; }
+.tmbx .refusal svg { width: calc(15 * var(--g)); height: calc(15 * var(--g)); flex: none; }
+.tmbx .join-err { color: #ffb3b3; font-size: var(--fs-12_5); }
+.tmbx .t-btn.join[aria-busy='true'] { opacity: 0.7; cursor: progress; }
+.tmbx .av { overflow: hidden; }
+.tmbx .av img, .tmbx .pp img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.tmbx .av { position: relative; }
+.tmbx .hero.is-paused .t-ring .fg { stroke: var(--t-muted); }
+.tmbx .hero.is-paused .ringbig .in b { color: var(--t-muted); }
+.tmbx .h .cx { color: var(--t-faint); font: 700 11px var(--t-num); letter-spacing: 0.1em; text-transform: uppercase; }
+.tmbx .result .prize { font: 700 20px/1.2 var(--t-font); }
+
+/* --- Final polish: amounts never cut, pause over the frozen time ------------------------------- */
+.tmbx .t-amount:not(.is-prize),
+.tmbx .nowrap,
+.tmbx .gain {
+  white-space: nowrap;
+}
+.tmbx .t-amount:not(.is-prize) {
+  max-width: 100%;
+}
+/* Pause (same signal as the overlay): the time stays where it is, veiled under a big amber Ⅱ. */
+.tmbx .ringbig .pz {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: calc(9 * var(--g));
+}
+.tmbx .ringbig .pz i {
+  width: calc(10 * var(--g));
+  height: calc(34 * var(--g));
+  border-radius: calc(3 * var(--g));
+  background: var(--t-hot);
+  box-shadow: 0 0 12px rgba(255, 179, 92, 0.4);
+}
+.tmbx .hero.is-paused .ringbig .pz {
+  display: flex;
+}
+.tmbx .hero.is-paused .ringbig .in {
+  opacity: 0.14;
+  filter: blur(1.5px);
+}
+.tmbx .hero.is-paused .t-ring .fg {
+  stroke: rgba(255, 179, 92, 0.55);
+}
+.tmbx .hero.is-paused .lbl {
+  color: var(--t-hot);
+}
+
+/* --- Currencies (shared/currency.js): amount first, short unit in the currency's colour, one line --- */
+.tmbx .cur-amt {
+  display: inline-flex;
+  align-items: baseline;
+  max-width: 100%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tmbx .cur-u {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.tmbx .t-amount .cur-u {
+  font-family: var(--t-num);
+  font-size: 0.52em;
+}
+/* Jetons = la pièce du wallet : un peu plus grande que l'ancien « Je » pour rester lisible à côté du montant. */
+.tmbx .t-amount .cur-u[data-tone='tokens'] {
+  margin-left: 0.12em;
+  font-size: 0.68em;
+}
+/* Inside rows whose spans are blocks (history, « Dernière »): the amount group stays one inline line. */
+.tmbx .h .w .cur-amt,
+.tmbx .stage .last .cur-amt {
+  display: inline-flex;
+  overflow: visible;
+  color: inherit;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  text-overflow: clip;
+}
+.tmbx .h .w .cur-amt .cur-u,
+.tmbx .stage .last .cur-amt .cur-u {
+  display: inline;
+  overflow: visible;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* --- Profil compact-video : Video Component 65 % · 3:2 (565×376 mesuré sur Twitch, validé le 14/10/2026) ---
+   Même fenêtre dans hub.css, tts-v2.css, soundboard.css, tombola-v2.css : largeur ≥ 521 px, hauteur 321–400 px.
+   Colonne gauche sans scroll (aussi avec un message de refus) ; à droite, titre fixe et TOUTE la liste
+   (--tmbx-preview-all lu par tombola-v2.js, plus de « Tout voir »), qui défile seule. Pseudos longs :
+   « … », défilement au survol (keyframes rl-marquee de soundboard.css). */
+html:where([data-mq~="m19"]):has(body.component-view){
+    --tmbx-preview-all: 1;
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .head{
+    height: calc(40 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .ib{
+    width: calc(28 * var(--g));
+    height: calc(28 * var(--g));
+    border-radius: calc(9 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .body:has(> .grid2 .hero),
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .body:has([data-slot='chips']){
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: calc(10 * var(--g)) calc(12 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .body:has(> .grid2 .hero) > .grid2{
+    flex: 1;
+    min-height: 0;
+    gap: calc(12 * var(--g));
+    align-items: stretch;
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .grid2:has(.hero) > div:last-child{
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .body:has([data-slot='chips']) > .sec:first-child{
+    margin-top: 0;
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .grid2:has(.hero) .rows,
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .body:has([data-slot='chips']) .rows{
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: rgba(47, 216, 196, 0.35) transparent;
+    scrollbar-width: thin;
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .body:has([data-slot='chips']) .chips{
+    flex: none;
+  }
+
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero{
+    gap: calc(6 * var(--g));
+    padding: calc(10 * var(--g)) calc(10 * var(--g)) calc(10 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero .lbl{
+    font-size: var(--fs-11);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .ringbig,
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .ringbig svg{
+    width: calc(84 * var(--g));
+    height: calc(84 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .ringbig .in b{
+    font-size: var(--fs-25);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .ringbig .in span{
+    font-size: var(--fs-9);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .ringbig .pz i{
+    width: calc(8 * var(--g));
+    height: calc(28 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero .amt{
+    font-size: var(--fs-26);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero .join,
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .joined{
+    height: calc(36 * var(--g));
+    font-size: var(--fs-14);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero .refusal{
+    min-height: calc(36 * var(--g));
+    padding: calc(6 * var(--g)) calc(10 * var(--g));
+    font-size: var(--fs-12);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero .alt{
+    font-size: var(--fs-12);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero .alt code{
+    padding: 1px calc(6 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .hero .join-err{
+    font-size: var(--fs-11_5);
+    line-height: 1.25;
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .meta-row{
+    padding-top: calc(8 * var(--g));
+    font-size: var(--fs-12);
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .grid2 .sec{
+    margin-bottom: calc(6 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .row{
+    min-height: calc(36 * var(--g));
+    padding: calc(5 * var(--g)) calc(10 * var(--g));
+  }
+  :where(:root[data-mq~="m19"]) body.component-view .tmbx .row:hover .name.rl-marquee{
+    text-overflow: clip;
+    animation: rl-marquee var(--mq-t, 4s) ease-in-out infinite;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 10px), transparent);
+  }

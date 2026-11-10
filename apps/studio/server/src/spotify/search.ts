@@ -128,6 +128,8 @@ export interface Candidate {
   duration_ms?: number;
   external_ids?: { isrc?: string };
   linked_from?: { id?: string; uri?: string };
+  /** False when the market cannot play this version (Music Hub shows it, never requests it). */
+  is_playable?: boolean;
   /** The release it comes from (always returned by the search, 26/10 diagnostic): tells editions apart. */
   album?: {
     name?: string;

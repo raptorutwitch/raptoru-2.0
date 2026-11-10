@@ -31,6 +31,7 @@ export const VIEW_IDS = [
   'tts',
   'bonk',
   'spotify',
+  'music-overlay',
   'sub-wheel',
 ] as const;
 export type ViewId = (typeof VIEW_IDS)[number];
@@ -302,6 +303,16 @@ export const PAGES: Page[] = [
     view: 'spotify',
     desc: 'Demandes de musique, file, quotas.',
     keywords: 'musique song request file musicale',
+  },
+  {
+    id: 'music-overlay',
+    label: 'Overlay musique',
+    section: 'modules',
+    group: 'Musique',
+    icon: 'film',
+    view: 'music-overlay',
+    desc: 'Le titre en cours sur le stream : modèles, réglages, OBS.',
+    keywords: 'overlay obs musique titre en cours now playing widget',
   },
   {
     id: 'commands',

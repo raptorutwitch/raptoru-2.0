@@ -5,18 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Raptoru Live — actions</title>
   <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
-  <link rel="stylesheet" href="base.css">
-  <link rel="stylesheet" href="overlay.css">
-  <link rel="stylesheet" href="picker.css">
-  <link rel="stylesheet" href="bonk-chargeur.css">
-  <link rel="stylesheet" href="soundboard.css">
-  <link rel="stylesheet" href="currency-switch.css">
-  <link rel="stylesheet" href="hub.css">
-  <link rel="stylesheet" href="events-shop.css">
-  <link rel="stylesheet" href="tts-v2.css">
-  <link rel="stylesheet" href="moderation-v2.css">
-  <link rel="stylesheet" href="commands-v2.css">
-  <link rel="stylesheet" href="tombola-v2.css">
 </head>
 <body class="overlay">
   <!-- Video Overlay : la page couvre tout le player mais reste TRANSPARENTE et
@@ -43,6 +31,7 @@
     <div id="panel" class="drawer__body"></div>
   </aside>
 
-  <script type="module" src="overlay.js"></script>
+  <!-- Feuilles et point d'entrée choisis par app/boot.js (shell legacy ou v2). -->
+  <script type="module" src="app/boot.js"></script>
 </body>
 </html>

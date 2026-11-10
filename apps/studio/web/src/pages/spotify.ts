@@ -9,10 +9,12 @@ import {
   poller,
   run,
   scrub,
+  toast,
   seg,
   viewersSeg,
   stateChip,
   esc,
+  ic,
 } from '../ds/ds.js';
 import { getJson, postJson, tryGetJson } from '../http.js';
 import { setNavCount } from '../shell/shell.js';
@@ -27,15 +29,22 @@ import {
   alertsView,
   countsView,
   historyRows,
+  livePosition,
+  liveOf,
   nowView,
+  playedRows,
   openingView,
   position,
   queueEmpty,
   quotasView,
   queueRows,
   stateView,
+  musicRulesView,
   timeView,
   verifyNote,
+  type SpLive,
+  type SpOverlay,
+  type SpPlayedPage,
   type SpState,
   type SpUi,
 } from './spotify-view.js';
@@ -45,6 +54,16 @@ import {
 // le seul à appeler Spotify (« Actualiser » est limité par Studio).
 
 const ERRORS: Record<string, string> = {
+  effects_player_offline:
+    'Source OBS « Effets » absente : ouvre OBS ou ajoute la source.',
+  effects_player_muted:
+    'Source « Effets » sans son : active le son de la source.',
+  effects_player_outdated: 'Source « Effets » à recharger dans OBS.',
+  effect_media_missing: 'Ce son n’est pas importé dans Studio.',
+  invalid_overlay: 'Réglage de l’overlay refusé.',
+  overlay_unavailable: 'Overlay indisponible dans ce Studio.',
+  unsupported_audio: 'Format de son non pris en charge (mp3, wav, ogg).',
+  sound_too_large: 'Son trop lourd (5 Mo max).',
   reward_exists: 'La récompense existe déjà.',
   reward_create_in_progress: 'Une création est déjà en cours.',
   rate_limited: 'Spotify limite les appels : réessaie plus tard.',
@@ -55,6 +74,10 @@ const ERRORS: Record<string, string> = {
   playing_use_skip: 'Elle joue déjà : utilise « Passer la musique ».',
   already_settled: 'Déjà réglée.',
   not_uncertain: 'Cette demande n’est plus à vérifier.',
+  player_controls_disabled:
+    'Commandes du lecteur désactivées (panneau, Extension).',
+  no_device: 'Aucun appareil Spotify actif.',
+  studio_unavailable: 'Studio absent pour le serveur.',
 };
 const SETTINGS = ['set-pending', 'set-cooldown', 'set-duration', 'set-grace'];
 
@@ -64,6 +87,8 @@ export function mountSpotifyPage(root: HTMLElement) {
     <div class="spo-main">
       <div class="spo-alerts d-tags" data-z="alerts"></div>
       <div data-z="open"></div>
+      <div data-z="ovl"></div>
+      <div data-z="rules"></div>
       <section class="spo-now" data-z="now" aria-label="Lecture en cours"><div class="d-skel" style="height:200px;grid-column:1/-1"></div></section>
       <div class="spo-quotas" data-z="quotas"></div>
       <div data-z="simbar"></div>
@@ -81,7 +106,10 @@ export function mountSpotifyPage(root: HTMLElement) {
 
   let state: SpState | null = null;
   let error = '';
-  let list: 'file' | 'past' = 'file';
+  let list: 'file' | 'past' | 'played' = 'file';
+  // Music Hub : les musiques du stream (Core), chargées à l'ouverture de l'onglet, page par page.
+  let played: (SpPlayedPage & { loading?: boolean; error?: string }) | null =
+    null;
   const ui: SpUi = { fields: {}, who: [], now: Date.now() };
 
   z('simbar').addEventListener(
@@ -115,13 +143,22 @@ export function mountSpotifyPage(root: HTMLElement) {
       )}${panelBtn(p.panel.isOpen())}`,
     );
   };
+  let barMs = -1;
   const paintProgress = () => {
     if (!state) return;
-    const at = position(state, Date.now());
+    const live = liveOf(state, ui);
+    const at = live
+      ? livePosition(live, ui.liveAt ?? Date.now(), Date.now())
+      : position(state, Date.now());
     const bar = p.body.querySelector<HTMLElement>('[data-prog]');
     const t0 = p.body.querySelector<HTMLElement>('[data-t0]');
     const t1 = p.body.querySelector<HTMLElement>('[data-t1]');
     if (!bar || !t0 || !t1) return;
+    // Fluide : la barre glisse d'une seconde à l'autre ; un retour en arrière (titre suivant, recherche) saute sans glisser.
+    const ms = at?.ms ?? 0;
+    bar.style.transition =
+      at?.live && ms >= barMs && ms - barMs < 2_500 ? '' : 'none';
+    barMs = ms;
     bar.style.width = at ? `${(at.ms / at.total) * 100}%` : '0';
     t0.textContent = at ? clock(at.ms / 1000) : '';
     t1.textContent = at ? clock(at.total / 1000) : '';
@@ -142,6 +179,7 @@ export function mountSpotifyPage(root: HTMLElement) {
     patch(z('now'), nowView(s, ui));
     paintProgress();
     patch(z('quotas'), quotasView(s));
+    patch(z('rules'), musicRulesView(s, ui.now));
     patch(z('time'), timeView(s, ui));
     patch(z('counts'), countsView(s));
     if (!z('simbar').contains(document.activeElement))
@@ -153,12 +191,14 @@ export function mountSpotifyPage(root: HTMLElement) {
         [
           ['file', `File ${s.queue.length + s.in_progress.length}`],
           ['past', 'Dernières décisions'],
+          ['played', 'Musiques du stream'],
         ],
         list,
       ),
     );
     patch(z('note'), list === 'file' ? verifyNote(s) : '');
     if (list === 'file') keyed(z('qlist'), queueRows(s, ui), queueEmpty(s));
+    else if (list === 'played') paintPlayed();
     else
       keyed(
         z('qlist'),
@@ -167,6 +207,88 @@ export function mountSpotifyPage(root: HTMLElement) {
       );
     if (!typing()) p.panel.set(spotifyPanel(s, ui));
   };
+
+  // --- Music Hub : les musiques du stream ----------------------------------------------------------------------------------
+  function paintPlayed() {
+    const h = played;
+    const rows = h ? playedRows(h) : [];
+    const more = h?.next
+      ? [
+          {
+            key: 'more',
+            html: `<button type="button" class="d-btn ghost sm spo-pmore" data-act="sp-hmore" ${h.loading ? 'aria-busy="true" disabled' : ''}>Plus anciennes</button>`,
+          },
+        ]
+      : [];
+    keyed(
+      z('qlist'),
+      [...rows, ...more],
+      h?.error
+        ? `<div class="d-empty">${esc(h.error)}</div>`
+        : !h || h.loading
+          ? '<div class="d-skel" style="height:120px"></div>'
+          : `<div class="d-empty">Aucune musique relevée pendant un live pour l’instant.<br><small>Studio note chaque titre que Spotify Desktop joue pendant le live (y compris ta musique), avec les demandes reconnues par le Core.</small></div>`,
+    );
+  }
+  async function loadPlayed(more = false) {
+    if (played?.loading) return;
+    played = played
+      ? { ...played, loading: true }
+      : { items: [], next: null, live: false, since: null, loading: true };
+    if (list === 'played') paintPlayed();
+    try {
+      const page = await postJson<SpPlayedPage>('/api/spotify/history', {
+        before: more ? played.next : null,
+      });
+      // Une première page relue garde les plus anciennes déjà chargées (sans doublon).
+      const items = more
+        ? [...played.items, ...page.items]
+        : [
+            ...page.items,
+            ...played.items.filter(
+              (i) =>
+                !page.items.some((n) => n.id === i.id) &&
+                Date.parse(i.at) < Date.parse(page.items.at(-1)?.at ?? ''),
+            ),
+          ];
+      played = {
+        ...page,
+        items,
+        next: more || !played.items.length ? page.next : played.next,
+        loading: false,
+      };
+    } catch (e) {
+      played = { ...played, loading: false, error: errText(e) };
+    }
+    if (list === 'played') paintPlayed();
+  }
+
+  // --- Music Hub : le titre en cours selon Windows (local, chaque seconde) ------------------------------------------------
+  let liveSig = '';
+  async function readLive() {
+    const out = await tryGetJson<{ live: SpLive | null }>('/api/spotify/live');
+    if (!out) return;
+    ui.live = out.live;
+    ui.liveAt = Date.now();
+    const l = out.live;
+    const sig = l
+      ? `${l.state}|${l.gen}|${l.seq}|${l.link?.uri ?? ''}|${l.cover ?? ''}`
+      : '';
+    if (sig === liveSig || !state) return;
+    const newTrack = !!l && liveSig.split('|')[1] !== String(l.gen);
+    liveSig = sig;
+    ui.now = Date.now();
+    patch(z('now'), nowView(state, ui));
+    paintProgress();
+    // Le titre change : une apparition douce, et l'historique ouvert se met à jour.
+    if (newTrack) {
+      const box = z('now');
+      box.classList.remove('is-new');
+      void box.offsetWidth;
+      box.classList.add('is-new');
+      if (list === 'played') void loadPlayed(false);
+    }
+  }
 
   let reads = 0;
   async function read() {
@@ -199,8 +321,49 @@ export function mountSpotifyPage(root: HTMLElement) {
     }
     paint();
   }
-  const tick = poller(read, 3000);
+  // Overlay musique (OBS) : le contrôle rapide (affiché ou non, quel preset) et le lien vers l'éditeur.
+  let ovl: { visible: boolean; preset: { name: string } } | null = null;
+  const paintOvl = () =>
+    patch(
+      z('ovl'),
+      ovl
+        ? `<div class="spo-line spo-ovl"><span>${ic('film')}Overlay musique : <b>${ovl.visible ? 'affiché' : 'masqué'}</b> · ${esc(ovl.preset.name)}</span>
+            <button type="button" class="d-btn sm ${ovl.visible ? '' : 'pri'}" data-act="sp-ovl" data-on="${ovl.visible ? '0' : '1'}">${ovl.visible ? 'Masquer' : 'Afficher'}</button>
+            <a class="d-btn ghost sm" href="/?p=music-overlay">Régler</a></div>`
+        : '',
+    );
+  const readOvl = async () => {
+    ovl = await tryGetJson<typeof ovl>('/api/spotify/overlays/summary');
+    paintOvl();
+  };
+
+  // Music Hub V2 : le réglage de la carte musique (lu une fois, puis à chaque enregistrement).
+  async function readOverlay() {
+    ui.overlay = await tryGetJson<SpOverlay>('/api/spotify/overlay');
+    paint();
+  }
+  void readOverlay();
+  async function saveOverlay(next: Partial<SpOverlay['config']>, done: string) {
+    if (!ui.overlay) return;
+    await run(
+      null,
+      async () => {
+        ui.overlay = await postJson<SpOverlay>('/api/spotify/overlay', {
+          ...ui.overlay!.config,
+          ...next,
+        });
+      },
+      done,
+      ERRORS,
+    );
+    paint();
+  }
+  const tick = poller(async () => {
+    await read();
+    await readOvl();
+  }, 3000);
   const clockTick = poller(paintProgress, 1000);
+  const liveTick = poller(readLive, 1000);
 
   const post = async (
     btn: HTMLElement | null,
@@ -227,6 +390,37 @@ export function mountSpotifyPage(root: HTMLElement) {
     return out as Record<string, unknown> | null;
   };
 
+  /**
+   * What the player really did (Studio's answer to the job), told once — never « demandé » as if it had worked.
+   * No job: Core refused before anything was sent (its reason is already shown by `post`).
+   */
+  const follow = async (jobId: unknown, done: string) => {
+    if (typeof jobId !== 'string') return;
+    let r: { status: string; reason: string | null } = {
+      status: 'pending',
+      reason: null,
+    };
+    for (let n = 0; n < 20 && r.status === 'pending'; n++) {
+      await new Promise((ok) => setTimeout(ok, 400));
+      r = (await tryGetJson<typeof r>(`/api/spotify/controls/${jobId}`)) ?? r;
+    }
+    const why: Record<string, string> = {
+      LAB_READ_ONLY: 'Lab en lecture seule : rien n’a été envoyé à Spotify',
+      NO_DEVICE: 'Aucun appareil Spotify actif : rien n’a été envoyé',
+      RATE_LIMITED: 'Spotify limite les appels : réessaie dans un moment',
+      STUDIO_LOST: 'Studio n’a pas répondu',
+    };
+    toast(
+      r.status === 'done'
+        ? done
+        : r.status === 'pending'
+          ? 'Le lecteur n’a pas encore répondu'
+          : (why[r.reason ?? ''] ?? 'Le lecteur n’a pas confirmé l’action'),
+      { bad: r.status !== 'done' },
+    );
+    await read();
+  };
+
   const field = (f: string) =>
     (
       ui.fields[f] ??
@@ -246,6 +440,76 @@ export function mountSpotifyPage(root: HTMLElement) {
   };
   p.root.addEventListener('input', keep);
   p.root.addEventListener('change', keep);
+  // Music Hub : les interrupteurs de l'extension et le volume s'appliquent dès qu'on les lâche.
+  p.root.addEventListener('change', (ev) => {
+    const t = ev.target as HTMLInputElement;
+    if (t.dataset.spFlag)
+      void post(
+        null,
+        '/settings',
+        { [t.dataset.spFlag]: t.checked },
+        'Réglage enregistré',
+      );
+    else if (t.dataset.spRule)
+      void post(
+        null,
+        '/music-rules',
+        { [t.dataset.spRule]: t.checked },
+        'Réglage enregistré',
+      );
+    else if (t.dataset.ov) {
+      const k = t.dataset.ov;
+      const v =
+        t.type === 'checkbox'
+          ? t.checked
+          : k === 'volume' || k === 'duration_s'
+            ? Number(t.value)
+            : k === 'sound'
+              ? t.value || null
+              : t.value;
+      void saveOverlay(
+        k === 'sound'
+          ? { sound: v as string | null, sound_name: null }
+          : { [k]: v },
+        'Overlay enregistré',
+      );
+    } else if (t.hasAttribute('data-ov-file') && t.files?.[0]) {
+      const file = t.files[0];
+      void run(
+        null,
+        async () => {
+          const res = await fetch('/api/spotify/overlay/sounds', {
+            method: 'POST',
+            headers: {
+              'x-raptoru-studio': '1',
+              'content-type': 'application/octet-stream',
+              'x-sound-name': encodeURIComponent(file.name),
+            },
+            body: file,
+          });
+          const up = (await res.json().catch(() => ({}))) as {
+            id?: string;
+            name?: string;
+            error?: string;
+          };
+          if (!res.ok || !up.id)
+            throw new Error(up.error ?? `HTTP ${res.status}`);
+          await saveOverlay(
+            { sound: up.id, sound_name: up.name ?? null },
+            `« ${up.name} » importé`,
+          );
+        },
+        'Son importé',
+        ERRORS,
+      );
+    } else if (t.hasAttribute('data-vol'))
+      void post(
+        null,
+        '/actions',
+        { action: 'volume', volume_percent: Number(t.value) },
+        `Volume ${t.value} demandé`,
+      );
+  });
   scrub(p.root, (i) => i.dispatchEvent(new Event('input', { bubbles: true })));
 
   async function setOpen(btn: HTMLElement | null, on: boolean) {
@@ -282,23 +546,79 @@ export function mountSpotifyPage(root: HTMLElement) {
           danger: false,
         })
       )
-        void post(el, '/actions', { action: 'skip' }, 'Passage demandé');
+        void post(el, '/actions', { action: 'skip' }, '').then((out) =>
+          out?.outcome === 'songskip_busy'
+            ? toast(
+                'Un skip payé par un viewer est déjà en cours : rien de plus n’a été envoyé',
+                { bad: true },
+              )
+            : follow(out?.job_id, 'Musique passée'),
+        );
     },
     'sp-remove': async (el) => {
+      const keep = el.dataset.keep === '1';
       if (
         await confirmBox({
-          title: 'Retirer cette demande ?',
-          body: 'Le viewer est remboursé (récompense de Raptoru) ; si elle est déjà dans la file Spotify, elle sera passée automatiquement.',
-          yes: 'Retirer et rembourser',
+          title: keep ? 'Retirer sans rembourser ?' : 'Retirer cette demande ?',
+          body: keep
+            ? 'Les Jetons ne sont pas rendus au viewer. Si elle est déjà dans la file Spotify, elle sera passée automatiquement.'
+            : 'Le viewer est remboursé (Jetons, ou points de la récompense de Raptoru) ; si elle est déjà dans la file Spotify, elle sera passée automatiquement.',
+          yes: keep ? 'Retirer sans rembourser' : 'Retirer et rembourser',
         })
       )
         void post(
           el,
           '/actions',
-          { action: 'remove', request_id: el.dataset.id },
-          'Demande retirée',
+          {
+            action: 'remove',
+            request_id: el.dataset.id,
+            ...(keep ? { refund: false } : {}),
+          },
+          keep ? 'Demande retirée, Jetons gardés' : 'Demande retirée',
         );
     },
+    'sp-play': async (el) => {
+      const out = await post(el, '/actions', { action: el.dataset.play }, '');
+      await follow(
+        out?.job_id,
+        el.dataset.play === 'pause' ? 'Lecteur en pause' : 'Lecture reprise',
+      );
+    },
+    'sp-bar': async (el) => {
+      const on = el.dataset.on === '1';
+      if (
+        on &&
+        !(await confirmBox({
+          title: 'Ouvrir l’Open Bar ?',
+          body: 'Jusqu’à ce que tu le fermes : les demandes depuis l’extension sont gratuites et sans limite par personne (20 s entre deux demandes, 50 musiques au plus en file). Les demandes déjà payées gardent leur prix. Les skips payants restent payants. La récompense de points de chaîne ne change pas.',
+          yes: 'Ouvrir l’Open Bar',
+          no: 'Annuler',
+          danger: false,
+        }))
+      )
+        return;
+      await post(
+        el,
+        '/music-rules',
+        { open_bar: on },
+        on ? 'Open Bar ouvert' : 'Open Bar fermé : prix et limites habituels',
+      );
+    },
+    'sp-ov-preview': (el) =>
+      run(
+        el,
+        () => postJson('/api/spotify/overlay/preview', {}),
+        'Carte envoyée à la source « Effets »',
+        ERRORS,
+      ),
+    'sp-ext-price': (el) =>
+      post(
+        el,
+        '/settings',
+        { extension_price_tokens: Number(field('ext-price')) },
+        'Prix enregistré',
+        ['ext-price'],
+      ),
     'sp-settle': async (el) => {
       const refund = el.dataset.decision === 'refund';
       if (
@@ -474,6 +794,54 @@ export function mountSpotifyPage(root: HTMLElement) {
     },
     'sp-sim': (el) =>
       post(el, `/sim/${el.dataset.what}`, {}, 'Simulateur modifié'),
+    // Music Hub : les musiques du stream, page suivante.
+    'sp-hmore': () => loadPlayed(true),
+    'sp-ovl': (el) =>
+      run(
+        el,
+        async () => {
+          await postJson('/api/spotify/overlays/visible', {
+            visible: el.dataset.on === '1',
+          });
+          await readOvl();
+        },
+        el.dataset.on === '1'
+          ? 'Overlay musique affiché'
+          : 'Overlay musique masqué',
+        ERRORS,
+      ),
+    // Lab : le live simulé (le même que la page Simulation) — l'historique ne note que pendant un live.
+    'sp-live': (el) =>
+      run(
+        el,
+        async () => {
+          await postJson('/api/raffle/actions', {
+            command: {
+              action: el.dataset.on === '1' ? 'stream_start' : 'stream_end',
+            },
+          });
+          if (list === 'played') await loadPlayed(false);
+        },
+        el.dataset.on === '1' ? 'Live simulé démarré' : 'Live simulé terminé',
+        ERRORS,
+      ),
+    // Lab with the real account: allow (or stop) the writes for this session — a confirmation before allowing.
+    'sp-lab-writes': (el) => {
+      const on = el.dataset.on === '1';
+      if (
+        on &&
+        !window.confirm(
+          'Autoriser le Lab à ajouter des titres à TA file Spotify, à passer et à piloter ton lecteur pendant cette session ?',
+        )
+      )
+        return;
+      return post(
+        el,
+        '/lab-writes',
+        { enabled: on },
+        on ? 'Ajouts autorisés pour cette session' : 'Lab en lecture seule',
+      );
+    },
   };
 
   p.root.addEventListener('click', (ev) => {
@@ -482,7 +850,8 @@ export function mountSpotifyPage(root: HTMLElement) {
     if (sw) return void setOpen(sw, sw.dataset.switch === 'on');
     const l = t.closest<HTMLElement>('[data-list]');
     if (l) {
-      list = l.dataset.list as 'file' | 'past';
+      list = l.dataset.list as 'file' | 'past' | 'played';
+      if (list === 'played') void loadPlayed(false);
       return paint();
     }
     const sim = t.closest<HTMLElement>('[data-sim-try]');
@@ -503,9 +872,11 @@ export function mountSpotifyPage(root: HTMLElement) {
       if (v) {
         tick.start();
         clockTick.start();
+        liveTick.start();
       } else {
         tick.stop();
         clockTick.stop();
+        liveTick.stop();
       }
     },
   };

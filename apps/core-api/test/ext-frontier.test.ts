@@ -96,7 +96,10 @@ afterEach(async () => {
   for (const close of closers.splice(0)) await close();
 });
 
-async function fixture(viewerLimit?: { capacity: number; refillPerS: number }) {
+async function fixture(
+  viewerLimit?: { capacity: number; refillPerS: number },
+  extra: Partial<CoreConfig> = {},
+) {
   const core = await setup();
   core.clock.set(new Date());
   const frontier = createPublicFrontier(core, core.db, core.clock, {
@@ -104,6 +107,7 @@ async function fixture(viewerLimit?: { capacity: number; refillPerS: number }) {
     TWITCH_CHANNEL_LOGIN: 'raptoru_',
     TWITCH_EXTENSION_SECRET: SECRET.toString('base64'),
     CORE_ENVIRONMENT: 'staging',
+    ...extra,
   } as CoreConfig)!;
   const server = createApp({
     ...core,
@@ -252,6 +256,9 @@ describe('public Core: viewer frontier /v1/ext', () => {
         { module_id: 'soundboard', credits_remaining: 3 },
       ],
     });
+    // Audit 09/11 (P1): the TTS view polls /tts/state for its credits — the same as the session, never 0.
+    const tts = await ext('/tts/state', viewer());
+    expect(tts.body.pending_actions).toEqual(r.body.pending_actions);
     expect(r.body.modules.map((m: { id: string }) => m.id)).toEqual([
       'tts',
       'soundboard',
@@ -1028,5 +1035,60 @@ describe('module host through the real Production doors (architecture socle)', (
       randomUUID(),
     );
     expect(ok.body).toMatchObject({ ok: true, activity: { amount: 500 } });
+  });
+});
+
+describe('Music Hub in Production (MUSIC_HUB_EXTENSION, release 10/11)', () => {
+  const tester = viewer('4242');
+  const other = viewer('5555');
+  const broadcaster = viewer(CHANNEL, 'broadcaster');
+
+  it('off (default): closed to everyone, the broadcaster included — no music in the session, no /music route', async () => {
+    const { ext } = await fixture();
+    for (const jwt of [tester, broadcaster]) {
+      expect((await ext('/session', jwt)).body.music ?? null).toBeNull();
+      expect((await ext('/music/state', jwt)).status).toBe(404);
+    }
+  });
+
+  it('testers: the broadcaster and the listed ids only; an unshared identity never', async () => {
+    const { ext, core } = await fixture(undefined, {
+      MUSIC_HUB_EXTENSION: 'testers:4242',
+    });
+    // Studio's « Demandes depuis l'extension » (the immediate switch) still OFF: present but not offered.
+    for (const jwt of [tester, broadcaster]) {
+      expect((await ext('/session', jwt)).body.music).toEqual({
+        offered: false,
+      });
+      expect((await ext('/music/state', jwt)).status).toBe(200);
+    }
+    for (const jwt of [other, token({})]) {
+      expect((await ext('/session', jwt)).body.music ?? null).toBeNull();
+      expect((await ext('/music/state', jwt)).status).toBe(404);
+    }
+    // Studio turns the extension's requests ON: offered to the tester, still nothing for the others.
+    await core.spotify.saveSettings(
+      CHANNEL,
+      { extension_enabled: true },
+      'test',
+    );
+    expect((await ext('/session', tester)).body.music).toMatchObject({
+      offered: true,
+    });
+    expect((await ext('/session', other)).body.music ?? null).toBeNull();
+    // And OFF again (the immediate kill switch): hidden at once.
+    await core.spotify.saveSettings(
+      CHANNEL,
+      { extension_enabled: false },
+      'test',
+    );
+    expect((await ext('/session', tester)).body.music).toEqual({
+      offered: false,
+    });
+  });
+
+  it('on: every identified viewer', async () => {
+    const { ext } = await fixture(undefined, { MUSIC_HUB_EXTENSION: 'on' });
+    expect((await ext('/music/state', other)).status).toBe(200);
   });
 });

@@ -10,6 +10,7 @@ import {
   esc,
   FAMILIES,
   familyOf,
+  filterLabel,
   FILTER_GROUPS,
   FILTERS,
   folded,
@@ -571,7 +572,7 @@ describe('grouping: Bonks only', () => {
 });
 
 describe('preferences', () => {
-  it('defaults: everything shown, costs hidden; the 14 filters in 4 groups (Halloween: its own)', () => {
+  it('defaults: everything shown, costs hidden; the 15 filters in 4 groups (Halloween: its own; Musique: Music Hub V2)', () => {
     expect(readPrefs(null)).toEqual(DEFAULT_PREFS);
     expect(FILTERS).toEqual([
       'follow',
@@ -587,6 +588,7 @@ describe('preferences', () => {
       'bonk',
       'random_ban',
       'raffle',
+      'music',
       'halloween',
     ]);
     expect(FILTER_GROUPS.map((g) => g.id)).toEqual([
@@ -931,5 +933,51 @@ describe('tests launched from Studio: never mistaken for real events (post-migra
     expect(prefsHtml({ ...DEFAULT_PREFS, tests: true })).toMatch(
       /id="tests" checked/,
     );
+  });
+});
+
+describe('Dock — Music Hub V2 (a song request from the extension)', () => {
+  const music = (status, over = {}) => ({
+    activity_key: 'ix:music:00000000-0000-4000-8000-000000000001',
+    kind: 'interaction',
+    type: 'music',
+    occurred_at: '2026-11-08T20:00:00.000Z',
+    data: {
+      actor: { id: '900101', name: 'Viewer Lab' },
+      track: { title: 'Néon Sauvage (Remix)', artists: ['Lune Rouge'] },
+      price: 500,
+      ...over,
+    },
+    state: { status, refund_status: null },
+  });
+
+  it('its own family (« Musique », filterable), the track and requester on one line; its status follows the request', () => {
+    expect(familyOf(music('music_queued'))).toBe('music');
+    expect(filterLabel('music')).toMatch(/Musique/);
+    expect(labelOf(music('music_queued'))).toMatchObject({
+      label: 'Musique',
+      note: 'Néon Sauvage (Remix) — Lune Rouge',
+    });
+    expect(
+      labelOf(music('music_queued'), { ...DEFAULT_PREFS, costs: true }).note,
+    ).toBe('Néon Sauvage (Remix) — Lune Rouge · 500 Jetons');
+    expect(labelOf(music('music_received', { track: null })).note).toBe(
+      'titre en cours d’ajout',
+    );
+    expect(stateOf(music('music_received'))).toMatchObject({
+      label: 'Demande reçue',
+      tone: 'wait',
+    });
+    expect(stateOf(music('music_playing'))).toMatchObject({
+      label: 'En lecture',
+      tone: 'ok',
+    });
+    const withdrawn = music('music_canceled');
+    withdrawn.state.refund_status = 'refunded';
+    expect(stateOf(withdrawn)).toMatchObject({
+      label: 'Retirée par le viewer · remboursée',
+      tone: 'muted',
+    });
+    expect(stateOf(music('music_failed'))).toMatchObject({ tone: 'bad' });
   });
 });

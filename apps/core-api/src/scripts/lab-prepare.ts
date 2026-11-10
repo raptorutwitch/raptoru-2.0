@@ -4,7 +4,7 @@ import { loadConfig } from '../config.js';
 import { createPgDb } from '../db/db.js';
 import { migrate } from '../db/migrate.js';
 import { labEnvironmentProblems } from '../lab/environment.js';
-import { seedLabFixtures } from '../lab/fixtures.js';
+import { seedLabFixtures, seedLabTeam } from '../lab/fixtures.js';
 import { StudioInstallations } from '../studio/installations.js';
 
 // Prepares the Lab database of the main Core before each start of the local Lab (Studio's runtime, opt-in
@@ -53,6 +53,8 @@ try {
     [config.TWITCH_CHANNEL_ID],
   );
   if (!seeded.length) await seedLabFixtures(db);
+  // Music Hub V2: the Lab's supermod, also on a Lab database seeded before it existed (idempotent).
+  else await seedLabTeam(db);
   const code = process.argv[2];
   let paired = 'déjà appairé';
   if (code) {

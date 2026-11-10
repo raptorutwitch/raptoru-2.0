@@ -58,7 +58,7 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
     onSync: null as ((body: Sync) => void) | null,
   };
   const call = async (path: string, body?: unknown): Promise<unknown> => {
-    if (path.endsWith('/studio')) {
+    if (path.split('?')[0]!.endsWith('/studio')) {
       core.syncs.push(body as Sync);
       const pb = (body as { playback?: { track?: { title?: string } | null } })
         .playback;
@@ -594,5 +594,347 @@ describe('Spotify runtime (Studio)', () => {
     }
     expect(h.sim.calls.length).toBe(calls);
     expect(h.core.syncs.at(-1)!.status.limited_until).not.toBeNull();
+  });
+});
+
+describe('Music Hub — search and player jobs (docs/music/MUSIC_HUB_STATE.md)', () => {
+  it('a search job: the Lab catalogue as you type (prefixes), versions told apart, no cover / not playable kept, never queued', async () => {
+    const h = await harness();
+    h.job({ kind: 'search', job_id: id(1), query: 'nuit bl' });
+    await h.rt.once();
+    await h.rt.searchesSettled();
+    const r = h.report() as unknown as {
+      outcome: string;
+      provider: string;
+      items: {
+        title: string;
+        album: string | null;
+        image_url: string | null;
+        playable: boolean;
+      }[];
+    };
+    expect(r.outcome).toBe('done');
+    expect(r.provider).toBe('lab');
+    expect(r.items.map((i) => i.title)).toEqual([
+      'Nuit Blanche',
+      'Nuit Blanche (Live à Lyon)',
+      'Nuit Blanche (Remix Club)',
+      'Nuit Blanche',
+    ]);
+    expect(r.items[3]!.album).toBe('Marées');
+    expect(r.items[0]!.image_url).toMatch(/^data:image\/svg\+xml,/);
+    h.job({ kind: 'search', job_id: id(2), query: 'comete acoustique' });
+    await h.rt.once();
+    await h.rt.searchesSettled();
+    const c = h.report() as unknown as typeof r;
+    expect(c.items[0]!.image_url).toBeNull();
+    h.job({ kind: 'search', job_id: id(3), query: 'session perdue' });
+    await h.rt.once();
+    await h.rt.searchesSettled();
+    expect((h.report() as unknown as typeof r).items[0]!.playable).toBe(false);
+    expect(h.sim.view().queue).toEqual([]);
+  });
+
+  it('pause, resume and volume: what the player says afterwards, never an assumed success', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'control',
+      job_id: id(4),
+      action: 'pause',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'done' });
+    expect(h.sim.view().playing).toBe(false);
+    h.job({
+      kind: 'control',
+      job_id: id(5),
+      action: 'volume',
+      volume_percent: 35,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'done',
+      playback: { volume_percent: 35, is_playing: false },
+    });
+    h.job({
+      kind: 'control',
+      job_id: id(6),
+      action: 'resume',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'done',
+      playback: { is_playing: true },
+    });
+    h.sim.deviceActive = false;
+    h.job({
+      kind: 'control',
+      job_id: id(7),
+      action: 'pause',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'failed',
+      reason: 'NO_DEVICE',
+    });
+  });
+
+  it('a paid skip aims at ONE track: another one playing → TRACK_CHANGED, nothing sent; the right one → skipped', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'skip',
+      job_id: id(11),
+      request_id: null,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    const missed = h.report() as { skipped_track: { uri: string } };
+    expect(missed).toMatchObject({
+      outcome: 'failed',
+      reason: 'TRACK_CHANGED',
+    });
+    expect(h.sim.view().current).toContain('Lofi Stream Beat');
+    h.job({
+      kind: 'skip',
+      job_id: id(12),
+      request_id: null,
+      expect_uri: missed.skipped_track.uri,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'skipped' });
+    expect(h.sim.view().current).toContain('Chill Loop');
+  });
+
+  it('a paid skip in the last seconds of its track: nothing sent (it would land on the next one) — audit 09/11', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'skip',
+      job_id: id(16),
+      request_id: null,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    const uri = (h.report() as { skipped_track: { uri: string } }).skipped_track
+      .uri;
+    h.sim.seekNearEnd(3_000);
+    h.job({ kind: 'skip', job_id: id(17), request_id: null, expect_uri: uri });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'failed',
+      reason: 'TRACK_CHANGED',
+    });
+    expect(h.sim.view().current).toContain('Lofi Stream Beat');
+  });
+
+  it('seek: in THE track the moderator saw (PUT /me/player/seek), proven by the reading after; another track → nothing sent', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'skip',
+      job_id: id(13),
+      request_id: null,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    const uri = (h.report() as { skipped_track: { uri: string } }).skipped_track
+      .uri;
+    h.job({
+      kind: 'control',
+      job_id: id(14),
+      action: 'seek',
+      volume_percent: null,
+      position_ms: 60_000,
+      expect_uri: uri,
+    });
+    await h.rt.once();
+    const done = h.report() as {
+      outcome: string;
+      playback: { progress_ms: number; track: { uri: string } };
+    };
+    expect(done.outcome).toBe('done');
+    expect(done.playback.track.uri).toBe(uri);
+    expect(Math.abs(done.playback.progress_ms - 60_000)).toBeLessThan(5_000);
+    h.job({
+      kind: 'control',
+      job_id: id(15),
+      action: 'seek',
+      volume_percent: null,
+      position_ms: 90_000,
+      expect_uri: 'spotify:track:LABMUSIC00000000000099',
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'failed',
+      reason: 'TRACK_CHANGED',
+    });
+    expect(h.sim.view().current).toContain('Lofi Stream Beat');
+  });
+});
+
+describe('Music Hub V2 — pasted links, many versions, the withdrawn request skipped (latency in the simulator)', () => {
+  const lab = (n: number) => `LABMUSIC${String(n).padStart(14, '0')}`;
+  type Items = { outcome: string; items: { id: string; title: string }[] };
+
+  it('a pasted link names ONE exact track (read by id, as the reward reads it); a text gets every version of a title', async () => {
+    const h = await harness();
+    h.job({
+      kind: 'search',
+      job_id: id(1),
+      query: `track:${lab(29)}`,
+      track_id: lab(29),
+    });
+    await h.rt.once();
+    await h.rt.searchesSettled();
+    const one = h.report() as unknown as Items;
+    expect(one.outcome).toBe('done');
+    expect(one.items.map((i) => i.title)).toEqual(['Néon Sauvage (Nightcore)']);
+    expect(h.events).toContain(`spotify GET tracks/${lab(29)}`);
+    h.job({ kind: 'search', job_id: id(2), query: 'neon sauv' });
+    await h.rt.once();
+    await h.rt.searchesSettled();
+    const all = h.report() as unknown as Items;
+    expect(all.items).toHaveLength(10);
+    expect(all.items.map((i) => i.title)).toEqual(
+      expect.arrayContaining([
+        'Néon Sauvage (Remix)',
+        'Néon Sauvage (Slowed + Reverb)',
+        'Néon Sauvage (Sped Up)',
+      ]),
+    );
+    // An unknown id: an empty answer, never an invented track.
+    h.job({
+      kind: 'search',
+      job_id: id(3),
+      query: 'track:LABMUSIC99999999999999',
+      track_id: 'LABMUSIC99999999999999',
+    });
+    await h.rt.once();
+    await h.rt.searchesSettled();
+    expect((h.report() as unknown as Items).items).toEqual([]);
+    expect(h.sim.view().queue).toEqual([]);
+  });
+
+  it('withdrawn after Spotify took it: skipped the moment it starts, once — measured latency in the simulator', async () => {
+    const h = await harness();
+    const uri = `spotify:track:${lab(28)}`;
+    h.job({
+      kind: 'song_request',
+      job_id: id(1),
+      request_id: id(101),
+      reference: { kind: 'exact', track_id: lab(28) },
+      max_duration_ms: 600_000,
+    });
+    await h.rt.once();
+    expect(h.sim.view().queue).toContain('Néon Sauvage (Remix)');
+    // The viewer withdrew it (Core: a tombstone, refunded once there); Spotify still holds it next.
+    h.core.answer = {
+      ...h.core.answer,
+      queue: [entry(1, uri, true)],
+      watch: true,
+    };
+    await h.rt.once();
+    await h.rt.api('POST', '/sim/near-end', async () => ({}));
+    const startsAt = h.clock.t + 3_000; // near-end: 3 s left on the track before it
+    let skippedAt = 0;
+    for (let i = 0; i < 80 && !skippedAt; i++) {
+      h.clock.t += 100;
+      await h.rt.once();
+      if (h.events.includes('spotify POST me/player/next'))
+        skippedAt = h.clock.t;
+    }
+    expect(skippedAt).toBeGreaterThan(0);
+    const latency = skippedAt - startsAt;
+    // The simulator's own pace (Studio reads Spotify every ~0.5 s while watching): a measure, not a frame-exact promise.
+    expect(latency).toBeGreaterThanOrEqual(0);
+    expect(latency).toBeLessThanOrEqual(1_500);
+    for (let i = 0; i < 10; i++) {
+      h.clock.t += 300;
+      await h.rt.once();
+    }
+    expect(
+      h.events.filter((x) => x === 'spotify POST me/player/next'),
+    ).toHaveLength(1);
+    expect(h.core.autoSkips).toHaveLength(1);
+    h.logs.push(`[test] auto-skip latency ${latency} ms`);
+    console.log(
+      `Music Hub V2 — latence du skip automatique (simulateur) : ${latency} ms`,
+    );
+  });
+});
+
+describe('Lab on the real account, read-only (docs/music/SPOTIFY_REEL_LAB.md)', () => {
+  it('a request resolves the EXACT track, then is refused before Spotify (LAB_READ_ONLY): nothing queued; allowed for the session, it is queued', async () => {
+    const lab = { writes: false };
+    const clock = { t: 1_000_000 };
+    const sim = new SpotifySim(() => clock.t);
+    const calls: string[] = [];
+    const api = new SpotifyApi({
+      auth: simulatedAuth,
+      stateFile: join(await mkdtemp(join(tmpdir(), 'sp-real-')), 'l.json'),
+      fetch: ((input: URL | string, init?: RequestInit) => {
+        calls.push(
+          `${init?.method ?? 'GET'} ${new URL(String(input)).pathname}`,
+        );
+        return sim.fetch(input, init);
+      }) as typeof fetch,
+      now: () => clock.t,
+      sleep: async (ms) => void (clock.t += ms),
+      writesAllowed: () => lab.writes,
+    });
+    const reports: Record<string, unknown>[] = [];
+    let jobs: SpotifyJob[] = [];
+    const rt = await SpotifyRuntime.open({
+      core: (async (path: string, body?: unknown) => {
+        if (path.split('?')[0]!.endsWith('/studio')) {
+          const a = {
+            enabled: true,
+            jobs,
+            queue: [],
+            current_request_id: null,
+            watch: false,
+          };
+          jobs = [];
+          return a;
+        }
+        if (path.endsWith('/report'))
+          reports.push(body as Record<string, unknown>);
+        return {};
+      }) as never,
+      environment: 'lab',
+      channelId: '1',
+      api,
+      auth: simulatedAuth,
+      sim: null,
+      labReal: lab,
+      reservationsFile: join(
+        await mkdtemp(join(tmpdir(), 'sp-real-r-')),
+        'r.json',
+      ),
+      now: () => clock.t,
+      sleep: async (ms) => void (clock.t += ms),
+    });
+    const ask = (n: number): SpotifyJob => ({
+      kind: 'song_request',
+      job_id: id(n),
+      request_id: id(100 + n),
+      reference: { kind: 'exact', track_id: NUMB.id! },
+      max_duration_ms: 600_000,
+    });
+    jobs = [ask(1)];
+    await rt.once();
+    expect(reports[0]).toMatchObject({
+      outcome: 'refused',
+      reason: 'LAB_READ_ONLY',
+      track: { id: NUMB.id, title: 'Numb' },
+    });
+    expect(calls.some((c) => c.startsWith('POST'))).toBe(false);
+    expect(sim.view().queue).toEqual([]);
+    lab.writes = true;
+    jobs = [ask(2)];
+    await rt.once();
+    expect(reports[1]).toMatchObject({ outcome: 'queued' });
+    expect(sim.view().queue).toEqual(['Numb']);
   });
 });

@@ -315,6 +315,8 @@ const points = await ChannelPointsRuntime.create({
     uploadsDir: join(dir, 'effects-uploads'),
   }),
   spotifyDir: join(dir, 'spotify-lab'),
+  // Music Hub: the OBS music overlays (their page; no OBS here: the install assistant says so).
+  musicOverlayDir: join(import.meta.dirname, '..', 'music-overlay'),
   twitch: () => ({ scope: false, adapter_running: false }),
 });
 points.start();

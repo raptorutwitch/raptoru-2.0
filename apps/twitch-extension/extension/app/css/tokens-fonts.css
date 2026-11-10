@@ -1,0 +1,43 @@
+/* Tailles de texte générées (scripts/dev/css-v2.mjs) : max(plancher du rôle, taille de la V1 × --kt). */
+:root {
+  --fs-8: max(var(--fl-small), calc(8px * var(--kt)));
+  --fsm-8: max(var(--fl-micro), calc(8px * var(--kt)));
+  --fs-8_5: max(var(--fl-small), calc(8.5px * var(--kt)));
+  --fsm-8_5: max(var(--fl-micro), calc(8.5px * var(--kt)));
+  --fs-9: max(var(--fl-small), calc(9px * var(--kt)));
+  --fsm-9: max(var(--fl-micro), calc(9px * var(--kt)));
+  --fs-9_5: max(var(--fl-small), calc(9.5px * var(--kt)));
+  --fsm-9_5: max(var(--fl-micro), calc(9.5px * var(--kt)));
+  --fs-10: max(var(--fl-small), calc(10px * var(--kt)));
+  --fsm-10: max(var(--fl-micro), calc(10px * var(--kt)));
+  --fs-10_5: max(var(--fl-small), calc(10.5px * var(--kt)));
+  --fsm-10_5: max(var(--fl-micro), calc(10.5px * var(--kt)));
+  --fs-11: max(var(--fl-small), calc(11px * var(--kt)));
+  --fsm-11: max(var(--fl-micro), calc(11px * var(--kt)));
+  --fs-11_5: max(var(--fl-small), calc(11.5px * var(--kt)));
+  --fsm-11_5: max(var(--fl-micro), calc(11.5px * var(--kt)));
+  --fs-12: max(var(--fl-body), calc(12px * var(--kt)));
+  --fs-12_5: max(var(--fl-body), calc(12.5px * var(--kt)));
+  --fs-13: max(var(--fl-body), calc(13px * var(--kt)));
+  --fs-13_5: max(var(--fl-body), calc(13.5px * var(--kt)));
+  --fs-14: max(var(--fl-strong), calc(14px * var(--kt)));
+  --fs-14_5: max(var(--fl-strong), calc(14.5px * var(--kt)));
+  --fs-15: max(var(--fl-strong), calc(15px * var(--kt)));
+  --fs-16: max(var(--fl-strong), calc(16px * var(--kt)));
+  --fs-17: max(var(--fl-strong), calc(17px * var(--kt)));
+  --fs-18: max(var(--fl-strong), calc(18px * var(--kt)));
+  --fs-19: max(var(--fl-strong), calc(19px * var(--kt)));
+  --fs-20: max(var(--fl-strong), calc(20px * var(--kt)));
+  --fs-21: max(var(--fl-strong), calc(21px * var(--kt)));
+  --fs-22: max(var(--fl-strong), calc(22px * var(--kt)));
+  --fs-24: max(var(--fl-strong), calc(24px * var(--kt)));
+  --fs-25: max(var(--fl-strong), calc(25px * var(--kt)));
+  --fs-26: max(var(--fl-strong), calc(26px * var(--kt)));
+  --fs-27: max(var(--fl-strong), calc(27px * var(--kt)));
+  --fs-28: max(var(--fl-strong), calc(28px * var(--kt)));
+  --fs-30: max(var(--fl-strong), calc(30px * var(--kt)));
+  --fs-31: max(var(--fl-strong), calc(31px * var(--kt)));
+  --fs-32: max(var(--fl-strong), calc(32px * var(--kt)));
+  --fs-36: max(var(--fl-strong), calc(36px * var(--kt)));
+  --fs-56: max(var(--fl-strong), calc(56px * var(--kt)));
+}

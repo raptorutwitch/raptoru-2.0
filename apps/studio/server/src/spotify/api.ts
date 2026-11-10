@@ -9,11 +9,19 @@ import { normalizeText, type Candidate } from './search.js';
 // + jitter, persisted across restarts, QUOTA_EXCEEDED kept apart); network errors / 5xx back off (1 s → 60 s);
 // a 401 refreshes the token once (shared) and retries once; a 403 is never retried; a write (queue, next) is never
 // retried — when its answer is lost the caller reads back instead.
+// Two lanes (docs/music/SPOTIFY_QUOTA.md): the ESSENTIAL one (queue, skip, player, playback readings, the reward's and
+// `!song`'s searches) always goes first; the CATALOGUE one (the Music Hub's searches) has its own budget and only uses
+// what the essential lane leaves — a wave of searches can never hold a skip or an addition behind it. Local counters
+// only (per endpoint, cache, waits): nothing leaves the PC.
 
 export const SPOTIFY_API = {
   base: 'https://api.spotify.com/v1',
   minSpacingMs: 200,
   maxPerMinute: 90,
+  /** The Music Hub's catalogue lane: at most this many calls in any sliding minute… */
+  catalogPerMinute: 30,
+  /** …and only while the whole gate stays under this (the rest is kept for the essential lane). */
+  catalogWhileUnder: 60,
   /** Above this, the panel warns (historical API_CALL_RATE_HIGH). */
   warnPerMinute: 60,
   timeoutMs: 10_000,
@@ -28,6 +36,18 @@ export const SPOTIFY_API = {
     track: 30 * 60_000,
   },
 } as const;
+
+export type SpotifyLane = 'essential' | 'catalog';
+
+interface Task {
+  method: 'GET' | 'POST' | 'PUT';
+  path: string;
+  query: Record<string, string | number | undefined>;
+  lane: SpotifyLane;
+  queuedAt: number;
+  resolve: (v: { status: number; data: unknown }) => void;
+  reject: (e: unknown) => void;
+}
 
 export class SpotifyApiError extends Error {
   constructor(
@@ -46,6 +66,8 @@ export interface SpotifyDevice {
   type: string;
   is_active: boolean;
   is_restricted: boolean;
+  /** The device's volume (0–100), when Spotify gives it. */
+  volume_percent?: number | null;
 }
 
 export interface SpotifyPlaybackRaw {
@@ -72,6 +94,11 @@ export interface SpotifyApiDeps {
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
   base?: string;
+  /**
+   * Lab with the broadcaster's real account (LAB_SPOTIFY=real): writes (queue, skip, player) only while this says yes —
+   * refused before any network otherwise (LAB_READ_ONLY). Absent: every write is allowed (Production, simulator).
+   */
+  writesAllowed?: () => boolean;
 }
 
 interface LimitState {
@@ -114,9 +141,30 @@ export class SpotifyApi {
   private readonly base: string;
   private limit: LimitState = { until: 0, reason: null, endpoint: null };
   private loaded: Promise<void> | null = null;
-  private chain: Promise<unknown> = Promise.resolve();
+  private readonly lanes: Record<SpotifyLane, Task[]> = {
+    essential: [],
+    catalog: [],
+  };
+  private pumping = false;
   private lastCallAt = 0;
   private calls: number[] = [];
+  private catalogCalls: number[] = [];
+  private readonly since: number;
+  /** Per endpoint (GET /search, POST /me/player/queue…): calls sent, 429 received, other errors. */
+  private readonly endpoints = new Map<
+    string,
+    { calls: number; r429: number; errors: number }
+  >();
+  /** Cache hits per kind of reading (search, track, playback, queue, devices). */
+  private readonly hits = new Map<string, number>();
+  /** Time spent waiting in each lane before being sent. */
+  private readonly waits: Record<
+    SpotifyLane,
+    { count: number; total_ms: number; max_ms: number }
+  > = {
+    essential: { count: 0, total_ms: 0, max_ms: 0 },
+    catalog: { count: 0, total_ms: 0, max_ms: 0 },
+  };
   private failures = 0;
   private failUntil = 0;
   private readonly cache = new Map<string, { value: unknown; until: number }>();
@@ -129,6 +177,10 @@ export class SpotifyApi {
     cache_hits: 0,
     shared: 0,
     suppressed: 0,
+    /** Music Hub searches refused by the catalogue lane's budget (never sent). */
+    catalog_deferred: 0,
+    /** Lab with the real account: writes refused before the network (read-only session). */
+    blocked_writes: 0,
   };
 
   constructor(private readonly d: SpotifyApiDeps) {
@@ -137,6 +189,7 @@ export class SpotifyApi {
     this.sleep = d.sleep ?? ((ms) => new Promise((ok) => setTimeout(ok, ms)));
     this.random = d.random ?? Math.random;
     this.base = (d.base ?? SPOTIFY_API.base).replace(/\/$/, '');
+    this.since = this.now();
   }
 
   private load() {
@@ -186,6 +239,22 @@ export class SpotifyApi {
       backoff_until:
         this.failUntil > now ? new Date(this.failUntil).toISOString() : null,
       counters: { ...this.counters },
+      /** Since this Studio started: per endpoint, cache hits per kind, waits per lane (local only). */
+      usage: {
+        since: new Date(this.since).toISOString(),
+        endpoints: Object.fromEntries(this.endpoints),
+        cache_hits: Object.fromEntries(this.hits),
+        waits: {
+          essential: { ...this.waits.essential },
+          catalog: { ...this.waits.catalog },
+        },
+        catalog_last_minute: this.catalogCalls.filter((t) => t > now - 60_000)
+          .length,
+        queued: {
+          essential: this.lanes.essential.length,
+          catalog: this.lanes.catalog.length,
+        },
+      },
     };
   }
 
@@ -194,25 +263,91 @@ export class SpotifyApi {
     return this.limit.until > this.now();
   }
 
-  /** One HTTP call, in the serialized queue. */
+  /** One HTTP call, in its lane; one call at a time for the whole gate (the essential lane first). */
   private call(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     path: string,
     query: Record<string, string | number | undefined> = {},
+    lane: SpotifyLane = 'essential',
   ) {
-    const run = this.chain.then(() => this.send(method, path, query));
-    this.chain = run.catch(() => {});
-    return run;
+    return new Promise<{ status: number; data: unknown }>((resolve, reject) => {
+      this.lanes[lane].push({
+        method,
+        path,
+        query,
+        lane,
+        queuedAt: this.now(),
+        resolve,
+        reject,
+      });
+      void this.pump();
+    });
+  }
+
+  /**
+   * The next catalogue call, when its budget allows it; over budget it is refused at once (never held: a held search
+   * would only grow stale, and Core answers « réessaie » to the viewer).
+   */
+  private nextCatalog(): Task | undefined {
+    const now = this.now();
+    this.catalogCalls = this.catalogCalls.filter((t) => t > now - 60_000);
+    this.calls = this.calls.filter((t) => t > now - 60_000);
+    while (
+      this.lanes.catalog.length &&
+      (this.catalogCalls.length >= SPOTIFY_API.catalogPerMinute ||
+        this.calls.length >= SPOTIFY_API.catalogWhileUnder)
+    ) {
+      this.counters.catalog_deferred++;
+      this.lanes.catalog.shift()!.reject(new SpotifyApiError('RATE_LIMITED'));
+    }
+    return this.lanes.catalog.shift();
+  }
+
+  private async pump() {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      for (;;) {
+        const task = this.lanes.essential.shift() ?? this.nextCatalog();
+        if (!task) return;
+        const w = this.waits[task.lane];
+        const waited = Math.max(0, this.now() - task.queuedAt);
+        w.count++;
+        w.total_ms += waited;
+        w.max_ms = Math.max(w.max_ms, waited);
+        try {
+          task.resolve(
+            await this.send(task.method, task.path, task.query, task.lane),
+          );
+        } catch (e) {
+          task.reject(e);
+        }
+      }
+    } finally {
+      this.pumping = false;
+    }
+  }
+
+  private endpoint(name: string) {
+    let e = this.endpoints.get(name);
+    if (!e) this.endpoints.set(name, (e = { calls: 0, r429: 0, errors: 0 }));
+    return e;
   }
 
   private async send(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     path: string,
     query: Record<string, string | number | undefined>,
+    lane: SpotifyLane,
   ) {
     await this.load();
-    const write = method === 'POST';
+    const write = method !== 'GET';
     const endpoint = `${method} /${path.replace(/\/[A-Za-z0-9]{22}$/, '/{id}')}`;
+    if (write && this.d.writesAllowed && !this.d.writesAllowed()) {
+      // Lab with the real account, read-only session: nothing reaches Spotify (never « maybe sent »).
+      this.counters.blocked_writes++;
+      throw new SpotifyApiError('LAB_READ_ONLY');
+    }
     const url = new URL(`${this.base}/${path}`);
     for (const [k, v] of Object.entries(query))
       if (v !== undefined && v !== '') url.searchParams.set(k, String(v));
@@ -238,8 +373,11 @@ export class SpotifyApi {
         await this.sleep(this.calls[0]! + 60_000 - this.now());
       this.lastCallAt = this.now();
       this.calls.push(this.lastCallAt);
+      if (lane === 'catalog') this.catalogCalls.push(this.lastCallAt);
       this.counters.calls++;
       if (write) this.counters.writes++;
+      const stat = this.endpoint(endpoint);
+      stat.calls++;
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), SPOTIFY_API.timeoutMs);
       let res: Response;
@@ -253,6 +391,7 @@ export class SpotifyApi {
           signal: ctl.signal,
         });
       } catch {
+        stat.errors++;
         this.backoff();
         throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', write);
       } finally {
@@ -266,6 +405,7 @@ export class SpotifyApi {
       if (res.status === 401)
         throw new SpotifyApiError('AUTH_REQUIRED', false, 401);
       if (res.status === 429) {
+        stat.r429++;
         const payload = await res.json().catch(() => undefined);
         const reason = classifyRateLimit(payload);
         const at = this.now();
@@ -289,11 +429,14 @@ export class SpotifyApi {
         throw new SpotifyApiError('RATE_LIMITED', false, 429);
       }
       if (res.status >= 500) {
+        stat.errors++;
         this.backoff();
         throw new SpotifyApiError('TEMPORARY_ERROR', write, res.status);
       }
-      if (!res.ok)
+      if (!res.ok) {
+        stat.errors++;
         throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', false, res.status);
+      }
       this.failures = 0;
       this.failUntil = 0;
       if (this.limit.reason) {
@@ -324,8 +467,11 @@ export class SpotifyApi {
     ttl: number,
     load: () => Promise<T>,
     force = false,
+    lane: SpotifyLane = 'essential',
   ): Promise<T> {
-    const pending = this.inFlight.get(key);
+    // Shared while in flight within ONE lane only: an essential reading never waits on a catalogue search.
+    const flight = `${lane}:${key}`;
+    const pending = this.inFlight.get(flight);
     if (pending) {
       this.counters.shared++;
       return pending as Promise<T>;
@@ -333,6 +479,8 @@ export class SpotifyApi {
     const hit = this.cache.get(key);
     if (!force && hit && hit.until > this.now()) {
       this.counters.cache_hits++;
+      const kind = key.split(':')[0]!;
+      this.hits.set(kind, (this.hits.get(kind) ?? 0) + 1);
       return hit.value as T;
     }
     const run = load().then((value) => {
@@ -342,11 +490,11 @@ export class SpotifyApi {
           this.cache.delete(k);
       return value;
     });
-    this.inFlight.set(key, run);
+    this.inFlight.set(flight, run);
     try {
       return await run;
     } finally {
-      this.inFlight.delete(key);
+      this.inFlight.delete(flight);
     }
   }
 
@@ -355,39 +503,66 @@ export class SpotifyApi {
       if (prefixes.some((p) => k.startsWith(p))) this.cache.delete(k);
   }
 
-  search(query: string) {
+  /**
+   * A track search (10 results: Development Mode's maximum since February 2026). The reward and `!song` search in the
+   * essential lane, as before; the Music Hub in the catalogue lane, with `market=from_token` so Spotify says whether
+   * each version plays on the broadcaster's account (`is_playable`).
+   */
+  search(query: string, lane: SpotifyLane = 'essential') {
+    const hub = lane === 'catalog';
     return this.read(
-      `search:${normalizeText(query)}`,
+      `search:${hub ? 'm:' : ''}${normalizeText(query)}`,
       SPOTIFY_API.ttl.search,
       async () => {
-        const r = await this.call('GET', 'search', {
-          q: query,
-          type: 'track',
-          limit: 10,
-        });
+        const r = await this.call(
+          'GET',
+          'search',
+          {
+            q: query,
+            type: 'track',
+            limit: 10,
+            ...(hub ? { market: 'from_token' } : {}),
+          },
+          lane,
+        );
         return (
           (r.data as { tracks?: { items?: (Candidate | null)[] } })?.tracks
             ?.items ?? []
         ).filter((c): c is Candidate => Boolean(c));
       },
+      false,
+      lane,
     );
   }
 
-  /** A track by id, or null when Spotify does not know it (404 / 400). */
-  track(id: string) {
-    return this.read(`track:${id}`, SPOTIFY_API.ttl.track, async () => {
-      try {
-        return (await this.call('GET', `tracks/${encodeURIComponent(id)}`))
-          .data as Candidate;
-      } catch (e) {
-        if (
-          e instanceof SpotifyApiError &&
-          (e.status === 404 || e.status === 400)
-        )
-          return null;
-        throw e;
-      }
-    });
+  /** A track by id, or null when Spotify does not know it (404 / 400). Same lanes as `search`. */
+  track(id: string, lane: SpotifyLane = 'essential') {
+    const hub = lane === 'catalog';
+    return this.read(
+      `track:${hub ? 'm:' : ''}${id}`,
+      SPOTIFY_API.ttl.track,
+      async () => {
+        try {
+          return (
+            await this.call(
+              'GET',
+              `tracks/${encodeURIComponent(id)}`,
+              hub ? { market: 'from_token' } : {},
+              lane,
+            )
+          ).data as Candidate;
+        } catch (e) {
+          if (
+            e instanceof SpotifyApiError &&
+            (e.status === 404 || e.status === 400)
+          )
+            return null;
+          throw e;
+        }
+      },
+      false,
+      lane,
+    );
   }
 
   devices(force = false) {
@@ -452,6 +627,46 @@ export class SpotifyApi {
     this.forget('queue');
     if (r.status !== 204)
       throw new SpotifyApiError('QUEUE_RESULT_UNKNOWN', true, r.status);
+  }
+
+  /**
+   * Music Hub: PUT /me/player/pause or /me/player/play (resume, no body). 204 (or 200) = done; anything else is « maybe
+   * sent »: the caller reads the playback back, never retries.
+   */
+  async setPlaying(play: boolean, deviceId: string | null) {
+    this.forget('playback');
+    const r = await this.call(
+      'PUT',
+      play ? 'me/player/play' : 'me/player/pause',
+      { device_id: deviceId ?? undefined },
+    );
+    this.forget('playback');
+    if (r.status !== 204 && r.status !== 200)
+      throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', true, r.status);
+  }
+
+  /** Music Hub: PUT /me/player/volume?volume_percent= (same « maybe sent » rule). */
+  async setVolume(percent: number, deviceId: string | null) {
+    this.forget('playback');
+    const r = await this.call('PUT', 'me/player/volume', {
+      volume_percent: Math.max(0, Math.min(100, Math.round(percent))),
+      device_id: deviceId ?? undefined,
+    });
+    this.forget('playback');
+    if (r.status !== 204 && r.status !== 200)
+      throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', true, r.status);
+  }
+
+  /** Music Hub: PUT /me/player/seek?position_ms= (same « maybe sent » rule: the caller reads the playback back). */
+  async seek(positionMs: number, deviceId: string | null) {
+    this.forget('playback');
+    const r = await this.call('PUT', 'me/player/seek', {
+      position_ms: Math.max(0, Math.round(positionMs)),
+      device_id: deviceId ?? undefined,
+    });
+    this.forget('playback');
+    if (r.status !== 204 && r.status !== 200)
+      throw new SpotifyApiError('SPOTIFY_UNAVAILABLE', true, r.status);
   }
 
   /** POST /me/player/next. Anything but 204 is « maybe sent »: read the playback back. */

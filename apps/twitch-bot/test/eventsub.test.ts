@@ -207,3 +207,58 @@ describe('EventSub lifecycle', () => {
     expect(client.connected()).toBe(false);
   });
 });
+
+describe('EventSub on a half-open connection (audit 09/11)', () => {
+  /** close() only sends a Close frame: onclose never comes (silent network loss). */
+  class HalfOpenSocket {
+    static opened: HalfOpenSocket[] = [];
+    onmessage?: (event: { data: string }) => Promise<void>;
+    onclose?: () => void;
+    close = vi.fn();
+    constructor(readonly url: string) {
+      HalfOpenSocket.opened.push(this);
+    }
+  }
+
+  it('missed keepalives: not « connected » any more and a fresh session is opened without waiting for onclose', async () => {
+    vi.useFakeTimers();
+    HalfOpenSocket.opened = [];
+    vi.stubGlobal('WebSocket', HalfOpenSocket);
+    const client = runEventSub({
+      subscribe: vi.fn(),
+      notification: vi.fn(),
+      revocation: vi.fn(),
+      log: vi.fn(),
+    });
+    await HalfOpenSocket.opened[0]!.onmessage!({ data: welcome('w1') });
+    expect(client.connected()).toBe(true);
+    await vi.advanceTimersByTimeAsync(21_000);
+    expect(HalfOpenSocket.opened[0]!.close).toHaveBeenCalled();
+    expect(client.connected()).toBe(false);
+    expect(HalfOpenSocket.opened).toHaveLength(2);
+    // The late close of the dead socket schedules nothing more.
+    HalfOpenSocket.opened[0]!.onclose?.();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(HalfOpenSocket.opened.length).toBeLessThanOrEqual(3);
+    client.stop();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('a socket that never says welcome is replaced too', async () => {
+    vi.useFakeTimers();
+    HalfOpenSocket.opened = [];
+    vi.stubGlobal('WebSocket', HalfOpenSocket);
+    const client = runEventSub({
+      subscribe: vi.fn(),
+      notification: vi.fn(),
+      revocation: vi.fn(),
+      log: vi.fn(),
+    });
+    await vi.advanceTimersByTimeAsync(21_000);
+    expect(HalfOpenSocket.opened).toHaveLength(2);
+    client.stop();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+});

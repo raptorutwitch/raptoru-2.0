@@ -5,17 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Raptoru Live — panneau</title>
   <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
-  <link rel="stylesheet" href="base.css">
-  <link rel="stylesheet" href="mobile.css">
-  <link rel="stylesheet" href="picker.css">
-  <link rel="stylesheet" href="bonk-chargeur.css">
-  <link rel="stylesheet" href="soundboard.css">
-  <link rel="stylesheet" href="currency-switch.css">
-  <link rel="stylesheet" href="hub.css">
-  <link rel="stylesheet" href="events-shop.css">
-  <link rel="stylesheet" href="tts-v2.css">
-  <link rel="stylesheet" href="moderation-v2.css">
-  <link rel="stylesheet" href="tombola-v2.css">
 </head>
 <body class="mobile panel-view">
   <header class="m-head" aria-label="Contrôles de l’extension">
@@ -24,6 +13,7 @@
 
   <main id="panel" class="m-body"></main>
 
-  <script type="module" src="mobile.js"></script>
+  <!-- Feuilles et point d'entrée choisis par app/boot.js (shell legacy ou v2). -->
+  <script type="module" src="app/boot.js"></script>
 </body>
 </html>

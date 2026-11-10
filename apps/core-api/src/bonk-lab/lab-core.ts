@@ -196,6 +196,8 @@ export function createLabCore({
   caution.rates = cautionRates(moduleSettings);
   const cpTwitch = new CpTwitchActions(db, systemClock);
   const spotify = new SpotifyService(db, systemClock, cpTwitch);
+  spotify.labSessions = true; // Music Hub: the stream's music history follows the Lab's simulated live
+  spotify.songV2 = true; // Music Hub: the new `!song` (announcement, 30 s cooldown, SMTC)
   const channelPoints = new ChannelPointsService(
     db,
     systemClock,

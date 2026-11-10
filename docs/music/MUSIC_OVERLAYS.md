@@ -1,0 +1,238 @@
+# Overlay musique (OBS) — 09/11/2026
+
+> Lab seulement, branche `feat/music-hub`. Rien de poussé, déployé ni publié. **Non validé par Antoni ; jamais testé dans
+> un vrai OBS** (rendu vérifié dans Chromium, le moteur des sources navigateur d'OBS). Socle : [SMTC_STUDIO.md](SMTC_STUDIO.md).
+
+## 1. En une phrase
+
+Une seule source navigateur OBS montre le titre en cours dans le look du preset « à l'antenne ».
+
+- **Studio › Modules › Musique › Overlay musique** : choisir un modèle, le régler en voyant le résultat, l'afficher ou le
+  masquer sur le stream.
+- **Aucun changement d'OBS** pour changer de preset ou pour l'afficher / le masquer.
+
+## 2. Les modèles (vraies compositions, pas des couleurs)
+
+| Modèle         | Archétype   | Pour quoi                                                                                                                                                        |
+| -------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Flottant**   | `minimal`   | Pastille d'une ligne (titre — artiste), pochette ronde, progression en filet. Permanent et discret. Composition « Deux lignes » possible (titre, puis artiste).  |
+| **Cartouche**  | `clean`     | Pochette, « En cours », titre, artiste, progression, temps, badge « Demande de X ». Lisibilité maximale.                                                         |
+| **Verre**      | `glass`     | La pochette floutée en fond (sa propre image, jamais la scène derrière), reflet, bords fins. Haut de gamme.                                                      |
+| **Néon**       | `neon`      | Cadre lumineux, bande d'accent, titre condensé en capitales, éclat qui balaie le cadre à chaque titre, lueur qui respire (**décorative** : aucune donnée audio). |
+| **Éditorial**  | `editorial` | Typographie d'abord : grand titre à empattements sur 2 lignes équilibrées, filet-progression, « par Artiste » en italique, pochette en retrait.                  |
+| **Projecteur** | `focus`     | Grande pochette, tout le détail, temps aux deux bouts, bandeau « Demandée par X ». Fait pour annoncer.                                                           |
+
+Deux presets prêts à l'emploi en plus :
+
+- **Hybride** : un Cartouche agrandi à chaque titre, puis une pastille.
+- **Jeu chargé** (le modèle compact de référence, **à l'antenne par défaut** sur un Studio neuf) : un petit bandeau
+  contrasté de 380 × 58 px en haut au centre, le titre (gras, blanc) puis l'artiste en dessous, une marque d'accent à
+  gauche, la demande en languette dessous. Ni pochette, ni progression, ni temps, ni album par défaut (activables).
+  **Événementiel** : il apparaît 30 s à chaque nouveau titre (§ 3 ter).
+
+## 3. Réglages
+
+- **Essentiel** :
+  - taille (compacte / standard / grande) ;
+  - position (grille 3 × 3) ;
+  - affichage (Toujours / Annonce / Hybride, et la durée d'affichage : 3 à 120 s) ;
+  - en pause (montrer « En pause », estomper, réduire, cacher) ;
+  - rien ne joue (cacher, ou « Aucune musique ») ;
+  - mettre en avant une demande ;
+  - pochette ;
+  - palette (Nuit, Aurore, Givre, Braise, Menthe, Papier) ;
+  - accent tiré de la pochette ;
+  - contenu affiché (titre, artiste, album, progression, temps, « En cours », badge demande, pseudo, état pause).
+- **Avancé (replié)** :
+  - couleurs une à une ;
+  - opacité du fond, dégradé, bordure, ombre ;
+  - police (Moderne, Condensée, Éditoriale, Machine : polices de Windows, rien à installer) ;
+  - tailles du titre et de l'artiste, graisse ;
+  - textes longs : défiler seulement s'ils débordent, 2 lignes, ou « … » ;
+  - largeur, marge, alignement, orientation (Cartouche, Verre, Projecteur), arrondis, espacement ;
+  - taille et forme de la pochette ;
+  - apparition, changement de titre (fondu enchaîné, défilement, pochette retournée, rebond), intensité, durée ;
+  - lueur décorative.
+- **Valeurs impossibles** : les curseurs et listes les empêchent ; le serveur refuse le reste (« Non enregistré : … »).
+- **Mouvement réduit** : si le système demande moins de mouvement, les animations s'arrêtent.
+
+## 3 bis. Le bandeau compact (09/11 soir)
+
+- **Défilement d'un texte trop long** (réglage « Textes trop longs : Défiler », Typographie) : mesuré sur la largeur réelle
+  ; un texte qui tient ne bouge jamais. Une seule animation par texte, lancée quand le titre change (jamais relancée par
+  un simple rafraîchissement de l'état).
+  - **Aller-retour** : le début visible, pause 1,8 s, glissement régulier jusqu'à la fin, pause 1,3 s, retour en
+    douceur (plus lent qu'avant, sans à-coup), et ainsi de suite.
+  - **Continu** : bandeau d'information ; le texte est suivi de sa copie après un espace, la boucle est invisible.
+  - Vitesse lente / normale / rapide (26, 40, 62 px/s du canevas). Fondus aux deux bords, hors de la zone du texte.
+  - Mouvement réduit demandé par le système : « … » au lieu du défilement.
+- **Languette « Demandé par @pseudo »** (Essentiel › Demande viewer ; détails dans « Languette de demande ») : une petite
+  étiquette qui glisse de derrière le bandeau, collée à son bord, en haut ou en bas, à gauche, au centre ou à droite.
+  - Hors du bandeau : ne l'agrandit pas, ne décale pas le titre, jamais coupée ; elle est cachée dans une découpe au
+    bord du bandeau (rien ne transparaît à travers un fond semi-transparent).
+  - Elle sort après l'apparition du bandeau ; au changement de titre, elle rentre puis ressort avec le nouveau nom, ou
+    reste rentrée pour une musique personnelle. Changements rapides : toujours l'état du dernier titre.
+  - Un pseudo très long finit en « … » (au plus ~ 3/4 de la largeur du bandeau).
+  - Taille, fond, texte, opacité, arrondis, animation et durée réglables. Avec la languette, la demande n'est plus
+    répétée dans la ligne du titre.
+  - **Seulement** si le Core a attribué la demande à ce titre exact (le champ `request` de l'état) ; sans pseudo connu
+    ou si « Pseudo du viewer » est décoché : « Demande viewer ».
+- **Lisibilité** (Essentiel) : trois looks en un clic (Contraste maximal, Clair, Sans fond), l'ombre du texte (aucune,
+  douce, forte, contour), l'opacité du fond et celle du texte (séparées ; jamais sous 50 %). Une alerte dit quand le
+  texte se lit mal (contraste insuffisant, fond transparent sans ombre, languette illisible), avec « Corriger ».
+  Couleurs en détail : titre, artiste, texte secondaire, accent, fond, contraste de la bordure.
+
+## 3 ter. L’overlay événementiel (mode « Annonce », 09/11)
+
+Le comportement par défaut du bandeau « Jeu chargé ». Tout vient de ce que Studio sait déjà (Windows + l'attribution
+du Core) : **aucun appel Spotify** pour les animations. La logique est un petit module pur, testé seul
+(`music-overlay/overlay-timing.js`, `test/music-overlay-timing.test.js`).
+
+| Événement                                                                                            | Ce que fait l'overlay                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nouveau titre (nouvelle occurrence SMTC)                                                             | Entrée douce (glissement léger + fondu), titre et artiste, **30 s**, puis sortie douce.                                                                                                                                           |
+| Autre titre pendant les 30 s                                                                         | Contenu remplacé (fondu enchaîné), les 30 s repartent.                                                                                                                                                                            |
+| Même titre vraiment rejoué (SMTC : nouvelle occurrence)                                              | Nouvelle annonce.                                                                                                                                                                                                                 |
+| Pause / reprise                                                                                      | Jamais de nouvelle annonce. « En pause : Cacher » : il disparaît, et revient à la reprise seulement si les 30 s ne sont pas finies.                                                                                               |
+| Simple actualisation (position, Studio qui revient après une coupure, rechargement de la source OBS) | Rien ne bouge, rien n'est rejoué. Le titre déjà en cours à l'ouverture de la page n'est pas annoncé.                                                                                                                              |
+| Demande confirmée par le Core avec le titre                                                          | La languette sort après l'entrée du bandeau.                                                                                                                                                                                      |
+| Demandeur confirmé un peu après le titre                                                             | La languette sort **sans relancer l'annonce** ; le bandeau reste au moins 8 s de plus pour qu'on la lise. Confirmé après la fin de l'annonce : le bandeau revient pour elle (si « Mettre en avant une demande »), une seule fois. |
+| Demande seulement en file                                                                            | Jamais présentée comme la musique en cours (le Core n'attribue que la demande qui joue, à son titre exact).                                                                                                                       |
+| Spotify fermé                                                                                        | Sortie douce, rien ne reste.                                                                                                                                                                                                      |
+
+- **Afficher = armer.** En mode Annonce, « Afficher » autorise l'overlay : il apparaîtra **au prochain titre**, pas
+  tout de suite. L'en-tête le dit (« Armé · Jeu chargé · 30 s à chaque nouveau titre ») ; « Montrer maintenant »
+  le montre 30 s avec le titre réel. En Toujours : « Affiché en permanence ». **« Masquer »** le cache tout de suite et
+  coupe toute apparition (un titre passé pendant qu'il était masqué n'est jamais annoncé ensuite).
+- **Réglages** : mode (Toujours / Annonce / Hybride), durée d'affichage (30 s par défaut, 3 à 120), apparition,
+  **disparition** (nouveau : « Comme l'apparition », fondu, glissement, zoom léger, aucune), languette, et tous les
+  réglages visuels du bandeau.
+- **Dans l'éditeur**, changer un réglage remontre l'aperçu (on voit ce qu'on règle, même après une annonce).
+- **Compatibilité.** Les variantes enregistrées gardent leur mode (une variante de Jeu chargé en « Toujours » le
+  reste) ; leur disparition est « Comme l'apparition », c'est-à-dire leur comportement d'avant. Flottant reste
+  permanent. Format inchangé (v2).
+
+## 4. Presets et variantes
+
+- **Les modèles ne changent jamais.** Le premier réglage modifié crée « Mon <modèle> » : la variante est créée et
+  enregistrée, avec un message qui le dit.
+- **Variantes** : renommer, dupliquer, supprimer, « Valeurs par défaut » (retour au modèle d'origine, nom gardé).
+  Supprimer celle à l'antenne remet son modèle à l'antenne : jamais d'overlay vide.
+- **Enregistrement automatique.** Une demi-seconde après le dernier changement. « Enregistré » ne s'affiche que quand
+  Studio l'a confirmé, sinon « Non enregistré : raison ».
+- **Persistance.** Les réglages et les variantes sont gardés au redémarrage de Studio, dans
+  `<dossier Spotify>/music-overlays.json`, format versionné.
+- **Robustesse.** Un réglage ancien ou abîmé est réparé champ par champ (les autres choix restent), et Studio l'annonce.
+  - **Format v2 (09/11 soir).** Une variante enregistrée avant garde son aspect : artiste dans sa couleur secondaire
+    d'avant, texte sans ombre, une ligne, demande dans le texte (la languette est à un interrupteur). Une option qui
+    n'existait pas prend sa valeur par défaut sans être annoncée comme « réparée ».
+    Un fichier illisible est mis de côté (`.unreadable-…`), jamais effacé.
+
+## 5. L'éditeur
+
+- **Réglages mis à jour en place** : une section avancée ouverte le reste (plusieurs à la fois), le champ en cours garde
+  le focus, un curseur tenu ou un sélecteur de couleur ouvert ne sont pas interrompus, le défilement ne bouge pas
+  pendant l'enregistrement automatique (vérifié dans Chromium par un test bout en bout).
+
+- **Galerie.** Une vraie miniature de chaque modèle : la page d'overlay elle-même, en petit.
+- **Aperçu 16:9.** C'est la vraie page OBS dans un cadre, donc le même code que l'overlay.
+  - **Source** : « Morceau réel » (ce que l'overlay reçoit) ou « Démo » (Normal, Titre très long, Demande viewer,
+    En pause, Spotify fermé).
+  - **Fond** : jeu sombre, jeu clair, jeu chargé, transparent.
+  - **Zoom ×2** sur le coin de l'overlay, et « Rejouer l'animation ».
+  - **La démo ne quitte jamais ce cadre** : rien n'est envoyé au stream (vérifié par un test bout en bout).
+- **En-tête.**
+  - « Afficher / Masquer » : sur le stream.
+  - « Tester sur le stream » : rejoue l'apparition avec le **vrai** titre.
+  - « OBS » : l'assistant (§ 6).
+- **Page Spotify.** Une ligne « Overlay musique : affiché / masqué · preset » avec « Afficher / Masquer » et « Régler ».
+
+## 6. OBS
+
+- **Une seule source.** Une source navigateur sert à tout : `http://127.0.0.1:<port>/music-overlay/overlay.html#<clé>`,
+  1920 × 1080, fond transparent.
+  - La clé est dans le `#` : elle ne circule pas dans les requêtes.
+  - Elle ne donne accès qu'à l'état de l'overlay (titres, pochette, pseudo affiché) : ni Spotify, ni secret.
+  - Elle ne change pas d'un démarrage à l'autre.
+- **Afficher / Masquer.** La page apparaît et disparaît d'elle-même : aucune scène ni source n'est modifiée.
+- **L'assistant** (bouton « OBS ») passe par la connexion OBS que Studio a déjà, la même que pour le Bonk et les
+  récompenses. Il ne fait qu'**ajouter**, sur clic et confirmation :
+  1. **« Installer dans OBS »** crée une scène à part, « Raptoru · Musique (overlay) », avec la source
+     « Raptoru · Musique ».
+     - Si la source existe déjà, rien n'est créé : jamais de doublon.
+     - Elle n'est dite installée que si OBS le confirme en relisant.
+     - Si une autre source porte déjà ce nom, Studio le dit et ne la remplace jamais.
+  2. **« Ajouter à cette scène »** (scène choisie dans la liste, confirmation) ajoute la même source à une de tes
+     scènes. Rien n'est retiré ni remplacé, et OBS confirme.
+  3. **« Réparer l'adresse »** ne touche que notre source (nouvelle clé, Studio déplacé).
+  - **Sans connexion OBS** (le cas du Lab) : l'assistant le dit, « Installer » est grisé, et l'adresse à copier permet
+    l'ajout à la main.
+- **Studio fermé** : la page s'efface après environ 1 s et revient seule quand Studio repart.
+  - Les reconnexions se font avec un délai croissant (jusqu'à 10 s).
+  - Un état périmé est estompé (« Non confirmé »).
+
+## 7. Données et performance
+
+- **Ce que la page reçoit de Studio.** La page interroge Studio en attente longue (_long poll_) : Studio répond dès que
+  quelque chose change, et au plus tard au bout de 25 s.
+  - **Source** : le titre de Windows (SMTC), puis son titre Spotify exact s'il a été lu, sinon la dernière lecture de
+    l'API Web.
+  - **Demandeur** : seulement quand le Core attribue la demande en cours à **ce titre exact** (son uri).
+  - **Aucun appel Spotify** de plus, aucune décision : la page ne fait que lire.
+- **Coût.**
+  - Le DOM ne change qu'au changement de titre, de preset ou d'affichage.
+  - La barre est **une** transition CSS jusqu'à la fin du titre ; l'heure bouge une fois par seconde, seulement si elle
+    est affichée.
+  - Les pochettes sont locales (octets de Windows, en cache par empreinte) ou celles de Spotify.
+- **Anciens OBS.** Pas de `color-mix()` (calculé en JS) ni de flou de la scène : les effets se dégradent proprement.
+
+## 8. Historique et Music Hub (finitions du 09/11)
+
+- **Un nouveau Daily, un historique visible vide.** Le Daily est celui du projet (`stream_day` : fenêtre de 16:00 à
+  16:00, Paris), celui du live en cours sinon celui de maintenant.
+  - Un stream qui passe minuit garde son historique.
+  - Les anciennes lignes restent en base : rien n'est supprimé.
+- **Doublon.** Une occurrence anonyme (titre exact non lu) qui commence avec une demande vue par le Core (à ±4 s) n'est
+  listée qu'une fois, en demande. Elle est cachée, jamais attribuée.
+- **Lab en lecture seule.**
+  - Studio grise « Passer la musique », Pause et Volume et dit pourquoi.
+  - L'extension dit pourquoi une action du lecteur n'a pas abouti (lecture seule, aucun appareil, limite Spotify,
+    Studio absent).
+  - Jamais de faux succès.
+
+## 9. Tester
+
+- **Lanceur.** `Ouvrir Music Hub (Lab).cmd` (simulé) ou `Ouvrir Music Hub (Lab, Spotify reel).cmd` (ton Spotify, en
+  lecture seule).
+- **Studio.**
+  1. Studio › Modules › Musique › **Overlay musique**.
+  2. Clique un modèle : l'aperçu change.
+  3. « Démo » et ses cas, « Zoom », un fond.
+  4. Change un réglage : « Mon … » apparaît dans « Mes variantes ».
+  5. « Mettre à l'antenne », puis « Afficher » (Jeu chargé : « Armé », il apparaît au prochain titre ; « Montrer
+     maintenant » pour le voir tout de suite).
+- **OBS** : bouton « OBS » › « Installer dans OBS » (scène à part), puis « Ajouter à cette scène » pour ta scène de jeu.
+  Ou une source navigateur à la main avec l'adresse copiée.
+- **Musique réelle** : lance Spotify Desktop (mode réel). L'overlay suit chaque changement de titre.
+- **Revenir en arrière** :
+  - « Masquer » suffit ;
+  - dans OBS, supprime la source et la scène « Raptoru · Musique (overlay) » si tu le souhaites (Studio ne supprime
+    jamais rien) ;
+  - côté code : commit précédent `43eb7c4`.
+
+## 10. Limites connues
+
+- **OBS.** Jamais essayé dans un vrai OBS. Ses sources navigateur utilisent Chromium (CEF) : le rendu devrait être le
+  même, mais c'est à vérifier par Antoni.
+- **Raccourcis.** Aucun raccourci clavier ni action « Stream Deck ».
+- **Événementiel.** Vérifié en Chromium sur une page OBS simulée (cycle de 30 s, changements rapides, demandeur tardif,
+  pause, Spotify fermé, Masquer : `.lab-data/music-overlay-captures/event/`), pas avec Spotify Desktop réel ni dans OBS.
+  Un nouveau titre qui arrive pendant la sortie (≈ 0,6 s) reprend l'entrée depuis l'état en cours.
+- **Animation de changement de titre.** Sur les modèles en 2 lignes de titre (Éditorial, « 2 lignes »), la hauteur du
+  widget saute (sans animation) quand le nouveau titre en demande une autre. Le bandeau compact a une hauteur fixe.
+- **Languette.** Pensée pour le bandeau compact ; elle marche sur les autres modèles mais n'y a pas été peaufinée
+  (désactivée par défaut sur eux).
+- **Accent de la pochette.** Pour une pochette Spotify (`i.scdn.co`), il dépend de l'autorisation CORS du CDN ; à
+  défaut, l'accent de la palette est gardé.
+- **Production.** La sonde Windows n'est pas embarquée dans Studio installé. Sans elle, l'overlay utilise la lecture de
+  l'API Web (moins réactive, et seulement quand Studio surveille une demande).

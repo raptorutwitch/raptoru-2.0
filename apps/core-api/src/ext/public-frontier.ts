@@ -1,3 +1,5 @@
+import { musicExtRoutes } from '../http/music-ext-routes.js';
+import { parseMusicAudience } from './music-audience.js';
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
 import { modulesRoutes } from '../http/modules-routes.js';
 import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
@@ -109,6 +111,8 @@ export function createPublicFrontier(
     ...miniGamesRoutes(core.chat.miniGames),
     // Roue du Sub V2 (R8): the viewer frontier's own tours / team actions, in-process only (never on HTTP).
     ...subWheelRoutes(core.subWheel, core.alerts),
+    // Music Hub (docs/music/MUSIC_HUB_STATE.md): the extension's song requests on Spotify V2, in-process only.
+    ...musicExtRoutes(core.spotify),
     // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
     ...eventShopRoutes(core.eventShop),
     // Halloween « Titres » (docs/COSMETIC_SHOP.md § 8): the cosmetic shop's catalogue, a viewer's side and the purchase,
@@ -146,6 +150,7 @@ export function createPublicFrontier(
       environment: config.CORE_ENVIRONMENT,
       wallet: core.economy.mode === 'canonical',
       lab,
+      music: parseMusicAudience(config.MUSIC_HUB_EXTENSION),
     },
     core.twitchViewers,
   );
@@ -210,6 +215,12 @@ export function createPublicFrontier(
               .catch((e: Error) =>
                 console.error(`[core-api] ${name} expiry failed`, e.message),
               );
+          // Audit 09/11 (P2): a chat !rb owed after a restart or a failed settle is refunded within 15 s.
+          await core.chat.randomBanChat
+            ?.settleAll()
+            .catch((e: Error) =>
+              console.error('[core-api] !rb refund sweep failed', e.message),
+            );
         })().finally(() => (sweeping = false));
       }, 15_000);
       // Jeu des mots: the 5–15 min cycle of a live channel (one word when due), like the Lab Core process.

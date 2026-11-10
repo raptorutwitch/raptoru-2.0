@@ -1,0 +1,41 @@
+/* Socle v2 — jetons (plan § 3). Chargé en premier par app/boot.js (shell v2).
+   Les valeurs par défaut donnent le profil normal à l'échelle 1 si app/layout.js ne s'exécute pas.
+   app/layout.js pose sur <html> : --kg, --kt, --vw, --vh, data-surface, data-profile, data-touch, data-mq. */
+:root {
+  /* Échelles (app/layout.js) */
+  --kg: 1;
+  --kt: 1;
+  --g: calc(var(--kg) * 1px); /* 1 px de la composition 651×434, mis à l'échelle géométrique */
+  --t: calc(var(--kt) * 1px); /* 1 px de texte, mis à l'échelle typographique */
+
+  /* Planchers absolus par rôle de texte (plan § 3.1) — décision d'Antoni du 08/11 */
+  --fl-strong: 13px; /* titres, prix, soldes, action principale (V1 ≥ 14 px) */
+  --fl-body: 12px; /* texte courant, libellés de bouton (V1 12–13,5 px) */
+  --fl-small: 11px; /* mentions secondaires (V1 < 12 px) */
+  --fl-micro: 10px; /* micro-étiquettes : compteurs, pastilles, puces (un ou deux mots) */
+
+  /* Identité (relevée dans hub.css, tts-v2.css, tombola-v2.css : aucune nouvelle palette) */
+  --rx-bg: #0f0a1c;
+  --rx-bg-2: #160f27;
+  --rx-surface: #1e1633;
+  --rx-surface-2: #261c40;
+  --rx-line: rgba(196, 164, 255, 0.14);
+  --rx-line-2: rgba(214, 170, 255, 0.34);
+  --rx-ink: #f4efff;
+  --rx-muted: #a99cc4;
+  /* La V1 utilise #7a6f93 (contraste 4,0:1 sur #160f27) : éclairci d'un cran dans la même teinte pour les mentions
+     (5,0:1 sur #160f27, 4,65:1 sur une carte #1e1633), plan § 3.1. */
+  --rx-faint: #8a7fa5;
+  --rx-accent: #a855f7;
+  --rx-ok: #5ee6a0;
+  --rx-warn: #ffbf6e;
+  --rx-danger: #ff7a8a;
+  --rx-token: #f2c65f;
+  --rx-credit: #7cc4ff;
+  --rx-ease: cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+/* Tactile (surface mobile ou pointeur grossier) : texte courant et boutons + 1 px (plan § 3.1). */
+:root[data-touch] {
+  --fl-body: 13px;
+}

@@ -12,7 +12,9 @@ export type PaidModule =
   | 'fx_cam'
   | 'caution'
   // Boutique d'événement: the Jetons of a Bonbons conversion (docs/HALLOWEEN.md).
-  | 'event_shop';
+  | 'event_shop'
+  // Music Hub: a song request from the extension, paid in Jetons (docs/music/MUSIC_HUB_STATE.md).
+  | 'music';
 export type ModuleState = 'active' | 'paused' | 'disabled';
 export type LabRole = 'broadcaster' | 'supermod' | 'moderator' | 'viewer';
 export type WalletCurrency = 'tokens' | 'credits_tts' | 'credits_soundboard';
@@ -100,6 +102,9 @@ export const PERMISSIONS: Record<
   // Roue du Sub V2 (R-7): ask a draw · grant a right — the broadcaster, supermods, moderators granted it.
   'subwheel.draw': 'subWheelDraw',
   'subwheel.grant': 'subWheelGrant',
+  // Music Hub V2 (docs/music/MUSIC_HUB_STATE.md): the player of the stream (pause, resume, skip, volume) from the
+  // extension — supermods and the broadcaster only (a moderator's removals stay « queue.cancel » / « refund »).
+  'music.player': 'supermod',
 };
 const RANK: Record<LabRole, number> = {
   viewer: 0,

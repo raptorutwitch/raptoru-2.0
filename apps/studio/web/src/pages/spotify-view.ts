@@ -1,4 +1,4 @@
-import { clock, esc, hhmm, ic, pp, stateChip } from '../ds/ds.js';
+import { clock, esc, fmt, hhmm, ic, pp, stateChip } from '../ds/ds.js';
 
 // Spotify, partie pure et testée (docs/SPOTIFY_V2.md § 6) : ce qui joue, la file, ses décisions, la frise du temps. Le Core décide,
 // Studio est le seul à parler à Spotify, cette page montre et transmet. La file suit l'ordre réel de Spotify : ni le Core ni l'API
@@ -14,7 +14,7 @@ export interface SpTrack {
 
 export interface SpRequest {
   request_id: string;
-  source: 'twitch' | 'simulation';
+  source: 'twitch' | 'simulation' | 'extension';
   viewer: { id: string; login: string; name: string };
   input: string | null;
   state: string;
@@ -32,6 +32,10 @@ export interface SpRequest {
   auto_skip: boolean;
   auto_skip_result: string | null;
   twitch_status: 'cancel_requested' | 'kept' | 'unmanaged' | 'none' | null;
+  /** Music Hub (absent d'un Core plus ancien) : la récompense paie en points, l'extension en Jetons. */
+  payment?: 'channel_points' | 'tokens';
+  price_tokens?: number | null;
+  refund_status?: 'refunded' | 'kept' | null;
 }
 
 export interface SpSettings {
@@ -40,6 +44,11 @@ export interface SpSettings {
   viewer_cooldown_seconds: number;
   max_duration_seconds: number;
   cancel_grace_seconds: number;
+  /** Music Hub (absent d'un Core plus ancien). */
+  extension_enabled?: boolean;
+  extension_price_tokens?: number;
+  no_duplicates?: boolean;
+  player_controls?: boolean;
 }
 
 export interface SpOverride {
@@ -74,6 +83,39 @@ export interface SpPlayback {
   track: SpTrack | null;
   progress_ms: number | null;
   is_playing: boolean;
+  volume_percent?: number | null;
+}
+
+/** Music Hub (MUSIC_HUB_STATE.md § 14): the viewers' paid skip, global to the stream, and the Open Bar. */
+export interface SpMusicRules {
+  viewer_skip: {
+    enabled: boolean;
+    protect_requests: boolean;
+    base_price: number;
+    window_minutes: number;
+    price: number;
+    doublings: number;
+    last_success_at: string | null;
+    resets_at: string | null;
+    busy: boolean;
+    recent?: {
+      id: string;
+      status: 'pending' | 'done' | 'refunded';
+      price: number;
+      reason: string | null;
+      track: { title: string; artists: string[] };
+      at: string;
+      ended_at: string | null;
+      viewer_name?: string;
+    }[];
+  };
+  open_bar: {
+    on: boolean;
+    since: string | null;
+    by: string | null;
+    cooldown_seconds: number;
+    max_queue: number;
+  };
 }
 
 export interface SpState {
@@ -106,12 +148,18 @@ export interface SpState {
     created_at: string;
   }[];
   managed_rewards: { reward_id: string; title: string; cost: number }[];
+  /** Music Hub: the paid skip and the Open Bar (Core's rules; absent from an older Core). */
+  music_rules?: SpMusicRules;
   connection: {
     auth: 'ok' | 'not_configured' | 'needs_reauth';
     client_id: string | null;
     account: { name: string; product: string | null } | null;
     redirect_uri: string;
     simulated: boolean;
+    /** Lab: simulator, or the broadcaster's real account (LAB_SPOTIFY=real); Production otherwise. */
+    mode?: 'lab_sim' | 'lab_real' | 'production';
+    /** Lab with the real account: writes (queue, skips, player) allowed for this session. */
+    lab_writes?: boolean | null;
   };
   api: {
     limited_until: string | null;
@@ -120,7 +168,22 @@ export interface SpState {
     rate_high: boolean;
     backoff_until: string | null;
     counters?: Record<string, number>;
+    /** Local usage since Studio started (docs/music/SPOTIFY_QUOTA.md). */
+    usage?: {
+      since: string;
+      endpoints: Record<
+        string,
+        { calls: number; r429: number; errors: number }
+      >;
+      cache_hits: Record<string, number>;
+      waits: Record<
+        'essential' | 'catalog',
+        { count: number; total_ms: number; max_ms: number }
+      >;
+      catalog_last_minute: number;
+    };
   };
+  watch?: { searches_abandoned: number; polls: number };
   local: {
     error: string | null;
     watching: boolean;
@@ -137,9 +200,68 @@ export interface SpState {
     progress_ms: number | null;
     queue: string[];
     calls: number;
+    playing?: boolean;
+    app_closed?: boolean;
   } | null;
   /** Pochettes que Studio a vues passer, par titre (absent d'un Studio plus ancien). */
   covers?: Record<string, string>;
+  /** Music Hub : ce que Windows dit que Spotify Desktop joue (SMTC), et son titre exact une fois lu. */
+  live?: SpLive | null;
+  /** Music Hub : le live (Lab : simulé) qui ouvre les musiques du stream. */
+  music_session?: { live: boolean; since: string | null };
+}
+
+/** Music Hub (docs/music/SMTC_STUDIO.md) : le titre en cours selon Windows — affichage seulement, jamais une décision. */
+export interface SpLive {
+  source: 'smtc' | 'sim';
+  state: 'playing' | 'paused' | 'lost' | 'stale' | 'off' | 'waiting';
+  gen: number;
+  seq: number;
+  track: {
+    title: string;
+    artists: string[];
+    album: string | null;
+    duration_ms: number | null;
+  } | null;
+  position_ms: number | null;
+  /** La pochette que Windows a donnée (servie par Studio), ou null. */
+  cover: string | null;
+  reason: string | null;
+  /** Le titre exact de CETTE occurrence (une lecture de l'API Web), ou null tant qu'il n'est pas lu. */
+  link: {
+    gen: number;
+    uri: string;
+    cover_url: string | null;
+    artists: string[];
+  } | null;
+  counters?: {
+    link_reads: number;
+    linked: number;
+    link_misses: number;
+    posts: number;
+  };
+}
+
+/** Une entrée des musiques du stream (Core). */
+export interface SpPlayed {
+  id: string;
+  at: string;
+  title: string | null;
+  artists: string[];
+  album: string | null;
+  image_url: string | null;
+  kind: 'request' | 'track';
+  requested_by: string | null;
+  viewer_login?: string | null;
+  end: 'skipped' | 'interrupted' | 'natural' | 'unknown' | null;
+  listened_ms: number | null;
+  session_started_at: string | null;
+}
+export interface SpPlayedPage {
+  items: SpPlayed[];
+  next: string | null;
+  live: boolean;
+  since: string | null;
 }
 
 export interface SpIdentity {
@@ -156,6 +278,27 @@ export interface SpUi {
   now: number;
   replies?: string[];
   simClosed?: boolean;
+  /** Music Hub V2 : la carte musique de l'overlay OBS (absente d'un Studio sans lecteur d'effets). */
+  overlay?: SpOverlay | null;
+  /** Music Hub : le titre en cours selon Windows, relu chaque seconde (local), et l'heure de ce relevé. */
+  live?: SpLive | null;
+  liveAt?: number;
+}
+
+/** Music Hub V2 : le réglage de la carte musique (Studio, music-overlay.json) et les sons du lecteur d'effets. */
+export interface SpOverlay {
+  config: {
+    enabled: boolean;
+    on_request: boolean;
+    on_start: boolean;
+    sound: string | null;
+    sound_name: string | null;
+    volume: number;
+    duration_s: number;
+    position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  };
+  available: boolean;
+  sounds: { id: string; label: string; available: boolean }[];
 }
 
 export const trackLabel = (t: SpTrack | null) =>
@@ -180,6 +323,7 @@ const left = (ms: number) =>
 
 /** Pourquoi une demande n'est pas passée, dans les mots de la page. */
 export const REASONS: Record<string, string> = {
+  LAB_READ_ONLY: 'Lab en lecture seule (rien envoyé à Spotify)',
   INVALID_INPUT: 'texte vide',
   INVALID_REFERENCE: 'lien non Spotify ou pas un titre',
   NOT_FOUND: 'aucun titre assez proche',
@@ -202,7 +346,20 @@ export const REASONS: Record<string, string> = {
   LATE: 'rédemption trop ancienne',
   INTERRUPTED: 'interrompue par une autre demande',
   INTERRUPTED_EXTERNAL: 'interrompue par un autre titre',
+  DUPLICATE_TRACK: 'titre déjà en file',
+  NOT_PLAYABLE: 'titre non jouable',
+  EXTENSION_DISABLED: 'demandes depuis l’extension fermées',
 };
+
+/** Ce qu'a coûté une demande : des points de la récompense, ou des Jetons depuis l'extension (Music Hub). */
+export const paidWith = (r: SpRequest) =>
+  r.payment === 'tokens'
+    ? r.price_tokens === 0
+      ? '<span class="d-tag" title="Demandée depuis l’extension pendant l’Open Bar">Open Bar · gratuite</span>'
+      : `<span class="d-tag" title="Demandée depuis l’extension">◆ ${fmt(r.price_tokens ?? '?')} Jetons</span>`
+    : r.source === 'twitch'
+      ? '<span class="d-tag off" title="Récompense de points de chaîne">points</span>'
+      : '';
 
 export const STATES: Record<string, string> = {
   RECEIVED: 'Reçue',
@@ -305,8 +462,107 @@ export function position(s: SpState, now: number) {
   };
 }
 
+/** Où en est le titre selon Windows : sa dernière position + l'horloge (en lecture), jamais au-delà de sa fin. */
+export function livePosition(
+  l: SpLive | null | undefined,
+  at: number,
+  now: number,
+) {
+  if (!l?.track || l.position_ms === null) return null;
+  if (l.state !== 'playing' && l.state !== 'paused' && l.state !== 'stale')
+    return null;
+  const ms =
+    l.position_ms + (l.state === 'playing' ? Math.max(0, now - at) : 0);
+  const total = l.track.duration_ms;
+  return total
+    ? { ms: Math.min(ms, total), total, live: l.state === 'playing' }
+    : null;
+}
+
+/** La source du titre en cours : Windows (SMTC) quand elle est là, sinon la dernière lecture de l'API Web. */
+export const liveOf = (s: SpState, ui: SpUi) => {
+  const l = ui.live !== undefined ? ui.live : (s.live ?? null);
+  return l && l.state !== 'off' ? l : null;
+};
+
+/**
+ * Ce qui joue selon Windows : pochette, titre, artistes, album, progression, état. Le demandeur seulement quand le titre
+ * EXACT de cette occurrence (lecture de l'API Web) est celui de la demande que le Core attribue — jamais un titre.
+ */
+function liveNowView(s: SpState, ui: SpUi, l: SpLive) {
+  const t = l.track;
+  const link = l.link;
+  const r =
+    s.current && link && s.current.track?.uri === link.uri ? s.current : null;
+  const playing = l.state === 'playing';
+  const kicker = r
+    ? 'Demande en cours'
+    : !t
+      ? l.state === 'lost'
+        ? 'Spotify fermé'
+        : 'Rien ne joue'
+      : l.state === 'stale'
+        ? 'Lecture non confirmée'
+        : playing
+          ? 'En cours'
+          : 'En pause';
+  const none = `<span class="spo-cov spo-cov--none" aria-hidden="true">${ic('music')}</span>`;
+  const art = !t
+    ? none
+    : l.cover
+      ? `<img class="spo-cov" src="/api/spotify/live/cover?v=${esc(l.cover)}" alt="">`
+      : link?.cover_url
+        ? `<img class="spo-cov" src="${esc(link.cover_url)}" alt="" referrerpolicy="no-referrer">`
+        : none;
+  const artists = link?.artists.length ? link.artists : (t?.artists ?? []);
+  const by = r
+    ? `<p class="spo-by">${pp(r.viewer.name || r.viewer.login, 22)}<span>@${esc(r.viewer.login)} · demandée ${esc(agoMs(ui.now - Date.parse(r.received_at)))}</span></p>`
+    : '';
+  const src =
+    l.source === 'sim' ? 'Windows simulé (Lab)' : 'Windows · Spotify Desktop';
+  const album = t?.album
+    ? ` · <span class="spo-album">${esc(t.album)}</span>`
+    : '';
+  return `<div class="spo-art">${art}${playing ? '<span class="spo-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}</div>
+    <div class="spo-meta">
+      <span class="d-lb">${esc(kicker)}<small class="spo-src" title="Titre, artiste, pochette et position lus localement par Windows (sans appel à Spotify)"> · ${esc(src)}</small></span>
+      <h2 class="spo-title">${t ? esc(t.title) : l.state === 'lost' ? 'Spotify Desktop est fermé' : 'Aucune musique'}</h2>
+      <p class="spo-artists">${t ? `${esc(artists.join(', '))}${album}` : 'Lance une musique dans Spotify.'}</p>
+      ${by}
+      <div class="spo-trans"${t && !playing ? ' data-paused' : ''}><span class="spo-t" data-t0></span><span class="d-prog"><i data-prog></i></span><span class="spo-t" data-t1></span></div>
+      ${nowSub(s, ui, playing, !!t)}
+    </div>`;
+}
+
+/** Lab sur le vrai compte, en lecture seule : le lecteur n'est pas piloté (aucun faux « demandé »). */
+export const readOnly = (s: SpState) =>
+  s.connection.mode === 'lab_real' && !s.connection.lab_writes;
+const RO_TITLE =
+  'Lab en lecture seule : autorise les ajouts pour cette session (panneau › Lab sur ton compte) pour piloter le lecteur.';
+const roAttr = (s: SpState, title: string) =>
+  readOnly(s) ? `disabled title="${esc(RO_TITLE)}"` : `title="${esc(title)}"`;
+
+/** Les commandes sous le titre en cours (passer, pause, volume, appareil, actualiser). */
+function nowSub(s: SpState, ui: SpUi, playing: boolean, hasTrack: boolean) {
+  const read = reading(s, ui.now);
+  const device = s.studio?.status.device;
+  const limited = !!s.api.limited_until;
+  const refresh = `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>`;
+  const vol = read?.p.volume_percent ?? null;
+  const controls = s.settings.player_controls
+    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${playing ? 'pause' : 'resume'}" ${roAttr(s, playing ? 'Pause' : 'Reprendre')}>${playing ? 'Pause' : 'Reprendre'}</button>
+        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume" ${readOnly(s) ? 'disabled' : ''}><b>${vol ?? '—'}</b></label>`
+    : '';
+  return `<div class="spo-sub">
+        <button type="button" class="d-btn" data-act="sp-skip" ${roAttr(s, 'Passe le titre en cours sur Spotify, même hors demandes')}>${ic('skip')}Passer la musique</button>
+        ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${hasTrack ? '' : refresh}
+      </div>${readOnly(s) ? `<p class="spo-ro">${ic('lock')}Lecture seule : passer, pause et volume sont coupés tant que les ajouts ne sont pas autorisés pour cette session.</p>` : ''}`;
+}
+
 /** La demande qui joue et son demandeur ; un titre hors demandes n'a jamais de demandeur. */
 export function nowView(s: SpState, ui: SpUi) {
+  const live = liveOf(s, ui);
+  if (live) return liveNowView(s, ui, live);
   const r = s.current;
   const read = reading(s, ui.now);
   const track = r?.track ?? read?.track ?? null;
@@ -328,6 +584,11 @@ export function nowView(s: SpState, ui: SpUi) {
   const seen = read?.stale
     ? `<span>Lu ${esc(agoMs(read.age))}</span><button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>`
     : '';
+  const vol = read?.p.volume_percent ?? null;
+  const controls = s.settings.player_controls
+    ? `<button type="button" class="d-btn" data-act="sp-play" data-play="${read?.p.is_playing ? 'pause' : 'resume'}" ${roAttr(s, read?.p.is_playing ? 'Pause' : 'Reprendre')}>${read?.p.is_playing ? 'Pause' : 'Reprendre'}</button>
+        <label class="spo-vol" title="Volume de l’appareil Spotify">${ic('vol')}<input type="range" min="0" max="100" step="5" data-vol value="${vol ?? 50}" aria-label="Volume" ${readOnly(s) ? 'disabled' : ''}><b>${vol ?? '—'}</b></label>`
+    : '';
   return `<div class="spo-art">${cover(s, track)}${playing ? '<span class="spo-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}</div>
     <div class="spo-meta">
       <span class="d-lb">${esc(kicker)}</span>
@@ -336,10 +597,33 @@ export function nowView(s: SpState, ui: SpUi) {
       ${by}
       <div class="spo-trans"><span class="spo-t" data-t0></span><span class="d-prog"><i data-prog></i></span><span class="spo-t" data-t1></span></div>
       <div class="spo-sub">
-        <button type="button" class="d-btn" data-act="sp-skip" title="Passe le titre en cours sur Spotify, même hors demandes">${ic('skip')}Passer la musique</button>
-        ${device ? `<span>${ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
-      </div>
+        <button type="button" class="d-btn" data-act="sp-skip" ${roAttr(s, 'Passe le titre en cours sur Spotify, même hors demandes')}>${ic('skip')}Passer la musique</button>
+        ${controls}${device ? `<span>${controls ? '' : ic('vol')}${esc(device.name)}</span>` : ''}${seen || (!track ? `<button type="button" class="d-btn ghost sm" data-act="sp-refresh" ${limited || (s.local.refresh_in_ms ?? 0) > 0 ? 'disabled' : ''}>Actualiser</button>` : '')}
+      </div>${readOnly(s) ? `<p class="spo-ro">${ic('lock')}Lecture seule : passer, pause et volume sont coupés tant que les ajouts ne sont pas autorisés pour cette session.</p>` : ''}
     </div>`;
+}
+
+/**
+ * Music Hub : l'Open Bar (un bouton évident, son état et ce qu'il change) et, quand il est actif, le prix du skip payant
+ * maintenant (le Core le décide ; ici il est seulement montré).
+ */
+export function musicRulesView(s: SpState, now: number) {
+  const m = s.music_rules;
+  if (!m || !s.settings.extension_enabled) return '';
+  const bar = m.open_bar;
+  const since = bar.since ? hhmm(bar.since) : '';
+  const vs = m.viewer_skip;
+  const back = vs.resets_at
+    ? Math.max(1, Math.ceil((Date.parse(vs.resets_at) - now) / 60_000))
+    : 0;
+  const skip = vs.enabled
+    ? `<div class="spo-line spo-vskip">${ic('skip')}<span class="spo-rl"><span>Skip payant : <b>◆ ${fmt(vs.price)}</b>${vs.busy ? ' · <b>un skip en cours…</b>' : ''}</span><small>${back ? `Revient à ◆ ${fmt(vs.base_price)} dans ${back} min sans autre skip payé` : 'Prix de base'}${vs.last_success_at ? ` · dernier skip payé à ${hhmm(vs.last_success_at)}` : ''}</small></span></div>`
+    : '';
+  return `<div class="spo-line spo-bar ${bar.on ? 'is-on' : ''}">${ic('gift')}<span class="spo-rl"><span>Open Bar : <b>${bar.on ? `ouvert${since ? ` depuis ${since}` : ''}` : 'fermé'}</b></span><small>${
+    bar.on
+      ? `Demandes gratuites, sans limite par personne (${bar.cooldown_seconds} s entre deux, ${bar.max_queue} au plus en file). Les skips restent payants.`
+      : `Demandes à ◆ ${fmt(s.settings.extension_price_tokens ?? 500)}, ${s.settings.max_pending_per_viewer} en attente par personne.`
+  }</small></span><button type="button" class="d-btn sm ${bar.on ? '' : 'pri'}" data-act="sp-bar" data-on="${bar.on ? '0' : '1'}">${bar.on ? 'Fermer l’Open Bar' : 'Ouvrir l’Open Bar'}</button></div>${skip}`;
 }
 
 // --- La file ---------------------------------------------------------------------------------------------------------------
@@ -394,6 +678,9 @@ export function queueRows(s: SpState, ui: SpUi) {
           queued.has(r.request_id)
             ? `<button type="button" class="d-btn ghost sm" data-act="sp-remove" ${id} title="Le viewer est remboursé ; déjà dans la file Spotify, le titre sera passé automatiquement">Retirer et rembourser</button>`
             : '',
+          queued.has(r.request_id) && r.payment === 'tokens'
+            ? `<button type="button" class="d-btn ghost sm" data-act="sp-remove" data-keep="1" ${id} title="Les Jetons ne sont pas rendus (abus, contenu interdit)">Sans rembourser</button>`
+            : '',
           toVerify
             ? `<button type="button" class="d-btn sm" data-act="sp-settle" data-decision="refund" ${id} title="Rend les points (récompense de Raptoru)">Rembourser</button>
                <button type="button" class="d-btn sm" data-act="sp-settle" data-decision="keep" ${id} title="Rien n’est envoyé à Twitch : la réclamation reste en attente">Garder</button>`
@@ -405,7 +692,7 @@ export function queueRows(s: SpState, ui: SpUi) {
         <span class="spo-pos">${pos}</span>${cover(s, r.track, 'spo-cov--s')}
         <div class="spo-r__m"><b>${r.track ? esc(r.track.title) : `« ${esc(r.input)} »`}</b><small>${r.track ? esc(r.track.artists.join(', ')) : ''}</small></div>
         <span class="spo-t">${time}</span>
-        <div class="spo-r__by">${pp(r.viewer.name || r.viewer.login, 18)}<span>@${esc(r.viewer.login)}</span><span class="spo-quota" title="Demandes en attente · délai restant">${esc(quota)}</span>${status}</div>
+        <div class="spo-r__by">${pp(r.viewer.name || r.viewer.login, 18)}<span>@${esc(r.viewer.login)}</span><span class="spo-quota" title="Demandes en attente · délai restant">${esc(quota)}</span>${paidWith(r)}${status}</div>
         ${acts ? `<div class="spo-r__a">${acts}</div>` : ''}
       </div>`,
     };
@@ -413,7 +700,7 @@ export function queueRows(s: SpState, ui: SpUi) {
 }
 
 export const queueEmpty = (s: SpState) =>
-  `<div class="d-empty">La file est vide.<br><small>Les viewers demandent une musique avec la récompense Twitch.</small>${s.sim ? '<br><button type="button" class="d-btn sm" data-open="simulateur" style="margin-top:8px">Simuler une demande</button>' : ''}</div>`;
+  `<div class="d-empty">La file est vide.<br><small>Les viewers demandent une musique avec la récompense Twitch${s.settings.extension_enabled ? ' ou depuis l’extension' : ''}.</small>${s.sim ? '<br><button type="button" class="d-btn sm" data-open="simulateur" style="margin-top:8px">Simuler une demande</button>' : ''}</div>`;
 
 /** La note qui explique la décision, seulement quand il y en a une à prendre. */
 export const verifyNote = (s: SpState) =>
@@ -439,11 +726,18 @@ function resultOf(r: SpRequest) {
         ? 'off'
         : 'bad';
   const why = r.reason && REASONS[r.reason] ? REASONS[r.reason] : '';
-  const twitch = r.twitch_status
-    ? TWITCH[r.twitch_status]
-    : r.source === 'twitch' && !['RECEIVED', 'SEARCHING'].includes(r.state)
-      ? 'réclamation en attente sur Twitch'
-      : '';
+  const twitch =
+    r.payment === 'tokens'
+      ? r.refund_status === 'refunded'
+        ? 'Jetons remboursés'
+        : r.refund_status === 'kept'
+          ? 'Jetons gardés'
+          : ''
+      : r.twitch_status
+        ? TWITCH[r.twitch_status]
+        : r.source === 'twitch' && !['RECEIVED', 'SEARCHING'].includes(r.state)
+          ? 'réclamation en attente sur Twitch'
+          : '';
   const skip = r.auto_skip
     ? `passée automatiquement : ${r.auto_skip_result === 'SKIPPED' ? 'oui' : (r.auto_skip_result ?? 'en attente')}`
     : '';
@@ -463,11 +757,65 @@ export function historyRows(s: SpState) {
     return {
       key: r.request_id,
       html: `<div class="spo-h"><span class="spo-t">${esc(hhmm(r.received_at))}</span>
-        <div class="spo-r__m"><b>${r.source === 'simulation' ? '<span class="d-tag off">Lab</span> ' : ''}@${esc(r.viewer.login)}</b><small>${esc(r.input)}</small></div>
+        <div class="spo-r__m"><b>${r.source === 'simulation' ? '<span class="d-tag off">Lab</span> ' : r.source === 'extension' ? '<span class="d-tag">Extension</span> ' : ''}@${esc(r.viewer.login)}</b><small>${esc(r.input)}</small></div>
         <span class="d-tag ${x.tone}">${esc(x.head)}</span>
         ${x.detail ? `<p>${esc(x.detail)}</p>` : ''}</div>`,
     };
   });
+}
+
+const END_TAG: Record<string, string> = {
+  skipped:
+    '<span class="d-tag warn" title="Passée par une commande (Studio, !songskip, lecteur de l’extension)">Skippé</span>',
+  interrupted:
+    '<span class="d-tag off" title="Un autre titre a commencé avant la fin, sans commande de Raptoru : interruption probable (à la main dans Spotify, un autre morceau choisi…)">Interrompu</span>',
+};
+
+/** Les musiques du stream (Core) : la plus récente d'abord, chaque live séparé, les demandes reconnues par le Core. */
+export function playedRows(h: SpPlayedPage) {
+  const rows: { key: string; html: string }[] = [];
+  let session: string | null | undefined;
+  for (const i of h.items) {
+    if (i.session_started_at !== session) {
+      session = i.session_started_at;
+      const d = session ? new Date(session) : null;
+      const day = d
+        ? d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+        : '';
+      rows.push({
+        key: `s:${session ?? 'none'}:${i.id}`,
+        html: `<div class="spo-psess d-lb">${
+          d
+            ? `Live du ${esc(day)} · depuis ${esc(hhmm(session!))}${h.live && session === h.since ? ' · en cours' : ''}`
+            : 'Demandes jouées (sans relevé Windows)'
+        }</div>`,
+      });
+    }
+    const who =
+      i.kind === 'request'
+        ? ` · <span class="spo-pby">demandée par ${esc(i.requested_by ?? '')}${i.viewer_login ? ` (@${esc(i.viewer_login)})` : ''}</span>`
+        : '';
+    const tags = [
+      i.kind === 'request' ? '<span class="d-tag">Demande</span>' : '',
+      i.end === null
+        ? '<span class="d-tag ok">En cours</span>'
+        : (END_TAG[i.end] ?? ''),
+    ].join('');
+    const heard =
+      i.listened_ms !== null
+        ? ` · écoutée ~${clock(i.listened_ms / 1000)}`
+        : '';
+    const cov = i.image_url
+      ? `<img class="spo-cov spo-cov--s" src="${esc(i.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+      : `<span class="spo-cov spo-cov--none spo-cov--s" aria-hidden="true">${ic('music')}</span>`;
+    rows.push({
+      key: i.id,
+      html: `<div class="spo-h spo-p" title="${esc(`${i.title ?? ''}${heard}`)}"><span class="spo-t">${esc(hhmm(i.at))}</span>${cov}
+        <div class="spo-r__m"><b>${esc(i.title ?? '—')}</b><small>${esc(i.artists.join(', '))}${who}</small></div>
+        <span class="spo-ptags">${tags}</span></div>`,
+    });
+  }
+  return rows;
 }
 
 /** La frise du temps : les titres de la file posés sur une règle graduée, à partir de maintenant. */

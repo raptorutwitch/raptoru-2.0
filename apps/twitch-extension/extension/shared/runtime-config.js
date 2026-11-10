@@ -1,7 +1,11 @@
-// Configuration publique de la Production Twitch. Aucun secret.
+// Source NON configurée : ce fichier n'est jamais servi tel quel.
+// - scripts/package.mjs le remplace dans chaque paquet (production, staging, calibration) ;
+// - le Lab de Studio le remplace à la volée (apps/studio/server/src/extension-lab/serve.ts).
+// Zippé à la main, ce dossier donne une extension qui affiche « Version non configurée »
+// (shared/runtime-guard.js) et n'appelle aucun serveur.
 export const RUNTIME = Object.freeze({
-  mode: 'connected',
-  apiBase: "https://raptoru.fr/api",
-  siteUrl: "https://raptoru.fr",
-  buildId: "20260920-095259Z-consolidated-final",
+  mode: 'unconfigured',
+  apiBase: '',
+  siteUrl: '',
+  buildId: 'source-unconfigured',
 });

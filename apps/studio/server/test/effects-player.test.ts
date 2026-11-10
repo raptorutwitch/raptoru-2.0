@@ -584,3 +584,113 @@ describe('Effects player: a sound imported from Studio (Votekick launch sound)',
     ).rejects.toThrow('uploads_unavailable');
   });
 });
+
+describe('Effects player — the music card (Music Hub V2)', () => {
+  it('a silent card plays even on a muted page (no media); with an alert sound it needs sound and its file; the page gets the card', async () => {
+    const { p, origin, token } = await player();
+    const pg = page(origin, token);
+    await pg.heartbeat(false);
+    const card = {
+      kind: 'music' as const,
+      card: {
+        event: 'request' as const,
+        title: 'Néon Sauvage (Remix)',
+        artists: ['Lune Rouge'],
+        requested_by: 'Viewer_Lab',
+      },
+      volume: 50,
+      duration_ms: 99_000,
+      position: 'top-right' as const,
+    };
+    await expect(p.play({ ...card, sound: 'eren-scream' })).rejects.toThrow(
+      'effects_player_muted',
+    );
+    const silent = p.play({ ...card, sound: null });
+    const [got] = (await taken(pg)) as unknown as {
+      delivery_id: string;
+      url: string;
+      kind: string;
+      music: Record<string, unknown>;
+    }[];
+    expect(got).toMatchObject({
+      kind: 'music',
+      url: '',
+      music: {
+        event: 'request',
+        title: 'Néon Sauvage (Remix)',
+        requested_by: 'Viewer_Lab',
+        duration_ms: 15_000, // capped
+        position: 'top-right',
+      },
+    });
+    await pg.report(got!.delivery_id, 'started');
+    const { end } = await silent;
+    await pg.report(got!.delivery_id, 'completed');
+    expect(await end).toMatchObject({ event: 'completed' });
+    await pg.heartbeat(true);
+    await expect(p.play({ ...card, sound: 'nope' })).rejects.toThrow(
+      'effect_unknown',
+    );
+    await expect(p.play({ ...card, sound: 'glory-holes' })).rejects.toThrow(
+      'effect_media_missing',
+    );
+    void p.play({ ...card, sound: 'eren-scream' });
+    const [loud] = await taken(pg);
+    expect(loud).toMatchObject({ kind: 'music', url: 'media/eren-scream' });
+  });
+});
+
+describe('Effects player: a reloaded OBS source (audit 09/11)', () => {
+  it('an effect started by a page that is gone ends as « unknown » as soon as the new page calls, not after endMs', async () => {
+    const { p, origin, token } = await player({
+      heartbeatMs: 150,
+      endMs: 60_000,
+    });
+    const old = page(origin, token);
+    await old.heartbeat();
+    const playing = p.play({
+      kind: 'sound',
+      id: 'eren-scream',
+      volume: 100,
+    });
+    const [x] = await taken(old);
+    await old.report(x!.delivery_id, 'started');
+    const played = await playing;
+    // The source reloads: the old page never calls again, a new one does.
+    const fresh = page(origin, token);
+    await fresh.heartbeat();
+    await new Promise((r) => setTimeout(r, 200));
+    await fresh.heartbeat();
+    await expect(played.end).resolves.toEqual({
+      event: 'unknown',
+      error: 'player_gone',
+    });
+    expect(p.status().playing).toBe(0);
+  });
+
+  it('a live page playing a long effect is never ended by another page calling', async () => {
+    const { p, origin, token } = await player({
+      heartbeatMs: 150,
+      endMs: 60_000,
+    });
+    const a = page(origin, token);
+    await a.heartbeat();
+    const playing = p.play({
+      kind: 'sound',
+      id: 'eren-scream',
+      volume: 100,
+    });
+    const [x] = await taken(a);
+    await a.report(x!.delivery_id, 'started');
+    const played = await playing;
+    const b = page(origin, token);
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      await a.heartbeat();
+      await b.heartbeat();
+    }
+    expect(p.status().playing).toBe(1);
+    await a.report(x!.delivery_id, 'completed');
+    await expect(played.end).resolves.toEqual({ event: 'completed' });
+  });
+});

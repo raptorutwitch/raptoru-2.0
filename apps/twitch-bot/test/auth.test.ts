@@ -196,6 +196,18 @@ describe('Twitch auth', () => {
     expect(await auth.getAccessToken()).toBe('at-2');
   });
 
+  it('a proactive refresh failing for now keeps the still-valid token (audit 09/11)', async () => {
+    const twitch = fakeTwitch({ refresh: 'down' });
+    let now = Date.now();
+    const auth = newAuth(twitch, memoryStore(), [], () => now);
+    await auth.init();
+    now += 4 * HOUR - 5 * 60_000; // 5 min left: refresh tried, Twitch down
+    expect(await auth.getAccessToken()).toBe('at-1');
+    expect(twitch.calls.refresh).toBe(1);
+    twitch.setRefresh('ok');
+    expect(await auth.getAccessToken()).toBe('at-2');
+  });
+
   it('refuses a token without the required scope', async () => {
     const twitch = fakeTwitch({ scopes: ['user:read:chat'] });
     const auth = newAuth(twitch, memoryStore());

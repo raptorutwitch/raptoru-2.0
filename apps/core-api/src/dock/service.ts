@@ -424,6 +424,20 @@ export class DockActivityService {
            jsonb_build_object('streamer_mute', coalesce(r.reason like 'streamer_mute%', false)),
            concat_ws('|', r.status, r.refund, coalesce(r.target_id, '-'), coalesce(r.reason, '-'))
          from rb_requests r where r.channel_id = $1 and r.source = 'chat' and r.created_at >= $2
+         union all
+         -- Music Hub V2 (docs/music/MUSIC_HUB_STATE.md): a song request from the extension (paid in Jetons) — ONE row
+         -- whose status follows the request (received, queued, playing, played, withdrawn, removed, skipped, failed).
+         -- A request paid with channel points is already its redemption (never a second activity).
+         select 'ix:music:' || m.request_id, 'music', m.received_at, m.viewer_id, m.viewer_name,
+           case m.state
+             when 'RECEIVED' then 'music_received' when 'SEARCHING' then 'music_received'
+             when 'QUEUED' then 'music_queued' when 'PLAYING' then 'music_playing' when 'PLAYED' then 'music_played'
+             when 'CANCELED' then 'music_canceled' when 'REMOVED_BY_MOD' then 'music_removed'
+             when 'SKIPPED' then 'music_skipped' when 'UNKNOWN' then 'music_unknown' else 'music_failed' end,
+           m.refund_status, null, m.track->>'title',
+           jsonb_build_object('artists', m.track->'artists', 'price', m.price_tokens, 'reason', m.reason),
+           concat_ws('|', m.state, coalesce(m.refund_status, '-'), coalesce(m.track->>'id', '-'))
+         from spotify_requests m where m.channel_id = $1 and m.source = 'extension' and m.received_at >= $2
 ${halloween}       )
        select src.key, src.type, src.created_at, src.viewer_id, src.viewer_name, src.status, src.refund_status,
          src.review_status, src.detail, src.extra, av.url as avatar,
@@ -477,7 +491,20 @@ ${halloween}       )
                       ...(r.detail ? { target: r.detail } : {}),
                       streamer_mute: !!x.streamer_mute,
                     }
-                  : { actor };
+                  : r.type === 'music'
+                    ? {
+                        actor,
+                        track: r.detail
+                          ? {
+                              title: r.detail,
+                              artists: Array.isArray(x.artists)
+                                ? x.artists
+                                : [],
+                            }
+                          : null,
+                        price: typeof x.price === 'number' ? x.price : null,
+                      }
+                    : { actor };
       return {
         activity_key: r.key,
         kind: 'interaction',

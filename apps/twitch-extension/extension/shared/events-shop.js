@@ -1,4 +1,5 @@
 import { registerSessionModule } from './module-registry.js';
+import { createRetryKeys, withRetryKey } from './purchase.js';
 // « Événements » in the Hub (docs/HALLOWEEN.md) — the edition of the moment (Halloween 2026): its interactions, played
 // on Raptoru's own screen, and its currency, the Bonbons. Everything is Core's projection for the JWT's viewer: names,
 // thumbnails, descriptions, prices, categories, limits, cooldowns, the overlay's state, the ways to earn (the Jetons
@@ -307,6 +308,8 @@ export function createEventShopView({ document, client, onState }) {
   let filter = 'all';
   let confirming = null;
   let confirmTimer = null;
+  // A lost answer, then the same item confirmed again: the same purchase (never paid twice).
+  const keys = createRetryKeys();
   let notice = null;
   let noticeTimer = null;
   let timer = null;
@@ -429,12 +432,12 @@ export function createEventShopView({ document, client, onState }) {
     render();
     try {
       if (offer) {
-        const out = await client.eventsBuyTitle(offer);
+        const out = await withRetryKey(keys, `title:${offer}`, (key) => client.eventsBuyTitle(offer, key));
         take(out?.event_shop);
         if (out?.titles?.enabled) titles = out.titles;
         say('Titre ajouté à ta collection, pour toujours ! 🎃');
       } else {
-        const out = await client.eventsBuy(id);
+        const out = await withRetryKey(keys, `item:${id}`, (key) => client.eventsBuy(id, key));
         take(out?.event_shop);
         say('Envoyé ! Surveille l’écran de Raptoru… 👀');
       }

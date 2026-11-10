@@ -128,6 +128,8 @@ export function createCore(
     votekickChat?: boolean;
     /** `!song`, `!songqueue`, `!mysong`, `!songcancel`, `!songremove`, `!songskip` (main Core: SPOTIFY_CHAT=true). */
     spotifyChat?: boolean;
+    /** Music Hub opened in Production (MUSIC_HUB_EXTENSION ≠ off): the new `!song` too (announcement, cooldown, SMTC). */
+    musicHub?: boolean;
   } = {},
 ): Core {
   const broadcasterOf = () => channel.broadcasterId ?? null;
@@ -179,6 +181,10 @@ export function createCore(
   const ttsLab = new TtsLabService(db, clock, undefined, undefined, economy);
   const cpTwitch = new CpTwitchActions(db, clock);
   const spotify = new SpotifyService(db, clock, cpTwitch);
+  spotify.economy = economy; // Music Hub: the extension's requests are paid in Jetons on this Core's economy
+  spotify.labSessions = channel.lab === true; // Music Hub: the stream's music history follows the Lab's simulated live
+  // Music Hub: the new `!song` in the Lab, and in Production once the Music Hub is opened (MUSIC_HUB_EXTENSION).
+  spotify.songV2 = channel.lab === true || channel.musicHub === true;
   const channelPoints = new ChannelPointsService(
     db,
     clock,

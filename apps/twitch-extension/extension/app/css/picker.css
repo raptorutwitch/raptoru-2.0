@@ -1,0 +1,563 @@
+/* Socle v2 — généré une fois par scripts/dev/css-v2.mjs depuis extension/picker.css,
+   puis édité à la main. Échelles : --g (géométrie), var(--fs-N) (texte avec plancher), data-mq (requêtes sur la boîte
+   de composition, app/mq.js). La feuille d'origine reste inchangée pour le shell legacy. */
+/* Picker d'emotes V2.1 (shared/emote-picker.js). Chargé après base/mobile/overlay : ces règles
+   reprennent la main sur l'ancienne mise en page Bonk sans la supprimer. */
+
+html body .jdm-module[data-module="bonk"] .jdm-bonk-picker.rl-bonk-picker {
+  display: grid !important;
+  grid-template-columns: calc(40 * var(--g)) minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  gap: calc(5 * var(--g)) calc(6 * var(--g)) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+html body.component-view .jdm-module[data-module="bonk"] .jdm-bonk-picker.rl-bonk-picker {
+  grid-template-columns: calc(36 * var(--g)) minmax(0, 1fr) !important;
+}
+html body .jdm-module[data-module="bonk"] .rl-bonk-picker > :not(.rl-picker__nav, .rl-picker__search, .rl-picker__scroll) {
+  grid-column: 1 / -1 !important;
+}
+/* Bonk feedback: shown in the chargeur's bubble (bonk-chargeur.js); the old 8 px line is hidden (no row). */
+html body .jdm-module[data-module="bonk"] .rl-bonk-picker .jdm-bonk-feedback { display: none !important; }
+
+/* --- rail compacte : icônes/avatars ronds, familles repliables -------------------------------- */
+.rl-picker__nav {
+  --rl-tone: #b873ff;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(4 * var(--g));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(4 * var(--g)) 0;
+  border-radius: calc(14 * var(--g));
+  background: linear-gradient(180deg, rgba(173, 108, 255, .09), rgba(255, 255, 255, .02) 40%);
+  scrollbar-width: none;
+}
+.rl-picker__nav::-webkit-scrollbar { display: none; }
+.rl-picker__nav-item {
+  position: relative;
+  display: grid;
+  width: calc(32 * var(--g));
+  height: calc(32 * var(--g));
+  flex: 0 0 calc(32 * var(--g));
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: calc(11 * var(--g));
+  background: transparent;
+  color: var(--jdm-muted, #b3b3bd);
+  cursor: pointer;
+  transition: background-color .12s ease, box-shadow .12s ease;
+}
+.rl-picker__nav-item:hover { background: rgba(255, 255, 255, .07); }
+.rl-picker__nav-item:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; }
+.rl-picker__nav-item.is-active {
+  background: rgba(173, 108, 255, .2);
+  box-shadow: inset 0 0 0 1px rgba(226, 150, 255, .55), 0 0 10px rgba(192, 100, 255, .22);
+}
+.rl-picker__nav.is-searching .rl-picker__nav-item.is-active { background: transparent; box-shadow: none; }
+.rl-picker__nav-icon {
+  display: grid;
+  width: calc(26 * var(--g));
+  height: calc(26 * var(--g));
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  font-size: var(--fs-15);
+  line-height: 1;
+}
+.rl-picker__nav-icon svg { width: calc(18 * var(--g)); height: calc(18 * var(--g)); }
+.rl-picker__nav-avatar { width: 100%; height: 100%; object-fit: cover; }
+.rl-picker__nav-emoji { width: calc(20 * var(--g)); height: calc(20 * var(--g)); object-fit: contain; }
+
+.rl-picker__nav-block {
+  display: flex;
+  width: calc(34 * var(--g));
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(3 * var(--g));
+  border-radius: calc(12 * var(--g));
+  transition: background-color .15s ease;
+}
+.rl-picker__nav-block.is-open {
+  padding-bottom: calc(3 * var(--g));
+  background: color-mix(in srgb, var(--rl-tone) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rl-tone) 18%, transparent);
+}
+.rl-picker__nav-family .rl-picker__nav-icon {
+  background: color-mix(in srgb, var(--rl-tone) 16%, rgba(255, 255, 255, .04));
+  color: var(--jdm-text, #efeff1);
+}
+/* Famille (dossier) ≠ catégorie : tuile carrée « empilée » (une carte dépasse derrière), alors que les
+   catégories restent rondes. La hiérarchie se lit d'un coup d'œil, même famille repliée. */
+.rl-picker__nav-family .rl-picker__nav-icon {
+  overflow: visible;
+  border-radius: calc(8 * var(--g));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--rl-tone) 45%, transparent),
+    3px -3px 0 -1px color-mix(in srgb, var(--rl-tone) 32%, rgba(24, 17, 38, .95));
+}
+/* Section repliée : son entrée du rail reste visible, un peu éteinte. */
+.rl-picker__nav-item.is-collapsed:not(.is-active) .rl-picker__nav-icon { opacity: .5; }
+.rl-picker__nav-caret {
+  position: absolute;
+  right: -1px;
+  bottom: 0;
+  color: color-mix(in srgb, var(--rl-tone) 70%, #fff);
+  font-size: var(--fs-8);
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.rl-picker__nav-block.is-open .rl-picker__nav-caret { transform: rotate(90deg); }
+/* Section active dans une famille repliée : petit point de couleur sur le parent. */
+.rl-picker__nav-block.has-active:not(.is-open) .rl-picker__nav-family::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: calc(6 * var(--g));
+  height: calc(6 * var(--g));
+  border-radius: 50%;
+  background: var(--rl-tone);
+  box-shadow: 0 0 6px var(--rl-tone);
+}
+.rl-picker__nav-children { display: none; flex-direction: column; align-items: center; gap: calc(3 * var(--g)); }
+.rl-picker__nav-block.is-open .rl-picker__nav-children { display: flex; }
+.rl-picker__nav-children .rl-picker__nav-item { width: calc(30 * var(--g)); height: calc(30 * var(--g)); flex-basis: calc(30 * var(--g)); }
+.rl-picker__nav-children .rl-picker__nav-icon { width: calc(24 * var(--g)); height: calc(24 * var(--g)); }
+.rl-picker__nav-children .rl-picker__nav-item.is-active {
+  background: color-mix(in srgb, var(--rl-tone) 26%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rl-tone) 65%, transparent);
+}
+html body.component-view .rl-picker__nav-item { width: calc(30 * var(--g)); height: calc(30 * var(--g)); flex-basis: calc(30 * var(--g)); }
+html body.component-view .rl-picker__nav-block { width: calc(32 * var(--g)); }
+html body.component-view .rl-picker__nav-icon { width: calc(24 * var(--g)); height: calc(24 * var(--g)); }
+html body.component-view .rl-picker__nav-children .rl-picker__nav-item { width: calc(28 * var(--g)); height: calc(28 * var(--g)); flex-basis: calc(28 * var(--g)); }
+html body.component-view .rl-picker__nav-children .rl-picker__nav-icon { width: calc(22 * var(--g)); height: calc(22 * var(--g)); }
+
+/* --- recherche compacte ---------------------------------------------------------------------- */
+.rl-picker__search {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  min-width: 0;
+  height: calc(30 * var(--g));
+  align-items: center;
+  gap: calc(6 * var(--g));
+  padding: 0 calc(4 * var(--g)) 0 calc(10 * var(--g));
+  border: 1px solid rgba(238, 228, 255, .08);
+  border-radius: calc(11 * var(--g));
+  background: rgba(255, 255, 255, .045);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.rl-picker__search:focus-within {
+  border-color: rgba(200, 140, 255, .6);
+  box-shadow: 0 0 0 3px rgba(173, 108, 255, .14);
+}
+.rl-picker__search-icon { color: #9a92a6; font-size: var(--fs-15); line-height: 1; }
+.rl-picker__input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--jdm-text, #efeff1);
+  font: inherit;
+  font-size: var(--fs-12);
+}
+.rl-picker__input::placeholder { color: #7f7889; }
+.rl-picker__input::-webkit-search-cancel-button { filter: invert(1); opacity: .55; }
+
+/* --- défilement continu ---------------------------------------------------------------------- */
+.rl-picker__scroll {
+  --rl-cell: 44px;
+  --rl-gap: 4px;
+  --rl-tone: #b873ff;
+  position: relative;
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 calc(3 * var(--g)) calc(6 * var(--g)) 0;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(183, 121, 255, .45) transparent;
+  scrollbar-width: thin;
+}
+/* Taille par surface : panel 5 colonnes, mobile ~6, vidéo ~10 (emotes plus présentes). */
+html body.mobile:not(.panel-view) .rl-picker__scroll { --rl-cell: 50px; }
+html body.component-view .rl-picker__scroll { --rl-cell: 46px; }
+.rl-picker__section + .rl-picker__section { margin-top: calc(8 * var(--g)); }
+.rl-picker__family {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--g));
+  margin: calc(6 * var(--g)) 2px calc(5 * var(--g));
+  color: color-mix(in srgb, var(--rl-tone) 75%, #fff);
+  font-size: var(--fs-9);
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.rl-picker__family::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rl-tone) 45%, transparent), transparent);
+}
+.rl-picker__section:first-child .rl-picker__family { margin-top: 1px; }
+/* En-tête de section : teinté, translucide, intégré au fond (plus de bandeau noir). */
+.rl-picker__head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(6 * var(--g));
+  margin: 0 0 calc(4 * var(--g));
+  padding: calc(4 * var(--g)) calc(8 * var(--g));
+  border-radius: calc(9 * var(--g));
+  background: rgba(24, 17, 38, .9);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--rl-tone) 20%, rgba(24, 17, 38, .92)), rgba(24, 17, 38, .86) 75%);
+  box-shadow: 0 4px 10px -6px rgba(0, 0, 0, .6);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #eee8f6;
+  font-size: var(--fs-10_5);
+  font-weight: 700;
+}
+.rl-picker__head::before {
+  content: '';
+  width: calc(6 * var(--g));
+  height: calc(6 * var(--g));
+  flex: 0 0 calc(6 * var(--g));
+  border-radius: 50%;
+  background: var(--rl-tone);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--rl-tone) 70%, transparent);
+}
+.rl-picker__head-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* En-tête cliquable : replie / déplie la section. */
+.rl-picker__head { cursor: pointer; user-select: none; }
+.rl-picker__head:hover { color: #fff; }
+.rl-picker__head:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; }
+.rl-picker__head-caret {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--rl-tone) 60%, #fff);
+  font-size: var(--fs-9);
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.rl-picker__section.is-collapsed .rl-picker__head-caret { transform: rotate(-90deg); }
+.rl-picker__section.is-collapsed .rl-picker__head { position: static; opacity: .72; margin-bottom: 0; }
+.rl-picker__section.is-collapsed > :not(.rl-picker__family, .rl-picker__head) { display: none; }
+.rl-picker__head-count {
+  margin-left: auto;
+  padding: 1px calc(6 * var(--g));
+  border-radius: calc(999 * var(--g));
+  background: rgba(255, 255, 255, .06);
+  color: #a79fb3;
+  font-size: var(--fsm-9);
+  font-weight: 600;
+}
+.rl-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--rl-cell), 1fr));
+  gap: var(--rl-gap);
+}
+.rl-picker__grid + .rl-picker__grid { margin-top: var(--rl-gap); }
+.rl-picker__cell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: calc(5 * var(--g));
+  border: 0;
+  border-radius: calc(11 * var(--g));
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color .1s ease, box-shadow .1s ease, transform .1s ease;
+}
+.rl-picker__cell:hover { background: rgba(255, 255, 255, .07); }
+.rl-picker__cell:active { transform: scale(.94); }
+.rl-picker__cell:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; }
+.rl-picker__cell.is-selected {
+  background: rgba(173, 108, 255, .17);
+  box-shadow: inset 0 0 0 1.5px rgba(226, 160, 255, .75);
+}
+.rl-picker__cell.is-next { box-shadow: inset 0 0 0 1.5px rgba(240, 200, 110, .85), 0 0 8px rgba(240, 200, 110, .25); }
+.rl-picker__cell.is-disabled { cursor: not-allowed; opacity: .35; }
+.rl-picker__cell[data-queue-index]::before {
+  content: attr(data-queue-index);
+  position: absolute;
+  top: 2px;
+  left: calc(3 * var(--g));
+  color: #f3e8ff;
+  font-size: var(--fs-8);
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+}
+/* Indicateur discret et permanent des favoris. */
+.rl-picker__cell.is-favorite::after {
+  content: '';
+  position: absolute;
+  right: calc(3 * var(--g));
+  bottom: calc(3 * var(--g));
+  width: calc(5 * var(--g));
+  height: calc(5 * var(--g));
+  border-radius: 50%;
+  background: #e9dcff;
+  box-shadow: 0 0 0 1px rgba(20, 12, 34, .55), 0 0 4px rgba(214, 180, 255, .6);
+}
+.rl-picker__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.rl-picker__glyph { font-size: var(--fs-28); line-height: 1; pointer-events: none; }
+html body.component-view .rl-picker__glyph { font-size: var(--fs-25); }
+
+/* Étoile unique, posée dans le coin de la cellule survolée/focalisée (desktop uniquement).
+   Au repos : contour très léger, presque fondu dans la cellule. Survol de l'étoile : contour
+   lumineux, léger remplissage translucide, halo doux. Favori : remplie, lavande claire. La zone
+   cliquable (24 px) reste collée à l'étoile. */
+.rl-picker__star {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  /* Default size; emote-picker.js sizes it from the hovered cell (40 %, 24 px at most). */
+  width: 24px;
+  height: calc(24 * var(--g));
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: .45;
+  transition: opacity .12s ease, transform .12s ease, filter .12s ease;
+}
+.rl-picker__star svg { width: 72%; height: 72%; max-width: calc(17 * var(--g)); max-height: calc(17 * var(--g)); overflow: visible; pointer-events: none; }
+.rl-picker__star path {
+  fill: transparent;
+  stroke: rgba(244, 238, 255, .75);
+  stroke-width: 1.4;
+  transition: fill .12s ease, stroke .12s ease;
+}
+.rl-picker__star:hover {
+  opacity: 1;
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 4px rgba(214, 180, 255, .75));
+}
+.rl-picker__star:hover path { fill: rgba(237, 225, 255, .28); stroke: #faf5ff; }
+.rl-picker__star.is-active { opacity: 1; filter: drop-shadow(0 0 2.5px rgba(214, 180, 255, .55)); }
+.rl-picker__star.is-active path { fill: #efe6ff; stroke: #efe6ff; }
+.rl-picker__star.is-active:hover path { fill: #fff; stroke: #fff; }
+.rl-picker__star:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; border-radius: calc(6 * var(--g)); opacity: 1; }
+.rl-picker__star[hidden] { display: none; }
+@media (hover: none) {
+  .rl-picker__star { display: none; }
+}
+
+/* Réorganisation des favoris (souris) : cellule d'origine estompée, fantôme sous le pointeur,
+   repère vertical à l'emplacement de dépôt. */
+.rl-picker__cell[data-reorder] { cursor: grab; }
+.rl-picker__scroll.is-reordering, .rl-picker__scroll.is-reordering .rl-picker__cell { cursor: grabbing; }
+.rl-picker__cell.is-dragging { opacity: .3; }
+.rl-picker__ghost {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  width: calc(var(--rl-cell) + calc(4 * var(--g)));
+  height: calc(var(--rl-cell) + calc(4 * var(--g)));
+  place-items: center;
+  padding: calc(6 * var(--g));
+  border-radius: calc(12 * var(--g));
+  background: rgba(40, 26, 64, .92);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .45), inset 0 0 0 1.5px rgba(226, 160, 255, .7);
+  pointer-events: none;
+}
+.rl-picker__ghost > * { width: 100%; height: 100%; object-fit: contain; }
+.rl-picker__drop {
+  position: absolute;
+  z-index: 3;
+  width: calc(3 * var(--g));
+  border-radius: calc(3 * var(--g));
+  background: linear-gradient(180deg, #f0abfc, #a970ff);
+  box-shadow: 0 0 8px rgba(226, 150, 255, .8);
+  pointer-events: none;
+}
+.rl-picker__drop[hidden] { display: none; }
+
+.rl-picker__empty { margin: calc(8 * var(--g)) 2px; color: #8f889a; font-size: var(--fs-11); }
+
+/* Contrôles OAuth Twitch (actualiser/retirer) au bout de la ligne de recherche. */
+html body .jdm-module[data-module="bonk"] .rl-picker__search .jdm-emote-oauth-controls {
+  flex: 0 0 auto;
+  gap: 2px !important;
+}
+html body .jdm-module[data-module="bonk"] .rl-picker__search .jdm-emote-oauth-button {
+  width: calc(22 * var(--g)) !important;
+  height: calc(22 * var(--g)) !important;
+  min-height: calc(22 * var(--g)) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-picker__nav-item, .rl-picker__nav-caret, .rl-picker__head-caret, .rl-picker__cell, .rl-picker__search { transition: none; }
+  .rl-picker__cell:active { transform: none; }
+}
+
+/* Famille Extension : provenance (7TV / BTTV / FFZ) en petit sous-titre dans le contexte. */
+.rl-picker__sub {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--g));
+  margin: calc(7 * var(--g)) calc(3 * var(--g)) calc(4 * var(--g));
+  color: #b9b1c6;
+  font-size: var(--fs-9_5);
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.rl-picker__head + .rl-picker__sub { margin-top: 2px; }
+.rl-picker__sub-icon { width: calc(12 * var(--g)); height: calc(12 * var(--g)); object-fit: contain; opacity: .9; }
+.rl-picker__sub-count { color: #7c7584; font-weight: 500; }
+.rl-picker__sub-count::before { content: '· '; }
+
+/* Bouton Favori de la barre du bas : desktop = étoile sur l'emote (bouton masqué) ; tactile =
+   ce bouton, pour l'emote sélectionnée, avec un état favori explicite. */
+@media (hover: hover) and (pointer: fine) {
+  html body .jdm-module[data-module="bonk"] .rl-bonk-picker .jdm-bonk-choice__favorite { display: none !important; }
+}
+html body .jdm-module[data-module="bonk"] .rl-bonk-picker .jdm-bonk-choice__favorite.is-active {
+  color: #efe6ff !important;
+  border-color: rgba(214, 180, 255, .55) !important;
+  background: rgba(173, 108, 255, .22) !important;
+  text-shadow: 0 0 6px rgba(214, 180, 255, .6);
+}
+
+/* --- Bonk · emotes Twitch non liées (shared/bonk-twitch-source.js) : source de la colonne + fenêtre --- */
+.rl-twitch-src {
+  position: relative;
+  display: grid;
+  width: calc(32 * var(--g));
+  height: calc(32 * var(--g));
+  flex: 0 0 calc(32 * var(--g));
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: calc(11 * var(--g));
+  background: transparent;
+  cursor: pointer;
+}
+.rl-twitch-src:hover { background: rgba(255, 255, 255, .07); }
+.rl-twitch-src:focus-visible { outline: 2px solid var(--jdm-accent, #a970ff); outline-offset: -2px; }
+.rl-twitch-src__icon {
+  display: grid;
+  width: calc(26 * var(--g));
+  height: calc(26 * var(--g));
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: #9146ff;
+  color: #fff;
+}
+.rl-twitch-src__icon svg { width: calc(15 * var(--g)); height: calc(15 * var(--g)); }
+.rl-twitch-src__state {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  display: grid;
+  width: calc(14 * var(--g));
+  height: calc(14 * var(--g));
+  place-items: center;
+  border: 1.5px solid #1b1430;
+  border-radius: 50%;
+  background: #ffbf6e;
+  color: #3a2300;
+  font-size: var(--fs-8);
+  font-weight: 900;
+  line-height: 1;
+}
+.rl-twitch-link {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(16 * var(--g));
+  background: rgba(6, 4, 14, .62);
+  pointer-events: auto;
+}
+.rl-twitch-link__card {
+  display: flex;
+  width: min(calc(300 * var(--g)), 100%);
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: calc(10 * var(--g));
+  padding: calc(14 * var(--g));
+  border: 1px solid rgba(214, 170, 255, .34);
+  border-radius: calc(16 * var(--g));
+  background: linear-gradient(180deg, #261c40, #1a1330);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .55);
+  color: #f4efff;
+  font-size: var(--fs-13);
+  line-height: 1.4;
+}
+.rl-twitch-link__title { display: flex; align-items: center; gap: calc(8 * var(--g)); margin: 0; font-size: var(--fs-14); font-weight: 800; }
+.rl-twitch-link__text { margin: 0; color: #cfc4e6; font-size: var(--fs-12_5); }
+.rl-twitch-link__actions { display: flex; justify-content: flex-end; gap: calc(8 * var(--g)); }
+.rl-twitch-link__btn {
+  height: calc(32 * var(--g));
+  padding: 0 calc(14 * var(--g));
+  border: 1px solid rgba(214, 170, 255, .25);
+  border-radius: calc(10 * var(--g));
+  background: rgba(255, 255, 255, .05);
+  color: #e6ddf5;
+  font: inherit;
+  font-size: var(--fs-12_5);
+  font-weight: 700;
+  cursor: pointer;
+}
+.rl-twitch-link__btn--primary { border-color: transparent; background: #9146ff; color: #fff; }
+.rl-twitch-link__btn:disabled { cursor: progress; opacity: .6; }
+.rl-twitch-link__btn:focus-visible { outline: 2px solid #dcc4ff; outline-offset: 2px; }
+
+/* Bonk · état des emotes Twitch (synchronisation, cache, reconnexion) : une ligne courte, jamais une erreur. */
+.rl-twitch-src--reauth .rl-twitch-src__state {
+  background: #ff7a8a;
+  color: #2a0710;
+  font-size: var(--fs-9);
+}
+.rl-twitch-status {
+  overflow: hidden;
+  max-width: calc(220 * var(--g));
+  flex: 0 1 auto;
+  align-self: center;
+  padding: 0 calc(6 * var(--g));
+  color: #b9a9d6;
+  font-size: var(--fs-11);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-twitch-status--reauth {
+  height: calc(26 * var(--g));
+  border: 1px solid rgba(255, 122, 138, 0.45);
+  border-radius: calc(8 * var(--g));
+  background: rgba(255, 122, 138, 0.12);
+  color: #ffc2ca;
+  font: inherit;
+  font-size: var(--fs-11);
+  font-weight: 800;
+  cursor: pointer;
+}

@@ -63,7 +63,8 @@ const TTS_ERRORS = {
 };
 const ttsError = (code) => TTS_ERRORS[code] || errorLabel(code);
 /** Only these leave the admission uncertain: the same key is sent again, never a new one. */
-const UNCERTAIN = new Set(['network_error', 'http_error', 'core_unavailable', undefined]);
+// Audit 09/11: invalid_response = Core answered 2xx without a readable body — the purchase may well be recorded.
+const UNCERTAIN = new Set(['network_error', 'http_error', 'core_unavailable', 'invalid_response', undefined]);
 
 /** Surface of the current page (same breakpoints as the prototype, from the real page classes). */
 export function ttsV2Surface(doc) {
@@ -653,6 +654,9 @@ export function createTtsV2View({ document, client, surface, assetBase, lab = fa
       const res = await client.ttsState();
       if (destroyed) return;
       applyData(res.tts_v2, { wallet: res.wallet, pending_actions: res.pending_actions });
+      // Audit 09/11 (P2): a purchase left uncertain (lost answer) is checked again with ITS key once Core answers again —
+      // the composer used to stay « Vérification de ton envoi… » until the module was reopened.
+      if (recovered && !sending && S.phase === 'compose' && readStore().pending) void recover();
     } catch { /* keep the last state; Core refusals still protect the payment */ }
     schedulePoll(POLL_MS);
   }

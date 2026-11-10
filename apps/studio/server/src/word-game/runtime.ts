@@ -17,6 +17,12 @@ export const DEFAULT_SOUND_VOLUME = 100;
 
 /** Delays between reconnections to Core's stream while an OBS source listens (the last one repeats). */
 export const EVENTS_RETRY_MS = [1000, 2000, 5000, 10_000];
+/**
+ * Audit 09/11 (P2): Core writes « : ping » every 25 s. Nothing at all for this long: the connection is half-open (PC
+ * asleep, Wi-Fi / NAT change) — read() would wait for ever (the request deadline covers the headers only) and the wins
+ * would stop playing in OBS until a restart. Aborted, then the usual reconnection.
+ */
+export const EVENTS_IDLE_MS = 60_000;
 
 const MAX_BODY = 1024;
 const PLAYER_FILES: Record<string, string> = {
@@ -39,6 +45,8 @@ export interface WordGameRuntimeDeps {
   playerDir: string;
   /** Which Core runs the game (lot 9): the Lab Core, or the main Core through the production cockpit. */
   environment?: 'lab' | 'production';
+  /** Tests: the silence after which Core's stream is taken for dead (default EVENTS_IDLE_MS). */
+  idleMs?: number;
 }
 
 export class WordGameRuntime {
@@ -255,14 +263,26 @@ export class WordGameRuntime {
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        for (let i; (i = buffer.indexOf('\n\n')) >= 0;) {
-          this.relay(buffer.slice(0, i));
-          buffer = buffer.slice(i + 2);
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      const watch = () => {
+        clearTimeout(idle);
+        idle = setTimeout(() => ac.abort(), this.d.idleMs ?? EVENTS_IDLE_MS);
+        idle.unref?.();
+      };
+      watch();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          watch();
+          buffer += decoder.decode(value, { stream: true });
+          for (let i; (i = buffer.indexOf('\n\n')) >= 0;) {
+            this.relay(buffer.slice(0, i));
+            buffer = buffer.slice(i + 2);
+          }
         }
+      } finally {
+        clearTimeout(idle);
       }
     } catch {
       /* Core unreachable, restarted, or the stream was closed on purpose */
