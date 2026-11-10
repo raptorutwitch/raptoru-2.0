@@ -1,12 +1,38 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 08/11/2026** (consolidation générale). À lire **en premier**, puis vérifier soi-même l'état (§ 4).
+**Mis à jour le 10/11/2026** (consolidation). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
+[`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
-- La période précédente (04 → 07/11) est archivée dans [archive/REPRISE_2026-11-04_2026-11-07.md](archive/REPRISE_2026-11-04_2026-11-07.md).
-- **10/11/2026 — livraison officielle** : PR #59 fusionnée (`900637f`), Core et bot déployés, Music Hub ouvert aux testeurs (`MUSIC_HUB_EXTENSION`), ZIP Hosted Test prêt, non téléversé. État et suite : [RELEASE_2026-11-10.md](RELEASE_2026-11-10.md).
-- **09/11/2026 (nuit) — audit de fiabilité avant live** : branche `audit/fiabilite-2026-11-09`, intégrée dans
-  `release/2026-11-10` le 10/11. 15 corrections avec tests (3 P1, 10 P2, 2 P3). Rapport, corrections proposées non appliquées et checklist GO / NO-GO Music Hub : [AUDIT_FIABILITE_2026-11-09.md](AUDIT_FIABILITE_2026-11-09.md).
-- Les règles complètes sont dans [`../CLAUDE.md`](../CLAUDE.md) : elles priment sur tout outil ou plugin.
+## 0. Résumé compact, à copier dans une nouvelle conversation
+
+```text
+Raptoru 2.0 — reprise au 10/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
+
+Projet : plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
+Règle de partage : le Core décide (données, Jetons, règles, files), le bot LeCroupier_ parle à Twitch (EventSub, chat),
+Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
+aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
+
+Production (relevée le 10/11) : Core bbce104 et bot 900637f sur Coolify (sains), Studio 0.1.29 installé (bbce104),
+site 74f7542. origin/main = afe98cf.
+Music Hub : livré, ouvert aux seuls testeurs (MUSIC_HUB_EXTENSION=testers) ; extension shell v2 en Hosted Test avec
+le ZIP raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.zip (SHA-256 80bdab00…f9f5b,
+worktree music-finish). Extension publique : présumée 0bf7907 (legacy), jamais prouvée.
+Music Hub : passe de finition et parcours viewer réels NON validés.
+OBS 33.0.1 réparé (shaderfilter 2.6.1, Composite Blur et Advanced Masks 1.6.1, Image Reaction 1.4, DSK 0.4.1,
+Move 3.2.1), SE.Live désactivé. Ouvert : 15 URL de sources navigateur gardent des paramètres selive-notify-*.
+
+Prochain chantier : Chaos V2, en CONCEPTION (rien de construit) — docs/chaos/. Lot 0 = mesures PresentMon + couper les
+fenêtres Halloween permanentes + choisir 59/165 Hz ; lot 1 = lecteur natif (WGC sans curseur), flip seul.
+
+Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
+publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
+le checkout principal (c'est le dossier de données du Studio installé). Travailler dans
+Documents\Raptoru 2.0 - Worktrees\<nom>. « Validé » = testé à la main par Antoni.
+
+À lire avant de coder : docs/REPRISE.md, CLAUDE.md, docs/PROJECT_STATUS.md, docs/ROADMAP.md, puis le document du module.
+```
 
 ## 1. Le projet en dix lignes
 
@@ -22,85 +48,64 @@
 | Extension Twitch             | `apps/twitch-extension`                               | HTML, CSS et JavaScript sans framework | hébergée par Twitch  |
 | Contrats partagés            | `packages/schemas`                                    | Zod                                    | —                    |
 | Schéma SQL                   | `supabase/migrations`                                 | SQL                                    | appliqué par le Core |
-| Site raptoru.fr              | dépôt séparé `raptorutwitch/Leaderboard-Jeu-des-mots` | —                                      | —                    |
+| Site raptoru.fr              | dépôt séparé `raptorutwitch/Leaderboard-Jeu-des-mots` | —                                      | Coolify              |
 
-**Monorepo** npm workspaces + turbo.
+Monorepo npm workspaces + turbo. Environnements : **Production** (VPS + PC), **Lab** (Core local réel, base Docker,
+jamais la Production), **Hosted Test** (extension visible des seuls testeurs), **staging** (`core-staging.raptoru.fr`).
 
-**Environnements**
+## 2. Limites d'autonomie : jamais sans GO explicite d'Antoni
 
-- **Production** : Core, bot et base sur le VPS ; Studio installé sur le PC.
-- **Lab** : Core local réel, avec sa base Docker et le dossier `%APPDATA%\Raptoru Studio Lab` ; jamais la Production.
-- **staging** : `core-staging.raptoru.fr`.
+**Production, Twitch et OBS** :
 
-État détaillé, versions, tests et problèmes ouverts : **[PROJECT_STATUS.md](PROJECT_STATUS.md)**.
-Roadmap : [ROADMAP.md](ROADMAP.md). Index : [README.md](README.md).
+- push, fusion dans `main`, déploiement Coolify, migration distante, variable ou drapeau, redémarrage d'un service ;
+- release ou installation de Studio ;
+- publication de l'extension, Hosted Test, console Twitch ;
+- toute action sur OBS (scènes, sources, plugins), Twitch, StreamElements, Spotify ou le Wallet : soldes, crédits,
+  débits, remboursements, sanctions, messages dans le vrai chat.
 
-## 2. Limites d'autonomie : ce qu'on ne fait jamais sans GO explicite d'Antoni
+**Destruction** :
 
-**Production, Twitch et OBS**
+- `git clean`, `reset --hard`, `checkout .` ou `-f`, réécriture d'historique ;
+- suppression de branche, de worktree, de sauvegarde, de média ou de données de Studio.
 
-- Push, fusion dans `main`, déploiement Coolify, migration distante, drapeau ou variable, redémarrage d'un service.
-- Release ou installation de Studio. `npm run studio:release` seulement quand Antoni le demande.
-- Publication de l'extension, Hosted Test sur un compte réel, modification de la console Twitch.
-- Toute action sur OBS, Twitch, StreamElements ou le Wallet : soldes, crédits, débits, remboursements, sanctions.
-  Les messages dans le vrai chat aussi.
+**Contenu et sécurité** :
 
-**Destruction**
+- ne pas créer de contenu métier à la place d'Antoni : défis, montants, récompenses, cosmétiques ;
+- dépôt **public** : aucun secret, `.env`, jeton, dump, journal ni donnée de viewer, y compris les clés des URL de
+  sources OBS ([../SECURITY.md](../SECURITY.md)).
 
-- `git clean`, `reset --hard`, `checkout .` ou `-f`, réécriture d'historique, suppression de branche ou de worktree.
-- Suppression de sauvegardes, de médias ou de données de Studio.
+**Méthode** :
 
-**Contenu et sécurité**
+- lots verticaux en autonomie, puis un livrable testable ;
+- interrompre Antoni seulement pour une décision métier, un blocage, la Production ou une action destructrice ;
+- « **Validé** » = testé à la main par Antoni.
 
-- Créer du contenu métier à sa place : défis, montants, récompenses, objets, cosmétiques.
-- Le dépôt est **public** : aucun secret, `.env`, jeton, dump, journal ni donnée de viewer dans un fichier commité,
-  un rapport ou une réponse ([../SECURITY.md](../SECURITY.md)).
-- Ne jamais committer `docs/HANDOFF_MIGRATION_2026-10-20.md` ni `docs/POST_LIVE_AUDIT_2026-10-20.md`.
-
-**Méthode attendue (08/11)**
-
-- Pour un lot autorisé : travailler en autonomie (décisions techniques ordinaires, corrections, tests, commits locaux,
-  journal), puis rendre un livrable testable.
-- Interrompre Antoni seulement pour :
-  - une décision métier ou artistique ;
-  - un blocage insoluble ;
-  - une action de Production ;
-  - une action destructrice.
-- « **Validé** » = testé à la main par Antoni. Un test automatique n'est jamais une validation.
+Registre des décisions et de leurs raisons : [DECISIONS_TECHNIQUES.md](DECISIONS_TECHNIQUES.md).
 
 ## 3. Où travailler sans rien casser
 
-**Checkout principal** `C:\Users\Antoni\Documents\Raptoru 2.0`
+**Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0`**
 
-- C'est le **dossier de données du Studio installé** (`.env`, jetons Twitch, `apps/studio/server/.runtime`).
-- Il est sur `main` local, **429 commits derrière** `origin/main`, avec du travail non commité.
-- On n'y travaille pas ; on ne le nettoie pas.
-- Pour lire un document à jour depuis là : `git show origin/main:<chemin>`.
-- Sa mise à jour demande un GO et une sauvegarde des données de Studio.
-- Conseil : retirer d'abord les copies non suivies qui bloqueraient la mise à jour, par exemple un ancien `docs/REPRISE.md`.
+- C'est le **dossier de données du Studio installé** : `.env`, jetons Twitch, `apps/studio/server/.runtime`.
+- Il est sur `main` local `11ffe3f`, **523 commits derrière** `origin/main`, avec 79 modifications non commitées.
+- On n'y travaille pas et on ne le nettoie pas. Pour lire un document à jour depuis là :
+  `git show origin/main:<chemin>`. Sa mise à jour demande un GO et une sauvegarde des données de Studio.
 
-**Nouveaux worktrees**
+**Nouveaux worktrees** : **uniquement** dans `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\<nom>`, à partir de
+`origin/main` ou de la branche du chantier.
 
-- **Uniquement** dans `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\<nom>`.
-- Partir de `origin/main`, ou de la branche du chantier.
+**Carte des worktrees, branches et dossiers** : [WORKSPACES.md](WORKSPACES.md). Propositions de nettoyage, sans rien
+supprimer : [CLEANUP_LATER.md](CLEANUP_LATER.md). Sauvegardes : [BACKUPS.md](BACKUPS.md). Ne jamais déplacer ni
+supprimer `Documents\Sauvegarde Raptoru 2.0`, `Documents\OBS-Backups` ni `Documents\Raptoru 2.0 - Livraisons`.
 
-**À préserver absolument** (branches et worktrees)
+**Ports du Studio installé** : 4100 (serveur et lecteurs OBS), 4110 (Dock), 3789. Tests : 4389–4399 (E2E),
+4471–4482 (banc de l'extension). OBS WebSocket : 4455. Détail : [ARCHITECTURE.md](ARCHITECTURE.md).
 
-| Branche                                                                    | Worktree                           | Pourquoi                                                                  |
-| -------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------- |
-| `feat/extension-next`                                                      | `…Worktrees\extension-next`        | **Extension Next**, sur GitHub depuis le 08/11 (`2f45ac1`), non fusionnée |
-| `docs/consolidation-2026-11`                                               | `…Worktrees\consolidation`         | cette documentation                                                       |
-| `docs/extension-audit`                                                     | `…Worktrees\studio-ux`             | base des deux branches précédentes                                        |
-| `backup/roue-v2-wip-2026-10-25` (`99157a3`)                                | `Documents\raptoru-roue-v2-backup` | sauvegarde, aussi conservée en bundle                                     |
-| `feat/studio-viewer-titles`, `feat/level-up-v2`, `feat/halloween-cauldron` | —                                  | PR non fusionnées                                                         |
+**Tester sans toucher la Production** :
 
-Carte complète des worktrees, branches et sauvegardes : [WORKSPACES.md](WORKSPACES.md). Propositions de retrait :
-[CLEANUP_LATER.md](CLEANUP_LATER.md). Rien n'est supprimé sans accord.
-
-**Sauvegardes** : `C:\Users\Antoni\Documents\Sauvegarde Raptoru 2.0\`, à accès restreint. Ne jamais les déplacer ni les supprimer.
-
-**Ports réservés au Studio installé** : 4100 (serveur), 4110 (Dock), 3789. Les tests utilisent 4389–4399 (E2E) et
-4471–4482 (banc de l'extension).
+- `npm run studio:lab` (Lab isolé) ;
+- **jamais `npm run studio` depuis le checkout principal**, qui ouvrirait le profil de Production ;
+- `Ouvrir Music Hub (Lab).cmd` (à la racine d'un worktree à jour, absent du checkout principal en retard) pour voir l'extension du Lab en viewer, modérateur ou supermod.
 
 ## 4. Vérifier l'état soi-même (lecture seule)
 
@@ -109,116 +114,97 @@ git -C "C:\Users\Antoni\Documents\Raptoru 2.0" fetch origin
 git -C "C:\Users\Antoni\Documents\Raptoru 2.0" log --oneline -5 origin/main
 git -C "C:\Users\Antoni\Documents\Raptoru 2.0" worktree list
 
-# Depuis un worktree à jour. L'ancienne adresse coolify.raptoru.fr répond 502.
+# Depuis un worktree à jour (l'ancienne adresse coolify.raptoru.fr répond 502)
 export COOLIFY_URL=https://dashboard.raptoru.fr
 node scripts/coolify-deploy.mjs status core     # SHA déployé, santé, sauvegarde, commit vu par le Core, bail du bot
 node scripts/coolify-deploy.mjs status bot
-curl -s https://raptoru.fr/api/status           # build du site
+curl -s https://raptoru.fr/api/status
 
 # Studio installé
 cat "$LOCALAPPDATA/Programs/Raptoru Studio/resources/app/build-info.json"
+
+# Archive de référence de l'extension
+sha256sum "C:/Users/Antoni/Documents/Raptoru 2.0 - Worktrees/music-finish/apps/twitch-extension/release/raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.zip"
 ```
 
-La version de l'extension **servie par Twitch** ne se lit pas hors live : Raptoru Live n'est pas installée en panel, et
-le composant vidéo n'apparaît qu'en live, pour les viewers autorisés (vérifié le 08/11). Pour la prouver, Antoni a deux
-moyens :
+**Relevé du 10/11** :
 
-1. Console développeur Twitch › Extensions › Raptoru Live › Versions : relever la version « Released », sa date et son
-   numéro.
-2. Pendant un live, connecté avec un compte autorisé, sur twitch.tv/raptoru_ : F12 › Sources ›
-   `<client-id>.ext-twitch.tv` › `shared/runtime-config.js` › `buildId`. Il a la forme
-   `production-<12 caractères du commit>-<date>`.
+| Élément            | Valeur                                          |
+| ------------------ | ----------------------------------------------- |
+| `origin/main`      | `afe98cf`                                       |
+| Core               | `bbce104`, sain ; dernière sauvegarde 04:00 UTC |
+| Bot                | `900637f`, bail actif                           |
+| Studio             | 0.1.29 (`bbce104`)                              |
+| Site               | `74f7542`                                       |
+| ZIP de l'extension | `80bdab00…f9f5b`                                |
 
-Reporter ensuite ce commit dans `apps/twitch-extension/PUBLISHED`, sur `feat/extension-next`, au début de la mission de
-publication.
+Un écart veut dire que quelqu'un a agi depuis : le comprendre avant d'agir.
 
-**Relevé du 08/11**
+La version **publique** de l'extension ne se lit pas hors live. Antoni peut la prouver par la console Twitch, ou en
+live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.3).
 
-- Core et bot `1b25f30`, sains, bail actif.
-- Studio 0.1.27, construit depuis `13ed6e8`.
-- Site `74f7542`.
-- `origin/main` `13ed6e8`.
+## 5. Situation au 10/11
 
-## 5. Situation au 08/11
+**Ce qui vient d'être terminé**
 
-**En Production**
+- Livraison du 10/11 :
+  - PR #59 à #62 ;
+  - Core `bbce104`, bot `900637f` ;
+  - Studio 0.1.28 puis **0.1.29**, installé ;
+  - Music Hub ouvert aux testeurs ;
+  - ZIP v2 en Hosted Test (Antoni).
 
-- Opération Coulisses (07/11) : Core et bot `1b25f30`, 5 migrations ; Studio 0.1.26, puis 0.1.27.
-- Les modules déjà en service : liste dans [ROADMAP.md](ROADMAP.md) § 1.
+  Détail : [RELEASE_2026-11-10.md](RELEASE_2026-11-10.md), [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md).
 
-**Extension Next**
+- Réparation d'**OBS 33.0.1** et désactivation de SE.Live : [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md).
+- **Recherche Chaos V2** : [chaos/](chaos/ARCHITECTURE_CHAOS_V2.md), § 0 pour le verdict.
+- Cette consolidation.
 
-- **Développé, non livré.**
-- Branche `feat/extension-next` @ `2f45ac1`, **sur GitHub** depuis le 08/11, non fusionnée. Elle part de `3834d6b`
-  (`origin/main` + 4 commits de documents d'audit).
-- Recette visuelle d'Antoni en Lab : **approuvée sur le principe et le ressenti général** (Antoni, 08/11). Ce n'est pas une validation de chaque vue, taille ou appareil.
-- Lancer et tester, dans `apps/twitch-extension` du worktree :
-  - `npx vitest run` ;
-  - `npm run test:requests` ;
-  - `npm run test:lab-module` ;
-  - `node test/responsive/matrix.mjs --shell v2` ;
-  - E2E Studio avec `RAPTORU_EXT_SHELL=v2`.
-- Hosted Test et retour arrière, préparés et non exécutés : `docs/extension/EXTENSION_NEXT_PUBLICATION.md`, sur la
-  branche. La remise en ligne d'une version précédente depuis la console Twitch **n'a jamais été vérifiée**. Le repli
-  sûr est une nouvelle soumission avec `--shell legacy` (review de 8 à 14 jours).
-- Ses documents de travail sont **sur la branche** :
-  - `docs/extension/EXTENSION_NEXT_EXECUTION_STATE.md` : journal de reprise ;
-  - `docs/extension/SOCLE.md` : guide développeur ;
-  - `docs/extension/EXTENSION_NEXT_PUBLICATION.md` : Hosted Test, publication, retour arrière.
-- Pour les lire sans changer de branche :
-  `git show feat/extension-next:docs/extension/EXTENSION_NEXT_EXECUTION_STATE.md`.
-- L'audit et le plan sont aussi dans cette branche-ci : [extension/](extension/PLAN_REFONTE_EXTENSION_2026-11-08.md).
+**En Production** : tous les modules de [ROADMAP.md](ROADMAP.md) § 1 marqués « Livré ». Music Hub y est **seulement
+pour les testeurs**.
 
-**Comparer les shells legacy et v2 dans le Lab**
+**Seulement en Hosted Test** : le module Musique de l'extension et tout le shell v2 (ZIP `bbce104`). Le public garde
+le shell legacy présumé `0bf7907`.
 
-- Double-cliquer `…Worktrees\extension-next\apps\twitch-extension\Comparer legacy et v2.cmd`, ou lancer `npm run lab:compare` dans ce dossier.
-- Une page s'ouvre sur `127.0.0.1:4480`, legacy à gauche, v2 à droite : 18 tailles, 8 écrans, données fictives.
-- Aucun service n'est appelé.
-- Autre option : le Studio de développement avec `RAPTORU_EXT_SHELL=v2`, ou `?shell=v2` sur une page de l'extension servie par le Lab.
+**Ce qui reste à vérifier** (Antoni) :
 
-**Builds sûrs de l'extension**
+- Music Hub après la passe de finition, puis les parcours viewer réels
+  ([extension/TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 6) ;
+- les 15 URL de sources OBS (`selive-notify-*`) ;
+- les effets OBS ;
+- la recette d'usage de Studio.
 
-- Sur `main` : seul `npm run build:production -w @raptoru/twitch-extension` vise le bon serveur
-  (`core.raptoru.fr/v1/ext`). Ne jamais utiliser `npm run build`, qui emballe l'ancien `raptoru.fr/api`.
-- Sur `feat/extension-next` : `node scripts/package.mjs --target production|staging|calibration [--shell v2] [--check]`.
-  La Production y est refusée sans inventaire validé par Antoni ; `npm run build` n'emballe plus rien.
-- Aucun emballage n'est une publication.
+Liste : [PROJECT_STATUS.md](PROJECT_STATUS.md) § 12.
 
-**Builds sûrs de Studio**
+**Prochain chantier** : **Chaos V2, lot 0** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md)).
 
-- Tester sans toucher au Studio installé : **toujours `npm run studio:lab`**. Il a son propre dossier `.lab-data`, sa
-  base Docker et son Core local, et refuse de démarrer si un Studio tourne déjà.
-- **Attention : `npm run studio` lit le dossier de données du checkout.** Lancé depuis le checkout principal, il ouvre
-  le profil de Production.
-- Médias et données locales du Studio installé : `apps/studio/server/.runtime` du checkout principal et
-  `%APPDATA%\Raptoru Studio`. Lecture seule ; sauvegardes : [WORKSPACES.md](WORKSPACES.md) § 4.
-- Release : `npm run studio:release`, **seulement sur demande d'Antoni**.
-- Le numéro de version des `package.json` du dépôt (0.1.6) n'est pas celui des releases : c'est l'étiquette `studio-v*` qui fait foi.
+- Lot 0 : couper les fenêtres Halloween permanentes, choisir la fréquence de l'écran, mesurer avec PresentMon.
+- Lot 1 : lecteur natif limité au flip, sur GO.
 
-## 6. Prochain travail réalisable
+## 6. Quels fichiers lire avant de coder
 
-1. **Mission « modules »**, la prochaine proposée : passe expérience sur 2 ou 3 modules existants, en Lab, puis la
-   Roulette visuelle ([ROADMAP.md](ROADMAP.md) § 4.3). Méthode : § 4.4.
-2. **Mission « publication d'Extension Next »**, sur GO dédié ([ROADMAP.md](ROADMAP.md) § 2.1).
-   - Côté agent : passe Prettier sur 17 fichiers d'outils de la branche, zip staging, aide au Hosted Test.
-   - Côté Antoni : preuve de la version servie, inventaire, Hosted Test, fusion, soumission.
-3. **Avant toute publication de l'extension**, il faut :
-   - la version servie prouvée ;
-   - l'inventaire validé par Antoni ;
-   - un Hosted Test réussi sur vrais appareils ;
-   - le GO explicite.
-
-## 7. Si on change de modèle demain
-
-1. Lire ce fichier en entier, puis [../CLAUDE.md](../CLAUDE.md) (règles), puis [PROJECT_STATUS.md](PROJECT_STATUS.md)
-   (état), puis [ROADMAP.md](ROADMAP.md) (§ 2 et § 4).
-2. Lancer les commandes du § 4 et comparer avec le relevé du 08/11. **Un écart veut dire que quelqu'un a agi depuis** :
-   le comprendre avant d'agir.
-3. Selon le chantier :
-   - extension : lire le journal de la branche (§ 5) et `SOCLE.md` ;
+1. Ce fichier, puis [../CLAUDE.md](../CLAUDE.md).
+2. [PROJECT_STATUS.md](PROJECT_STATUS.md) (état), [ROADMAP.md](ROADMAP.md) (§ 0–2).
+3. [ARCHITECTURE.md](ARCHITECTURE.md) et [INVENTAIRE_MODULES.md](INVENTAIRE_MODULES.md) (le code du module visé).
+4. Selon le chantier :
+   - Chaos V2 : `chaos/ARCHITECTURE_CHAOS_V2.md` puis `chaos/ROADMAP_CHAOS_V2.md` ;
+   - musique : [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md) ;
+   - extension : [extension/SOCLE.md](extension/SOCLE.md) ;
    - Studio : [studio-refonte/CONTEXTE.md](studio-refonte/CONTEXTE.md), puis
-     [DESIGN_SYSTEM.md](studio-refonte/DESIGN_SYSTEM.md) et [architecture/GUIDE_MODULE.md](studio-refonte/architecture/GUIDE_MODULE.md) ;
-   - un module : son document, listé dans [ARCHITECTURE.md](ARCHITECTURE.md) § 5.
-4. Créer un worktree dans `…Worktrees\` et ne jamais toucher le checkout principal.
-5. Tenir un journal de reprise du chantier (modèle : `EXTENSION_NEXT_EXECUTION_STATE.md`).
+     [DESIGN_SYSTEM.md](studio-refonte/DESIGN_SYSTEM.md) et
+     [architecture/GUIDE_MODULE.md](studio-refonte/architecture/GUIDE_MODULE.md) ;
+   - OBS : [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md).
+5. Créer un worktree dans `…Worktrees\`, et tenir un journal de reprise du chantier.
 6. Avant de s'arrêter : mettre à jour **ce fichier**, court. Le détail daté va dans `archive/`.
+
+## 7. Ce qu'il ne faut surtout pas faire
+
+- Lancer `npm run studio` depuis le checkout principal, ou y faire `git clean`, `reset` ou `checkout .`.
+- Téléverser une ancienne archive : la seule référence est `bbce1048a078` ; les ZIP de `Documents\Raptoru\…` sont
+  d'un ancien projet.
+- Activer le Hosted Test sur la chaîne en live : il retire l'extension à tous les non-testeurs.
+- Réactiver SE.Live ou SAMMI.
+- Modifier une scène OBS ou une URL de source sans GO.
+- Copier une URL de source OBS, un `.env`, un jeton ou un dump dans le dépôt.
+- Présenter un test automatique, un déploiement ou une publication comme une validation.
+- Présenter Chaos V2 comme existant : il est **en conception**.

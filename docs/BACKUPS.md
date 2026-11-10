@@ -1,23 +1,72 @@
 # Sauvegardes — inventaire et récupération
 
-Relevé du **24/10/2026 ~12:20**, complété le **24/10 ~13:30** par deux sauvegardes réellement faites (§ 1) ; aucune
-sauvegarde restaurée ni supprimée.
+**Inventaire de référence : § 0, vérifié le 10/11/2026.** Les § 1 à 9 sont le relevé détaillé du 24/10, gardé pour ses
+preuves et ses procédures. Aucune sauvegarde n'a été ouverte, restaurée ni supprimée pour cette consolidation.
 
-> **Complément du 08/11/2026 (consolidation).** L'inventaire détaillé ci-dessous date du 24/10. Depuis, d'après les
-> noms des dossiers et les comptes rendus cités (aucune ouverture des fichiers) :
->
-> | Sauvegarde                                                            | Contenu                                                                                        | Vérification                     | Source                                                               |
-> | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------- |
-> | Base Production, sauvegarde automatique Coolify à 04:00 UTC           | —                                                                                              | dernière réussie le 08/11        | `coolify-deploy.mjs status core`                                     |
-> | `Documents\Sauvegarde Raptoru 2.0\prod-db-2026-11-07-avant-coulisses` | dump du 07/11, juste avant la bascule « Coulisses »                                            | **restauré** (confiance A)       | [OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) § 12 |
-> | Dump du 04/11 00:06 UTC                                               | —                                                                                              | restauré (A)                     | [OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) § 2  |
-> | `studio-data-2026-11-07-avant-coulisses`                              | données de Studio, 204 fichiers                                                                | restauration d'essai 204/204 (A) | idem                                                                 |
-> | `studio-installer-0.1.25`, `studio-installer-0.1.26`                  | installateurs de retour arrière                                                                | —                                | —                                                                    |
-> | `extension-next-2026-11-08`                                           | bundle de `backup/roue-v2-wip-2026-10-25` ; patch du travail non commité du checkout principal | —                                | journal d'Extension Next                                             |
-> | dossiers datés du 29/10 au 02/11                                      | Halloween, titres, profils Studio avant chaque mise à jour                                     | —                                | —                                                                    |
->
-> La restauration de la base a donc été prouvée le 20/10, le 04/11 et le 07/11. Le script de déploiement est dans le
-> dépôt (`scripts/coolify-deploy.mjs`) : la ligne « unique copie » plus bas est d'époque.
+## 0. Inventaire au 10/11/2026
+
+**Existence** vérifiée le 10/11 (liste des dossiers). **Intégrité** : seulement là où un document le prouve.
+
+**Sensibilité** : **élevée** = soldes et identités des viewers, `.env`, jetons ; **moyenne** = préférences,
+connexions, achats ; **faible** = code. Aucune de ces sauvegardes ne va dans Git. Ne jamais les déplacer ni les
+supprimer sans accord.
+
+### 0.1 Base de Production
+
+| Sauvegarde                                                                                              | Date                                    | Vérification                                                                                            | Restauration                                                                    | Sensibilité |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----------- |
+| Sauvegarde automatique Coolify (`raptoru-prod-postgres`, quotidienne à 04:00 UTC, 14 copies sur le VPS) | dernière réussie le **10/11 04:00 UTC** | `coolify-deploy.mjs status core` le 10/11                                                               | § 2 (téléchargement depuis Coolify, `pg_restore`)                               | élevée      |
+| Sauvegarde manuelle avant la migration Music Hub                                                        | 10/11 02:30:59 UTC                      | rapport de livraison ([RELEASE_2026-11-10.md](RELEASE_2026-11-10.md)) ; sur le VPS seulement            | idem                                                                            | élevée      |
+| `Documents\Sauvegarde Raptoru 2.0\prod-db-2026-11-07-avant-coulisses`                                   | 07/11                                   | **restaurée** en base jetable (A, [OPERATION_COULISSES.md](studio-refonte/OPERATION_COULISSES.md) § 12) | `pg_restore` dans une base jetable ; **jamais** sur la Production sans décision | élevée      |
+| `prod-db-2026-10-30`, `prod-db-2026-10-24`, `2026-10-29-prod-db-avant-halloween`, `-avant-periodes`     | 24–30/10                                | 24/10 : lisible (B, § 2) ; autres : existence seulement                                                 | idem                                                                            | élevée      |
+
+**La copie locale la plus récente date du 07/11** : les copies hors VPS sont manuelles.
+
+### 0.2 Studio
+
+| Sauvegarde                                                            | Date     | Contenu                                                                            | Vérification                         | Sensibilité |
+| --------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------- | ------------------------------------ | ----------- |
+| `studio-data-2026-11-07-avant-coulisses`                              | 07/11    | données du Studio installé (204 fichiers : `.runtime`, `.env`, jetons)             | **restauration d'essai 204/204** (A) | élevée      |
+| `studio-installer-0.1.25`, `studio-installer-0.1.26`                  | 07/11    | installateurs de retour arrière (0.1.27 → 0.1.29 sont dans les releases publiques) | existence                            | faible      |
+| `studio-profile-avant-0.1.8` → `0.1.15`, `2026-10-3*-studio-profil-*` | 26–31/10 | profil Electron avant chaque mise à jour                                           | existence                            | moyenne     |
+| `studio-data-2026-10-24*`, `-10-25-avant-sup10`                       | 24–25/10 | anciennes données                                                                  | B (§ 1)                              | élevée      |
+| `Raptoru Studio`                                                      | 23/10    | ancienne copie du profil                                                           | existence                            | moyenne     |
+
+**Aucune sauvegarde des données de Studio** n'a été faite avant les installations de 0.1.28 et 0.1.29 (10/11).
+
+### 0.3 Git et code
+
+| Sauvegarde                                                                                  | Date  | Contenu                                                                                    | Vérification                                   |
+| ------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `music-hub-branch-2026-11-09\feat-music-hub-2026-11-09.bundle`                              | 09/11 | bundle de `feat/music-hub`, fusionnée depuis                                               | existence                                      |
+| `extension-next-2026-11-08\`                                                                | 08/11 | bundle de `backup/roue-v2-wip-2026-10-25` (`99157a3`), patch et état du checkout principal | `git bundle verify` (journal d'Extension Next) |
+| `music-hub-design-lab-2026-11-08\`                                                          | 08/11 | prototypes de design de Music Hub (ZIP + SHA-256 dans `LISEZMOI.txt`)                      | existence                                      |
+| `worktrees-2026-10-24\`                                                                     | 24/10 | instantané des worktrees temporaires                                                       | B (§ 3)                                        |
+| Branche locale `backup/roue-v2-wip-2026-10-25`, worktree `Documents\raptoru-roue-v2-backup` | 25/10 | Roue V2 en cours                                                                           | existence                                      |
+| GitHub `raptorutwitch/raptoru-2.0`                                                          | —     | tout ce qui est poussé                                                                     | —                                              |
+
+### 0.4 Extension, livraisons, OBS, autres
+
+| Sauvegarde                                                                                                    | Contenu                                                                                                            | Où c'est décrit                                      |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| Archives de l'extension (ZIP et `.sha256`)                                                                    | référence `bbce1048a078` et précédentes                                                                            | [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3 |
+| `Documents\Raptoru 2.0 - Livraisons\`                                                                         | paquets du 29–31/10 : médias Halloween v1–v3 (avec `SHA256SUMS.txt`), extension Halloween, alertes, transition OBS | [HALLOWEEN.md](HALLOWEEN.md) § 5                     |
+| `Documents\OBS-Backups\2026-11-10_avant-reparation-plugins-obs33\`                                            | `%APPDATA%\obs-studio` complet (25 460 fichiers), anciens plugins, **`RESTAURATION.txt`**                          | [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md) § 4     |
+| `Documents\OBS-Backups\2026-11-10_desactivation-SE-Live\`                                                     | réglages du gestionnaire de plugins d'origine, collection, profils, configuration SE.Live (28 fichiers)            | idem                                                 |
+| `Documents\obs-backup-2026-10-24-*`                                                                           | références zoom / mute, Move Transition 3.1.1                                                                      | § 6                                                  |
+| `halloween-items-2026-10-31`, `halloween-close-2026-11-02`, `titles-2026-10-31`, `2026-10-29-wizebot-archive` | état d'Halloween, des titres, archive WizeBot (XP historique)                                                      | existence ; sensibilité moyenne                      |
+| `Documents\Raptoru\_migration-exports\`                                                                       | exports privés de la migration du 20/10 (**contient des secrets**)                                                 | § 2                                                  |
+
+**Restauration** :
+
+- base, § 2 ;
+- Studio : réinstaller l'installateur précédent, puis, si besoin, les données. `studio_backup.py` et `MANIFEST.json`
+  sont dans chaque dossier `studio-data-*` ; `RESTAURER.txt` existe dans celui du 24/10 ;
+- OBS : `RESTAURATION.txt` ;
+- code : `git clone <bundle>` ou `git fetch <bundle>`.
+
+Le script de déploiement est dans le dépôt (`scripts/coolify-deploy.mjs`) : la mention « unique copie » du § 3 est
+d'époque.
 
 Mettre à jour ce fichier à chaque nouvelle sauvegarde ou suppression. Procédures d'exploitation : [OPERATIONS.md](OPERATIONS.md).
 
