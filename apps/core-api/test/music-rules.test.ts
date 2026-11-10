@@ -66,13 +66,19 @@ async function music(o: { controls?: boolean } = {}) {
   let progress = 30_000;
   let playing = true;
   let status = OK;
+  /** The Studio declares `?caps=targeted_skip` (Studio ≥ the release of 10/11); false = Studio 0.1.27. */
+  let caps = { targetedSkip: true };
   const reading = (): SpotifyPlayback => ({
     observed_at: core.clock.now().toISOString(),
     track,
     progress_ms: track ? progress : null,
     is_playing: !!track && playing,
   });
-  const sync = () => spotify.sync(CH, { status, playback: reading() });
+  const sync = () => spotify.sync(CH, { status, playback: reading() }, caps);
+  const oldStudio = async () => {
+    caps = { targetedSkip: false };
+    await sync();
+  };
   await sync();
   const at = async (ms: number) => {
     progress = ms;
@@ -167,6 +173,7 @@ async function music(o: { controls?: boolean } = {}) {
     core,
     spotify,
     sync,
+    oldStudio,
     play,
     pause,
     setStatus,
@@ -807,15 +814,19 @@ describe('Music Hub — audit 09/11', () => {
     await m.fund(viewer(1), 100_000);
     m.core.clock.advance(20_000);
     // Studio alive (it syncs), its last reading of the player 20 s old.
-    await m.spotify.sync(CH, {
-      status: {
-        auth: 'ok',
-        limited_until: null,
-        quota_exceeded: false,
-        device: { name: 'PC', type: 'Computer' },
-        calls_last_minute: 1,
+    await m.spotify.sync(
+      CH,
+      {
+        status: {
+          auth: 'ok',
+          limited_until: null,
+          quota_exceeded: false,
+          device: { name: 'PC', type: 'Computer' },
+          calls_last_minute: 1,
+        },
       },
-    });
+      { targetedSkip: true },
+    );
     expect(await m.code(m.buy(viewer(1)))).toBe('nothing_playing');
   });
 
@@ -831,5 +842,40 @@ describe('Music Hub — audit 09/11', () => {
     expect(
       (await m.sync()).jobs.filter((j) => j.kind === 'read_playback'),
     ).toHaveLength(2);
+  });
+});
+
+describe('Music Hub — release 10/11: Studio / Core compatibility', () => {
+  it('a Studio that does not declare the targeted skip (0.1.27): no paid skip, no seek — before any debit; a sync with it restores both', async () => {
+    const m = await music({ controls: true });
+    await m.rules({ viewer_skip_enabled: true });
+    await m.fund(viewer(1), 100_000);
+    await m.oldStudio();
+    expect(await m.code(m.buy(viewer(1)))).toBe('studio_outdated');
+    expect(await m.balance(viewer(1))).toBe(100_000);
+    expect((await m.sync()).jobs.filter((j) => j.kind === 'skip')).toHaveLength(
+      0,
+    );
+    expect(
+      await m.code(m.spotify.control(CH, 'seek', null, 'test', 60_000)),
+    ).toBe('studio_outdated');
+    // The moderation's pause stays available (no target needed).
+    expect(await m.code(m.spotify.control(CH, 'pause', null, 'test'))).toBe(
+      'ok',
+    );
+    await m.spotify.sync(
+      CH,
+      {
+        status: {
+          auth: 'ok',
+          limited_until: null,
+          quota_exceeded: false,
+          device: { name: 'PC', type: 'Computer' },
+          calls_last_minute: 1,
+        },
+      },
+      { targetedSkip: true },
+    );
+    expect(await m.code(m.buy(viewer(1)))).not.toBe('studio_outdated');
   });
 });

@@ -885,18 +885,22 @@ export class SpotifyRuntime {
     const api = await this.d.api.status();
     const view = this.d.auth.view();
     const fresh = this.reading && !this.reading.sent ? this.reading : null;
-    const answer = await this.d.core<SpotifySyncAnswer>(`${this.base}/studio`, {
-      status: {
-        auth: view.auth,
-        limited_until: api.limited_until,
-        quota_exceeded: api.quota_exceeded,
-        device: this.device,
-        calls_last_minute: Math.min(api.calls_last_minute, 100_000),
-        // Music Hub: the Lab on the real account tells Core its read-only session (the extension disables the controls).
-        ...(this.d.labReal ? { read_only: !this.d.labReal.writes } : {}),
+    // `caps`: this Studio skips / seeks only the track Core names (`expect_uri`) — Core sells a paid skip only then.
+    const answer = await this.d.core<SpotifySyncAnswer>(
+      `${this.base}/studio?caps=targeted_skip`,
+      {
+        status: {
+          auth: view.auth,
+          limited_until: api.limited_until,
+          quota_exceeded: api.quota_exceeded,
+          device: this.device,
+          calls_last_minute: Math.min(api.calls_last_minute, 100_000),
+          // Music Hub: the Lab on the real account tells Core its read-only session (the extension disables the controls).
+          ...(this.d.labReal ? { read_only: !this.d.labReal.writes } : {}),
+        },
+        ...(fresh ? { playback: fresh.playback } : {}),
       },
-      ...(fresh ? { playback: fresh.playback } : {}),
-    });
+    );
     if (fresh) fresh.sent = true;
     // Keep only the reservations Core still lists, or not yet reported.
     const listed = new Set(answer.queue.map((q) => q.request_id));

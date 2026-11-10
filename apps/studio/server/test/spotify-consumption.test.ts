@@ -82,7 +82,7 @@ async function bench(o: { smtc?: boolean } = {}) {
   };
   const syncs: number[] = [];
   const core = async (path: string, body?: unknown): Promise<unknown> => {
-    if (path.endsWith('/studio')) {
+    if (path.split('?')[0]!.endsWith('/studio')) {
       syncs.push(clock.t);
       const pb = (body as { playback?: Reading }).playback;
       if (pb) {

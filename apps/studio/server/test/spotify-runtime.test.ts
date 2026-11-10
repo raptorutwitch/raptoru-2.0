@@ -58,7 +58,7 @@ async function harness(opts: { reservationsFile?: string; t0?: number } = {}) {
     onSync: null as ((body: Sync) => void) | null,
   };
   const call = async (path: string, body?: unknown): Promise<unknown> => {
-    if (path.endsWith('/studio')) {
+    if (path.split('?')[0]!.endsWith('/studio')) {
       core.syncs.push(body as Sync);
       const pb = (body as { playback?: { track?: { title?: string } | null } })
         .playback;
@@ -887,7 +887,7 @@ describe('Lab on the real account, read-only (docs/music/SPOTIFY_REEL_LAB.md)', 
     let jobs: SpotifyJob[] = [];
     const rt = await SpotifyRuntime.open({
       core: (async (path: string, body?: unknown) => {
-        if (path.endsWith('/studio')) {
+        if (path.split('?')[0]!.endsWith('/studio')) {
           const a = {
             enabled: true,
             jobs,

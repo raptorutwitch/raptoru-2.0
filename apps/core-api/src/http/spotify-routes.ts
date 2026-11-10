@@ -167,9 +167,14 @@ export function spotifyRoutes(
       method: 'POST',
       pattern: at(base, `/${ch}/studio`),
       auth,
-      handle: ({ params, body }) =>
+      // `?caps=targeted_skip`: the Studio honours `expect_uri` (a query, ignored by an older Core: safe both ways).
+      handle: ({ params, body, url }) =>
         mapped(() =>
-          spotify.sync(channel(params[0]!), parse(SpotifyStudioSync, body)),
+          spotify.sync(channel(params[0]!), parse(SpotifyStudioSync, body), {
+            targetedSkip: (url.searchParams.get('caps') ?? '')
+              .split(',')
+              .includes('targeted_skip'),
+          }),
         ),
     },
     {

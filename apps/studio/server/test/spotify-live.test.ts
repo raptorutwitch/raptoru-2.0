@@ -293,7 +293,7 @@ async function harness(o: { coreLive?: 'ok' | '404' } = {}) {
     syncs: 0,
   };
   const call = async (path: string, body?: unknown): Promise<unknown> => {
-    if (path.endsWith('/studio')) {
+    if (path.split('?')[0]!.endsWith('/studio')) {
       core.syncs++;
       return core.answer;
     }

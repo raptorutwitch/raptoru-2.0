@@ -78,6 +78,7 @@ function refusal(e, st) {
     case 'not_removable': return 'Cette demande n’est plus dans la file.';
     case 'identity_required': return 'Partage ton identité Twitch pour demander une musique.';
     case 'network_error': return 'Connexion perdue. Réessaie : rien ne sera jamais payé deux fois.';
+    case 'studio_outdated': return 'Raptoru Studio doit être mis à jour pour cette action : rien n’a été payé ni envoyé.';
     case 'lab_read_only': return 'Lab en lecture seule : le lecteur Spotify n’est pas piloté, rien n’a été envoyé.';
     case 'queue_full': return `Open Bar : la file est pleine (${d.max_queue ?? 50} musiques). Attends qu’une musique passe.`;
     case 'viewer_skip_disabled': return 'Le skip payant est désactivé pour le moment.';

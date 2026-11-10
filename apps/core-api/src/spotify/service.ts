@@ -163,7 +163,11 @@ export interface RequestRow {
 
 interface StudioRow {
   seen_at: Date;
-  status: SpotifyStudioStatus;
+  /**
+   * `targeted_skip`: Core's own mark (never sent in the body, whose schema an older Core rejects) — the Studio
+   * declared `?caps=targeted_skip` on its sync, i.e. it honours `expect_uri` (skips / seeks only THAT track).
+   */
+  status: SpotifyStudioStatus & { targeted_skip?: boolean };
   playback: SpotifyPlayback | null;
   playback_at: Date | null;
   current_request_id: string | null;
@@ -1026,6 +1030,7 @@ export class SpotifyService {
   async sync(
     channelId: string,
     s: SpotifyStudioSync,
+    caps: { targetedSkip?: boolean } = {},
   ): Promise<SpotifySyncAnswer> {
     const changed: string[] = [];
     const answer = await this.db.tx(async (q) => {
@@ -1035,7 +1040,14 @@ export class SpotifyService {
       await q.query(
         `insert into spotify_studio (channel_id, seen_at, status) values ($1, $2, $3)
          on conflict (channel_id) do update set seen_at = $2, status = $3`,
-        [channelId, now, JSON.stringify(s.status)],
+        [
+          channelId,
+          now,
+          JSON.stringify({
+            ...s.status,
+            ...(caps.targetedSkip ? { targeted_skip: true } : {}),
+          }),
+        ],
       );
       if (s.playback)
         changed.push(...(await this.observe(q, channelId, prior, s.playback)));
@@ -2448,6 +2460,10 @@ export class SpotifyService {
       const st = await this.studio(q, e.channel_id);
       const refusal = this.writeRefusal(st);
       if (refusal) throw new SpotifyError(409, refusal.toLowerCase());
+      // Release 10/11: a Studio that does not honour `expect_uri` (0.1.27 and older) would skip whatever plays —
+      // never sell it a skip (before any debit).
+      if (!st?.status.targeted_skip)
+        throw new SpotifyError(409, 'studio_outdated');
       const busy = await q.query(
         `select 1 from module_activity where channel_id = $1 and module_id = $2 and status = 'queued'
          union all
@@ -3227,6 +3243,9 @@ export class SpotifyService {
       if (reason) throw new SpotifyError(409, reason.toLowerCase());
       let seek: { position_ms: number; expect_uri: string } | null = null;
       if (action === 'seek') {
+        // Same as the paid skip: an older Studio would not check the track before seeking.
+        if (!st?.status.targeted_skip)
+          throw new SpotifyError(409, 'studio_outdated');
         const t = await this.playingNow(q, channelId, st);
         if (!t) throw new SpotifyError(409, 'nothing_playing');
         if (!t.uri || !t.duration_ms)
