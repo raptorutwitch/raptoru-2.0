@@ -21,7 +21,7 @@ le ZIP raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.z
 worktree music-finish). Extension publique : présumée 0bf7907 (legacy), jamais prouvée.
 Music Hub : passe de finition et parcours viewer réels NON validés.
 OBS 33.0.1 réparé (shaderfilter 2.6.1, Composite Blur et Advanced Masks 1.6.1, Image Reaction 1.4, DSK 0.4.1,
-Move 3.2.1), SE.Live désactivé. Ouvert : 15 URL de sources navigateur gardent des paramètres selive-notify-*.
+Move 3.2.1), SE.Live désactivé. URL des sources navigateur nettoyées des paramètres SE.Live (10/11, 17:06).
 
 Prochain chantier : Chaos V2, en CONCEPTION (rien de construit) — docs/chaos/. Lot 0 = mesures PresentMon + couper les
 fenêtres Halloween permanentes + choisir 59/165 Hz ; lot 1 = lecteur natif (WGC sans curseur), flip seul.
@@ -170,7 +170,7 @@ le shell legacy présumé `0bf7907`.
 
 - Music Hub après la passe de finition, puis les parcours viewer réels
   ([extension/TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 6) ;
-- les 15 URL de sources OBS (`selive-notify-*`) ;
+- la source OBS `Navigateur web 2` (ancienne clé TTS) ;
 - les effets OBS ;
 - la recette d'usage de Studio.
 

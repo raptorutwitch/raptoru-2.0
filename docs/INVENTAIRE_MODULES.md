@@ -96,4 +96,4 @@ l'identique par Studio :
 | Dock                         | `dock-page/`                                   |
 
 Les dossiers sont sous `apps/studio/server/`. Voir [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md) O1 pour les URL
-modifiées par SE.Live.
+modifiées par SE.Live (nettoyées le 10/11).
