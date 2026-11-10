@@ -391,3 +391,44 @@ Revue contradictoire de cafbf80 (rapport : docs/AUDIT_FIABILITE_2026-11-09.md su
    « Fermer l'Open Bar » → 500 Jetons.
 5. Chat simulé : `!song` deux fois de suite → une seule réponse.
 6. Overlay : [MUSIC_OVERLAYS.md](MUSIC_OVERLAYS.md) § 3 ter.
+
+## 15. Passe après le test réel d'Antoni (10/11)
+
+Antoni a testé Studio 0.1.28 et le Hosted Test sur son vrai Spotify Desktop : pause, reprise, skip, volume et
+affichage fonctionnent. Corrigé ensuite, sur la branche `fix/music-hub-finish` :
+
+- **Clignotement de la carte « en cours » (Studio)**
+  - Cause : la carte était réécrite d'un bloc (`innerHTML`) dès qu'un caractère changeait. Une action, chaque
+    événement Windows (son compteur entrait dans la signature) et la relecture après l'action reconstruisaient
+    plusieurs fois de suite la pochette, le titre, les boutons et le curseur.
+  - Correction : `morph()` (`web/src/ds/ds.ts`) garde les nœuds et ne réécrit que ce qui change. La barre et les temps
+    (`data-own`) restent au script, et un bouton du lecteur garde le focus.
+- **« Le lecteur n'a pas confirmé l'action » alors que Spotify l'avait faite**
+  - Causes :
+    - une seule relecture, aussitôt après la commande, alors que `/me/player` rend encore l'ancien état un moment ;
+    - après un 5xx (Spotify exécute parfois une commande en répondant 502), la pause de 1 s de Studio refusait cette
+      relecture (`TEMPORARY_ERROR`) ;
+    - un skip incertain n'avait qu'une relecture, à 250 ms.
+  - Correction :
+    - relectures à 0 / 0,3 / 0,7 / 1,2 / 1,8 s jusqu'à la preuve ; non prouvé : « incertain » ;
+    - la commande n'est **jamais renvoyée** ;
+    - la page attend 12 s et distingue « pas confirmé à temps » d'un refus.
+- **Progression du skip payant réglable dans Studio** (Spotify › Extension) : prix de base, multiplicateur, retour au
+  prix de base.
+  - Défauts inchangés : 25 000, ×2, 30 min. Le Core les valide (base de 100 à 10 000 000, multiplicateur de 1 à 10
+    avec deux décimales au plus, fenêtre de 1 à 720 min) et journalise chaque changement.
+  - Prix = base × multiplicateur^n, avec n le nombre de skips payés réussis enchaînés, plafonné à 1 000 000 000.
+  - Un changement en cours de série s'applique au prochain skip, sur le même n ; une page restée sur l'ancien prix
+    reçoit `price_changed`.
+- **Vue supermod** : Pause / Reprendre et Passer étaient déjà directs. Le troisième bouton (volume) a maintenant un
+  haut-parleur au lieu d'une icône de réglages ambiguë. E2E `music-roles` (318 / 400 / 565 px), captures dans
+  `.lab-data/music-hub-captures/roles`.
+- **Prévisualiser les vues sans la Production** : `Ouvrir Music Hub (Lab).cmd` ouvre l'extension du Lab en viewer,
+  modérateur et supermod. Le Studio de Production reste séparé du Lab.
+
+Livraison :
+
+- Core, pour les réglages de progression ;
+- Studio 0.1.29, pour le clignotement, les confirmations et le panneau ;
+- nouveau ZIP, pour l'icône du volume et le texte du multiplicateur. Dans Twitch, il remplace les fichiers de la
+  version en Hosted Test, sans nouveau numéro de version.

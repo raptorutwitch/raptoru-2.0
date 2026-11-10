@@ -459,12 +459,15 @@ export type SpotifyPanelAction = z.infer<typeof SpotifyPanelAction>;
  * one global progression per stream, never per viewer.
  */
 export const MUSIC_RULES = {
-  /** A viewer's paid skip: this price, doubled for each paid skip that succeeded within the window of the previous. */
+  /**
+   * A viewer's paid skip — DEFAULTS, set in Studio (MusicRulesUpdate): the base price, multiplied for each paid skip that
+   * succeeded within the window of the previous one; past the window without one, back to the base.
+   */
   skipBasePriceTokens: 25_000,
-  /** The window restarts at every successful paid skip; past it without one, the price is back to the base. */
+  skipMultiplier: 2,
   skipWindowMs: 30 * 60_000,
-  /** ponytail: the ledger's amounts are 32-bit — 25 000 × 2^15 = 819 200 000 at most (unreachable in a stream). */
-  skipMaxDoublings: 15,
+  /** The ledger's amounts are 32-bit: a price never goes above this, whatever the settings. */
+  skipMaxPriceTokens: 1_000_000_000,
   /** Open Bar: requests from the extension free, no per-viewer count — one short frequency limit stays. */
   openBarCooldownSeconds: 20,
   /** Open Bar: the whole queue (waiting + being added) is capped at this many requests. */
@@ -481,6 +484,17 @@ export const MusicRulesUpdate = z.strictObject({
   viewer_skip_enabled: z.boolean().optional(),
   /** On by default: a viewer can never pay to skip a request another viewer paid for (moderation still can). */
   viewer_skip_protect_requests: z.boolean().optional(),
+  /** The paid skip's progression (Studio): base price, multiplier per successful skip, window before the reset. */
+  viewer_skip_base_price: z.number().int().min(100).max(10_000_000).optional(),
+  viewer_skip_multiplier: z
+    .number()
+    .min(1)
+    .max(10)
+    .refine((v) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6, {
+      message: 'two decimals at most',
+    })
+    .optional(),
+  viewer_skip_window_minutes: z.number().int().min(1).max(720).optional(),
   open_bar: z.boolean().optional(),
 });
 export type MusicRulesUpdate = z.infer<typeof MusicRulesUpdate>;

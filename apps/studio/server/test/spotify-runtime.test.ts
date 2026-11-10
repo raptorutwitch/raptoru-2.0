@@ -938,3 +938,82 @@ describe('Lab on the real account, read-only (docs/music/SPOTIFY_REEL_LAB.md)', 
     expect(sim.view().queue).toEqual(['Numb']);
   });
 });
+
+describe('Music Hub — late confirmations of the real player (test of 10/11)', () => {
+  const sent = (h: { sim: SpotifySim }, call: string) =>
+    h.sim.calls.filter((c) => c === call).length;
+
+  it('pause / resume: Spotify still answers the old state for a moment → read again, done; ONE command sent', async () => {
+    const h = await harness();
+    h.sim.staleReads = 2;
+    h.job({
+      kind: 'control',
+      job_id: id(41),
+      action: 'pause',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'done',
+      playback: { is_playing: false },
+    });
+    expect(sent(h, 'PUT me/player/pause')).toBe(1);
+    h.sim.staleReads = 3;
+    h.job({
+      kind: 'control',
+      job_id: id(42),
+      action: 'resume',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({
+      outcome: 'done',
+      playback: { is_playing: true },
+    });
+    expect(sent(h, 'PUT me/player/play')).toBe(1);
+  });
+
+  it('Spotify answers 502 but pauses: proven by the readings, done; never a second pause', async () => {
+    const h = await harness();
+    h.sim.playerAnswer = 502;
+    h.sim.staleReads = 1;
+    h.job({
+      kind: 'control',
+      job_id: id(43),
+      action: 'pause',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'done' });
+    expect(sent(h, 'PUT me/player/pause')).toBe(1);
+  });
+
+  it('a skip answered 502 but applied: skipped once the next track is read; ONE « next » only', async () => {
+    const h = await harness();
+    h.sim.playerAnswer = 502;
+    h.sim.staleReads = 2;
+    h.job({ kind: 'skip', job_id: id(44), request_id: null });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'skipped' });
+    expect(sent(h, 'POST me/player/next')).toBe(1);
+  });
+
+  it('still the old state after every reading: unknown, never an assumed success, nothing sent again', async () => {
+    const h = await harness();
+    h.sim.staleReads = 20;
+    h.job({
+      kind: 'control',
+      job_id: id(45),
+      action: 'pause',
+      volume_percent: null,
+    });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'unknown' });
+    expect(sent(h, 'PUT me/player/pause')).toBe(1);
+    h.sim.playerAnswer = 502;
+    h.job({ kind: 'skip', job_id: id(46), request_id: null });
+    await h.rt.once();
+    expect(h.report()).toMatchObject({ outcome: 'unknown' });
+    expect(sent(h, 'POST me/player/next')).toBe(1);
+  });
+});

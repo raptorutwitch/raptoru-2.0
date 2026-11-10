@@ -43,7 +43,8 @@ const I = {
   left: svg('<path d="m15 6-6 6 6 6"/>'),
   clock: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
   dots: svg('<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>'),
-  sliders: svg('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
+  // Retour du test réel (10/11) : le volume a son haut-parleur, plus d'icône de réglages ambiguë.
+  volume: svg('<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
   history: svg('<path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5"/><path d="M4 4v4.5h4.5M12 8v4l3 2"/>'),
 };
 const EQ = '<span class="mh-eqs" aria-hidden="true"><i></i><i></i><i></i></span>';
@@ -102,6 +103,14 @@ function ending(h) {
   if (h.state === 'REMOVED_BY_MOD') return { kind: 'warning', text: `${t} a été retirée par la modération${back}.` };
   if (h.state === 'CANCELED') return { kind: 'warning', text: `${t} a été retirée de la file${back}.` };
   return { kind: 'warning', text: `${t} n’a pas pu être ajoutée${back}.` };
+}
+
+/** La règle du skip payant, telle que le Core l'applique (multiplicateur réglé dans Studio ; absent : ×2). */
+function skipRule(vs) {
+  const m = typeof vs.multiplier === 'number' ? vs.multiplier : 2;
+  if (m === 1) return `Le prix est le même à chaque skip : ◆ ${fmt(vs.base_price)}.`;
+  const how = m === 2 ? 'Le prix double' : `Le prix est multiplié par ${String(m).replace('.', ',')}`;
+  return `${how} à chaque skip payé dans les ${vs.window_minutes} minutes qui suivent le précédent (pour tout le stream), puis revient à ◆ ${fmt(vs.base_price)}.`;
 }
 
 export function view(ctx) {
@@ -319,12 +328,12 @@ export function view(ctx) {
     const seekable = pl && !why && timed && !n.stale;
     const busy = (a) => (ctlBusy === a ? 'aria-busy="true"' : '');
     const off = why || ctlBusy ? 'disabled' : '';
-    // Supermods and the streamer: Pause / Passer right here (the volume behind the sliders); a viewer: the paid skip.
+    // Supermods and the streamer: Pause / Passer right here (the volume behind its speaker); a viewer: the paid skip.
     const acts = pl
       ? `<span class="mh-ctl" role="group" aria-label="Lecteur du stream">
           <button type="button" class="mh-ico mh-ico--ctl" data-act="${playing ? 'pause' : 'resume'}" data-key="pp" ${off} ${busy(playing ? 'pause' : 'resume')} aria-label="${playing ? 'Mettre en pause' : 'Reprendre la lecture'}" title="${esc(why || (playing ? 'Pause' : 'Reprendre'))}">${playing ? I.pause : I.play}</button>
           <button type="button" class="mh-ico mh-ico--ctl" data-act="skip" data-key="sk" ${off} ${busy('skip')} aria-label="Passer cette musique" title="${esc(why || 'Passer (modération, gratuit)')}">${I.next}</button>
-          <button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Volume du lecteur" title="Volume">${I.sliders}</button>
+          <button type="button" class="mh-ico" data-act="sup" data-key="sup" aria-expanded="${sup}" aria-label="Volume du lecteur" title="Volume">${I.volume}</button>
         </span>`
       : paidSkipHtml(n, playing);
     // The bar and the time move every second outside this HTML (paintProgress): the list is never rebuilt for them.
@@ -713,7 +722,7 @@ export function view(ctx) {
     return `<div class="mh-scrim" data-act="keep-out"><div class="mh-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mh-st" aria-describedby="mh-sd">
       <div class="mh-dialog__row">${art(n.image_url, 'mh-art--lg')}<div><h3 id="mh-st">Passer cette musique ?</h3><p><b>${esc(n.title)}</b>${n.artists?.length ? ` · ${esc(n.artists[0])}` : ''}</p></div></div>
       <p class="mh-dialog__price"><b>◆ ${fmt(vs.price)} Jetons</b>${after !== null ? `<span>${short ? `il te manque ◆ ${fmt(-after)}` : `il te restera ◆ ${fmt(after)}`}</span>` : ''}</p>
-      <p id="mh-sd">Le prix double à chaque skip payé dans les ${vs.window_minutes} minutes qui suivent le précédent (pour tout le stream), puis revient à ◆ ${fmt(vs.base_price)}. Si le skip ne se fait pas, tes Jetons te sont rendus.</p>
+      <p id="mh-sd">${skipRule(vs)} Si le skip ne se fait pas, tes Jetons te sont rendus.</p>
       ${d.error ? `<p class="mh-buy__err" role="alert">${esc(d.error)}</p>` : ''}
       <div class="mh-dialog__acts"><button type="button" class="mh-btn" data-act="keep" data-key="keep">Garder</button><button type="button" class="mh-btn mh-btn--danger" data-act="vskip-go" data-key="vskip-go" ${d.busy || short ? 'disabled' : ''} ${d.busy ? 'aria-busy="true"' : ''}>${d.busy ? 'Envoi…' : `Passer · ◆ ${fmt(vs.price)}`}</button></div></div></div>`;
   }

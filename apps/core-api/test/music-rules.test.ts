@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   MUSIC_RULES,
+  MusicRulesUpdate,
   type SpotifyPlayback,
   type SpotifySearchItem,
   type SpotifyStudioStatus,
@@ -10,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import type { Actor } from '../src/lab-moderation/store.js';
 import { adminAdjust } from '../src/lab-moderation/store.js';
 import { CommandSteps } from '../src/commands/steps.js';
+import { priceAfter } from '../src/spotify/music-rules.js';
 import { setup } from './helpers.js';
 
 // Music Hub — the paid viewer skip (25 000 Jetons, doubled within 30 min of the last successful one, global to the
@@ -877,5 +879,101 @@ describe('Music Hub — release 10/11: Studio / Core compatibility', () => {
       { targetedSkip: true },
     );
     expect(await m.code(m.buy(viewer(1)))).not.toBe('studio_outdated');
+  });
+});
+
+describe('Music Hub — the paid skip’s progression set in Studio (test of 10/11)', () => {
+  it('defaults unchanged (◆ 25 000, ×2, 30 min); a base, a multiplier and a window of Studio’s apply to the next price', async () => {
+    const m = await music();
+    expect((await m.spotify.musicRules(CH)).viewer_skip).toMatchObject({
+      base_price: 25_000,
+      multiplier: 2,
+      window_minutes: 30,
+      price: 25_000,
+    });
+    await m.rules({
+      viewer_skip_enabled: true,
+      viewer_skip_base_price: 10_000,
+      viewer_skip_multiplier: 1.5,
+      viewer_skip_window_minutes: 10,
+    });
+    await m.fund(viewer(1), 1_000_000);
+    expect(await m.price()).toBe(10_000);
+    await m.skipOk(viewer(1), 2);
+    expect(await m.price()).toBe(15_000);
+    await m.skipOk(viewer(1), 3);
+    expect(await m.price()).toBe(22_500);
+    // 10 min without a successful paid skip (the window of now): back to the base.
+    await m.later(10 * MIN + 1);
+    expect(await m.price()).toBe(10_000);
+  });
+
+  it('changed during a series: the same n repriced at once (base × multiplier^n); a shorter window may end it', async () => {
+    const m = await music();
+    await m.rules({ viewer_skip_enabled: true });
+    await m.fund(viewer(1), 10_000_000);
+    await m.skipOk(viewer(1), 2);
+    await m.skipOk(viewer(1), 3);
+    expect(await m.price()).toBe(100_000); // n = 2
+    await m.rules({ viewer_skip_multiplier: 3 });
+    expect(await m.price()).toBe(225_000); // 25 000 × 3²
+    await m.rules({ viewer_skip_base_price: 10_000 });
+    expect(await m.price()).toBe(90_000); // 10 000 × 3²
+    // The page still shows the price before the change: refused, nothing debited.
+    const before = await m.balance(viewer(1));
+    expect(await m.code(m.buy(viewer(1), 100_000))).toBe('price_changed');
+    expect(await m.balance(viewer(1))).toBe(before);
+    await m.later(5 * MIN);
+    await m.rules({ viewer_skip_window_minutes: 4 });
+    expect(await m.price()).toBe(10_000); // the last success is 5 min old: the series is over
+    await m.rules({ viewer_skip_window_minutes: 30 });
+    expect(await m.price()).toBe(90_000); // and back within a longer window
+    // Journaled (who, what).
+    const log = await m.core.db.query<{ action: string; ended_by: string }>(
+      `select action, ended_by from module_activity where channel_id = $1 and module_id = 'music_hub' and action = 'skip_rules'`,
+      [CH],
+    );
+    expect(log).toHaveLength(4);
+  });
+
+  it('server validation: incoherent values refused; the price never above the ledger’s cap', async () => {
+    for (const bad of [
+      { viewer_skip_base_price: 50 },
+      { viewer_skip_base_price: 1.5e7 },
+      { viewer_skip_base_price: 2_500.5 },
+      { viewer_skip_multiplier: 0.5 },
+      { viewer_skip_multiplier: 11 },
+      { viewer_skip_multiplier: 1.234 },
+      { viewer_skip_window_minutes: 0 },
+      { viewer_skip_window_minutes: 721 },
+    ])
+      expect(MusicRulesUpdate.safeParse(bad).success, JSON.stringify(bad)).toBe(
+        false,
+      );
+    expect(
+      MusicRulesUpdate.safeParse({ viewer_skip_multiplier: 1.25 }).success,
+    ).toBe(true);
+    expect(priceAfter({ base_price: 10_000_000, multiplier: 10 }, 64)).toBe(
+      1_000_000_000,
+    );
+    expect(priceAfter({ base_price: 25_000, multiplier: 1 }, 64)).toBe(25_000);
+    expect(priceAfter({ base_price: 25_000, multiplier: 2 }, 15)).toBe(
+      819_200_000,
+    );
+  });
+
+  it('a change racing a purchase: either the old price is paid (before) or the purchase is refused (after) — never a mix', async () => {
+    const m = await music();
+    await m.rules({ viewer_skip_enabled: true });
+    await m.fund(viewer(1), 1_000_000);
+    const [, out] = await Promise.all([
+      m.rules({ viewer_skip_base_price: 40_000 }),
+      m.code(m.buy(viewer(1), 25_000)),
+    ]);
+    const paid = 1_000_000 - (await m.balance(viewer(1)));
+    expect([
+      ['ok', 25_000],
+      ['price_changed', 0],
+    ]).toContainEqual([out, paid]);
   });
 });

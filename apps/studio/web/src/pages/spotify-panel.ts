@@ -96,14 +96,17 @@ function extension(s: SpState, ui: SpUi) {
       ${row('Prix d’une demande', `${fld('data-f="ext-price" min="1" max="1000000"', val(ui, 'ext-price', v.extension_price_tokens ?? 500), 'Jetons')}<button type="button" class="d-btn sm" data-act="sp-ext-price">Enregistrer</button>`, 'prix jetons')}
       ${row('Refuser un titre déjà en file', sw(v.no_duplicates ?? true, 'data-sp-flag="no_duplicates"', 'Refuser un titre déjà en file'), 'doublon')}
       ${row('Commandes du lecteur', sw(v.player_controls ?? false, 'data-sp-flag="player_controls"', 'Commandes du lecteur'), 'pause reprendre passer volume supermods')}
-      ${paidSkip(s)}
+      ${paidSkip(s, ui)}
       <small>Même file, mêmes quotas et mêmes commandes du chat que la récompense ; seul le paiement change : des Jetons, rendus une seule fois si la demande est refusée, retirée ou annulée. La récompense de points n’est pas touchée.</small>
       <small>Commandes du lecteur : pause, reprise et volume ici ; dans l’extension, pause, reprise, passer et volume pour les supermods seulement (les modérateurs gardent le retrait des demandes). Elles agissent sur ton appareil Spotify, et tu gardes la main ici.</small>
-      ${s.environment === 'production' ? '<p class="spo-state warn">En Production, l’extension n’a pas encore accès à la musique : ces réglages n’ont d’effet que dans le Lab.</p>' : ''}
+      ${s.environment === 'production' ? '<p class="spo-state">En Production, le module Musique de l’extension n’est montré qu’aux comptes autorisés par le Core (Hosted Test : variable MUSIC_HUB_EXTENSION).</p>' : ''}
     </div>`,
     'jetons music hub',
   );
 }
+
+/** 2 → « 2 », 1.5 → « 1,5 ». */
+const fmtMult = (m: number) => String(m).replace('.', ',');
 
 const SKIP_STATUS: Record<string, string> = {
   pending: 'en cours',
@@ -119,8 +122,8 @@ const SKIP_REASON: Record<string, string> = {
   LAB_READ_ONLY: 'Lab en lecture seule',
 };
 
-/** Le skip payant des viewers : interrupteurs, règle validée (fixe), dernières décisions. */
-function paidSkip(s: SpState) {
+/** Le skip payant des viewers : interrupteurs, progression réglable (Core), prix actuel, dernières décisions. */
+function paidSkip(s: SpState, ui: SpUi) {
   const m = s.music_rules;
   if (!m) return '';
   const vs = m.viewer_skip;
@@ -132,7 +135,11 @@ function paidSkip(s: SpState) {
     .join('');
   return `${row('Skip payant par les viewers', sw(vs.enabled, 'data-sp-rule="viewer_skip_enabled"', 'Skip payant par les viewers'), 'skip payant jetons viewers passer progressif')}
       ${row('Protéger les demandes payées', sw(vs.protect_requests, 'data-sp-rule="viewer_skip_protect_requests"', 'Protéger les demandes payées'), 'protéger demandes skip payant')}
-      <small>◆ ${fmt(vs.base_price)} Jetons, doublé à chaque skip payé dans les ${vs.window_minutes} min du précédent (pour tout le stream), puis retour au prix de base. Tes skips et ceux de la modération sont gratuits et ne comptent pas. Un skip qui ne se fait pas est remboursé et ne fait pas monter le prix.</small>
+      ${row('Prix de base', fld('data-f="vs-base" min="100" max="10000000" step="100"', val(ui, 'vs-base', vs.base_price), 'Jetons'), 'prix base skip payant')}
+      ${row('Multiplicateur', fld('data-f="vs-mult" min="1" max="10" step="0.25"', val(ui, 'vs-mult', vs.multiplier ?? 2), '×'), 'multiplicateur progression skip')}
+      ${row('Retour au prix de base', fld('data-f="vs-window" min="1" max="720"', val(ui, 'vs-window', vs.window_minutes), 'min'), 'fenêtre réinitialisation skip minutes')}
+      <div class="spo-btns" data-k="enregistrer progression skip payant"><button type="button" class="d-btn pri sm" data-act="sp-skip-rules">Enregistrer</button><button type="button" class="d-btn ghost sm" data-act="sp-skip-defaults">Valeurs d’origine</button></div>
+      <small>Prix actuel : <b>◆ ${fmt(vs.price)}</b>${vs.doublings ? ` (${vs.doublings} skip${vs.doublings > 1 ? 's' : ''} payé${vs.doublings > 1 ? 's' : ''} enchaîné${vs.doublings > 1 ? 's' : ''})` : ' (prix de base)'}. ◆ ${fmt(vs.base_price)} Jetons, ×${fmtMult(vs.multiplier ?? 2)} à chaque skip payé dans les ${vs.window_minutes} min du précédent (pour tout le stream), puis retour au prix de base. Un changement s’applique au prochain skip : le prix est recalculé avec les nouveaux réglages sur la série en cours (base × multiplicateur^n). Tes skips et ceux de la modération sont gratuits et ne comptent pas. Un skip qui ne se fait pas est remboursé et ne fait pas monter le prix.</small>
       ${recent ? `<ul class="spo-vs">${recent}</ul>` : ''}`;
 }
 

@@ -145,6 +145,52 @@ export function patch(el: HTMLElement | null, html: string) {
 }
 
 /**
+ * Comme `patch`, mais les nœuds restent : seuls les attributs et les textes qui changent sont réécrits. Une pochette
+ * chargée n'est pas rechargée, un bouton garde son focus, un curseur tenu en main garde sa valeur. Un élément marqué
+ * `data-own` appartient à un script qui l'anime (barre de progression, temps) : ni ses attributs ni son contenu ne sont
+ * touchés.
+ */
+export function morph(el: HTMLElement | null, html: string) {
+  if (!el || el.dataset.sig === html) return;
+  el.dataset.sig = html;
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  syncChildren(el, t.content);
+}
+
+function syncChildren(to: Node, from: Node) {
+  const have = [...to.childNodes];
+  const want = [...from.childNodes];
+  want.forEach((next, i) => {
+    const cur = have[i];
+    if (!cur) to.appendChild(next);
+    else if (cur.nodeType !== next.nodeType || cur.nodeName !== next.nodeName)
+      to.replaceChild(next, cur);
+    else if (cur.nodeType !== Node.ELEMENT_NODE) {
+      if (cur.nodeValue !== next.nodeValue) cur.nodeValue = next.nodeValue;
+    } else if (!(cur as Element).hasAttribute('data-own')) {
+      syncAttributes(cur as Element, next as Element);
+      syncChildren(cur, next);
+    }
+  });
+  for (const extra of have.slice(want.length)) to.removeChild(extra);
+}
+
+function syncAttributes(cur: Element, next: Element) {
+  for (const { name } of [...cur.attributes])
+    if (!next.hasAttribute(name)) cur.removeAttribute(name);
+  for (const { name, value } of [...next.attributes])
+    if (cur.getAttribute(name) !== value) cur.setAttribute(name, value);
+  // Une valeur saisie vit dans la propriété : la remettre, sauf sous la main de l'utilisateur.
+  if (
+    cur instanceof HTMLInputElement &&
+    cur !== document.activeElement &&
+    cur.value !== (next as HTMLInputElement).value
+  )
+    cur.value = (next as HTMLInputElement).value;
+}
+
+/**
  * Une liste vivante : les lignes gardent leur élément d'un relevé à l'autre (clé), seules les nouvelles apparaissent.
  * Pur DOM, pour une file qui bouge pendant qu'on la lit.
  */
