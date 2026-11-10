@@ -103,3 +103,18 @@ Avant de commencer :
 | 13  | Antoni (Studio)      | « Demandes depuis l'extension » OFF                                                                 | la carte disparaît dans les 4 s ; une demande est refusée                                   |
 
 L'assistant OBS ajoute une source et ne modifie rien d'autre ; tu peux aussi ajouter l'URL de l'overlay à la main.
+
+## 7. Mise à jour du Hosted Test (10/11, passe après le test réel)
+
+- **Nouveau ZIP** : `Raptoru 2.0 - Worktrees\music-finish\apps\twitch-extension\release\raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.zip`.
+  - Construit depuis `main` (`bbce104`).
+  - Inventaire de 72 commits, validé par Antoni.
+  - Domaines inchangés.
+- **Ce qui change** : le volume du lecteur est derrière un haut-parleur explicite (vue supermod), et le texte de la
+  règle du skip payant suit le multiplicateur réglé dans Studio.
+- **Remplacer les fichiers de la version en Hosted Test**, sans nouveau numéro de version :
+  1. Status › repasser la version en Local Test ;
+  2. Files › téléverser le nouveau ZIP ;
+  3. Status › revenir en Hosted Test.
+
+  Si la console impose une nouvelle version, créer la suivante en recopiant les réglages (§ 4).
