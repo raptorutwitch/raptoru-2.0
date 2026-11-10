@@ -427,6 +427,7 @@ affichage fonctionnent. Corrigé ensuite, sur la branche `fix/music-hub-finish` 
   modérateur et supermod. Le Studio de Production reste séparé du Lab.
 
 Livraison :
+
 - Core, pour les réglages de progression ;
 - Studio 0.1.29, pour le clignotement, les confirmations et le panneau ;
 - nouveau ZIP, pour l'icône du volume et le texte du multiplicateur. Dans Twitch, il remplace les fichiers de la
