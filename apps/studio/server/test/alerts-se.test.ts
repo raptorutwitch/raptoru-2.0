@@ -26,7 +26,13 @@ const AT = new Date('2026-10-17T20:00:00Z');
 const dirs: string[] = [];
 afterEach(async () => {
   vi.useRealTimers();
-  for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
+  for (const d of dirs.splice(0))
+    await rm(d, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
 });
 
 describe('readTip (StreamElements channel.tips → donation event)', () => {
