@@ -209,7 +209,7 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     return [...mine, ...list.filter((p) => !me || p.viewer_id !== me.viewer_id)];
   }
   function rows(r, limit) {
-    // Preview (5, no filter) on the open screen; the full list (« Tout voir ») with its filters.
+    // Preview (PREVIEW_MAX, no filter) on the open screen; the full list (« Tout voir ») with its filters.
     const list = people(r);
     const shown = limit ? list.slice(0, limit) : list.filter((p) => filter === 'all' || p.source === filter);
     if (!shown.length) return '<p class="fine">En attente des premières inscriptions…</p>';
