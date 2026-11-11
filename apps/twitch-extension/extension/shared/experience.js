@@ -29,6 +29,8 @@ export const THEME_REGISTRY = Object.freeze({
   winter: Object.freeze({ id: 'winter', label: 'Fêtes d’hiver' }),
 });
 
+// Mission 11/11: only commands that exist (docs/INVENTAIRE_COMMANDES_TWITCH.md) and no price or delay written here —
+// they are set in Studio and change; the buttons show the real cost before sending.
 export const CORE_TUTORIAL = Object.freeze({
   id: 'core',
   version: 2,
@@ -49,15 +51,15 @@ export const CORE_TUTORIAL = Object.freeze({
       icon: '◆',
       kicker: 'À découvrir ensuite',
       title: 'Les jetons',
-      body: 'Une monnaie secondaire pour garder tes points de chaîne. Gagne-les en regardant, avec un follow (+500), un abonnement, les dons, les bits et les jeux.',
-      command: '!jetons pour voir ton solde',
+      body: 'Une monnaie secondaire pour garder tes points de chaîne. Gagne-les en regardant, avec un follow, un abonnement, les dons, les bits et les jeux.',
+      command: '!solde pour voir ton solde',
     }),
     Object.freeze({
       id: 'games',
       icon: '✚',
       kicker: 'Comment en gagner davantage',
       title: 'Les jeux du stream',
-      body: 'Daily, tombolas, mots, roulette, slots et duels récompensent ta participation. Une tombola reste ouverte 60 secondes : clique Rejoindre ou tape !join.',
+      body: 'Daily, tombolas, mots, roulette, slots et duels récompensent ta participation. Quand une tombola est ouverte, clique Rejoindre ou tape !join.',
       command: '!daily · !roulette 500 · !slot 500 · !duel @pseudo',
     }),
     Object.freeze({
@@ -65,15 +67,15 @@ export const CORE_TUTORIAL = Object.freeze({
       icon: '↗',
       kicker: 'À toi de jouer',
       title: 'Dépenser ses jetons',
-      body: 'Bonk 200 · Soundboard selon le son · TTS 2 000 · RandomBan 25 000. Les boutons indiquent toujours le coût avant l’envoi.',
-      command: '!bonk · !soundboard · !tts · !rb',
+      body: 'Bonk, Soundboard, TTS, RandomBan, musique… Chaque bouton indique son coût réel avant l’envoi.',
+      command: 'Dans le chat : !tts · !rb',
     }),
     Object.freeze({
       id: 'more',
       icon: '⌘',
       kicker: 'Les commandes utiles',
       title: 'Quelques raccourcis',
-      body: '!cashin convertit tes points de chaîne en jetons. !oracle répond à tes questions. !votekick lance un vote du chat, une fois par heure.',
+      body: '!streak montre ta série Daily. !give @pseudo montant offre des jetons à un autre viewer. !votekick @pseudo lance un vote du chat.',
     }),
     Object.freeze({
       id: 'bonk-emotes',

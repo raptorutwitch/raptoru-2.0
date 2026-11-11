@@ -24,7 +24,8 @@ import {
 } from '../ds/ds.js';
 import { ApiError, STUDIO_HEADERS } from '../http.js';
 
-export type ModModule = 'tts' | 'soundboard' | 'bonk' | 'raffle';
+/** `music`: Music Hub purchases (post-live 11/11) — in the history and refundable, never a desk module. */
+export type ModModule = 'tts' | 'soundboard' | 'bonk' | 'raffle' | 'music';
 export interface ModItem {
   interaction_id: string;
   module?: ModModule;
@@ -70,6 +71,7 @@ export const MODS: Record<
   soundboard: { label: 'Soundboard', unit: 'son', units: 'sons' },
   bonk: { label: 'Bonk', unit: 'bonk', units: 'bonks' },
   raffle: { label: 'Tombola', unit: 'ticket', units: 'tickets' },
+  music: { label: 'Musique', unit: 'demande', units: 'demandes' },
 };
 export const SCOPE: Record<string, string> = {
   all: 'Tout Raptoru',
@@ -77,6 +79,7 @@ export const SCOPE: Record<string, string> = {
   soundboard: 'Soundboard',
   bonk: 'Bonk',
   raffle: 'Tombola',
+  music: 'Musique',
 };
 const STATUS: Record<string, string> = {
   queued: 'En attente',
@@ -147,7 +150,10 @@ export const when = (iso?: string | null) => {
 
 /** Les permissions accordées à un modérateur (mêmes noms que le Core, qui seul les vérifie). */
 export const PERMS: Record<string, readonly [string, string]> = {
-  wallet: ['Portefeuilles (admin)', 'Créditer ou débiter Jetons et crédits.'],
+  wallet: [
+    'Portefeuille',
+    'Créditer, débiter ou rembourser des Jetons et crédits.',
+  ],
   modules: ['Fermer un module', 'Passer un module en « Fermé ».'],
   globalPause: ['Pause globale', 'Refuser toutes les nouvelles interactions.'],
   perms: ['Gérer les permissions', 'Accorder ces permissions aux autres mods.'],
@@ -340,7 +346,7 @@ export function learnMissing(ids: (string | null)[], then: () => void) {
   if (!missing.length) return;
   void Promise.all(
     missing.slice(0, 12).map((id) =>
-      modGet<Card>(`viewers/${id}`).then(
+      modGet<Card>(`viewers/${id}?music=1`).then(
         (c) => names.set(id, c.display_name),
         () => names.set(id, id),
       ),
@@ -943,6 +949,7 @@ const WHAT: Record<ModModule, (i: ModItem) => string> = {
   soundboard: (i) => `Son « ${i.sound_label ?? i.detail ?? ''} »`,
   bonk: (i) => `Bonk ${i.emote_glyph ?? ''}`,
   raffle: () => 'Ticket tombola',
+  music: (i) => `Musique · ${i.detail ?? ''}`,
 };
 export const whatOf = (i: ModItem, m: ModModule) => WHAT[m](i);
 export const refundable = (i: ModItem, m: ModModule) =>
@@ -987,9 +994,9 @@ function itemFoot(i: ModItem, m: ModModule) {
   const live = isLive(i);
   const p = isPlaying(i);
   return `${pending(i) ? `<button type="button" class="d-btn pri sm" data-allow>${ic('check')}Laisser passer</button>` : ''}
-    ${live && m !== 'raffle' && m !== 'bonk' ? `<button type="button" class="d-btn sm" data-rm="1">${ic('refund')}${p ? 'Couper et rembourser' : 'Retirer et rembourser'}</button><button type="button" class="d-btn bad sm" data-rm="0">${ic(p ? 'stop' : 'trash')}${p ? 'Couper sans rembourser' : 'Retirer sans rembourser'}</button>` : ''}
+    ${live && m !== 'raffle' && m !== 'bonk' && m !== 'music' ? `<button type="button" class="d-btn sm" data-rm="1">${ic('refund')}${p ? 'Couper et rembourser' : 'Retirer et rembourser'}</button><button type="button" class="d-btn bad sm" data-rm="0">${ic(p ? 'stop' : 'trash')}${p ? 'Couper sans rembourser' : 'Retirer sans rembourser'}</button>` : ''}
     ${refundable(i, m) ? `<button type="button" class="d-btn sm" data-refund>${ic('refund')}Rembourser</button>` : ''}
-    <button type="button" class="d-btn ghost sm" data-block>${ic('ban')}Bloquer${ic('down')}</button>`;
+    ${m === 'music' ? '' : `<button type="button" class="d-btn ghost sm" data-block>${ic('ban')}Bloquer${ic('down')}</button>`}`;
 }
 
 let opened: { refresh(): void } | null = null;
@@ -1024,7 +1031,7 @@ export function openItem(
   paint();
   const reload = async () => {
     const full = await modGet<ModItem>(
-      `interactions/${i.interaction_id}`,
+      `interactions/${i.interaction_id}?music=1`,
     ).catch(() => null);
     if (full && s.isOpen()) {
       i = { ...i, ...full, module };
@@ -1073,7 +1080,7 @@ async function refundItem(
 /** Ouvrir une demande dont on n'a que la référence (un mouvement, une ligne d'audit). */
 export async function openItemId(id: string) {
   try {
-    const i = await modGet<ModItem>(`interactions/${id}`);
+    const i = await modGet<ModItem>(`interactions/${id}?music=1`);
     openItem(i, i.module ?? 'tts');
   } catch (e) {
     toast(modErr(e), { bad: true });

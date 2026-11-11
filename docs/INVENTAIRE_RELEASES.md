@@ -49,6 +49,18 @@ live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJE
 
 ## 3. Extension Twitch « Raptoru Live »
 
+### 3.0 Prochaine archive (passe post-live du 11/11) : préparée, **pas construite**
+
+| Champ        | Valeur                                                                                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nom attendu  | `raptoru-live-PRODUCTION-<commit>-depuis-0bf7907-78-commits-shell-v2.zip` (le `<commit>` est celui du dépôt au moment de l'emballage)                          |
+| Source       | branche `feat/post-live-moderation` (PR #64) ; dernier commit de l'extension `bb870081` ; shell **v2** ; `https://core.raptoru.fr/v1/ext`                      |
+| Inventaire   | `apps/twitch-extension/release-inventory/INVENTAIRE-bb8700814939.md` : 78 commits listés, **ligne « Validé par Antoni : oui » absente** (l'emballage refuse)   |
+| Vérification | `node scripts/package.mjs --target production --shell v2 --check` : tout OK sauf la ligne de validation (11/11)                                                |
+| SHA-256      | calculé à l'emballage (le `--check` en affiche un provisoire, sans inventaire embarqué : ce n'est pas l'empreinte finale)                                      |
+| Prérequis    | Core avec la PR #64 déployé (Musique dans la modération, recherche canonique) ; avec `bbce104` l'extension fonctionne sans ces deux ajouts                     |
+| Procédure    | après la recette d'Antoni : ajouter la ligne de validation, `npm run package:production -- --shell v2` dans `apps/twitch-extension`, téléverser en Hosted Test |
+
 ### 3.1 Référence actuelle
 
 **Dernière archive complète connue : `raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.zip`**

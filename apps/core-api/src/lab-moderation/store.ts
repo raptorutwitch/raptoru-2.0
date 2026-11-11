@@ -26,7 +26,11 @@ export interface Actor {
   display_name?: string;
   /** Role claimed by the caller (Lab JWT role); Core computes the effective role. */
   role: LabRole;
-  via: 'studio' | 'extension' | 'system';
+  /**
+   * `chat`: a Twitch chat command (post-live 11/11, `!addpoints`…). Never accepted from a client: the role comes from the
+   * Twitch badges the bot read (EventSub), exactly like the chat's Caution / Votekick moderators.
+   */
+  via: 'studio' | 'extension' | 'system' | 'chat';
 }
 
 export const SYSTEM: Actor = {
@@ -265,7 +269,7 @@ export interface AuditEntry {
   channelId: string;
   actor: Actor;
   role?: LabRole;
-  module?: LabModule | 'all' | null;
+  module?: LabModule | 'all' | 'music' | null;
   action: string;
   viewerId?: string | null;
   interactionId?: string | null;

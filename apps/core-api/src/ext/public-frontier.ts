@@ -13,6 +13,7 @@ import { bonkLabRoutes } from '../http/bonk-lab-routes.js';
 import { commandsRoutes } from '../http/commands-routes.js';
 import { miniGamesRoutes } from '../http/mini-games-routes.js';
 import { wordGameRoutes } from '../http/word-game-routes.js';
+import { WalletAdminChat } from '../wallet/admin-chat.js';
 import { chatRouter } from '../lab-chat/games.js';
 import { labModerationRoutes } from '../http/lab-moderation-routes.js';
 import type { AppDeps } from '../http/server.js';
@@ -89,9 +90,27 @@ export function createPublicFrontier(
     core.raffleLab,
     // The same economy as every module of this Core (balances, activity, adjustments).
     core.economy,
+    // Music Hub: its Jetons purchases in the moderation history and the manual refund (post-live 11/11).
+    core.spotify,
   );
   // The Lab environment (CORE_ENVIRONMENT=lab) carries the whole Lab table behind the same in-process call.
   const lab = config.CORE_ENVIRONMENT === 'lab';
+  // Portefeuille in the chat (`!addpoints`…): the moderation's own `wallet_adjust`, same rules as the extension.
+  const walletAdmin = new WalletAdminChat(
+    db,
+    clock,
+    moderation,
+    core.chat.loginLookup,
+  );
+  // The historical `!wallet add|remove|set` (bot): the same decision and the same adjustment (wallet/chat.ts).
+  core.wallet.chat.moderation = {
+    legacy: (req) => walletAdmin.legacy(channelId, req),
+    isBroadcaster: (id) => walletAdmin.isBroadcaster(channelId, id),
+  };
+  const walletAdminModule = {
+    name: 'wallet_admin',
+    chat: (m: Parameters<WalletAdminChat['chat']>[0]) => walletAdmin.chat(m),
+  };
   const call = internalLabCall([
     ...bonkLabRoutes(core.bonkLab, lab ? core.twitchViewers : null),
     ...soundLabRoutes(core.soundLab),
@@ -102,7 +121,13 @@ export function createPublicFrontier(
       moderation,
       core.ttsLab,
       core.raffleLab,
-      lab ? [...core.chat.chatModules, core.progression.chatModule] : [],
+      lab
+        ? [
+            ...core.chat.chatModules,
+            core.progression.chatModule,
+            walletAdminModule,
+          ]
+        : [],
     ),
     ...(lab ? labCockpitRoutes(core, channelId) : []),
     // Chat games configuration for the Studio cockpit (lot 8): Commands V2, Jeu des mots, Roulette / Slot / Duel.
@@ -162,6 +187,7 @@ export function createPublicFrontier(
         router: chatRouter(core.raffleLab, [
           ...core.chat.chatModules,
           core.progression.chatModule,
+          walletAdminModule,
         ]),
         games: core.chat,
       },

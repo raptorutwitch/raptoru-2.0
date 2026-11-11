@@ -99,11 +99,14 @@ export function createChatGames(o: {
     undefined,
     o.economy,
   );
+  // Exact login → Twitch account (Helix): the Duel's target, the moderators' `!addpoints` target.
+  const loginLookup =
+    o.loginLookup ?? (o.twitch ? twitchAppLoginLookup(o.twitch) : null);
   const miniGames = new MiniGamesService(
     o.db,
     o.clock,
     undefined,
-    o.loginLookup ?? (o.twitch ? twitchAppLoginLookup(o.twitch) : null),
+    loginLookup,
     o.economy,
     o.miniGameLimits,
   );
@@ -186,6 +189,7 @@ export function createChatGames(o: {
     chatModules,
     randomBanChat,
     fxCamChat,
+    loginLookup,
   };
 }
 export type ChatGames = ReturnType<typeof createChatGames>;

@@ -113,6 +113,8 @@ export function mountJournal(): View {
             q: f.viewer ? null : f.q.trim(),
             before: next ? ix.at(-1)?.created_at : null,
             limit: 60,
+            // This Studio knows the Music Hub purchases (post-live 11/11).
+            music: 1,
           })}`,
         );
         if (mine !== seq) return;

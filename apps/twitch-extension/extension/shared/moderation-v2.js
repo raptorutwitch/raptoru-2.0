@@ -44,6 +44,7 @@ const P = {
   coin: '<circle cx="12" cy="12" r="8"/><path d="M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4M12 7.5v1.5M12 15.5V17"/>',
   filter: '<path d="M4 5h16l-6 8v6l-4-2v-4z"/>',
   hub: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
 };
 const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -55,9 +56,22 @@ const MODS = {
   soundboard: { label: 'Soundboard', short: 'Sons', c: 'var(--m-soundboard)', unit: 'son', units: 'sons' },
   bonk: { label: 'Bonk', c: 'var(--m-bonk)', unit: 'bonk', units: 'bonks' },
   raffle: { label: 'Tombola', c: 'var(--m-raffle)', unit: 'ticket', units: 'tickets' },
+  // Post-live 11/11: Music Hub purchases (song requests, paid skips) in the history and the refunds — not a nav module.
+  music: { label: 'Musique', c: 'var(--accent)', unit: 'demande', units: 'demandes' },
 };
 const MOD_KEYS = ['tts', 'soundboard', 'bonk', 'raffle'];
-const SCOPE = { all: 'Tout Raptoru', ...Object.fromEntries(MOD_KEYS.map((m) => [m, MODS[m].label])) };
+/** Music Hub: why a request ended (spotify_requests.reason); an unknown code shows nothing. */
+const MUSIC_REASON = {
+  VIEWER_CANCEL: 'Annulée par le viewer',
+  MOD_REMOVE: 'Retirée par la modération',
+  STREAM_ENDED: 'Fin du live',
+  STUDIO_UNAVAILABLE: 'Studio indisponible',
+  STUDIO_LOST: 'Studio perdu pendant la demande',
+  SPOTIFY_UNAVAILABLE: 'Spotify indisponible',
+  QUEUE_RESULT_UNKNOWN: 'Ajout à la file non confirmé par Spotify',
+  SETTLED_REFUND: 'Remboursée automatiquement',
+};
+const SCOPE = { all: 'Tout Raptoru', ...Object.fromEntries(MOD_KEYS.map((m) => [m, MODS[m].label])), music: MODS.music.label };
 const STATE = { active: 'Actif', paused: 'En pause', disabled: 'Désactivé' };
 const STATUS = {
   queued: 'en attente',
@@ -72,7 +86,7 @@ const STATUS = {
 };
 /** The permissions D4 grants per moderator (Core names them the same way; Core checks them, never this page). */
 const PERMS = {
-  wallet: ['Admin Wallet', 'Créditer ou débiter Jetons et crédits.'],
+  wallet: ['Portefeuille', 'Créditer, débiter ou rembourser des Jetons et crédits.'],
   modules: ['Désactiver un module', 'Passer un module en « Désactivé ».'],
   globalPause: ['Pause globale', 'Refuser toutes les nouvelles interactions.'],
   perms: ['Gérer les permissions', 'Accorder ces permissions aux autres mods.'],
@@ -105,7 +119,7 @@ const ACTION = {
   note_add: 'Note',
   word_add: 'Mot ajouté',
   word_remove: 'Mot retiré',
-  wallet_adjust: 'Wallet admin',
+  wallet_adjust: 'Portefeuille',
   raffle_open: 'Tombola ouverte',
   raffle_close: 'Tombola fermée',
   raffle_draw: 'Tirage Tombola',
@@ -119,9 +133,9 @@ const ACTION = {
   raffle_config: 'Configuration Tombola',
   config_update: 'Configuration TTS',
   config_reset: 'Configuration TTS (défaut)',
-  lab_wallet_set: 'Wallet de test défini',
-  lab_wallet_adjust: 'Wallet de test ajusté',
-  lab_wallet_reset: 'Wallet de test réinitialisé',
+  lab_wallet_set: 'Portefeuille de test défini',
+  lab_wallet_adjust: 'Portefeuille de test ajusté',
+  lab_wallet_reset: 'Portefeuille de test réinitialisé',
   sw_mode: 'Roue du Sub · mode',
   sw_draw_request: 'Roue du Sub · tirage demandé',
   sw_grant: 'Roue du Sub · tour accordé',
@@ -132,6 +146,8 @@ const ACTION = {
 const ERRORS = {
   already_refunded: 'Déjà remboursé.',
   not_terminal: 'Arrête ou retire d’abord cette demande.',
+  nothing_to_refund: 'Rien à rembourser (aucun débit d’origine).',
+  interaction_not_found: 'Demande introuvable.',
   nothing_playing: 'Rien en cours de lecture.',
   not_open: 'Cette demande n’est plus dans la file.',
   not_pending: 'Cette demande n’attend plus de vérification.',
@@ -179,7 +195,8 @@ const ago = (iso) => {
   const d = agoSecs(iso);
   return d < 60 ? `il y a ${d} s` : d < 3600 ? `il y a ${Math.floor(d / 60)} min` : `il y a ${Math.floor(d / 3600)} h`;
 };
-const money = (i) => (Number(i.simulated_cost ?? i.cost) === 0 && i.module === 'raffle' ? 'gratuit' : `${fmt(i.simulated_cost ?? i.cost)} ${i.payment_method === 'credits' ? 'cr' : 'J'}`);
+// A Music request at 0 Jetons: Open Bar (never a purchase, never refundable).
+const money = (i) => (Number(i.simulated_cost ?? i.cost) === 0 && (i.module === 'raffle' || i.module === 'music') ? 'gratuit' : `${fmt(i.simulated_cost ?? i.cost)} ${i.payment_method === 'credits' ? 'cr' : 'J'}`);
 const CUR = { tokens: 'J', credits_tts: 'cr TTS', credits_soundboard: 'cr Sons' };
 const signed = (e) => `${Number(e.amount) > 0 ? '+' : '−'} ${fmt(Math.abs(Number(e.amount)))} ${CUR[e.currency] ?? e.currency}`;
 const hue = (id) => [...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -354,7 +371,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
   async function loadViewer(id) {
     try {
-      const card = await client.modV2(`viewers/${id}`);
+      // `music=1`: this client knows the Music Hub purchases (post-live 11/11); older ones never receive them.
+      const card = await client.modV2(`viewers/${id}?music=1`);
       if (destroyed) return;
       cards.set(id, card);
       for (const e of card.wallet_ledger ?? []) ledgerById.set(String(e.id), e);
@@ -365,7 +383,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
   async function loadDetail(id) {
     try {
-      const d = await client.modV2(`interactions/${id}`);
+      const d = await client.modV2(`interactions/${id}?music=1`);
       if (destroyed) return;
       details.set(id, d);
       render();
@@ -429,7 +447,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       } else {
         const before = more ? hist?.items?.at(-1)?.created_at : null;
         out = await client.modV2(
-          `interactions?${q({ module: f.module === 'all' ? null : f.module, status: f.status === 'all' ? null : f.status, period: f.period === 'all' ? 'stream' : f.period, viewer: vid, q: vid ? null : f.viewer.trim(), before, limit: 60 })}`,
+          `interactions?${q({ module: f.module === 'all' ? null : f.module, status: f.status === 'all' ? null : f.status, period: f.period === 'all' ? 'stream' : f.period, viewer: vid, q: vid ? null : f.viewer.trim(), before, limit: 60, music: 1 })}`,
         );
       }
       if (destroyed) return;
@@ -636,6 +654,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <button class="sidelink${t.v === 'history' && !t.vid ? ' is-sel' : ''}" data-act="history" data-histlink>${ic('history')}Historique</button>
       <button class="sidelink${t.v === 'restrictions' ? ' is-sel' : ''}" data-act="restrictions" data-restrlink>${ic('ban')}Restrictions</button>
       <button class="sidelink${t.v === 'hostmods' ? ' is-sel' : ''}" data-act="hostmods" data-hostlink>${ic('shield')}Autres modules</button>
+      <button class="sidelink" data-act="wallet-find">${ic(has('wallet') ? 'wallet' : 'lock')}Portefeuille</button>
       ${onCommands ? `<button class="sidelink" data-act="commands">${ic('note')}Commandes</button>` : ''}</div>
       <div class="side__foot" data-foot>${footHtml()}</div>`;
   }
@@ -666,11 +685,12 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <button class="icon-btn icon-btn--xs stopic" data-act="item-menu" data-id="${i.interaction_id}" data-tip="Arrêter ce son" aria-label="Arrêter ${esc(i.sound_label)}">${ic('stop')}</button>
       <span class="thin"><i data-prog="${i.interaction_id}"></i></span></div>`;
   }
-  const itemWhat = (i) => (i.module === 'soundboard' ? MODS.soundboard.short : MODS[i.module]?.short || MODS[i.module]?.label || i.module);
+  // Music: the track itself (« Musique · Titre — Artiste »), so a purchase is found at a glance.
+  const itemWhat = (i) => (i.module === 'soundboard' ? MODS.soundboard.short : i.module === 'music' ? `Musique · ${esc(i.detail ?? '')}` : MODS[i.module]?.short || MODS[i.module]?.label || i.module);
   function hLine(i, vid) {
     const m = i.module;
     return `<button class="h" data-act="open-ix" data-id="${esc(i.interaction_id)}"><span class="h__t tnum">${hhmm(i.created_at)}</span><span class="mini" style="--c:${MODS[m].c}">${ic(m)}</span>
-      <span class="h__what">${vid ? MODS[m].label : `<b>${esc(i.viewer_display_name)}</b> · ${itemWhat(i)}`}</span>
+      <span class="h__what">${vid ? (m === 'music' ? itemWhat(i) : MODS[m].label) : `<b>${esc(i.viewer_display_name)}</b> · ${itemWhat(i)}`}</span>
       <span class="h__st h__st--${esc(statusKey(i) === 'done' ? 'done' : i.status)}">${statusText(i)}</span>${vid ? `<span class="meta tnum">${money(i)}</span>` : ''}</button>`;
   }
   function aLine(a) {
@@ -842,7 +862,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       nav.htab === 'ix' && f.status !== 'all' ? ['status', STATUS_F.find((x) => x[0] === f.status)[1]] : null,
       nav.htab === 'ix' && f.period !== 'all' ? ['period', PERIOD_F.find((x) => x[0] === f.period)[1]] : null,
     ].filter(Boolean);
-    const body = `${tabs}<div class="hbar"><div class="chips chips--scroll">${chip('all', 'Tout')}${MOD_KEYS.map((m) => chip(m, MODS[m].short || MODS[m].label)).join('')}</div>
+    const body = `${tabs}<div class="hbar"><div class="chips chips--scroll">${chip('all', 'Tout')}${[...MOD_KEYS, 'music'].map((m) => chip(m, MODS[m].short || MODS[m].label)).join('')}</div>
         ${nav.htab === 'ix' ? `<button class="icon-btn icon-btn--sm${active.length || f.viewer ? ' is-on' : ''}" data-act="hfilters" data-tip="Statut, période, viewer" aria-label="Filtres">${ic('filter')}</button>` : ''}</div>
       ${nav.vq && !vid && nav.htab === 'ix' ? `<label class="search search--sm">${ic('search')}<input data-hq placeholder="Filtrer par viewer" value="${esc(f.viewer)}"></label>` : ''}
       ${active.length ? `<div class="chips">${active.map(([k, l]) => `<button class="chip is-on" data-act="hfilter" data-k="${k}" data-val="all" data-tip="Retirer ce filtre">${l} ${ic('x')}</button>`).join('')}</div>` : ''}
@@ -959,6 +979,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
 
   // ------------------------------------------------------------------ search (Core)
   let searchSeq = 0;
+  /** « Portefeuille » side link: the next viewer picked in the search opens straight on their Portefeuille. */
+  let walletPick = false;
   async function showSearch(qv) {
     const input = node.querySelector('[data-q]');
     if (!input) return;
@@ -979,16 +1001,17 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     const r = input.getBoundingClientRect();
     const rr = node.getBoundingClientRect();
     Object.assign(d.style, { top: `${r.bottom - rr.top + 4}px`, left: `${r.left - rr.left}px` });
-    d.innerHTML = `<div class="sdrop__label">${qv.trim() ? 'Résultats' : 'Actifs récemment'}</div>${
+    d.innerHTML = `<div class="sdrop__label">${walletPick ? 'Portefeuille de…' : qv.trim() ? 'Résultats' : 'Actifs récemment'}</div>${
       viewers.length
         ? viewers
             .slice(0, 6)
-            .map((v) => `<button class="srow" data-act="open-viewer" data-id="${esc(v.viewer_id)}">${av(v.viewer_id, v.display_name, 'xs')}<b class="ellipsis">${esc(v.display_name)}</b><span class="grow"></span>${v.restriction ? `<span class="badge badge--warn">${ic(v.restriction === 'block' ? 'ban' : 'clock')}</span>` : ''}${v.role && v.role !== 'viewer' ? `<span class="muted small">${ROLE_LABEL[v.role]}</span>` : ''}</button>`)
+            .map((v) => `<button class="srow" data-act="${walletPick ? 'open-wallet' : 'open-viewer'}" data-id="${esc(v.viewer_id)}">${av(v.viewer_id, v.display_name, 'xs')}<b class="ellipsis">${esc(v.display_name)}</b>${v.login && v.login.toLowerCase() !== String(v.display_name).toLowerCase() ? `<span class="muted small ellipsis">@${esc(v.login)}</span>` : ''}<span class="grow"></span>${v.restriction ? `<span class="badge badge--warn">${ic(v.restriction === 'block' ? 'ban' : 'clock')}</span>` : ''}${v.role && v.role !== 'viewer' ? `<span class="muted small">${ROLE_LABEL[v.role]}</span>` : ''}</button>`)
             .join('')
         : `<div class="empty">Personne pour « ${esc(qv)} »</div>`
     }`;
   }
   function closeSearch() {
+    walletPick = false;
     node.querySelector('.sdrop')?.remove();
     const qi = node.querySelector('[data-q]');
     if (qi) qi.value = '';
@@ -1012,7 +1035,10 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     });
     qi.addEventListener('blur', () =>
       win.setTimeout(() => {
-        if (document.activeElement !== qi) node.querySelector('.sdrop')?.remove();
+        if (document.activeElement !== qi) {
+          walletPick = false;
+          node.querySelector('.sdrop')?.remove();
+        }
       }, 180),
     );
   }
@@ -1295,7 +1321,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
 
   // ------------------------------------------------------------------ drawers (content)
-  const whatOf = (i) => (i.module === 'soundboard' ? `Son « ${esc(i.sound_label ?? i.detail ?? '')} »` : i.module === 'bonk' ? `Bonk ${esc(i.emote_glyph ?? '')}` : i.module === 'raffle' ? 'Ticket tombola ×1' : 'Message TTS');
+  const whatOf = (i) => (i.module === 'soundboard' ? `Son « ${esc(i.sound_label ?? i.detail ?? '')} »` : i.module === 'bonk' ? `Bonk ${esc(i.emote_glyph ?? '')}` : i.module === 'raffle' ? 'Ticket tombola ×1' : i.module === 'music' ? `Musique · ${esc(i.detail ?? '')}` : 'Message TTS');
   function ixDrawer(id) {
     const i = findItem(id);
     if (!i) return { kicker: 'Demande', title: '…', body: '<div class="empty">Chargement…</div>' };
@@ -1308,6 +1334,9 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     if (i.review_status === 'allowed' && i.reviewed_by) b += `<p class="fine">Laissée passer par ${esc(actorName(i.reviewed_by))}.</p>`;
     const text = i.message ?? (i.module === 'tts' ? i.detail : null);
     if (text) b += `<blockquote class="itext">${hits.length ? marked(text, hits) : esc(text)}</blockquote>`;
+    // Music Hub: Spotify's own reason when the request was refused or failed (« introuvable », « déjà en file »…).
+    const why = i.module === 'music' && i.status !== 'completed' ? MUSIC_REASON[i.music_reason] : null;
+    if (why) b += `<div class="watchline">${ic('info')}<span>${why}</span></div>`;
     const error = i.error?.code ?? null;
     if (error && !['cancelled_by_moderator', 'stopped_by_moderator', 'purged_by_moderator'].includes(error))
       b += `<div class="watchline watchline--err">${ic('info')}<span>${esc(i.error?.message ?? error)} · ${i.refund_status === 'refunded' ? 'remboursé automatiquement' : 'non remboursé'}</span></div>`;
@@ -1316,13 +1345,13 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     const endBy = end.find((a) => a.action !== 'refund');
     const note = endBy ? ` · <span class="muted">${esc(ACTION[endBy.action] ?? endBy.action)} par ${esc(actorName(endBy.actor))}, ${i.refund_status === 'refunded' ? 'remboursé' : 'sans remboursement'}</span>` : '';
     b += `<p class="istatus"><b>${esc(statusText(i).replace(/^./, (c) => c.toUpperCase()))}</b> · ${money(i)} · ${hhmm(i.created_at)}${note}</p>`;
-    // Refund after the fact: an explicit addition to D4 (« Admin Wallet »), for a debited, finished item.
+    // Refund after the fact: an explicit addition to D4 (« Portefeuille »), for a debited, finished item.
     const debited = (i.movements ?? []).some((mv) => mv.kind === 'debit' && Number(mv.amount) !== 0);
     const refundable = !live && i.module !== 'raffle' && i.refund_status !== 'refunded' && debited;
     b += `<div class="vact">${hits.length ? `<button class="btn btn--ok" data-act="allow" data-id="${esc(i.interaction_id)}">${ic('check')}Laisser passer</button>` : ''}
       ${live && i.module !== 'raffle' && i.module !== 'bonk' ? `<button class="btn" data-act="item-menu" data-id="${esc(i.interaction_id)}">${ic(isPlaying(i) ? 'stop' : 'trash')}${isPlaying(i) ? 'Stop' : 'Retirer'}${ic('down')}</button>` : ''}
       ${refundable ? `<button class="btn" data-act="${has('wallet') ? 'refund' : 'locked'}" data-perm="wallet" data-id="${esc(i.interaction_id)}" data-m="${i.module}">${ic(has('wallet') ? 'refund' : 'lock')}Rembourser</button>` : ''}
-      <button class="btn" data-act="quick-block" data-v="${esc(i.viewer_id)}" data-m="${i.module}">${ic('ban')}Bloquer${ic('down')}</button></div>`;
+      ${i.module === 'music' ? '' : `<button class="btn" data-act="quick-block" data-v="${esc(i.viewer_id)}" data-m="${i.module}">${ic('ban')}Bloquer${ic('down')}</button>`}</div>`;
     b += `<details class="acc" data-key="tech-${esc(id)}"><summary>Détails techniques</summary><div class="acc__body"><dl class="kv"><dt>module</dt><dd>${esc(i.module)}</dd><dt>status</dt><dd>${esc(i.status)}</dd>
       <dt>cost</dt><dd>${esc(i.simulated_cost ?? i.cost)}</dd><dt>currency</dt><dd>${esc(i.payment_method)}</dd><dt>created_at</dt><dd>${esc(i.created_at)}</dd>
       <dt>completed_at</dt><dd>${esc(i.completed_at ?? i.delivery?.completed_at ?? '—')}</dd><dt>error</dt><dd>${esc(error ?? '—')}</dd>${i.stopped_at ? `<dt>stopped_at</dt><dd>${esc(i.stopped_at)}</dd>` : ''}<dt>reference_id</dt><dd>${esc(i.interaction_id)}</dd><dt>viewer_id</dt><dd>${esc(i.viewer_id)}</dd></dl></div></details>`;
@@ -1369,8 +1398,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     if (!v) return '<div class="empty">Chargement…</div>';
     const adm = (v.wallet_ledger ?? []).filter((e) => ['admin', 'lab_tools'].includes(e.operation_type));
     return `<div class="wal wal--3"><div><small>Jetons</small><b class="cost tnum">${fmt(v.wallet?.tokens)} J</b></div><div><small>Crédits TTS</small><b class="cost cost--credit tnum">${credit(v.wallet?.credits_tts)} cr</b></div><div><small>Crédits Sons</small><b class="cost cost--credit tnum">${credit(v.wallet?.credits_soundboard)} cr</b></div></div>
-      ${has('wallet') ? `<div class="vact"><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="1">+ Créditer</button><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="-1">− Débiter</button></div>` : `<p class="lock">${ic('lock')} Réservé à la permission « Admin Wallet ».</p>`}
-      ${adm.length ? sec('Ajustements') + `<div class="rows">${adm.map((e) => jLine(e)).join('')}</div>` : ''}<p class="fine">Wallet de test du Lab · jamais l’économie réelle.</p>`;
+      ${has('wallet') ? `<div class="vact"><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="1">+ Créditer</button><button class="btn" data-act="wallet-dialog" data-v="${esc(vid)}" data-sign="-1">− Débiter</button></div>` : `<p class="lock">${ic('lock')} Réservé à la permission « Portefeuille ».</p>`}
+      ${adm.length ? sec('Ajustements') + `<div class="rows">${adm.map((e) => jLine(e)).join('')}</div>` : ''}<p class="fine">${v.economy === 'canonical' ? 'Jetons réels de la chaîne · chaque opération est journalisée.' : 'Portefeuille de test du Lab · jamais l’économie réelle.'}</p>`;
   }
   function walletDialog(vid, sign) {
     dialog({
@@ -1514,7 +1543,19 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     },
     wallet: (d, b) => {
       void loadViewer(d.v);
-      drawerOf(`wallet:${d.v}`, () => walletBody(d.v), b, 'Wallet admin', () => esc(nameOf(d.v)));
+      drawerOf(`wallet:${d.v}`, () => walletBody(d.v), b, 'Portefeuille', () => esc(nameOf(d.v)));
+    },
+    'wallet-find': () => {
+      const qi = node.querySelector('[data-q]');
+      if (!qi) return;
+      qi.value = '';
+      qi.focus();
+      walletPick = true; // after focus: the focus already asked Core for the list, this re-labels it
+      void showSearch('');
+    },
+    'open-wallet': (d) => {
+      open.viewer(d.id);
+      acts.wallet({ v: d.id }, null);
     },
     details: (d, b) => drawerOf(`details:${d.v}`, () => detailsBody(d.v), b, 'Détails', () => esc(nameOf(d.v))),
     hub: () => onBack?.(),
@@ -1637,7 +1678,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         { label: 'Historique complet', icon: 'history', data: { act: 'history', v: d.v } },
         { label: 'Activité Jetons', icon: 'coin', data: { act: 'jetons', v: d.v } },
         { label: `Notes · ${v?.notes?.length ?? 0}`, icon: 'note', data: { act: 'notes', v: d.v } },
-        { label: 'Wallet admin', icon: has('wallet') ? 'wallet' : 'lock', hint: has('wallet') ? '' : 'permission', data: { act: 'wallet', v: d.v } },
+        { label: 'Portefeuille', icon: has('wallet') ? 'wallet' : 'lock', hint: has('wallet') ? '' : 'permission', data: { act: 'wallet', v: d.v } },
         { label: 'Détails', icon: 'info', data: { act: 'details', v: d.v } },
       ]);
     },

@@ -12,6 +12,8 @@ import type { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { nominalStreamDay, streamDayWindow } from '../stream/stream-day.js';
 import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
+import type { SpotifyService } from '../spotify/service.js';
+import { SKIP_MODULE } from '../spotify/music-rules.js';
 import {
   access,
   actorName,
@@ -74,7 +76,7 @@ export const LEDGER_TYPES: Record<
     visible_in_moderation_activity: true,
   },
   lab_tools: {
-    label: 'Wallet de test (Studio)',
+    label: 'Portefeuille de test (Studio)',
     visible_in_moderation_activity: true,
   },
 };
@@ -90,6 +92,23 @@ const STATUS_KEY = `case when refund_status = 'refunded' then 'refunded'
   when status = 'completed' then 'done'
   when status in ('accepted', 'queued', 'starting', 'playing', 'executing') then 'queued'
   when status = 'cancelled' then 'cancelled' else 'failed' end`;
+/**
+ * Music Hub (post-live 11/11): its Jetons purchases in D4's history — the song requests paid from the extension and
+ * the paid skips. The state is Spotify's; « refunded » once given back (automatically or by a moderator).
+ */
+const MUSIC_INTERACTIONS = `union all select 'music', request_id::text, channel_id, viewer_id, viewer_name,
+    case when state in ('PLAYED', 'SKIPPED') then 'completed'
+         when state in ('RECEIVED', 'SEARCHING', 'QUEUED') then 'queued' when state = 'PLAYING' then 'playing'
+         when state in ('CANCELED', 'REMOVED_BY_MOD') then 'cancelled' else 'failed' end,
+    case when refund_status = 'refunded' then 'refunded' else 'none' end, received_at, coalesce(price_tokens, 0),
+    'tokens', coalesce(nullif(concat_ws(' — ', track->>'title', case jsonb_typeof(track->'artists') when 'array' then array_to_string(array(select jsonb_array_elements_text(track->'artists')), ', ') else track->>'artists' end), ''), raw_input), 'none'
+  from spotify_requests where payment = 'tokens'
+  union all select 'music', activity_id::text, channel_id, viewer_id, coalesce(viewer_name, ''),
+    case status when 'done' then 'completed' when 'queued' then 'queued' when 'canceled' then 'cancelled'
+      else 'failed' end,
+    case when status = 'refunded' or result ? 'refunded_at' then 'refunded' else 'none' end, created_at, amount,
+    'tokens', 'Skip payant', 'none'
+  from module_activity where module_id = '${SKIP_MODULE}' and action = 'viewer_skip'`;
 /** Every interaction of every module, in one shape (history, viewer card). */
 const INTERACTIONS = `(
   select 'tts' as module, interaction_id::text as interaction_id, channel_id, viewer_id, viewer_display_name, status,
@@ -101,6 +120,7 @@ const INTERACTIONS = `(
     created_at, simulated_cost, 'tokens', coalesce(emote_glyph, emote_id), 'none' from bonk_lab_interactions
   union all select 'raffle', entry_id::text, channel_id, viewer_id, viewer_display_name, 'completed', 'none', created_at,
     0, 'tokens', 'Inscription', 'none' from lab_raffle_entries
+  ${MUSIC_INTERACTIONS}
 ) ix`;
 
 interface InteractionRow {
@@ -132,6 +152,14 @@ const interactionView = (r: InteractionRow) => ({
   review_status: r.review_status,
 });
 
+/**
+ * A moderation request: a client's (the schema: Studio, the extension façade) or a chat command's (`via: 'chat'`, built
+ * by Core from the bot's message — never parsed from a client, so no client can claim it).
+ */
+export type ModerationRequest = Omit<LabModerationRequest, 'actor'> & {
+  actor: Actor;
+};
+
 export class LabModerationService {
   constructor(
     private readonly db: Db,
@@ -142,6 +170,11 @@ export class LabModerationService {
     private readonly raffle: RaffleLabService,
     /** Balances, movements and ledger of the economy the modules use (the Lab test wallet by default). */
     private readonly economy: EconomyPort = labEconomy,
+    /** Music Hub (post-live 11/11): its Jetons purchases in the history and the manual refund. Absent: none. */
+    private readonly music: Pick<
+      SpotifyService,
+      'moderationRefund'
+    > | null = null,
   ) {}
 
   /** The Lab test-wallet tool (set / reset the fictitious balances) only exists on the Lab ledger. */
@@ -227,7 +260,7 @@ export class LabModerationService {
     }
   }
 
-  async act(channelId: string, req: LabModerationRequest) {
+  async act(channelId: string, req: ModerationRequest) {
     const actor: Actor = req.actor;
     const cmd = req.command;
     // Tombola: due transitions (draw at closes_at…) are committed first, whatever this command does.
@@ -530,6 +563,13 @@ export class LabModerationService {
           return { ok: true };
         }
         case 'wallet_adjust': {
+          // Post-live 11/11: nobody adjusts their own wallet but the broadcaster — the same rule for the extension's
+          // « Portefeuille » and the chat's `!addpoints` (both come here).
+          if (cmd.viewer_id === actor.id && role !== 'broadcaster')
+            throw new LabModerationError(
+              'self_adjust_forbidden',
+              'a team member cannot adjust their own wallet',
+            );
           // Refonte P0-2: applied once per intent — the caller names it (after the access check), Core never invents it.
           if (!req.idempotency_key)
             throw new LabModerationError(
@@ -579,6 +619,38 @@ export class LabModerationService {
           return this.raffle.applyModeration(q, channelId, cmd, actor, role);
         default: {
           const module = cmd.module;
+          if (module === 'music') {
+            if (cmd.action !== 'refund' || !this.music)
+              throw new LabModerationError(
+                'unsupported',
+                `${cmd.action} is not a music command`,
+              );
+            const out = await this.music.moderationRefund(
+              q,
+              channelId,
+              cmd.interaction_id,
+              actorName(actor),
+              reason,
+            );
+            if (!out.ok)
+              throw new LabModerationError(
+                out.code === 'not_found' ? 'interaction_not_found' : out.code,
+                out.code,
+              );
+            await audit(q, now, {
+              channelId,
+              actor,
+              role,
+              module: 'music',
+              action: 'refund',
+              viewerId: out.viewer_id,
+              interactionId: cmd.interaction_id,
+              reason,
+              before: { state: out.before, kind: out.kind },
+              after: { refunded: out.amount },
+            });
+            return { ok: true, refunded: true, amount: out.amount };
+          }
           if (module === 'tts')
             return this.tts.applyModeration(q, channelId, cmd, actor, role);
           if (module === 'soundboard')
@@ -599,7 +671,7 @@ export class LabModerationService {
    */
   private txOnce<T>(
     channelId: string,
-    req: LabModerationRequest,
+    req: ModerationRequest,
     apply: (q: Queryable) => Promise<T>,
   ): Promise<T> {
     const key = req.idempotency_key;
@@ -721,30 +793,49 @@ export class LabModerationService {
   }
 
   /** « Viewer… » search: every viewer seen (and the team), with role and restriction badges. */
+  /**
+   * « Trouver un viewer » (D4, and the extension's « Portefeuille », post-live 11/11): `@pseudo` or `pseudo`, by login,
+   * name or exact Twitch id. Every known account — the moderation's viewers AND the Wallet's (`viewers`: whoever has a
+   * wallet, even without a module interaction) —, one line per Twitch account, the exact login / name first. A result
+   * is only a choice: every action then names that account's id (never a credit on an approximate match).
+   */
   async search(channelId: string, query: string, limit = 12) {
-    const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    const q = query.trim().replace(/^@+/, '').trim().slice(0, 40);
+    const like = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
     const now = this.clock.now();
     const rows = await this.db.query<{
       viewer_id: string;
       display_name: string;
+      login: string | null;
       last_seen: Date;
       staff_role: string | null;
       blocked: boolean;
       cooldown: boolean;
     }>(
-      `select v.viewer_id, v.display_name, v.last_seen, s.role as staff_role,
-         exists (select 1 from lab_viewer_blocks b where b.channel_id = v.channel_id and b.viewer_id = v.viewer_id
+      `select x.viewer_id, x.display_name, x.login, x.last_seen, s.role as staff_role,
+         exists (select 1 from lab_viewer_blocks b where b.channel_id = $1 and b.viewer_id = x.viewer_id
            and (b.until is null or b.until > $5)) as blocked,
-         exists (select 1 from lab_viewer_cooldowns c where c.channel_id = v.channel_id and c.viewer_id = v.viewer_id
+         exists (select 1 from lab_viewer_cooldowns c where c.channel_id = $1 and c.viewer_id = x.viewer_id
            and c.until > $5) as cooldown
-       from lab_viewers v left join lab_staff s on s.channel_id = v.channel_id and s.viewer_id = v.viewer_id
-       where v.channel_id = $1 and ($2 = '' or v.display_name ilike $3 or v.viewer_id like $3)
-       order by v.last_seen desc limit $4`,
-      [channelId, query, like, limit, now],
+       from (
+         select distinct on (u.viewer_id) u.viewer_id, u.display_name, u.login, u.last_seen from (
+           select v.viewer_id, v.display_name, w.login, v.last_seen
+             from lab_viewers v left join viewers w on w.twitch_user_id = v.viewer_id where v.channel_id = $1
+           union all
+           select w.twitch_user_id, w.display_name, w.login, w.updated_at from viewers w
+         ) u
+         where $2 = '' or u.display_name ilike $3 or u.login ilike $3 or u.viewer_id = $2
+         order by u.viewer_id, u.last_seen desc
+       ) x left join lab_staff s on s.channel_id = $1 and s.viewer_id = x.viewer_id
+       order by (lower(coalesce(x.login, '')) = lower($2) or lower(x.display_name) = lower($2)) desc,
+         x.last_seen desc
+       limit $4`,
+      [channelId, q, like, limit, now],
     );
     return rows.map((r) => ({
       viewer_id: r.viewer_id,
       display_name: r.display_name,
+      login: r.login,
       last_seen: new Date(r.last_seen).toISOString(),
       role:
         r.viewer_id === channelId ? 'broadcaster' : (r.staff_role ?? 'viewer'),
@@ -835,7 +926,12 @@ export class LabModerationService {
   }
 
   /** Viewer card (D4 fiche): identity, role, Lab wallet, restrictions, activity, notes, ledger. */
-  async viewer(channelId: string, viewerId: string) {
+  /** `music`: include the Music Hub purchases (only clients that know the `music` module ask — post-live 11/11). */
+  async viewer(
+    channelId: string,
+    viewerId: string,
+    o: { music?: boolean } = {},
+  ) {
     const now = this.clock.now();
     const since = this.streamStart(now);
     const [wallet, restr, dir, role, activity, today, notes, ledger, history] =
@@ -851,7 +947,11 @@ export class LabModerationService {
           [channelId, viewerId],
         ),
         this.roleOf(this.db, channelId, viewerId),
-        this.interactions(channelId, { viewer: viewerId, limit: 12 }),
+        this.interactions(channelId, {
+          viewer: viewerId,
+          limit: 12,
+          music: o.music,
+        }),
         this.db.query<{ n: string | number }>(
           `select count(*) as n from ${INTERACTIONS} where channel_id = $1 and viewer_id = $2 and created_at >= $3`,
           [channelId, viewerId, since],
@@ -879,13 +979,25 @@ export class LabModerationService {
       'select login, display_name from lab_staff where channel_id = $1 and viewer_id = $2',
       [channelId, viewerId],
     );
+    // Post-live 11/11: a viewer found in the canonical directory (Portefeuille search) has a name and a login there.
+    const known = await this.db
+      .query<{
+        login: string | null;
+        display_name: string | null;
+      }>('select login, display_name from viewers where twitch_user_id = $1', [
+        viewerId,
+      ])
+      .catch(() => []);
     return {
       viewer_id: viewerId,
       display_name:
         dir[0]?.display_name ??
         staff[0]?.display_name ??
         staff[0]?.login ??
+        known[0]?.display_name ??
+        known[0]?.login ??
         viewerId,
+      login: known[0]?.login ?? staff[0]?.login ?? null,
       role,
       staff: role !== 'viewer',
       /** Kept for older readers: supermod name (null otherwise). */
@@ -894,6 +1006,8 @@ export class LabModerationService {
       last_seen: dir[0] ? new Date(dir[0].last_seen).toISOString() : null,
       today_count: Number(today[0]?.n ?? 0),
       wallet,
+      /** Which economy the Portefeuille acts on: 'lab' (test wallet) or 'canonical' (the real Jetons). */
+      economy: this.economy.mode,
       restrictions: restr,
       tts_cooldown_until: await this.tts.runningCooldownUntil(
         channelId,
@@ -933,6 +1047,11 @@ export class LabModerationService {
       period?: string | null;
       before?: string | null;
       limit?: number;
+      /**
+       * Music Hub purchases (module `music`, post-live 11/11): only for a client that knows them — the extension and
+       * Studio of before would not render an unknown module. Absent = the history as it was.
+       */
+      music?: boolean;
     } = {},
   ) {
     const now = this.clock.now();
@@ -949,6 +1068,7 @@ export class LabModerationService {
        where ($2::text is null or module = $2) and ($3::text is null or status_key = $3)
          and ($4::text is null or viewer_id = $4) and ($5::text is null or viewer_display_name ilike $5)
          and ($6::timestamptz is null or created_at >= $6) and ($7::timestamptz is null or created_at < $7)
+         and ($9::boolean or module <> 'music')
        order by created_at desc limit $8`,
       [
         channelId,
@@ -959,6 +1079,7 @@ export class LabModerationService {
         since,
         f.before ? new Date(f.before) : null,
         limit + 1,
+        f.music === true || f.module === 'music',
       ],
     );
     const items = rows.slice(0, limit).map(interactionView);
@@ -999,10 +1120,20 @@ export class LabModerationService {
                  from bonk_lab_interactions i left join bonk_lab_deliveries d using (interaction_id) where i.interaction_id = $1`,
                 [id],
               )
-            : await this.db.query(
-                'select raffle_id, created_at as completed_at from lab_raffle_entries where entry_id = $1',
-                [id],
-              );
+            : row.module === 'music'
+              ? await this.db.query(
+                  `select state as music_state, reason as music_reason, track->>'title' as track_name,
+                     case jsonb_typeof(track->'artists') when 'array' then array_to_string(array(select jsonb_array_elements_text(track->'artists')), ', ') else track->>'artists' end as track_artists, raw_input, refunded_by, refunded_at, ended_at as completed_at
+                   from spotify_requests where request_id::text = $1
+                   union all select status, reason, 'Skip payant', null, null, result->>'refunded_by',
+                     (result->>'refunded_at')::timestamptz, updated_at
+                   from module_activity where activity_id::text = $1`,
+                  [id],
+                )
+              : await this.db.query(
+                  'select raffle_id, created_at as completed_at from lab_raffle_entries where entry_id = $1',
+                  [id],
+                );
     const ended = (
       await this.db.query<{
         action: string;

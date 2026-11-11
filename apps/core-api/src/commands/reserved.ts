@@ -20,12 +20,22 @@ export function raffleReservedWords(
 }
 
 /** Chat interactions of the paid modules (docs/CHAT_COMMANDS.md): `!tts` belongs to the TTS, never to Commands V2. */
+/** Portefeuille (post-live 11/11): the moderators' Jetons commands of the chat (wallet/admin-chat.ts). */
+export const ADMIN_WALLET_WORDS = [
+  'addpoints',
+  'crediter',
+  'removepoints',
+  'debiter',
+] as const;
+
 export function withInteractionWords(base: ReservedWords): ReservedWords {
   return async (q, channelId) => [
     ...(await base(q, channelId)),
     { word: 'tts', module: 'TTS' },
     { word: 'rb', module: 'Random Ban' },
     { word: 'fxcam', module: 'FX Cam' },
+    // Portefeuille (post-live 11/11): the moderators' Jetons commands (wallet/admin-chat.ts).
+    ...ADMIN_WALLET_WORDS.map((word) => ({ word, module: 'Portefeuille' })),
   ];
 }
 

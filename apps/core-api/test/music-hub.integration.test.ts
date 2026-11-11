@@ -122,6 +122,38 @@ describe.skipIf(!isLocal)('Music Hub on a real Postgres (two Cores)', () => {
     return { channel, A, B, viewer, balance, ask };
   }
 
+  it('moderation refund of the same request on two Cores at once: given back once (post-live 11/11)', async () => {
+    const t = await twoCores();
+    const r = (await t.ask(t.A, 1)).request;
+    // Ended WITHOUT refund (a finished request that was debited): the case of a later manual refund.
+    await a.query(
+      `update spotify_requests set state = 'REMOVED_BY_MOD' where request_id = $1`,
+      [r.request_id],
+    );
+    expect(await t.balance()).toBe(2_500);
+    const out = await Promise.allSettled([
+      a.tx((q) =>
+        t.A.moderationRefund(q, t.channel, r.request_id, 'mod_a', null),
+      ),
+      b.tx((q) =>
+        t.B.moderationRefund(q, t.channel, r.request_id, 'mod_b', null),
+      ),
+      a.tx((q) =>
+        t.A.moderationRefund(q, t.channel, r.request_id, 'mod_a', null),
+      ),
+    ]);
+    const ok = out.filter(
+      (o) => o.status === 'fulfilled' && (o.value as { ok: boolean }).ok,
+    );
+    expect(ok).toHaveLength(1);
+    expect(await t.balance()).toBe(3_000);
+    const row = await a.query<{ refund_status: string }>(
+      'select refund_status from spotify_requests where request_id = $1',
+      [r.request_id],
+    );
+    expect(row[0]!.refund_status).toBe('refunded');
+  });
+
   it('the same key on two Cores at once: one request, one debit', async () => {
     const t = await twoCores();
     const key = randomUUID();

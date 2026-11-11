@@ -98,7 +98,8 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
   /** Refund of a finished interaction (addition to D4: « Admin Wallet »). */
   z.strictObject({
     action: z.literal('refund'),
-    module: z.enum(['tts', 'soundboard', 'bonk']),
+    // Music Hub (post-live 11/11): a finished Jetons purchase of the music (request or paid skip).
+    module: z.enum(['tts', 'soundboard', 'bonk', 'music']),
     interaction_id: z.uuid(),
     reason: Reason,
   }),
