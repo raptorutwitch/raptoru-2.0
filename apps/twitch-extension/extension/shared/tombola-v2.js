@@ -234,12 +234,20 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     const same = anchor && list.querySelector(`.row[data-v="${win.CSS.escape(anchor.dataset.v)}"]`);
     if (same) scroller.scrollTop += same.getBoundingClientRect().top - top - offset;
   }
-  // Aperçu de l'écran ouvert : 5 participants + « Tout voir » ; profil compact-video (tombola-v2.css pose
-  // --tmbx-preview-all: 1 sur la racine) : toute la liste, qui défile seule, et plus de « Tout voir ».
+  // Aperçu de l'écran ouvert (post-live 11/11 : « 6 participants, 5 lignes ») : jusqu'à PREVIEW_MAX participants, TOUS
+  // sont dans la liste — le corps de l'écran défile, on ne cache plus personne derrière un plafond de 5. Au-delà, les
+  // PREVIEW_MAX premiers et un lien qui dit combien restent (« +N · Tout voir », avec les filtres). Profil compact-video
+  // (tombola-v2.css pose --tmbx-preview-all: 1 sur la racine) : toute la liste, qui défile seule, sans lien.
+  const PREVIEW_MAX = 30;
   const previewLimit = () =>
-    document.defaultView?.getComputedStyle(document.documentElement)?.getPropertyValue('--tmbx-preview-all').trim() === '1' ? Infinity : 5;
+    document.defaultView?.getComputedStyle(document.documentElement)?.getPropertyValue('--tmbx-preview-all').trim() === '1' ? Infinity : PREVIEW_MAX;
+  const moreLink = (r, limit) => {
+    if (!Number.isFinite(limit)) return '';
+    const hidden = Math.max(0, (r.list ?? []).length - limit);
+    return `<a data-act="participants" data-slot="more">${hidden ? `+${hidden} · Tout voir` : 'Tout voir'}</a>`;
+  };
   function participantsSec(r, limit) {
-    return `<div class="sec"><span data-slot="pcount">Participants · ${r.participants}</span>${Number.isFinite(limit) ? '<a data-act="participants">Tout voir</a>' : ''}</div>
+    return `<div class="sec"><span data-slot="pcount">Participants · ${r.participants}</span>${moreLink(r, limit)}</div>
       ${limit ? '' : `<div class="chips" data-slot="chips">${chips()}</div>`}
       <div class="rows" data-slot="rows">${rows(r, limit)}</div>`;
   }
@@ -439,6 +447,11 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       setSlot('count', `${ic('users')}<b>${r.participants}</b> participants`);
       setSlot('split', counts(r));
       setSlot('pcount', `Participants · ${r.participants}`);
+      {
+        const limit = previewLimit();
+        const hidden = Number.isFinite(limit) ? Math.max(0, (r.list ?? []).length - limit) : 0;
+        setSlot('more', hidden ? `+${hidden} · Tout voir` : 'Tout voir');
+      }
       setRows(rows(r, previewLimit()));
       const hero = body.querySelector('.hero');
       hero?.classList.toggle('is-paused', !!r.paused);

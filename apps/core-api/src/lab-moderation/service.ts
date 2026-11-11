@@ -970,13 +970,25 @@ export class LabModerationService {
       'select login, display_name from lab_staff where channel_id = $1 and viewer_id = $2',
       [channelId, viewerId],
     );
+    // Post-live 11/11: a viewer found in the canonical directory (Portefeuille search) has a name and a login there.
+    const known = await this.db
+      .query<{
+        login: string | null;
+        display_name: string | null;
+      }>('select login, display_name from viewers where twitch_user_id = $1', [
+        viewerId,
+      ])
+      .catch(() => []);
     return {
       viewer_id: viewerId,
       display_name:
         dir[0]?.display_name ??
         staff[0]?.display_name ??
         staff[0]?.login ??
+        known[0]?.display_name ??
+        known[0]?.login ??
         viewerId,
+      login: known[0]?.login ?? staff[0]?.login ?? null,
       role,
       staff: role !== 'viewer',
       /** Kept for older readers: supermod name (null otherwise). */
@@ -985,6 +997,8 @@ export class LabModerationService {
       last_seen: dir[0] ? new Date(dir[0].last_seen).toISOString() : null,
       today_count: Number(today[0]?.n ?? 0),
       wallet,
+      /** Which economy the Portefeuille acts on: 'lab' (test wallet) or 'canonical' (the real Jetons). */
+      economy: this.economy.mode,
       restrictions: restr,
       tts_cooldown_until: await this.tts.runningCooldownUntil(
         channelId,

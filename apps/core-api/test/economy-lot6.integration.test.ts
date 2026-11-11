@@ -18,6 +18,7 @@ import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
 import { coreWalletEconomy } from '../src/economy/economy.js';
 import { LabModerationService } from '../src/lab-moderation/service.js';
+import { WalletAdminChat } from '../src/wallet/admin-chat.js';
 import { WalletService } from '../src/wallet/wallet-service.js';
 import { FakeClock, paris } from './helpers.js';
 import { LOCK_WAIT_MS, lockDestructiveSuite } from './pg-exclusive.js';
@@ -91,7 +92,22 @@ describe.skipIf(!isLocal)(
           lab_session_id: 'lab-1',
           emote: { provider: 'unicode', id: 'unicode:1f600', glyph: '😀' },
         });
-      return { core, bonk, adjust, shoot };
+      // Post-live 11/11: the moderators' `!addpoints` / `!removepoints` (no Helix here: the known viewer).
+      const chat = new WalletAdminChat(db, clock, mod, null);
+      const say = (id: string, text: string) =>
+        chat.chat({
+          channel_id: CH,
+          message_id: id,
+          text,
+          chatter: {
+            id: CH,
+            login: 'raptoru_',
+            display_name: 'Raptoru_',
+            role: 'broadcaster',
+          },
+          source: 'simulator',
+        } as Parameters<WalletAdminChat['chat']>[0]);
+      return { core, bonk, adjust, shoot, say };
     };
     const n = async (sql: string) =>
       Number(
@@ -145,6 +161,32 @@ describe.skipIf(!isLocal)(
       expect(await n('bonk_lab_interactions')).toBe(
         await n("wallet_transactions where source = 'bonk'"),
       );
+    });
+
+    it('!addpoints: one Twitch message delivered to two Cores at once credits once; !removepoints never below 0', async () => {
+      const [x, y] = [instance(a), instance(b)];
+      await fund(1); // the viewer is known (login v901501), 1 Jeton
+      const text = `!addpoints @v${V} 300 bug Soundboard`;
+      await Promise.allSettled([
+        x.say('twitch-msg-add', text),
+        y.say('twitch-msg-add', text),
+        x.say('twitch-msg-add', text),
+      ]);
+      expect(await balance()).toBe(301);
+      expect(
+        await n(
+          "wallet_transactions where source = 'admin' and kind = 'admin_add'",
+        ),
+      ).toBe(1);
+      await Promise.allSettled([
+        x.say('twitch-msg-rm-1', `!removepoints @v${V} 1000000`),
+        y.say('twitch-msg-rm-2', `!removepoints @v${V} 1000000`),
+      ]);
+      expect(await balance()).toBe(0);
+      await ledgerAgrees();
+      expect(
+        await n("lab_moderation_audit where action = 'wallet_adjust'"),
+      ).toBe(2);
     });
 
     it('the same moderation action from two Cores at once: one adjustment', async () => {

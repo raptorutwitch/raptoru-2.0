@@ -24,7 +24,8 @@ import {
 } from '../ds/ds.js';
 import { ApiError, STUDIO_HEADERS } from '../http.js';
 
-export type ModModule = 'tts' | 'soundboard' | 'bonk' | 'raffle';
+/** `music`: Music Hub purchases (post-live 11/11) — in the history and refundable, never a desk module. */
+export type ModModule = 'tts' | 'soundboard' | 'bonk' | 'raffle' | 'music';
 export interface ModItem {
   interaction_id: string;
   module?: ModModule;
@@ -70,6 +71,7 @@ export const MODS: Record<
   soundboard: { label: 'Soundboard', unit: 'son', units: 'sons' },
   bonk: { label: 'Bonk', unit: 'bonk', units: 'bonks' },
   raffle: { label: 'Tombola', unit: 'ticket', units: 'tickets' },
+  music: { label: 'Musique', unit: 'demande', units: 'demandes' },
 };
 export const SCOPE: Record<string, string> = {
   all: 'Tout Raptoru',
@@ -77,6 +79,7 @@ export const SCOPE: Record<string, string> = {
   soundboard: 'Soundboard',
   bonk: 'Bonk',
   raffle: 'Tombola',
+  music: 'Musique',
 };
 const STATUS: Record<string, string> = {
   queued: 'En attente',
@@ -147,7 +150,10 @@ export const when = (iso?: string | null) => {
 
 /** Les permissions accordées à un modérateur (mêmes noms que le Core, qui seul les vérifie). */
 export const PERMS: Record<string, readonly [string, string]> = {
-  wallet: ['Portefeuilles (admin)', 'Créditer ou débiter Jetons et crédits.'],
+  wallet: [
+    'Portefeuille',
+    'Créditer, débiter ou rembourser des Jetons et crédits.',
+  ],
   modules: ['Fermer un module', 'Passer un module en « Fermé ».'],
   globalPause: ['Pause globale', 'Refuser toutes les nouvelles interactions.'],
   perms: ['Gérer les permissions', 'Accorder ces permissions aux autres mods.'],
@@ -943,6 +949,7 @@ const WHAT: Record<ModModule, (i: ModItem) => string> = {
   soundboard: (i) => `Son « ${i.sound_label ?? i.detail ?? ''} »`,
   bonk: (i) => `Bonk ${i.emote_glyph ?? ''}`,
   raffle: () => 'Ticket tombola',
+  music: (i) => `Musique · ${i.detail ?? ''}`,
 };
 export const whatOf = (i: ModItem, m: ModModule) => WHAT[m](i);
 export const refundable = (i: ModItem, m: ModModule) =>
