@@ -57,15 +57,15 @@ Retour arrière Core : `node scripts/coolify-deploy.mjs deploy core bbce1048a078
 
 ### C2. Livraison du 11/11 (GO d'Antoni) : fait et restant
 
-| Étape         | État                                                                                                                             |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| PR #64        | fusionnée par Antoni (11:04 UTC), commit de fusion `052ab2ec` = tête de la PR `6c4d922` ; CI de `main` verte (run 43008949938)   |
-| Core          | **déployé** `052ab2ec` (plan PRÊT, aucune migration, hors live, vérifications OK, journal de démarrage sans erreur)              |
-| Bot           | rien à faire                                                                                                                     |
-| Studio        | **0.1.30 publiée** (mise à jour testée par le workflow) ; **à installer par Antoni** (« Rechercher une mise à jour »)            |
-| ZIP extension | **non construit** : la ligne « Validé par Antoni : oui » manque à `INVENTAIRE-bb8700814939.md` (elle atteste ta recette)         |
-| Hosted Test   | inchangé ; même domaine API (`https://core.raptoru.fr/v1/ext`) que l'archive actuelle : aucun réglage Twitch à changer           |
-| Compatibilité | Studio 0.1.29 et l'extension actuelle ne reçoivent pas les lignes Musique (`music=1`) : prouvé par tests, pas relu en Production |
+| Étape         | État                                                                                                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PR #64        | fusionnée par Antoni (11:04 UTC), commit de fusion `052ab2ec` = tête de la PR `6c4d922` ; CI de `main` verte (run 43008949938)                                                                                                  |
+| Core          | **déployé** `052ab2ec` (plan PRÊT, aucune migration, hors live, vérifications OK, journal de démarrage sans erreur)                                                                                                             |
+| Bot           | rien à faire                                                                                                                                                                                                                    |
+| Studio        | **0.1.30 publiée** (mise à jour testée par le workflow) ; **à installer par Antoni** (« Rechercher une mise à jour »)                                                                                                           |
+| ZIP extension | **construit** : `raptoru-live-PRODUCTION-45cb7224b16d-depuis-0bf7907-78-commits-shell-v2.zip`, SHA-256 `b9e438ab…d0d9865` ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.0) ; **à téléverser en Hosted Test par Antoni** |
+| Hosted Test   | inchangé ; même domaine API (`https://core.raptoru.fr/v1/ext`) que l'archive actuelle : aucun réglage Twitch à changer                                                                                                          |
+| Compatibilité | Studio 0.1.29 et l'extension actuelle ne reçoivent pas les lignes Musique (`music=1`) : prouvé par tests, pas relu en Production                                                                                                |
 
 Gestes restants d'Antoni :
 

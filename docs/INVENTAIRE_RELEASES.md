@@ -50,17 +50,19 @@ live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJE
 
 ## 3. Extension Twitch « Raptoru Live »
 
-### 3.0 Prochaine archive (passe post-live du 11/11) : préparée, **pas construite** (vérifiée depuis `main` `052ab2ec`)
+### 3.0 Nouvelle archive (passe post-live du 11/11) : **construite, à téléverser par Antoni**
 
-| Champ        | Valeur                                                                                                                                                         |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nom attendu  | `raptoru-live-PRODUCTION-<commit>-depuis-0bf7907-78-commits-shell-v2.zip` (le `<commit>` est celui du dépôt au moment de l'emballage)                          |
-| Source       | branche `feat/post-live-moderation` (PR #64) ; dernier commit de l'extension `bb870081` ; shell **v2** ; `https://core.raptoru.fr/v1/ext`                      |
-| Inventaire   | `apps/twitch-extension/release-inventory/INVENTAIRE-bb8700814939.md` : 78 commits listés, **ligne « Validé par Antoni : oui » absente** (l'emballage refuse)   |
-| Vérification | `node scripts/package.mjs --target production --shell v2 --check` : tout OK sauf la ligne de validation (11/11)                                                |
-| SHA-256      | calculé à l'emballage (le `--check` en affiche un provisoire, sans inventaire embarqué : ce n'est pas l'empreinte finale)                                      |
-| Prérequis    | Core avec la PR #64 déployé (Musique dans la modération, recherche canonique) ; avec `bbce104` l'extension fonctionne sans ces deux ajouts                     |
-| Procédure    | après la recette d'Antoni : ajouter la ligne de validation, `npm run package:production -- --shell v2` dans `apps/twitch-extension`, téléverser en Hosted Test |
+| Champ       | Valeur                                                                                                                                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nom         | `raptoru-live-PRODUCTION-45cb7224b16d-depuis-0bf7907-78-commits-shell-v2.zip` (+ `.sha256`)                                                                                                                               |
+| Emplacement | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\release-2026-11-11\apps\twitch-extension\release\`                                                                                                                     |
+| SHA-256     | `b9e438abc11828bf5461636a16c51cf6f9e9bf97ac0376f010fd1bc9bd0d9865` (recalculé), 12 820 968 octets                                                                                                                         |
+| Source      | `45cb7224` (branche `docs/delivery-2026-11-11`, PR #65) = code de l'extension de `main` `052ab2ec` + inventaire validé ; shell **v2** ; `buildId` `production-45cb7224b16d-2026-11-11` ; `https://core.raptoru.fr/v1/ext` |
+| Inventaire  | `INVENTAIRE-bb8700814939.md`, 78 commits, « Validé par Antoni : oui » (« go tu peux faire le zip », 11/11), embarqué                                                                                                      |
+| Contenu     | mêmes 2 149 fichiers et mêmes 9 modules que `bbce1048a078` ; passe post-live (Portefeuille, Musique dans la modération, Tombola, tutoriel)                                                                                |
+| Prérequis   | Core `052ab2ec` (déployé)                                                                                                                                                                                                 |
+| Statut      | **non téléversé** : Hosted Test à remplacer par Antoni dans la console Twitch ; **ne pas soumettre ni publier**                                                                                                           |
+| Retour      | remettre les fichiers de `bbce1048a078` (§ 3.1)                                                                                                                                                                           |
 
 ### 3.1 Référence actuelle
 
