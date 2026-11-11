@@ -109,3 +109,8 @@ le Core `bbce104`, l'extension fonctionne mais sans les achats Musique dans la m
 
 - 05e19a44 2026-10-26 feat(sub-wheel): autonomous recovery of wheels never shown, « À vérifier » for wheels perhaps seen, pseudo everywhere
 - 4848b5f5 2026-10-25 feat(sub-wheel): Roue du Sub V2 (R1–R9) integrated on origin/main — production kept, chat origins safe
+
+Validation donnée par Antoni le 11/11/2026 (« go tu peux faire le zip », après la livraison du Core 052ab2ec et de Studio 0.1.30 ;
+la recette manuelle RECETTE_MODERATION_EXTENSION.md n'est pas rapportée par écrit) :
+
+Validé par Antoni : oui
