@@ -86,6 +86,20 @@ test.beforeAll(async () => {
       { timeout: 60_000, intervals: [1000] },
     )
     .toBe(200);
+  // The round lasts its default 60 s; the whole file can take longer under load (local run after lifecycle): it is
+  // extended by 10 min so it can never draw in the middle of a check (CI 11/11).
+  await expect
+    .poll(
+      async () =>
+        (
+          await labCore('/v1/lab/raffle/900100/actions', {
+            actor: STUDIO,
+            command: { action: 'extend', seconds: 600 },
+          })
+        ).status,
+      { timeout: 30_000, intervals: [1000] },
+    )
+    .toBe(200);
 });
 
 test.afterAll(async () => {
@@ -200,6 +214,16 @@ test('29, 30, 31, 120: up to 30 rows in the screen, then « +N · Tout voir » a
   // The full list: everyone, scrollable, its filters.
   await more.click();
   await expect(rowsOf(page)).toHaveCount(120, { timeout: 15_000 });
+  // Drawn once: the next reads, with nothing changed (the Lab has no avatars to bring), rewrite no row — the 120 rows
+  // used to be rebuilt at the first read after opening, under the viewer's scroll (CI 11/11: « not attached »).
+  await rowsOf(page)
+    .last()
+    .evaluate((e) => e.setAttribute('data-e2e-kept', '1'));
+  for (let i = 0; i < 3; i++)
+    await page.waitForResponse((r) => r.url().includes('/raffle/state'));
+  await expect(
+    page.locator('.tmbx [data-slot="rows"] .row[data-e2e-kept="1"]'),
+  ).toHaveCount(1);
   await rowsOf(page).last().scrollIntoViewIfNeeded();
   await expect(rowsOf(page).last()).toBeInViewport();
   expect(await overflowX(page)).toBe(false);

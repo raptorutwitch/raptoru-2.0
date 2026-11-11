@@ -106,6 +106,8 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
   let dueRead = 0; // closes_at / result_at reached locally: one immediate read
   let resultAt = null; // { id, at } local time of Core's result_at (set once per round, no jitter)
   const slotHtml = new WeakMap();
+  /** build() → updateSlots: each slot's html remembered without being written again. */
+  let seeding = false;
 
   const round = () => data?.round ?? null;
   /** Core's titles of a round (fallback only while an older Core answers). */
@@ -381,6 +383,8 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
     const el = body.querySelector(`[data-slot="${name}"]`) ?? node.querySelector(`[data-slot="${name}"]`);
     if (!el || slotHtml.get(el) === html) return;
     slotHtml.set(el, html);
+    // build() just drew this exact html: remembered only (see build).
+    if (seeding) return;
     // The pictures already on screen are moved into the new rows (never reloaded: no blink).
     const kept = new Map([...el.querySelectorAll('img[data-pp]')].map((i) => [i.getAttribute('src'), i]));
     el.innerHTML = html;
@@ -410,6 +414,15 @@ export function createTombolaV2View({ document, client, onBack, onJoined }) {
       modeTimer = win.setTimeout(() => body.classList.remove(mode), 700);
     }
     shownKey = key;
+    // Remember what each slot was just drawn with (the same helpers as updateSlots): the first read after a new
+    // screen no longer rewrites them when nothing changed (« Tout voir » used to rebuild its 120 rows a second after
+    // opening, under the viewer's scroll and hover — CI 11/11).
+    seeding = true;
+    try {
+      updateSlots(key);
+    } finally {
+      seeding = false;
+    }
     wireImages(body);
     fitAmounts();
     if (key.startsWith('drawing:') && drawingSince?.id !== round()?.raffle_id) drawingSince = { id: round().raffle_id, at: now() };
