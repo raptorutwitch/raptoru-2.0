@@ -685,11 +685,12 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       <button class="icon-btn icon-btn--xs stopic" data-act="item-menu" data-id="${i.interaction_id}" data-tip="Arrêter ce son" aria-label="Arrêter ${esc(i.sound_label)}">${ic('stop')}</button>
       <span class="thin"><i data-prog="${i.interaction_id}"></i></span></div>`;
   }
-  const itemWhat = (i) => (i.module === 'soundboard' ? MODS.soundboard.short : MODS[i.module]?.short || MODS[i.module]?.label || i.module);
+  // Music: the track itself (« Musique · Titre — Artiste »), so a purchase is found at a glance.
+  const itemWhat = (i) => (i.module === 'soundboard' ? MODS.soundboard.short : i.module === 'music' ? `Musique · ${esc(i.detail ?? '')}` : MODS[i.module]?.short || MODS[i.module]?.label || i.module);
   function hLine(i, vid) {
     const m = i.module;
     return `<button class="h" data-act="open-ix" data-id="${esc(i.interaction_id)}"><span class="h__t tnum">${hhmm(i.created_at)}</span><span class="mini" style="--c:${MODS[m].c}">${ic(m)}</span>
-      <span class="h__what">${vid ? MODS[m].label : `<b>${esc(i.viewer_display_name)}</b> · ${itemWhat(i)}`}</span>
+      <span class="h__what">${vid ? (m === 'music' ? itemWhat(i) : MODS[m].label) : `<b>${esc(i.viewer_display_name)}</b> · ${itemWhat(i)}`}</span>
       <span class="h__st h__st--${esc(statusKey(i) === 'done' ? 'done' : i.status)}">${statusText(i)}</span>${vid ? `<span class="meta tnum">${money(i)}</span>` : ''}</button>`;
   }
   function aLine(a) {
@@ -861,7 +862,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       nav.htab === 'ix' && f.status !== 'all' ? ['status', STATUS_F.find((x) => x[0] === f.status)[1]] : null,
       nav.htab === 'ix' && f.period !== 'all' ? ['period', PERIOD_F.find((x) => x[0] === f.period)[1]] : null,
     ].filter(Boolean);
-    const body = `${tabs}<div class="hbar"><div class="chips chips--scroll">${chip('all', 'Tout')}${MOD_KEYS.map((m) => chip(m, MODS[m].short || MODS[m].label)).join('')}</div>
+    const body = `${tabs}<div class="hbar"><div class="chips chips--scroll">${chip('all', 'Tout')}${[...MOD_KEYS, 'music'].map((m) => chip(m, MODS[m].short || MODS[m].label)).join('')}</div>
         ${nav.htab === 'ix' ? `<button class="icon-btn icon-btn--sm${active.length || f.viewer ? ' is-on' : ''}" data-act="hfilters" data-tip="Statut, période, viewer" aria-label="Filtres">${ic('filter')}</button>` : ''}</div>
       ${nav.vq && !vid && nav.htab === 'ix' ? `<label class="search search--sm">${ic('search')}<input data-hq placeholder="Filtrer par viewer" value="${esc(f.viewer)}"></label>` : ''}
       ${active.length ? `<div class="chips">${active.map(([k, l]) => `<button class="chip is-on" data-act="hfilter" data-k="${k}" data-val="all" data-tip="Retirer ce filtre">${l} ${ic('x')}</button>`).join('')}</div>` : ''}
