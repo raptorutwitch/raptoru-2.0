@@ -14,18 +14,18 @@ live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJE
 
 ## 1. Core et bot (Coolify, VPS)
 
-| Date (UTC)      | Core                   | Bot               | Contenu                                                                                                                       | Statut                                                     |
-| --------------- | ---------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| **10/11 05:08** | **`bbce104`** (PR #61) | —                 | Music Hub : progression du skip payant réglable                                                                               | **déployé, sain** (`/health`, `/ready`) ; aucune migration |
-| 10/11 02:31     | `900637f` (PR #59)     | —                 | audit de fiabilité, Music Hub (fermé par défaut), migration `20261122130000_music_hub.sql` (sauvegarde de la base à 02:30:59) | remplacé                                                   |
-| **10/11 02:35** | —                      | **`900637f`**     | compatibilité (le bot ne lit pas les changements de `bbce104`)                                                                | **déployé, sain**, bail actif                              |
-| 07/11 18:58     | `1b25f30` (PR #56)     | `1b25f30` (19:02) | Opération Coulisses, 5 migrations                                                                                             | point de retour arrière                                    |
-| 04/11 01:45     | `8a897a5`              | —                 | raptoru.fr lots 1–5                                                                                                           | historique                                                 |
-| 31/10 13:02     | `8b2189e`              | —                 | Halloween (attente entre screamers)                                                                                           | historique                                                 |
-| 27/10           | —                      | `4ba9243`         | Random Ban V3                                                                                                                 | historique                                                 |
+| Date (UTC)      | Core                   | Bot               | Contenu                                                                                                                         | Statut                                                                                                                                              |
+| --------------- | ---------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **11/11 11:24** | **`052ab2e`** (PR #64) | —                 | passe post-live : Portefeuille, `!addpoints` / `!removepoints`, `!wallet` unifié, Musique dans la modération ; aucune migration | **déployé, sain** (déploiement `xtugwkjyb0f9mnrpy5bfz98e`, 125 s) ; retour : `deploy core bbce1048a0783cc1bdbb9a2ca86fb1769ce01872 --rollback --go` |
+| 10/11 05:08     | `bbce104` (PR #61)     | —                 | Music Hub : progression du skip payant réglable                                                                                 | **déployé, sain** (`/health`, `/ready`) ; aucune migration                                                                                          |
+| 10/11 02:31     | `900637f` (PR #59)     | —                 | audit de fiabilité, Music Hub (fermé par défaut), migration `20261122130000_music_hub.sql` (sauvegarde de la base à 02:30:59)   | remplacé                                                                                                                                            |
+| **10/11 02:35** | —                      | **`900637f`**     | compatibilité (le bot ne lit pas les changements de `bbce104`)                                                                  | **déployé, sain**, bail actif                                                                                                                       |
+| 07/11 18:58     | `1b25f30` (PR #56)     | `1b25f30` (19:02) | Opération Coulisses, 5 migrations                                                                                               | point de retour arrière                                                                                                                             |
+| 04/11 01:45     | `8a897a5`              | —                 | raptoru.fr lots 1–5                                                                                                             | historique                                                                                                                                          |
+| 31/10 13:02     | `8b2189e`              | —                 | Halloween (attente entre screamers)                                                                                             | historique                                                                                                                                          |
+| 27/10           | —                      | `4ba9243`         | Random Ban V3                                                                                                                   | historique                                                                                                                                          |
 
-- **Activé** : `MUSIC_HUB_EXTENSION=testers:1239040922` (LeCroupier_, plus le diffuseur, toujours inclus) ; Music Hub
-  est fermé pour tous les autres viewers.
+- **Activé** : `MUSIC_HUB_EXTENSION=on` depuis le 10/11 au soir (auparavant `testers:…`).
 - **Retour arrière** :
   - Core : `node scripts/coolify-deploy.mjs deploy core 900637f2b000cd9531970452cf11342876befe82 --rollback --go`. La
     migration reste : elle est additive.
@@ -33,14 +33,15 @@ live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJE
 
 ## 2. Raptoru Studio
 
-| Version         | Commit                | Publiée (UTC) | Statut                                                                                                                                                      |
-| --------------- | --------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0.1.29**      | `bbce104`             | 10/11 05:18   | **installée** sur le PC (`build-info.json` : `0.1.29`, `bbce104`, construite à 05:14:50) ; clignotement du lecteur, confirmations Spotify, réglages du skip |
-| 0.1.28          | `900637f`             | 10/11 03:09   | installée puis remplacée ; publiée au 2ᵉ essai (nettoyage `alerts-se` sous Windows)                                                                         |
-| 0.1.27          | `13ed6e8`             | 07/11 22:22   | Dock sans les tests de Studio                                                                                                                               |
-| 0.1.26          | `1b25f30`             | 07/11 19:17   | Coulisses (installateur sauvegardé)                                                                                                                         |
-| 0.1.25          | `8a897a5`             | 04/11         | installateur sauvegardé                                                                                                                                     |
-| 0.1.18 → 0.1.24 | `7223b0a` → `8b2189e` | 29–31/10      | période Halloween                                                                                                                                           |
+| Version         | Commit                | Publiée (UTC) | Statut                                                                                                                                                                                                                                                  |
+| --------------- | --------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0.1.30**      | `052ab2e`             | 11/11 11:32   | **publiée** (workflow run 43011771406 : mise à jour 0.1.29 → 0.1.30 testée, 8 fichiers utilisateur identiques ; re-téléchargement anonyme identique) ; **pas encore installée** ; passe post-live (Musique dans la modération native, « Portefeuille ») |
+| 0.1.29          | `bbce104`             | 10/11 05:18   | installée sur le PC (`build-info.json` : `0.1.29`, `bbce104`, construite à 05:14:50) ; clignotement du lecteur, confirmations Spotify, réglages du skip                                                                                                 |
+| 0.1.28          | `900637f`             | 10/11 03:09   | installée puis remplacée ; publiée au 2ᵉ essai (nettoyage `alerts-se` sous Windows)                                                                                                                                                                     |
+| 0.1.27          | `13ed6e8`             | 07/11 22:22   | Dock sans les tests de Studio                                                                                                                                                                                                                           |
+| 0.1.26          | `1b25f30`             | 07/11 19:17   | Coulisses (installateur sauvegardé)                                                                                                                                                                                                                     |
+| 0.1.25          | `8a897a5`             | 04/11         | installateur sauvegardé                                                                                                                                                                                                                                 |
+| 0.1.18 → 0.1.24 | `7223b0a` → `8b2189e` | 29–31/10      | période Halloween                                                                                                                                                                                                                                       |
 
 - Une publication ne prouve pas l'installation : Studio ne s'installe jamais seul (Antoni : « Rechercher une mise à
   jour »).
@@ -49,7 +50,7 @@ live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJE
 
 ## 3. Extension Twitch « Raptoru Live »
 
-### 3.0 Prochaine archive (passe post-live du 11/11) : préparée, **pas construite**
+### 3.0 Prochaine archive (passe post-live du 11/11) : préparée, **pas construite** (vérifiée depuis `main` `052ab2ec`)
 
 | Champ        | Valeur                                                                                                                                                         |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
