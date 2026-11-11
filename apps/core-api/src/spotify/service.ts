@@ -763,8 +763,21 @@ export class SpotifyService {
     actor: string,
     reason: string | null,
   ): Promise<
-    | { ok: true; amount: number; viewer_id: string; kind: 'request' | 'skip'; before: string }
-    | { ok: false; code: 'not_found' | 'not_terminal' | 'already_refunded' | 'nothing_to_refund' }
+    | {
+        ok: true;
+        amount: number;
+        viewer_id: string;
+        kind: 'request' | 'skip';
+        before: string;
+      }
+    | {
+        ok: false;
+        code:
+          | 'not_found'
+          | 'not_terminal'
+          | 'already_refunded'
+          | 'nothing_to_refund';
+      }
   > {
     if (!this.economy) return { ok: false, code: 'nothing_to_refund' };
     const now = this.clock.now();
@@ -776,19 +789,33 @@ export class SpotifyService {
       )
     )[0];
     if (r) {
-      if (r.payment !== 'tokens') return { ok: false, code: 'nothing_to_refund' };
+      if (r.payment !== 'tokens')
+        return { ok: false, code: 'nothing_to_refund' };
       if (['RECEIVED', 'SEARCHING', 'QUEUED', 'PLAYING'].includes(r.state))
         return { ok: false, code: 'not_terminal' };
-      if (r.refund_status === 'refunded') return { ok: false, code: 'already_refunded' };
+      if (r.refund_status === 'refunded')
+        return { ok: false, code: 'already_refunded' };
       if (!r.price_tokens) return { ok: false, code: 'nothing_to_refund' };
-      const out = await this.economy.refund(q, now, r.request_id, actor.slice(0, 64), why);
+      const out = await this.economy.refund(
+        q,
+        now,
+        r.request_id,
+        actor.slice(0, 64),
+        why,
+      );
       if (!(out.amount > 0)) return { ok: false, code: 'nothing_to_refund' };
       await this.update(q, r.request_id, {
         refund_status: 'refunded',
         refunded_at: now,
         refunded_by: actor.slice(0, 64),
       });
-      return { ok: true, amount: out.amount, viewer_id: r.viewer_id, kind: 'request', before: r.state };
+      return {
+        ok: true,
+        amount: out.amount,
+        viewer_id: r.viewer_id,
+        kind: 'request',
+        before: r.state,
+      };
     }
     const a = (
       await q.query<{
@@ -807,19 +834,36 @@ export class SpotifyService {
     if (a.status === 'queued') return { ok: false, code: 'not_terminal' };
     if (a.status === 'refunded' || a.result?.refunded_at)
       return { ok: false, code: 'already_refunded' };
-    if (!(Number(a.amount) > 0)) return { ok: false, code: 'nothing_to_refund' };
-    const out = await this.economy.refund(q, now, a.activity_id, actor.slice(0, 64), why);
+    if (!(Number(a.amount) > 0))
+      return { ok: false, code: 'nothing_to_refund' };
+    const out = await this.economy.refund(
+      q,
+      now,
+      a.activity_id,
+      actor.slice(0, 64),
+      why,
+    );
     if (!(out.amount > 0)) return { ok: false, code: 'nothing_to_refund' };
     await q.query(
       `update module_activity set result = coalesce(result, '{}'::jsonb) || $2::jsonb, updated_at = $3
         where activity_id = $1`,
       [
         a.activity_id,
-        JSON.stringify({ refunded_at: now.toISOString(), refunded_by: actor.slice(0, 64), refund_reason: why }),
+        JSON.stringify({
+          refunded_at: now.toISOString(),
+          refunded_by: actor.slice(0, 64),
+          refund_reason: why,
+        }),
         now,
       ],
     );
-    return { ok: true, amount: out.amount, viewer_id: a.viewer_id ?? '', kind: 'skip', before: a.status };
+    return {
+      ok: true,
+      amount: out.amount,
+      viewer_id: a.viewer_id ?? '',
+      kind: 'skip',
+      before: a.status,
+    };
   }
 
   /**

@@ -171,7 +171,10 @@ export class LabModerationService {
     /** Balances, movements and ledger of the economy the modules use (the Lab test wallet by default). */
     private readonly economy: EconomyPort = labEconomy,
     /** Music Hub (post-live 11/11): its Jetons purchases in the history and the manual refund. Absent: none. */
-    private readonly music: Pick<SpotifyService, 'moderationRefund'> | null = null,
+    private readonly music: Pick<
+      SpotifyService,
+      'moderationRefund'
+    > | null = null,
   ) {}
 
   /** The Lab test-wallet tool (set / reset the fictitious balances) only exists on the Lab ledger. */
@@ -618,7 +621,10 @@ export class LabModerationService {
           const module = cmd.module;
           if (module === 'music') {
             if (cmd.action !== 'refund' || !this.music)
-              throw new LabModerationError('unsupported', `${cmd.action} is not a music command`);
+              throw new LabModerationError(
+                'unsupported',
+                `${cmd.action} is not a music command`,
+              );
             const out = await this.music.moderationRefund(
               q,
               channelId,
@@ -836,7 +842,6 @@ export class LabModerationService {
       restriction: r.blocked ? 'block' : r.cooldown ? 'cooldown' : null,
     }));
   }
-
 
   /**
    * « Restrictions » view: every block and personal cooldown still running on the channel (same rows and

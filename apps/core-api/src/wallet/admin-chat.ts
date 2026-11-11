@@ -3,10 +3,7 @@ import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db } from '../db/db.js';
 import type { LoginLookup } from '../mini-games/twitch-login.js';
-import {
-  LabForbiddenError,
-  LabWalletError,
-} from '../lab-moderation/store.js';
+import { LabForbiddenError, LabWalletError } from '../lab-moderation/store.js';
 import type {
   LabModerationError,
   LabModerationService,
@@ -38,7 +35,13 @@ export const CHAT_ADJUST_MAX = 1_000_000;
 const fmt = (n: number) => n.toLocaleString('fr-FR').replace(/\s/g, ' ');
 
 export type AdminWalletCommand =
-  | { kind: 'adjust'; sign: 1 | -1; login: string; amount: number; reason?: string }
+  | {
+      kind: 'adjust';
+      sign: 1 | -1;
+      login: string;
+      amount: number;
+      reason?: string;
+    }
   | { kind: 'usage'; sign: 1 | -1 }
   | { kind: 'too_much'; sign: 1 | -1 };
 
@@ -84,7 +87,9 @@ export class WalletAdminChat {
     private readonly lookup: LoginLookup | null,
   ) {}
 
-  async chat(msg: LabChatMessage): Promise<{ outcome: string; replayed?: boolean }> {
+  async chat(
+    msg: LabChatMessage,
+  ): Promise<{ outcome: string; replayed?: boolean }> {
     const cmd = parseAdminWallet(msg.text);
     if (!cmd) return { outcome: 'ignored' };
     const author = msg.chatter;
@@ -108,7 +113,10 @@ export class WalletAdminChat {
     };
     // A viewer never gets this far: refused without asking Twitch anything (Core re-checks the permission anyway).
     if (author.role === 'viewer')
-      return reply('wallet_forbidden', 'commande réservée à l’équipe de modération.');
+      return reply(
+        'wallet_forbidden',
+        'commande réservée à l’équipe de modération.',
+      );
     if (cmd.kind === 'usage') return reply('wallet_usage', usage(cmd.sign));
     if (cmd.kind === 'too_much')
       return reply(
@@ -120,12 +128,21 @@ export class WalletAdminChat {
     try {
       target = await this.resolve(cmd.login);
     } catch {
-      return reply('wallet_lookup_failed', `Twitch ne répond pas : « ${cmd.login} » non vérifié · rien n’a été fait.`);
+      return reply(
+        'wallet_lookup_failed',
+        `Twitch ne répond pas : « ${cmd.login} » non vérifié · rien n’a été fait.`,
+      );
     }
     if (!target)
-      return reply('wallet_unknown', `viewer « ${cmd.login} » introuvable · rien n’a été fait.`);
+      return reply(
+        'wallet_unknown',
+        `viewer « ${cmd.login} » introuvable · rien n’a été fait.`,
+      );
     if (target === AMBIGUOUS)
-      return reply('wallet_ambiguous', `plusieurs comptes connus pour « ${cmd.login} » · rien n’a été fait.`);
+      return reply(
+        'wallet_ambiguous',
+        `plusieurs comptes connus pour « ${cmd.login} » · rien n’a été fait.`,
+      );
 
     try {
       const out = (await this.moderation.act(msg.channel_id, {
@@ -147,7 +164,9 @@ export class WalletAdminChat {
       })) as { applied: number; wallet?: { tokens?: number } | null };
       const applied = Math.abs(Number(out.applied));
       const balance = Number(out.wallet?.tokens ?? NaN);
-      const after = Number.isFinite(balance) ? ` (solde : ${fmt(balance)})` : '';
+      const after = Number.isFinite(balance)
+        ? ` (solde : ${fmt(balance)})`
+        : '';
       const partial =
         applied < cmd.amount ? ` sur ${fmt(cmd.amount)} demandés` : '';
       return reply(
@@ -158,22 +177,39 @@ export class WalletAdminChat {
       );
     } catch (e) {
       if (e instanceof LabForbiddenError)
-        return reply('wallet_forbidden', 'permission « Portefeuille » requise.');
+        return reply(
+          'wallet_forbidden',
+          'permission « Portefeuille » requise.',
+        );
       const code = (e as Partial<LabModerationError>).code;
       if (code === 'self_adjust_forbidden')
-        return reply('wallet_self', 'impossible de modifier ton propre portefeuille.');
+        return reply(
+          'wallet_self',
+          'impossible de modifier ton propre portefeuille.',
+        );
       if (code === 'nothing_to_debit')
-        return reply('wallet_nothing', `le solde de @${target.name} est déjà à 0 · rien n’a été retiré.`);
+        return reply(
+          'wallet_nothing',
+          `le solde de @${target.name} est déjà à 0 · rien n’a été retiré.`,
+        );
       if (code === 'wallet_full')
-        return reply('wallet_full', `le solde de @${target.name} est au maximum · rien n’a été crédité.`);
+        return reply(
+          'wallet_full',
+          `le solde de @${target.name} est au maximum · rien n’a été crédité.`,
+        );
       if (e instanceof LabWalletError)
-        return reply('wallet_unavailable', 'Portefeuille momentanément indisponible · rien n’a été fait.');
+        return reply(
+          'wallet_unavailable',
+          'Portefeuille momentanément indisponible · rien n’a été fait.',
+        );
       throw e;
     }
   }
 
   /** The account of this exact login: Twitch first; else a single viewer already known by it. */
-  async resolve(login: string): Promise<{ id: string; name: string } | typeof AMBIGUOUS | null> {
+  async resolve(
+    login: string,
+  ): Promise<{ id: string; name: string } | typeof AMBIGUOUS | null> {
     if (this.lookup) {
       const u = await this.lookup(login);
       return u ? { id: u.id, name: u.display_name || u.login } : null;
