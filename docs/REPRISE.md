@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 10/11/2026** (consolidation). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+**Mis à jour le 11/11/2026** (passe post-live). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
@@ -144,6 +144,13 @@ La version **publique** de l'extension ne se lit pas hors live. Antoni peut la p
 live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.3).
 
 ## 5. Situation au 10/11
+
+**Passe post-live du 11/11** ([RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md)) — branche `feat/post-live-moderation`,
+worktree `post-live`, **ni poussée ni déployée** : `!addpoints`/`!removepoints` pour les modérateurs (permission
+« Portefeuille »), Tombola qui affiche tous les participants, achats Musique remboursables depuis la modération,
+« Portefeuille » + recherche `@pseudo` dans l'extension. Livraison : Core + release Studio ensemble, nouveau ZIP
+d'extension ; aucune migration, rien pour le bot. Prochaine étape : recette d'Antoni dans le Lab
+([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)), puis GO de livraison.
 
 **Ce qui vient d'être terminé**
 
