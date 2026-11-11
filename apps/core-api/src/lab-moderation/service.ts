@@ -76,7 +76,7 @@ export const LEDGER_TYPES: Record<
     visible_in_moderation_activity: true,
   },
   lab_tools: {
-    label: 'Wallet de test (Studio)',
+    label: 'Portefeuille de test (Studio)',
     visible_in_moderation_activity: true,
   },
 };
