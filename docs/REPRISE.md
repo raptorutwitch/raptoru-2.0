@@ -7,7 +7,9 @@ précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-1
 ## 0. Résumé compact, à copier dans une nouvelle conversation
 
 ```text
-Raptoru 2.0 — reprise au 10/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
+Raptoru 2.0 — reprise au 11/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
+Passe post-live du 11/11 : PR #64 (Portefeuille, !addpoints, Musique dans la modération, Tombola) — voir
+docs/REPRISE_SESSION_POST_LIVE_2026-11-11.md pour son état de livraison exact.
 
 Projet : plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
 Règle de partage : le Core décide (données, Jetons, règles, files), le bot LeCroupier_ parle à Twitch (EventSub, chat),
@@ -145,12 +147,15 @@ live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.
 
 ## 5. Situation au 10/11
 
-**Passe post-live du 11/11** ([RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md)) — branche `feat/post-live-moderation`,
-worktree `post-live`, **ni poussée ni déployée** : `!addpoints`/`!removepoints` pour les modérateurs (permission
-« Portefeuille »), Tombola qui affiche tous les participants, achats Musique remboursables depuis la modération,
-« Portefeuille » + recherche `@pseudo` dans l'extension. Livraison : Core + release Studio ensemble, nouveau ZIP
-d'extension ; aucune migration, rien pour le bot. Prochaine étape : recette d'Antoni dans le Lab
-([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)), puis GO de livraison.
+**Passe post-live du 11/11 (soir + nuit)** — reprise détaillée :
+[REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md), rapport :
+[RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md). Branche `feat/post-live-moderation`, worktree `post-live`, **PR #64**.
+Contenu : `!addpoints`/`!removepoints` et `!wallet` sur la permission « Portefeuille » (une seule décision pour le chat,
+l'extension et Studio ; `!wallet set` = streamer), Portefeuille + recherche `@pseudo` dans l'extension, achats Musique
+visibles et remboursables une fois, Tombola jusqu'à 30 lignes, tutoriel corrigé, inventaire des commandes. Le Core peut
+être déployé seul (les anciens clients ne reçoivent pas les lignes Musique) ; aucune migration ; rien pour le bot ; le
+ZIP attend la ligne de validation d'Antoni. Prochaine étape : recette d'Antoni
+([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)).
 
 **Ce qui vient d'être terminé**
 
