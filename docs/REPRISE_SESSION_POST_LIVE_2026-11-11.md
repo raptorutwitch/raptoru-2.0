@@ -21,17 +21,17 @@ l'inventaire de l'extension (ZIP), et éventuellement la release Studio. Prochai
 
 ## B. État exact du code
 
-| Élément             | Valeur                                                                                               |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| Dépôt               | `raptorutwitch/raptoru-2.0` (public)                                                                 |
-| Branche             | `feat/post-live-moderation`, poussée                                                                 |
-| PR                  | **#64** (ouverte ; voir le rapport final pour la CI et la fusion)                                    |
-| Worktree            | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\post-live`                                        |
-| Base                | `origin/main` `b4e65c6` (PR #63 fusionnée le 10/11)                                                  |
-| Dernier commit code | `458e3581` (extension) ; documents ensuite                                                           |
-| Non fusionné        | toute la passe (≈ 12 commits)                                                                        |
-| Base de test        | PostgreSQL Docker `vk-test-pg` (port 55432), base `raptoru_postlive_test` (effaçable)                |
-| Checkout principal  | `Documents\Raptoru 2.0` : **ne pas toucher** (données du Studio installé, très en retard sur `main`) |
+| Élément             | Valeur                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| Dépôt               | `raptorutwitch/raptoru-2.0` (public)                                                                   |
+| Branche             | `feat/post-live-moderation`, poussée                                                                   |
+| PR                  | **#64** ouverte, **CI entièrement verte** sur `cf3e9e5e` (11/11 ~05:10 UTC) ; **non fusionnée** (§ C2) |
+| Worktree            | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\post-live`                                          |
+| Base                | `origin/main` `b4e65c6` (PR #63 fusionnée le 10/11)                                                    |
+| Dernier commit code | `ca07ccb9` (E2E) ; extension `458e3581` ; Core `c4ed1198` ; documents ensuite                          |
+| Non fusionné        | toute la passe (16 commits sur `b4e65c6`)                                                              |
+| Base de test        | PostgreSQL Docker `vk-test-pg` (port 55432), base `raptoru_postlive_test` (effaçable)                  |
+| Checkout principal  | `Documents\Raptoru 2.0` : **ne pas toucher** (données du Studio installé, très en retard sur `main`)   |
 
 Vérifier :
 
@@ -41,11 +41,11 @@ git -C "C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\post-live" log --oneli
 gh pr view 64 --json state,mergedAt,mergeCommit,statusCheckRollup
 ```
 
-## C. Production (relevé du 11/11 ~03:30 UTC, lecture seule)
+## C. Production (relevé du 11/11, 03:30 puis ~05:15 UTC, lecture seule : inchangée)
 
 | Composant       | Version                                      | Note                                                          |
 | --------------- | -------------------------------------------- | ------------------------------------------------------------- |
-| Core            | `bbce104`, sain ; sauvegarde 10/11 04:00 UTC | `MUSIC_HUB_EXTENSION=on`, `ECONOMY_MODE=canonical`            |
+| Core            | `bbce104`, sain ; sauvegarde 11/11 04:00 UTC | `MUSIC_HUB_EXTENSION=on`, `ECONOMY_MODE=canonical`            |
 | Bot             | `900637f`, bail actif                        | aucun changement nécessaire pour cette passe                  |
 | Studio installé | 0.1.29 (`bbce104`)                           | compatible avec le nouveau Core (lignes Musique non envoyées) |
 | Extension       | Hosted Test : ZIP `bbce1048a078` (shell v2)  | publique : `0bf7907` présumée                                 |
@@ -54,6 +54,32 @@ gh pr view 64 --json state,mergedAt,mergeCommit,statusCheckRollup
 
 Ne jamais supposer qu'un déploiement a eu lieu parce que la PR est fusionnée : `node scripts/coolify-deploy.mjs status
 core` (avec `COOLIFY_URL=https://dashboard.raptoru.fr`).
+
+### C2. Livraison : ce qui est fait, ce qui attend Antoni
+
+| Étape              | État                                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Push de la branche | fait                                                                                                                                   |
+| PR #64 + CI        | faite, verte (3 passages rouges corrigés : libellé « Wallet » restant ; ordre des specs Musique ; un `ECONNRESET` isolé non reproduit) |
+| Fusion             | **refusée par le garde-fou automatique** (« Merge Without Review ») : non contournée                                                   |
+| Déploiement Core   | **non fait** : exige le commit sur `main` avec sa CI verte                                                                             |
+| Bot                | rien à faire                                                                                                                           |
+| Release Studio     | **non faite** : règle du projet (jamais une version non validée par Antoni) ; non indispensable au Core                                |
+| ZIP extension      | **non construit** : la ligne « Validé par Antoni : oui » manque dans `INVENTAIRE-458e3581c96a.md` (par construction)                   |
+| Sauvegardes        | aucune opération Production → aucune utilisée ; base sauvegardée par Coolify le 11/11 04:00 UTC                                        |
+
+Gestes d'Antoni, dans l'ordre (chacun sur son GO) :
+
+1. Recette Lab : [RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md) (`Ouvrir Music Hub (Lab).cmd`).
+2. Fusionner la PR #64 sur GitHub (bouton « Merge pull request »), attendre la CI de `main`.
+3. Core : `node scripts/coolify-deploy.mjs plan core <sha40 de main>` (PRÊT attendu, aucune migration), puis
+   `deploy core <sha40> --go` hors live, ou le workflow GitHub « Déployer Core / bot ». Vérifier `status core`.
+   Retour : `deploy core bbce1048a0783cc1bdbb9a2ca86fb1769ce01872 --rollback --go`.
+4. Petit test réel : `!addpoints @un_viewer 1 test` puis `!removepoints @un_viewer 1` ; Studio 0.1.29 ouvre toujours sa
+   modération sans erreur.
+5. Extension : ajouter « Validé par Antoni : oui » en fin d'inventaire, `npm run package:production -- --shell v2` dans
+   `apps/twitch-extension`, téléverser en Hosted Test ; retour : ZIP `bbce1048a078`.
+6. Studio : `npm run studio:release` après validation (achats Musique dans la modération native).
 
 ## D. Travail réalisé (détail : [RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md))
 

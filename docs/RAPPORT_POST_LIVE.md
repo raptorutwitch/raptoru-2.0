@@ -61,7 +61,7 @@ Recette manuelle : [RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSIO
 
 ## 4. Livraison
 
-Voir [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md) § B–C pour l'état final
+Voir [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md) § B–C2 pour l'état final
 vérifié (PR, CI, fusion, déploiements) et les gestes restants.
 
 ## 5. Décisions laissées à Antoni
