@@ -25,7 +25,10 @@ const labCore = async (path: string, body?: unknown) => {
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return { status: r.status, body: (await r.json()) as Record<string, unknown> };
+  return {
+    status: r.status,
+    body: (await r.json()) as Record<string, unknown>,
+  };
 };
 const chatJoin = (id: string, name: string) =>
   labCore('/v1/lab/chat', {
@@ -140,9 +143,7 @@ test('six: six rows at every width and height, the last one reachable, both badg
     await expect(rows, `${width}×${height}`).toHaveCount(6, {
       timeout: 15_000,
     });
-    await expect(page.locator('.tmbx [data-slot="pcount"]')).toContainText(
-      '6',
-    );
+    await expect(page.locator('.tmbx [data-slot="pcount"]')).toContainText('6');
     await rows.last().scrollIntoViewIfNeeded();
     await expect(rows.last(), `${width}×${height}`).toBeInViewport();
     await expect(
