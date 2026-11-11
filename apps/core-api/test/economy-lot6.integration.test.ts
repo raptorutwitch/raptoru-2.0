@@ -107,7 +107,20 @@ describe.skipIf(!isLocal)(
           },
           source: 'simulator',
         } as Parameters<WalletAdminChat['chat']>[0]);
-      return { core, bonk, adjust, shoot, say };
+      // The historical `!wallet add` (bot route): the same adjustment, keyed by its message.
+      const legacy = (requestId: string, amount: number) =>
+        chat.legacy(CH, {
+          requestId,
+          actor: {
+            twitchUserId: CH,
+            login: 'raptoru_',
+            displayName: 'Raptoru_',
+          },
+          target: who(V),
+          op: 'add',
+          amount,
+        });
+      return { core, bonk, adjust, shoot, say, legacy };
     };
     const n = async (sql: string) =>
       Number(
@@ -183,10 +196,15 @@ describe.skipIf(!isLocal)(
         y.say('twitch-msg-rm-2', `!removepoints @v${V} 1000000`),
       ]);
       expect(await balance()).toBe(0);
+      await Promise.allSettled([
+        x.legacy('twitch-msg-wallet', 40),
+        y.legacy('twitch-msg-wallet', 40),
+      ]);
+      expect(await balance()).toBe(40);
       await ledgerAgrees();
       expect(
         await n("lab_moderation_audit where action = 'wallet_adjust'"),
-      ).toBe(2);
+      ).toBe(3);
     });
 
     it('the same moderation action from two Cores at once: one adjustment', async () => {

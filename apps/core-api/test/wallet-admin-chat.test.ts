@@ -348,3 +348,162 @@ describe('Portefeuille: « Trouver un viewer » (post-live 11/11)', () => {
     ).toHaveLength(1);
   });
 });
+
+describe('Portefeuille: one decision for every door (mission 11/11)', () => {
+  const legacyReq = (
+    actor: ReturnType<typeof who>,
+    op: 'add' | 'remove' | 'set',
+    amount: number,
+    requestId = `tw-${++n}`,
+  ) => ({
+    requestId,
+    actor: {
+      twitchUserId: actor.id,
+      login: actor.login,
+      displayName: actor.display_name,
+    },
+    target: {
+      twitchUserId: target.id,
+      login: target.login,
+      displayName: target.display_name,
+    },
+    op,
+    amount,
+  });
+
+  it('« broadcaster » by identity only: a claimed role that is not the streamer is a viewer', async () => {
+    const t = await lab();
+    const fake = who('900999', 'faux_streamer', 'broadcaster');
+    const out = await t.chat.chat(msg(fake, '!addpoints @aouh 500'));
+    expect(out.outcome).toBe('wallet_forbidden');
+    expect(t.spy).not.toHaveBeenCalled();
+    expect(await t.tokens()).toBe(1_000);
+  });
+
+  it('rights withdrawn: a supermod removed, a grant revoked → refused at once', async () => {
+    const t = await lab();
+    const studio: LabActor = {
+      id: 'antoni',
+      role: 'broadcaster',
+      via: 'studio',
+    };
+    await t.m.act(CH, {
+      actor: studio,
+      command: { action: 'set_staff', viewer_id: supermod.id, role: null },
+    });
+    await t.m.act(CH, {
+      actor: studio,
+      command: {
+        action: 'set_permission',
+        viewer_id: granted.id,
+        permission: 'wallet',
+        granted: false,
+      },
+    });
+    for (const c of [supermod, granted])
+      expect((await t.chat.chat(msg(c, '!addpoints @aouh 5'))).outcome).toBe(
+        'wallet_forbidden',
+      );
+    expect(await t.tokens()).toBe(1_000);
+  });
+
+  it('a viewer never seen: credited on his Twitch account, filed under his real login (not his id)', async () => {
+    const fresh = {
+      id: '900777',
+      login: 'nouveau_venu',
+      display_name: 'Nouveau_Venu',
+    };
+    const t = await lab(async (login) =>
+      login === fresh.login ? fresh : null,
+    );
+    const out = await t.chat.chat(
+      msg(broadcaster, '!addpoints @nouveau_venu 300'),
+    );
+    expect(out.outcome).toBe('wallet_credited');
+    // The Lab wallet opens a new viewer with its test balance: +300 on top of it.
+    expect((await t.replies()).at(-1)).toContain(
+      '300 Jetons crédités à @Nouveau_Venu',
+    );
+    expect(await t.tokens(fresh.id)).toBe(12_300);
+    const row = await t.core.db.query<{ login: string; display_name: string }>(
+      'select login, display_name from viewers where twitch_user_id = $1',
+      [fresh.id],
+    );
+    expect(row[0]).toEqual({
+      login: 'nouveau_venu',
+      display_name: 'Nouveau_Venu',
+    });
+  });
+
+  it('Core failing mid-way: an error, never a false « crédité »', async () => {
+    const t = await lab();
+    const broken = new WalletAdminChat(
+      t.core.db,
+      t.core.clock,
+      { act: async () => Promise.reject(new Error('db down')) },
+      async () => target,
+    );
+    await expect(
+      broken.chat(msg(broadcaster, '!addpoints @aouh 5')),
+    ).rejects.toThrow('db down');
+    expect(await t.replies()).toEqual([]);
+  });
+
+  it('!wallet add|remove (historical syntax) = the same decision: team and grant, self refused, once per message', async () => {
+    const t = await lab();
+    const r1 = await t.chat.legacy(CH, legacyReq(supermod, 'add', 200, 'w-1'));
+    expect(r1.message).toContain('200 Jetons crédités à @Aouh');
+    // Redelivered: nothing more.
+    await t.chat.legacy(CH, legacyReq(supermod, 'add', 200, 'w-1'));
+    expect(await t.tokens()).toBe(1_200);
+    expect(
+      (await t.chat.legacy(CH, legacyReq(granted, 'remove', 50))).message,
+    ).toContain('50 Jetons retirés');
+    // A plain moderator, someone outside the team: the badge-less route reads the team only.
+    for (const c of [plainMod, viewer])
+      expect(
+        (await t.chat.legacy(CH, legacyReq(c, 'add', 5))).message,
+      ).toContain('permission « Portefeuille » requise');
+    // Over the cap, zero: nothing.
+    expect(
+      (await t.chat.legacy(CH, legacyReq(supermod, 'add', 2_000_000))).message,
+    ).toContain('au plus par commande');
+    expect(
+      (await t.chat.legacy(CH, legacyReq(supermod, 'add', 0))).message,
+    ).toContain('usage');
+    // set never goes through here (wallet/chat.ts keeps it for the broadcaster).
+    expect(
+      (await t.chat.legacy(CH, legacyReq(broadcaster, 'set', 5))).message,
+    ).toContain('usage');
+    expect(await t.tokens()).toBe(1_150);
+    // Self: a supermod on his own wallet.
+    const self = await t.chat.legacy(CH, {
+      ...legacyReq(supermod, 'add', 5),
+      target: {
+        twitchUserId: supermod.id,
+        login: supermod.login,
+        displayName: supermod.login,
+      },
+    });
+    expect(self.message).toContain('ton propre portefeuille');
+    const audit = await t.audit();
+    expect(audit.map((a) => a.actor)).toEqual([supermod.login, granted.login]);
+  });
+
+  it('!wallet itself (bot route): set for the broadcaster only, add / remove handed to the moderation', async () => {
+    const t = await lab();
+    const w = t.core.wallet.chat;
+    w.moderation = {
+      legacy: (r) => t.chat.legacy(CH, r),
+      isBroadcaster: (id) => t.chat.isBroadcaster(CH, id),
+    };
+    expect((await w.admin(legacyReq(supermod, 'set', 5))).message).toContain(
+      'réservé au streamer',
+    );
+    const set = await w.admin(legacyReq(broadcaster, 'set', 777));
+    expect(set.result?.status).toBe('applied');
+    const add = await w.admin(legacyReq(supermod, 'add', 5));
+    expect(add.message).toContain('5 Jetons crédités à @Aouh');
+    expect(add.result).toBeNull();
+  });
+});

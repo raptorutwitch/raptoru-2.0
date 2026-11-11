@@ -1,7 +1,12 @@
-import type { LabChatMessage } from '@raptoru/schemas';
+import type {
+  LabChatMessage,
+  WalletChatAdminRequest,
+  WalletChatResponse,
+} from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db } from '../db/db.js';
+import { chatRole, type BroadcasterOf } from '../lab-chat/broadcaster.js';
 import type { LoginLookup } from '../mini-games/twitch-login.js';
 import { LabForbiddenError, LabWalletError } from '../lab-moderation/store.js';
 import type {
@@ -23,7 +28,10 @@ import type {
 //   what is there and says how much);
 // - once per Twitch message (the message id is the idempotency key: a redelivered message changes nothing);
 // - audited (actor, role, reason, before / after, ledger line), like every moderation action.
-// The previous `!wallet add|remove|set` (bot, `staff_roles`) is unchanged — see the commands inventory.
+// « broadcaster » is granted by identity only (lab-chat/broadcaster.ts), never by a badge; a moderator's badge alone gives
+// nothing here: Core then reads the team (lab_staff: supermod, or the « Portefeuille » grant).
+// The historical `!wallet add|remove|set` (bot → /v1/bot/wallet/admin) comes here too (`legacy`): add / remove are the
+// same `wallet_adjust`; `set` stays the Wallet's atomic set, for the broadcaster only (wallet/chat.ts).
 
 export { ADMIN_WALLET_WORDS } from '../commands/reserved.js';
 const ADD = new Set(['!addpoints', '!crediter']);
@@ -85,7 +93,56 @@ export class WalletAdminChat {
     private readonly moderation: Pick<LabModerationService, 'act'>,
     /** Exact login → Twitch account (Helix). Null: only a single viewer already known by that login. */
     private readonly lookup: LoginLookup | null,
+    /** The channel's real Twitch broadcaster (absent: the channel id itself, like every chat module). */
+    private readonly broadcasterOf?: BroadcasterOf,
   ) {}
+
+  /** The streamer of this channel, by identity. */
+  isBroadcaster(channelId: string, userId: string): boolean {
+    return (this.broadcasterOf?.(channelId) ?? channelId) === userId;
+  }
+
+  /**
+   * `!wallet add|remove @x N [motif]` (historical syntax, bot → /v1/bot/wallet/admin): the target was resolved by the bot
+   * (real @mention or exact Helix login). The route carries no badge: the broadcaster by identity, anyone else is read
+   * from the team (supermod, or a moderator granted « Portefeuille ») — removing someone from the team revokes it.
+   */
+  async legacy(
+    channelId: string,
+    req: WalletChatAdminRequest,
+  ): Promise<WalletChatResponse> {
+    const say = (body: string) => ({
+      message: `@${req.actor.displayName} - ${body}`,
+      result: null,
+    });
+    if (req.op === 'set' || req.amount < 1)
+      return say('usage : !wallet add|remove @pseudo montant [motif]');
+    if (req.amount > CHAT_ADJUST_MAX)
+      return say(
+        `${fmt(CHAT_ADJUST_MAX)} Jetons au plus par commande · rien n’a été fait.`,
+      );
+    const out = await this.apply(
+      channelId,
+      {
+        id: req.actor.twitchUserId,
+        login: req.actor.login,
+        display_name: req.actor.displayName,
+        role: this.isBroadcaster(channelId, req.actor.twitchUserId)
+          ? 'broadcaster'
+          : 'moderator',
+      },
+      {
+        id: req.target.twitchUserId,
+        login: req.target.login,
+        name: req.target.displayName,
+      },
+      req.op === 'add' ? 1 : -1,
+      req.amount,
+      req.reason,
+      `chat-wallet:${req.requestId}`,
+    );
+    return say(out.text);
+  }
 
   async chat(
     msg: LabChatMessage,
@@ -111,8 +168,15 @@ export class WalletAdminChat {
       );
       return { outcome };
     };
+    // The streamer by identity only; a claimed « broadcaster » that is not him is a viewer (lab-chat/broadcaster.ts).
+    const role = chatRole(
+      msg.channel_id,
+      author,
+      this.broadcasterOf,
+      msg.source === 'simulator' ? 'simulator' : 'twitch',
+    );
     // A viewer never gets this far: refused without asking Twitch anything (Core re-checks the permission anyway).
-    if (author.role === 'viewer')
+    if (role === 'viewer')
       return reply(
         'wallet_forbidden',
         'commande réservée à l’équipe de modération.',
@@ -143,65 +207,96 @@ export class WalletAdminChat {
         'wallet_ambiguous',
         `plusieurs comptes connus pour « ${cmd.login} » · rien n’a été fait.`,
       );
+    const out = await this.apply(
+      msg.channel_id,
+      { ...author, role },
+      { ...target, login: cmd.login },
+      cmd.sign,
+      cmd.amount,
+      cmd.reason,
+      `chat:${msg.message_id}`,
+    );
+    return reply(out.outcome, out.text);
+  }
 
+  /** The one adjustment of both syntaxes: the moderation's `wallet_adjust`, its rules, its audit, its key. */
+  private async apply(
+    channelId: string,
+    actor: {
+      id: string;
+      login: string;
+      display_name: string;
+      role: 'broadcaster' | 'moderator' | 'viewer';
+    },
+    target: { id: string; login: string; name: string },
+    sign: 1 | -1,
+    amount: number,
+    reason: string | undefined,
+    key: string,
+  ): Promise<{ outcome: string; text: string }> {
+    // A viewer never seen by the Wallet gets his real name in the directory (else the Wallet would file him under his
+    // numeric id). Never overwrites a known row.
+    await this.db
+      .query(
+        `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3)
+         on conflict (twitch_user_id) do nothing`,
+        [target.id, target.login, target.name],
+      )
+      .catch(() => undefined);
     try {
-      const out = (await this.moderation.act(msg.channel_id, {
-        actor: {
-          id: author.id,
-          login: author.login,
-          display_name: author.display_name,
-          role: author.role,
-          via: 'chat',
-        },
+      const out = (await this.moderation.act(channelId, {
+        actor: { ...actor, via: 'chat' },
         command: {
           action: 'wallet_adjust',
           viewer_id: target.id,
           currency: 'tokens',
-          delta: cmd.sign * cmd.amount,
-          reason: cmd.reason ?? 'commande chat',
+          delta: sign * amount,
+          reason: reason ?? 'commande chat',
         },
-        idempotency_key: `chat:${msg.message_id}`,
+        idempotency_key: key,
       })) as { applied: number; wallet?: { tokens?: number } | null };
       const applied = Math.abs(Number(out.applied));
       const balance = Number(out.wallet?.tokens ?? NaN);
       const after = Number.isFinite(balance)
         ? ` (solde : ${fmt(balance)})`
         : '';
-      const partial =
-        applied < cmd.amount ? ` sur ${fmt(cmd.amount)} demandés` : '';
-      return reply(
-        cmd.sign > 0 ? 'wallet_credited' : 'wallet_debited',
-        cmd.sign > 0
-          ? `${fmt(applied)} Jetons crédités à @${target.name}${partial}${after}.`
-          : `${fmt(applied)} Jetons retirés à @${target.name}${partial}${after}.`,
-      );
+      const partial = applied < amount ? ` sur ${fmt(amount)} demandés` : '';
+      return sign > 0
+        ? {
+            outcome: 'wallet_credited',
+            text: `${fmt(applied)} Jetons crédités à @${target.name}${partial}${after}.`,
+          }
+        : {
+            outcome: 'wallet_debited',
+            text: `${fmt(applied)} Jetons retirés à @${target.name}${partial}${after}.`,
+          };
     } catch (e) {
       if (e instanceof LabForbiddenError)
-        return reply(
-          'wallet_forbidden',
-          'permission « Portefeuille » requise.',
-        );
+        return {
+          outcome: 'wallet_forbidden',
+          text: 'permission « Portefeuille » requise.',
+        };
       const code = (e as Partial<LabModerationError>).code;
       if (code === 'self_adjust_forbidden')
-        return reply(
-          'wallet_self',
-          'impossible de modifier ton propre portefeuille.',
-        );
+        return {
+          outcome: 'wallet_self',
+          text: 'impossible de modifier ton propre portefeuille.',
+        };
       if (code === 'nothing_to_debit')
-        return reply(
-          'wallet_nothing',
-          `le solde de @${target.name} est déjà à 0 · rien n’a été retiré.`,
-        );
+        return {
+          outcome: 'wallet_nothing',
+          text: `le solde de @${target.name} est déjà à 0 · rien n’a été retiré.`,
+        };
       if (code === 'wallet_full')
-        return reply(
-          'wallet_full',
-          `le solde de @${target.name} est au maximum · rien n’a été crédité.`,
-        );
+        return {
+          outcome: 'wallet_full',
+          text: `le solde de @${target.name} est au maximum · rien n’a été crédité.`,
+        };
       if (e instanceof LabWalletError)
-        return reply(
-          'wallet_unavailable',
-          'Portefeuille momentanément indisponible · rien n’a été fait.',
-        );
+        return {
+          outcome: 'wallet_unavailable',
+          text: 'Portefeuille momentanément indisponible · rien n’a été fait.',
+        };
       throw e;
     }
   }

@@ -102,6 +102,11 @@ export function createPublicFrontier(
     moderation,
     core.chat.loginLookup,
   );
+  // The historical `!wallet add|remove|set` (bot): the same decision and the same adjustment (wallet/chat.ts).
+  core.wallet.chat.moderation = {
+    legacy: (req) => walletAdmin.legacy(channelId, req),
+    isBroadcaster: (id) => walletAdmin.isBroadcaster(channelId, id),
+  };
   const walletAdminModule = {
     name: 'wallet_admin',
     chat: (m: Parameters<WalletAdminChat['chat']>[0]) => walletAdmin.chat(m),

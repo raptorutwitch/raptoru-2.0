@@ -162,8 +162,10 @@ export function labModerationRoutes(
       method: 'GET',
       pattern: /^\/v1\/lab\/moderation\/([^/]+)\/viewers\/([^/]+)$/,
       auth: 'studio',
-      handle: read((c, _url, params) =>
-        mod.viewer(c, parse(Digits, params[1])),
+      handle: read((c, url, params) =>
+        mod.viewer(c, parse(Digits, params[1]), {
+          music: url.searchParams.get('music') === '1',
+        }),
       ),
     },
     {
@@ -179,6 +181,7 @@ export function labModerationRoutes(
           period: url.searchParams.get('period'),
           before: url.searchParams.get('before'),
           limit: limitParam(url, 60, 200),
+          music: url.searchParams.get('music') === '1',
         }),
       ),
     },
@@ -187,9 +190,13 @@ export function labModerationRoutes(
       pattern:
         /^\/v1\/lab\/moderation\/([^/]+)\/interactions\/([0-9a-f-]{36})$/,
       auth: 'studio',
-      handle: read(async (c, _url, params) => {
+      handle: read(async (c, url, params) => {
         const found = await mod.interaction(c, params[1]!);
-        if (!found)
+        // A Music Hub purchase only for a client that knows the module (post-live 11/11): an older one gets « not found ».
+        if (
+          !found ||
+          (found.module === 'music' && url.searchParams.get('music') !== '1')
+        )
           throw new HttpError(404, { error: 'interaction_not_found' });
         return found;
       }),

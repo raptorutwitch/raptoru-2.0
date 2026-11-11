@@ -1077,6 +1077,20 @@ describe('Music Hub in the moderation (post-live 11/11): the history and the man
     return { h, m, r1, r2, r3, plain, sup, refund };
   }
 
+  it('only a client that knows them gets them: the extension and Studio of before see the history as it was', async () => {
+    const t = await modded();
+    const mods = async (o: { music?: boolean }) =>
+      new Set((await t.m.interactions(CH, o)).items.map((i) => i.module));
+    expect((await mods({})).has('music')).toBe(false);
+    expect((await mods({ music: true })).has('music')).toBe(true);
+    const card = (o: { music?: boolean }) =>
+      t.m
+        .viewer(CH, viewer(1).id, o)
+        .then((c) => c.activity.map((i) => i.module));
+    expect(await card({})).not.toContain('music');
+    expect(await card({ music: true })).toContain('music');
+  });
+
   it('every Jetons purchase is in the history: its viewer, its track, what was debited, refunded or not', async () => {
     const t = await modded();
     const { items } = await t.m.interactions(CH, { module: 'music' });

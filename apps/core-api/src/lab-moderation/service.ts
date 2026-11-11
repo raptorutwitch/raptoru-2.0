@@ -926,7 +926,12 @@ export class LabModerationService {
   }
 
   /** Viewer card (D4 fiche): identity, role, Lab wallet, restrictions, activity, notes, ledger. */
-  async viewer(channelId: string, viewerId: string) {
+  /** `music`: include the Music Hub purchases (only clients that know the `music` module ask — post-live 11/11). */
+  async viewer(
+    channelId: string,
+    viewerId: string,
+    o: { music?: boolean } = {},
+  ) {
     const now = this.clock.now();
     const since = this.streamStart(now);
     const [wallet, restr, dir, role, activity, today, notes, ledger, history] =
@@ -942,7 +947,11 @@ export class LabModerationService {
           [channelId, viewerId],
         ),
         this.roleOf(this.db, channelId, viewerId),
-        this.interactions(channelId, { viewer: viewerId, limit: 12 }),
+        this.interactions(channelId, {
+          viewer: viewerId,
+          limit: 12,
+          music: o.music,
+        }),
         this.db.query<{ n: string | number }>(
           `select count(*) as n from ${INTERACTIONS} where channel_id = $1 and viewer_id = $2 and created_at >= $3`,
           [channelId, viewerId, since],
@@ -1038,6 +1047,11 @@ export class LabModerationService {
       period?: string | null;
       before?: string | null;
       limit?: number;
+      /**
+       * Music Hub purchases (module `music`, post-live 11/11): only for a client that knows them — the extension and
+       * Studio of before would not render an unknown module. Absent = the history as it was.
+       */
+      music?: boolean;
     } = {},
   ) {
     const now = this.clock.now();
@@ -1054,6 +1068,7 @@ export class LabModerationService {
        where ($2::text is null or module = $2) and ($3::text is null or status_key = $3)
          and ($4::text is null or viewer_id = $4) and ($5::text is null or viewer_display_name ilike $5)
          and ($6::timestamptz is null or created_at >= $6) and ($7::timestamptz is null or created_at < $7)
+         and ($9::boolean or module <> 'music')
        order by created_at desc limit $8`,
       [
         channelId,
@@ -1064,6 +1079,7 @@ export class LabModerationService {
         since,
         f.before ? new Date(f.before) : null,
         limit + 1,
+        f.music === true || f.module === 'music',
       ],
     );
     const items = rows.slice(0, limit).map(interactionView);

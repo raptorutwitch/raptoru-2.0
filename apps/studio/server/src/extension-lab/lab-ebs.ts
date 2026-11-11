@@ -575,7 +575,7 @@ export class LabEbs {
       if (method === 'GET' && path === '/moderation/v2/interactions')
         return this.ok(
           await core<Json>(
-            `/v1/lab/moderation/${C}/interactions?${as}&${pass(['module', 'status', 'viewer', 'q', 'period', 'before', 'limit'])}`,
+            `/v1/lab/moderation/${C}/interactions?${as}&${pass(['module', 'status', 'viewer', 'q', 'period', 'before', 'limit', 'music'])}`,
           ),
         );
       if (
@@ -584,7 +584,7 @@ export class LabEbs {
       )
         return this.ok(
           await core<Json>(
-            `/v1/lab/moderation/${C}/interactions/${m[1]}?${as}`,
+            `/v1/lab/moderation/${C}/interactions/${m[1]}?${as}&${pass(['music'])}`,
           ),
         );
       if (method === 'GET' && path === '/moderation/v2/ledger')
@@ -619,7 +619,9 @@ export class LabEbs {
         (m = /^\/moderation\/v2\/viewers\/(\d{1,32})$/.exec(path))
       )
         return this.ok(
-          await core<Json>(`/v1/lab/moderation/${C}/viewers/${m[1]}?${as}`),
+          await core<Json>(
+            `/v1/lab/moderation/${C}/viewers/${m[1]}?${as}&${pass(['music'])}`,
+          ),
         );
       if (method === 'GET' && path === '/moderation/v2/restrictions')
         return this.ok(

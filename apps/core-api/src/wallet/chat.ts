@@ -19,6 +19,16 @@ export class WalletChat {
    */
   balanceExtra: ((viewerId: string) => Promise<string | null>) | null = null;
 
+  /**
+   * Post-live 11/11: who may `!wallet` is the moderation's decision (D4 « Portefeuille », ext/public-frontier.ts), no
+   * longer the historical `staff_roles`. add / remove = the moderation's `wallet_adjust` (wallet/admin-chat.ts);
+   * `set` (an absolute balance) = the broadcaster only. Null (a Core without the moderation): `staff_roles`.
+   */
+  moderation: {
+    legacy(req: WalletChatAdminRequest): Promise<WalletChatResponse>;
+    isBroadcaster(userId: string): boolean;
+  } | null = null;
+
   constructor(
     private readonly wallet: WalletService,
     private readonly currencies: CurrencyService,
@@ -90,7 +100,16 @@ export class WalletChat {
   }
 
   async admin(req: WalletChatAdminRequest): Promise<WalletChatResponse> {
-    if (!(await this.staff.canAdministerEconomy(req.actor.twitchUserId))) {
+    if (this.moderation) {
+      if (req.op !== 'set') return this.moderation.legacy(req);
+      if (!this.moderation.isBroadcaster(req.actor.twitchUserId))
+        return {
+          message: `@${req.actor.displayName} - !wallet set est réservé au streamer (utilise !addpoints / !removepoints).`,
+          result: null,
+        };
+    } else if (
+      !(await this.staff.canAdministerEconomy(req.actor.twitchUserId))
+    ) {
       return {
         message: walletMessages.notAuthorized(req.actor.displayName),
         result: null,

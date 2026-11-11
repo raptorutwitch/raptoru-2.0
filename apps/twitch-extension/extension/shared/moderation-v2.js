@@ -60,6 +60,17 @@ const MODS = {
   music: { label: 'Musique', c: 'var(--accent)', unit: 'demande', units: 'demandes' },
 };
 const MOD_KEYS = ['tts', 'soundboard', 'bonk', 'raffle'];
+/** Music Hub: why a request ended (spotify_requests.reason); an unknown code shows nothing. */
+const MUSIC_REASON = {
+  VIEWER_CANCEL: 'Annulée par le viewer',
+  MOD_REMOVE: 'Retirée par la modération',
+  STREAM_ENDED: 'Fin du live',
+  STUDIO_UNAVAILABLE: 'Studio indisponible',
+  STUDIO_LOST: 'Studio perdu pendant la demande',
+  SPOTIFY_UNAVAILABLE: 'Spotify indisponible',
+  QUEUE_RESULT_UNKNOWN: 'Ajout à la file non confirmé par Spotify',
+  SETTLED_REFUND: 'Remboursée automatiquement',
+};
 const SCOPE = { all: 'Tout Raptoru', ...Object.fromEntries(MOD_KEYS.map((m) => [m, MODS[m].label])), music: MODS.music.label };
 const STATE = { active: 'Actif', paused: 'En pause', disabled: 'Désactivé' };
 const STATUS = {
@@ -184,7 +195,8 @@ const ago = (iso) => {
   const d = agoSecs(iso);
   return d < 60 ? `il y a ${d} s` : d < 3600 ? `il y a ${Math.floor(d / 60)} min` : `il y a ${Math.floor(d / 3600)} h`;
 };
-const money = (i) => (Number(i.simulated_cost ?? i.cost) === 0 && i.module === 'raffle' ? 'gratuit' : `${fmt(i.simulated_cost ?? i.cost)} ${i.payment_method === 'credits' ? 'cr' : 'J'}`);
+// A Music request at 0 Jetons: Open Bar (never a purchase, never refundable).
+const money = (i) => (Number(i.simulated_cost ?? i.cost) === 0 && (i.module === 'raffle' || i.module === 'music') ? 'gratuit' : `${fmt(i.simulated_cost ?? i.cost)} ${i.payment_method === 'credits' ? 'cr' : 'J'}`);
 const CUR = { tokens: 'J', credits_tts: 'cr TTS', credits_soundboard: 'cr Sons' };
 const signed = (e) => `${Number(e.amount) > 0 ? '+' : '−'} ${fmt(Math.abs(Number(e.amount)))} ${CUR[e.currency] ?? e.currency}`;
 const hue = (id) => [...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -359,7 +371,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
   async function loadViewer(id) {
     try {
-      const card = await client.modV2(`viewers/${id}`);
+      // `music=1`: this client knows the Music Hub purchases (post-live 11/11); older ones never receive them.
+      const card = await client.modV2(`viewers/${id}?music=1`);
       if (destroyed) return;
       cards.set(id, card);
       for (const e of card.wallet_ledger ?? []) ledgerById.set(String(e.id), e);
@@ -370,7 +383,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   }
   async function loadDetail(id) {
     try {
-      const d = await client.modV2(`interactions/${id}`);
+      const d = await client.modV2(`interactions/${id}?music=1`);
       if (destroyed) return;
       details.set(id, d);
       render();
@@ -434,7 +447,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       } else {
         const before = more ? hist?.items?.at(-1)?.created_at : null;
         out = await client.modV2(
-          `interactions?${q({ module: f.module === 'all' ? null : f.module, status: f.status === 'all' ? null : f.status, period: f.period === 'all' ? 'stream' : f.period, viewer: vid, q: vid ? null : f.viewer.trim(), before, limit: 60 })}`,
+          `interactions?${q({ module: f.module === 'all' ? null : f.module, status: f.status === 'all' ? null : f.status, period: f.period === 'all' ? 'stream' : f.period, viewer: vid, q: vid ? null : f.viewer.trim(), before, limit: 60, music: 1 })}`,
         );
       }
       if (destroyed) return;
@@ -1320,6 +1333,9 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     if (i.review_status === 'allowed' && i.reviewed_by) b += `<p class="fine">Laissée passer par ${esc(actorName(i.reviewed_by))}.</p>`;
     const text = i.message ?? (i.module === 'tts' ? i.detail : null);
     if (text) b += `<blockquote class="itext">${hits.length ? marked(text, hits) : esc(text)}</blockquote>`;
+    // Music Hub: Spotify's own reason when the request was refused or failed (« introuvable », « déjà en file »…).
+    const why = i.module === 'music' && i.status !== 'completed' ? MUSIC_REASON[i.music_reason] : null;
+    if (why) b += `<div class="watchline">${ic('info')}<span>${why}</span></div>`;
     const error = i.error?.code ?? null;
     if (error && !['cancelled_by_moderator', 'stopped_by_moderator', 'purged_by_moderator'].includes(error))
       b += `<div class="watchline watchline--err">${ic('info')}<span>${esc(i.error?.message ?? error)} · ${i.refund_status === 'refunded' ? 'remboursé automatiquement' : 'non remboursé'}</span></div>`;
@@ -1334,7 +1350,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     b += `<div class="vact">${hits.length ? `<button class="btn btn--ok" data-act="allow" data-id="${esc(i.interaction_id)}">${ic('check')}Laisser passer</button>` : ''}
       ${live && i.module !== 'raffle' && i.module !== 'bonk' ? `<button class="btn" data-act="item-menu" data-id="${esc(i.interaction_id)}">${ic(isPlaying(i) ? 'stop' : 'trash')}${isPlaying(i) ? 'Stop' : 'Retirer'}${ic('down')}</button>` : ''}
       ${refundable ? `<button class="btn" data-act="${has('wallet') ? 'refund' : 'locked'}" data-perm="wallet" data-id="${esc(i.interaction_id)}" data-m="${i.module}">${ic(has('wallet') ? 'refund' : 'lock')}Rembourser</button>` : ''}
-      <button class="btn" data-act="quick-block" data-v="${esc(i.viewer_id)}" data-m="${i.module}">${ic('ban')}Bloquer${ic('down')}</button></div>`;
+      ${i.module === 'music' ? '' : `<button class="btn" data-act="quick-block" data-v="${esc(i.viewer_id)}" data-m="${i.module}">${ic('ban')}Bloquer${ic('down')}</button>`}</div>`;
     b += `<details class="acc" data-key="tech-${esc(id)}"><summary>Détails techniques</summary><div class="acc__body"><dl class="kv"><dt>module</dt><dd>${esc(i.module)}</dd><dt>status</dt><dd>${esc(i.status)}</dd>
       <dt>cost</dt><dd>${esc(i.simulated_cost ?? i.cost)}</dd><dt>currency</dt><dd>${esc(i.payment_method)}</dd><dt>created_at</dt><dd>${esc(i.created_at)}</dd>
       <dt>completed_at</dt><dd>${esc(i.completed_at ?? i.delivery?.completed_at ?? '—')}</dd><dt>error</dt><dd>${esc(error ?? '—')}</dd>${i.stopped_at ? `<dt>stopped_at</dt><dd>${esc(i.stopped_at)}</dd>` : ''}<dt>reference_id</dt><dd>${esc(i.interaction_id)}</dd><dt>viewer_id</dt><dd>${esc(i.viewer_id)}</dd></dl></div></details>`;

@@ -346,7 +346,7 @@ export function learnMissing(ids: (string | null)[], then: () => void) {
   if (!missing.length) return;
   void Promise.all(
     missing.slice(0, 12).map((id) =>
-      modGet<Card>(`viewers/${id}`).then(
+      modGet<Card>(`viewers/${id}?music=1`).then(
         (c) => names.set(id, c.display_name),
         () => names.set(id, id),
       ),
@@ -994,9 +994,9 @@ function itemFoot(i: ModItem, m: ModModule) {
   const live = isLive(i);
   const p = isPlaying(i);
   return `${pending(i) ? `<button type="button" class="d-btn pri sm" data-allow>${ic('check')}Laisser passer</button>` : ''}
-    ${live && m !== 'raffle' && m !== 'bonk' ? `<button type="button" class="d-btn sm" data-rm="1">${ic('refund')}${p ? 'Couper et rembourser' : 'Retirer et rembourser'}</button><button type="button" class="d-btn bad sm" data-rm="0">${ic(p ? 'stop' : 'trash')}${p ? 'Couper sans rembourser' : 'Retirer sans rembourser'}</button>` : ''}
+    ${live && m !== 'raffle' && m !== 'bonk' && m !== 'music' ? `<button type="button" class="d-btn sm" data-rm="1">${ic('refund')}${p ? 'Couper et rembourser' : 'Retirer et rembourser'}</button><button type="button" class="d-btn bad sm" data-rm="0">${ic(p ? 'stop' : 'trash')}${p ? 'Couper sans rembourser' : 'Retirer sans rembourser'}</button>` : ''}
     ${refundable(i, m) ? `<button type="button" class="d-btn sm" data-refund>${ic('refund')}Rembourser</button>` : ''}
-    <button type="button" class="d-btn ghost sm" data-block>${ic('ban')}Bloquer${ic('down')}</button>`;
+    ${m === 'music' ? '' : `<button type="button" class="d-btn ghost sm" data-block>${ic('ban')}Bloquer${ic('down')}</button>`}`;
 }
 
 let opened: { refresh(): void } | null = null;
@@ -1031,7 +1031,7 @@ export function openItem(
   paint();
   const reload = async () => {
     const full = await modGet<ModItem>(
-      `interactions/${i.interaction_id}`,
+      `interactions/${i.interaction_id}?music=1`,
     ).catch(() => null);
     if (full && s.isOpen()) {
       i = { ...i, ...full, module };
@@ -1080,7 +1080,7 @@ async function refundItem(
 /** Ouvrir une demande dont on n'a que la référence (un mouvement, une ligne d'audit). */
 export async function openItemId(id: string) {
   try {
-    const i = await modGet<ModItem>(`interactions/${id}`);
+    const i = await modGet<ModItem>(`interactions/${id}?music=1`);
     openItem(i, i.module ?? 'tts');
   } catch (e) {
     toast(modErr(e), { bad: true });
