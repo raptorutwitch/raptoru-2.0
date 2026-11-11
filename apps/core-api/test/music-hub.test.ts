@@ -999,3 +999,82 @@ describe('Spotify quota protection (docs/music/SPOTIFY_QUOTA.md) — the searche
     });
   });
 });
+
+describe('Music Hub in the moderation (post-live 11/11): the history and the manual refund', () => {
+  const ext = (id: string, role: 'moderator' | 'broadcaster', login: string) => ({
+    id,
+    login,
+    display_name: login,
+    role,
+    via: 'extension' as const,
+  });
+  async function modded() {
+    const h = await hub();
+    await h.spotify.saveSettings(CH, { max_pending_per_viewer: 5, viewer_cooldown_seconds: 0 }, 'test');
+    await h.fund(viewer(1), 5_000);
+    await h.search(viewer(1), 'titre');
+    await h.answerSearches([item(1), item(2), item(3)]);
+    const r1 = (await h.ask(viewer(1), 1)).request;
+    const r2 = (await h.ask(viewer(1), 2)).request;
+    const r3 = (await h.ask(viewer(1), 3)).request;
+    await h.runRequests();
+    // r1 withdrawn and refunded, r2 removed WITHOUT refund (kept), r3 still queued.
+    await h.spotify.extensionModerate(CH, MOD, { action: 'remove', request_id: r1.request_id, refund: true }, randomUUID());
+    await h.spotify.extensionModerate(CH, MOD, { action: 'remove', request_id: r2.request_id, refund: false }, randomUUID());
+    const { LabModerationService } = await import('../src/lab-moderation/service.js');
+    const m = new LabModerationService(
+      h.core.db, h.core.clock, h.core.ttsLab, h.core.soundLab, h.core.bonkLab, h.core.raffleLab,
+      h.core.economy, h.core.spotify,
+    );
+    const studio = { id: 'antoni', role: 'broadcaster' as const, via: 'studio' as const };
+    const plain = ext('900107', 'moderator', 'modo_b');
+    const sup = ext('900108', 'moderator', 'grobinou');
+    for (const x of [plain, sup]) await m.whoami(CH, x);
+    await m.act(CH, { actor: studio, command: { action: 'set_staff', viewer_id: sup.id, role: 'supermod' } });
+    const refund = (actor: typeof plain, id: string, reason?: string) =>
+      m.act(CH, {
+        actor,
+        command: { action: 'refund', module: 'music', interaction_id: id, ...(reason ? { reason } : {}) },
+        idempotency_key: randomUUID(),
+      });
+    return { h, m, r1, r2, r3, plain, sup, refund };
+  }
+
+  it('every Jetons purchase is in the history: its viewer, its track, what was debited, refunded or not', async () => {
+    const t = await modded();
+    const { items } = await t.m.interactions(CH, { module: 'music' });
+    expect(items).toHaveLength(3);
+    const by = (id: string) => items.find((i) => i.interaction_id === id)!;
+    expect(by(t.r1.request_id)).toMatchObject({
+      module: 'music', viewer_id: viewer(1).id, simulated_cost: 500, status: 'cancelled', refund_status: 'refunded',
+      status_key: 'refunded', detail: 'Titre de MUSICHUB00000000000001 — Artiste',
+    });
+    expect(by(t.r2.request_id)).toMatchObject({ status: 'cancelled', refund_status: 'none', status_key: 'cancelled' });
+    expect(by(t.r3.request_id)).toMatchObject({ status: 'queued', status_key: 'queued' });
+    const one = await t.m.interaction(CH, t.r2.request_id);
+    expect(one).toMatchObject({ music_state: 'REMOVED_BY_MOD', track_name: 'Titre de MUSICHUB00000000000002' });
+    expect(one!.movements.map((x) => x.kind)).toEqual(['debit']);
+  });
+
+  it('« Rembourser »: needs « Portefeuille »; a finished, kept purchase is given back ONCE; never a queued one', async () => {
+    const t = await modded();
+    expect(await t.h.balance(viewer(1))).toBe(4_000);
+    expect(await t.h.code(t.refund(t.plain, t.r2.request_id))).toMatch(/forbidden: refund\.manual/);
+    expect(await t.h.code(t.refund(t.sup, t.r3.request_id))).toBe('not_terminal');
+    expect(await t.h.code(t.refund(t.sup, t.r1.request_id))).toBe('already_refunded');
+    expect(await t.refund(t.sup, t.r2.request_id, 'retirée par erreur')).toMatchObject({ refunded: true, amount: 500 });
+    expect(await t.h.balance(viewer(1))).toBe(4_500);
+    expect(await t.h.code(t.refund(t.sup, t.r2.request_id))).toBe('already_refunded');
+    expect(await t.h.balance(viewer(1))).toBe(4_500);
+    const one = await t.m.interaction(CH, t.r2.request_id);
+    expect(one).toMatchObject({ refund_status: 'refunded', refunded_by: 'grobinou' });
+    expect(one!.movements.map((x) => x.kind)).toEqual(['debit', 'refund']);
+    expect(one!.actions).toMatchObject([{ action: 'refund', actor: 'grobinou', role: 'supermod' }]);
+  });
+
+  it('an unknown id refuses (never a credit without the original debit)', async () => {
+    const t = await modded();
+    expect(await t.h.code(t.refund(t.sup, randomUUID()))).toBe('interaction_not_found');
+    expect(await t.h.balance(viewer(1))).toBe(4_000);
+  });
+});

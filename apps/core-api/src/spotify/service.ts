@@ -749,6 +749,80 @@ export class SpotifyService {
   }
 
   /**
+   * Moderation « Rembourser » (post-live 11/11, D4 `refund.manual` — checked by the moderation before this): a FINISHED
+   * Jetons purchase of the music given back once, by hand, on a moderator's decision — a song request (its
+   * `request_id`) or a paid skip (its `activity_id`). Never a request still waiting or playing (remove it first: the
+   * removal refunds it), never twice, never without the original debit (the economy gives back exactly that debit, keyed
+   * by the interaction: a replay credits nothing more). A refunded skip stays in the skip series (its price was real):
+   * the refund is written on the activity, its status unchanged.
+   */
+  async moderationRefund(
+    q: Queryable,
+    channelId: string,
+    id: string,
+    actor: string,
+    reason: string | null,
+  ): Promise<
+    | { ok: true; amount: number; viewer_id: string; kind: 'request' | 'skip'; before: string }
+    | { ok: false; code: 'not_found' | 'not_terminal' | 'already_refunded' | 'nothing_to_refund' }
+  > {
+    if (!this.economy) return { ok: false, code: 'nothing_to_refund' };
+    const now = this.clock.now();
+    const why = (reason ?? 'remboursement modération').slice(0, 160);
+    const r = (
+      await q.query<RequestRow>(
+        'select * from spotify_requests where request_id::text = $1 and channel_id = $2 for update',
+        [id, channelId],
+      )
+    )[0];
+    if (r) {
+      if (r.payment !== 'tokens') return { ok: false, code: 'nothing_to_refund' };
+      if (['RECEIVED', 'SEARCHING', 'QUEUED', 'PLAYING'].includes(r.state))
+        return { ok: false, code: 'not_terminal' };
+      if (r.refund_status === 'refunded') return { ok: false, code: 'already_refunded' };
+      if (!r.price_tokens) return { ok: false, code: 'nothing_to_refund' };
+      const out = await this.economy.refund(q, now, r.request_id, actor.slice(0, 64), why);
+      if (!(out.amount > 0)) return { ok: false, code: 'nothing_to_refund' };
+      await this.update(q, r.request_id, {
+        refund_status: 'refunded',
+        refunded_at: now,
+        refunded_by: actor.slice(0, 64),
+      });
+      return { ok: true, amount: out.amount, viewer_id: r.viewer_id, kind: 'request', before: r.state };
+    }
+    const a = (
+      await q.query<{
+        activity_id: string;
+        viewer_id: string | null;
+        amount: number;
+        status: string;
+        result: Record<string, unknown> | null;
+      }>(
+        `select activity_id, viewer_id, amount, status, result from module_activity
+          where activity_id::text = $1 and channel_id = $2 and module_id = $3 for update`,
+        [id, channelId, SKIP_MODULE],
+      )
+    )[0];
+    if (!a) return { ok: false, code: 'not_found' };
+    if (a.status === 'queued') return { ok: false, code: 'not_terminal' };
+    if (a.status === 'refunded' || a.result?.refunded_at)
+      return { ok: false, code: 'already_refunded' };
+    if (!(Number(a.amount) > 0)) return { ok: false, code: 'nothing_to_refund' };
+    const out = await this.economy.refund(q, now, a.activity_id, actor.slice(0, 64), why);
+    if (!(out.amount > 0)) return { ok: false, code: 'nothing_to_refund' };
+    await q.query(
+      `update module_activity set result = coalesce(result, '{}'::jsonb) || $2::jsonb, updated_at = $3
+        where activity_id = $1`,
+      [
+        a.activity_id,
+        JSON.stringify({ refunded_at: now.toISOString(), refunded_by: actor.slice(0, 64), refund_reason: why }),
+        now,
+      ],
+    );
+    return { ok: true, amount: out.amount, viewer_id: a.viewer_id ?? '', kind: 'skip', before: a.status };
+  }
+
+  /**
    * Music Hub V2: a request withdrawn while Studio is still adding it. Refunded once now (Jetons or channel points);
    * not taken yet (RECEIVED) → its job is withdrawn too, Studio never adds it; being added (SEARCHING) → marked to be
    * skipped: if Spotify takes it anyway, Studio's report turns it into a tombstone (reportJob) skipped when it starts.
