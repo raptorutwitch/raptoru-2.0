@@ -48,9 +48,12 @@ Automatiques (aucun n'est une validation) :
   concurrents = un seul) ; suite d'intégration complète : voir § 4.
 - Extension : 132 unitaires. Studio serveur : 1 061 (passe du soir) + suites modération relancées.
 - E2E Lab (Chromium, vraie interface) : `tombola-participants` (0 → 1 → 6/7 → 29/30/31 → 120, liste complète, zoom 150 %,
-  318/400/565 px) ; `moderation-portefeuille` (lien, `@viewer`, crédit, cadenas modérateur, achat Musique remboursé une
-  fois, filtre Musique, supermod, recherche vide, Studio ouvre l'achat sans erreur) ; non-régression `music-hub`,
-  `music-final`, `music-roles`, `lifecycle`, `commands-public` : 10/10.
+  318/400/565 px) ; `moderation-portefeuille` (lien, `@viewer`, crédit, cadenas modérateur, supermod, recherche
+  vide) ; `music-moderation` (achat Musique remboursé une fois, filtre Musique, cadenas sans permission, Studio ouvre
+  l'achat sans erreur ; exécuté après `music-hub` / `music-live`, qui comptent les avis du viewer) ; non-régression
+  `music-hub`, `music-final`, `music-live`, `music-roles`, `lifecycle`, `commands-public`.
+- CI de la PR #64 : premier passage, un libellé « Wallet de test (Studio) » restant (corrigé) ; deuxième, les specs
+  Musique perturbées par l'ordre des fichiers (corrigé en séparant `music-moderation`) ; résultat final : rapport final.
 - typecheck Core / Studio ; eslint et Prettier sur les fichiers modifiés ; build Studio web.
 
 Non vérifiable ici : Production (Helix réel, vrais rôles, vrais Jetons), un vrai OBS, l'extension hébergée par Twitch.
