@@ -15,9 +15,8 @@ participants sur 6, les achats Spotify n'étaient ni visibles ni remboursables d
 Portefeuille (ex « Wallet admin ») avec recherche `@pseudo`, unifie toutes les portes économiques sur une seule
 décision, corrige le tutoriel de l'extension et documente toutes les commandes du chat.
 
-**Rien n'est en Production à l'heure de ce document** (voir § C) : tout est sur la PR #64. Ce qui attend Antoni :
-la recette manuelle dans le Lab, puis la fusion de la PR, le déploiement du Core, la ligne de validation de
-l'inventaire de l'extension (ZIP), et éventuellement la release Studio. Prochain grand chantier : Chaos V2 (lot 0).
+**Livré le 11/11** (§ C) : Core `052ab2ec` déployé, Studio 0.1.30 publié. Ce qui attend Antoni : installer
+Studio 0.1.30, la recette, la ligne de validation de l'inventaire puis le ZIP en Hosted Test. Prochain grand chantier : Chaos V2 (lot 0).
 
 ## B. État exact du code
 
@@ -41,32 +40,46 @@ git -C "C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\post-live" log --oneli
 gh pr view 64 --json state,mergedAt,mergeCommit,statusCheckRollup
 ```
 
-## C. Production (relevé du 11/11, 03:30 puis ~05:15 UTC, lecture seule : inchangée)
+## C. Production (relevé du 11/11 ~11:40 UTC, après la livraison)
 
-| Composant       | Version                                      | Note                                                          |
-| --------------- | -------------------------------------------- | ------------------------------------------------------------- |
-| Core            | `bbce104`, sain ; sauvegarde 11/11 04:00 UTC | `MUSIC_HUB_EXTENSION=on`, `ECONOMY_MODE=canonical`            |
-| Bot             | `900637f`, bail actif                        | aucun changement nécessaire pour cette passe                  |
-| Studio installé | 0.1.29 (`bbce104`)                           | compatible avec le nouveau Core (lignes Musique non envoyées) |
-| Extension       | Hosted Test : ZIP `bbce1048a078` (shell v2)  | publique : `0bf7907` présumée                                 |
-| Site            | `74f7542`                                    | non concerné                                                  |
-| Base            | aucune migration dans cette passe            |                                                               |
+| Composant       | Version                                               | Preuve                                                                                                                                                                             |
+| --------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core            | **`052ab2ec`** (fusion de la PR #64), sain            | `coolify-deploy.mjs deploy` : DÉPLOYÉ, déploiement `xtugwkjyb0f9mnrpy5bfz98e`, 125 s, `/health` `/ready` 200, le Core rapporte `052ab2ec`                                          |
+| Bot             | `900637f`, bail actif sur le nouveau Core             | `status bot` ; non redéployé (aucun fichier utile au bot modifié)                                                                                                                  |
+| Studio publié   | **0.1.30** (`052ab2ec`), public                       | workflow « Studio — construire / publier » run 43011771406 : « UPGRADE OK — 0.1.29 → 0.1.30 : 8 fichiers identiques à l'octet », publication + re-téléchargement anonyme identique |
+| Studio installé | 0.1.29 (`bbce104`)                                    | `build-info.json` ; **installation de 0.1.30 = Antoni**                                                                                                                            |
+| Extension       | Hosted Test : ZIP `bbce1048a078` (shell v2), inchangé | nouveau ZIP **non construit** (ligne de validation absente, § C2)                                                                                                                  |
+| Site            | `74f7542`                                             | `raptoru.fr/api/status`                                                                                                                                                            |
+| Base            | aucune migration ; sauvegarde Coolify 11/11 04:00 UTC | `status core`                                                                                                                                                                      |
 
-Ne jamais supposer qu'un déploiement a eu lieu parce que la PR est fusionnée : `node scripts/coolify-deploy.mjs status
-core` (avec `COOLIFY_URL=https://dashboard.raptoru.fr`).
+Retour arrière Core : `node scripts/coolify-deploy.mjs deploy core bbce1048a0783cc1bdbb9a2ca86fb1769ce01872 --rollback
+--go` (aucune migration à annuler). Studio : réinstaller 0.1.29 depuis les releases publiques.
 
-### C2. Livraison : ce qui est fait, ce qui attend Antoni
+### C2. Livraison du 11/11 (GO d'Antoni) : fait et restant
 
-| Étape              | État                                                                                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Push de la branche | fait                                                                                                                                                        |
-| PR #64 + CI        | 5 passages rouges corrigés : libellé « Wallet » ; ordre des specs Musique ; `ECONNRESET` isolé ; **Tombola « not attached »** (cause réelle corrigée, § C3) |
-| Fusion             | **refusée par le garde-fou automatique** (« Merge Without Review ») : non contournée                                                                        |
-| Déploiement Core   | **non fait** : exige le commit sur `main` avec sa CI verte                                                                                                  |
-| Bot                | rien à faire                                                                                                                                                |
-| Release Studio     | **non faite** : règle du projet (jamais une version non validée par Antoni) ; non indispensable au Core                                                     |
-| ZIP extension      | **non construit** : la ligne « Validé par Antoni : oui » manque dans `INVENTAIRE-bb8700814939.md` (par construction)                                        |
-| Sauvegardes        | aucune opération Production → aucune utilisée ; base sauvegardée par Coolify le 11/11 04:00 UTC                                                             |
+| Étape         | État                                                                                                                             |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| PR #64        | fusionnée par Antoni (11:04 UTC), commit de fusion `052ab2ec` = tête de la PR `6c4d922` ; CI de `main` verte (run 43008949938)   |
+| Core          | **déployé** `052ab2ec` (plan PRÊT, aucune migration, hors live, vérifications OK, journal de démarrage sans erreur)              |
+| Bot           | rien à faire                                                                                                                     |
+| Studio        | **0.1.30 publiée** (mise à jour testée par le workflow) ; **à installer par Antoni** (« Rechercher une mise à jour »)            |
+| ZIP extension | **non construit** : la ligne « Validé par Antoni : oui » manque à `INVENTAIRE-bb8700814939.md` (elle atteste ta recette)         |
+| Hosted Test   | inchangé ; même domaine API (`https://core.raptoru.fr/v1/ext`) que l'archive actuelle : aucun réglage Twitch à changer           |
+| Compatibilité | Studio 0.1.29 et l'extension actuelle ne reçoivent pas les lignes Musique (`music=1`) : prouvé par tests, pas relu en Production |
+
+Gestes restants d'Antoni :
+
+1. Installer Studio 0.1.30 (Studio › « Rechercher une mise à jour »), puis ouvrir Modération › Historique.
+2. Petit test réel hors live ou en live : `!addpoints @un_viewer 1 test`, puis `!removepoints @un_viewer 1`.
+3. Recette de l'extension dans le Lab ([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)), puis
+   ajouter la ligne `Validé par Antoni : oui` à la fin de
+   `apps/twitch-extension/release-inventory/INVENTAIRE-bb8700814939.md` (sur `main`, ou demander à l'agent de le faire
+   sur ta confirmation écrite), puis dans `apps/twitch-extension` :
+   `npm run package:production -- --shell v2` → `release/raptoru-live-PRODUCTION-<commit>-depuis-0bf7907-78-commits-shell-v2.zip`
+   et son `.sha256`.
+4. Téléverser ce ZIP en Hosted Test dans la console Twitch (même procédure que le 10/11,
+   [extension/TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 7) ; **ne pas** soumettre ni
+   publier. Retour : le ZIP `bbce1048a078`.
 
 ### C3. Correctif Tombola du 11/11 (CI « not attached »)
 

@@ -44,8 +44,9 @@ SAMMI est abandonné depuis le 20/10. Le dépôt est **public** depuis le 28/10 
 - L'extension **publique** reste la version présumée `0bf7907` (shell legacy), jamais prouvée.
 - Extension Next (socle v2) est **fusionnée dans `main`** depuis la PR #59.
 - OBS est passé en **33.0.1** : plugins réparés, SE.Live désactivé ([OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md)).
-- **Passe post-live (11/11)** : PR #64 — Portefeuille, `!addpoints` / `!removepoints`, Musique dans la modération,
-  Tombola, tutoriel ; état de livraison dans [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md).
+- **Passe post-live (11/11) livrée** : Core **`052ab2ec`** déployé (Portefeuille, `!addpoints` / `!removepoints`,
+  Musique dans la modération) ; Studio **0.1.30** publié, à installer ; ZIP de l'extension (Tombola, Portefeuille, tutoriel)
+  en attente de la validation d'Antoni ([REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md)).
 - **Prochain chantier : Chaos V2**, en phase de conception ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Rien n'est
   construit.
 
@@ -118,6 +119,7 @@ seule source de ces états.
 | 10/11        | PR #62 (`afe98cf`, documents) : inventaire du ZIP validé, remplacement du Hosted Test                                                                                                                                                                     | [extension/TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 7       |
 | 10/11        | **OBS 33.0.1** : 4 plugins réparés, SE.Live désactivé                                                                                                                                                                                                     | [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md)                                                     |
 | 10/11        | **Chaos V2 : recherche** (audit de V1, capture et curseur, performances, architecture, catalogue, roadmap)                                                                                                                                                | [chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)                                                         |
+| 11/11 11:24  | **Livraison** : PR #64 fusionnée (`052ab2ec`), Core déployé, Studio 0.1.30 publié (mise à jour 0.1.29 → 0.1.30 testée)                                                                                                                                    | [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md) § C2          |
 | 11/11        | **Passe post-live** (soir + nuit) : commandes Jetons de l'équipe, Portefeuille, Musique dans la modération, Tombola 30 lignes, tutoriel, inventaire des commandes ; PR #64                                                                                | [RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md)                                                     |
 | 10/11        | Consolidation documentaire (ce document)                                                                                                                                                                                                                  | branche `docs/consolidation-2026-11-10`                                                          |
 
@@ -201,9 +203,9 @@ Retours arrière Core, bot, Studio et extension : [RELEASE_2026-11-10.md](RELEAS
 
 ## 12. Ce qui demande encore Antoni
 
-0. **Passe post-live** : recette Lab ([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)), fusion de
-   la PR #64, déploiement du Core, ligne de validation de l'inventaire `INVENTAIRE-bb8700814939.md` puis ZIP en Hosted
-   Test, release Studio ; décisions `!solde @x`, `!wallet set`, mots réservés, catalogue public.
+0. **Passe post-live** : installer Studio 0.1.30 ; petit test `!addpoints` réel ; recette Lab
+   ([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)) puis ligne de validation de
+   `INVENTAIRE-bb8700814939.md` et ZIP en Hosted Test ; décisions `!solde @x`, `!wallet set`, mots réservés, catalogue.
 1. **Music Hub** :
    - tester Studio 0.1.29 et le Hosted Test `bbce104` ;
    - suivre le parcours réel de [TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 6 ;

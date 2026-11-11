@@ -8,8 +8,8 @@ précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-1
 
 ```text
 Raptoru 2.0 — reprise au 11/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
-Passe post-live du 11/11 : PR #64 (Portefeuille, !addpoints, Musique dans la modération, Tombola) — voir
-docs/REPRISE_SESSION_POST_LIVE_2026-11-11.md pour son état de livraison exact.
+Passe post-live du 11/11 LIVRÉE : Core 052ab2ec, Studio 0.1.30 publié (installation = Antoni), ZIP extension en
+attente de la validation d'Antoni — voir docs/REPRISE_SESSION_POST_LIVE_2026-11-11.md.
 
 Projet : plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
 Règle de partage : le Core décide (données, Jetons, règles, files), le bot LeCroupier_ parle à Twitch (EventSub, chat),
@@ -147,15 +147,10 @@ live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.
 
 ## 5. Situation au 10/11
 
-**Passe post-live du 11/11 (soir + nuit)** — reprise détaillée :
-[REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md), rapport :
-[RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md). Branche `feat/post-live-moderation`, worktree `post-live`, **PR #64**.
-Contenu : `!addpoints`/`!removepoints` et `!wallet` sur la permission « Portefeuille » (une seule décision pour le chat,
-l'extension et Studio ; `!wallet set` = streamer), Portefeuille + recherche `@pseudo` dans l'extension, achats Musique
-visibles et remboursables une fois, Tombola jusqu'à 30 lignes, tutoriel corrigé, inventaire des commandes. Le Core peut
-être déployé seul (les anciens clients ne reçoivent pas les lignes Musique) ; aucune migration ; rien pour le bot ; le
-ZIP attend la ligne de validation d'Antoni. Prochaine étape : recette d'Antoni
-([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)).
+**Passe post-live du 11/11 : LIVRÉE le 11/11** — Core **`052ab2ec`** déployé (PR #64 fusionnée), Studio **0.1.30**
+publié (à installer par Antoni), extension : ZIP pas encore construit (ligne de validation d'Antoni). Détail et gestes
+restants : [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md) § C–C2 ; rapport :
+[RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md).
 
 **Ce qui vient d'être terminé**
 
