@@ -202,7 +202,7 @@ Retours arrière Core, bot, Studio et extension : [RELEASE_2026-11-10.md](RELEAS
 ## 12. Ce qui demande encore Antoni
 
 0. **Passe post-live** : recette Lab ([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)), fusion de
-   la PR #64, déploiement du Core, ligne de validation de l'inventaire `INVENTAIRE-458e3581c96a.md` puis ZIP en Hosted
+   la PR #64, déploiement du Core, ligne de validation de l'inventaire `INVENTAIRE-bb8700814939.md` puis ZIP en Hosted
    Test, release Studio ; décisions `!solde @x`, `!wallet set`, mots réservés, catalogue public.
 1. **Music Hub** :
    - tester Studio 0.1.29 et le Hosted Test `bbce104` ;

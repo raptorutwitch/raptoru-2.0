@@ -53,9 +53,9 @@ live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJE
 
 | Champ        | Valeur                                                                                                                                                         |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nom attendu  | `raptoru-live-PRODUCTION-<commit>-depuis-0bf7907-77-commits-shell-v2.zip` (le `<commit>` est celui du dépôt au moment de l'emballage)                          |
-| Source       | branche `feat/post-live-moderation` (PR #64) ; dernier commit de l'extension `458e3581` ; shell **v2** ; `https://core.raptoru.fr/v1/ext`                      |
-| Inventaire   | `apps/twitch-extension/release-inventory/INVENTAIRE-458e3581c96a.md` : 77 commits listés, **ligne « Validé par Antoni : oui » absente** (l'emballage refuse)   |
+| Nom attendu  | `raptoru-live-PRODUCTION-<commit>-depuis-0bf7907-78-commits-shell-v2.zip` (le `<commit>` est celui du dépôt au moment de l'emballage)                          |
+| Source       | branche `feat/post-live-moderation` (PR #64) ; dernier commit de l'extension `bb870081` ; shell **v2** ; `https://core.raptoru.fr/v1/ext`                      |
+| Inventaire   | `apps/twitch-extension/release-inventory/INVENTAIRE-bb8700814939.md` : 78 commits listés, **ligne « Validé par Antoni : oui » absente** (l'emballage refuse)   |
 | Vérification | `node scripts/package.mjs --target production --shell v2 --check` : tout OK sauf la ligne de validation (11/11)                                                |
 | SHA-256      | calculé à l'emballage (le `--check` en affiche un provisoire, sans inventaire embarqué : ce n'est pas l'empreinte finale)                                      |
 | Prérequis    | Core avec la PR #64 déployé (Musique dans la modération, recherche canonique) ; avec `bbce104` l'extension fonctionne sans ces deux ajouts                     |

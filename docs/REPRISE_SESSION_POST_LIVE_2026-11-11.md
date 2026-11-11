@@ -21,17 +21,17 @@ l'inventaire de l'extension (ZIP), et éventuellement la release Studio. Prochai
 
 ## B. État exact du code
 
-| Élément             | Valeur                                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------ |
-| Dépôt               | `raptorutwitch/raptoru-2.0` (public)                                                                   |
-| Branche             | `feat/post-live-moderation`, poussée                                                                   |
-| PR                  | **#64** ouverte, **CI entièrement verte** sur `cf3e9e5e` (11/11 ~05:10 UTC) ; **non fusionnée** (§ C2) |
-| Worktree            | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\post-live`                                          |
-| Base                | `origin/main` `b4e65c6` (PR #63 fusionnée le 10/11)                                                    |
-| Dernier commit code | `ca07ccb9` (E2E) ; extension `458e3581` ; Core `c4ed1198` ; documents ensuite                          |
-| Non fusionné        | toute la passe (16 commits sur `b4e65c6`)                                                              |
-| Base de test        | PostgreSQL Docker `vk-test-pg` (port 55432), base `raptoru_postlive_test` (effaçable)                  |
-| Checkout principal  | `Documents\Raptoru 2.0` : **ne pas toucher** (données du Studio installé, très en retard sur `main`)   |
+| Élément             | Valeur                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Dépôt               | `raptorutwitch/raptoru-2.0` (public)                                                                                                 |
+| Branche             | `feat/post-live-moderation`, poussée                                                                                                 |
+| PR                  | **#64** ouverte, **non fusionnée** ; le commit à fusionner = la tête de la PR **si** sa CI est entièrement verte (`gh pr checks 64`) |
+| Worktree            | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\post-live`                                                                        |
+| Base                | `origin/main` `b4e65c6` (PR #63 fusionnée le 10/11)                                                                                  |
+| Dernier commit code | `bb870081` (correctif Tombola, extension + E2E) ; Core `c4ed1198` ; documents ensuite                                                |
+| Non fusionné        | toute la passe (16 commits sur `b4e65c6`)                                                                                            |
+| Base de test        | PostgreSQL Docker `vk-test-pg` (port 55432), base `raptoru_postlive_test` (effaçable)                                                |
+| Checkout principal  | `Documents\Raptoru 2.0` : **ne pas toucher** (données du Studio installé, très en retard sur `main`)                                 |
 
 Vérifier :
 
@@ -57,16 +57,32 @@ core` (avec `COOLIFY_URL=https://dashboard.raptoru.fr`).
 
 ### C2. Livraison : ce qui est fait, ce qui attend Antoni
 
-| Étape              | État                                                                                                                                   |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Push de la branche | fait                                                                                                                                   |
-| PR #64 + CI        | faite, verte (3 passages rouges corrigés : libellé « Wallet » restant ; ordre des specs Musique ; un `ECONNRESET` isolé non reproduit) |
-| Fusion             | **refusée par le garde-fou automatique** (« Merge Without Review ») : non contournée                                                   |
-| Déploiement Core   | **non fait** : exige le commit sur `main` avec sa CI verte                                                                             |
-| Bot                | rien à faire                                                                                                                           |
-| Release Studio     | **non faite** : règle du projet (jamais une version non validée par Antoni) ; non indispensable au Core                                |
-| ZIP extension      | **non construit** : la ligne « Validé par Antoni : oui » manque dans `INVENTAIRE-458e3581c96a.md` (par construction)                   |
-| Sauvegardes        | aucune opération Production → aucune utilisée ; base sauvegardée par Coolify le 11/11 04:00 UTC                                        |
+| Étape              | État                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Push de la branche | fait                                                                                                                                                        |
+| PR #64 + CI        | 5 passages rouges corrigés : libellé « Wallet » ; ordre des specs Musique ; `ECONNRESET` isolé ; **Tombola « not attached »** (cause réelle corrigée, § C3) |
+| Fusion             | **refusée par le garde-fou automatique** (« Merge Without Review ») : non contournée                                                                        |
+| Déploiement Core   | **non fait** : exige le commit sur `main` avec sa CI verte                                                                                                  |
+| Bot                | rien à faire                                                                                                                                                |
+| Release Studio     | **non faite** : règle du projet (jamais une version non validée par Antoni) ; non indispensable au Core                                                     |
+| ZIP extension      | **non construit** : la ligne « Validé par Antoni : oui » manque dans `INVENTAIRE-bb8700814939.md` (par construction)                                        |
+| Sauvegardes        | aucune opération Production → aucune utilisée ; base sauvegardée par Coolify le 11/11 04:00 UTC                                                             |
+
+### C3. Correctif Tombola du 11/11 (CI « not attached »)
+
+- **Symptôme** (CI run 42962307407, puis reproduit 1 fois sur 3 en local) : « Tout voir » à 120 participants,
+  `scrollIntoViewIfNeeded` sur la dernière ligne → « Element is not attached to the DOM ».
+- **Cause** : `build()` dessinait l'écran sans remplir le cache de `setSlot` ; la première lecture après tout nouvel
+  écran réécrivait donc chaque emplacement même inchangé (120 lignes reconstruites ~1 s après l'ouverture, sous le
+  défilement et le survol du viewer, avec perte du défilement des noms longs). Pas une régression du Core ni du
+  responsive : un redessin inutile du client, rendu visible par la liste de 120 du nouveau test.
+- **Correctif** (`bb870081`, `extension/shared/tombola-v2.js`) : `build()` mémorise le html de chaque emplacement avec
+  les mêmes fonctions que `updateSlots` ; rien n'est réécrit tant que l'état du Core ne change pas.
+- **Test** : la liste complète doit garder ses lignes à travers trois lectures (échouait 4/4 avant le correctif) ; la
+  manche du test est prolongée de 10 min (sous charge, elle pouvait se tirer au milieu d'une vérification).
+- **Vérifications** : 5/5 en local ; conteneur Linux Playwright 1.63 (Node 24) : spec 3/3, suite E2E complète 133/133.
+  Sous Windows, une longue séquence E2E locale meurt vers 10 min (limite connue) : la CI Linux fait foi.
+- **Conséquence livraison** : nouveau commit d'extension → inventaire renommé `INVENTAIRE-bb8700814939.md` (78 commits).
 
 Gestes d'Antoni, dans l'ordre (chacun sur son GO) :
 
@@ -111,7 +127,7 @@ Gestes d'Antoni, dans l'ordre (chacun sur son GO) :
 
 - Dernière archive : `raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.zip`
   (`80bdab00…f9f5b`), Hosted Test.
-- Prochaine : inventaire `apps/twitch-extension/release-inventory/INVENTAIRE-458e3581c96a.md` (77 commits) ; il manque
+- Prochaine : inventaire `apps/twitch-extension/release-inventory/INVENTAIRE-bb8700814939.md` (78 commits) ; il manque
   la ligne « Validé par Antoni : oui » ; puis `npm run package:production -- --shell v2` ; SHA calculé à ce moment-là.
 - Testé (Lab, Chromium) : Tombola, Portefeuille, remboursement Musique, filtre Musique, rôles. À tester par Antoni :
   tout le reste de [RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md), puis en Hosted Test.

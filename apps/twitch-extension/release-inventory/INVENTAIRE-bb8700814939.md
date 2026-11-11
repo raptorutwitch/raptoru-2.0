@@ -1,18 +1,19 @@
-# Inventaire de l'emballage de Production — source 458e3581c96a
+# Inventaire de l'emballage de Production — source bb8700814939
 
-Écart : 77 commits de l'extension depuis `PUBLISHED` = `0bf7907` (**présumé, non prouvé**).
+Écart : 78 commits de l'extension depuis `PUBLISHED` = `0bf7907` (**présumé, non prouvé**).
 Si la version servie n'est pas `0bf7907`, corriger `PUBLISHED` et régénérer cet inventaire.
 
 Préparé par l'agent le 2026-11-11 (mission de nuit post-live). **Non validé** : la ligne de validation appartient à
 Antoni ; tant qu'elle manque, l'emballage de Production refuse d'écrire le ZIP (`npm run package:production -- --shell v2`).
-Remplace en Hosted Test l'archive `bbce1048a078` (72 commits) : les 72 commits ci-dessous la composaient déjà, les 5
+Remplace en Hosted Test l'archive `bbce1048a078` (72 commits) : les 72 commits ci-dessous la composaient déjà, les 6
 nouveaux sont dans la première section.
 
 Prérequis : Core ≥ la branche `feat/post-live-moderation` déployée (Portefeuille, `music=1`, recherche `@pseudo`). Avec
 le Core `bbce104`, l'extension fonctionne mais sans les achats Musique dans la modération ni la recherche canonique.
 
-## Passe post-live du 11/11 (Portefeuille, Musique dans la modération, Tombola, tutoriel) — 5
+## Passe post-live du 11/11 (Portefeuille, Musique dans la modération, Tombola, tutoriel) — 6
 
+- bb870081 2026-11-11 fix(tombola): a new screen's slots are remembered at build — the first read no longer redraws an unchanged list
 - 458e3581 2026-11-11 feat(extension): Music purchases findable in the moderation history (track in the row, « Musique » filter); E2E refund once, locked without Portefeuille, Studio opens it
 - 58f33889 2026-11-11 test(tombola): E2E 0 → 1 → 6/7 → 29/30/31 → 120 participants, full list, zoom 150 %
 - 63e74d73 2026-11-11 fix(extension): tutorial lists only existing commands, no hardcoded prices (!solde, not !jetons; no !cashin / !oracle; TTS price from the buttons)
