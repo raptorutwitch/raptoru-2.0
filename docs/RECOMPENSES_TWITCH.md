@@ -15,14 +15,14 @@ l'application qui appelle, lesquelles **elle** peut gérer.
 Lecture authentifiée du 12/11/2026 (consentement dédié de raptoru_, droit `channel:read:redemptions` seul, non
 renouvelable ; application Twitch = celle du bot de Production) : **40 récompenses, une seule gérable par Raptoru**.
 
-| Champ | Valeur |
-| --- | --- |
-| Nom, id | « Ban aléatoire », `b15cc303-bf34-4bc8-9535-1f11ef1299dd` |
-| Coût, état | 3 000 points, **active**, pas en pause |
-| Gérable par l'application Raptoru | **non** (`only_manageable_rewards=true` ne la liste pas) |
-| Cooldown global, maximum par stream, maximum par viewer | aucun |
-| Validée automatiquement | non (les rachats restent « en attente » sur Twitch) |
-| Texte du viewer | non |
+| Champ                                                   | Valeur                                                    |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| Nom, id                                                 | « Ban aléatoire », `b15cc303-bf34-4bc8-9535-1f11ef1299dd` |
+| Coût, état                                              | 3 000 points, **active**, pas en pause                    |
+| Gérable par l'application Raptoru                       | **non** (`only_manageable_rewards=true` ne la liste pas)  |
+| Cooldown global, maximum par stream, maximum par viewer | aucun                                                     |
+| Validée automatiquement                                 | non (les rachats restent « en attente » sur Twitch)       |
+| Texte du viewer                                         | non                                                       |
 
 **Conclusion : il faut recréer Random Ban depuis Studio.** Raptoru ne peut ni la mettre en pause, ni rembourser ses
 rachats, ni lire ses rachats en attente : seuls le tableau de bord Twitch (ou l'outil qui l'a créée) le peuvent. Le Client
@@ -36,16 +36,16 @@ remboursements dus) ; le jeton local expiré n'a pas été rafraîchi (il pourra
 
 ## 3. Ce que Studio sait faire (avant / maintenant)
 
-| Besoin | Avant (Production actuelle) | Maintenant (worktree, testé) |
-| --- | --- | --- |
-| Lister les récompenses, régler leurs actions | oui (lecture Twitch par le bot, règles dans Studio) | idem |
-| Savoir lesquelles Raptoru peut gérer | non (seulement « créée par Raptoru ») | **oui**, d'après Twitch à chaque synchro du bot ; badge dans la fiche |
-| Créer une récompense gérée par Raptoru | seulement celle de la musique (page Spotify) | **oui**, générique : nom, coût, description, saisie du viewer |
-| Remplacer une ancienne récompense | non | **oui** : la nouvelle reçoit la règle de l'ancienne, **coupée** ; l'ancienne n'est pas touchée |
-| Mettre en pause / réactiver, changer le coût | non | **oui** (récompenses Raptoru seulement ; Twitch refuserait les autres) |
-| Rembourser un rachat via Twitch | automatique seulement (Spotify, expirations) | **oui**, bouton dans le détail d'un rachat ; une fois, jamais après une validation |
-| Cooldown individuel de 10 min (Random Ban) | non | oui, **seulement sur une récompense Raptoru** (le refus est remboursé) ; l'ancienne garde son comportement actuel |
-| « À traiter » | non | **oui** : remboursements à faire sur Twitch, actions Twitch refusées ou sans réponse, récompenses disparues |
+| Besoin                                       | Avant (Production actuelle)                         | Maintenant (worktree, testé)                                                                                      |
+| -------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Lister les récompenses, régler leurs actions | oui (lecture Twitch par le bot, règles dans Studio) | idem                                                                                                              |
+| Savoir lesquelles Raptoru peut gérer         | non (seulement « créée par Raptoru »)               | **oui**, d'après Twitch à chaque synchro du bot ; badge dans la fiche                                             |
+| Créer une récompense gérée par Raptoru       | seulement celle de la musique (page Spotify)        | **oui**, générique : nom, coût, description, saisie du viewer                                                     |
+| Remplacer une ancienne récompense            | non                                                 | **oui** : la nouvelle reçoit la règle de l'ancienne, **coupée** ; l'ancienne n'est pas touchée                    |
+| Mettre en pause / réactiver, changer le coût | non                                                 | **oui** (récompenses Raptoru seulement ; Twitch refuserait les autres)                                            |
+| Rembourser un rachat via Twitch              | automatique seulement (Spotify, expirations)        | **oui**, bouton dans le détail d'un rachat ; une fois, jamais après une validation                                |
+| Cooldown individuel de 10 min (Random Ban)   | non                                                 | oui, **seulement sur une récompense Raptoru** (le refus est remboursé) ; l'ancienne garde son comportement actuel |
+| « À traiter »                                | non                                                 | **oui** : remboursements à faire sur Twitch, actions Twitch refusées ou sans réponse, récompenses disparues       |
 
 Code : Core `channel-points/service.ts` (création, migration, pause, remboursement, À traiter), `twitch-actions.ts`
 (action `reward_update`), routes `…/channel-points/<canal>/rewards`, `…/rewards/<id>/twitch`,
@@ -64,18 +64,18 @@ sur Twitch si besoin ; la page Studio n'a pas été vue à l'écran (typée, tes
 **A. Actives et raccordées à Raptoru 2.0 — à migrer une à la fois (aucune n'a de cooldown global, sauf Eren cri 300 s et
 ntm 60 s, à recopier sur Twitch après création) :**
 
-| Récompense | Coût | Action Raptoru | Gérable | Ordre |
-| --- | ---: | --- | --- | --- |
-| Ban aléatoire | 3 000 | Random Ban | non | **1** |
-| TTS | 2 000 | crédits TTS | non | 2 |
-| Soundboard | 2 000 | crédits Soundboard | non | 3 |
-| Be Right Back | 1 500 | BRB | non | 4 |
-| Couleur Cam | 100 | effet OBS | non | 5 |
-| FX cam | 200 | effet OBS | non | 6 |
-| Creepy | 700 | effet OBS | non | 7 |
-| Eren cri | 1 500 (cooldown 300 s) | son | non | 8 |
-| ntm | 2 000 (cooldown 60 s) | vidéo | non | 9 |
-| Choisi la prochaine musique | 1 500 | demande Spotify | **oui** | rien à faire |
+| Récompense                  |                   Coût | Action Raptoru     | Gérable | Ordre        |
+| --------------------------- | ---------------------: | ------------------ | ------- | ------------ |
+| Ban aléatoire               |                  3 000 | Random Ban         | non     | **1**        |
+| TTS                         |                  2 000 | crédits TTS        | non     | 2            |
+| Soundboard                  |                  2 000 | crédits Soundboard | non     | 3            |
+| Be Right Back               |                  1 500 | BRB                | non     | 4            |
+| Couleur Cam                 |                    100 | effet OBS          | non     | 5            |
+| FX cam                      |                    200 | effet OBS          | non     | 6            |
+| Creepy                      |                    700 | effet OBS          | non     | 7            |
+| Eren cri                    | 1 500 (cooldown 300 s) | son                | non     | 8            |
+| ntm                         |  2 000 (cooldown 60 s) | vidéo              | non     | 9            |
+| Choisi la prochaine musique |                  1 500 | demande Spotify    | **oui** | rien à faire |
 
 **B. Désactivées — rien à recréer :** 200 IQ, Arrêteuh, Ban forcé, Boop!, Bzez, Cash-In, Choisi la prochaine musique !
 (ancienne), Couleur Overlay, Couleur overlay Cam, Counter Ban 1, Counter ban 5, Dance Fortnite, Emote only, Fais moi
@@ -100,6 +100,7 @@ aujourd'hui), l'achat depuis l'extension, le Sniper, Le Viseur, la modération e
 migration `random_ban_purchase`. Ils restent dans le worktree `mini-jeux-random-ban`, à rebaser sur cette branche.
 
 **Effets du déploiement, à connaître :**
+
 - aucun changement visible tant qu'aucune récompense Raptoru n'a de règle Random Ban (le cooldown et les remboursements
   ne visent que les récompenses Raptoru) ;
 - la seule récompense déjà gérable, « Choisi la prochaine musique », gagne seulement le badge et les boutons ; ses
@@ -107,6 +108,7 @@ migration `random_ban_purchase`. Ils restent dans le worktree `mini-jeux-random-
 - « À traiter » liste les rachats d'anciennes récompenses dont les points sont dus (à rendre sur Twitch).
 
 **Ordre :**
+
 1. Migration `20261124130000_cp_reward_admin.sql` (additive : deux colonnes nullables, une contrainte élargie).
 2. Core : **avant** le bot (le bot envoie un champ `manageable` que l'ancien Core refuserait).
 3. Bot : juste après le Core (l'ancien bot ne sait pas exécuter `reward_update` : ne pas mettre en pause avant).
@@ -119,16 +121,16 @@ migration `random_ban_purchase`. Ils restent dans le worktree `mini-jeux-random-
 
 ## 6. Procédure : migration de Random Ban
 
-| # | Étape | Qui / où | Twitch | Retour arrière |
-| --- | --- | --- | --- | --- |
-| 1 | **Lecture** : consentement dédié (`rewards-audit-auth.ts`, un seul droit `channel:read:redemptions`, non renouvelable, fichier hors du dépôt), puis `rewards-audit.ts` | toi + moi | lecture seule | — · **fait le 12/11** |
-| 2 | Réglages Twitch de « Ban aléatoire » : aucun cooldown global, aucun maximum, non validée automatiquement, pas de texte | moi | — | — · **fait le 12/11** |
-| 3 | Studio › Récompenses › Ban aléatoire › **Remplacer par une récompense Raptoru…** : « Random Ban », 3 000 points, « Créer masquée » coché (par défaut) | toi (GO) | **création, masquée** (invisible des viewers) | mettre en pause ou laisser masquée |
-| 4 | Vérifier : « Gérée par Raptoru », masquée, règle Random Ban recopiée **coupée** ; puis activer la règle (Studio) | toi | — | règle OFF |
-| 5 | **Test de remboursement contrôlé, hors live** : « Rendre visible sur Twitch… », tu la rachètes toi-même → refusée (« hors live »), **aucun Random Ban**, points rendus (CANCELED) — visible dans Studio et sur ton solde. Tout rachat hors live d'un viewer est rendu de la même façon | toi (GO) | **remboursement** | la masquer de nouveau (« Mettre en pause ») |
-| 6 | En live, quand tu le décides : un rachat réel → un Random Ban (vrai timeout) ; un 2ᵉ rachat du même viewer dans les 10 min → refusé et remboursé | toi (GO) | timeout réel, remboursement | règle OFF (les rachats sont alors rendus) |
-| 7 | **Bascule** : règle de l'ancienne OFF (Studio), ancienne **mise en pause à la main sur Twitch** (Raptoru ne peut pas), jamais supprimée | toi (GO) | pause manuelle | ancienne : règle ON + réactivation ; nouvelle : pause depuis Studio |
-| 8 | **Anciens rachats en attente** de « Ban aléatoire » : Raptoru ne peut ni les lire ni les changer ; les valider ou rembourser dans la file des récompenses de Twitch (Studio liste dans « À traiter » ceux dont il sait que les points sont dus) | toi | manuel | — |
+| #   | Étape                                                                                                                                                                                                                                                                                  | Qui / où  | Twitch                                        | Retour arrière                                                      |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------------------------- |
+| 1   | **Lecture** : consentement dédié (`rewards-audit-auth.ts`, un seul droit `channel:read:redemptions`, non renouvelable, fichier hors du dépôt), puis `rewards-audit.ts`                                                                                                                 | toi + moi | lecture seule                                 | — · **fait le 12/11**                                               |
+| 2   | Réglages Twitch de « Ban aléatoire » : aucun cooldown global, aucun maximum, non validée automatiquement, pas de texte                                                                                                                                                                 | moi       | —                                             | — · **fait le 12/11**                                               |
+| 3   | Studio › Récompenses › Ban aléatoire › **Remplacer par une récompense Raptoru…** : « Random Ban », 3 000 points, « Créer masquée » coché (par défaut)                                                                                                                                  | toi (GO)  | **création, masquée** (invisible des viewers) | mettre en pause ou laisser masquée                                  |
+| 4   | Vérifier : « Gérée par Raptoru », masquée, règle Random Ban recopiée **coupée** ; puis activer la règle (Studio)                                                                                                                                                                       | toi       | —                                             | règle OFF                                                           |
+| 5   | **Test de remboursement contrôlé, hors live** : « Rendre visible sur Twitch… », tu la rachètes toi-même → refusée (« hors live »), **aucun Random Ban**, points rendus (CANCELED) — visible dans Studio et sur ton solde. Tout rachat hors live d'un viewer est rendu de la même façon | toi (GO)  | **remboursement**                             | la masquer de nouveau (« Mettre en pause »)                         |
+| 6   | En live, quand tu le décides : un rachat réel → un Random Ban (vrai timeout) ; un 2ᵉ rachat du même viewer dans les 10 min → refusé et remboursé                                                                                                                                       | toi (GO)  | timeout réel, remboursement                   | règle OFF (les rachats sont alors rendus)                           |
+| 7   | **Bascule** : règle de l'ancienne OFF (Studio), ancienne **mise en pause à la main sur Twitch** (Raptoru ne peut pas), jamais supprimée                                                                                                                                                | toi (GO)  | pause manuelle                                | ancienne : règle ON + réactivation ; nouvelle : pause depuis Studio |
+| 8   | **Anciens rachats en attente** de « Ban aléatoire » : Raptoru ne peut ni les lire ni les changer ; les valider ou rembourser dans la file des récompenses de Twitch (Studio liste dans « À traiter » ceux dont il sait que les points sont dus)                                        | toi       | manuel                                        | —                                                                   |
 
 **Jamais de points perdus pendant la migration :** une récompense Raptoru rachetée alors que sa règle ou les
 automatisations sont coupées, ou hors live, rend les points (CANCELED, une fois). L'ancienne garde son comportement
