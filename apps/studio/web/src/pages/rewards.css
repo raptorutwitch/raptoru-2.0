@@ -1113,3 +1113,82 @@
     overflow: visible;
   }
 }
+
+/* Récompenses Twitch — l'administration (rewards-admin.ts) : bloc « Gestion Twitch », boutons de la fiche, formulaire. */
+.rwp-att {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--raise2);
+}
+.rwp-att .rwp-fh {
+  padding: 0 0 8px;
+}
+.rwp-att > p {
+  margin: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.rwp-att h3 {
+  margin: 10px 0 6px;
+}
+.rwp-attl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+.rwp-attl li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.rwp-attl small {
+  color: var(--ink3);
+}
+.rwf-adm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.rwa-form {
+  display: grid;
+  gap: 14px;
+}
+.rwa-form .rwa-f {
+  display: grid;
+  gap: 6px;
+  align-items: stretch;
+  height: auto;
+  padding: 0;
+  background: none;
+}
+.rwa-form .rwa-f > span {
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.rwa-form .rwa-f > input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  background: var(--raise3);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.rwa-c {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.rwa-err:empty {
+  display: none;
+}

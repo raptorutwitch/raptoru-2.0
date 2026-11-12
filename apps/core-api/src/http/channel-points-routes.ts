@@ -4,6 +4,7 @@ import {
   CpEffectReport,
   CpRedemptionInput,
   CpRedemptionUpdate,
+  CpRewardPatch,
   CpRewardsSync,
   CpRuleInput,
   CpSettingsInput,
@@ -14,6 +15,7 @@ import {
   type ChannelPointsService,
   CpError,
 } from '../channel-points/service.js';
+import { CpTwitchError } from '../channel-points/twitch-actions.js';
 import { loadLabRewards } from '../lab/rewards-catalog.js';
 import { HttpError, parse, type Route } from './server.js';
 
@@ -28,11 +30,25 @@ async function mapped<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (e) {
     if (e instanceof CpError) throw new HttpError(e.status, { error: e.code });
+    if (e instanceof CpTwitchError)
+      throw new HttpError(e.status, { error: e.code });
     throw e;
   }
 }
 
 const RewardId = z.string().regex(/^[A-Za-z0-9-]{1,128}$/);
+/** Studio creates a reward owned by Raptoru (Twitch's limits: title 45, description 200). */
+const RewardCreate = z.strictObject({
+  title: z.string().trim().min(1).max(45),
+  cost: z.number().int().min(1).max(100_000_000),
+  prompt: z.string().max(200).default(''),
+  user_input: z.boolean().default(false),
+  /** The old reward it replaces: its rule is copied OFF onto the new one. */
+  migrated_from: RewardId.nullable().optional(),
+  /** Created hidden from the viewers (default: hidden for a migration, visible otherwise). */
+  hidden: z.boolean().optional(),
+});
+const RewardUpdate = z.strictObject({ patch: CpRewardPatch });
 const TestRequest = z.strictObject({
   reward_id: RewardId,
   /** The viewer's text to simulate (FX Cam: the effect name). */
@@ -90,6 +106,45 @@ export function channelPointsRoutes(
             params[1]!,
             parse(CpRuleInput, body),
           ),
+        ),
+    },
+    // Reward administration (docs/RECOMPENSES_TWITCH.md): each one a Twitch action the bot runs ONCE with the
+    // broadcaster's token. Studio only (never the bot); Twitch itself refuses any reward Raptoru did not create.
+    {
+      method: 'POST',
+      pattern: at(base, '/(\\d{1,32})/rewards'),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          cp.createManagedReward(
+            channel(params[0]!),
+            parse(RewardCreate, body),
+          ),
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: at(base, '/(\\d{1,32})/rewards/([A-Za-z0-9-]{1,128})/twitch'),
+      auth,
+      handle: ({ params, body }) =>
+        mapped(() =>
+          cp.updateManagedReward(
+            channel(params[0]!),
+            params[1]!,
+            parse(RewardUpdate, body).patch,
+          ),
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: at(
+        base,
+        '/(\\d{1,32})/redemptions/(twitch|simulation)/([A-Za-z0-9-]{1,128})/refund',
+      ),
+      auth,
+      handle: ({ params }) =>
+        mapped(() =>
+          cp.refundRedemption(channel(params[0]!), params[1]!, params[2]!),
         ),
     },
     {

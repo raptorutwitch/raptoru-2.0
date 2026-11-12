@@ -189,6 +189,72 @@ export class RandomBanService {
     return this.clock.now();
   }
 
+  /**
+   * Channel points: one ACCEPTED Random Ban redemption per buyer per this delay (docs/RECOMPENSES_TWITCH.md; Twitch has
+   * no per-viewer cooldown). 0: none.
+   */
+  cpCooldownMs = 10 * 60_000;
+
+  /** One buyer's redemptions, one at a time: the second sees the first. */
+  private async lockBuyer(q: Queryable, channelId: string, buyerId: string) {
+    await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+      `random_ban:buyer:${channelId}:${buyerId}`,
+    ]);
+  }
+
+  /** The ms left of the buyer's cooldown (0: free) — failed / dry-run-free requests never hold it. */
+  async cpCooldownLeft(q: Queryable, channelId: string, buyerId: string) {
+    if (this.cpCooldownMs <= 0) return 0;
+    const last = (
+      await q.query<{ created_at: Date }>(
+        `select created_at from rb_requests where channel_id = $1 and buyer_id = $2 and source = 'channel_points'
+           and status <> 'failed' order by seq desc limit 1`,
+        [channelId, buyerId],
+      )
+    )[0];
+    if (!last) return 0;
+    return Math.max(
+      0,
+      new Date(last.created_at).getTime() +
+        this.cpCooldownMs -
+        this.now().getTime(),
+    );
+  }
+
+  /**
+   * A channel points redemption asks for a Random Ban: the same redemption again is its request; a buyer under his
+   * personal cooldown gets NO request (`cooling_ms` > 0: the caller refunds and explains); other viewers never held.
+   */
+  async requestChannelPoints(r: {
+    channel_id: string;
+    source_ref: string;
+    mode: 'real' | 'dry_run';
+    buyer: RbTwitchUser;
+    /** false: no cooldown for this redemption (a reward whose points Raptoru cannot give back). */
+    cooldown?: boolean;
+  }) {
+    const { cooldown = true, ...req } = r;
+    return this.db.tx(async (q) => {
+      await this.lockBuyer(q, r.channel_id, r.buyer.id);
+      const prior = (
+        await q.query<Row>(
+          `select * from rb_requests where channel_id = $1 and source = 'channel_points' and source_ref = $2`,
+          [r.channel_id, r.source_ref.slice(0, 200)],
+        )
+      )[0];
+      if (prior) return { request: rbView(prior), cooling_ms: 0 };
+      const left = cooldown
+        ? await this.cpCooldownLeft(q, r.channel_id, r.buyer.id)
+        : 0;
+      if (left > 0) return { request: null, cooling_ms: left };
+      const { request } = await this.requestIfNew(
+        { ...req, source: 'channel_points' },
+        q,
+      );
+      return { request, cooling_ms: 0 };
+    });
+  }
+
   private async lock(q: Queryable, channelId: string) {
     await q.query('select pg_advisory_xact_lock(hashtext($1))', [
       `random_ban:${channelId}`,

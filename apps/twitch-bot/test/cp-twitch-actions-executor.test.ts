@@ -59,6 +59,10 @@ function harness(
         if (twitch.fail) throw twitch.fail;
         return 'new-reward-id';
       },
+      updateCustomReward: async (reward, patch) => {
+        calls.push(`update ${reward} ${JSON.stringify(patch)}`);
+        if (twitch.fail) throw twitch.fail;
+      },
     },
     pause: async () => {},
     log: () => {},
@@ -69,6 +73,29 @@ function harness(
 }
 
 describe('Points de chaîne Twitch actions executor', () => {
+  it('Studio pauses a reward Raptoru owns: one PATCH, done; Twitch refusing it (403: not ours) → failed, never resent', async () => {
+    const UPDATE = {
+      kind: 'reward_update',
+      action_id: '00000000-0000-4000-8000-0000000000aa',
+      attempt_id: '00000000-0000-4000-8000-0000000000ab',
+      reward_id: 'reward-rb-new',
+      patch: { is_paused: true },
+    };
+    const h = harness(UPDATE);
+    await h.ex.tick();
+    expect(h.calls).toEqual(['update reward-rb-new {"is_paused":true}']);
+    expect(h.reports()[0]).toMatchObject({ outcome: 'done' });
+    const refused = harness(UPDATE, {
+      fail: new HelixError(403, 'not manageable'),
+    });
+    await refused.ex.tick();
+    expect(refused.reports()[0]).toMatchObject({
+      outcome: 'failed',
+      http_status: 403,
+    });
+    expect(refused.calls).toHaveLength(1);
+  });
+
   it('a refund applied: one call, reported done; nothing more to claim', async () => {
     const h = harness(STATUS);
     expect(await h.ex.tick()).toBe('worked');

@@ -24,6 +24,12 @@ import {
   streamTestConfirm,
 } from '../ds/ds.js';
 import { getJson, postJson, tryGetJson } from '../http.js';
+import {
+  adminHtml,
+  attentionHtml,
+  bindRewardAdmin,
+  refundHtml,
+} from './rewards-admin.js';
 import { cpBlocker } from '../shell/regie.js';
 import {
   actionIcon,
@@ -99,6 +105,7 @@ export function mountRewardsPage(root: HTMLElement) {
         <div class="rwp-chips" role="group" aria-label="Filtrer" data-z="filters"></div>
       </div>
       <div data-z="master"></div>
+      <div data-z="att"></div>
       <div class="rwp-grid" data-z="grid"></div>
     </section>
     <aside class="rwp-feed" aria-label="Demandes reçues">
@@ -150,6 +157,8 @@ export function mountRewardsPage(root: HTMLElement) {
     else if (fiche) refreshFiche();
   }
   const tick = poller(read, 3000);
+  // L'administration Twitch : ses boutons vivent dans la page et dans les fiches (dialogues hors de la page).
+  bindRewardAdmin(document, { state: () => s, refresh: () => tick.now() });
 
   /** Suggestions lues dans OBS (lecture seule) : OBS fermé, la saisie libre reste possible. */
   async function loadLists(scene?: string, source?: string) {
@@ -270,6 +279,7 @@ export function mountRewardsPage(root: HTMLElement) {
   function paint() {
     paintHead();
     patch(z('pulse'), statusView(s, s ? null : error));
+    patch(z('att'), attentionHtml(s));
     paintGallery();
     paintFeed();
     paintPanel();
@@ -434,7 +444,7 @@ export function mountRewardsPage(root: HTMLElement) {
         <p class="rwf-facts"><span><b class="d-num">${r.cost.toLocaleString('fr-FR')}</b> points de chaîne</span>${r.user_input_required ? `<span>${ic('chat')}Le viewer écrit un texte</span>` : ''}</p>
       </div>
     </div>
-    <p class="rwf-note">${ic('info')}<span>Nom, coût, image, disponibilité : ils se règlent sur Twitch, Studio les lit${r.listed_by_twitch ? '' : ' (celle-ci n’est connue que par un achat reçu)'}. Rien n’est créé ni modifié sur Twitch d’ici.</span></p>`;
+    ${adminHtml(r, s)}${r.listed_by_twitch ? '' : `<p class="rwf-note">${ic('info')}<span>Celle-ci n’est connue que par un achat reçu.</span></p>`}`;
   }
   /** Bloc 2 : les actions de Raptoru, la seule partie réglée ici. */
   function actsHtml(r: CpReward) {
@@ -844,7 +854,7 @@ export function mountRewardsPage(root: HTMLElement) {
     const dr = drawer({
       kicker: 'Demande',
       title: x.reward.title,
-      body: requestHtml(x, s, r),
+      body: requestHtml(x, s, r) + refundHtml(x, r, s),
     });
     dr.el.addEventListener('click', (e) => {
       const id = (e.target as HTMLElement).closest<HTMLElement>('[data-open]')

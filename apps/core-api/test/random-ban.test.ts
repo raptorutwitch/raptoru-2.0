@@ -354,6 +354,8 @@ describe('Random Ban — from the channel points rule', () => {
   it('a real redemption → one real request (no Studio job); a redelivery → nothing more; the result reaches the history', async () => {
     const { core, rb } = await fixture();
     const cp = new ChannelPointsService(core.db, core.clock, core.soundLab, rb);
+    // Several redemptions of one buyer in a row: the personal cooldown is off here.
+    rb.cpCooldownMs = 0;
     await cp.syncRewards({
       channel_id: CH,
       rewards: [
@@ -463,6 +465,8 @@ describe('Random Ban — the redemption follows the result without Studio (live 
   it('confirmed → the redemption is done at the executor report, no Studio read; another pending one is untouched', async () => {
     const { core, rb } = await fixture();
     const cp = new ChannelPointsService(core.db, core.clock, core.soundLab, rb);
+    // Several redemptions of one buyer in a row: the personal cooldown is off here.
+    rb.cpCooldownMs = 0;
     await cp.syncRewards({
       channel_id: CH,
       rewards: [

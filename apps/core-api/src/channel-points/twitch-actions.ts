@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { CpTwitchAction, CpTwitchActionReport } from '@raptoru/schemas';
+import type {
+  CpRewardPatch as CpTwitchActionPatch,
+  CpTwitchAction,
+  CpTwitchActionReport,
+} from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 
@@ -27,7 +31,7 @@ export class CpTwitchError extends Error {
 interface ActionRow {
   action_id: string;
   channel_id: string;
-  kind: 'redemption_status' | 'reward_create';
+  kind: 'redemption_status' | 'reward_create' | 'reward_update';
   idempotency_key: string;
   payload: Record<string, unknown>;
   status: 'queued' | 'running' | 'done' | 'failed' | 'unknown';
@@ -121,7 +125,49 @@ export class CpTwitchActions {
     return rows.length ? 'queued' : 'exists';
   }
 
-  /** Studio asks for a reward owned by Raptoru (one creation in flight at a time per channel). */
+  /**
+   * A change of a reward Raptoru owns (pause, resume, title, cost, description): one in flight per reward, run once
+   * by the bot. Refused for a reward Raptoru does not own (Twitch would refuse it anyway: 403).
+   */
+  async updateReward(
+    channelId: string,
+    rewardId: string,
+    patch: Record<string, unknown>,
+  ) {
+    return this.db.tx(async (q) => {
+      if (!(await this.managed(q, channelId, rewardId)))
+        throw new CpTwitchError(409, 'reward_not_managed');
+      await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+        `cp_twitch_reward_update:${channelId}:${rewardId}`,
+      ]);
+      const busy = await q.query(
+        `select 1 from cp_twitch_actions where channel_id = $1 and kind = 'reward_update'
+           and payload->>'reward_id' = $2 and status in ('queued', 'running')`,
+        [channelId, rewardId],
+      );
+      if (busy.length)
+        throw new CpTwitchError(409, 'reward_update_in_progress');
+      const now = this.clock.now();
+      const id = randomUUID();
+      await q.query(
+        `insert into cp_twitch_actions (action_id, channel_id, kind, idempotency_key, payload, status, created_at, updated_at)
+         values ($1, $2, 'reward_update', $3, $4, 'queued', $5, $5)`,
+        [
+          id,
+          channelId,
+          `reward_update:${channelId}:${id}`,
+          JSON.stringify({ reward_id: rewardId, patch }),
+          now,
+        ],
+      );
+      return { action_id: id };
+    });
+  }
+
+  /**
+   * Studio asks for a reward owned by Raptoru (one creation in flight at a time per channel). `migrated_from`: the old
+   * reward it replaces — its rule is copied onto the new one, OFF (Antoni turns it on after his controlled test).
+   */
   async createReward(
     channelId: string,
     reward: {
@@ -129,6 +175,9 @@ export class CpTwitchActions {
       cost: number;
       prompt: string;
       is_user_input_required: boolean;
+      migrated_from?: string | null;
+      /** false: created hidden (Twitch « is_enabled »). */
+      is_enabled?: boolean;
     },
   ) {
     return this.db.tx(async (q) => {
@@ -202,17 +251,26 @@ export class CpTwitchActions {
                 redemption_id: String(p.redemption_id),
                 status: p.status as 'FULFILLED' | 'CANCELED',
               }
-            : {
-                kind: 'reward_create',
-                action_id: row.action_id,
-                attempt_id: attempt,
-                reward: {
-                  title: String(p.title),
-                  cost: Number(p.cost),
-                  prompt: String(p.prompt ?? ''),
-                  is_user_input_required: p.is_user_input_required === true,
+            : row.kind === 'reward_update'
+              ? {
+                  kind: 'reward_update',
+                  action_id: row.action_id,
+                  attempt_id: attempt,
+                  reward_id: String(p.reward_id),
+                  patch: p.patch as CpTwitchActionPatch,
+                }
+              : {
+                  kind: 'reward_create',
+                  action_id: row.action_id,
+                  attempt_id: attempt,
+                  reward: {
+                    title: String(p.title),
+                    cost: Number(p.cost),
+                    prompt: String(p.prompt ?? ''),
+                    is_user_input_required: p.is_user_input_required === true,
+                    ...(p.is_enabled === false ? { is_enabled: false } : {}),
+                  },
                 },
-              },
       };
     });
   }
@@ -251,7 +309,7 @@ export class CpTwitchActions {
         await q.query(
           `insert into cp_rewards (channel_id, reward_id, title, cost, prompt, is_enabled, user_input_required, source,
              last_seen_at, managed_by_raptoru)
-           values ($1, $2, $3, $4, $5, true, $6, 'twitch_api', $7, true)
+           values ($1, $2, $3, $4, $5, $8, $6, 'twitch_api', $7, true)
            on conflict (channel_id, reward_id) do update set managed_by_raptoru = true, last_seen_at = $7`,
           [
             channelId,
@@ -261,6 +319,41 @@ export class CpTwitchActions {
             String(p.prompt ?? ''),
             p.is_user_input_required === true,
             now,
+            p.is_enabled !== false,
+          ],
+        );
+        // A migration: the new reward gets the old one's rule, OFF — nothing runs before Antoni's controlled test.
+        if (typeof p.migrated_from === 'string' && p.migrated_from) {
+          await q.query(
+            `update cp_rewards set migrated_from = $3 where channel_id = $1 and reward_id = $2`,
+            [channelId, r.reward_id, p.migrated_from],
+          );
+          await q.query(
+            `insert into cp_rules (channel_id, reward_id, enabled, actions, version, updated_at)
+             select channel_id, $2, false, actions, 1, $4 from cp_rules where channel_id = $1 and reward_id = $3
+             on conflict (channel_id, reward_id) do nothing`,
+            [channelId, r.reward_id, p.migrated_from, now],
+          );
+        }
+      }
+      // A change Twitch applied to a reward Raptoru owns: the Core's copy follows at once (the next sync confirms).
+      if (row.kind === 'reward_update' && r.outcome === 'done') {
+        const patch = (row.payload.patch ?? {}) as Record<string, unknown>;
+        await q.query(
+          `update cp_rewards set
+             title = coalesce($3, title), cost = coalesce($4, cost), prompt = coalesce($5, prompt),
+             is_paused = coalesce($6, is_paused),
+             is_enabled = case when is_enabled is null then null
+               else coalesce($7, is_enabled or coalesce(is_paused, false)) and not coalesce($6, is_paused, false) end
+           where channel_id = $1 and reward_id = $2`,
+          [
+            channelId,
+            String(row.payload.reward_id),
+            typeof patch.title === 'string' ? patch.title : null,
+            typeof patch.cost === 'number' ? patch.cost : null,
+            typeof patch.prompt === 'string' ? patch.prompt : null,
+            typeof patch.is_paused === 'boolean' ? patch.is_paused : null,
+            typeof patch.is_enabled === 'boolean' ? patch.is_enabled : null,
           ],
         );
       }

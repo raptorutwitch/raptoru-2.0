@@ -145,6 +145,12 @@ export interface CpReward {
   user_input_required?: boolean;
   listed_by_twitch: boolean;
   rule: { enabled: boolean; actions: CpActionView[]; version: number } | null;
+  /** Créée par l'application Raptoru : Studio peut la mettre en pause et rembourser ses rachats (absent : ancien Core). */
+  managed?: boolean;
+  /** La pause Twitch (null : pas encore lue). */
+  paused?: boolean | null;
+  /** L'ancienne récompense qu'elle remplace. */
+  migrated_from?: string | null;
 }
 
 export interface CpRedemption {
@@ -202,6 +208,9 @@ export interface CpState {
     interaction_media?: { id: string; label: string; available: boolean }[];
   } | null;
   executor_error: string | null;
+  /** L'administration des récompenses (absent : ancien Core). */
+  twitch_actions?: import('./rewards-admin.js').CpTwitchActionView[];
+  attention?: import('./rewards-admin.js').CpAttention;
 }
 
 const REASON: Record<string, string> = {

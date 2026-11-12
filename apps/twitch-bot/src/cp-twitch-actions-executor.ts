@@ -4,7 +4,8 @@ import { HelixError } from './twitch/helix.js';
 // Twitch-side channel points actions (docs/SPOTIFY_V2.md § 7): the main Core decides, this executor runs each one ONCE
 // with the broadcaster's token (`channel:manage:redemptions`) and reports it:
 // - redemption_status: FULFILLED, or CANCELED (Twitch gives the viewer's points back);
-// - reward_create: the reward owned by Raptoru's app (only its creator may change its redemptions).
+// - reward_create: the reward owned by Raptoru's app (only its creator may change its redemptions);
+// - reward_update: pause / resume / edit such a reward (Studio's reward administration).
 // Outcomes: done (Twitch applied it) · failed (Twitch refused it, or the right is missing: nothing sent) · unknown (no
 // answer, 429, 5xx: it may have applied). Never retried: a refund is never sent twice.
 
@@ -21,7 +22,18 @@ export interface CpTwitchCalls {
     cost: number;
     prompt: string;
     is_user_input_required: boolean;
+    is_enabled?: boolean;
   }): Promise<string>;
+  updateCustomReward(
+    rewardId: string,
+    patch: {
+      title?: string;
+      cost?: number;
+      prompt?: string;
+      is_enabled?: boolean;
+      is_paused?: boolean;
+    },
+  ): Promise<void>;
 }
 
 export interface CpTwitchExecutorDeps {
@@ -94,6 +106,10 @@ export function createCpTwitchActionsExecutor(d: CpTwitchExecutorDeps) {
         );
         return { outcome: 'done', http_status: 200 };
       }
+      if (a.kind === 'reward_update') {
+        await d.twitch!.updateCustomReward(a.reward_id, a.patch);
+        return { outcome: 'done', http_status: 200 };
+      }
       const id = await d.twitch!.createCustomReward(a.reward);
       return { outcome: 'done', http_status: 200, reward_id: id };
     } catch (e) {
@@ -112,7 +128,7 @@ export function createCpTwitchActionsExecutor(d: CpTwitchExecutorDeps) {
     if (claimed.status !== 200 || !action) return 'idle';
     const r = await run1(action);
     log(
-      `[cp-twitch] ${action.kind === 'redemption_status' ? `rédemption ${action.status}` : 'création de récompense'} → ${r.outcome}${r.error ? ` (${r.error})` : ''}`,
+      `[cp-twitch] ${action.kind === 'redemption_status' ? `rédemption ${action.status}` : action.kind === 'reward_update' ? 'modification de récompense' : 'création de récompense'} → ${r.outcome}${r.error ? ` (${r.error})` : ''}`,
     );
     await report(action, r);
     return 'worked';
