@@ -1,3 +1,4 @@
+import { RB_PRICING_DEFAULT } from '../src/random-ban/pricing.js';
 import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { RANDOM_BAN, RANDOM_BAN_DRAW } from '@raptoru/schemas';
@@ -354,6 +355,8 @@ describe('Random Ban — from the channel points rule', () => {
   it('a real redemption → one real request (no Studio job); a redelivery → nothing more; the result reaches the history', async () => {
     const { core, rb } = await fixture();
     const cp = new ChannelPointsService(core.db, core.clock, core.soundLab, rb);
+    // Several redemptions of one buyer in a row: the personal cooldown (Mini-jeux) is off here.
+    rb.pricing = async () => ({ ...RB_PRICING_DEFAULT, cpCooldownMs: 0 });
     await cp.syncRewards({
       channel_id: CH,
       rewards: [
@@ -463,6 +466,8 @@ describe('Random Ban — the redemption follows the result without Studio (live 
   it('confirmed → the redemption is done at the executor report, no Studio read; another pending one is untouched', async () => {
     const { core, rb } = await fixture();
     const cp = new ChannelPointsService(core.db, core.clock, core.soundLab, rb);
+    // Several redemptions of one buyer in a row: the personal cooldown (Mini-jeux) is off here.
+    rb.pricing = async () => ({ ...RB_PRICING_DEFAULT, cpCooldownMs: 0 });
     await cp.syncRewards({
       channel_id: CH,
       rewards: [
@@ -565,7 +570,7 @@ describe('Random Ban migrations', () => {
     await migrate(prod, 'prod');
     await migrate(lab, 'lab');
     const p = await schema(prod);
-    expect(p.columns.length).toBe(30);
+    expect(p.columns.length).toBe(38);
     expect(p).toEqual(await schema(lab));
     const all = fresh();
     closers.push(() => all.close());

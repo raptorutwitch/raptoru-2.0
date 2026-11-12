@@ -163,6 +163,11 @@ export const CpRewardsSync = z.strictObject({
         is_enabled: z.boolean(),
         is_paused: z.boolean().optional(),
         user_input_required: z.boolean().optional(),
+        /**
+         * Twitch says Raptoru's app may manage it (listed by `only_manageable_rewards=true`): only then can Raptoru
+         * pause it, edit it, refund its redemptions. Absent: unknown (an older bot) — the Core's record is kept.
+         */
+        manageable: z.boolean().optional(),
       }),
     )
     .max(50),
@@ -222,6 +227,18 @@ export type CpRedemptionStatus =
  * creation of a reward owned by Raptoru's app (only the app that created a reward may change its redemptions). A Studio
  * simulation never produces one. docs/SPOTIFY_V2.md § 7.
  */
+/** What Studio may change on a reward Raptoru owns (Twitch's « Update Custom Reward » fields we use). */
+export const CpRewardPatch = z
+  .strictObject({
+    title: z.string().trim().min(1).max(45).optional(),
+    cost: z.number().int().min(1).max(100_000_000).optional(),
+    prompt: z.string().max(200).optional(),
+    is_enabled: z.boolean().optional(),
+    is_paused: z.boolean().optional(),
+  })
+  .refine((p) => Object.keys(p).length > 0, 'empty_patch');
+export type CpRewardPatch = z.infer<typeof CpRewardPatch>;
+
 export const CpTwitchAction = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('redemption_status'),
@@ -241,6 +258,14 @@ export const CpTwitchAction = z.discriminatedUnion('kind', [
       prompt: z.string().max(200),
       is_user_input_required: z.boolean(),
     }),
+  }),
+  /** A reward Raptoru owns: pause / resume / edit (Twitch refuses it for any other reward). */
+  z.strictObject({
+    kind: z.literal('reward_update'),
+    action_id: z.uuid(),
+    attempt_id: z.uuid(),
+    reward_id: ExternalId,
+    patch: CpRewardPatch,
   }),
 ]);
 export type CpTwitchAction = z.infer<typeof CpTwitchAction>;

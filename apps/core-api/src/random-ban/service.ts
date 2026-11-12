@@ -17,6 +17,23 @@ import {
 import type { Clock } from '../clock.js';
 import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
+import type { EconomyPort } from '../economy/economy.js';
+import { activeBlock } from '../lab-moderation/store.js';
+import {
+  lastCounted,
+  quote,
+  RB_PRICING_DEFAULT,
+  type RbPricing,
+  type RbQuote,
+} from './pricing.js';
+import type { RandomBanModeration } from './moderation.js';
+import { buildStrip, REEL_MS, type ReelItem } from './reel.js';
+import {
+  presenceCandidates,
+  settleSniper,
+  sniperWindow,
+  type RbCandidates,
+} from './sniper.js';
 
 // Random Ban V2 (docs/RANDOM_BAN_V2.md) — the ONE implementation (Lab Core and production Core; the channel points
 // reward today, `!rb` with the economy later). Core holds the truth: one request per trigger (dedup), one Random Ban
@@ -31,15 +48,18 @@ export class RbError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    readonly details: Record<string, unknown> = {},
   ) {
     super(code);
   }
 }
 
+export type RbSource = 'channel_points' | 'chat' | 'test' | 'extension';
+
 interface Row {
   request_id: string;
   channel_id: string;
-  source: 'channel_points' | 'chat' | 'test';
+  source: RbSource;
   source_ref: string;
   mode: RbMode;
   buyer_id: string;
@@ -74,6 +94,22 @@ interface Row {
   created_at: Date;
   updated_at: Date;
   ended_at: Date | null;
+  /** Jetons purchases (extension, `!rb`) since 20261123: the price charged and the series level it was charged at. */
+  price_paid: number | null;
+  series_level: number | null;
+  /** Sniper (extension): the wished viewer frozen at purchase (never read by the draw) and the decision. */
+  wish_id: string | null;
+  wish_login: string | null;
+  wish_name: string | null;
+  sniper:
+    | 'none'
+    | 'armed'
+    | 'hit'
+    | 'miss'
+    | 'glory'
+    | 'glory_hit'
+    | 'void'
+    | 'revoked';
 }
 
 const OPEN: RbStatus[] = ['queued', 'searching', 'timeout_requested'];
@@ -151,6 +187,13 @@ export const rbView = (r: Row) => ({
   streamer_decision: r.stats?.streamer ?? null,
   animation: r.animation,
   animation_status: r.animation_status,
+  price_paid: r.price_paid ?? null,
+  series_level: r.series_level ?? null,
+  wish: r.wish_id
+    ? { id: r.wish_id, login: r.wish_login, name: r.wish_name }
+    : null,
+  sniper: r.sniper ?? 'none',
+  sniper_bonus: Number(r.stats?.sniper_bonus ?? 0) || 0,
   created_at: iso(r.created_at),
   ended_at: iso(r.ended_at),
 });
@@ -185,8 +228,358 @@ export class RandomBanService {
     } = {},
   ) {}
 
+  /** The progressive price and the per-buyer limits (app.ts / lab-core.ts: the module settings). */
+  pricing: (q: Queryable, channelId: string) => Promise<RbPricing> = async () =>
+    RB_PRICING_DEFAULT;
+  /** Sniper: who may be aimed at (present viewers), and the economy that pays the bonus (app.ts / lab-core.ts). */
+  candidates: RbCandidates = presenceCandidates;
+  economy: EconomyPort | null = null;
+  /** The team's Random Ban actions (history, cancel, refunds, pause), set by app.ts / lab-core.ts. */
+  moderation: RandomBanModeration | null = null;
+  /** Moderation's pause of the Random Ban queue (app.ts / lab-core.ts: the module setting `queue_paused`). */
+  paused: (q: Queryable, channelId: string) => Promise<boolean> = async () =>
+    false;
+
+  /**
+   * The moderation's restrictions of one buyer (any source): the queue paused, a block (module « random_ban » or
+   * « all »), a personal cooldown (D4: `delay_s` between two counted Random Ban during its span). Null: free.
+   */
+  async restriction(
+    q: Queryable,
+    channelId: string,
+    buyerId: string,
+  ): Promise<{
+    code: 'rb_paused' | 'viewer_blocked' | 'viewer_cooldown';
+    wait_ms?: number;
+  } | null> {
+    if (await this.paused(q, channelId)) return { code: 'rb_paused' };
+    const now = this.now();
+    if (await activeBlock(q, channelId, buyerId, 'random_ban', now))
+      return { code: 'viewer_blocked' };
+    const cd = (
+      await q.query<{ delay_s: number; until: Date }>(
+        `select delay_s, until from lab_viewer_cooldowns where channel_id = $1 and viewer_id = $2
+           and module_id = 'random_ban' and until > $3`,
+        [channelId, buyerId, now],
+      )
+    )[0];
+    if (!cd) return null;
+    const last = (
+      await q.query<{ created_at: Date }>(
+        `select created_at from rb_requests where channel_id = $1 and buyer_id = $2 and source <> 'test'
+           and status not in ('failed', 'canceled') order by seq desc limit 1`,
+        [channelId, buyerId],
+      )
+    )[0];
+    if (!last) return null;
+    const next = Math.min(
+      new Date(last.created_at).getTime() + cd.delay_s * 1000,
+      new Date(cd.until).getTime(),
+    );
+    return next > now.getTime()
+      ? { code: 'viewer_cooldown', wait_ms: next - now.getTime() }
+      : null;
+  }
+
+  /** A moderation decision ended a request outside the executor: the refund paths follow at once. */
+  async notifySettled(channelId: string, requestId: string) {
+    for (const fn of this.settledListeners)
+      await fn(channelId, requestId).catch((e) =>
+        console.error('[random-ban] settle failed', requestId, e),
+      );
+  }
+
+  /** Decides the Sniper of an ended request, once (inside the caller's transaction). */
+  private async sniper(q: Queryable, requestId: string, channelId: string) {
+    const p = await this.pricing(q, channelId);
+    await settleSniper(q, requestId, {
+      economy: this.economy,
+      bonus: p.sniperBonus,
+      windowMs: p.sniperWindowMs,
+      now: this.now(),
+    });
+  }
+
   private now() {
     return this.clock.now();
+  }
+
+  /** One buyer's purchases, one at a time (price, pending cap, cooldown): the second sees the first. */
+  async lockBuyer(q: Queryable, channelId: string, buyerId: string) {
+    await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+      `random_ban:buyer:${channelId}:${buyerId}`,
+    ]);
+  }
+
+  private async pending(q: Queryable, channelId: string, buyerId: string) {
+    return Number(
+      (
+        await q.query<{ n: number | string }>(
+          `select count(*) as n from rb_requests where channel_id = $1 and buyer_id = $2 and source <> 'test'
+             and status = any($3::text[])`,
+          [channelId, buyerId, OPEN],
+        )
+      )[0]?.n ?? 0,
+    );
+  }
+
+  /** The buyer's price now (call inside the transaction that will charge it, after lockBuyer). */
+  async quoteFor(q: Queryable, channelId: string, buyerId: string) {
+    const p = await this.pricing(q, channelId);
+    return {
+      pricing: p,
+      quote: quote(p, await lastCounted(q, channelId, buyerId), this.now()),
+    };
+  }
+
+  /**
+   * A Jetons purchase (extension or `!rb`) — the ONE place that prices and charges a Random Ban. Inside the caller's
+   * transaction, under the buyer's lock: the same trigger again is the same request (nothing more debited); more than
+   * `maxPending` open requests → `too_many_pending`; a current price above `ceiling` → `price_changed` (nothing
+   * debited: never more than the amount the buyer confirmed; a lower price is charged as it is); else the request and
+   * its debit (a refused debit — balance — rolls the request back).
+   */
+  async buy(
+    q: Queryable,
+    economy: EconomyPort,
+    r: {
+      channel_id: string;
+      source: 'chat' | 'extension';
+      source_ref: string;
+      mode: 'real' | 'dry_run';
+      buyer: RbTwitchUser;
+      /** The highest price the buyer confirmed (`normal`: the normal price only, a bare `!rb`). */
+      ceiling: number | 'normal';
+      /** Sniper (extension only): the viewer the buyer predicts — frozen here, never given to the draw. */
+      wish?: { id: string } | null;
+    },
+  ): Promise<{
+    request: ReturnType<typeof rbView>;
+    created: boolean;
+    quote: RbQuote;
+    sniper_ready?: boolean;
+  }> {
+    await this.lockBuyer(q, r.channel_id, r.buyer.id);
+    const prior = (
+      await q.query<Row>(
+        'select * from rb_requests where channel_id = $1 and source = $2 and source_ref = $3',
+        [r.channel_id, r.source, r.source_ref.slice(0, 200)],
+      )
+    )[0];
+    const { pricing, quote: price } = await this.quoteFor(
+      q,
+      r.channel_id,
+      r.buyer.id,
+    );
+    if (prior) return { request: rbView(prior), created: false, quote: price };
+    const restricted = await this.restriction(q, r.channel_id, r.buyer.id);
+    if (restricted) throw new RbError(409, restricted.code, restricted);
+    if ((await this.pending(q, r.channel_id, r.buyer.id)) >= pricing.maxPending)
+      throw new RbError(409, 'too_many_pending', {
+        max_pending: pricing.maxPending,
+      });
+    if (price.price > (r.ceiling === 'normal' ? price.normal_price : r.ceiling))
+      throw new RbError(409, 'price_changed', {
+        price: price.price,
+        quote: price,
+      });
+    let wish: {
+      wish_id: string;
+      wish_login: string;
+      wish_name: string;
+      sniper: 'armed';
+    } | null = null;
+    let sniperReady = false;
+    if (r.wish) {
+      const streamer = this.v3.streamer?.();
+      const c = (await this.candidates(q, r.channel_id)).find(
+        (x) => x.id === r.wish!.id,
+      );
+      if (!c || c.id === r.buyer.id || c.id === streamer?.id)
+        throw new RbError(400, 'wish_unknown');
+      wish = {
+        wish_id: c.id,
+        wish_login: c.login,
+        wish_name: c.name,
+        sniper: 'armed',
+      };
+      sniperReady = (
+        await sniperWindow(
+          q,
+          r.channel_id,
+          r.buyer.id,
+          this.now(),
+          pricing.sniperWindowMs,
+        )
+      ).ready;
+    }
+    const { request, created } = await this.requestIfNew(r, q);
+    await this.set(q, request.request_id, {
+      price_paid: price.price,
+      series_level: price.level,
+      ...(wish ?? {}),
+    });
+    await economy.debit(q, this.now(), {
+      channelId: r.channel_id,
+      viewer: { id: r.buyer.id, display_name: r.buyer.name },
+      currency: 'tokens',
+      amount: price.price,
+      module: 'random_ban',
+      interactionId: request.request_id,
+    });
+    return {
+      request: {
+        ...rbView(await this.row(q, request.request_id)),
+      },
+      created,
+      quote: (await this.quoteFor(q, r.channel_id, r.buyer.id)).quote,
+      /** Shown at purchase only: the final decision is taken at the result (§ 4.2). */
+      sniper_ready: sniperReady,
+    };
+  }
+
+  /**
+   * Channel points: the buyer's last ACCEPTED redemption (a request) that still counts — failed / canceled ones never
+   * hold the cooldown. Returns the ms left (0: free).
+   */
+  async cpCooldownLeft(q: Queryable, channelId: string, buyerId: string) {
+    const { cpCooldownMs } = await this.pricing(q, channelId);
+    if (cpCooldownMs <= 0) return 0;
+    const last = (
+      await q.query<{ created_at: Date }>(
+        `select created_at from rb_requests where channel_id = $1 and buyer_id = $2 and source = 'channel_points'
+           and status not in ('failed', 'canceled') order by seq desc limit 1`,
+        [channelId, buyerId],
+      )
+    )[0];
+    if (!last) return 0;
+    return Math.max(
+      0,
+      new Date(last.created_at).getTime() + cpCooldownMs - this.now().getTime(),
+    );
+  }
+
+  /**
+   * A channel points redemption asks for a Random Ban (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 3): the same redemption
+   * again is its request; a buyer under his personal cooldown gets NO request (`cooling_ms` > 0: the caller refunds and
+   * explains) — the other viewers are never held. Serialized per buyer: two redemptions at once, one request.
+   */
+  async requestChannelPoints(r: {
+    channel_id: string;
+    source_ref: string;
+    mode: 'real' | 'dry_run';
+    buyer: RbTwitchUser;
+  }) {
+    return this.db.tx(async (q) => {
+      await this.lockBuyer(q, r.channel_id, r.buyer.id);
+      const prior = (
+        await q.query<Row>(
+          `select * from rb_requests where channel_id = $1 and source = 'channel_points' and source_ref = $2`,
+          [r.channel_id, r.source_ref.slice(0, 200)],
+        )
+      )[0];
+      if (prior)
+        return { request: rbView(prior), cooling_ms: 0, refused: null };
+      const restricted = await this.restriction(q, r.channel_id, r.buyer.id);
+      if (restricted?.code === 'viewer_cooldown')
+        return {
+          request: null,
+          cooling_ms: restricted.wait_ms ?? 0,
+          refused: 'cooldown' as const,
+        };
+      if (restricted)
+        return {
+          request: null,
+          cooling_ms: 0,
+          refused:
+            restricted.code === 'rb_paused'
+              ? ('paused' as const)
+              : ('blocked' as const),
+        };
+      const left = await this.cpCooldownLeft(q, r.channel_id, r.buyer.id);
+      if (left > 0)
+        return {
+          request: null,
+          cooling_ms: left,
+          refused: 'cooldown' as const,
+        };
+      const { request } = await this.requestIfNew(
+        { ...r, source: 'channel_points' },
+        q,
+      );
+      return { request, cooling_ms: 0, refused: null };
+    });
+  }
+
+  /** The buyer's own Random Ban figures (the extension's « Mes stats »: this viewer only). */
+  private async personalStats(
+    q: Queryable,
+    channelId: string,
+    viewerId: string,
+  ) {
+    const r =
+      (
+        await q.query<Record<string, number | string | null>>(
+          `select
+           count(*) filter (where buyer_id = $2 and status not in ('failed', 'canceled')) as launched,
+           count(*) filter (where buyer_id = $2 and status = 'confirmed' and target_id <> buyer_id) as landed,
+           count(*) filter (where buyer_id = $2 and status = 'confirmed' and target_id = buyer_id) as self,
+           count(*) filter (where buyer_id = $2 and status = 'flop') as flops,
+           count(*) filter (where buyer_id <> $2 and status = 'confirmed' and target_id = $2) as received,
+           count(*) filter (where buyer_id = $2 and wish_id is not null and sniper <> 'void') as sniper_tries,
+           count(*) filter (where buyer_id = $2 and sniper in ('hit', 'glory_hit')) as sniper_hits,
+           coalesce(sum(price_paid) filter (where buyer_id = $2 and status not in ('failed', 'canceled')), 0) as spent,
+           coalesce(sum((stats->>'sniper_bonus')::int) filter (where buyer_id = $2 and sniper = 'hit'), 0) as earned
+         from rb_requests where channel_id = $1 and source <> 'test' and (buyer_id = $2 or target_id = $2)`,
+          [channelId, viewerId],
+        )
+      )[0] ?? {};
+    return Object.fromEntries(
+      Object.entries(r).map(([k, v]) => [k, Number(v ?? 0)]),
+    );
+  }
+
+  /** What the extension shows one buyer: the price and its gauge, the pending cap, the last own requests. */
+  async buyerState(channelId: string, buyerId: string) {
+    return this.db.tx(async (q) => {
+      const { pricing, quote: price } = await this.quoteFor(
+        q,
+        channelId,
+        buyerId,
+      );
+      const mine = await q.query<Row>(
+        `select * from rb_requests where channel_id = $1 and buyer_id = $2 and source <> 'test'
+           order by seq desc limit 10`,
+        [channelId, buyerId],
+      );
+      const streamer = this.v3.streamer?.();
+      const window = await sniperWindow(
+        q,
+        channelId,
+        buyerId,
+        this.now(),
+        pricing.sniperWindowMs,
+      );
+      return {
+        price,
+        tiers: pricing.tiers,
+        step_ms: pricing.stepMs,
+        pending: mine.filter((m) => OPEN.includes(m.status)).length,
+        max_pending: pricing.maxPending,
+        mine: mine.map(rbView),
+        sniper: {
+          ready: window.ready,
+          ready_at: window.ready_at,
+          bonus: pricing.sniperBonus,
+          window_ms: pricing.sniperWindowMs,
+        },
+        // Who may be aimed at: present viewers, never yourself nor the streamer (identity checked again at purchase).
+        candidates: (await this.candidates(q, channelId))
+          .filter((c) => c.id !== buyerId && c.id !== streamer?.id)
+          .map((c) => ({ id: c.id, name: c.name })),
+        stats: await this.personalStats(q, channelId, buyerId),
+      };
+    });
   }
 
   private async lock(q: Queryable, channelId: string) {
@@ -243,7 +636,7 @@ export class RandomBanService {
   async request(
     r: {
       channel_id: string;
-      source: 'channel_points' | 'chat' | 'test';
+      source: RbSource;
       source_ref: string;
       mode: 'real' | 'dry_run';
       buyer: RbTwitchUser;
@@ -260,7 +653,7 @@ export class RandomBanService {
   async requestIfNew(
     r: {
       channel_id: string;
-      source: 'channel_points' | 'chat' | 'test';
+      source: RbSource;
       source_ref: string;
       mode: 'real' | 'dry_run';
       buyer: RbTwitchUser;
@@ -508,6 +901,13 @@ export class RandomBanService {
       )
         await this.set(q, r.request_id, { animation_status: 'skipped' });
     }
+    // Sniper catch-up: an ended request whose prediction is still open (ended by this sweep, a claim refusal, a mute).
+    const undecided = await q.query<{ request_id: string }>(
+      `select request_id from rb_requests where channel_id = $1 and sniper = 'armed'
+         and status <> all($2::text[]) order by seq limit 20`,
+      [channelId, OPEN],
+    );
+    for (const o of undecided) await this.sniper(q, o.request_id, channelId);
   }
 
   /**
@@ -530,6 +930,9 @@ export class RandomBanService {
         [channelId],
       );
       if (busy.length) return { request: null, reason: 'busy' };
+      // Moderation paused the queue: nothing is handed out (the 2-min expiry refunds what waits too long).
+      if (await this.paused(q, channelId))
+        return { request: null, reason: 'idle' };
       const r = (
         await q.query<Row>(
           `select * from rb_requests where channel_id = $1 and status = 'queued' order by seq limit 1 for update`,
@@ -627,12 +1030,20 @@ export class RandomBanService {
     return this.db.tx(async (q) => {
       const r = await this.row(q, id, true);
       this.current(r, t.executor_id, t.attempt_id);
-      if (r.status === 'timeout_requested' && r.target_id === t.target.id)
+      if (r.status === 'timeout_requested' && r.target_id === t.target.id) {
+        // The same report again: the same answer, the strike time unchanged (never a new delay).
+        const at = (r.stats?.reel as { strike_at?: string } | undefined)
+          ?.strike_at;
+        const left = at
+          ? Math.max(0, Date.parse(at) - this.now().getTime())
+          : 0;
         return {
           proceed: true,
           duration_s: r.duration_s!,
           reason: r.reason!,
+          ...(left ? { delay_ms: left } : {}),
         };
+      }
       if (r.status !== 'searching') throw new RbError(409, 'not_searching');
       const duration = t.is_sub
         ? RANDOM_BAN.durationSubS
@@ -647,6 +1058,13 @@ export class RandomBanService {
         reason,
         stats: { ...t.stats, streamer: r.stats?.streamer },
       };
+      // Le Viseur (reveal_first): the target is frozen; Studio's reel stops on it, the timeout follows the stop. Only
+      // while Studio said it is there (else the historical order: timeout at once, the video after).
+      const reel = await this.reelFor(q, r, {
+        id: t.target.id,
+        name: t.target.name,
+      });
+      if (reel) fields.stats = { ...fields.stats, reel };
       if (r.mode !== 'real') {
         const done = { ...r, ...fields } as Row;
         await this.set(q, id, {
@@ -656,17 +1074,61 @@ export class RandomBanService {
           ended_at: this.now(),
           ...this.animated(r, this.animationFor(done)),
         });
+        await this.sniper(q, id, r.channel_id);
         return { proceed: false as const };
       }
+      const delay = reel
+        ? Date.parse(reel.strike_at) - this.now().getTime()
+        : 0;
       await this.set(q, id, {
         ...fields,
         status: 'timeout_requested',
         lease_expires_at: new Date(
-          this.now().getTime() + RANDOM_BAN.timeoutLeaseMs,
+          this.now().getTime() + delay + RANDOM_BAN.timeoutLeaseMs,
         ),
       });
-      return { proceed: true as const, duration_s: duration, reason };
+      return {
+        proceed: true as const,
+        duration_s: duration,
+        reason,
+        ...(delay > 0 ? { delay_ms: delay } : {}),
+      };
     });
+  }
+
+  /** The reel of a request whose target was just drawn, or null (sequence off, Studio absent, the streamer). */
+  private async reelFor(q: Queryable, r: Row, target: ReelItem) {
+    const p = await this.pricing(q, r.channel_id);
+    if (!p.revealFirst) return null;
+    const studio = this.studios.get(r.channel_id);
+    if (!studio || this.now().getTime() - studio.at > RANDOM_BAN.studioReadyMs)
+      return null;
+    const pool = (await this.candidates(q, r.channel_id)).map((c) => ({
+      id: c.id,
+      name: c.name,
+    }));
+    const strip = buildStrip(pool, target, r.wish_id, this.draw);
+    return {
+      ...strip,
+      status: 'pending' as const,
+      duration_ms: REEL_MS,
+      strike_at: new Date(
+        this.now().getTime() + REEL_MS + p.strikeOffsetMs,
+      ).toISOString(),
+    };
+  }
+
+  /** Updates the reel's state (or its dodge card) in the request's stats. */
+  private async setReel(
+    q: Queryable,
+    id: string,
+    patch: Record<string, unknown>,
+  ) {
+    await q.query(
+      `update rb_requests set stats = jsonb_set(stats, '{reel}', coalesce(stats->'reel', '{}'::jsonb) || $2::jsonb),
+         updated_at = $3 where request_id = $1`,
+      [id, JSON.stringify(patch), this.now()],
+    );
   }
 
   /** The outcome (idempotent: a final result stays; only an « uncertain » can still be settled by the executor). */
@@ -710,7 +1172,7 @@ export class RandomBanService {
           ended_at: now,
           ...this.animated(r, this.animationFor(r)),
         });
-      else if (o.event === 'refused' && settles)
+      else if (o.event === 'refused' && settles) {
         await this.set(q, id, {
           status: 'failed',
           error: (o.error ?? 'refused').slice(0, 300),
@@ -718,7 +1180,9 @@ export class RandomBanService {
           lease_expires_at: null,
           ended_at: now,
         });
-      else if (o.event === 'uncertain' && r.status === 'timeout_requested')
+        // The reel already showed the drawn viewer: the stream sees « Esquivé ! » (never « BANNI »), refunded.
+        if (r.stats?.reel) await this.setReel(q, id, { dodge: 'pending' });
+      } else if (o.event === 'uncertain' && r.status === 'timeout_requested')
         await this.set(q, id, {
           status: 'uncertain',
           error: (o.error ?? 'uncertain').slice(0, 300),
@@ -726,6 +1190,7 @@ export class RandomBanService {
           lease_expires_at: null,
           ended_at: now,
         });
+      await this.sniper(q, id, r.channel_id);
       return { view: rbView(await this.row(q, id)), channelId: r.channel_id };
     });
     // After the commit: the channel points redemption follows its result now, not at Studio's next read (live of
@@ -759,6 +1224,8 @@ export class RandomBanService {
         [channelId],
       );
       if (playing.length) return { animation: null };
+      const viseur = await this.claimReel(q, channelId, consumerId);
+      if (viseur) return { animation: viseur };
       const r = (
         await q.query<Row>(
           `select * from rb_requests where channel_id = $1 and animation_status = 'pending'
@@ -787,9 +1254,91 @@ export class RandomBanService {
     return out;
   }
 
+  /**
+   * Le Viseur: a reel to play now (before the strike; too late → skipped, never a reel after the fact), or a dodge
+   * card. One at a time; the reel's state lives in the request's stats (no column).
+   */
+  private async claimReel(q: Queryable, channelId: string, consumerId: string) {
+    const r = (
+      await q.query<Row>(
+        `select * from rb_requests where channel_id = $1
+           and (stats->'reel'->>'status' = 'pending' or stats->'reel'->>'dodge' = 'pending')
+         order by seq limit 1 for update`,
+        [channelId],
+      )
+    )[0];
+    if (!r) return null;
+    const reel = r.stats!.reel as {
+      items: ReelItem[];
+      stop: number;
+      status: string;
+      dodge?: string;
+      duration_ms: number;
+      strike_at: string;
+    };
+    const base = {
+      request_id: r.request_id,
+      trigger: r.buyer_name,
+      banned: r.target_name,
+    };
+    if (reel.status === 'pending') {
+      if (this.now().getTime() > Date.parse(reel.strike_at)) {
+        await this.setReel(q, r.request_id, { status: 'skipped' });
+        return null;
+      }
+      await this.setReel(q, r.request_id, {
+        status: 'playing',
+        consumer: consumerId,
+      });
+      return {
+        ...base,
+        animation: 'reel' as const,
+        reel: {
+          target: { id: r.target_id!, name: r.target_name ?? '' },
+          items: reel.items,
+          stop: reel.stop,
+          self: r.target_id === r.buyer_id,
+          wish: r.wish_name,
+          duration_ms: reel.duration_ms,
+        },
+      };
+    }
+    await this.setReel(q, r.request_id, {
+      dodge: 'playing',
+      consumer: consumerId,
+    });
+    return {
+      ...base,
+      animation: 'dodge' as const,
+      reel: {
+        target: { id: r.target_id!, name: r.target_name ?? '' },
+        items: [],
+        stop: 0,
+        self: false,
+        wish: null,
+        duration_ms: 2_500,
+      },
+    };
+  }
+
   async reportAnimation(id: string, a: RbAnimationReport) {
     return this.db.tx(async (q) => {
       const r = await this.row(q, id, true);
+      // Le Viseur: the reel's or the dodge's report (its own state, not the result's animation).
+      const reel = r.stats?.reel as
+        { status?: string; dodge?: string; consumer?: string } | undefined;
+      if (
+        reel &&
+        reel.consumer === a.consumer_id &&
+        (reel.status === 'playing' || reel.dodge === 'playing')
+      ) {
+        await this.setReel(
+          q,
+          id,
+          reel.status === 'playing' ? { status: a.event } : { dodge: a.event },
+        );
+        return { animation_status: a.event };
+      }
       if (r.animation_consumer !== a.consumer_id)
         throw new RbError(409, 'not_current_consumer');
       if (r.animation_status !== 'playing')

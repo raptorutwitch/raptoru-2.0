@@ -73,6 +73,7 @@ describe('module host — real Lab chain (Lab Core + Studio client + Extension L
       'votekick',
       'caution',
       'random_ban',
+      'random_ban_ext', // Mini-jeux: the extension's purchase (OFF by default)
       'word_game',
       'event_shop',
     ]);

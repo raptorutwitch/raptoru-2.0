@@ -1,5 +1,6 @@
 // Primitives visuelles partagees par les vues Viewer. Ce module ne contient
 // aucune regle metier : il normalise uniquement l'affichage et les etats UI.
+import { formatCompactAmount } from './currency.js';
 
 export const UI_ICONS = Object.freeze({
   search: '⌕',
@@ -115,29 +116,12 @@ function bonkGroupPresentation(group, source, id) {
   return null;
 }
 
-function compactDecimal(value) {
-  return String(Number(value.toFixed(1)));
-}
-
 /**
- * Format compact uniquement pour les soldes affichés dans le wallet.
+ * Format compact uniquement pour les soldes affichés dans le wallet (le formateur partagé : currency.js).
  * Les coûts et les historiques continuent d'utiliser le formateur métier/UI
  * existant afin de ne pas modifier la lecture des autres écrans.
  */
-export function formatWalletValue(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return '—';
-  const amount = Math.max(0, Math.trunc(numeric));
-  if (amount < 1_000) return amount.toLocaleString('fr-FR');
-
-  if (amount < 1_000_000) {
-    const scaled = Math.min(999, Math.round(amount / 100) / 10);
-    return `${compactDecimal(scaled)}K`;
-  }
-
-  const scaled = Math.round(amount / 100_000) / 10;
-  return `${compactDecimal(scaled)}M`;
-}
+export const formatWalletValue = (value) => formatCompactAmount(value);
 
 /**
  * Format exact utilisé uniquement par les informations accessibles et le
@@ -394,24 +378,16 @@ const CURRENCY_SWITCH_UNITS = Object.freeze({
   credits: (amount) => `crédit${amount > 1 ? 's' : ''}`,
 });
 let currencySwitchSequence = 0;
+// Last balance shown by a « balance » switch (the header is rebuilt at every redraw): a gain between two reads shows
+// « +N » once — 10 Jetons of passive gain never change « 125 K » (12/11 report « le solde ne se met pas à jour »).
+const lastShownBalance = { tokens: null, credits: null };
+export const resetShownBalances = () => { lastShownBalance.tokens = null; lastShownBalance.credits = null; };
 
 /**
- * Solde compact pour une case de largeur fixe : jusqu'à 999 tel quel, puis K / M avec une
- * décimale sous 10 (1,2K · 12K · 985K · 1,2M). Tronqué : jamais surestimé.
+ * Solde compact pour une case de largeur fixe (40 px) : 2 chiffres significatifs
+ * (1,2 K · 12 K · 985 K · 6,2 M). Tronqué : jamais surestimé ; le solde exact est dans l'infobulle.
  */
-export function formatCompactBalance(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return '—';
-  const amount = Math.max(0, Math.trunc(numeric));
-  if (amount < 1_000) return String(amount);
-  const [divisor, unit] = amount < 1_000_000 ? [1_000, 'K'] : [1_000_000, 'M'];
-  const scaled = amount / divisor;
-  if (scaled < 10) {
-    const truncated = Math.floor(scaled * 10) / 10;
-    return `${Number.isInteger(truncated) ? String(truncated) : truncated.toFixed(1).replace('.', ',')}${unit}`;
-  }
-  return `${Math.floor(scaled)}${unit}`;
-}
+export const formatCompactBalance = (value) => formatCompactAmount(value, { digits: 2 });
 
 /**
  * Switch de monnaie Jetons / Crédits « Peek slide » (classes rl-cswitch, currency-switch.css).
@@ -537,6 +513,17 @@ export function createCurrencySwitch({
       texts[candidate].textContent = mode === 'balance'
         ? (known(amounts[candidate]) ? formatCompactBalance(amounts[candidate]) : '—')
         : CURRENCY_SWITCH_LABELS[candidate];
+      if (mode !== 'balance' || !known(amounts[candidate])) continue;
+      const value = Math.max(0, Math.trunc(Number(amounts[candidate])));
+      const before = lastShownBalance[candidate];
+      lastShownBalance[candidate] = value;
+      if (candidate !== active || before === null || value <= before) continue;
+      root.querySelector('.rl-cswitch__gain')?.remove();
+      const gain = make('span', 'rl-cswitch__gain');
+      gain.setAttribute('aria-hidden', 'true');
+      gain.textContent = `+${formatCompactAmount(value - before)}`;
+      root.append(gain);
+      setTimeout(() => gain.remove(), 2_600);
     }
     const hasAmounts = known(amounts.tokens) || known(amounts.credits);
     tip.hidden = !hasAmounts;

@@ -26,8 +26,9 @@ export function hostModules() {
     .filter((m) => views.has(m.id) && m.enabled !== false)
     .map((m) => ({
       id: m.id,
-      label: m.label,
-      description: m.description,
+      // A view may name its Hub card itself (Random Ban's card is « Mini-jeux »).
+      label: views.get(m.id).presentation.label ?? m.label,
+      description: views.get(m.id).presentation.description ?? m.description,
       icon: views.get(m.id).presentation.icon ?? '✨',
       host: true,
       server: m,

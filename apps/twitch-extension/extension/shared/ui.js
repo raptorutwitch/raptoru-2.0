@@ -44,6 +44,7 @@ import { raffleIsActive } from './tombola-v1.js';
 import { hostModules, loadHostModules, moduleVariant, sessionModule, sessionModules, viewerModuleView } from './module-registry.js';
 import { createModuleModerationPanel } from './module-moderation.js';
 import './coffre-mystere.js';
+import './random-ban-view.js';
 import {
   hideRestrictions,
   holdsAction,

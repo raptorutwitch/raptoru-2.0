@@ -39,14 +39,58 @@ import { bindSettings, settingRows } from './setting-rows.js';
 // et le bot décident et appliquent. Un vrai Random Ban ne vient que d'une récompense ou de !rb, jamais de cette page. Deux essais
 // sont sans sanction, deux sont réels : ils sont séparés, nommés, et disent chacun ce qu'ils font avant de partir.
 
+type ModAction = 'cancel' | 'refund_uncertain' | 'revoke_bonus';
+const MOD: Record<
+  ModAction | 'pause' | 'resume',
+  { title: string; done: string }
+> = {
+  cancel: {
+    title:
+      'Annuler cette demande en attente ? L’acheteur est remboursé une fois.',
+    done: 'Demande annulée et remboursée',
+  },
+  refund_uncertain: {
+    title:
+      'Rembourser ce résultat incertain ? Seulement si tu as vérifié sur Twitch que le timeout n’a PAS eu lieu.',
+    done: 'Remboursement envoyé',
+  },
+  revoke_bonus: {
+    title: 'Retirer la prime Sniper de ce viewer ?',
+    done: 'Prime retirée',
+  },
+  pause: {
+    title:
+      'Mettre la file Random Ban en pause ? Plus aucun achat ; le bot ne prend rien.',
+    done: 'File en pause',
+  },
+  resume: { title: 'Reprendre la file Random Ban ?', done: 'File reprise' },
+};
+
+/** The moderation actions this request allows (Core checks again). */
+function rbModActions(r: RbView) {
+  const b = (a: ModAction, label: string) =>
+    `<button type="button" class="d-btn warn sm" data-mod="${a}">${label}</button>`;
+  return [
+    r.status === 'queued' && r.source !== 'test'
+      ? b('cancel', 'Annuler et rembourser…')
+      : '',
+    r.status === 'uncertain' && r.refund === 'to_verify'
+      ? b('refund_uncertain', 'Rembourser (vérifié)…')
+      : '',
+    r.sniper === 'hit' ? b('revoke_bonus', 'Retirer la prime…') : '',
+  ].join('');
+}
+
 export function mountRandomBanPage(root: HTMLElement) {
   const p = page(root, { title: 'Random Ban', mod: 'sanction', panel: true });
   p.body.innerHTML = `<div class="sx">
     <section class="sx-main">
       <h2 class="d-lb">Le tirage</h2>
       <div class="sx-draw" data-z="draw"></div>
-      <h2 class="d-lb sx-h">Suivi des demandes</h2>
+      <h2 class="d-lb sx-h">Suivi des demandes <span data-z="queue"></span></h2>
       <div class="sx-ledger" data-z="ledger"></div>
+      <h2 class="d-lb sx-h">À vérifier</h2>
+      <div class="sx-ledger" data-z="recon"></div>
     </section>
     <aside class="sx-side">
       <h2 class="d-lb">Avant de sanctionner</h2>
@@ -68,6 +112,14 @@ export function mountRandomBanPage(root: HTMLElement) {
   let error: string | null = null;
   let settings: SettingView[] | null = null;
   let outcome = 'ban';
+  let paused = false;
+  let recon: { why: string; request: RbView }[] = [];
+  const WHY: Record<string, string> = {
+    timeout_incertain: 'Timeout incertain : vérifier sur Twitch',
+    remboursement_en_attente: 'Remboursement en attente',
+    prime_non_decidee: 'Prime Sniper pas encore décidée',
+    demande_bloquee: 'Demande ouverte depuis plus de 2 min',
+  };
 
   async function read() {
     try {
@@ -77,6 +129,17 @@ export function mountRandomBanPage(root: HTMLElement) {
       error = errText(e);
     }
     cp = await getJson<CpState>('/api/channel-points/state').catch(() => cp);
+    // Moderation (Mini-jeux): an older Core without these routes leaves them empty, never a broken page.
+    paused = await getJson<{ paused: boolean }>(
+      '/api/random-ban/moderation/history',
+    )
+      .then((h) => h.paused)
+      .catch(() => paused);
+    recon = await getJson<{ items: { why: string; request: RbView }[] }>(
+      '/api/random-ban/moderation/reconciliation',
+    )
+      .then((x) => x.items)
+      .catch(() => recon);
     paint();
   }
   const tick = poller(read, 3000);
@@ -88,7 +151,8 @@ export function mountRandomBanPage(root: HTMLElement) {
     const trace = s ? rbTrace(s) : '';
     const media = s?.effects?.media ?? [];
     p.panel
-      .set(`${grp('Prix dans le chat', 'coin', settingRows(settings, ['random_ban.price']), 'prix rb')}
+      .set(`${grp('Prix (extension et !rb)', 'coin', settingRows(settings, ['random_ban.price', 'random_ban.price_2', 'random_ban.price_3', 'random_ban.price_4', 'random_ban.price_5', 'random_ban.tier_step_min', 'random_ban.max_pending']), 'prix rb palier série')}
+      ${grp('Points de chaîne et Sniper', 'ban', settingRows(settings, ['random_ban.cp_cooldown_min', 'random_ban.sniper_bonus', 'random_ban.sniper_window_min', 'random_ban_ext.enabled']), 'cooldown sniper prime extension')}
       ${grp('Déclencheurs', 'gift', `<div class="d-row col" data-k="déclencheurs récompenses liaisons points de chaîne">${triggersHtml(cp, error, usesRandomBan)}<small>Activation : une récompense dont l’action est l’interaction native Random Ban.</small></div>`)}
       ${grp('Suivi du streamer', 'activity', `<div class="d-row col" data-k="suivi streamer tirage malchance"><small>${esc(trace || 'Aucun Random Ban réel suivi pour l’instant.')}</small></div>`)}
       ${grp('Animations', 'film', media.length ? media.map((m) => `<div class="d-row" data-k="animations ${esc(m.label.toLowerCase())}"><span>${esc(m.label.replace('Random Ban — ', ''))}</span>${m.available ? '<span class="d-tag ok">Importée</span>' : '<span class="d-tag warn">À importer</span>'}</div>`).join('') : '<p class="d-note">Lecteur d’effets indisponible.</p>')}`);
@@ -120,6 +184,23 @@ export function mountRandomBanPage(root: HTMLElement) {
     );
     patch(z('locks'), s ? rbLocks(s) : '');
     patch(
+      z('queue'),
+      paused
+        ? `<span class="d-tag warn">File en pause</span> <button type="button" class="d-btn sm" data-queue="resume">Reprendre…</button>`
+        : `<button type="button" class="d-btn ghost sm" data-queue="pause">Mettre en pause…</button>`,
+    );
+    keyed(
+      z('recon'),
+      recon.map((x) => ({
+        key: `${x.why}:${x.request.request_id}`,
+        html: rbRow(x.request).replace(
+          '<span class="sx-what">',
+          `<span class="sx-what"><small class="sx-due">${esc(WHY[x.why] ?? x.why)}</small> `,
+        ),
+      })),
+      '<div class="d-empty">Rien à vérifier.</div>',
+    );
+    patch(
       z('tests'),
       `<div class="sx-try"><span>${seg(
         'data-out',
@@ -145,12 +226,14 @@ export function mountRandomBanPage(root: HTMLElement) {
       kicker: `Random Ban · ${hhmm(r.created_at)}`,
       title: r.target?.name ?? r.buyer.name,
       body: rbDetail(r),
-      foot: `<button type="button" class="d-btn ghost sm" data-see="${esc(r.buyer.id)}">${ic('user')}Fiche de l’acheteur</button>${r.target && r.target.id !== r.buyer.id ? `<button type="button" class="d-btn ghost sm" data-see="${esc(r.target.id)}">${ic('user')}Fiche de la cible</button>` : ''}`,
+      foot: `${rbModActions(r)}<button type="button" class="d-btn ghost sm" data-see="${esc(r.buyer.id)}">${ic('user')}Fiche de l’acheteur</button>${r.target && r.target.id !== r.buyer.id ? `<button type="button" class="d-btn ghost sm" data-see="${esc(r.target.id)}">${ic('user')}Fiche de la cible</button>` : ''}`,
     });
     d.el.addEventListener('click', (e) => {
-      const id = (e.target as HTMLElement).closest<HTMLElement>('[data-see]')
-        ?.dataset.see;
+      const t = e.target as HTMLElement;
+      const id = t.closest<HTMLElement>('[data-see]')?.dataset.see;
       if (id) openViewer(id);
+      const b = t.closest<HTMLElement>('[data-mod]');
+      if (b) void moderate(b, b.dataset.mod as ModAction, r.request_id);
     });
   }
 
@@ -204,8 +287,38 @@ export function mountRandomBanPage(root: HTMLElement) {
     if (ok) tick.now();
   }
 
+  /** One audited moderation action (Core checks, refunds once, writes the author and the reason). */
+  async function moderate(
+    b: HTMLElement,
+    action: ModAction | 'pause' | 'resume',
+    requestId?: string,
+  ) {
+    const t = MOD[action];
+    const reason = window.prompt(
+      `${t.title}\n\nMotif (obligatoire, gardé dans l’historique de modération) :`,
+      '',
+    );
+    if (!reason?.trim()) return;
+    const ok = await run(
+      b,
+      () =>
+        postJson('/api/random-ban/moderation/act', {
+          command: {
+            action,
+            reason,
+            ...(requestId ? { request_id: requestId } : {}),
+          },
+        }),
+      t.done,
+    );
+    if (ok) tick.now();
+  }
+
   p.root.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
+    const q = t.closest<HTMLElement>('[data-queue]')?.dataset.queue;
+    if (q === 'pause' || q === 'resume')
+      return void moderate(t.closest('button')!, q);
     const go = t.closest<HTMLElement>('[data-go-reward]')?.dataset.goReward;
     if (go) askReward(go);
     const b = t.closest<HTMLElement>('button');
@@ -216,7 +329,9 @@ export function mountRandomBanPage(root: HTMLElement) {
     }
     if (b.dataset.t) return void test(b, b.dataset.t as keyof typeof TESTS);
     if (b.dataset.rq) {
-      const r = s?.recent.find((x) => x.request_id === b.dataset.rq);
+      const r =
+        s?.recent.find((x) => x.request_id === b.dataset.rq) ??
+        recon.find((x) => x.request.request_id === b.dataset.rq)?.request;
       if (r) openRow(r);
     }
   });

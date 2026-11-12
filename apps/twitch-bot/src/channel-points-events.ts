@@ -181,6 +181,8 @@ export interface ChannelPointsEventsDeps {
     version: string,
   ): Promise<void>;
   getCustomRewards(): Promise<HelixReward[]>;
+  /** The ids of the rewards Raptoru's app created (only_manageable_rewards); absent or failing: not sent. */
+  getManageableRewardIds?(): Promise<string[]>;
   log?: (...args: unknown[]) => void;
   now?: () => number;
 }
@@ -346,6 +348,15 @@ export function createChannelPointsEvents(d: ChannelPointsEventsDeps) {
     async syncRewards() {
       try {
         const rewards = await d.getCustomRewards();
+        // Which ones Raptoru may manage, from Twitch itself; unknown (not sent) if that read fails.
+        let manageable: Set<string> | null = null;
+        try {
+          manageable = d.getManageableRewardIds
+            ? new Set(await d.getManageableRewardIds())
+            : null;
+        } catch {
+          manageable = null;
+        }
         await d.postRewards({
           channel_id: d.channelId,
           rewards: rewards.slice(0, 50).map((r) => ({
@@ -358,6 +369,7 @@ export function createChannelPointsEvents(d: ChannelPointsEventsDeps) {
             ...(r.is_user_input_required !== undefined
               ? { user_input_required: r.is_user_input_required }
               : {}),
+            ...(manageable ? { manageable: manageable.has(r.id) } : {}),
           })),
         });
         log(

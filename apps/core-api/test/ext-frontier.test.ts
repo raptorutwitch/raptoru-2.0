@@ -884,6 +884,7 @@ describe('module host through the real Production doors (architecture socle)', (
       'votekick', // adapters added once their service exists (architecture/MIGRATIONS.md)
       'caution',
       'random_ban',
+      'random_ban_ext', // Mini-jeux: the extension's purchase (OFF by default)
       'word_game',
       'event_shop',
     ]);
@@ -943,6 +944,13 @@ describe('module host through the real Production doors (architecture socle)', (
         label: 'Coffre mystère',
         enabled: true,
         moderation: { visible: true, refund: 'moderator' },
+      },
+      // Mini-jeux (switched off by default): its journal is the team's too; refunds are Random Ban's own.
+      {
+        id: 'random_ban_ext',
+        label: 'Mini-jeux · Random Ban',
+        enabled: false,
+        moderation: { visible: true, refund: 'never' },
       },
     ]);
     // A module the policy hides from the team (or an unknown one): no journal.

@@ -69,7 +69,11 @@ export class ModuleStatsService {
            count(*) filter (where buyer_id = $2 and status = 'confirmed' and target_id is distinct from buyer_id) as landed,
            count(*) filter (where buyer_id = $2 and status = 'confirmed' and target_id = buyer_id) as backfired,
            count(*) filter (where buyer_id = $2 and status = 'flop') as flops,
-           count(*) filter (where target_id = $2 and buyer_id <> $2 and status = 'confirmed') as received
+           count(*) filter (where target_id = $2 and buyer_id <> $2 and status = 'confirmed') as received,
+           count(*) filter (where buyer_id = $2 and wish_id is not null and sniper <> 'void') as sniper_tries,
+           count(*) filter (where buyer_id = $2 and sniper in ('hit', 'glory_hit')) as sniper_hits,
+           coalesce(sum(price_paid) filter (where buyer_id = $2 and status not in ('failed', 'canceled')), 0) as tokens_spent,
+           coalesce(sum((stats->>'sniper_bonus')::int) filter (where buyer_id = $2 and sniper = 'hit'), 0) as tokens_won
          from rb_requests where channel_id = $1 and mode = 'real' and (buyer_id = $2 or target_id = $2)`,
           [channelId, viewerId],
         ),
@@ -108,6 +112,11 @@ export class ModuleStatsService {
         backfired: n(rb[0]?.backfired),
         flops: n(rb[0]?.flops),
         received: n(rb[0]?.received),
+        // Mini-jeux: the Sniper and the Jetons (this viewer only, like the rest of this answer).
+        sniper_tries: n(rb[0]?.sniper_tries),
+        sniper_hits: n(rb[0]?.sniper_hits),
+        tokens_spent: n(rb[0]?.tokens_spent),
+        tokens_won: n(rb[0]?.tokens_won),
       },
       roulette: {
         plays: n(game('roulette')?.plays),
@@ -120,6 +129,37 @@ export class ModuleStatsService {
         screamers.map((s) => [s.season, n(s.bought)]),
       ),
       since,
+    };
+  }
+  /**
+   * The channel's public Random Ban figures (raptoru.fr): totals only, never a viewer, never a prediction.
+   * `since`: the first request this Core holds (nothing is reconstructed before it).
+   */
+  async randomBanPublic(channelId: string) {
+    const r =
+      (
+        await this.db.query<Record<string, number | string | Date | null>>(
+          `select
+           count(*) filter (where status not in ('failed', 'canceled')) as launched,
+           count(*) filter (where status = 'confirmed') as executed,
+           count(distinct target_id) filter (where status = 'confirmed' and coalesce(reason, '') not like 'streamer_mute%') as distinct_banned,
+           count(*) filter (where status = 'confirmed' and target_id = buyer_id) as self,
+           count(*) filter (where status = 'flop') as flops,
+           count(*) filter (where wish_id is not null and sniper <> 'void') as sniper_tries,
+           count(*) filter (where sniper in ('hit', 'glory_hit')) as sniper_hits,
+           coalesce(sum(price_paid) filter (where status not in ('failed', 'canceled')), 0) as tokens_spent,
+           coalesce(sum((stats->>'sniper_bonus')::int) filter (where sniper = 'hit'), 0) as tokens_won,
+           min(created_at) as since
+         from rb_requests where channel_id = $1 and mode = 'real' and source <> 'test'`,
+          [channelId],
+        )
+      )[0] ?? {};
+    const { since, ...n } = r;
+    return {
+      ...Object.fromEntries(
+        Object.entries(n).map(([k, v]) => [k, Number(v ?? 0)]),
+      ),
+      since: since ? new Date(since as Date).toISOString() : null,
     };
   }
 }

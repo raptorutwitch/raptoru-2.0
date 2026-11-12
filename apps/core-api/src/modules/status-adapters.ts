@@ -5,49 +5,8 @@ import type { ModuleDefinition } from './kit.js';
 // its engine, its switch, its settings and its screens; the host only READS what really works, so the Control Center
 // and the « Modules du socle » page tell it like every other module. Nothing here writes or executes anything.
 
-const hourAgo = (now: Date) => new Date(now.getTime() - 3_600_000);
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n > 1 ? many : one}`;
-
-/** Random Ban (docs/RANDOM_BAN*.md): `!rb` has no switch of its own; it works only while the bot's executor reports. */
-export function randomBanModule(service: {
-  executorReady(channelId: string): boolean;
-}): ModuleDefinition {
-  return {
-    id: 'random_ban',
-    label: 'Random Ban',
-    description:
-      'Un viewer paie pour exclure un viewer au hasard (!rb) : le prix se règle dans Points de chaîne.',
-    category: 'interactions',
-    capabilities: ['supervision'],
-    async status(ctx, channelId) {
-      const ready = service.executorReady(channelId);
-      const n = Number(
-        (
-          await ctx.db.query<{ n: number | string }>(
-            'select count(*) as n from rb_requests where channel_id = $1 and created_at > $2',
-            [channelId, hourAgo(ctx.clock.now())],
-          )
-        )[0]?.n ?? 0,
-      );
-      return {
-        intention: 'on',
-        observed: ready ? 'ready' : 'waiting',
-        summary: ready
-          ? 'Le bot peut chercher et exclure : !rb fonctionne.'
-          : 'Le bot ne s’est pas signalé : !rb serait refusé (aucun Jeton débité).',
-        reasons: ready
-          ? []
-          : [
-              'Exécuteur Random Ban du bot silencieux depuis plus de 15 s (RANDOM_BAN côté bot ?).',
-            ],
-        activity: n
-          ? `${plural(n, 'demande', 'demandes')} la dernière heure`
-          : null,
-      };
-    },
-  };
-}
 
 /** Jeu des mots (docs/WORD_GAME*.md): its durable switch (H8), the live, the next word — its service's own state. */
 export function wordGameModule(service: {

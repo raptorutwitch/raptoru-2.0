@@ -496,7 +496,13 @@ export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
       return 'worked';
     }
     // Core knows the target before anything is sent; no answer → nothing is sent (the lease expires, re-offered).
-    let answer: { proceed?: boolean; duration_s?: number; reason?: string };
+    let answer: {
+      proceed?: boolean;
+      duration_s?: number;
+      reason?: string;
+      /** Le Viseur (Mini-jeux, `reveal_first`): strike when Studio's reel stops — an older Core never sends it. */
+      delay_ms?: number;
+    };
     try {
       const r = await d.core(`${base}/requests/${req.request_id}/target`, {
         executor_id: d.executorId,
@@ -511,6 +517,14 @@ export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
       return 'worked';
     }
     if (!answer.proceed || req.mode !== 'real') return 'worked';
+    // Bounded (10 s, within Core's lease); nothing is sent before it ends, and a stop during it sends nothing.
+    const strikeIn = Math.min(
+      Math.max(0, Number(answer.delay_ms) || 0),
+      10_000,
+    );
+    if (strikeIn) await (d.pause ?? sleep)(strikeIn);
+    // Stopped while waiting: nothing sent (Core's lease ends: « à vérifier », never a second timeout).
+    if (strikeIn && stopped) return 'worked';
     d.journal.put({
       request_id: req.request_id,
       attempt_id: req.attempt_id,

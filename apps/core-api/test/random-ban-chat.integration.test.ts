@@ -5,7 +5,6 @@
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
 import type { LabChatMessage } from '@raptoru/schemas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { defaultChatPrices } from '../src/chat-interactions/prices.js';
 import { RandomBanChat } from '../src/chat-interactions/random-ban-chat.js';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
@@ -57,8 +56,8 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
     b = createPgDb(url!);
     rbA = new RandomBanService(a, clock);
     rbB = new RandomBanService(b, clock);
-    chatA = new RandomBanChat(a, clock, rbA, labEconomy, defaultChatPrices);
-    chatB = new RandomBanChat(b, clock, rbB, labEconomy, defaultChatPrices);
+    chatA = new RandomBanChat(a, clock, rbA, labEconomy);
+    chatB = new RandomBanChat(b, clock, rbB, labEconomy);
     // Both Cores saw the executor poll.
     await rbA.claim(CH, EXEC);
     await rbB.claim(CH, EXEC);
@@ -127,14 +126,49 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
       chatA.chat(msg('tw-bal-1', '9002')),
       chatB.chat(msg('tw-bal-2', '9002')),
     ]);
-    expect(out.map((o) => o.outcome).sort()).toEqual([
-      'rb_queued',
-      'rb_refused',
-    ]);
+    // The second sees the first (buyer's lock): its price is now the 2nd tier — announced, nothing debited.
+    expect(out.map((o) => o.outcome).sort()).toEqual(['rb_queued', 'rb_quote']);
     expect(await tokens('9002')).toBe(5_000);
     expect(
       await n(`select count(*) as n from rb_requests where buyer_id = '9002'`),
     ).toBe(1);
+  });
+
+  it('progressive price (Mini-jeux): 4 confirmed purchases of one buyer at once on 2 Cores — tiers in order, the pending cap holds', async () => {
+    await editWallet(
+      a,
+      clock.now(),
+      CH,
+      '9010',
+      'set',
+      { tokens: 1_000_000 },
+      'test',
+    );
+    const m = (id: string): LabChatMessage => ({
+      ...msg(id, '9010'),
+      text: '!rb 100000',
+    });
+    const out = await Promise.all([
+      chatA.chat(m('tw-pp-1')),
+      chatB.chat(m('tw-pp-2')),
+      chatA.chat(m('tw-pp-3')),
+      chatB.chat(m('tw-pp-4')),
+    ]);
+    expect(out.map((o) => o.outcome).sort()).toEqual([
+      'rb_queued',
+      'rb_queued',
+      'rb_refused',
+      'rb_refused',
+    ]);
+    const paid = await a.query<{ price_paid: number; series_level: number }>(
+      `select price_paid, series_level from rb_requests where buyer_id = '9010' order by seq`,
+    );
+    // Never two purchases at the same level: 25 000 then 30 000, whatever the order.
+    expect(paid.map((p) => [p.series_level, p.price_paid])).toEqual([
+      [0, 25_000],
+      [1, 30_000],
+    ]);
+    expect(await tokens('9010')).toBe(1_000_000 - 55_000);
   });
 
   it('a failed request settled by both Cores at once: refunded exactly once', async () => {

@@ -10,9 +10,11 @@ import {
   traceTimeoutDebug,
 } from './shared/timeout-debug.js';
 import { createModulePanel } from './shared/ui.js';
+import { installDblclickGuard } from './shared/dblclick-guard.js';
 import { mountEnvironmentBadge } from './shared/env-badge.js';
 
 mountEnvironmentBadge();
+installDblclickGuard(); // a double-click on OUR controls never asks the player for full screen
 
 const toggle = document.getElementById('toggle');
 const drawer = document.getElementById('drawer');

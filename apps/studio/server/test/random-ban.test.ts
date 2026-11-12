@@ -167,6 +167,31 @@ async function chain(o: {
 }
 
 describe('Random Ban — Lab chain (real Lab Core, bot executor on a simulated Twitch, Studio runtime)', () => {
+  it('Le Viseur (sequence 1): the Studio runtime plays the reel that lands on the drawn target, then the ban video', async () => {
+    const c = await chain({
+      chatters: [{ id: '5', name: 'Lurker' }],
+      follows: ['5'],
+    });
+    await c.core(`/v1/lab/module-settings/${CH}`, {
+      key: 'random_ban.sequence',
+      value: 1,
+    });
+    await c.core(`/v1/lab/channel-points/${CH}/settings`, { enabled: true });
+    await c.rt.randomBan.once(); // Studio's poll: it is there (no reel is offered to an absent Studio)
+    await c.redeem();
+    expect(await c.executor.tick()).toBe('worked');
+    expect(c.timeouts).toHaveLength(1);
+    expect(await c.rt.randomBan.once()).toBe(true);
+    expect(c.shown[0]).toMatchObject({
+      kind: 'reel',
+      reel: { trigger: 'Buyer', target: { id: '5', name: 'Lurker' } },
+    });
+    const reel = c.shown[0]!.reel as { items: { id: string }[]; stop: number };
+    expect(reel.items[reel.stop]!.id).toBe('5');
+    expect(await c.rt.randomBan.once()).toBe(true);
+    expect(c.shown[1]).toMatchObject({ kind: 'ban', banned: 'Lurker' });
+  });
+
   it('a real redemption: one target among the followers present, ONE timeout by LeCroupier_ (sub 3 min), then the animation with both names', async () => {
     const c = await chain({
       chatters: [

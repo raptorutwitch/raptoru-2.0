@@ -24,5 +24,9 @@ registerSessionModule({
   },
   // A new session while the module is open: absorbed (no host redraw); the view re-reads its own state only when the
   // session's music summary changed (open / closed, queue size) — never one more reading per host refresh.
-  onState: (view, next, previous) => view.onState?.(next, previous) === true,
+  // A new balance is NOT absorbed: the host redraws its header wallet (12/11: the balance stayed frozen while open).
+  onState: (view, next, previous) => {
+    const absorbed = view.onState?.(next, previous) === true;
+    return absorbed && JSON.stringify(next?.wallet ?? null) === JSON.stringify(previous?.wallet ?? null);
+  },
 });

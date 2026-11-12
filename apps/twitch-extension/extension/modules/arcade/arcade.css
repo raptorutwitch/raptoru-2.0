@@ -1,0 +1,147 @@
+/* Mini-jeux › Random Ban (docs/mini-jeux/UX_UI_MINI_JEUX.md § 2) — rose poudré sur nuit : le module reste sombre,
+   seul le « ticket » du jeu est rose clair. Chargé par la vue elle-même (shared/random-ban-view.js), dans les deux
+   shells : --g vaut 1px en legacy (repli), l'échelle du socle en v2. */
+
+.rbx {
+  --rb-rose: #f4d3dc;
+  --rb-rose-deep: #e58aa6;
+  --rb-ink: #3b1530;
+  --rb-night: #1a1024;
+  --rb-u: var(--g, 1px);
+  display: grid;
+  gap: calc(10 * var(--rb-u));
+  padding: calc(4 * var(--rb-u)) 0;
+  color: #f3e9f2;
+  font-size: calc(13 * var(--rb-u));
+}
+
+.rbx__ticket {
+  position: relative;
+  display: grid;
+  gap: calc(8 * var(--rb-u));
+  padding: calc(14 * var(--rb-u)) calc(16 * var(--rb-u));
+  border-radius: calc(14 * var(--rb-u));
+  background:
+    radial-gradient(circle at 0 50%, var(--rb-night) calc(7 * var(--rb-u)), transparent calc(7.5 * var(--rb-u))),
+    radial-gradient(circle at 100% 50%, var(--rb-night) calc(7 * var(--rb-u)), transparent calc(7.5 * var(--rb-u))),
+    var(--rb-rose);
+  color: var(--rb-ink);
+  box-shadow: 0 calc(6 * var(--rb-u)) calc(18 * var(--rb-u)) rgba(229, 138, 166, 0.18);
+}
+
+.rbx__price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: calc(4 * var(--rb-u)) calc(10 * var(--rb-u));
+}
+.rbx__label {
+  font-size: calc(11 * var(--rb-u));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.rbx__amount {
+  font-size: calc(24 * var(--rb-u));
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.rbx__tier {
+  font-size: calc(12 * var(--rb-u));
+  font-weight: 700;
+}
+.rbx.is-series .rbx__tier { color: #a3244f; }
+
+.rbx__gauge { display: grid; gap: calc(4 * var(--rb-u)); }
+.rbx__gauge[hidden] { display: none; }
+.rbx__bar {
+  height: calc(8 * var(--rb-u));
+  border-radius: 999px;
+  background: rgba(59, 21, 48, 0.14);
+  overflow: hidden;
+}
+.rbx__bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--rb-rose-deep);
+  transition: width 1s linear;
+}
+.rbx__next, .rbx__normal { margin: 0; font-size: calc(12 * var(--rb-u)); font-variant-numeric: tabular-nums; }
+.rbx__next { font-weight: 800; }
+.rbx__normal { opacity: 0.75; }
+
+.rbx__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.rbx__rules { margin: 0; font-size: calc(11.5 * var(--rb-u)); line-height: 1.4; opacity: 0.78; }
+
+.rbx__foot { display: grid; gap: calc(6 * var(--rb-u)); }
+.rbx__cta {
+  min-height: calc(36 * var(--rb-u));
+  padding: calc(8 * var(--rb-u)) calc(16 * var(--rb-u));
+  border: 0;
+  border-radius: 999px;
+  background: var(--rb-rose-deep);
+  color: #2a0d20;
+  font: inherit;
+  font-size: calc(14 * var(--rb-u));
+  font-weight: 900;
+  cursor: pointer;
+}
+.rbx__cta.is-armed { background: #ffffff; box-shadow: 0 0 0 calc(2 * var(--rb-u)) var(--rb-rose-deep); }
+.rbx__cta:disabled { opacity: 0.45; cursor: default; }
+.rbx__cta:focus-visible { outline: calc(2 * var(--rb-u)) solid var(--rb-rose); outline-offset: calc(2 * var(--rb-u)); }
+.rbx__msg { margin: 0; min-height: 1.3em; font-size: calc(12 * var(--rb-u)); color: var(--rb-rose); }
+
+.rbx__h { margin: calc(2 * var(--rb-u)) 0 0; font-size: calc(12 * var(--rb-u)); letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
+.rbx__list { display: grid; gap: calc(4 * var(--rb-u)); margin: 0; padding: 0; list-style: none; }
+.rbx__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(8 * var(--rb-u));
+  padding: calc(6 * var(--rb-u)) calc(10 * var(--rb-u));
+  border-radius: calc(8 * var(--rb-u));
+  background: rgba(244, 211, 220, 0.07);
+  font-size: calc(12 * var(--rb-u));
+}
+.rbx__list li span { opacity: 0.7; white-space: nowrap; }
+.rbx__list li.is-open b { color: var(--rb-rose); }
+.rbx__list .rbx__empty { opacity: 0.7; }
+
+.rbx__sniper { display: grid; gap: calc(4 * var(--rb-u)); }
+.rbx__slabel { font-size: calc(12 * var(--rb-u)); font-weight: 800; }
+.rbx__select {
+  min-height: calc(32 * var(--rb-u));
+  padding: 0 calc(10 * var(--rb-u));
+  border: calc(1 * var(--rb-u)) solid rgba(244, 211, 220, 0.35);
+  border-radius: calc(8 * var(--rb-u));
+  background: #1f1428;
+  color: #f3e9f2;
+  font: inherit;
+  font-size: calc(13 * var(--rb-u));
+}
+.rbx__select:focus-visible { outline: calc(2 * var(--rb-u)) solid var(--rb-rose); outline-offset: calc(1 * var(--rb-u)); }
+.rbx__snote { margin: 0; font-size: calc(11.5 * var(--rb-u)); opacity: 0.8; }
+.rbx__list li b small { display: block; font-weight: 600; opacity: 0.8; }
+.rbx__list li.is-hit b small { color: #9ff0c9; opacity: 1; }
+.rbx__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(130 * var(--rb-u)), 1fr));
+  gap: calc(6 * var(--rb-u));
+  margin: 0;
+}
+.rbx__stats div { padding: calc(6 * var(--rb-u)) calc(10 * var(--rb-u)); border-radius: calc(8 * var(--rb-u)); background: rgba(244, 211, 220, 0.07); }
+.rbx__stats dt { font-size: calc(11 * var(--rb-u)); opacity: 0.7; }
+.rbx__stats dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rbx__bar > i { transition: none; }
+}

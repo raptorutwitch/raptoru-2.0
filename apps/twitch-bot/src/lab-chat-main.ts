@@ -274,6 +274,12 @@ const broadcaster = await (async () => {
           broadcasterHelix.subscribe(type, condition, sessionId, version),
         getCustomRewards: () =>
           broadcasterHelix.getCustomRewards(app.TWITCH_BROADCASTER_ID),
+        getManageableRewardIds: async () =>
+          (
+            await broadcasterHelix.getCustomRewards(app.TWITCH_BROADCASTER_ID, {
+              manageableOnly: true,
+            })
+          ).map((r) => r.id),
       })
     : null;
   if (events) {

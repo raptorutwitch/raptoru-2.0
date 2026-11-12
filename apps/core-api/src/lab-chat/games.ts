@@ -121,13 +121,7 @@ export function createChatGames(o: {
     chatModules.push({ name: 'tts', chat: (m) => ttsChat.chat(m) });
   }
   const randomBanChat = o.randomBan
-    ? new RandomBanChat(
-        o.db,
-        o.clock,
-        o.randomBan,
-        o.economy,
-        o.chatPrices ?? defaultChatPrices,
-      )
+    ? new RandomBanChat(o.db, o.clock, o.randomBan, o.economy)
     : null;
   if (randomBanChat)
     chatModules.push({

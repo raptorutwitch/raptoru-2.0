@@ -293,14 +293,13 @@ describe('!rb in the chat', () => {
       { tokens: 100_000 },
       'test',
     );
+    // Studio's « Prix de !rb » is the normal price (tier 1) of the progressive price.
+    await core.moduleSettings.set(CH, 'random_ban.price', 30_000, 'test');
     const chat = new RandomBanChat(
       core.db,
       core.clock,
       core.randomBan,
       core.economy,
-      {
-        price: async (_c, i) => (i === 'random_ban' ? 30_000 : 0),
-      },
     );
     await core.randomBan.claim(CH, EXEC);
     await chat.chat(msg('!rb'));
@@ -317,8 +316,6 @@ describe('Refonte H1: `!rb` only during the canonical live', () => {
     const l = await lab();
     await l.poll();
     const { coreWalletEconomy } = await import('../src/economy/economy.js');
-    const { defaultChatPrices } =
-      await import('../src/chat-interactions/prices.js');
     const port = coreWalletEconomy(l.core.wallet.wallet);
     await l.core.wallet.wallet.credit({
       key: 'fund-h1',
@@ -330,13 +327,7 @@ describe('Refonte H1: `!rb` only during the canonical live', () => {
       amount: 100_000,
       source: 'test',
     });
-    const chat = new RandomBanChat(
-      l.core.db,
-      l.core.clock,
-      l.rb,
-      port,
-      defaultChatPrices,
-    );
+    const chat = new RandomBanChat(l.core.db, l.core.clock, l.rb, port);
     expect(await chat.chat(msg('!rb'))).toEqual({ outcome: 'stream_offline' });
     expect(await l.requests()).toEqual([]);
     expect(await l.replies()).toEqual([

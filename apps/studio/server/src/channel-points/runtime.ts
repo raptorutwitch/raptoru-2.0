@@ -532,6 +532,40 @@ export class ChannelPointsRuntime {
       return this.d.environment === 'lab'
         ? reply(200, await this.d.core(`${ch}/lab-catalog`, {}))
         : reply(403, { error: 'lab_only' });
+    // Reward administration (docs/mini-jeux/RECOMPENSES_TWITCH.md): only these fields are passed on; Core decides.
+    if (p === '/rewards') {
+      const b = await this.body(req);
+      return reply(
+        200,
+        await this.d.core(`${ch}/rewards`, {
+          title: b.title,
+          cost: b.cost,
+          prompt: b.prompt ?? '',
+          user_input: b.user_input === true,
+          ...(b.migrated_from ? { migrated_from: b.migrated_from } : {}),
+        }),
+      );
+    }
+    const upd = /^\/rewards\/([A-Za-z0-9-]{1,128})\/twitch$/.exec(p);
+    if (upd) {
+      const b = await this.body(req);
+      return reply(
+        200,
+        await this.d.core(`${ch}/rewards/${upd[1]}/twitch`, { patch: b.patch }),
+      );
+    }
+    const refund =
+      /^\/redemptions\/(twitch|simulation)\/([A-Za-z0-9-]{1,128})\/refund$/.exec(
+        p,
+      );
+    if (refund)
+      return reply(
+        200,
+        await this.d.core(
+          `${ch}/redemptions/${refund[1]}/${refund[2]}/refund`,
+          {},
+        ),
+      );
     const rule = /^\/rules\/([A-Za-z0-9-]{1,128})$/.exec(p);
     if (rule)
       return reply(

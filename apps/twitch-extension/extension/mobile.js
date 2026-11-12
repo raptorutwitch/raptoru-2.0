@@ -2,9 +2,11 @@
 
 import { createClient, errorLabel, isDemo, sessionFailureState } from './shared/api.js';
 import { createModulePanel } from './shared/ui.js';
+import { installDblclickGuard } from './shared/dblclick-guard.js';
 import { mountEnvironmentBadge } from './shared/env-badge.js';
 
 mountEnvironmentBadge();
+installDblclickGuard(); // a double-click on OUR controls never asks the player for full screen
 
 let token = null;
 let refreshTimer = null;
