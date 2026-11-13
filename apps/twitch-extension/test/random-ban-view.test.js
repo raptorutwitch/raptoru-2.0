@@ -3,6 +3,8 @@ import {
   exactViewer,
   recoveryModel,
   reelSchedule,
+  carouselSlot,
+  reelProgress,
   historyLine,
   matchViewers,
   resultModel,
@@ -309,5 +311,40 @@ describe('reel rhythm', () => {
       expect(d[i]).toBeGreaterThanOrEqual(d[i - 1]);
     expect(Math.abs(d.reduce((a, b) => a + b, 0) - 3400)).toBeLessThan(25);
     expect(reelSchedule(1)).toEqual([0]);
+  });
+});
+
+// V4 (14/11) — the machine is a carousel: the centre whole, the neighbours smaller and darker; a clean stop.
+describe('draw machine carousel', () => {
+  it('the centre is whole and in front; neighbours smaller, darker, symmetric', () => {
+    expect(carouselSlot(0)).toMatchObject({
+      x: 0,
+      scale: 1,
+      opacity: 1,
+      front: true,
+    });
+    const r = carouselSlot(1);
+    const l = carouselSlot(-1);
+    expect(r.x).toBeCloseTo(-l.x);
+    expect(r.scale).toBeLessThan(1);
+    expect(r.opacity).toBeLessThan(1);
+    expect(r.front).toBe(false);
+    expect(carouselSlot(3).opacity).toBe(0); // far ones fade out
+  });
+  it('moving continuously: the scale shrinks as a portrait leaves the centre', () => {
+    expect(carouselSlot(0.3).scale).toBeLessThan(1);
+    expect(carouselSlot(0.3).scale).toBeGreaterThan(carouselSlot(0.8).scale);
+  });
+  it('the reel: fast at once, slow at the end, exactly on the target at the end (no overshoot)', () => {
+    expect(reelProgress(0)).toBe(0);
+    expect(reelProgress(1)).toBe(1);
+    expect(reelProgress(0.25)).toBeGreaterThan(0.6);
+    let last = 0;
+    for (let t = 0; t <= 1.0001; t += 0.05) {
+      const p = reelProgress(t);
+      expect(p).toBeGreaterThanOrEqual(last);
+      expect(p).toBeLessThanOrEqual(1);
+      last = p;
+    }
   });
 });

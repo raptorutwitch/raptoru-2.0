@@ -119,6 +119,10 @@ interface Row {
 }
 
 const OPEN: RbStatus[] = ['queued', 'searching', 'timeout_requested'];
+/** The present viewers and their pictures, shared by the players of a channel (each one reads every 4 s). */
+const PRESENT_MS = 5_000;
+/** Missing pictures asked to Twitch (in the background) at most this often per channel. */
+const AVATARS_MS = 30_000;
 const stripOf = (r: Row) =>
   (r.stats?.strip as { items: ReelItem[]; stop: number } | undefined) ?? null;
 
@@ -611,18 +615,24 @@ export class RandomBanService {
         this.now(),
         pricing.sniperWindowMs,
       );
-      const pool = await this.candidates(q, channelId);
+      // The present viewers and their pictures, shared by every player of the channel for a few seconds (each one
+      // reads every 4 s: never the presence and the pictures again for each of them).
+      const { pool, pics: poolPics } = await this.presentWithPictures(
+        q,
+        channelId,
+      );
       // Who may be aimed at: present viewers, never yourself nor the streamer (identity checked again at purchase).
       const candidates = pool.filter(
         (c) => c.id !== buyerId && c.id !== streamer?.id,
       );
-      // Pictures: the cache only (never a Twitch call on a read); the missing ones are fetched in the background.
+      // The pictures of my last draws' strips (a viewer may have left the chat since).
       const shown = mine.slice(0, 3).flatMap((m) => stripOf(m)?.items ?? []);
-      const ids = [
-        ...new Set([...candidates.map((c) => c.id), ...shown.map((x) => x.id)]),
-      ].slice(0, 300);
-      void this.avatars?.ensure(ids.slice(0, 100)).catch(() => {});
-      const pics = await this.avatarsOf(q, ids);
+      const missing = [...new Set(shown.map((x) => x.id))].filter(
+        (id) => !poolPics.has(id),
+      );
+      const pics = missing.length
+        ? new Map([...poolPics, ...(await this.avatarsOf(q, missing))])
+        : poolPics;
       const withPic = <T extends { id: string }>(x: T) => ({
         ...x,
         avatar: pics.get(x.id) ?? null,
@@ -655,10 +665,45 @@ export class RandomBanService {
         candidates: candidates.map((c) =>
           withPic({ id: c.id, login: c.login, name: c.name }),
         ),
+        // What stops THIS buyer now (the moderation's pause, block or personal delay): said before he clicks.
+        // Distinct from the price recovery (`price`), the Sniper window (`sniper`) and the channel points' delay
+        // (channel points only, never shown here).
+        restriction: await this.restriction(q, channelId, buyerId),
         // Kept for raptoru.fr (the game screen no longer shows them).
         stats: await this.personalStats(q, channelId, buyerId),
       };
     });
+  }
+
+  private readonly present = new Map<
+    string,
+    {
+      at: number;
+      pool: Awaited<ReturnType<RbCandidates>>;
+      pics: Map<string, string>;
+    }
+  >();
+  private avatarsAskedAt = new Map<string, number>();
+  /**
+   * The channel's present viewers with their pictures, kept PRESENT_MS. Pictures come from the cache only (never a
+   * Twitch call on a read); the missing ones are asked in the background, at most once per AVATARS_MS per channel.
+   */
+  private async presentWithPictures(q: Queryable, channelId: string) {
+    const now = Date.now();
+    const hit = this.present.get(channelId);
+    if (hit && now - hit.at < PRESENT_MS) return hit;
+    const pool = await this.candidates(q, channelId);
+    const ids = pool.map((c) => c.id).slice(0, 300);
+    if (
+      this.avatars &&
+      now - (this.avatarsAskedAt.get(channelId) ?? 0) > AVATARS_MS
+    ) {
+      this.avatarsAskedAt.set(channelId, now);
+      void this.avatars.ensure(ids.slice(0, 100)).catch(() => {});
+    }
+    const entry = { at: now, pool, pics: await this.avatarsOf(q, ids) };
+    this.present.set(channelId, entry);
+    return entry;
   }
 
   /** The Twitch profile pictures (the Tombola's cache, lab_viewer_avatars), set by the Core's host. */

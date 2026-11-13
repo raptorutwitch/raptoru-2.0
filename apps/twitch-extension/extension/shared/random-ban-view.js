@@ -52,6 +52,7 @@ const REASONS = {
   wish_unknown: 'Ce viewer n’est plus dans le chat : vise quelqu’un d’autre.',
   stream_offline: 'Random Ban se joue pendant le live.',
   unavailable: 'Random Ban est indisponible pour le moment.',
+  offline: 'Connexion perdue : nouvelle tentative…',
 };
 const reasonText = (code) => REASONS[code] ?? errorLabel(code);
 
@@ -92,22 +93,25 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     <header class="rb__bar">
       ${back ? '<button type="button" class="rb__back" data-k="back" aria-label="Retour aux Mini-jeux"><span aria-hidden="true">‹</span> Jeux</button>' : ''}
       <span class="rb__title"><span class="rb__logo">${RB_ICON}</span><b>Random Ban</b></span>
+      <span class="rb__gauge" data-k="gauge"></span>
       <button type="button" class="rb__info" data-k="infobtn" aria-expanded="false" aria-label="Comment ça marche">?</button>
     </header>
     <div class="rb__body">
       <div class="rb__left" data-k="left"></div>
       <div class="rb__right">
-        <div data-k="gauge"></div>
-        <div class="rb__sniper" data-k="sniper">
-          <span class="rb__scope" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
-          <input class="rb__input" data-k="wish" type="text" maxlength="40" autocomplete="off" spellcheck="false"
-            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="rb-sugg"
-            aria-label="Sniper : le viewer que tu prédis (facultatif)" placeholder="Sniper : @pseudo (facultatif)">
-          <span class="rb__picked" data-k="picked" hidden></span>
-          <button type="button" class="rb__clear" data-k="clear" aria-label="Effacer le Sniper" hidden>×</button>
-          <ul class="rb__sugg" id="rb-sugg" role="listbox" data-k="sugg" hidden></ul>
+        <div class="rb__play">
+          <div class="rb__sniper" data-k="sniper">
+            <span class="rb__scope" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
+            <input class="rb__input" data-k="wish" type="text" maxlength="40" autocomplete="off" spellcheck="false"
+              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="rb-sugg"
+              aria-label="Sniper : le viewer que tu prédis (facultatif)" placeholder="Sniper : @pseudo">
+            <span class="rb__snhint" data-k="snhint" hidden></span>
+            <span class="rb__picked" data-k="picked" hidden></span>
+            <button type="button" class="rb__clear" data-k="clear" aria-label="Effacer le Sniper" hidden>×</button>
+            <ul class="rb__sugg" id="rb-sugg" role="listbox" data-k="sugg" hidden></ul>
+          </div>
+          <button type="button" class="rb__go" data-k="go" disabled>Lancer</button>
         </div>
-        <button type="button" class="rb__go" data-k="go" disabled>Lancer</button>
         <p class="rb__msg" data-k="msg" role="status"></p>
         <section class="rb__recent" aria-label="Derniers tirages">
           <header><b>Derniers tirages</b><button type="button" class="rb__all" data-k="histbtn" aria-expanded="false">Tout voir</button></header>
@@ -144,6 +148,9 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   let shown = null; // request id the machine shows (after its draw)
   let shownAt = 0;
   let flash = ''; // the message of the last action, kept a few seconds over the state's own
+  let offline = false; // the last read failed: the last state stays shown, nothing can be bought
+  let armedPrice = null; // the price the first click armed (a change disarms: never a price the player did not see)
+  let armedAt = 0; // a double click is not a confirmation
 
   const st = () => s?.state ?? null;
   const launch = () => s?.actions?.find((a) => a.name === 'launch') ?? null;
@@ -206,15 +213,41 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     const pool = candidates();
     if (open) return machine.spin(pool);
     shown = null;
+    machine.idle(pool, pool.length ? 'Prêt' : 'Personne dans le chat');
+  }
+
+  /** The line under the machine: the one thing the player should know now (never two mechanisms mixed). */
+  function drawInfo() {
     const state = st();
-    machine.idle(
-      pool,
-      state && !state.identity
-        ? reasonText('identity_required')
-        : pool.length
-          ? `${pool.length} viewer${pool.length > 1 ? 's' : ''} dans le viseur`
-          : 'Personne dans le chat',
-    );
+    const mine = state?.mine ?? [];
+    const r = state?.restriction;
+    const left = (ms) => {
+      const sec = Math.max(0, Math.ceil((ms - (Date.now() - readAt)) / 1000));
+      return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    };
+    const run = mine.find((x) => OPEN.includes(x.status));
+    const pool = candidates().length;
+    let text = `${pool} viewer${pool > 1 ? 's' : ''} dans le viseur`;
+    let tone = '';
+    if (offline) [text, tone] = ['Connexion perdue · nouvelle tentative…', 'bad'];
+    else if (!state) [text, tone] = ['Lecture…', ''];
+    else if (!state.identity) [text, tone] = [reasonText('identity_required'), 'warn'];
+    else if (state.live === false) [text, tone] = [reasonText('stream_offline'), 'warn'];
+    else if (r?.code === 'rb_paused') [text, tone] = ['Random Ban est en pause (modération).', 'warn'];
+    else if (r?.code === 'viewer_blocked') [text, tone] = ['Random Ban est bloqué pour ton compte (modération).', 'bad'];
+    else if (r?.code === 'viewer_cooldown')
+      [text, tone] = [`Délai fixé par la modération : encore ${left(r.wait_ms ?? 0)}`, 'warn'];
+    else if (!state.ready) [text, tone] = ['Le bot ne répond pas : rien ne serait débité.', 'bad'];
+    else if (run)
+      [text, tone] = [
+        run.status === 'queued'
+          ? 'Ta demande attend son tour…'
+          : run.status === 'searching'
+            ? 'Le serveur cherche un viewer…'
+            : 'Sanction envoyée à Twitch…',
+        'wait',
+      ];
+    machine.info(text, tone);
   }
 
   // --- Sniper: free text, suggestions, the picked account -----------------------------------------------------------
@@ -290,6 +323,19 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   const onBlur = () => win.setTimeout(drawSuggestions, 0);
   const onFocus = () => drawSuggestions();
 
+  /** The Sniper's own window (its bonus), never mixed with the price or a moderation delay. */
+  function drawSnHint() {
+    const sn = st()?.sniper;
+    const hint = $('snhint');
+    const at = sn && !sn.ready && sn.ready_at ? Date.parse(sn.ready_at) - serverNow() : 0;
+    hint.hidden = !(at > 0) || !!picked;
+    if (at > 0) {
+      const min = Math.ceil(at / 60_000);
+      hint.textContent = `prime dans ${min} min`;
+      hint.title = `Sniper pour la gloire d’ici là : la prime de ${priceText(sn.bonus)} revient ${min} min après ton dernier Random Ban.`;
+    }
+  }
+
   /** What the purchase sends for the Sniper: the picked account, else the exact one, else the text as typed. */
   function wishInput() {
     const text = cleanWish($('wish').value);
@@ -303,9 +349,12 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   function reason() {
     const state = st();
     const a = launch();
+    if (offline) return 'offline';
     if (!a) return 'unavailable';
     if (!a.available) return a.unavailable_reason;
     if (state && !state.identity) return 'identity_required';
+    if (state?.live === false) return 'stream_offline';
+    if (state?.restriction) return state.restriction.code;
     if (state && !state.ready) return 'rb_unavailable';
     if (state && state.pending >= state.max_pending) return 'too_many_pending';
     return null;
@@ -320,21 +369,27 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     go.innerHTML = busy
       ? 'Envoi…'
       : armed
-        ? `Confirmer <span>${esc(priceText(price))}</span>`
+        ? `Confirmer <span>${esc(priceShort(price))}</span>`
         : `Lancer${price === null ? '' : ` <span>${esc(priceShort(price))}</span>`}`;
-    if (!armed) $('msg').textContent = flash || (why && !busy ? reasonText(why) : '');
+    go.setAttribute(
+      'aria-label',
+      armed ? `Confirmer : payer ${priceText(price)}` : price === null ? 'Lancer' : `Lancer un Random Ban pour ${priceText(price)}`,
+    );
+    if (!armed) $('msg').textContent = flash;
   }
 
   function drawRecent() {
     const recent = st()?.recent ?? [];
     $('recent').innerHTML = recent.length
       ? recent
-          .slice(0, 3)
+          .slice(0, 6)
           .map((r) => {
             const l = historyLine(r);
-            return `<li data-tone="${l.tone}">${face({ name: r.target?.name ?? '?', avatar: avatarOf(r, r.target?.id) }, 'rb-face rb-face--xs')}<span class="rb__rl"><b>${esc(l.target ?? '—')}</b><small>par ${esc(l.buyer)}</small></span><span class="rb__rr">${
-              l.sniper && r.sniper === 'hit' ? '<i class="rb__hitdot" title="Sniper réussi">◎</i>' : ''
-            }${esc(l.result)}</span></li>`;
+            const via = l.meta ? l.meta.split(' · ').pop() : '';
+            const hit = r.sniper === 'hit' || r.sniper === 'glory_hit';
+            return `<li data-tone="${l.tone}">${face({ name: r.target?.name ?? '?', avatar: avatarOf(r, r.target?.id) }, 'rb-face rb-face--xs')}<span class="rb__rl"><b>${esc(l.target ?? 'Personne')}</b><small>par ${esc(l.buyer)}${via ? ` · ${esc(via)}` : ''}</small></span><span class="rb__rr">${
+              hit ? '<i class="rb__hitdot" title="Sniper réussi">◎</i>' : ''
+            }<span class="rb__pill">${esc(l.result)}</span></span></li>`;
           })
           .join('')
       : '<li class="rb__none">Aucun tirage pour l’instant.</li>';
@@ -358,7 +413,15 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     if (stopped) return;
     const m = gauge.update(st(), readAt);
     if (m?.stale) void refresh();
+    // The price moved while armed (a step fell, another purchase): disarmed, the new price shown before any payment.
+    if (armed && st()?.price?.price !== armedPrice) {
+      armed = false;
+      win.clearTimeout(disarm);
+      say('Ton prix a changé : vérifie le nouveau montant avant de lancer.');
+    }
     drawButton();
+    drawInfo();
+    drawSnHint();
     drawSniper();
     drawMachine();
     drawRecent();
@@ -371,9 +434,11 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       if (stopped) return;
       s = next;
       readAt = Date.now();
+      offline = false;
     } catch {
       if (stopped) return;
-      s = null; // never a purchase the server cannot honour: the button waits for the next read
+      // The last state stays on screen (no blank game), but nothing can be bought until a read succeeds again.
+      offline = true;
     }
     draw();
     schedule();
@@ -383,7 +448,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     win.clearTimeout(poll);
     if (stopped) return;
     const running = animating || (st()?.mine ?? []).some((r) => OPEN.includes(r.status));
-    poll = win.setTimeout(() => void refresh(), running ? 1000 : 4000);
+    poll = win.setTimeout(() => void refresh(), offline ? 3000 : running ? 1000 : 4000);
   }
 
   function say(text, ms = 6000) {
@@ -402,6 +467,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     if (busy || !Number.isInteger(price)) return;
     if (!armed) {
       armed = true;
+      armedPrice = price;
+      armedAt = Date.now();
       const wish = wishInput();
       const aim = wish.wish_id
         ? ` · vise ${picked?.name ?? exactViewer(candidates(), wish.wish_text)?.name ?? wish.wish_text}`
@@ -419,6 +486,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       }, 5000);
       return draw();
     }
+    if (Date.now() - armedAt < 350) return; // a double click arms, it never pays
     win.clearTimeout(disarm);
     armed = false;
     busy = true;
@@ -532,6 +600,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       tick = win.setInterval(() => {
         const m = gauge.update(st(), readAt);
         if (m?.stale) void refresh();
+        if (st()?.restriction?.wait_ms) drawInfo(); // a moderation delay counts down
       }, 250);
     },
     destroy() {
@@ -540,6 +609,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       win.clearTimeout(poll);
       win.clearTimeout(disarm);
       machine.destroy();
+      gauge.destroy();
       for (const [el, ev, fn] of on) el.removeEventListener(ev, fn);
       node.removeEventListener('error', onImgError, true);
     },

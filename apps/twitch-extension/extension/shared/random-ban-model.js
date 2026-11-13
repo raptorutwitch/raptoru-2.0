@@ -259,3 +259,22 @@ export function reelSchedule(steps, totalMs = 3400) {
   const sum = raw.reduce((a, b) => a + b, 0);
   return raw.map((r) => Math.round((r / sum) * totalMs));
 }
+
+// --- V4 (14/11): the machine is a carousel — the viewers pass THROUGH the centre ------------------------------------
+
+/**
+ * Where a portrait sits at distance `d` from the centre (in portraits, fractional while moving): horizontal offset
+ * (in centre-portrait widths), scale and opacity. The centre one is whole; its neighbours smaller and darker.
+ */
+export function carouselSlot(d) {
+  const a = Math.min(Math.abs(d), 3);
+  return {
+    x: Math.sign(d) * (a <= 1 ? a : 1 + (a - 1) * 0.7),
+    scale: 1 - Math.min(a, 2) * 0.24,
+    opacity: a >= 2.6 ? 0 : Math.max(0, 1 - a * 0.42),
+    front: a < 0.5,
+  };
+}
+
+/** The reel's position at `t` (0 → 1): fast at once, a long slow-down, a clean stop (no overshoot). */
+export const reelProgress = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(1 - t, 4));

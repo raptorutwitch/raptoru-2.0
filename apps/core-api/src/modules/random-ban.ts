@@ -220,11 +220,14 @@ export function randomBanExtModule(
         },
       },
     },
-    async viewerState(_ctx, channelId, viewer) {
+    async viewerState(ctx, channelId, viewer) {
       const ready = service.executorReady(channelId);
-      if (!viewer) return { ready, identity: false };
+      // Random Ban plays during the live only (the purchase checks it again): said before the click.
+      const live = await ctx.live(ctx.db);
+      if (!viewer) return { ready, live, identity: false };
       return {
         ready,
+        live,
         identity: true,
         ...(await service.buyerState(channelId, viewer.id)),
       };

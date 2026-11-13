@@ -1,9 +1,10 @@
-// Mini-jeux › Random Ban V3 — the draw machine (left of the game screen). A scope: one big portrait in its sights, the
-// name under it, a strip of thumbnails below (the viewers it passes through). It SHOWS the Core's draw: `play()` runs
-// through the strip the Core built after its draw and stops on the Core's target (`stop`). It never picks anyone.
-// The stream's own ban alerts are Studio's, untouched: this is the player's view only.
+// Mini-jeux › Random Ban V4 — the draw machine (left of the game screen). A carousel: the viewers pass THROUGH the
+// centre (the big portrait), their neighbours smaller and darker on each side; a light scope frames the centre. It
+// SHOWS the Core's draw: `play()` scrolls the strip the Core built after its draw and stops on the Core's target
+// (`stop`). It never picks anyone. The stream's own ban alerts are Studio's, untouched: this is the player's view only.
+// One requestAnimationFrame loop, only while something moves; seven reused slots, never a node per viewer.
 
-import { reelSchedule } from './random-ban-model.js';
+import { carouselSlot, reelProgress } from './random-ban-model.js';
 
 const esc = (t) =>
   String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -20,18 +21,14 @@ export const face = (item, cls = 'rb-face') =>
     okPicture(item?.avatar) ? `<img src="${esc(item.avatar)}" alt="" draggable="false">` : ''
   }</span>`;
 
-const SCOPE = `<svg class="rbm__scope" viewBox="0 0 200 200" aria-hidden="true">
-  <circle cx="100" cy="100" r="92" class="rbm__r1"/>
-  <circle cx="100" cy="100" r="78" class="rbm__r2" pathLength="100"/>
-  <g class="rbm__ticks">${Array.from({ length: 24 }, (_, i) => {
-    const a = (i / 24) * Math.PI * 2;
-    const r1 = i % 6 === 0 ? 84 : 88;
-    return `<line x1="${(100 + Math.cos(a) * r1).toFixed(1)}" y1="${(100 + Math.sin(a) * r1).toFixed(1)}" x2="${(100 + Math.cos(a) * 92).toFixed(1)}" y2="${(100 + Math.sin(a) * 92).toFixed(1)}"/>`;
-  }).join('')}</g>
-  <path class="rbm__cross" d="M100 2v22M100 176v22M2 100h22M176 100h22"/>
-</svg>
-<svg class="rbm__lock" viewBox="0 0 200 200" aria-hidden="true">
-  <path d="M38 62V38h24M138 38h24v24M162 138v24h-24M62 162H38v-24"/>
+const SLOTS = 7; // the centre and three on each side (the outer ones fade out while moving)
+const SPIN_SPEED = 7; // portraits per second while the Core draws
+const REEL_MS = 3600;
+
+const SIGHT = `<svg class="rbm__sight" viewBox="0 0 100 100" aria-hidden="true">
+  <circle cx="50" cy="50" r="47" class="rbm__ring"/>
+  <path class="rbm__ticks" d="M50 0v7M50 93v7M0 50h7M93 50h7"/>
+  <path class="rbm__corners" d="M16 30V16h14M70 16h14v14M84 70v14H70M30 84H16V70"/>
 </svg>`;
 
 export function createMachine(document, { reduced = false } = {}) {
@@ -40,48 +37,91 @@ export function createMachine(document, { reduced = false } = {}) {
   node.className = 'rbm';
   node.dataset.mode = 'idle';
   node.innerHTML = `<div class="rbm__frame">
-      ${SCOPE}
-      <div class="rbm__portrait" data-m="portrait"></div>
+      <div class="rbm__deck" data-m="deck"></div>
+      ${SIGHT}
+      <div class="rbm__badge" data-m="badge" hidden></div>
       <div class="rbm__name" data-m="name"></div>
       <div class="rbm__status" data-m="status"></div>
-      <div class="rbm__badge" data-m="badge" hidden></div>
     </div>
-    <div class="rbm__strip" aria-hidden="true"><div class="rbm__track" data-m="track"></div></div>`;
+    <p class="rbm__info" data-m="info"></p>`;
   const $ = (k) => node.querySelector(`[data-m="${k}"]`);
-  let timers = [];
-  let spinTimer = null;
-  let trackSig = '';
-  let thumbs = [];
-  const stopTimers = () => {
-    for (const t of timers) win.clearTimeout(t);
-    timers = [];
-    win.clearInterval(spinTimer);
-    spinTimer = null;
+  const deck = $('deck');
+  const slots = Array.from({ length: SLOTS }, () => {
+    const el = document.createElement('span');
+    el.className = 'rbm__slot';
+    el.dataset.idx = '';
+    deck.append(el);
+    return el;
+  });
+
+  let items = []; // what passes through the centre
+  let loop = false; // the pool loops (idle, spin); the Core's strip does not
+  let pos = 0; // fractional index at the centre
+  let raf = 0;
+  let anim = null; // { kind: 'spin', from, at } | { kind: 'reel', from, to, at, done }
+  let placeholder = true; // idle: the centre is a « ? », the viewers wait around it
+
+  const itemAt = (i) => {
+    if (!items.length) return null;
+    if (loop) return items[((i % items.length) + items.length) % items.length];
+    return items[i] ?? null;
   };
 
-  function setTrack(items) {
-    const sig = items.map((x) => x.id).join(',');
-    if (sig === trackSig) return;
-    trackSig = sig;
-    thumbs = items;
-    $('track').innerHTML = items.map((it, i) => `<span class="rbm__thumb" data-i="${i}">${face(it, 'rb-face rb-face--thumb')}</span>`).join('');
+  /** Puts every slot where `pos` says (cheap: transforms and opacity; a portrait is rebuilt only when it changes). */
+  function layout() {
+    const base = Math.floor(pos);
+    const frac = pos - base;
+    const width = deck.clientWidth || 200;
+    const size = Math.min(width * 0.42, deck.clientHeight * 0.74 || 999, 120);
+    node.style.setProperty('--size', `${size.toFixed(1)}px`);
+    slots.forEach((el, k) => {
+      const idx = base + k - 3;
+      const d = k - 3 - frac;
+      const it = itemAt(idx);
+      const s = carouselSlot(d);
+      const centreHole = placeholder && s.front;
+      const key = it && !centreHole ? `${idx}:${it.id}` : '';
+      if (el.dataset.idx !== key) {
+        el.dataset.idx = key;
+        el.innerHTML = key ? face(it, 'rb-face rb-face--slot') : '';
+      }
+      el.style.transform = `translate(-50%, -50%) translateX(${(s.x * size).toFixed(1)}px) scale(${s.scale.toFixed(3)})`;
+      el.style.opacity = key ? s.opacity.toFixed(3) : '0';
+      el.style.zIndex = String(10 - Math.round(Math.abs(d) * 2));
+      el.classList.toggle('is-front', s.front);
+    });
+    const centre = placeholder ? null : itemAt(Math.round(pos));
+    $('name').textContent = centre?.name ?? '';
   }
-  /** Centers thumbnail `i` under the portrait and marks it. */
-  function focus(i, smooth = true) {
-    const track = $('track');
-    const el = track.children[i];
-    track.querySelector('.is-on')?.classList.remove('is-on');
-    if (!el) return;
-    el.classList.add('is-on');
-    const strip = track.parentElement;
-    const x = strip.clientWidth / 2 - (el.offsetLeft + el.offsetWidth / 2);
-    track.style.transition = smooth && !reduced ? 'transform 0.18s ease-out' : 'none';
-    track.style.transform = `translateX(${x}px)`;
+
+  function frame(now) {
+    raf = 0;
+    if (!anim) return;
+    if (anim.kind === 'spin') pos = anim.from + ((now - anim.at) / 1000) * SPIN_SPEED;
+    else {
+      const t = (now - anim.at) / REEL_MS;
+      pos = anim.from + (anim.to - anim.from) * reelProgress(t);
+      if (t >= 1) {
+        pos = anim.to;
+        const done = anim.done;
+        anim = null;
+        layout();
+        return done();
+      }
+    }
+    layout();
+    raf = win.requestAnimationFrame(frame);
   }
-  function show(item, name = item?.name) {
-    $('portrait').innerHTML = item ? face(item, 'rb-face rb-face--main') : '<span class="rbm__q">?</span>';
-    $('name').textContent = name ?? '';
-  }
+  const run = (a) => {
+    anim = a;
+    if (!raf) raf = win.requestAnimationFrame(frame);
+  };
+  const halt = () => {
+    anim = null;
+    if (raf) win.cancelAnimationFrame(raf);
+    raf = 0;
+  };
+
   const status = (text, tone = '') => {
     $('status').textContent = text;
     $('status').dataset.tone = tone;
@@ -89,96 +129,109 @@ export function createMachine(document, { reduced = false } = {}) {
   const mode = (m) => {
     node.dataset.mode = m;
   };
+  const badge = (text, tone = '') => {
+    $('badge').hidden = !text;
+    $('badge').textContent = text ?? '';
+    $('badge').dataset.tone = tone;
+  };
+  const reset = () => {
+    node.classList.remove('is-sniped', 'is-locked');
+    badge(null);
+  };
+  const samePool = (pool) => loop && items.length === pool.length && items.every((x, i) => x.id === pool[i]?.id);
 
   return {
     node,
     get busy() {
       return node.dataset.mode === 'reel';
     },
-    /** At rest: the scope empty, the viewers in its sights listed below. */
+    /** At rest: an empty sight in the centre, the viewers it could land on around it. */
     idle(pool, text) {
       if (node.dataset.mode === 'reel') return;
-      stopTimers();
+      halt();
+      reset();
       mode(pool.length ? 'idle' : 'empty');
-      setTrack(pool.slice(0, 40));
-      show(null, '');
-      $('badge').hidden = true;
-      node.classList.remove('is-sniped', 'is-locked');
+      if (!samePool(pool) || !placeholder) {
+        items = pool;
+        loop = true;
+        pos = Math.floor(pool.length / 2);
+      }
+      placeholder = true;
       status(text, '');
-      win.requestAnimationFrame(() => focus(Math.floor(Math.min(pool.length, 40) / 2), false));
+      layout();
     },
-    /** Paid, the Core has not drawn yet: the portraits run, nothing is decided here. */
+    /** Paid, the Core has not drawn yet: the viewers run through the centre, nothing is decided here. */
     spin(pool) {
       if (node.dataset.mode === 'reel' || node.dataset.mode === 'spin') return;
-      stopTimers();
+      reset();
       mode('spin');
-      node.classList.remove('is-sniped', 'is-locked');
-      $('badge').hidden = true;
-      setTrack(pool.slice(0, 40));
+      items = pool;
+      loop = true;
+      placeholder = !pool.length;
       status('Tirage en cours…', 'wait');
-      if (!pool.length) return show(null, '');
-      let i = 0;
-      const step = () => {
-        i = (i + 1) % thumbs.length;
-        show(thumbs[i]);
-        focus(i, false);
-      };
-      step();
-      if (!reduced) spinTimer = win.setInterval(step, 110);
+      if (reduced || !pool.length) {
+        halt();
+        return layout();
+      }
+      run({ kind: 'spin', from: pos, at: win.performance?.now?.() ?? Date.now() });
     },
-    /** The Core's strip: through it, slowing down, to the Core's target at `stop`. Resolves when stopped. */
+    /** The Core's strip: through the centre, slowing down, a clean stop on the Core's target. Resolves when stopped. */
     play(strip) {
-      stopTimers();
+      halt();
+      reset();
       mode('reel');
-      node.classList.remove('is-sniped', 'is-locked');
-      $('badge').hidden = true;
-      const items = strip.items.slice(0, strip.stop + 1);
-      setTrack(strip.items);
+      items = strip.items;
+      loop = false;
+      placeholder = false;
       status('Tirage…', 'wait');
       return new Promise((resolve) => {
         const land = () => {
-          show(items[items.length - 1]);
-          focus(strip.stop);
           node.classList.add('is-locked');
           mode('result');
           resolve();
         };
-        if (reduced || items.length < 2) return land();
-        const delays = reelSchedule(items.length);
-        let at = 0;
-        items.forEach((it, i) => {
-          at += delays[i];
-          if (i === items.length - 1) timers.push(win.setTimeout(land, at));
-          else
-            timers.push(
-              win.setTimeout(() => {
-                show(it);
-                focus(i);
-              }, at),
-            );
-        });
+        if (reduced || strip.stop < 1) {
+          pos = strip.stop;
+          layout();
+          return land();
+        }
+        pos = 0;
+        layout();
+        run({ kind: 'reel', from: 0, to: strip.stop, at: win.performance?.now?.() ?? Date.now(), done: land });
       });
     },
     /** The outcome on the target (the Core's words), and the Sniper's. */
     result(target, m) {
       if (node.dataset.mode === 'reel') return;
-      stopTimers();
+      halt();
       mode('result');
       node.classList.add('is-locked');
-      if (target) show(target);
+      const centre = itemAt(Math.round(pos));
+      if (target && centre?.id !== target.id) {
+        // No strip to land on (a refresh, a result without a draw): the target alone in the centre.
+        items = [target];
+        loop = false;
+        pos = 0;
+      }
+      placeholder = !target;
+      layout();
+      if (!target) $('name').textContent = '';
       status(m.text, m.tone);
       const sn = m.sniper;
-      const badge = $('badge');
-      badge.hidden = !sn?.text;
-      badge.textContent = sn?.text ?? '';
-      badge.dataset.tone = sn?.hit ? 'hit' : '';
+      badge(sn?.text || null, sn?.hit ? 'hit' : '');
     },
-    /** A Sniper hit: the lock turns green and closes in — once (the caller remembers it). */
+    /** A Sniper hit: the sight turns green and closes in — once (the caller remembers it). */
     sniped() {
       node.classList.remove('is-sniped');
       void node.offsetWidth;
       node.classList.add('is-sniped');
     },
-    destroy: stopTimers,
+    /** The line under the machine: what the player should know now (availability, a delay, the connection). */
+    info(text, tone = '') {
+      $('info').textContent = text ?? '';
+      $('info').dataset.tone = tone;
+    },
+    relayout: layout,
+    destroy: halt,
   };
 }

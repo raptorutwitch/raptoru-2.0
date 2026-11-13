@@ -377,3 +377,30 @@ describe('Sniper — free text and the moderator’s resolution', () => {
     expect(recent.redemption_id).toBeNull();
   });
 });
+
+// V4 (14/11): what stops the buyer is said BEFORE the click — and never mixed with the price or the Sniper window.
+describe('the player’s availability', () => {
+  it('pause, personal delay of the moderation: in the state, with the time left; none otherwise', async () => {
+    const l = await lab();
+    expect((await l.rb.buyerState(CH, V.id)).restriction).toBeNull();
+    await l.core.moduleSettings.set(CH, 'random_ban.queue_paused', 1, 'test');
+    expect((await l.rb.buyerState(CH, V.id)).restriction).toEqual({
+      code: 'rb_paused',
+    });
+    await l.core.moduleSettings.set(CH, 'random_ban.queue_paused', 0, 'test');
+    await l.launch();
+    await l.core.db.query(
+      `insert into lab_viewer_cooldowns (channel_id, viewer_id, module_id, delay_s, until, stream, reason, actor, created_at)
+       values ($1, $2, 'random_ban', 600, $3, false, 'test', 'test', $4)`,
+      [
+        CH,
+        V.id,
+        new Date(l.core.clock.now().getTime() + 3_600_000),
+        l.core.clock.now(),
+      ],
+    );
+    const r = (await l.rb.buyerState(CH, V.id)).restriction;
+    expect(r).toMatchObject({ code: 'viewer_cooldown' });
+    expect(r!.wait_ms).toBeGreaterThan(9 * MIN);
+  });
+});

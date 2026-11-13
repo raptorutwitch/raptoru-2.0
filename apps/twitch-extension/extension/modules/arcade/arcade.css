@@ -1,16 +1,16 @@
-/* Mini-jeux V3 (14/11, docs/mini-jeux/UX_UI_MINI_JEUX.md § 0) — « salle d'arcade de nuit » : cramoisi et bordeaux
-   (jamais le rose → violet de Tombola ni le violet du TTS), lueurs de viseur, un vert de verrouillage réservé au Sniper.
+/* Mini-jeux V4 (14/11, docs/mini-jeux/UX_UI_MINI_JEUX.md § 0) — « salle d'arcade de nuit » : cramoisi et bordeaux
+   (jamais le rose → violet de Tombola ni le violet du TTS), un vert de verrouillage réservé au Sniper.
    Chargé par la vue elle-même (shared/random-ban-view.js), dans les deux shells : --g vaut 1px en legacy (repli),
-   l'échelle du socle en v2. Composition : la machine de tirage à gauche, les commandes du joueur à droite ; empilées
-   en largeur étroite. */
+   l'échelle du socle en v2. Composition : bandeau (titre, jauge de prix compacte, aide) ; la machine de tirage à
+   gauche, le jeu du joueur à droite ; empilées en largeur étroite. */
 
 .mg {
   --mg-a: #ff2f55;
   --mg-b: #9b1238;
   --mg-hot: #ff5c7a;
   --mg-ink: #fff3f5;
-  --mg-dim: rgba(255, 232, 238, 0.6);
-  --mg-faint: rgba(255, 232, 238, 0.36);
+  --mg-dim: rgba(255, 232, 238, 0.62);
+  --mg-faint: rgba(255, 232, 238, 0.38);
   --mg-panel: rgba(255, 255, 255, 0.035);
   --mg-line: rgba(255, 255, 255, 0.09);
   --mg-lock: #2bff88;
@@ -140,12 +140,11 @@
   display: flex;
   align-items: center;
   gap: calc(8 * var(--u));
-  min-height: calc(28 * var(--u));
+  min-height: calc(30 * var(--u));
 }
 .rb__back,
 .rb__info,
-.rb__all,
-.rb__x {
+.rb__all {
   border: 1px solid var(--mg-line);
   border-radius: 999px;
   background: var(--mg-panel);
@@ -156,20 +155,24 @@
   cursor: pointer;
 }
 .rb__back {
-  padding: calc(4 * var(--u)) calc(10 * var(--u)) calc(4 * var(--u)) calc(8 * var(--u));
+  flex: none;
+  min-height: calc(26 * var(--u));
+  padding: 0 calc(10 * var(--u)) 0 calc(8 * var(--u));
 }
 .rb__back:hover,
 .rb__info:hover,
-.rb__all:hover {
+.rb__all:hover,
+.rb__back:focus-visible,
+.rb__info:focus-visible,
+.rb__all:focus-visible {
   border-color: rgba(255, 92, 122, 0.55);
   color: var(--mg-ink);
 }
 .rb__title {
   display: inline-flex;
-  flex: 1;
+  flex: none;
   align-items: center;
   gap: calc(8 * var(--u));
-  min-width: 0;
   font-size: calc(15 * var(--u));
 }
 .rb__logo {
@@ -181,15 +184,137 @@
   width: calc(19 * var(--u));
   height: calc(19 * var(--u));
 }
+.rb__gauge {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0;
+}
 .rb__info {
+  flex: none;
   width: calc(26 * var(--u));
   height: calc(26 * var(--u));
   padding: 0;
 }
 
+/* --- La jauge de prix, compacte -------------------------------------------------------------------------------- */
+.rbg {
+  position: relative;
+  width: min(100%, calc(250 * var(--u)));
+}
+.rbg__btn {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  width: 100%;
+  padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)) calc(10 * var(--u));
+  border: 0;
+  border-radius: calc(10 * var(--u));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: help;
+}
+.rbg__btn:hover,
+.rbg__btn:focus-visible,
+.rbg__btn[aria-expanded='true'] {
+  background: var(--mg-panel);
+}
+.rbg__bar {
+  position: relative;
+  flex: 1;
+  height: calc(5 * var(--u));
+  margin: calc(-8 * var(--u)) calc(4 * var(--u)) 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.rbg__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffb347, var(--mg-a) 55%, var(--mg-b));
+  box-shadow: 0 0 calc(8 * var(--u)) rgba(255, 47, 85, 0.45);
+  transform-origin: 0 50%;
+  transition: transform 0.26s linear;
+}
+.rbg__marks {
+  position: absolute;
+  inset: 0;
+}
+.rbg__mark {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at) * 100%);
+  display: grid;
+  justify-items: center;
+  translate: -50% -50%;
+}
+.rbg__mark i {
+  width: calc(7 * var(--u));
+  height: calc(7 * var(--u));
+  border: calc(1.5 * var(--u)) solid #1b0d16;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+}
+.rbg__mark b {
+  position: absolute;
+  top: calc(8 * var(--u));
+  color: var(--mg-faint);
+  font-size: calc(9 * var(--u));
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rbg__mark.is-on i {
+  scale: 1.45;
+  background: #fff;
+  box-shadow: 0 0 0 calc(1.5 * var(--u)) var(--mg-a);
+}
+.rbg__mark.is-on b {
+  color: var(--mg-ink);
+}
+.rbg__next {
+  flex: none;
+  min-width: calc(42 * var(--u));
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: right;
+}
+.rbg.is-up .rbg__next {
+  color: var(--mg-hot);
+}
+.rbg__tip {
+  position: absolute;
+  z-index: 9;
+  top: calc(100% + 6 * var(--u));
+  right: 0;
+  display: grid;
+  gap: calc(3 * var(--u));
+  width: calc(230 * var(--u));
+  padding: calc(9 * var(--u)) calc(11 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(12 * var(--u));
+  background: #1f0e18;
+  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(0, 0, 0, 0.55);
+  font-size: calc(12 * var(--u));
+  line-height: 1.35;
+}
+.rbg__tip[hidden] {
+  display: none;
+}
+.rbg__tip span {
+  color: var(--mg-dim);
+}
+.rbg__tip small {
+  margin-top: calc(3 * var(--u));
+  color: var(--mg-faint);
+  font-size: calc(11 * var(--u));
+}
+
 .rb__body {
   display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   gap: calc(10 * var(--u));
   min-height: 0;
 }
@@ -204,119 +329,130 @@
   gap: calc(8 * var(--u));
 }
 
-/* --- La machine de tirage -------------------------------------------------------------------------------------- */
+/* --- La machine de tirage : un carrousel qui passe par le viseur ------------------------------------------------ */
 .rbm {
   display: grid;
   grid-template-rows: 1fr auto;
-  gap: calc(8 * var(--u));
+  gap: calc(6 * var(--u));
   height: 100%;
-  padding: calc(8 * var(--u));
-  border: 1px solid var(--mg-line);
-  border-radius: calc(18 * var(--u));
-  background: var(--mg-panel);
 }
 .rbm__frame {
+  --foot: calc(46 * var(--u));
   position: relative;
-  display: grid;
-  place-items: center;
   min-height: calc(150 * var(--u));
   overflow: hidden;
-  border: 1px solid rgba(255, 92, 122, 0.25);
-  border-radius: calc(14 * var(--u));
+  border: 1px solid rgba(255, 92, 122, 0.22);
+  border-radius: calc(18 * var(--u));
   background:
-    radial-gradient(55% 55% at 50% 45%, rgba(255, 47, 85, 0.22), transparent 70%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px),
+    radial-gradient(42% 52% at 50% 44%, rgba(255, 47, 85, 0.26), transparent 72%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.2)),
     #12080f;
   isolation: isolate;
 }
-.rbm__scope,
-.rbm__lock {
+.rbm__deck {
   position: absolute;
-  top: 44%;
+  inset: 0 0 var(--foot);
+}
+.rbm__slot {
+  position: absolute;
+  top: 54%;
   left: 50%;
-  width: min(84%, calc(100% * 0.84));
+  width: var(--size);
+  height: var(--size);
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+.rbm__slot:not(.is-front) {
+  filter: saturate(0.7) brightness(0.75);
+}
+.rb-face--slot {
+  --face: 100%;
+  font-size: calc(var(--size) * 0.34);
+  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.16);
+}
+.rbm__slot.is-front .rb-face--slot {
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) rgba(255, 255, 255, 0.92),
+    0 0 calc(22 * var(--u)) rgba(255, 47, 85, 0.55);
+}
+
+/* Le viseur, réduit à l'essentiel : un anneau fin, quatre repères, des coins qui se referment sur la cible. */
+.rbm__sight {
+  position: absolute;
+  z-index: 20;
+  top: calc((100% - var(--foot)) * 0.54);
+  left: 50%;
+  width: calc(var(--size, 110px) + 26 * var(--u));
   aspect-ratio: 1;
-  max-height: 88%;
   translate: -50% -50%;
   pointer-events: none;
 }
-.rbm__scope circle,
-.rbm__scope line,
-.rbm__scope path {
+.rbm__sight * {
   fill: none;
-  stroke: rgba(255, 92, 122, 0.55);
-  stroke-width: 1.4;
+  stroke: rgba(255, 92, 122, 0.6);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
 }
-.rbm__r2 {
-  stroke-dasharray: 3 2;
-  opacity: 0.6;
-}
-.rbm__ticks line {
+.rbm__ticks {
   stroke-width: 2;
+  stroke-linecap: round;
 }
-.rbm[data-mode='idle'] .rbm__scope {
-  animation: rbm-turn 24s linear infinite;
-}
-.rbm[data-mode='spin'] .rbm__scope,
-.rbm[data-mode='reel'] .rbm__scope {
-  animation: rbm-turn 2.4s linear infinite;
-}
-.rbm.is-locked .rbm__scope circle {
-  stroke: rgba(255, 92, 122, 0.9);
-}
-@keyframes rbm-turn {
-  to {
-    rotate: 360deg;
-  }
-}
-.rbm__lock path {
-  fill: none;
+.rbm__corners {
   stroke: var(--mg-hot);
-  stroke-width: 6;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0;
 }
-.rbm.is-locked .rbm__lock path {
-  opacity: 0.9;
-  animation: rbm-snap 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+.rbm[data-mode='idle'] .rbm__ring {
+  stroke-dasharray: 4 6;
+  animation: rbm-breathe 3.2s ease-in-out infinite;
+}
+.rbm[data-mode='spin'] .rbm__ring,
+.rbm[data-mode='reel'] .rbm__ring {
+  stroke: rgba(255, 92, 122, 0.9);
+}
+.rbm.is-locked .rbm__corners {
+  opacity: 1;
+  animation: rbm-snap 0.32s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes rbm-breathe {
+  50% {
+    opacity: 0.45;
+  }
 }
 @keyframes rbm-snap {
   from {
     opacity: 0;
-    scale: 1.35;
+    transform: scale(1.25);
+    transform-origin: 50% 50%;
   }
 }
-
-.rbm__portrait {
+.rbm[data-mode='idle'] .rbm__deck::after {
   position: absolute;
-  top: 44%;
+  z-index: 15;
+  top: 54%;
   left: 50%;
   display: grid;
   place-items: center;
-  width: 46%;
-  max-width: calc(128 * var(--u));
-  aspect-ratio: 1;
-  translate: -50% -50%;
-}
-.rbm__q {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  border: calc(2 * var(--u)) dashed rgba(255, 92, 122, 0.45);
+  width: var(--size);
+  height: var(--size);
+  border: calc(2 * var(--u)) dashed rgba(255, 92, 122, 0.5);
   border-radius: 50%;
-  color: rgba(255, 92, 122, 0.85);
-  font-size: calc(40 * var(--u));
+  color: rgba(255, 92, 122, 0.9);
+  font-size: calc(var(--size) * 0.36);
   font-weight: 900;
+  translate: -50% -50%;
+  content: '?';
 }
+
 .rbm__name {
   position: absolute;
-  bottom: calc(30 * var(--u));
+  bottom: calc(26 * var(--u));
   left: 0;
   right: 0;
   overflow: hidden;
-  padding: 0 calc(8 * var(--u));
+  padding: 0 calc(10 * var(--u));
   font-size: calc(16 * var(--u));
   font-weight: 900;
   letter-spacing: 0.01em;
@@ -327,11 +463,11 @@
 }
 .rbm__status {
   position: absolute;
-  bottom: calc(7 * var(--u));
+  bottom: calc(6 * var(--u));
   left: 50%;
   max-width: calc(100% - 12 * var(--u));
   overflow: hidden;
-  padding: calc(2 * var(--u)) calc(10 * var(--u));
+  padding: calc(1 * var(--u)) calc(10 * var(--u));
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.45);
   color: var(--mg-dim);
@@ -352,6 +488,9 @@
   background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
   color: #fff;
 }
+.rbm__status[data-tone='bad'] {
+  color: var(--mg-dim);
+}
 @keyframes rbm-blink {
   50% {
     opacity: 0.55;
@@ -359,7 +498,8 @@
 }
 .rbm__badge {
   position: absolute;
-  top: calc(7 * var(--u));
+  z-index: 25;
+  top: calc(8 * var(--u));
   left: 50%;
   padding: calc(2 * var(--u)) calc(9 * var(--u));
   border-radius: 999px;
@@ -369,6 +509,9 @@
   font-weight: 900;
   translate: -50% 0;
   white-space: nowrap;
+}
+.rbm__badge[hidden] {
+  display: none;
 }
 .rbm__badge[data-tone='hit'] {
   background: var(--mg-lock);
@@ -380,21 +523,18 @@
 .rbm.is-sniped .rbm__frame {
   border-color: var(--mg-lock);
   background:
-    radial-gradient(55% 55% at 50% 45%, rgba(43, 255, 136, 0.28), transparent 70%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px),
+    radial-gradient(42% 52% at 50% 44%, rgba(43, 255, 136, 0.3), transparent 72%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.2)),
     #06140c;
-  box-shadow: 0 0 calc(24 * var(--u)) rgba(43, 255, 136, 0.35);
+  box-shadow: 0 0 calc(24 * var(--u)) rgba(43, 255, 136, 0.3);
 }
-.rbm.is-sniped .rbm__scope circle,
-.rbm.is-sniped .rbm__scope line,
-.rbm.is-sniped .rbm__scope path {
+.rbm.is-sniped .rbm__sight * {
   stroke: var(--mg-lock);
 }
-.rbm.is-sniped .rbm__lock path {
-  stroke: var(--mg-lock);
+.rbm.is-sniped .rbm__corners {
   animation: rbm-close 0.8s cubic-bezier(0.2, 1.3, 0.4, 1);
 }
-.rbm.is-sniped .rb-face--main {
+.rbm.is-sniped .rbm__slot.is-front .rb-face--slot {
   box-shadow:
     0 0 0 calc(3 * var(--u)) var(--mg-lock),
     0 0 calc(30 * var(--u)) var(--mg-lock);
@@ -402,44 +542,34 @@
 @keyframes rbm-close {
   0% {
     opacity: 0;
-    scale: 1.9;
-    rotate: 45deg;
+    transform: scale(1.8) rotate(45deg);
+    transform-origin: 50% 50%;
   }
   70% {
     opacity: 1;
-    scale: 0.94;
-    rotate: 0deg;
+    transform: scale(0.94);
+    transform-origin: 50% 50%;
   }
 }
 
-/* Les vignettes : la bande des viewers sous le viseur. */
-.rbm__strip {
-  position: relative;
-  height: calc(40 * var(--u));
+.rbm__info {
+  min-height: calc(16 * var(--u));
+  margin: 0;
   overflow: hidden;
-  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  color: var(--mg-faint);
+  font-size: calc(11.5 * var(--u));
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.rbm__track {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  display: flex;
-  gap: calc(6 * var(--u));
-  translate: 0 -50%;
+.rbm__info[data-tone='wait'] {
+  color: var(--mg-amber);
 }
-.rbm__thumb {
-  flex: none;
-  opacity: 0.5;
-  transition:
-    opacity 0.15s,
-    scale 0.15s;
+.rbm__info[data-tone='warn'] {
+  color: #ffd27a;
 }
-.rbm__thumb.is-on {
-  opacity: 1;
-  scale: 1.18;
-}
-.rbm__thumb.is-on .rb-face {
-  box-shadow: 0 0 0 calc(2 * var(--u)) var(--mg-hot);
+.rbm__info[data-tone='bad'] {
+  color: var(--mg-hot);
 }
 
 /* Les portraits. */
@@ -468,119 +598,23 @@
   height: 100%;
   object-fit: cover;
 }
-.rb-face--thumb {
-  --face: calc(28 * var(--u));
-}
 .rb-face--xs {
-  --face: calc(22 * var(--u));
-}
-.rb-face--main {
-  --face: 100%;
-  font-size: calc(36 * var(--u));
-  box-shadow:
-    0 0 0 calc(3 * var(--u)) rgba(255, 255, 255, 0.9),
-    0 0 calc(22 * var(--u)) rgba(255, 47, 85, 0.6);
+  --face: calc(24 * var(--u));
 }
 
-/* --- La jauge de prix ------------------------------------------------------------------------------------------ */
-.rbg {
-  display: grid;
-  gap: calc(6 * var(--u));
-  padding: calc(9 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u));
-  border: 1px solid var(--mg-line);
-  border-radius: calc(14 * var(--u));
-  background: var(--mg-panel);
-}
-.rbg__top {
+/* --- Le jeu du joueur : Sniper et Lancer sur une ligne ---------------------------------------------------------- */
+.rb__play {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: stretch;
   gap: calc(8 * var(--u));
 }
-.rbg__label {
-  color: var(--mg-faint);
-  font-size: calc(10.5 * var(--u));
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.rbg__price {
-  font-size: calc(17 * var(--u));
-  font-variant-numeric: tabular-nums;
-}
-.rbg__price::after {
-  margin-left: calc(4 * var(--u));
-  color: var(--mg-faint);
-  font-size: calc(11 * var(--u));
-  font-weight: 700;
-  content: 'Jetons';
-}
-.rbg.is-up .rbg__price {
-  color: var(--mg-hot);
-}
-.rbg__bar {
-  position: relative;
-  height: calc(8 * var(--u));
-  margin: calc(2 * var(--u)) calc(8 * var(--u)) calc(16 * var(--u));
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-}
-.rbg__fill {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #ffb347, var(--mg-a) 55%, var(--mg-b));
-  box-shadow: 0 0 calc(10 * var(--u)) rgba(255, 47, 85, 0.45);
-  transform-origin: 0 50%;
-  transition: transform 0.26s linear;
-}
-.rbg__marks {
-  position: absolute;
-  inset: 0;
-}
-.rbg__mark {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--at) * 100%);
-  display: grid;
-  justify-items: center;
-  translate: -50% -50%;
-}
-.rbg__mark i {
-  width: calc(10 * var(--u));
-  height: calc(10 * var(--u));
-  border: calc(2 * var(--u)) solid #1b0d16;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
-}
-.rbg__mark b {
-  position: absolute;
-  top: calc(13 * var(--u));
-  color: var(--mg-faint);
-  font-size: calc(9.5 * var(--u));
-  font-weight: 800;
-  white-space: nowrap;
-}
-.rbg__mark.is-on i {
-  scale: 1.35;
-  background: #fff;
-  box-shadow: 0 0 0 calc(2 * var(--u)) var(--mg-a);
-}
-.rbg__mark.is-on b {
-  color: var(--mg-ink);
-}
-.rbg__next {
-  color: var(--mg-dim);
-  font-size: calc(11.5 * var(--u));
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- Le Sniper ------------------------------------------------------------------------------------------------- */
 .rb__sniper {
   position: relative;
   display: flex;
+  flex: 1;
   align-items: center;
-  min-height: calc(36 * var(--u));
+  min-width: 0;
+  min-height: calc(38 * var(--u));
   border: 1px solid var(--mg-line);
   border-radius: calc(12 * var(--u));
   background: rgba(0, 0, 0, 0.22);
@@ -619,6 +653,17 @@
 .rb__input::placeholder {
   color: var(--mg-faint);
 }
+.rb__snhint {
+  flex: none;
+  margin-right: calc(6 * var(--u));
+  padding: calc(1 * var(--u)) calc(7 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 194, 77, 0.12);
+  color: var(--mg-amber);
+  font-size: calc(10.5 * var(--u));
+  font-weight: 800;
+  white-space: nowrap;
+}
 .rb__picked {
   display: inline-flex;
   align-items: center;
@@ -642,8 +687,8 @@
   position: absolute;
   z-index: 6;
   top: calc(100% + 4 * var(--u));
-  right: 0;
   left: 0;
+  width: max(100%, calc(220 * var(--u)));
   max-height: calc(170 * var(--u));
   margin: 0;
   padding: calc(4 * var(--u));
@@ -679,27 +724,27 @@
   text-transform: uppercase;
 }
 
-/* --- Lancer ---------------------------------------------------------------------------------------------------- */
 .rb__go {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  gap: calc(8 * var(--u));
-  min-height: calc(40 * var(--u));
-  padding: calc(8 * var(--u)) calc(14 * var(--u));
+  gap: calc(7 * var(--u));
+  min-width: calc(112 * var(--u));
+  min-height: calc(38 * var(--u));
+  padding: 0 calc(12 * var(--u));
   border: 0;
   border-radius: calc(12 * var(--u));
   background:
     radial-gradient(120% 120% at 20% 0%, rgba(255, 255, 255, 0.28), transparent 50%),
     linear-gradient(120deg, var(--mg-a), var(--mg-b));
   box-shadow:
-    0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(255, 47, 85, 0.32),
+    0 calc(5 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
   color: #fff;
   font: inherit;
-  font-size: calc(14.5 * var(--u));
+  font-size: calc(14 * var(--u));
   font-weight: 900;
-  letter-spacing: 0.02em;
   cursor: pointer;
   transition:
     transform 0.12s,
@@ -711,8 +756,12 @@
 .rb__go:active:not(:disabled) {
   transform: translateY(calc(1 * var(--u)));
 }
+.rb__go:focus-visible {
+  outline: calc(2 * var(--u)) solid #fff;
+  outline-offset: calc(2 * var(--u));
+}
 .rb__go span {
-  padding: calc(1 * var(--u)) calc(8 * var(--u));
+  padding: calc(1 * var(--u)) calc(7 * var(--u));
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.25);
   font-variant-numeric: tabular-nums;
@@ -721,7 +770,7 @@
   background: #fff;
   box-shadow:
     0 0 0 calc(3 * var(--u)) rgba(255, 47, 85, 0.55),
-    0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(255, 47, 85, 0.35);
+    0 calc(5 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.35);
   color: #a3102f;
   animation: rb-armed 1s ease-in-out infinite;
 }
@@ -732,7 +781,7 @@
   50% {
     box-shadow:
       0 0 0 calc(5 * var(--u)) rgba(255, 47, 85, 0.3),
-      0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(255, 47, 85, 0.35);
+      0 calc(5 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.35);
   }
 }
 .rb__go:disabled {
@@ -742,8 +791,7 @@
   cursor: default;
 }
 .rb__msg {
-  min-height: calc(16 * var(--u));
-  margin: calc(-2 * var(--u)) 0 0;
+  margin: calc(-3 * var(--u)) 0 0;
   overflow: hidden;
   color: var(--mg-dim);
   font-size: calc(11.5 * var(--u));
@@ -763,9 +811,9 @@
   grid-template-rows: auto 1fr;
   gap: calc(4 * var(--u));
   min-height: 0;
-  padding: calc(8 * var(--u)) calc(10 * var(--u));
+  padding: calc(8 * var(--u)) calc(10 * var(--u)) calc(6 * var(--u));
   border: 1px solid var(--mg-line);
-  border-radius: calc(14 * var(--u));
+  border-radius: calc(16 * var(--u));
   background: var(--mg-panel);
 }
 .rb__recent header {
@@ -780,13 +828,14 @@
   text-transform: uppercase;
 }
 .rb__all {
-  padding: calc(2 * var(--u)) calc(9 * var(--u));
+  min-height: calc(24 * var(--u));
+  padding: 0 calc(10 * var(--u));
   font-size: calc(11 * var(--u));
 }
 .rb__recent ul {
   display: grid;
   align-content: start;
-  gap: calc(2 * var(--u));
+  grid-auto-rows: calc(36 * var(--u));
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -797,8 +846,11 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: calc(8 * var(--u));
-  min-height: calc(28 * var(--u));
+  gap: calc(9 * var(--u));
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.rb__recent li:first-child {
+  border-top: 0;
 }
 .rb__rl {
   display: grid;
@@ -816,19 +868,28 @@
   font-size: calc(10.5 * var(--u));
 }
 .rb__rr {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(5 * var(--u));
+}
+.rb__pill {
+  padding: calc(2 * var(--u)) calc(8 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 47, 85, 0.16);
   color: var(--mg-hot);
-  font-size: calc(11.5 * var(--u));
+  font-size: calc(11 * var(--u));
   font-weight: 800;
   white-space: nowrap;
 }
-.rb__recent li[data-tone='bad'] .rb__rr,
-.rb__recent li[data-tone='info'] .rb__rr {
+.rb__recent li[data-tone='bad'] .rb__pill,
+.rb__recent li[data-tone='info'] .rb__pill {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--mg-faint);
 }
 .rb__hitdot {
-  margin-right: calc(4 * var(--u));
   color: var(--mg-lock);
   font-style: normal;
+  font-weight: 900;
 }
 .rb__none {
   color: var(--mg-faint);
@@ -837,7 +898,7 @@
 /* --- Les feuilles (historique complet, règles) ----------------------------------------------------------------- */
 .rb__sheet {
   position: absolute;
-  z-index: 8;
+  z-index: 30;
   inset: 0;
   display: grid;
   grid-template-rows: auto 1fr;
@@ -915,15 +976,26 @@
   content: '';
 }
 
-/* --- Étroit (panneau, mobile) : la machine au-dessus, les commandes dessous. ------------------------------------- */
+/* --- Étroit (panneau, mobile) : la jauge sous le titre, la machine au-dessus du jeu. ----------------------------- */
 @container (max-width: 400px) {
-  .rb__body {
-    grid-template-columns: 1fr;
-    grid-auto-rows: auto;
-    overflow-y: auto;
+  .rb__bar {
+    flex-wrap: wrap;
+  }
+  .rb__title {
+    flex: 1;
+  }
+  .rb__gauge {
+    order: 5;
+    flex-basis: 100%;
+    justify-content: stretch;
+  }
+  .rbg {
+    width: 100%;
   }
   .rb__body {
+    grid-template-columns: 1fr;
     align-content: start;
+    overflow-y: auto;
   }
   .rb__left,
   .rb__right {
@@ -933,92 +1005,62 @@
     height: auto;
   }
   .rbm__frame {
-    min-height: calc(168 * var(--u));
-  }
-  .rbm__portrait,
-  .rbm__scope,
-  .rbm__lock {
-    top: 40%;
-  }
-  .rbm__portrait {
-    width: calc(80 * var(--u));
-  }
-  .rbm__name {
-    bottom: calc(28 * var(--u));
-    font-size: calc(14 * var(--u));
+    min-height: calc(210 * var(--u));
   }
   .rb__recent {
     flex: none;
   }
-  .rb__recent li:nth-child(n + 3) {
+  .rb__recent li:nth-child(n + 4) {
     display: none;
   }
 }
 
-/* --- Bas (lecteur réduit) : une machine plus basse, l'historique en deux lignes. --------------------------------- */
+/* --- Bas (lecteur réduit) : tout se resserre, l'historique garde ses premières lignes. -------------------------- */
 @media (max-height: 360px) {
   .rb {
     gap: calc(5 * var(--u));
   }
   .rb__bar {
-    min-height: calc(24 * var(--u));
-  }
-  .rbm {
-    gap: calc(4 * var(--u));
-    padding: calc(5 * var(--u));
+    min-height: calc(26 * var(--u));
   }
   .rbm__frame {
     min-height: calc(110 * var(--u));
   }
-  .rbm__strip {
-    height: calc(32 * var(--u));
-  }
-  .rb-face--thumb {
-    --face: calc(22 * var(--u));
+  .rbm__frame {
+    --foot: calc(40 * var(--u));
   }
   .rbm__name {
-    bottom: calc(24 * var(--u));
-    font-size: calc(13 * var(--u));
+    bottom: calc(22 * var(--u));
+    font-size: calc(13.5 * var(--u));
   }
-  .rbm__portrait {
-    top: 40%;
-    max-width: calc(72 * var(--u));
+  .rbm__status {
+    bottom: calc(4 * var(--u));
+    font-size: calc(10.5 * var(--u));
   }
-  .rbm__scope,
-  .rbm__lock {
-    top: 40%;
-  }
-  .rbg {
-    gap: calc(3 * var(--u));
-    padding: calc(6 * var(--u)) calc(10 * var(--u));
-  }
-  .rbg__bar {
-    margin-bottom: calc(4 * var(--u));
-  }
-  .rbg__mark b {
+  .rbm__info {
     display: none;
   }
   .rb__right {
     gap: calc(5 * var(--u));
   }
-  .rb__go {
+  .rb__go,
+  .rb__sniper {
     min-height: calc(34 * var(--u));
   }
-  .rb__recent li:nth-child(n + 2) {
-    display: none;
+  .rb__recent ul {
+    grid-auto-rows: calc(30 * var(--u));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rbm__scope,
+  .rbm__ring,
   .rbm__status,
   .rb__go.is-armed,
-  .rbm.is-locked .rbm__lock path,
-  .rbm.is-sniped .rbm__lock path {
+  .rbm.is-locked .rbm__corners,
+  .rbm.is-sniped .rbm__corners {
     animation: none !important;
   }
-  .rbg__fill,
-  .rbm__track {
+  .rbg__fill {
     transition: none !important;
   }
 }
