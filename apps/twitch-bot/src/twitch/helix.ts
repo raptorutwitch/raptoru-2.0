@@ -330,6 +330,8 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
         cost: number;
         prompt: string;
         is_user_input_required: boolean;
+        /** false: created hidden from the viewers. */
+        is_enabled?: boolean;
       },
     ) {
       const qs = new URLSearchParams({ broadcaster_id: broadcasterId });

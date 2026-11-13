@@ -21,15 +21,16 @@ Rien n'est déployé, rien n'est poussé, rien n'est fusionné dans `main`, aucu
 - Documentation complète : `docs/RECOMPENSES_TWITCH.md` (statut, inventaire, procédure § 6, retour arrière).
 - Tests :
 
-  | Suite | Résultat |
-  | --- | --- |
-  | Core (2 workers) | 1525 réussis ; 1 échec `sub-wheel-viewers` (« bad port »), réussi quand on le relance seul |
-  | Bot | 292 réussis |
-  | Studio ciblé (rewards-admin-chain, random-ban, brb, effects-player) | 28 réussis |
-  | Lint, typecheck | propres |
-  | Contrôle visuel | Chromium sur la pile e2e (`apps/studio/server/e2e/core-lab-stack.ts`) |
+  | Suite                                                               | Résultat                                                                                   |
+  | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+  | Core (2 workers)                                                    | 1525 réussis ; 1 échec `sub-wheel-viewers` (« bad port »), réussi quand on le relance seul |
+  | Bot                                                                 | 292 réussis                                                                                |
+  | Studio ciblé (rewards-admin-chain, random-ban, brb, effects-player) | 28 réussis                                                                                 |
+  | Lint, typecheck                                                     | propres                                                                                    |
+  | Contrôle visuel                                                     | Chromium sur la pile e2e (`apps/studio/server/e2e/core-lab-stack.ts`)                      |
 
   **Pas encore validé par Antoni à la main.**
+
 - Reste à faire avant livraison : pousser la branche (GO), ouvrir la PR et passer la CI. Il faut aussi la suite globale
   Studio, le build et éventuellement une recette Lab par Antoni.
 
@@ -47,6 +48,7 @@ Rien n'est déployé, rien n'est poussé, rien n'est fusionné dans `main`, aucu
 
   Modules `random_ban` et `random_ban_ext` coupés par défaut. Docs : `docs/mini-jeux/`. Démo :
   `cd apps/core-api && npx tsx scripts/mini-jeux-demo.ts` → http://127.0.0.1:4495.
+
 - Pas fait : Unban, tampon SNIPER, vrais avatars, pages du site.
 - **À rebaser sur A** : B contient une version antérieure de l'administration des récompenses. Garder la version de A
   pour :
@@ -60,14 +62,14 @@ Rien n'est déployé, rien n'est poussé, rien n'est fusionné dans `main`, aucu
 - 40 récompenses, 10 actives. Une seule est gérable par Raptoru : « Choisi la prochaine musique » (1500).
 - « Ban aléatoire » :
 
-  | Champ | Valeur |
-  | --- | --- |
-  | id | `b15cc303-bf34-4bc8-9535-1f11ef1299dd` |
-  | Coût | 3000 points |
-  | État | active, **non gérable** |
-  | Limites | aucun cooldown, aucun maximum |
-  | Validation | manuelle (pas `skip_queue`) |
-  | Texte du viewer | non |
+  | Champ           | Valeur                                 |
+  | --------------- | -------------------------------------- |
+  | id              | `b15cc303-bf34-4bc8-9535-1f11ef1299dd` |
+  | Coût            | 3000 points                            |
+  | État            | active, **non gérable**                |
+  | Limites         | aucun cooldown, aucun maximum          |
+  | Validation      | manuelle (pas `skip_queue`)            |
+  | Texte du viewer | non                                    |
 
 - Inventaire détaillé : `docs/RECOMPENSES_TWITCH.md` § 2 et § 4.
 

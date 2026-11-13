@@ -144,18 +144,14 @@ describe('channel points Random Ban — personal cooldown', () => {
     ]);
   });
 
-  it('the old reward (not created by Raptoru): refused, no refund asked nor promised', async () => {
+  it('the old reward (not created by Raptoru): NO cooldown — a refusal could not give the points back; the behaviour of today kept', async () => {
     const f = await fixture({ managed: false });
     await f.redeem();
     await f.drain();
-    const second = await f.redeem();
+    await f.redeem();
+    expect(await f.requests()).toBe(2);
     expect(await f.cancels()).toEqual([]);
-    expect(second.redemption.results[0]!.error).toContain(
-      'à rembourser à la main',
-    );
-    expect(await f.chat()).toEqual([
-      '@Kiwi - Random Ban indisponible pour toi : encore 10 min avant ton prochain tirage. Un modérateur peut te rembourser tes points depuis Twitch.',
-    ]);
+    expect(await f.chat()).toEqual([]);
   });
 
   it('personal: another viewer is never held; after 10 min Kiwi plays again', async () => {

@@ -14,7 +14,7 @@ import { createCpTwitchActionsExecutor } from '../../../twitch-bot/src/cp-twitch
 import { ChannelPointsRuntime } from '../src/channel-points/runtime.js';
 import { localLabCoreClient } from '../src/lab-moderation/proxy.js';
 
-// Récompenses Twitch — the whole chain without Twitch (docs/mini-jeux/RECOMPENSES_TWITCH.md): Studio's API → the real
+// Récompenses Twitch — the whole chain without Twitch (docs/RECOMPENSES_TWITCH.md): Studio's API → the real
 // Lab Core (HTTP) → the bot's Twitch actions executor on a FAKE Twitch → back to Studio's state. A migration of the old
 // « Ban aléatoire »: the new reward, its rule copied OFF; then a pause; then a refund — each sent to « Twitch » ONCE.
 
@@ -182,7 +182,8 @@ describe('Récompenses Twitch — Studio → Lab Core → bot executor (fake Twi
     expect(
       s.rewards.find((r: { id: string }) => r.id === 'raptoru-rb-1'),
     ).toMatchObject({ paused: true });
-    // A real redemption of the new reward, refunded by hand from Studio: one CANCELED.
+    // A real redemption of the new reward while its rule is still OFF (the migration's copy): refunded at once by the
+    // Core (never points kept for nothing); a refund by hand from Studio then finds it done — one CANCELED only.
     const redemption = randomUUID();
     await c.core('/v1/lab/channel-points/redemptions', {
       channel_id: CH,
@@ -193,9 +194,6 @@ describe('Récompenses Twitch — Studio → Lab Core → bot executor (fake Twi
       twitch_status: 'unfulfilled',
       redeemed_at: new Date().toISOString(),
     });
-    expect(
-      (await c.api(`/redemptions/twitch/${redemption}/refund`, {})).body,
-    ).toMatchObject({ status: 'queued' });
     expect(
       (await c.api(`/redemptions/twitch/${redemption}/refund`, {})).body,
     ).toMatchObject({ status: 'exists' });

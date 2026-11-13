@@ -45,6 +45,8 @@ const RewardCreate = z.strictObject({
   user_input: z.boolean().default(false),
   /** The old reward it replaces: its rule is copied OFF onto the new one. */
   migrated_from: RewardId.nullable().optional(),
+  /** Created hidden from the viewers (default: hidden for a migration, visible otherwise). */
+  hidden: z.boolean().optional(),
 });
 const RewardUpdate = z.strictObject({ patch: CpRewardPatch });
 const TestRequest = z.strictObject({
@@ -106,7 +108,7 @@ export function channelPointsRoutes(
           ),
         ),
     },
-    // Reward administration (docs/mini-jeux/RECOMPENSES_TWITCH.md): each one a Twitch action the bot runs ONCE with the
+    // Reward administration (docs/RECOMPENSES_TWITCH.md): each one a Twitch action the bot runs ONCE with the
     // broadcaster's token. Studio only (never the bot); Twitch itself refuses any reward Raptoru did not create.
     {
       method: 'POST',

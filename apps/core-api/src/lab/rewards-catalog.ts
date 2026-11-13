@@ -64,7 +64,7 @@ export const LAB_REWARDS: readonly Reward[] = [
     title: 'Ban aléatoire',
     cost: 20000,
     is_enabled: true,
-    // The migration rehearsal (docs/mini-jeux/RECOMPENSES_TWITCH.md): an OLD reward Raptoru's app did not create, as
+    // The migration rehearsal (docs/RECOMPENSES_TWITCH.md): an OLD reward Raptoru's app did not create, as
     // the real « Ban aléatoire » is (audit of 12/11) — Studio offers to replace it, never to pause or refund it.
     manageable: false,
     actions: [{ type: 'interaction', interaction: 'random_ban' }],

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-// READ ONLY — the inventory of the channel's custom rewards on Twitch (docs/mini-jeux/RECOMPENSES_TWITCH.md, phase 1):
+// READ ONLY — the inventory of the channel's custom rewards on Twitch (docs/RECOMPENSES_TWITCH.md, phase 1):
 // every reward, and which ones THIS Twitch app may manage (`only_manageable_rewards=true`: the rewards it created —
 // the only ones whose redemptions it may refund, and that it may pause or edit). Two GET requests, nothing else:
 // - the token is READ from the file given, never refreshed, never written (a refresh could rotate a grant another

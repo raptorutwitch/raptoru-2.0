@@ -257,6 +257,8 @@ export const CpTwitchAction = z.discriminatedUnion('kind', [
       cost: z.number().int().min(1).max(100_000_000),
       prompt: z.string().max(200),
       is_user_input_required: z.boolean(),
+      /** false: created hidden from the viewers (a migration: shown when its rule is ready). Absent: visible. */
+      is_enabled: z.boolean().optional(),
     }),
   }),
   /** A reward Raptoru owns: pause / resume / edit (Twitch refuses it for any other reward). */

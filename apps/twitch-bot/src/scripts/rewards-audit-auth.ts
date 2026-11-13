@@ -9,7 +9,7 @@ import {
 } from '../twitch/auth.js';
 import { waitForAuthorizationCode } from './twitch-auth.js';
 
-// READ-ONLY consent for the rewards audit (docs/mini-jeux/RECOMPENSES_TWITCH.md, phase 1). A separate authorization of
+// READ-ONLY consent for the rewards audit (docs/RECOMPENSES_TWITCH.md, phase 1). A separate authorization of
 // raptoru_ that asks Twitch for ONE right, `channel:read:redemptions` (read the rewards and which ones this app may
 // manage) — never a right to change anything. It keeps NO refresh token: the access token expires by itself (~4 h) and
 // can never be renewed, so no other grant (the bot's, the Lab's, Production's) is ever touched. Written outside the

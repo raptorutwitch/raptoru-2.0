@@ -22,6 +22,7 @@ export interface CpTwitchCalls {
     cost: number;
     prompt: string;
     is_user_input_required: boolean;
+    is_enabled?: boolean;
   }): Promise<string>;
   updateCustomReward(
     rewardId: string,

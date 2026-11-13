@@ -176,6 +176,8 @@ export class CpTwitchActions {
       prompt: string;
       is_user_input_required: boolean;
       migrated_from?: string | null;
+      /** false: created hidden (Twitch « is_enabled »). */
+      is_enabled?: boolean;
     },
   ) {
     return this.db.tx(async (q) => {
@@ -266,6 +268,7 @@ export class CpTwitchActions {
                     cost: Number(p.cost),
                     prompt: String(p.prompt ?? ''),
                     is_user_input_required: p.is_user_input_required === true,
+                    ...(p.is_enabled === false ? { is_enabled: false } : {}),
                   },
                 },
       };
@@ -306,7 +309,7 @@ export class CpTwitchActions {
         await q.query(
           `insert into cp_rewards (channel_id, reward_id, title, cost, prompt, is_enabled, user_input_required, source,
              last_seen_at, managed_by_raptoru)
-           values ($1, $2, $3, $4, $5, true, $6, 'twitch_api', $7, true)
+           values ($1, $2, $3, $4, $5, $8, $6, 'twitch_api', $7, true)
            on conflict (channel_id, reward_id) do update set managed_by_raptoru = true, last_seen_at = $7`,
           [
             channelId,
@@ -316,6 +319,7 @@ export class CpTwitchActions {
             String(p.prompt ?? ''),
             p.is_user_input_required === true,
             now,
+            p.is_enabled !== false,
           ],
         );
         // A migration: the new reward gets the old one's rule, OFF — nothing runs before Antoni's controlled test.

@@ -469,7 +469,10 @@ export class RandomBanService {
     source_ref: string;
     mode: 'real' | 'dry_run';
     buyer: RbTwitchUser;
+    /** false: no cooldown for this redemption (a reward whose points Raptoru cannot give back). */
+    cooldown?: boolean;
   }) {
+    const { cooldown = true, ...req } = r;
     return this.db.tx(async (q) => {
       await this.lockBuyer(q, r.channel_id, r.buyer.id);
       const prior = (
@@ -496,7 +499,10 @@ export class RandomBanService {
               ? ('paused' as const)
               : ('blocked' as const),
         };
-      const left = await this.cpCooldownLeft(q, r.channel_id, r.buyer.id);
+      // The personal cooldown only where a refused redemption can be refunded (docs/RECOMPENSES_TWITCH.md).
+      const left = cooldown
+        ? await this.cpCooldownLeft(q, r.channel_id, r.buyer.id)
+        : 0;
       if (left > 0)
         return {
           request: null,
@@ -504,7 +510,7 @@ export class RandomBanService {
           refused: 'cooldown' as const,
         };
       const { request } = await this.requestIfNew(
-        { ...r, source: 'channel_points' },
+        { ...req, source: 'channel_points' },
         q,
       );
       return { request, cooling_ms: 0, refused: null };

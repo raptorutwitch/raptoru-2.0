@@ -8,7 +8,7 @@ import { channelPointsRoutes } from '../src/http/channel-points-routes.js';
 import { RandomBanService } from '../src/random-ban/service.js';
 import { setup } from './helpers.js';
 
-// Points de chaîne — Studio administers the rewards (docs/mini-jeux/RECOMPENSES_TWITCH.md): Twitch says which rewards
+// Points de chaîne — Studio administers the rewards (docs/RECOMPENSES_TWITCH.md): Twitch says which rewards
 // Raptoru's app may manage; Studio creates one (a migration copies the old rule OFF), pauses / resumes it, refunds a
 // redemption of it — each a Twitch action the bot runs once. Never on a reward Raptoru does not own.
 
@@ -246,15 +246,24 @@ describe('reward administration from Studio', () => {
     expect(await f.bot()).toBeNull(); // nothing more: one refund
   });
 
-  it('À traiter: a redemption of the OLD reward refused (cooldown) — its points to give back by hand', async () => {
+  it('À traiter: a Random Ban of the OLD reward that did nothing — its points to give back by hand on Twitch', async () => {
     const f = await fixture();
     await f.redeem(OLD, 'Ban aléatoire');
-    await f.redeem(OLD, 'Ban aléatoire'); // within the personal 10 min: refused, not refundable by Raptoru
+    // The executor cannot time out: failed, the points are owed, Raptoru cannot give them back (not its reward).
+    await f.rb.claim(CH, {
+      executor_id: 'b',
+      login: 'x',
+      can_search: true,
+      can_timeout: false,
+      missing: ['x'],
+    });
+    await f.cp.state(CH);
     const att = await f.cp.attention(CH);
     expect(att.hand_refunds).toHaveLength(1);
     expect(att.hand_refunds[0]!.results[0]!.error).toContain(
-      'à rembourser à la main',
+      'remboursement nécessaire',
     );
+    expect(await f.bot()).toBeNull(); // nothing sent to Twitch
   });
 
   it('the Studio routes (Lab door): create, change, refund — with the readable refusals', async () => {
@@ -333,5 +342,59 @@ describe('reward administration from Studio', () => {
       status: 'CANCELED',
       redemption_id: r.redemption.redemption_id,
     });
+  });
+
+  it('a migration creates the new reward HIDDEN; redeemed while its rule is OFF, the points go back (never kept for nothing)', async () => {
+    const f = await fixture();
+    await f.cp.createManagedReward(CH, {
+      title: 'Random Ban',
+      cost: 3000,
+      prompt: '',
+      user_input: false,
+      migrated_from: OLD,
+    });
+    const a = await f.bot('done', 'new-rb-reward');
+    expect(a).toMatchObject({
+      kind: 'reward_create',
+      reward: { is_enabled: false },
+    });
+    expect(await f.reward('new-rb-reward')).toMatchObject({
+      twitch_enabled: false,
+      paused: null,
+      rule: { enabled: false },
+    });
+    // Shown on Twitch (Studio « Rendre visible »), its rule still OFF: a viewer redeems it → refunded, no Random Ban.
+    await f.cp.updateManagedReward(CH, 'new-rb-reward', { is_enabled: true });
+    await f.bot();
+    expect(await f.reward('new-rb-reward')).toMatchObject({
+      twitch_enabled: true,
+    });
+    const r = await f.redeem('new-rb-reward', 'Random Ban');
+    expect(r.redemption).toMatchObject({ reason: 'rule_disabled' });
+    expect(await f.rbCount()).toBe(0);
+    expect(await f.bot()).toMatchObject({
+      kind: 'redemption_status',
+      status: 'CANCELED',
+    });
+    // A plain creation (no migration) is visible unless asked otherwise.
+    await f.cp.createManagedReward(CH, {
+      title: 'Autre',
+      cost: 10,
+      prompt: '',
+      user_input: false,
+    });
+    expect(await f.bot('done', 'other')).toMatchObject({
+      kind: 'reward_create',
+      reward: { title: 'Autre' },
+    });
+    expect(await f.reward('other')).toMatchObject({ twitch_enabled: true });
+    // The OLD reward with its rule OFF: nothing sent to Twitch (not Raptoru's).
+    await f.cp.saveRule(CH, OLD, {
+      enabled: false,
+      actions: [{ type: 'interaction', interaction: 'random_ban' }],
+      expected_version: 1,
+    });
+    await f.redeem(OLD, 'Ban aléatoire');
+    expect(await f.bot()).toBeNull();
   });
 });

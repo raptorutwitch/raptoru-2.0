@@ -681,8 +681,13 @@ export class ChannelPointsService {
       );
       // Refonte H1: a stream effect bought outside the live is refused; its points go back once on Twitch when the
       // reward is Raptoru's and nothing was granted (a song request is refunded by Spotify's own refusal below).
+      // Récompenses Twitch: the same when its rule or the automations are OFF (a reward being migrated, a pause of
+      // Raptoru): a reward Raptoru owns never keeps points for nothing.
       if (
-        reason === STREAM_OFFLINE &&
+        e.source === 'twitch' &&
+        (reason === STREAM_OFFLINE ||
+          reason === 'rule_disabled' ||
+          reason === 'automations_off') &&
         !actions.length &&
         !rule!.actions.some(isSongRequest) &&
         this.twitch &&
@@ -788,6 +793,11 @@ export class ChannelPointsService {
       let update: ResultUpdate;
       try {
         if (!this.randomBan) throw new Error('random_ban_unavailable');
+        // The personal cooldown only where a refused redemption can be refunded (a reward Raptoru owns): on an old
+        // reward a refusal would cost the viewer his points — the old reward keeps today's behaviour.
+        const refundable =
+          !!this.twitch &&
+          (await this.twitch.managed(this.db, e.channel_id, e.reward.id));
         const { request, cooling_ms, refused } =
           await this.randomBan.requestChannelPoints({
             channel_id: e.channel_id,
@@ -798,6 +808,7 @@ export class ChannelPointsService {
               login: e.user.login,
               name: e.user.display_name,
             },
+            cooldown: refundable,
           });
         update = request
           ? {
@@ -1846,7 +1857,7 @@ export class ChannelPointsService {
     };
   }
 
-  // --- Studio's reward administration (docs/mini-jeux/RECOMPENSES_TWITCH.md) -------------------------------------
+  // --- Studio's reward administration (docs/RECOMPENSES_TWITCH.md) -------------------------------------
 
   private needTwitch() {
     if (!this.twitch) throw new CpError(503, 'twitch_actions_unavailable');
@@ -1862,6 +1873,8 @@ export class ChannelPointsService {
       prompt: string;
       user_input: boolean;
       migrated_from?: string | null;
+      /** Created hidden from the viewers (default for a migration: shown once its rule is ready). */
+      hidden?: boolean;
     },
   ) {
     const twitch = this.needTwitch();
@@ -1884,6 +1897,7 @@ export class ChannelPointsService {
       prompt: r.prompt,
       is_user_input_required: r.user_input,
       migrated_from: r.migrated_from ?? null,
+      ...((r.hidden ?? !!r.migrated_from) ? { is_enabled: false } : {}),
     });
   }
 
@@ -1941,7 +1955,8 @@ export class ChannelPointsService {
   async attention(channelId: string) {
     const handRefunds = await this.db.query<RedemptionRow>(
       `select * from cp_redemptions where channel_id = $1 and source = 'twitch' and received_at > now() - interval '7 days'
-         and results::text like '%à rembourser à la main%' order by received_at desc limit 30`,
+         and (results::text like '%à rembourser à la main%' or results::text like '%remboursement nécessaire%')
+       order by received_at desc limit 30`,
       [channelId],
     );
     const actions = this.twitch

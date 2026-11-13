@@ -2,7 +2,7 @@ import { confirmBox, drawer, esc, ic, run } from '../ds/ds.js';
 import { postJson } from '../http.js';
 import type { CpRedemption, CpReward, CpState } from './rewards-model.js';
 
-// Récompenses Twitch — l'administration depuis Studio (docs/mini-jeux/RECOMPENSES_TWITCH.md). Une règle de Twitch :
+// Récompenses Twitch — l'administration depuis Studio (docs/RECOMPENSES_TWITCH.md). Une règle de Twitch :
 // seule l'application qui a CRÉÉ une récompense peut la modifier, la mettre en pause et rembourser ses rachats. Studio
 // crée donc les récompenses de Raptoru (le bot l'exécute une fois, avec le jeton du streamer), met en pause / réactive
 // celles-là, rembourse un de leurs rachats ; une ancienne récompense (SAMMI…) est seulement lue, et peut être
@@ -70,9 +70,11 @@ export function adminHtml(r: CpReward, s: CpState | null) {
       <p class="rwf-adm">${
         busy
           ? '<span class="d-tag">Modification en cours sur Twitch…</span>'
-          : r.paused
-            ? `<button type="button" class="d-btn sm" data-ra="resume" data-id="${esc(r.id)}">${ic('play')}Réactiver sur Twitch…</button>`
-            : `<button type="button" class="d-btn sm" data-ra="pause" data-id="${esc(r.id)}">${ic('stop')}Mettre en pause sur Twitch…</button>`
+          : r.twitch_enabled === false && !r.paused
+            ? `<button type="button" class="d-btn sm" data-ra="show" data-id="${esc(r.id)}">${ic('play')}Rendre visible sur Twitch…</button>`
+            : r.paused
+              ? `<button type="button" class="d-btn sm" data-ra="resume" data-id="${esc(r.id)}">${ic('play')}Réactiver sur Twitch…</button>`
+              : `<button type="button" class="d-btn sm" data-ra="pause" data-id="${esc(r.id)}">${ic('stop')}Mettre en pause sur Twitch…</button>`
       }<button type="button" class="d-btn ghost sm" data-ra="cost" data-id="${esc(r.id)}" data-cost="${r.cost}">Changer le coût…</button></p>`;
   return `<div class="rwf-note">${ic('info')}<span><b>Ancienne récompense</b> (créée hors de Raptoru, SAMMI ou le tableau de bord Twitch) : Studio la lit seulement. Raptoru ne peut ni la mettre en pause, ni rembourser ses rachats — cela se fait sur Twitch.</span></div>
     ${r.listed_by_twitch && r.twitch_enabled !== null ? `<p class="rwf-adm"><button type="button" class="d-btn sm" data-ra="migrate" data-id="${esc(r.id)}">${ic('gift')}Remplacer par une récompense Raptoru…</button></p>` : ''}`;
@@ -149,9 +151,10 @@ function openCreate(
       <label class="d-fld rwa-f"><span>Coût en points de chaîne</span><input name="cost" type="number" min="1" required value="${from?.cost ?? 1000}"></label>
       <label class="d-fld rwa-f"><span>Description (200 caractères)</span><input name="prompt" maxlength="200" value="${esc(from?.prompt ?? '')}"></label>
       <label class="rwa-c"><input type="checkbox" name="user_input"${from?.user_input_required ? ' checked' : ''}><span>Le viewer écrit un texte</span></label>
+      <label class="rwa-c"><input type="checkbox" name="hidden"${from ? ' checked' : ''}><span>Créer masquée (invisible des viewers jusqu’à « Rendre visible »)</span></label>
       <p class="rwf-note">${ic('info')}<span>${
         from
-          ? 'Twitch refuse deux récompenses du même nom : choisis un autre nom que l’ancienne. La nouvelle reçoit la règle de l’ancienne, <b>coupée</b> : rien ne se déclenche avant ton test. L’ancienne n’est ni modifiée ni supprimée.'
+          ? 'Twitch refuse deux récompenses du même nom : choisis un autre nom que l’ancienne. La nouvelle reçoit la règle de l’ancienne, <b>coupée</b>, et naît <b>masquée</b> : rien ne se déclenche et personne ne la voit avant ton test. Un rachat pendant que la règle est coupée est remboursé. L’ancienne n’est ni modifiée ni supprimée.'
           : 'La récompense est créée active sur Twitch, sans règle : rachetée, elle ne fait rien tant que tu ne lui as pas donné d’action.'
       }</span></p>
       <p class="rwa-err d-faint" data-ra-err></p>
@@ -170,7 +173,7 @@ function openCreate(
     }
     const yes = await confirmBox({
       title: `Créer « ${title} » sur Twitch ?`,
-      body: `${s?.environment === 'production' ? 'PRODUCTION : la récompense apparaît VRAIMENT sur ta chaîne' : 'Lab'} — ${cost.toLocaleString('fr-FR')} points, créée par l’application Raptoru (seule elle pourra la gérer).${from ? `\n\nElle remplacera « ${from.title} » : la règle est recopiée coupée ; l’ancienne reste telle quelle.` : ''}`,
+      body: `${s?.environment === 'production' ? 'PRODUCTION : la récompense est VRAIMENT créée sur ta chaîne' : 'Lab'} — ${cost.toLocaleString('fr-FR')} points, créée par l’application Raptoru (seule elle pourra la gérer).${d.get('hidden') === 'on' ? ' Elle naît MASQUÉE : aucun viewer ne la voit avant « Rendre visible ».' : ' Elle est VISIBLE des viewers dès sa création.'}${from ? `\n\nElle remplacera « ${from.title} » : la règle est recopiée coupée ; l’ancienne reste telle quelle.` : ''}`,
       yes: 'Créer sur Twitch',
       no: 'Annuler',
       danger: s?.environment === 'production',
@@ -184,6 +187,7 @@ function openCreate(
           cost,
           prompt: String(d.get('prompt') ?? ''),
           user_input: d.get('user_input') === 'on',
+          hidden: d.get('hidden') === 'on',
           ...(from ? { migrated_from: from.id } : {}),
         }),
       'Création demandée : le bot la fait sur Twitch',
@@ -209,6 +213,30 @@ export function bindRewardAdmin(
     const act = b.dataset.ra;
     if (act === 'create') return openCreate(s, o.refresh, null);
     if (act === 'migrate' && reward) return openCreate(s, o.refresh, reward);
+    if (act === 'show' && reward)
+      return void confirmBox({
+        title: `Rendre « ${reward.title} » visible sur Twitch ?`,
+        body: reward.rule?.enabled
+          ? 'Les viewers la voient et peuvent la racheter : sa règle est active.'
+          : 'Sa règle est COUPÉE : un rachat ne déclencherait rien (les points seraient rendus). Active d’abord la règle si tu veux qu’elle agisse.',
+        yes: 'Rendre visible',
+        no: 'Annuler',
+        danger: false,
+      }).then(async (yes) => {
+        if (!yes) return;
+        if (
+          await run(
+            b,
+            () =>
+              postJson(`/api/channel-points/rewards/${reward.id}/twitch`, {
+                patch: { is_enabled: true },
+              }),
+            'Demandé : le bot l’applique sur Twitch',
+            REFUSALS,
+          )
+        )
+          o.refresh();
+      });
     if ((act === 'pause' || act === 'resume') && reward)
       return void confirmBox({
         title: `${act === 'pause' ? 'Mettre en pause' : 'Réactiver'} « ${reward.title} » sur Twitch ?`,
