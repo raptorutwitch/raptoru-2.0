@@ -4,15 +4,15 @@ import { RbError, type RandomBanService } from '../random-ban/service.js';
 import { ModuleError, type ModuleDefinition } from './kit.js';
 
 // Random Ban on the module host (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md), TWO declarations:
-// - `random_ban`: its settings (the progressive price, the limits) and its supervision — no switch of its own: `!rb` and
-//   the channel points work while the bot's executor reports (the Control Center says so, as before);
-// - `random_ban_ext`: the extension's « Mini-jeux › Random Ban » — the viewer's price and gauge (viewerState) and the
-//   purchase (`launch`), behind the host's switch `random_ban_ext.enabled` (OFF by default). The module adds no draw, no executor, no
-// timeout: `launch` creates the SAME request as `!rb` and the channel points (random-ban/service.ts `buy`), paid in
-// Jetons at the progressive price shared with `!rb`. The host gives the intent key (replayed key = first answer), the
-// per-viewer lock, the global pause, the moderation blocks and the switch (OFF: the extension's purchase is closed
-// until Antoni opens it). The action is « free » for the host: the progressive price
-// depends on the buyer, so the module charges it itself, in the host's transaction, never above `expected_price`.
+// - `random_ban`: its settings (the charges, the channel-wide limit, the Sniper) and its supervision — no switch of its
+//   own: `!rb` and the channel points work while the bot's executor reports (the Control Center says so, as before);
+// - `random_ban_ext`: the extension's « Mini-jeux › Random Ban » — the viewer's charges and gauge (viewerState) and the
+//   purchase (`launch`), behind the host's switch `random_ban_ext.enabled` (OFF by default). The module adds no draw,
+//   no executor, no timeout: `launch` creates the SAME request as `!rb` and the channel points (random-ban/service.ts
+//   `buy`), at the fixed Jetons price, using one of the charges the three ways share. The host gives the intent key
+//   (replayed key = first answer), the per-viewer lock, the global pause, the moderation blocks and the switch. The
+//   action is « free » for the host: the module charges the price itself, in the host's transaction, never above
+//   `expected_price`.
 
 const min = (
   label: string,
@@ -28,16 +28,6 @@ const min = (
   max: hi,
   help,
 });
-const tier = (n: number) => ({
-  label: `Prix de Random Ban, palier ${n}`,
-  unit: 'Jetons',
-  default: RB_PRICING_DEFAULT.tiers[n - 1]!,
-  min: 1_000,
-  max: 1_000_000,
-  help: 'extension et !rb ; jamais inférieur au palier précédent',
-  advanced: true,
-});
-
 export function randomBanModule(
   service: Pick<RandomBanService, 'executorReady'>,
 ): ModuleDefinition {
@@ -45,27 +35,39 @@ export function randomBanModule(
     id: 'random_ban',
     label: 'Random Ban',
     description:
-      'Un viewer paie pour exclure un viewer au hasard (!rb, points de chaîne, extension) : prix progressif par viewer.',
+      'Un viewer paie pour exclure un viewer au hasard (!rb, points de chaîne, extension) : prix fixe, charges personnelles.',
     category: 'interactions',
     capabilities: ['settings', 'supervision'],
     settings: {
-      price_2: tier(2),
-      price_3: tier(3),
-      price_4: tier(4),
-      price_5: tier(5),
-      tier_step_min: min(
-        'Retour d’un palier toutes les',
-        RB_PRICING_DEFAULT.stepMs / 60_000,
-        0,
-        60,
-        'sans nouveau lancer ; 0 = prix fixe (palier 1)',
-      ),
-      cp_cooldown_min: min(
-        'Délai entre deux Random Ban d’un viewer par points de chaîne',
-        RB_PRICING_DEFAULT.cpCooldownMs / 60_000,
-        0,
+      charges_max: {
+        label: 'Charges par viewer',
+        unit: 'charges',
+        default: RB_PRICING_DEFAULT.chargesMax,
+        min: 0,
+        max: 10,
+        help: 'communes à l’extension, !rb et aux points de chaîne ; un Random Ban accepté en utilise une ; 0 = aucune limite',
+      },
+      recharge_min: min(
+        'Une charge revient toutes les',
+        RB_PRICING_DEFAULT.rechargeMs / 60_000,
+        1,
         120,
-        'personnel ; 0 = aucun délai',
+        'en continu, même extension fermée ; un refus ne repousse rien',
+      ),
+      channel_max: {
+        label: 'Limite de la chaîne',
+        unit: 'Random Ban',
+        default: RB_PRICING_DEFAULT.channelMax,
+        min: 0,
+        max: 60,
+        help: 'au plus ce nombre de Random Ban acceptés, tous viewers confondus, sur la période ci-dessous ; 0 = aucune limite',
+      },
+      channel_window_min: min(
+        'Période de la limite de la chaîne',
+        RB_PRICING_DEFAULT.channelWindowMs / 60_000,
+        1,
+        60,
+        'utilisée seulement si la limite de la chaîne est réglée',
       ),
       sniper_bonus: {
         label: 'Prime Sniper',
@@ -155,7 +157,7 @@ export function randomBanExtModule(
     id: 'random_ban_ext',
     label: 'Mini-jeux · Random Ban',
     description:
-      'Random Ban depuis l’extension : le prix progressif du viewer, sa jauge, l’achat confirmé (jamais au-dessus).',
+      'Random Ban depuis l’extension : les charges du viewer, sa jauge, l’achat au prix affiché (jamais au-dessus).',
     category: 'jeux',
     capabilities: ['viewer', 'moderation', 'history'],
     viewer: {
@@ -208,7 +210,8 @@ export function randomBanExtModule(
               status: 'done',
               result: {
                 request: out.request,
-                price: out.quote,
+                price: out.price,
+                charges: out.charges,
                 sniper_ready: out.sniper_ready ?? null,
               },
             };

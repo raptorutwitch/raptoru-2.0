@@ -1,24 +1,30 @@
 import type { Queryable } from '../db/db.js';
 import type { ModuleSettings } from '../module-settings/service.js';
 
-// Random Ban — the progressive Jetons price (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 2, decided by Antoni 12/11/2026).
-// One level per Twitch account, shared by the extension and `!rb` (never the channel points):
-// - a counted purchase pays the tier of the level that applies just before it, then the level rises by one (capped);
-// - one level comes back every `stepMs` without a new counted purchase:
-//     level(t) = max(0, min(top, level_paid_last + 1) − ⌊(t − t_last) / stepMs⌋)
-// - derived from the LAST counted purchase only (its `series_level` and `created_at`): no counter that could drift. A
-//   purchase that ends `failed` (nothing done, refunded) or `canceled` stops counting by itself.
-// The Core computes it, under the buyer's lock, with the server clock; the extension only projects the gauge.
+// Random Ban — fixed prices and personal charges (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 2, V5 decided by Antoni
+// 13/11/2026; it replaces the progressive Jetons price of 12/11, never deployed):
+// - the extension and `!rb` cost `price` Jetons (25 000), the channel points reward costs what Twitch charges (3 000);
+// - each viewer holds at most `chargesMax` charges (3), shared by the three ways; one comes back every `rechargeMs`
+//   (10 min), continuously, without the viewer opening anything; an accepted Random Ban uses one;
+// - derived from the buyer's ACCEPTED requests only (no counter that could drift or be duplicated by a second
+//   connection): a refusal creates no request, a request that ends `failed` / `canceled` or an `uncertain` one
+//   refunded stops counting by itself, a moderator's refill marks the buyer's requests `charge = false`;
+// - computed by the Core under the buyer's lock with the server clock (several Cores: the same rows, the same lock);
+//   the extension only projects the gauge.
+// Bucket replay: `full` = when the buyer is back to `chargesMax`; each counted request at t: full = max(full, t) + R
+// (never more than chargesMax·R ahead of t: a forced use never digs below zero).
 
 export interface RbPricing {
-  /** Jetons per level, increasing; [0] = normal price. */
-  tiers: number[];
-  /** One level back per this many ms of calm (0: flat price, the progressive price is off). */
-  stepMs: number;
+  /** Jetons price of a Random Ban (extension and `!rb`). */
+  price: number;
+  /** Personal charges: at most this many (0: no charge limit), one back every `rechargeMs`. */
+  chargesMax: number;
+  rechargeMs: number;
+  /** Channel-wide: at most `channelMax` accepted Random Ban per `channelWindowMs`, all buyers (0: no limit). */
+  channelMax: number;
+  channelWindowMs: number;
   /** Requests still open per buyer (queued → timeout_requested), all sources. */
   maxPending: number;
-  /** Channel points: one accepted redemption per buyer per this many ms. */
-  cpCooldownMs: number;
   /** Sniper: the bonus of a rewardable hit, and the calm before an attempt is rewardable (all sources). */
   sniperBonus: number;
   sniperWindowMs: number;
@@ -29,35 +35,29 @@ export interface RbPricing {
 }
 
 export const RB_PRICING_DEFAULT: RbPricing = Object.freeze({
-  tiers: [25_000, 30_000, 50_000, 75_000, 100_000],
-  stepMs: 5 * 60_000,
-  maxPending: 2,
-  cpCooldownMs: 10 * 60_000,
+  price: 25_000,
+  chargesMax: 3,
+  rechargeMs: 10 * 60_000,
+  channelMax: 0,
+  channelWindowMs: 10 * 60_000,
+  maxPending: 3,
   sniperBonus: 2_000,
   sniperWindowMs: 30 * 60_000,
   revealFirst: false,
   strikeOffsetMs: 3_000,
 });
 
-/** The module settings behind the pricing (module `random_ban`, modules/status-adapters.ts declares them). */
+/** The module settings behind the rules (module `random_ban`, modules/random-ban.ts declares them). */
 export function randomBanPricing(settings: ModuleSettings) {
   return async (q: Queryable, ch: string): Promise<RbPricing> => {
     const get = (k: string) => settings.get(q, ch, `random_ban.${k}`);
-    const tiers = [
-      await get('price'),
-      await get('price_2'),
-      await get('price_3'),
-      await get('price_4'),
-      await get('price_5'),
-    ];
-    // A tier set below the previous one never makes a series cheaper than the purchase before it.
-    for (let i = 1; i < tiers.length; i++)
-      tiers[i] = Math.max(tiers[i]!, tiers[i - 1]!);
     return {
-      tiers,
-      stepMs: (await get('tier_step_min')) * 60_000,
+      price: await get('price'),
+      chargesMax: await get('charges_max'),
+      rechargeMs: (await get('recharge_min')) * 60_000,
+      channelMax: await get('channel_max'),
+      channelWindowMs: (await get('channel_window_min')) * 60_000,
       maxPending: await get('max_pending'),
-      cpCooldownMs: (await get('cp_cooldown_min')) * 60_000,
       sniperBonus: await get('sniper_bonus'),
       sniperWindowMs: (await get('sniper_window_min')) * 60_000,
       revealFirst: (await get('sequence')) === 1,
@@ -66,71 +66,68 @@ export function randomBanPricing(settings: ModuleSettings) {
   };
 }
 
-export interface LastPurchase {
-  series_level: number;
-  created_at: Date;
-}
-
-export interface RbQuote {
-  /** 0 = normal price. */
-  level: number;
-  price: number;
-  normal_price: number;
-  /** The next lower price and when it applies (null at the normal price). */
-  next_price: number | null;
-  next_drop_at: string | null;
-  /** When the normal price is back without a new purchase (null: already). */
-  normal_at: string | null;
-  /** The level after a purchase now (what the next one would pay). */
-  price_after: number;
+export interface RbCharges {
+  /** Whole charges usable now. */
+  available: number;
+  /** 0: no charge limit. */
+  max: number;
+  recharge_ms: number;
+  /** The next charge back and the reserve full again (null: already full). */
+  next_at: string | null;
+  full_at: string | null;
   server_now: string;
 }
 
-export function quote(
-  p: RbPricing,
-  last: LastPurchase | null,
+/** The charges at `now` from the buyer's counted requests (oldest first). Pure. */
+export function charges(
+  p: Pick<RbPricing, 'chargesMax' | 'rechargeMs'>,
+  used: Date[],
   now: Date,
-): RbQuote {
-  const top = p.tiers.length - 1;
-  let level = 0;
-  let after = 0;
-  if (last && p.stepMs > 0) {
-    after = Math.min(top, last.series_level + 1);
-    const since = now.getTime() - new Date(last.created_at).getTime();
-    level = Math.max(0, after - Math.floor(Math.max(0, since) / p.stepMs));
+): RbCharges {
+  const max = p.chargesMax;
+  const R = Math.max(1, p.rechargeMs);
+  let full = -Infinity;
+  for (const u of used) {
+    const at = new Date(u).getTime();
+    full = Math.min(Math.max(full, at) + R, at + max * R);
   }
-  const base = last ? new Date(last.created_at).getTime() : 0;
-  const drops = after - level;
+  const t = now.getTime();
+  const missing = max > 0 ? Math.min(max, Math.max(0, full - t) / R) : 0;
+  const lost = Math.ceil(missing - 1e-9);
   return {
-    level,
-    price: p.tiers[level]!,
-    normal_price: p.tiers[0]!,
-    next_price: level > 0 ? p.tiers[level - 1]! : null,
-    next_drop_at:
-      level > 0 ? new Date(base + (drops + 1) * p.stepMs).toISOString() : null,
-    normal_at:
-      level > 0 ? new Date(base + after * p.stepMs).toISOString() : null,
-    price_after: p.tiers[p.stepMs > 0 ? Math.min(top, level + 1) : 0]!,
+    available: max - lost,
+    max,
+    recharge_ms: R,
+    next_at: lost > 0 ? new Date(full - (lost - 1) * R).toISOString() : null,
+    full_at: lost > 0 ? new Date(full).toISOString() : null,
     server_now: now.toISOString(),
   };
 }
 
-/** Counted for the price: a Jetons purchase (extension, `!rb`) that is neither failed nor canceled. */
-export async function lastCounted(
+/**
+ * Counted for the charges: an accepted request of any source but a Studio test, not failed / canceled / refunded,
+ * not refilled by a moderator. ponytail: replays the last 24 h only — older requests count as recovered (a buyer would
+ * need 24 h of non-stop buying at the full recharge rate for the cut to matter).
+ */
+export async function chargesOf(
   q: Queryable,
+  p: RbPricing,
   channelId: string,
   buyerId: string,
-): Promise<LastPurchase | null> {
-  return (
-    (
-      await q.query<LastPurchase>(
-        `select series_level, created_at from rb_requests
-          where channel_id = $1 and buyer_id = $2 and source in ('chat', 'extension') and series_level is not null
-            and status not in ('failed', 'canceled')
-          order by seq desc limit 1`,
-        [channelId, buyerId],
-      )
-    )[0] ?? null
+  now: Date,
+) {
+  if (p.chargesMax <= 0) return charges(p, [], now);
+  const rows = await q.query<{ created_at: Date }>(
+    `select created_at from rb_requests
+      where channel_id = $1 and buyer_id = $2 and source <> 'test' and charge and created_at > $3
+        and status not in ('failed', 'canceled') and not (status = 'uncertain' and refund <> 'to_verify')
+      order by created_at`,
+    [channelId, buyerId, new Date(now.getTime() - 24 * 3_600_000)],
+  );
+  return charges(
+    p,
+    rows.map((r) => r.created_at),
+    now,
   );
 }
 

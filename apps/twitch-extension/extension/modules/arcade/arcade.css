@@ -136,11 +136,20 @@
   min-height: 0;
   container-type: inline-size;
 }
+/* The top bar follows the body's two columns: the title over the machine, the charges over the Sniper and Launch. */
 .rb__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: calc(10 * var(--u));
+  align-items: center;
+  min-height: calc(30 * var(--u));
+}
+.rb__head,
+.rb__tools {
   display: flex;
   align-items: center;
   gap: calc(8 * var(--u));
-  min-height: calc(30 * var(--u));
+  min-width: 0;
 }
 .rb__back,
 .rb__info,
@@ -187,7 +196,6 @@
 .rb__gauge {
   display: flex;
   flex: 1;
-  justify-content: flex-end;
   min-width: 0;
 }
 .rb__info {
@@ -197,20 +205,21 @@
   padding: 0;
 }
 
-/* --- La jauge de prix, compacte -------------------------------------------------------------------------------- */
+/* --- La jauge de charges (V5) : un segment par charge, celle qui revient se remplit en continu -------------------- */
 .rbg {
   position: relative;
-  width: min(100%, calc(250 * var(--u)));
+  width: 100%;
 }
 .rbg__btn {
   display: flex;
   align-items: center;
-  gap: calc(10 * var(--u));
+  gap: calc(8 * var(--u));
   width: 100%;
-  padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)) calc(10 * var(--u));
-  border: 0;
-  border-radius: calc(10 * var(--u));
-  background: transparent;
+  min-height: calc(28 * var(--u));
+  padding: calc(3 * var(--u)) calc(8 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: 999px;
+  background: var(--mg-panel);
   color: inherit;
   font: inherit;
   cursor: help;
@@ -218,70 +227,52 @@
 .rbg__btn:hover,
 .rbg__btn:focus-visible,
 .rbg__btn[aria-expanded='true'] {
-  background: var(--mg-panel);
+  border-color: rgba(255, 92, 122, 0.55);
 }
-.rbg__bar {
+.rbg__label {
+  flex: none;
+  color: var(--mg-faint);
+  font-size: calc(10.5 * var(--u));
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rbg__cells {
+  display: flex;
+  flex: 1;
+  gap: calc(4 * var(--u));
+  min-width: 0;
+}
+.rbg__cell {
   position: relative;
   flex: 1;
-  height: calc(5 * var(--u));
-  margin: calc(-8 * var(--u)) calc(4 * var(--u)) 0;
+  height: calc(8 * var(--u));
+  overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.09);
 }
-.rbg__fill {
+.rbg__cell i {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, #ffb347, var(--mg-a) 55%, var(--mg-b));
-  box-shadow: 0 0 calc(8 * var(--u)) rgba(255, 47, 85, 0.45);
+  background: rgba(255, 179, 71, 0.75);
   transform-origin: 0 50%;
   transition: transform 0.26s linear;
 }
-.rbg__marks {
-  position: absolute;
-  inset: 0;
-}
-.rbg__mark {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--at) * 100%);
-  display: grid;
-  justify-items: center;
-  translate: -50% -50%;
-}
-.rbg__mark i {
-  width: calc(7 * var(--u));
-  height: calc(7 * var(--u));
-  border: calc(1.5 * var(--u)) solid #1b0d16;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
-}
-.rbg__mark b {
-  position: absolute;
-  top: calc(8 * var(--u));
-  color: var(--mg-faint);
-  font-size: calc(9 * var(--u));
-  font-weight: 800;
-  white-space: nowrap;
-}
-.rbg__mark.is-on i {
-  scale: 1.45;
-  background: #fff;
-  box-shadow: 0 0 0 calc(1.5 * var(--u)) var(--mg-a);
-}
-.rbg__mark.is-on b {
-  color: var(--mg-ink);
+.rbg__cell.is-full i {
+  background: linear-gradient(90deg, #ffb347, var(--mg-a));
+  box-shadow: 0 0 calc(8 * var(--u)) rgba(255, 47, 85, 0.45);
 }
 .rbg__next {
   flex: none;
-  min-width: calc(42 * var(--u));
+  min-width: calc(44 * var(--u));
   color: var(--mg-dim);
   font-size: calc(11.5 * var(--u));
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   text-align: right;
 }
-.rbg.is-up .rbg__next {
+.rbg.is-empty .rbg__next {
   color: var(--mg-hot);
 }
 .rbg__tip {
@@ -355,7 +346,7 @@
 }
 .rbm__slot {
   position: absolute;
-  top: 54%;
+  top: 50%;
   left: 50%;
   width: var(--size);
   height: var(--size);
@@ -380,7 +371,7 @@
 .rbm__sight {
   position: absolute;
   z-index: 20;
-  top: calc((100% - var(--foot)) * 0.54);
+  top: calc((100% - var(--foot)) * 0.5);
   left: 50%;
   width: calc(var(--size, 110px) + 26 * var(--u));
   aspect-ratio: 1;
@@ -431,7 +422,7 @@
 .rbm[data-mode='idle'] .rbm__deck::after {
   position: absolute;
   z-index: 15;
-  top: 54%;
+  top: 50%;
   left: 50%;
   display: grid;
   place-items: center;
@@ -958,6 +949,42 @@
   color: var(--mg-dim);
   font-size: calc(11 * var(--u));
 }
+.rb__pref {
+  display: flex;
+  gap: calc(8 * var(--u));
+  align-items: flex-start;
+  margin: 0 calc(10 * var(--u)) calc(10 * var(--u));
+  padding: calc(8 * var(--u)) calc(10 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(10 * var(--u));
+  cursor: pointer;
+}
+.rb__pref input {
+  margin-top: calc(2 * var(--u));
+  accent-color: var(--mg-a);
+}
+.rb__pref span {
+  display: grid;
+  gap: calc(2 * var(--u));
+}
+.rb__pref small {
+  color: var(--mg-faint);
+  font-size: calc(11 * var(--u));
+}
+.rb__once {
+  margin-left: calc(4 * var(--u));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mg-dim);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.rb__once:hover,
+.rb__once:focus-visible {
+  color: var(--mg-ink);
+}
 .rb__rules li {
   position: relative;
   margin: 0 0 calc(8 * var(--u));
@@ -979,18 +1006,8 @@
 /* --- Étroit (panneau, mobile) : la jauge sous le titre, la machine au-dessus du jeu. ----------------------------- */
 @container (max-width: 400px) {
   .rb__bar {
-    flex-wrap: wrap;
-  }
-  .rb__title {
-    flex: 1;
-  }
-  .rb__gauge {
-    order: 5;
-    flex-basis: 100%;
-    justify-content: stretch;
-  }
-  .rbg {
-    width: 100%;
+    grid-template-columns: 1fr;
+    gap: calc(6 * var(--u));
   }
   .rb__body {
     grid-template-columns: 1fr;
@@ -1060,7 +1077,7 @@
   .rbm.is-sniped .rbm__corners {
     animation: none !important;
   }
-  .rbg__fill {
+  .rbg__cell i {
     transition: none !important;
   }
 }

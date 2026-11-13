@@ -1,18 +1,18 @@
 # Spécification — Random Ban V2 (premier mini-jeu de l'extension)
 
-12/11/2026. **Spécification active.** Règles métier décidées par Antoni le 12/11 (deux messages ; le second fixe la
-récupération à 5 min par palier). C'est la seule source des règles en vigueur ; les propositions abandonnées sont dans
+12/11/2026, **V5 du 13/11** : les charges personnelles remplacent le prix progressif (décision d'Antoni du 13/11).
+**Spécification active.** C'est la seule source des règles en vigueur ; les propositions abandonnées sont dans
 l'annexe A, à titre d'historique. Constats techniques : [AUDIT](AUDIT_MINI_JEUX_RANDOM_BAN.md). État de la
 construction : § 13 et [PLAN](PLAN_IMPLEMENTATION.md).
 
 **Principe directeur : un seul Random Ban.** Trois façons de le lancer, **une seule demande** (`rb_requests`), un seul
 exécuteur, les mêmes immunités, le même timeout. Il n'y a jamais trois tirages distincts.
 
-| Moyen                                   | Paiement      | Prix                                    | Sniper                 | Limite                                  |
-| --------------------------------------- | ------------- | --------------------------------------- | ---------------------- | --------------------------------------- |
-| Extension (nouveau, source `extension`) | Jetons        | **progressif**, commun avec `!rb` (§ 2) | **oui**, seulement ici | 2 demandes en attente                   |
-| `!rb`                                   | Jetons        | **progressif**, commun avec l'extension | non                    | 2 demandes en attente                   |
-| Récompense de points de chaîne          | points Twitch | fixe (3 000 points)                     | non                    | **cooldown individuel de 10 min** (§ 3) |
+| Moyen                                   | Paiement      | Prix                 | Sniper                 | Limite                                          |
+| --------------------------------------- | ------------- | -------------------- | ---------------------- | ----------------------------------------------- |
+| Extension (nouveau, source `extension`) | Jetons        | fixe : 25 000 Jetons | **oui**, seulement ici | **charges communes** (§ 2) · 3 en attente       |
+| `!rb`                                   | Jetons        | fixe : 25 000 Jetons | non                    | **charges communes** (§ 2) · 3 en attente       |
+| Récompense de points de chaîne          | points Twitch | fixe : 3 000 points  | non                    | **charges communes** (§ 2, refus remboursé § 3) |
 
 Tout est identifié par l'**identifiant Twitch** du viewer, jamais par le pseudo. Le Core décide de tout : prix,
 cooldowns, Sniper, résultat, primes. L'extension et le chat affichent ce que le Core dit.
@@ -20,7 +20,7 @@ cooldowns, Sniper, résultat, primes. L'extension et le chat affichent ce que le
 ## 1. Parcours du viewer (extension)
 
 1. **Hub → « Mini-jeux ».** Tant que Random Ban est le seul jeu, la carte l'ouvre directement.
-2. **Écran Random Ban :** le prix actuel **pour toi** et la jauge de récupération (§ 2.4), ton solde, les règles en
+2. **Écran Random Ban :** le prix (fixe) sur le bouton Lancer et la jauge de tes charges (§ 2.4), ton solde, les règles en
    3 lignes, le nombre de viewers dans le chat, l'état du Sniper (« prêt » ou « prêt dans 12 min »).
 3. **Option « 🎯 Viser quelqu'un » (Sniper)**, facultative : « Ça ne change pas le tirage. Si le tirage tombe dessus :
    +2 000 Jetons. »
@@ -30,109 +30,87 @@ cooldowns, Sniper, résultat, primes. L'extension et le chat affichent ce que le
    l'extension retrouve l'état, relu sur le Core.
 6. **Résultat et historique :** cible, durée, « SNIPER ! +2 000 », CSC, prix payé, remboursement ; tes derniers lancers.
 
-## 2. Prix progressif (extension et `!rb`)
+## 2. Prix fixes et charges personnelles (V5, décision du 13/11)
 
-### 2.1 Barème
+### 2.1 Prix
 
-|        Palier |          Prix |
-| ------------: | ------------: |
-|    1 (normal) | 25 000 Jetons |
-|             2 |        30 000 |
-|             3 |        50 000 |
-|             4 |        75 000 |
-| 5 et suivants |       100 000 |
+- Extension et `!rb` : **25 000 Jetons** (réglage `random_ban.price`, « Prix de Random Ban »).
+- Points de chaîne : **3 000 points**, le coût réglé sur la récompense Twitch (la récompense existe déjà, Raptoru ne la
+  modifie pas).
+- Le prix progressif du 12/11 (25 000 → 100 000) est **abandonné** (annexe A) ; il n'a jamais été déployé. La
+  récupération des charges remplace la récupération du prix.
 
-Le barème est un réglage du module (5 montants croissants) ; le réglage actuel `random_ban.price` devient son
-1ᵉʳ palier. Les points de chaîne n'y participent pas.
+### 2.2 Charges
 
-### 2.2 Récupération : un palier toutes les 5 minutes (règle définitive du 12/11)
+- Chaque viewer (identifiant Twitch) a une **réserve de 3 charges au plus**, **commune** à l'extension, `!rb` et la
+  récompense de points de chaîne.
+- Un Random Ban **accepté** utilise une charge. Une charge revient **toutes les 10 minutes**, en continu, en
+  arrière-plan, sans que le viewer ouvre l'extension. Une utilisation pendant une recharge ne la relance pas.
+- **Ne coûte rien :** un refus (aucune demande créée), une demande `failed` (rien fait, remboursée), une demande
+  `canceled` (annulée sans exécution), une demande `uncertain` remboursée par la modération. La charge revient d'elle-même.
+- **Un refus ne repousse pas la prochaine recharge.**
+- **Calcul (le Core, horloge du serveur, sous le verrou de l'acheteur) :** rejoue les demandes comptées des 24
+  dernières heures : `plein = max(plein, t) + 10 min` pour chacune (jamais plus de 3 × 10 min devant `t`) ; charges
+  disponibles = `3 − ⌈(plein − maintenant) / 10 min⌉`. Rien n'est stocké en plus des demandes : pas de compteur qui
+  pourrait dériver, pas de double utilisation par un second onglet ou une seconde connexion, plusieurs Cores lisent
+  les mêmes lignes sous le même verrou.
+- Capacité (0 = aucune limite) et durée de recharge sont des réglages Studio (§ 12).
+- **Récompense que Raptoru ne peut pas rembourser** (l'ancienne) : jamais refusée pour les charges ni la limite de la
+  chaîne (un refus coûterait ses points au viewer) ; son Random Ban utilise quand même une charge, sans descendre sous 0.
 
-- Chaque viewer a un **niveau** de 0 à 4 ; niveau 0 = palier 1 = prix normal. Un seul niveau par compte Twitch,
-  extension et `!rb` confondus.
-- Un lancer **compté** paie le palier du niveau qui s'applique **juste avant son enregistrement**, puis le niveau monte
-  de 1 (plafond : 4).
-- **Récupération :** sans nouveau lancer compté, le niveau baisse de 1 toutes les **5 minutes**, à partir du dernier
-  lancer compté. Depuis le plafond, le prix normal revient en **20 minutes**.
-- **Formule (le Core, horloge du serveur) :**
-  `niveau(t) = max(0, min(4, niveau_payé_par_le_dernier + 1) − ⌊(t − date_du_dernier) / 5 min⌋)`.
-- **Compté :** une demande payée en Jetons (extension ou `!rb`) qui n'est ni `failed` (rien fait, remboursée) ni
-  `canceled`. Une demande en file compte dès son paiement ; un flop compte (un tirage a eu lieu). Les points de chaîne
-  ne comptent pas (ils comptent pour le Sniper, § 4.2).
-- **Rien d'autre à stocker :** chaque demande enregistre le prix payé (`price_paid`) et son niveau (`series_level`) ;
-  le niveau courant se déduit du **dernier** lancer compté. Il n'y a pas de compteur qui pourrait dériver, et une demande
-  qui échoue cesse de compter d'elle-même (le prix de la suivante redescend tout seul).
+| Situation                                            | Résultat                                                          |
+| ---------------------------------------------------- | ----------------------------------------------------------------- |
+| 3 Random Ban d'affilée                               | 3 acceptés, 75 000 Jetons ; le 4ᵉ refusé, rien débité             |
+| Réserve vide, 10 min plus tard                       | 1 charge                                                          |
+| Utilisé à 0 et à 5 min                               | à 5 min : 1 charge, la suivante revient à 10 min, pleine à 20 min |
+| 2 rédemptions de points puis `!rb`                   | 3 acceptés ; la rédemption suivante est refusée et remboursée     |
+| Demande `failed` remboursée                          | la charge revient                                                 |
+| La même demande rejouée (même clé, même message)     | une seule demande, un seul débit, une seule charge                |
+| 5 achats simultanés sur deux Cores (2 `!rb` + 3 pts) | exactement 3 acceptés (testé sur vrai PostgreSQL)                 |
 
-| Temps écoulé après une série maximale (5 lancers d'affilée) | Prix du prochain Random Ban |
-| ----------------------------------------------------------- | --------------------------: |
-| immédiatement                                               |                     100 000 |
-| 5 min                                                       |                      75 000 |
-| 10 min                                                      |                      50 000 |
-| 15 min                                                      |                      30 000 |
-| 20 min                                                      |                      25 000 |
+### 2.3 Jamais plus cher que le prix affiché
 
-| Situation                                               | Prix payés                                                                    |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Lancers isolés, espacés d'au moins 5 min                | toujours 25 000                                                               |
-| 5 lancers d'affilée                                     | 25 000 + 30 000 + 50 000 + 75 000 + 100 000 = **280 000**                     |
-| Série maximale, puis un lancer 10 min plus tard         | 50 000 ; le suivant coûte 75 000, et le normal revient 15 min après ce lancer |
-| Deux lancers, le premier `failed` et remboursé          | 25 000, puis 25 000 (l'échec ne compte pas)                                   |
-| La même demande rejouée (même clé, même message Twitch) | une seule demande, un seul débit                                              |
-| Alterner extension et `!rb`                             | aucun effet : un seul niveau par viewer                                       |
-| Points de chaîne entre deux lancers en Jetons           | aucun effet sur le prix                                                       |
-
-Les montants et le pas (5 min) sont des réglages (§ 12). Un pas de 0 rend le prix fixe (palier 1) : c'est le retour
-arrière sans déploiement.
-
-### 2.3 Jamais plus cher que le montant confirmé
-
-- **Le Core est seul juge** : le prix est calculé à l'encaissement, avec l'horloge du serveur, **sous un verrou par
-  acheteur**, dans la transaction qui crée la demande et débite. Le chronomètre du navigateur ne sert qu'à l'affichage.
-- **Extension :** l'action `launch` porte `input.expected_price`, le prix affiché et confirmé (obligatoire).
-  - prix actuel ≤ prix confirmé → on débite **le prix actuel** (s'il a baissé entre-temps, le reçu le dit) ;
-  - prix actuel > prix confirmé → refus `price_changed`, **rien débité**, l'écran montre le nouveau prix et redemande.
-- **`!rb` :**
-  - au prix normal, `!rb` part comme aujourd'hui ;
-  - au-dessus : le Core répond « Random Ban : 30 000 Jetons pour toi (série · 25 000 dans 7 min). Tape `!rb 30000`
-    pour confirmer. » ; rien n'est débité ;
-  - `!rb 30000` paie le prix actuel s'il est **≤ 30 000**, sinon il annonce le nouveau prix, sans débit ;
-  - la confirmation est le montant lui-même : pas d'état en mémoire, rien à perdre si le Core redémarre ; `!rb 30 000`
-    et `!rb 30k` sont acceptés.
-- **Concurrence :** deux achats simultanés du même viewer (deux onglets, extension + chat) passent l'un après l'autre :
-  le second voit le premier et paie le palier suivant, ou est refusé s'il dépasse son montant confirmé.
-- **Solde insuffisant :** refus avant toute écriture, avec le montant manquant (comme aujourd'hui).
-- **Plafond de file :** 2 demandes **en attente** au plus par acheteur, toutes sources ; la 3ᵉ est refusée avant
-  débit (« Tu as déjà 2 Random Ban en attente · rien n'a été débité. »).
-- Rejeu (même clé, même message Twitch) : la même demande, rien de plus débité (inchangé).
+- **Extension :** `launch` porte `input.expected_price` (obligatoire). Un prix changé dans Studio entre l'affichage et
+  l'achat → `price_changed`, rien débité, l'écran montre le nouveau prix.
+- **`!rb` :** seulement `!rb` seul, au prix du réglage (`!rb <montant>` n'est plus une commande).
+- **Ordre des refus**, avant toute écriture : pause de la file, blocage, délai personnel de la modération (la
+  modération passe avant les charges), limite de la chaîne, charges, demandes en attente, prix, solde.
+- **Plafond de file :** 3 demandes en attente au plus par acheteur, toutes sources (réglage).
 
 ### 2.4 Données de la jauge (fournies par le Core)
 
-L'état du module (`GET /modules/v3/random_ban/state`, identité du JWT) renvoie `price` = { `level`, `price`,
-`normal_price`, `next_price`, `next_drop_at`, `normal_at`, `price_after`, `server_now` }, plus `tiers`, `step_ms`,
-`pending`, `max_pending` et les 10 dernières demandes du viewer. L'extension anime la jauge à partir de l'écart avec
-`server_now` (jamais l'horloge locale seule), et relit l'état dès que `next_drop_at` est passé. Le prix affiché est
-toujours celui du Core. Maquette : UX § 4.
+L'état du module (`GET /modules/v3/random_ban/state`) renvoie `price` (Jetons) et `charges` = { `available`, `max`,
+`recharge_ms`, `next_at`, `full_at`, `server_now` }, plus `restriction` (pause, blocage, délai, limite de la chaîne),
+`pending`, `max_pending`. L'extension anime la jauge à partir de l'écart avec `server_now` (jamais l'horloge locale
+seule) et relit l'état dès qu'une charge revient. Le nombre de charges affiché est toujours celui du Core.
 
-## 3. Points de chaîne : cooldown individuel de 10 minutes
+### 2.5 Limite de la chaîne (anti-spam global)
 
-- **Règle :** un viewer peut lancer un Random Ban par la récompense au plus une fois toutes les 10 minutes. Le
-  cooldown de Kiwi ne bloque que Kiwi. Contrôlé par le Core, sous le verrou de l'acheteur, quels que soient les
-  réglages Twitch.
-- **Ce qui le déclenche :** une rédemption **acceptée** (une demande Random Ban est créée). Une rédemption refusée ou
-  une demande `failed` / `canceled` ne relance pas le cooldown.
-- **Rédemption sous cooldown :**
-  1. le Core refuse : **aucune demande, aucun Random Ban** ;
-  2. remboursement automatique : `CANCELED` via `cp_twitch_actions` (une fois par rédemption, clé existante) ;
-  3. le message part **après la réponse de Twitch** : « @Kiwi - Random Ban indisponible pour toi : encore 6 min 24 s
-     avant ton prochain tirage. Tes points de chaîne ont été remboursés. » ;
-  4. si Twitch refuse ou ne répond pas : « … Tes points n'ont pas pu être remboursés automatiquement : un modérateur
-     va le faire. » et la rédemption apparaît dans la réconciliation ;
-  5. tout est journalisé (rédemption, refus, action Twitch, message).
-- **Condition :** une récompense **créée par Raptoru** (AUDIT § 12.1, réponse B). Tant que l'ancienne récompense est
-  en service, une rédemption sous cooldown est refusée **sans** promettre de remboursement (« un modérateur peut te
-  rembourser depuis Twitch ») et part en réconciliation.
-- **Bonus de la nouvelle récompense :** une demande ratée (`failed`, remboursement dû) est remboursée automatiquement
-  en points, ce qui met fin aux rédemptions « à rembourser à la main ».
-- **Réussite :** la rédemption reste « en attente » sur Twitch (comme Spotify V2) ; tu gardes la main pour la valider.
+Les charges n'empêchent pas plusieurs viewers de lancer en même temps : la file exécute un Random Ban à la fois.
+Réglage indépendant, **désactivé par défaut** : au plus `channel_max` Random Ban acceptés par `channel_window_min`
+minutes, tous viewers et moyens confondus (sous un verrou de chaîne : deux acheteurs simultanés ne prennent jamais la
+dernière place tous les deux). Refus « Trop de Random Ban en ce moment, réessaie dans … », rien débité, points
+remboursés.
+
+## 3. Points de chaîne : refus et remboursement
+
+- **Rédemption refusée** (plus de charge, blocage, délai de la modération, pause, limite de la chaîne) :
+  1. le Core refuse : **aucune demande, aucun Random Ban**, aucune charge utilisée ;
+  2. remboursement automatique : `CANCELED` via `cp_twitch_actions` (une fois par rédemption), **jamais limité** ;
+  3. le message part **après la réponse de Twitch** : « @Kiwi - Plus de charge Random Ban, la prochaine dans 6 min 24 s ·
+     points remboursés. » (ou « remboursement automatique impossible : un modérateur va le faire. ») ;
+  4. tout est journalisé (rédemption, refus, action Twitch, message).
+- **Condition :** une récompense **créée par Raptoru**. L'ancienne récompense n'est jamais refusée pour les charges
+  (§ 2.2).
+- Une demande ratée (`failed`, remboursement dû) est remboursée automatiquement en points.
+- **Réussite :** la rédemption reste « en attente » sur Twitch ; tu gardes la main pour la valider.
+
+### 3.1 Messages du chat (V5)
+
+- Achat réussi : aucun message (le Random Ban lui-même est la réponse) ; remboursement d'un échec : un message court.
+- Refus (charge, délai, blocage, pause, limite, solde, hors live) : une ligne courte avec le délai restant quand il
+  compte, **au plus une ligne de refus par viewer toutes les 5 minutes** (`!rb` et points de chaîne ensemble). Seule la
+  ligne est limitée, jamais le remboursement.
 
 ## 4. Sniper (extension uniquement)
 
@@ -362,17 +340,17 @@ Colonnes ajoutées (migration additive) : `price_paid`, `series_level`, `wish_id
 
 ## 12. Réglages du module
 
-| Réglage                                                                           | Défaut                                                               |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `random_ban.price` (palier 1, réglage existant « Prix de !rb »)                   | 25 000                                                               |
-| `random_ban.price_2` · `price_3` · `price_4` · `price_5`                          | 30 000 · 50 000 · 75 000 · 100 000 (jamais sous le palier précédent) |
-| `random_ban.tier_step_min`                                                        | 5 (0 = prix fixe)                                                    |
-| `random_ban.max_pending`                                                          | 2                                                                    |
-| `random_ban.cp_cooldown_min`                                                      | 10 (0 = aucun délai)                                                 |
-| `random_ban_ext.enabled` (achat depuis l'extension, interrupteur du socle)        | OFF                                                                  |
-| `random_ban.sniper_window_min` · `sniper_bonus`                                   | 30 · 2 000                                                           |
-| `random_ban.sequence` (0 = timeout puis vidéo, 1 = Le Viseur) · `strike_offset_s` | 0 · 3 (à mesurer)                                                    |
-| `random_ban.queue_paused` (réglé par la modération)                               | 0                                                                    |
+| Réglage                                                                           | Défaut            |
+| --------------------------------------------------------------------------------- | ----------------- |
+| `random_ban.price` (« Prix de Random Ban », extension et `!rb`)                   | 25 000            |
+| `random_ban.charges_max` (0 = aucune limite)                                      | 3                 |
+| `random_ban.recharge_min`                                                         | 10                |
+| `random_ban.channel_max` · `channel_window_min` (limite de la chaîne, 0 = aucune) | 0 · 10            |
+| `random_ban.max_pending`                                                          | 3                 |
+| `random_ban_ext.enabled` (achat depuis l'extension, interrupteur du socle)        | OFF               |
+| `random_ban.sniper_window_min` · `sniper_bonus`                                   | 30 · 2 000        |
+| `random_ban.sequence` (0 = timeout puis vidéo, 1 = Le Viseur) · `strike_offset_s` | 0 · 3 (à mesurer) |
+| `random_ban.queue_paused` (réglé par la modération)                               | 0                 |
 
 Toutes existent dans le code (module `random_ban` du socle, `modules/random-ban.ts`) et se règlent dans Studio
 (« Sanctions › Random Ban », panneau de réglages).
@@ -384,11 +362,11 @@ Production.
 
 | Partie                                                                                                               | Où                                                                                                                                | État                                                      |
 | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Prix progressif 5 min, compté / non compté, jamais au-dessus du confirmé, file de 2                                  | `random-ban/pricing.ts`, `RandomBanService.buy`                                                                                   | codé, testé (PGlite + vrai PostgreSQL concurrent)         |
-| `!rb` / `!rb <montant>`                                                                                              | `chat-interactions/random-ban-chat.ts`                                                                                            | codé, testé                                               |
+| V5 : prix fixes, charges communes, limite de la chaîne, recharge par la modération, refus limités à 1 / 5 min        | `random-ban/pricing.ts`, `random-ban/refusal.ts`, `RandomBanService.admit/buy/requestChannelPoints`                               | codé, testé (PGlite + vrai PostgreSQL, deux Cores)        |
+| `!rb`                                                                                                                | `chat-interactions/random-ban-chat.ts`                                                                                            | codé, testé                                               |
 | Achat extension, jauge, Sniper, « Mes stats »                                                                        | `modules/random-ban.ts` (`random_ban_ext`, OFF), `extension/shared/random-ban-view.js`                                            | codé, testé, vu dans Chromium (deux shells, deux tailles) |
 | Sniper : cible figée, jamais transmise au tirage, fenêtre 30 min toutes sources, prime unique                        | `random-ban/sniper.ts`                                                                                                            | codé, testé (cas limites, simultanés, vrai PostgreSQL)    |
-| Points de chaîne : cooldown 10 min, refus, `CANCELED`, message après Twitch, remboursement auto d'un échec           | `channel-points/service.ts`                                                                                                       | codé, testé (Twitch simulé)                               |
+| Points de chaîne : charges, refus, `CANCELED`, message après Twitch, remboursement auto d'un échec                   | `channel-points/service.ts`                                                                                                       | codé, testé (Twitch simulé)                               |
 | Le Viseur : bande, frappe différée, « Esquivé ! », secours sans Studio                                               | `random-ban/reel.ts`, `RandomBanService.target/claimAnimation`, `twitch-bot` (`delay_ms`), `studio/server/effects-player/reel.js` | codé, testé ; rendu vu dans Chromium ; OFF (`sequence` 0) |
 | Modération : historique, À vérifier, annuler, rembourser un incertain, retirer une prime, pause, blocage et délai D4 | `random-ban/moderation.ts`, page Studio                                                                                           | codé, testé (Core) ; page Studio typée, non vue à l'écran |
 | Statistiques : personnelles (extension, site) et publiques (`GET /v1/site/modules/random-ban/public`)                | `module-stats/service.ts`                                                                                                         | codé, testé ; le site n'est pas modifié                   |
@@ -398,6 +376,11 @@ Production.
 | Lever une sanction (Unban), tampon « SNIPER ! », vrais avatars                                                       | —                                                                                                                                 | pas fait                                                  |
 
 ## Annexe A — propositions abandonnées (historique, ne s'appliquent pas)
+
+- **Prix progressif** (25 000 · 30 000 · 50 000 · 75 000 · 100 000, un palier de moins toutes les 5 min, `!rb <montant>`
+  pour confirmer), décidé le 12/11, jamais déployé : remplacé le 13/11 par les prix fixes et les charges (§ 2). Le code
+  n'est pas gardé : le retour arrière est le redéploiement du Core précédent.
+- **Cooldown individuel de 10 min des points de chaîne** : remplacé par les charges communes.
 
 - **Fenêtre glissante** (« les lancers des N dernières minutes ») et **expiration de chaque lancer** : rejetées, car
   après une rafale tous les lancers expirent ensemble et le prix retombe d'un coup au normal.

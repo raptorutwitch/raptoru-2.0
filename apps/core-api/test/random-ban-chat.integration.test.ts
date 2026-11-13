@@ -126,15 +126,18 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
       chatA.chat(msg('tw-bal-1', '9002')),
       chatB.chat(msg('tw-bal-2', '9002')),
     ]);
-    // The second sees the first (buyer's lock): its price is now the 2nd tier — announced, nothing debited.
-    expect(out.map((o) => o.outcome).sort()).toEqual(['rb_queued', 'rb_quote']);
+    // The second sees the first (buyer's lock): 5 000 left — refused, nothing debited.
+    expect(out.map((o) => o.outcome).sort()).toEqual([
+      'rb_queued',
+      'rb_refused',
+    ]);
     expect(await tokens('9002')).toBe(5_000);
     expect(
       await n(`select count(*) as n from rb_requests where buyer_id = '9002'`),
     ).toBe(1);
   });
 
-  it('progressive price (Mini-jeux): 4 confirmed purchases of one buyer at once on 2 Cores — tiers in order, the pending cap holds', async () => {
+  it('charges (V5): 2 `!rb` and 3 redemptions of one buyer at once on 2 Cores — exactly 3 accepted, never a charge used twice', async () => {
     await editWallet(
       a,
       clock.now(),
@@ -144,31 +147,37 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
       { tokens: 1_000_000 },
       'test',
     );
-    const m = (id: string): LabChatMessage => ({
-      ...msg(id, '9010'),
-      text: '!rb 100000',
-    });
+    const buyer = { id: '9010', login: 'v9010', name: 'V9010' };
+    const cp = (rb: RandomBanService, ref: string) =>
+      rb.requestChannelPoints({
+        channel_id: CH,
+        source_ref: `twitch:${ref}:0`,
+        mode: 'real',
+        buyer,
+      });
     const out = await Promise.all([
-      chatA.chat(m('tw-pp-1')),
-      chatB.chat(m('tw-pp-2')),
-      chatA.chat(m('tw-pp-3')),
-      chatB.chat(m('tw-pp-4')),
+      chatA.chat(msg('tw-ch-1', '9010')),
+      cp(rbB, 'cp-ch-1'),
+      chatB.chat(msg('tw-ch-2', '9010')),
+      cp(rbA, 'cp-ch-2'),
+      cp(rbB, 'cp-ch-3'),
     ]);
-    expect(out.map((o) => o.outcome).sort()).toEqual([
-      'rb_queued',
-      'rb_queued',
-      'rb_refused',
-      'rb_refused',
-    ]);
-    const paid = await a.query<{ price_paid: number; series_level: number }>(
-      `select price_paid, series_level from rb_requests where buyer_id = '9010' order by seq`,
+    const accepted = out.filter(
+      (o) =>
+        ('outcome' in o && o.outcome === 'rb_queued') ||
+        ('request' in o && o.request),
     );
-    // Never two purchases at the same level: 25 000 then 30 000, whatever the order.
-    expect(paid.map((p) => [p.series_level, p.price_paid])).toEqual([
-      [0, 25_000],
-      [1, 30_000],
-    ]);
-    expect(await tokens('9010')).toBe(1_000_000 - 55_000);
+    expect(accepted).toHaveLength(3);
+    expect(
+      await n(`select count(*) as n from rb_requests where buyer_id = '9010'`),
+    ).toBe(3);
+    const chats = await n(
+      `select count(*) as n from rb_requests where buyer_id = '9010' and source = 'chat'`,
+    );
+    expect(await tokens('9010')).toBe(1_000_000 - chats * 25_000);
+    expect(
+      (await a.tx((q) => rbA.chargesFor(q, CH, '9010'))).charges.available,
+    ).toBe(0);
   });
 
   it('a failed request settled by both Cores at once: refunded exactly once', async () => {

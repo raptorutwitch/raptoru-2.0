@@ -1,62 +1,74 @@
 import { describe, expect, it } from 'vitest';
 import {
   exactViewer,
-  recoveryModel,
   reelSchedule,
   carouselSlot,
   reelProgress,
   historyLine,
   matchViewers,
   resultModel,
-  gaugeModel,
+  chargesModel,
   requestLine,
   sniperLine,
   sniperReadyText,
   waitText,
 } from '../extension/shared/random-ban-model.js';
 
-// Mini-jeux › Random Ban: the gauge is a PROJECTION of the Core's times (server_now, next_drop_at, normal_at) — the
-// local clock only measures the time elapsed since the read, and a fallen step asks for a new read.
+// Mini-jeux › Random Ban V5: the charges gauge is a PROJECTION of the Core's times (server_now, full_at) — the local
+// clock only measures the time elapsed since the read, and a charge back asks for a new read.
 
 const MIN = 60_000;
-const quote = {
-  level: 2,
-  price: 50_000,
-  next_price: 30_000,
-  server_now: '2026-11-12T20:10:00.000Z',
-  next_drop_at: '2026-11-12T20:15:00.000Z',
-  normal_at: '2026-11-12T20:25:00.000Z',
-};
+const NOW = '2026-11-12T20:10:00.000Z';
+const after = (min) => new Date(Date.parse(NOW) + min * MIN).toISOString();
+/** The Core's charges: 3 at most, one back every 10 min, `full` in `min` minutes. */
+const core = (available, min) => ({
+  available,
+  max: 3,
+  recharge_ms: 10 * MIN,
+  next_at: min ? after(min - (Math.ceil(min / 10) - 1) * 10) : null,
+  full_at: min ? after(min) : null,
+  server_now: NOW,
+});
 
-describe('gaugeModel', () => {
-  it('normal price: no gauge', () => {
-    expect(
-      gaugeModel({ ...quote, level: 0, next_drop_at: null }, 0, 0, 5 * MIN),
-    ).toBeNull();
+describe('chargesModel', () => {
+  it('no charge limit (Studio: 0): no gauge', () => {
+    expect(chargesModel({ ...core(0, 0), max: 0 }, 0, 0)).toBeNull();
   });
 
-  it('from the server times, whatever the local clock says', () => {
-    // A local clock 3 h off: only the elapsed time (90 s) counts.
-    const readAt = Date.parse('2026-11-12T23:00:00Z');
-    const g = gaugeModel(quote, readAt, readAt + 90_000, 5 * MIN);
-    expect(g).toMatchObject({
-      price: 50_000,
-      next_price: 30_000,
-      next_in_ms: 210_000,
-      normal_in_ms: 810_000,
+  it('full: 3 of 3, nothing to wait for', () => {
+    expect(chargesModel(core(3, 0), 0, 0)).toMatchObject({
+      available: 3,
+      level: 3,
+      next_in_ms: 0,
       stale: false,
     });
-    expect(g.fraction).toBeCloseTo(0.7);
   });
 
-  it('the step falls: stale (read the Core again), the amount shown never changes by itself', () => {
-    const g = gaugeModel(quote, 0, 5 * MIN, 5 * MIN);
-    expect(g).toMatchObject({ next_in_ms: 0, stale: true, price: 50_000 });
+  it('from the server times, whatever the local clock says; the recharging one fills continuously', () => {
+    // Empty, full in 30 min. A local clock 3 h off: only the elapsed time (4 min) counts.
+    const readAt = Date.parse('2026-11-12T23:00:00Z');
+    const m = chargesModel(core(0, 30), readAt, readAt + 4 * MIN);
+    expect(m).toMatchObject({
+      available: 0,
+      next_in_ms: 6 * MIN,
+      full_in_ms: 26 * MIN,
+      stale: false,
+    });
+    expect(m.level).toBeCloseTo(0.4);
+  });
+
+  it('a charge back: stale (read the Core again)', () => {
+    const m = chargesModel(core(1, 15), 0, 5 * MIN);
+    expect(m).toMatchObject({
+      available: 2,
+      stale: true,
+      next_in_ms: 10 * MIN,
+    });
   });
 
   it('reduced motion: whole minutes only', () => {
-    const g = gaugeModel(quote, 0, 90_000, 5 * MIN, { reducedMotion: true });
-    expect(g.fraction).toBeCloseTo(4 / 5); // 3 min 30 s left → shown as 4 of 5 minutes
+    const m = chargesModel(core(0, 30), 0, 90_000, { reducedMotion: true });
+    expect(m.level).toBeCloseTo(0.1); // 28 min 30 s left → shown as 29 min
   });
 });
 
@@ -256,52 +268,6 @@ describe('the stage and the history', () => {
 });
 
 // V3 (14/11) — the recovery gauge slides continuously between the tier marks; the reel slows down to its stop.
-describe('recovery gauge', () => {
-  const TIERS = [25_000, 30_000, 50_000, 75_000, 100_000];
-  const STEP = 5 * MIN;
-  const at = (level, nextInMin) => ({
-    level,
-    price: TIERS[level],
-    next_price: TIERS[level - 1] ?? null,
-    server_now: '2026-11-14T00:00:00.000Z',
-    next_drop_at: level
-      ? new Date(
-          Date.parse('2026-11-14T00:00:00Z') + nextInMin * MIN,
-        ).toISOString()
-      : null,
-    normal_at: level
-      ? new Date(
-          Date.parse('2026-11-14T00:00:00Z') +
-            ((level - 1) * 5 + nextInMin) * MIN,
-        ).toISOString()
-      : null,
-  });
-  it('the top tier just bought: full; the normal price: empty', () => {
-    expect(recoveryModel(at(4, 5), TIERS, 0, 0, STEP).fill).toBeCloseTo(1);
-    expect(recoveryModel(at(0, 0), TIERS, 0, 0, STEP)).toMatchObject({
-      fill: 0,
-      price: 25_000,
-      level: 0,
-    });
-  });
-  it('continuous: it slides with the time elapsed, and reaches a mark exactly when the price drops to it', () => {
-    const m0 = recoveryModel(at(2, 5), TIERS, 0, 0, STEP);
-    const m1 = recoveryModel(at(2, 5), TIERS, 0, 60_000, STEP);
-    expect(m0.fill).toBeCloseTo(0.5); // 50 000: on its own mark
-    expect(m1.fill).toBeLessThan(m0.fill);
-    expect(m1.fill).toBeGreaterThan(0.25);
-    const end = recoveryModel(at(2, 5), TIERS, 0, 5 * MIN, STEP);
-    expect(end.fill).toBeCloseTo(0.25); // the 30 000 mark
-    expect(end.stale).toBe(true); // the Core is read again for the new price
-    expect(end.price).toBe(50_000); // never a price of its own
-  });
-  it('the marks: the five tiers, the current one marked', () => {
-    const m = recoveryModel(at(1, 3), TIERS, 0, 0, STEP);
-    expect(m.marks.map((x) => x.at)).toEqual([0, 0.25, 0.5, 0.75, 1]);
-    expect(m.marks.find((x) => x.current).amount).toBe(30_000);
-  });
-});
-
 describe('reel rhythm', () => {
   it('fast first, slower at the end, about the total asked', () => {
     const d = reelSchedule(23, 3400);

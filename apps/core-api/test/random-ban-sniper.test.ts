@@ -44,7 +44,7 @@ async function lab() {
       viewer: V,
       idempotency_key: `intent-${++k}-sniper`,
       input: {
-        expected_price: s.price.price,
+        expected_price: s.price,
         ...(wish_id ? { wish_id } : {}),
         ...(wish_text ? { wish_text } : {}),
       },

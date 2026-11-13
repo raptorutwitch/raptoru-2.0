@@ -1,5 +1,16 @@
 # UX / UI — module Mini-jeux et Random Ban
 
+## 0quater. V5 du 13/11 (charges partagées) — remplace les lignes correspondantes des § 0 à 0ter
+
+| Sujet           | V5 codée                                                                                                                                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bandeau         | aligné sur les deux colonnes du jeu : titre au-dessus de la machine, **jauge des charges** au-dessus du Sniper et du bouton Lancer                                                                        |
+| Charges         | un segment par charge (3), celle qui revient se remplit en continu, « +1 m:ss » ou « 3/3 » ; infobulle : charges, prochaine, pleine dans, règle commune extension / `!rb` / points ; le prix n'y est plus |
+| Plus de charge  | bouton fermé, ligne sous la machine « Plus de charge · la prochaine dans m:ss »                                                                                                                           |
+| Achat en 1 clic | préférence de l'appareil (localStorage), désactivée par défaut ; « Ne plus demander » dans la confirmation, case dans « ? » ; le montant reste sur le bouton ; un double clic ne paie qu'une fois         |
+| Machine         | portraits plus grands (centre jusqu'à la moitié de la largeur), voisins rapprochés, même transparence et échelle secondaire, centrés verticalement ; viseur et carrousel V4 inchangés                     |
+| Livraison       | [LIVRAISON_V5.md](LIVRAISON_V5.md)                                                                                                                                                                        |
+
 ## 0ter. V4 du 14/11 (finition) — remplace les lignes correspondantes des § 0 et 0bis
 
 | Sujet            | V4 codée                                                                                                                                                                                                                                                                                                                                                  |
@@ -10,7 +21,7 @@
 | Sniper           | la fenêtre de prime a son propre repère dans le champ (« prime dans N min »), distinct du prix et des délais de modération                                                                                                                                                                                                                                |
 | Derniers tirages | 6 lignes : portrait du tiré, auteur, origine, résultat en pastille, marque Sniper ; « Tout voir » inchangé                                                                                                                                                                                                                                                |
 | Robustesse       | double-clic = armer seulement ; prix changé pendant la confirmation = désarmé et annoncé ; connexion perdue = dernier état gardé, achat fermé ; rafraîchissement sans rejouer ; test de bout en bout `npm run mini-jeux:check`                                                                                                                            |
-| Livraison        | [LIVRAISON_V4.md](LIVRAISON_V4.md)                                                                                                                                                                                                                                                                                                                        |
+| Livraison        | [LIVRAISON_V5.md](LIVRAISON_V5.md)                                                                                                                                                                                                                                                                                                                        |
 
 ## 0bis. V3 du 14/11 (carte blanche d'Antoni) — remplace les lignes correspondantes du § 0
 

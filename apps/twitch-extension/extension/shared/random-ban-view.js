@@ -1,8 +1,9 @@
-// Mini-jeux › Random Ban V3 (14/11, docs/mini-jeux/UX_UI_MINI_JEUX.md § 0) — the game screen: the draw machine on the
-// left (random-ban-machine.js), the player's controls on the right (price recovery gauge, Sniper, launch, last draws).
-// A host module view (module-registry.js). The Core decides everything: the buyer's price, availability, the purchase,
-// the draw and its target. This view shows `GET /modules/v3/random_ban/state` and sends `launch` with the price the
-// viewer confirmed (input.expected_price: never charged above it). One key per intent (purchase.js): a double tap, a
+// Mini-jeux › Random Ban V5 (13/11, docs/mini-jeux/UX_UI_MINI_JEUX.md § 0) — the game screen: the draw machine on the
+// left (random-ban-machine.js), the player's controls on the right (charges gauge, Sniper, launch, last draws).
+// A host module view (module-registry.js). The Core decides everything: the price, the charges, availability, the
+// purchase, the draw and its target. This view shows `GET /modules/v3/random_ban/state` and sends `launch` with the
+// price the viewer saw (input.expected_price: never charged above it). Purchase in one click is a per-device
+// preference (off by default: a first click arms, a second pays). One key per intent (purchase.js): a double tap, a
 // retry after a lost answer or a reconnection resend the SAME key — one Random Ban, one debit. The machine replays the
 // Core's strip and stops on the Core's target: the extension never draws, and the Sniper never reaches the draw. The
 // stream's ban alerts are Studio's own, untouched and never synchronised with this screen.
@@ -10,10 +11,11 @@
 import { errorLabel } from './api.js';
 import { createMiniGames } from './mini-games.js';
 import { createMachine, face } from './random-ban-machine.js';
-import { createPriceGauge } from './random-ban-gauge.js';
+import { createChargesGauge } from './random-ban-gauge.js';
 import { registerViewerModule } from './module-registry.js';
 import { createIntent, isRetryable } from './purchase.js';
 import {
+  chargesModel,
   cleanWish,
   exactViewer,
   historyLine,
@@ -49,6 +51,8 @@ const REASONS = {
   rb_paused: 'Random Ban est en pause. Rien n’a été débité.',
   viewer_blocked: 'Random Ban est indisponible pour ton compte.',
   viewer_cooldown: 'Délai personnel en cours. Rien n’a été débité.',
+  no_charge: 'Plus de charge : attends la prochaine. Rien n’a été débité.',
+  rb_busy: 'Trop de Random Ban en ce moment : réessaie un peu plus tard. Rien n’a été débité.',
   wish_unknown: 'Ce viewer n’est plus dans le chat : vise quelqu’un d’autre.',
   stream_offline: 'Random Ban se joue pendant le live.',
   unavailable: 'Random Ban est indisponible pour le moment.',
@@ -77,6 +81,27 @@ function seenStore(win, key) {
   };
 }
 
+/** « Achat en un clic »: this device's choice (localStorage; memory only when storage is blocked). */
+function prefStore(win, key) {
+  let on = false;
+  try {
+    on = win.localStorage.getItem(key) === '1';
+  } catch {
+    /* memory only */
+  }
+  return {
+    get: () => on,
+    set(v) {
+      on = !!v;
+      try {
+        win.localStorage.setItem(key, on ? '1' : '0');
+      } catch {
+        /* memory only */
+      }
+    },
+  };
+}
+
 const REPLAY_WINDOW_MS = 90_000;
 const RESULT_HOLD_MS = 10_000;
 const OPEN = ['queued', 'searching', 'timeout_requested'];
@@ -86,15 +111,19 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   const win = document.defaultView ?? globalThis;
   const reduced = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const machine = createMachine(document, { reduced });
-  const gauge = createPriceGauge(document);
+  const gauge = createChargesGauge(document, { reducedMotion: reduced });
   const node = document.createElement('div');
   node.className = 'rb';
   node.innerHTML = `
     <header class="rb__bar">
-      ${back ? '<button type="button" class="rb__back" data-k="back" aria-label="Retour aux Mini-jeux"><span aria-hidden="true">‹</span> Jeux</button>' : ''}
-      <span class="rb__title"><span class="rb__logo">${RB_ICON}</span><b>Random Ban</b></span>
-      <span class="rb__gauge" data-k="gauge"></span>
-      <button type="button" class="rb__info" data-k="infobtn" aria-expanded="false" aria-label="Comment ça marche">?</button>
+      <span class="rb__head">
+        ${back ? '<button type="button" class="rb__back" data-k="back" aria-label="Retour aux Mini-jeux"><span aria-hidden="true">‹</span> Jeux</button>' : ''}
+        <span class="rb__title"><span class="rb__logo">${RB_ICON}</span><b>Random Ban</b></span>
+      </span>
+      <span class="rb__tools">
+        <span class="rb__gauge" data-k="gauge"></span>
+        <button type="button" class="rb__info" data-k="infobtn" aria-expanded="false" aria-label="Comment ça marche">?</button>
+      </span>
     </header>
     <div class="rb__body">
       <div class="rb__left" data-k="left"></div>
@@ -126,6 +155,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     <div class="rb__sheet rb__sheet--info" data-k="info" hidden role="dialog" aria-label="Comment ça marche">
       <div class="rb__sheethead"><b>Comment ça marche</b><button type="button" class="rb__x" data-k="infoclose" aria-label="Fermer">×</button></div>
       <ul class="rb__rules" data-k="rules"></ul>
+      <label class="rb__pref"><input type="checkbox" data-k="oneclick"> <span><b>Achat en un clic</b><small>Sans demande de confirmation. Le prix reste affiché sur le bouton ; un double clic ne paie jamais deux fois.</small></span></label>
     </div>`;
   const $ = (k) => node.querySelector(`[data-k="${k}"]`);
   $('left').append(machine.node);
@@ -133,6 +163,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   const intent = createIntent();
   const played = seenStore(win, 'rb:played');
   const celebrated = seenStore(win, 'rb:sniper');
+  const oneClick = prefStore(win, 'rb:oneclick');
   let s = null; // the Core's state of the module for this viewer
   let readAt = 0;
   let armed = false;
@@ -151,11 +182,12 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   let offline = false; // the last read failed: the last state stays shown, nothing can be bought
   let armedPrice = null; // the price the first click armed (a change disarms: never a price the player did not see)
   let armedAt = 0; // a double click is not a confirmation
+  let calmUntil = 0; // just after a purchase: a stray extra click never starts another one
 
   const st = () => s?.state ?? null;
   const launch = () => s?.actions?.find((a) => a.name === 'launch') ?? null;
   const serverNow = () => {
-    const at = st()?.price?.server_now;
+    const at = st()?.charges?.server_now;
     return at ? Date.parse(at) + (Date.now() - readAt) : Date.now();
   };
   const age = (r) => serverNow() - Date.parse(r.created_at);
@@ -216,6 +248,12 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     machine.idle(pool, pool.length ? 'Prêt' : 'Personne dans le chat');
   }
 
+  const charges = () => chargesModel(st()?.charges, readAt, Date.now(), { reducedMotion: reduced });
+  const mmss = (ms) => {
+    const sec = Math.max(0, Math.ceil(ms / 1000));
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  };
+
   /** The line under the machine: the one thing the player should know now (never two mechanisms mixed). */
   function drawInfo() {
     const state = st();
@@ -237,6 +275,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     else if (r?.code === 'viewer_blocked') [text, tone] = ['Random Ban est bloqué pour ton compte (modération).', 'bad'];
     else if (r?.code === 'viewer_cooldown')
       [text, tone] = [`Délai fixé par la modération : encore ${left(r.wait_ms ?? 0)}`, 'warn'];
+    else if (r?.code === 'rb_busy')
+      [text, tone] = [`Trop de Random Ban en ce moment : encore ${left(r.wait_ms ?? 0)}`, 'warn'];
     else if (!state.ready) [text, tone] = ['Le bot ne répond pas : rien ne serait débité.', 'bad'];
     else if (run)
       [text, tone] = [
@@ -247,6 +287,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
             : 'Sanction envoyée à Twitch…',
         'wait',
       ];
+    else if (charges() && charges().available < 1)
+      [text, tone] = [`Plus de charge · la prochaine dans ${mmss(charges().next_in_ms)}`, 'warn'];
     machine.info(text, tone);
   }
 
@@ -357,11 +399,13 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     if (state?.restriction) return state.restriction.code;
     if (state && !state.ready) return 'rb_unavailable';
     if (state && state.pending >= state.max_pending) return 'too_many_pending';
+    if (charges() && charges().available < 1) return 'no_charge';
     return null;
   }
 
   function drawButton() {
-    const price = st()?.price?.price ?? null;
+    const p = st()?.price;
+    const price = Number.isInteger(p) ? p : null;
     const why = reason();
     const go = $('go');
     go.disabled = busy || !!why || price === null;
@@ -400,7 +444,10 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     $('rules').innerHTML = [
       'Le serveur tire au sort un viewer présent dans le chat (toi compris, avec 4 fois moins de chances).',
       'Timeout de 3 min pour un abonné, 5 min sinon. Si rien ne se passe, tu es remboursé.',
-      'Chaque lancer monte ton prix d’un palier ; un palier revient toutes les 5 min sans nouveau lancer.',
+      `Prix fixe : ${priceText(st()?.price ?? 25000)} ici et avec !rb, 3 000 points de chaîne avec la récompense.`,
+      st()?.charges?.max > 0
+        ? `${st().charges.max} charges au plus, communes à l’extension, !rb et aux points de chaîne : un Random Ban lancé en utilise une, une charge revient toutes les ${Math.round(st().charges.recharge_ms / 60_000)} min.`
+        : 'Aucune limite de charges pour le moment.',
       `Sniper (facultatif) : prédis la personne tirée. Il ne change jamais le tirage. Touché : +${priceText(sn?.bonus ?? 2000)}${
         sn?.window_ms ? ` (au plus une prime toutes les ${Math.round(sn.window_ms / 60_000)} min)` : ''
       }.`,
@@ -413,8 +460,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     if (stopped) return;
     const m = gauge.update(st(), readAt);
     if (m?.stale) void refresh();
-    // The price moved while armed (a step fell, another purchase): disarmed, the new price shown before any payment.
-    if (armed && st()?.price?.price !== armedPrice) {
+    // The price moved while armed (Studio changed it): disarmed, the new price shown before any payment.
+    if (armed && st()?.price !== armedPrice) {
       armed = false;
       win.clearTimeout(disarm);
       say('Ton prix a changé : vérifie le nouveau montant avant de lancer.');
@@ -463,9 +510,9 @@ export function createRandomBanGame({ document, client, module, back = null }) {
 
   const onGo = async () => {
     const state = st();
-    const price = state?.price?.price;
-    if (busy || !Number.isInteger(price)) return;
-    if (!armed) {
+    const price = state?.price;
+    if (busy || !Number.isInteger(price) || Date.now() < calmUntil) return;
+    if (!armed && !oneClick.get()) {
       armed = true;
       armedPrice = price;
       armedAt = Date.now();
@@ -475,10 +522,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
         : wish.wish_text
           ? ` · vise « ${wish.wish_text} » (à vérifier)`
           : '';
-      $('msg').innerHTML =
-        state.price.level > 0
-          ? `<b class="rb__up">Prix en hausse : ${esc(priceText(price))}</b> (normal ${esc(priceShort(state.tiers?.[0] ?? price))})${esc(aim)}`
-          : `Confirme pour payer ${esc(priceText(price))}${esc(aim)}`;
+      $('msg').innerHTML = `Confirme pour payer ${esc(priceText(price))}${esc(aim)} <button type="button" class="rb__once" data-k="once">Ne plus demander</button>`;
       win.clearTimeout(disarm);
       disarm = win.setTimeout(() => {
         armed = false;
@@ -486,7 +530,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       }, 5000);
       return draw();
     }
-    if (Date.now() - armedAt < 350) return; // a double click arms, it never pays
+    if (armed && Date.now() - armedAt < 350) return; // a double click arms, it never pays
     win.clearTimeout(disarm);
     armed = false;
     busy = true;
@@ -496,13 +540,10 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       const out = await client.moduleAct(module.id, 'launch', { expected_price: price, ...wish }, intent.key());
       intent.close();
       const req = out?.activity?.result?.request;
-      const paid = req?.price_paid;
       say(
         req?.sniper === 'unresolved'
           ? `Payé. « ${wish.wish_text} » sera vérifié par un modérateur.`
-          : Number.isInteger(paid) && paid < price
-            ? `Payé ${priceText(paid)} (le prix avait baissé).`
-            : 'Payé · tirage en cours…',
+          : 'Payé · tirage en cours…',
       );
       picked = null;
       $('wish').value = '';
@@ -520,8 +561,23 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       );
     } finally {
       busy = false;
+      calmUntil = Date.now() + 800;
       await refresh();
     }
+  };
+  /** « Ne plus demander » (in the confirmation) and the setting in « Comment ça marche ». */
+  const onMsgClick = (e) => {
+    if (!e.target.closest?.('[data-k="once"]')) return;
+    oneClick.set(true);
+    armed = false;
+    win.clearTimeout(disarm);
+    $('oneclick').checked = true;
+    say('Achat en un clic activé. Tu peux le retirer dans « ? ».');
+    drawButton();
+  };
+  const onPref = () => {
+    oneClick.set($('oneclick').checked);
+    drawButton();
   };
 
   // --- Sheets: the full history, the rules ----------------------------------------------------------------------------
@@ -552,6 +608,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   const onHistClose = () => sheet('hist', false, 'histbtn');
   const onInfo = () => {
     drawRules();
+    $('oneclick').checked = oneClick.get();
     sheet('info', $('info').hidden, 'infobtn');
   };
   const onInfoClose = () => sheet('info', false, 'infobtn');
@@ -585,6 +642,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     [$('histclose'), 'click', onHistClose],
     [$('infobtn'), 'click', onInfo],
     [$('infoclose'), 'click', onInfoClose],
+    [$('msg'), 'click', onMsgClick],
+    [$('oneclick'), 'change', onPref],
     [node, 'keydown', onKey],
     ...(back ? [[$('back'), 'click', onBack]] : []),
   ];
@@ -600,7 +659,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       tick = win.setInterval(() => {
         const m = gauge.update(st(), readAt);
         if (m?.stale) void refresh();
-        if (st()?.restriction?.wait_ms) drawInfo(); // a moderation delay counts down
+        // A moderation delay, the channel's limit or the next charge counts down.
+        if (st()?.restriction?.wait_ms || (m && m.available < 1)) drawInfo();
       }, 250);
     },
     destroy() {
@@ -630,9 +690,10 @@ export function createRandomBanView({ document, client, module }) {
         create: ({ back }) => createRandomBanGame({ document, client, module, back }),
         async peek() {
           const st = (await client.moduleState(module.id))?.state;
-          if (!st?.price) return null;
+          if (!Number.isInteger(st?.price)) return null;
           const last = st.recent?.[0];
-          return `Ton prix : ${priceShort(st.price.price)}${last?.target ? ` · dernier : ${last.target.name}` : ''}`;
+          const c = st.charges?.max > 0 ? `Charges : ${st.charges.available}/${st.charges.max}` : priceShort(st.price);
+          return `${c}${last?.target ? ` · dernier : ${last.target.name}` : ''}`;
         },
       },
     ],

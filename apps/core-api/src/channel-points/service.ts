@@ -19,7 +19,11 @@ import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { type EconomyPort, labEconomy } from '../economy/economy.js';
 import { insertWordGameSteps } from '../commands/steps.js';
-import { waitText } from '../random-ban/pricing.js';
+import {
+  refusalText,
+  sayRefusal,
+  type RbRefusal,
+} from '../random-ban/refusal.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import type { SpotifyRequestView, SpotifyService } from '../spotify/service.js';
@@ -58,9 +62,9 @@ export const CP_RULES = {
   queuedMaxMs: 120_000,
 } as const;
 
-/** The result text of a Random Ban redemption refused by the buyer's cooldown (read back by afterTwitchAction). */
+/** Before V5: a Random Ban redemption refused by the buyer's cooldown (rows written then, read back). */
 const RB_COOLDOWN = 'Random Ban : délai personnel';
-/** A Random Ban redemption refused by the moderation (block, queue paused). */
+/** A Random Ban redemption refused (`Random Ban refusé : <why> · <refund>`, read back by afterTwitchAction). */
 const RB_REFUSED = 'Random Ban refusé';
 /** A failed Random Ban whose points Raptoru asked Twitch to give back (read back by afterTwitchAction). */
 const RB_REFUND_ASKED = 'remboursement des points demandé à Twitch';
@@ -821,7 +825,7 @@ export class ChannelPointsService {
               e,
               index,
               cooling_ms,
-              refused ?? 'cooldown',
+              refused ?? 'no_charge',
             );
       } catch (err) {
         update = { index, ok: false, error: (err as Error).message };
@@ -1545,9 +1549,10 @@ export class ChannelPointsService {
   }
 
   /**
-   * Mini-jeux (SPEC_RANDOM_BAN_V2.md § 3): a Random Ban redemption under the buyer's personal cooldown — no Random Ban.
-   * Its points go back once (CANCELED) when the reward is Raptoru's; the chat is told AFTER Twitch's answer (the
-   * listener below), never « remboursé » before it. Another reward (the SAMMI-era one): no refund promised.
+   * Mini-jeux (SPEC_RANDOM_BAN_V2.md § 3): a Random Ban redemption the gate refused (no charge left, the moderation, the
+   * channel-wide limit) — no Random Ban. Its points go back once (CANCELED) when the reward is Raptoru's, never
+   * limited; the chat line (at most one refusal line per viewer every 5 min) comes AFTER Twitch's answer (the listener
+   * below), never « remboursé » before it. Another reward (the SAMMI-era one): no refund promised.
    */
   private async randomBanCooling(
     e: {
@@ -1555,27 +1560,34 @@ export class ChannelPointsService {
       source: string;
       redemption_id: string;
       reward: { id: string };
-      user: { display_name: string };
+      user: { id: string; display_name: string };
     },
     index: number,
     coolingMs: number,
-    /** Why: the personal cooldown (channel points or moderation), a moderation block, or the queue paused. */
-    refused: 'cooldown' | 'blocked' | 'paused' = 'cooldown',
+    refused: 'cooldown' | 'blocked' | 'paused' | 'busy' | 'no_charge',
   ): Promise<ResultUpdate> {
-    const wait = waitText(coolingMs);
-    const head =
-      refused === 'cooldown'
-        ? `@${e.user.display_name} - Random Ban indisponible pour toi : encore ${wait} avant ton prochain tirage.`
-        : `@${e.user.display_name} - Random Ban indisponible pour le moment.`;
-    const key = `rb:cp-cooldown:${e.redemption_id}`;
+    const why = refusalText(
+      (
+        {
+          cooldown: 'viewer_cooldown',
+          blocked: 'viewer_blocked',
+          paused: 'rb_paused',
+          busy: 'rb_busy',
+          no_charge: 'no_charge',
+        } as const satisfies Record<typeof refused, RbRefusal>
+      )[refused],
+      coolingMs,
+    );
+    const line = (end: string) => ({
+      channelId: e.channel_id,
+      viewerId: e.user.id,
+      ref: `cp:${e.redemption_id}`,
+      text: `@${e.user.display_name} - ${why[0]!.toUpperCase()}${why.slice(1)}${end}`,
+      now: this.clock.now(),
+    });
     const refund = await this.db.tx(async (q) => {
       if (e.source !== 'twitch') {
-        await this.say(
-          q,
-          e.channel_id,
-          key,
-          `${head} (simulation : rien à rembourser)`,
-        );
+        await sayRefusal(q, line(' (simulation : rien à rembourser).'));
         return 'simulation';
       }
       if (
@@ -1590,18 +1602,16 @@ export class ChannelPointsService {
         });
         return 'asked';
       }
-      await this.say(
+      await sayRefusal(
         q,
-        e.channel_id,
-        key,
-        `${head} Un modérateur peut te rembourser tes points depuis Twitch.`,
+        line('. Un modérateur peut te rembourser tes points depuis Twitch.'),
       );
       return 'unmanaged';
     });
     return {
       index,
       ok: false,
-      error: `${refused === 'cooldown' ? `${RB_COOLDOWN} (encore ${wait})` : refused === 'blocked' ? `${RB_REFUSED} (compte bloqué par la modération)` : `${RB_REFUSED} (file en pause)`} · ${
+      error: `${RB_REFUSED} : ${why} · ${
         refund === 'asked'
           ? 'remboursement demandé à Twitch'
           : refund === 'unmanaged'
@@ -1679,34 +1689,24 @@ export class ChannelPointsService {
         r.error?.startsWith(RB_COOLDOWN) || r.error?.startsWith(RB_REFUSED),
     );
     if (!row || !cooled) return;
-    if (cooled.error!.startsWith(RB_REFUSED)) {
-      await this.db.tx((q) =>
-        this.say(
-          q,
-          channelId,
-          `rb:cp-cooldown:${p.redemption_id}`,
-          `@${row.user_name} - Random Ban indisponible pour le moment. ${
-            a.status === 'done'
-              ? 'Tes points de chaîne ont été remboursés.'
-              : 'Tes points n’ont pas pu être remboursés automatiquement : un modérateur va le faire.'
-          }`,
-        ),
-      );
-      return;
-    }
-    const wait =
-      /encore ([^)]+)\)/.exec(cooled.error!)?.[1] ?? 'quelques minutes';
+    const err = cooled.error!;
+    const why =
+      /^Random Ban refusé : (.+?) · /.exec(err)?.[1] ??
+      (err.startsWith(RB_COOLDOWN)
+        ? `Random Ban indisponible pour toi encore ${/encore ([^)]+)\)/.exec(err)?.[1] ?? 'quelques minutes'}`
+        : 'Random Ban indisponible pour le moment');
     await this.db.tx((q) =>
-      this.say(
-        q,
+      sayRefusal(q, {
         channelId,
-        `rb:cp-cooldown:${p.redemption_id}`,
-        `@${row.user_name} - Random Ban indisponible pour toi : encore ${wait} avant ton prochain tirage. ${
+        viewerId: row.user_id,
+        ref: `cp:${p.redemption_id}`,
+        text: `@${row.user_name} - ${why[0]!.toUpperCase()}${why.slice(1)} · ${
           a.status === 'done'
-            ? 'Tes points de chaîne ont été remboursés.'
-            : 'Tes points n’ont pas pu être remboursés automatiquement : un modérateur va le faire.'
+            ? 'points remboursés.'
+            : 'remboursement automatique impossible : un modérateur va le faire.'
         }`,
-      ),
+        now: this.clock.now(),
+      }),
     );
   }
 

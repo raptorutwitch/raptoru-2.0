@@ -14,7 +14,7 @@ import {
 
 export const MODULE_SETTINGS = {
   'random_ban.price': {
-    label: 'Prix de !rb',
+    label: 'Prix de Random Ban (extension et !rb)',
     unit: 'Jetons',
     default: CHAT_INTERACTION_PRICES.random_ban,
     min: 1_000,

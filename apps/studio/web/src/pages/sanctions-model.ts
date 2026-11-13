@@ -40,7 +40,6 @@ export interface RbView {
   created_at: string;
   /** Mini-jeux: the Jetons price paid and its tier; the Sniper prediction and its decision. */
   price_paid?: number | null;
-  series_level?: number | null;
   wish?: {
     id: string | null;
     name: string | null;
@@ -242,7 +241,7 @@ export function rbDetail(r: RbView) {
   return `<dl class="d-kv">
     ${kv('Acheteur', esc(r.buyer.name))}
     ${kv('Origine', RB_SOURCE[r.source] ?? esc(r.source))}
-    ${kv('Prix payé', Number.isInteger(r.price_paid) ? `${r.price_paid!.toLocaleString('fr-FR')} Jetons${r.series_level ? ` (palier ${r.series_level + 1})` : ''}` : '')}
+    ${kv('Prix payé', Number.isInteger(r.price_paid) ? `${r.price_paid!.toLocaleString('fr-FR')} Jetons` : '')}
     ${kv('Sniper', r.wish ? `vise ${esc(r.wish.name ?? `« ${r.wish.text ?? r.wish.id ?? '?'} »`)} · ${esc(SNIPER[r.sniper ?? ''] ?? r.sniper ?? '')}${r.sniper_bonus ? ` (+${r.sniper_bonus.toLocaleString('fr-FR')})` : ''}` : '')}
     ${kv('Mode', r.mode === 'real' ? 'Réel' : r.mode === 'dry_run' ? 'À blanc' : 'Animation seule')}
     ${kv('Résultat', rbWho(r))}

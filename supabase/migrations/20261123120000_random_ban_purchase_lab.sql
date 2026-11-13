@@ -1,10 +1,10 @@
 -- Random Ban V2 — purchases (Mini-jeux, 12/11/2026) — Lab database. Same content as the production file
 -- 20261123130000_random_ban_purchase.sql:
--- the Jetons price of each purchase (extension / `!rb`), the series level it was charged at (the progressive price of
--- docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 2 is derived from the last counted purchase: no counter), the extension as a
--- source, the Sniper prediction (frozen at purchase, never read by the draw) and a moderator cancellation. Additive:
+-- the Jetons price of each purchase (extension / `!rb`), whether a request uses one of its buyer's charges (V5, 13/11:
+-- the charges of docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 2 are derived from the counted requests: no counter), the
+-- extension as a source, the Sniper prediction (frozen at purchase, never read by the draw) and a moderator cancellation. Additive:
 -- the new columns are nullable or defaulted, the widened checks keep every existing value valid, existing rows are not
--- rewritten. The progressive price only applies to rows that carry series_level (none before this migration).
+-- rewritten (`charge` defaults to true: a request of the last 24 h uses a charge from the deploy on, as it should).
 
 alter table rb_requests drop constraint if exists rb_requests_source_check;
 alter table rb_requests add constraint rb_requests_source_check
@@ -17,8 +17,8 @@ alter table rb_requests add constraint rb_requests_status_check
 
 alter table rb_requests
   add column if not exists price_paid integer check (price_paid is null or price_paid >= 0),
-  -- 0 = normal price; the level the purchase was charged at (the next one starts from series_level + 1).
-  add column if not exists series_level smallint check (series_level is null or series_level between 0 and 20),
+  -- false: a moderator refilled the buyer's charges (the request no longer uses one)
+  add column if not exists charge boolean not null default true,
   add column if not exists wish_id text,
   add column if not exists wish_login text,
   add column if not exists wish_name text,
@@ -33,7 +33,7 @@ alter table rb_requests
   add column if not exists canceled_by text,
   add column if not exists cancel_reason text;
 
--- One buyer's last purchases (price, pending cap, channel points cooldown, Sniper window).
+-- One buyer's last requests (charges, pending cap, Sniper window).
 create index if not exists rb_requests_buyer on rb_requests (channel_id, buyer_id, seq desc);
 
 -- Moderation (D4): Random Ban gets the blocks and personal cooldowns of every module (widened checks only).

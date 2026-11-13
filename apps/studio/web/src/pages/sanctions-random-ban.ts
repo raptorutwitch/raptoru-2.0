@@ -151,8 +151,9 @@ export function mountRandomBanPage(root: HTMLElement) {
     const trace = s ? rbTrace(s) : '';
     const media = s?.effects?.media ?? [];
     p.panel
-      .set(`${grp('Prix (extension et !rb)', 'coin', settingRows(settings, ['random_ban.price', 'random_ban.price_2', 'random_ban.price_3', 'random_ban.price_4', 'random_ban.price_5', 'random_ban.tier_step_min', 'random_ban.max_pending']), 'prix rb palier série')}
-      ${grp('Points de chaîne et Sniper', 'ban', settingRows(settings, ['random_ban.cp_cooldown_min', 'random_ban.sniper_bonus', 'random_ban.sniper_window_min', 'random_ban_ext.enabled']), 'cooldown sniper prime extension')}
+      .set(`${grp('Prix et charges', 'coin', `${settingRows(settings, ['random_ban.price', 'random_ban.charges_max', 'random_ban.recharge_min'])}<small>Points de chaîne : le coût réglé sur la récompense Twitch (3 000). Les charges sont communes à l’extension, !rb et aux points de chaîne.</small>`, 'prix rb charges recharge')}
+      ${grp('Limite de la chaîne', 'clock', settingRows(settings, ['random_ban.channel_max', 'random_ban.channel_window_min', 'random_ban.max_pending']), 'limite chaîne spam global attente')}
+      ${grp('Sniper et extension', 'ban', settingRows(settings, ['random_ban.sniper_bonus', 'random_ban.sniper_window_min', 'random_ban_ext.enabled']), 'sniper prime extension')}
       ${grp('Déclencheurs', 'gift', `<div class="d-row col" data-k="déclencheurs récompenses liaisons points de chaîne">${triggersHtml(cp, error, usesRandomBan)}<small>Activation : une récompense dont l’action est l’interaction native Random Ban.</small></div>`)}
       ${grp('Suivi du streamer', 'activity', `<div class="d-row col" data-k="suivi streamer tirage malchance"><small>${esc(trace || 'Aucun Random Ban réel suivi pour l’instant.')}</small></div>`)}
       ${grp('Animations', 'film', media.length ? media.map((m) => `<div class="d-row" data-k="animations ${esc(m.label.toLowerCase())}"><span>${esc(m.label.replace('Random Ban — ', ''))}</span>${m.available ? '<span class="d-tag ok">Importée</span>' : '<span class="d-tag warn">À importer</span>'}</div>`).join('') : '<p class="d-note">Lecteur d’effets indisponible.</p>')}`);

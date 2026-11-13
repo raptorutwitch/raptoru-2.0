@@ -1,10 +1,12 @@
-// LAB ONLY — end-to-end check of Mini-jeux / Random Ban in a real browser (docs/mini-jeux/LIVRAISON_V4.md § 3).
+// LAB ONLY — end-to-end check of Mini-jeux / Random Ban in a real browser (docs/mini-jeux/LIVRAISON_V5.md § 3).
 //   npm run mini-jeux:check -w @raptoru/core-api          (screenshots: MINI_JEUX_SHOTS=<dir>, default the OS temp dir)
 // Starts its own demo (scripts/mini-jeux-demo.ts, port 4496: an in-memory Core, a FAKE Twitch, fictional Jetons) and
 // plays the main paths in Chromium, asserting what the player sees against what the Core decided:
-// catalog → game · a double click never pays · one purchase debits once · the machine stops on the Core's target ·
-// a refresh never replays a draw · moderation pause / personal delay said before the click · a Sniper hit pays once ·
-// reduced motion · the three usual extension sizes. Nothing leaves the machine.
+// catalog → game · a double click never pays · one purchase debits once and uses one charge · the machine stops on the
+// Core's target · a refresh never replays a draw · moderation pause / personal delay said before the click · charges
+// shared with the channel points, none left = refused before anything · moderator refill · purchase in one click (a
+// double click still pays once) · a Sniper hit pays once · reduced motion · the three usual extension sizes. Nothing
+// leaves the machine.
 import { spawn } from 'node:child_process';
 import console from 'node:console';
 import process from 'node:process';
@@ -121,8 +123,9 @@ try {
     'le bouton dit le prix (25K)',
   );
   check(
-    (await fr.locator('.rbg__next').textContent()).includes('normal'),
-    'la jauge dit le tarif normal',
+    (await fr.locator('.rbg__next').textContent()).includes('3/3') &&
+      (await fr.locator('.rbg__cell.is-full').count()) === 3,
+    'la jauge montre 3 charges pleines',
   );
   await page.locator('#ext').screenshot({ path: join(SHOTS, '1-game.png') });
 
@@ -149,8 +152,9 @@ try {
     `la machine s’arrête sur la cible du Core (${shown})`,
   );
   check(
-    (await fr.locator('.rbg__next').textContent()).startsWith('↓'),
-    'la jauge descend après l’achat (palier 2)',
+    (await fr.locator('.rbg__next').textContent()).startsWith('+1') &&
+      (await fr.locator('.rbg__cell.is-full').count()) === 2,
+    'une charge utilisée, la recharge compte à rebours (2 pleines)',
   );
   await page.locator('#ext').screenshot({ path: join(SHOTS, '2-result.png') });
 
@@ -211,9 +215,59 @@ try {
     'délai levé : on peut rejouer',
   );
 
+  // Charges shared with the channel points: 2 left → two redemptions, then nothing left.
+  await api('/api/cp', {});
+  await api('/api/cp', {});
+  const refusedCp = await api('/api/cp', {});
+  await sleep(4500);
+  check(
+    refusedCp.refused === 'no_charge' &&
+      (await fr.locator('.rb__go').isDisabled()) &&
+      /Plus de charge/.test(await fr.locator('.rbm__info').textContent()),
+    'plus de charge (points de chaîne compris) : refus, bouton fermé, attente affichée',
+  );
+  check(
+    (await api('/api/replies'))[0]?.includes('Plus de charge'),
+    'le chat reçoit un refus court',
+  );
+  await page.locator('#ext').screenshot({ path: join(SHOTS, '3b-empty.png') });
+  const refill = () =>
+    api('/api/mod', {
+      action: 'refill_charges',
+      viewer_id: '9001',
+      reason: 'check',
+    });
+  await refill();
+  await sleep(4500);
+  check(
+    !(await fr.locator('.rb__go').isDisabled()) &&
+      (await fr.locator('.rbg__cell.is-full').count()) === 3,
+    'recharge par la modération : 3 charges, on peut rejouer',
+  );
+
+  // Purchase in one click: the setting in « ? », one click pays, a double click still pays once.
+  await fr.locator('.rb__info').click();
+  await fr.locator('[data-k="oneclick"]').check();
+  await fr.locator('.rb__sheet--info .rb__x').click();
+  const w1 = await tokens();
+  const h1 = (await history()).length;
+  await fr.locator('.rb__go').dblclick();
+  await sleep(1500);
+  check(
+    (await tokens()) === w1 - 25_000 && (await history()).length === h1 + 1,
+    'achat en un clic : un clic paie, un double clic ne paie qu’une fois',
+  );
+  await settle(fr);
+  await fr.locator('.rb__info').click();
+  await fr.locator('[data-k="oneclick"]').uncheck();
+  await fr.locator('.rb__sheet--info .rb__x').click();
+  await refill();
+
   await api('/api/small-chat', {});
   let hit = false;
   for (let t = 0; t < 10 && !hit; t++) {
+    await refill();
+    await sleep(4500);
     const w0 = await tokens();
     await fr.locator('.rb__input').fill('@pika');
     await buy(fr);
@@ -252,6 +306,7 @@ try {
   ({ ctx, page, fr } = await open({ reducedMotion: 'reduce' }));
   if (await fr.locator('.mg__tile').count())
     await fr.locator('.mg__tile').click();
+  await refill();
   await sleep(6000);
   await buy(fr);
   let reel = false;

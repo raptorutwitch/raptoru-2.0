@@ -1,6 +1,6 @@
-// Random Ban (Mini-jeux) — the view's PURE part (docs/mini-jeux/UX_UI_MINI_JEUX.md § 4, SPEC § 2.4): the gauge
+// Random Ban (Mini-jeux) — the view's PURE part (docs/mini-jeux/UX_UI_MINI_JEUX.md § 4, SPEC § 2.4): the charges gauge
 // projected from the Core's own times, the request statuses in the viewer's words, the history lines. The Core decides
-// every price; this only projects it between two reads (the local clock never sets an amount).
+// the price and the charges; this only projects the recharge between two reads (the local clock never sets a count).
 
 import { formatCompactAmount } from './currency.js';
 
@@ -17,27 +17,28 @@ export function waitText(ms, { seconds = true } = {}) {
 }
 
 /**
- * The gauge at `nowLocal`, from the Core's quote read at `readAtLocal` (server_now ↔ readAtLocal: the local clock only
- * measures the time elapsed since the read, never the time itself).
- * Returns null at the normal price (no gauge).
+ * The charges at `nowLocal`, from the Core's state read at `readAtLocal` (server_now ↔ readAtLocal: the local clock only
+ * measures the time elapsed since the read, never the time itself). `level` is fractional (2.4 = two charges and 40 % of
+ * the third): the gauge fills continuously. Null: no charge limit (Studio: 0).
  */
-export function gaugeModel(price, readAtLocal, nowLocal, stepMs, { reducedMotion = false } = {}) {
-  if (!price || !price.level || !price.next_drop_at) return null;
-  const serverNow = Date.parse(price.server_now) + Math.max(0, nowLocal - readAtLocal);
-  const nextIn = Math.max(0, Date.parse(price.next_drop_at) - serverNow);
-  const normalIn = Math.max(0, Date.parse(price.normal_at) - serverNow);
-  let fraction = stepMs > 0 ? Math.min(1, nextIn / stepMs) : 0;
+export function chargesModel(c, readAtLocal, nowLocal, { reducedMotion = false } = {}) {
+  if (!c || !(c.max > 0)) return null;
+  const R = Math.max(1, c.recharge_ms);
+  const serverNow = Date.parse(c.server_now) + Math.max(0, nowLocal - readAtLocal);
+  const fullIn = c.full_at ? Math.max(0, Date.parse(c.full_at) - serverNow) : 0;
   // Reduced motion: the bar moves by whole minutes, never continuously.
-  if (reducedMotion && stepMs > 0) fraction = Math.min(1, Math.ceil(nextIn / 60_000) * 60_000 / stepMs);
+  const missing = Math.min(c.max, (reducedMotion ? Math.ceil(fullIn / 60_000) * 60_000 : fullIn) / R);
+  const available = c.max - Math.ceil(missing - 1e-9);
+  const nextIn = fullIn > 0 ? fullIn - (Math.ceil(fullIn / R - 1e-9) - 1) * R : 0;
   return {
-    level: price.level,
-    price: price.price,
-    next_price: price.next_price,
-    fraction,
-    next_in_ms: nextIn,
-    normal_in_ms: normalIn,
-    /** The step fell: read the Core again (the amount shown is always the server's). */
-    stale: nextIn === 0,
+    max: c.max,
+    available,
+    level: c.max - missing,
+    recharge_ms: R,
+    next_in_ms: available < c.max ? nextIn : 0,
+    full_in_ms: fullIn,
+    /** A charge came back since the read: read the Core again (the count shown is always the server's). */
+    stale: available > c.available,
   };
 }
 
@@ -223,31 +224,7 @@ export function historyLine(r) {
   };
 }
 
-// --- V3 (14/11): the price recovery gauge and the reel's rhythm ------------------------------------------------------
-
-/**
- * The recovery gauge at `nowLocal`: where the buyer's price stands on the tier scale, CONTINUOUSLY (the time left to the
- * normal price over the time from the top tier to it). `fill` 0 = normal price, 1 = the top tier just bought. The tier
- * marks sit at i / (tiers − 1): the fill reaches a mark exactly when the Core's price drops to it. The amounts are the
- * Core's (price, next_price, tiers); the local clock only measures the time elapsed since the read.
- */
-export function recoveryModel(price, tiers, readAtLocal, nowLocal, stepMs) {
-  const list = Array.isArray(tiers) && tiers.length ? tiers : [price?.price ?? 0];
-  const span = Math.max(1, (list.length - 1) * stepMs);
-  const g = gaugeModel(price, readAtLocal, nowLocal, stepMs);
-  const fill = g ? Math.min(1, g.normal_in_ms / span) : 0;
-  return {
-    price: price?.price ?? null,
-    level: price?.level ?? 0,
-    tiers: list,
-    fill,
-    marks: list.map((t, i) => ({ amount: t, at: list.length > 1 ? i / (list.length - 1) : 0, current: i === (price?.level ?? 0) })),
-    next_price: g?.next_price ?? null,
-    next_in_ms: g?.next_in_ms ?? 0,
-    normal_in_ms: g?.normal_in_ms ?? 0,
-    stale: !!g?.stale,
-  };
-}
+// --- V3 (14/11): the reel's rhythm ---------------------------------------------------------------------------------
 
 /**
  * The reel's rhythm: the delay before each of `steps` portraits (fast, then slowing down on the last ones), adding up
@@ -269,7 +246,7 @@ export function reelSchedule(steps, totalMs = 3400) {
 export function carouselSlot(d) {
   const a = Math.min(Math.abs(d), 3);
   return {
-    x: Math.sign(d) * (a <= 1 ? a : 1 + (a - 1) * 0.7),
+    x: Math.sign(d) * (a <= 1 ? a * 0.84 : 0.84 + (a - 1) * 0.62),
     scale: 1 - Math.min(a, 2) * 0.24,
     opacity: a >= 2.6 ? 0 : Math.max(0, 1 - a * 0.42),
     front: a < 0.5,

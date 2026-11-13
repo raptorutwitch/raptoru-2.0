@@ -72,7 +72,7 @@ export function createMachine(document, { reduced = false } = {}) {
     const base = Math.floor(pos);
     const frac = pos - base;
     const width = deck.clientWidth || 200;
-    const size = Math.min(width * 0.42, deck.clientHeight * 0.74 || 999, 120);
+    const size = Math.min(width * 0.5, deck.clientHeight * 0.78 || 999, 150);
     node.style.setProperty('--size', `${size.toFixed(1)}px`);
     slots.forEach((el, k) => {
       const idx = base + k - 3;

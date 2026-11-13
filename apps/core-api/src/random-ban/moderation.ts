@@ -17,6 +17,7 @@ import { resolveSniper, type RbCandidate } from './sniper.js';
 // - revoke_bonus (wallet.admin): a Sniper bonus taken back (negative movement, keyed), `revoked`;
 // - resolve_sniper (wallet.admin): an `unresolved` prediction (a typed name no account matched for sure) settled by a
 //   moderator — the account it meant, or none; never the draw, the bonus once (sniper.ts resolveSniper);
+// - refill_charges (viewer.cooldown, like a personal delay): a viewer's charges full again (V5; his counted requests stop using one);
 // - pause / resume (module.pause): no new purchase, the executor takes nothing (queued ones are refunded by the usual
 //   2-min expiry when the pause lasts).
 
@@ -31,6 +32,7 @@ export type RbModerationCommand =
       viewer_id: string | null;
       reason: string;
     }
+  | { action: 'refill_charges'; viewer_id: string; reason: string }
   | { action: 'pause' | 'resume'; reason: string };
 
 export class RandomBanModeration {
@@ -125,9 +127,35 @@ export class RandomBanModeration {
       );
       return { ok: true, paused: on };
     }
+    if (cmd.action === 'refill_charges') {
+      return this.db.tx(async (q) => {
+        const role = await assertAllowed(
+          q,
+          channelId,
+          actor,
+          'viewer.cooldown',
+        );
+        await this.rb.lockBuyer(q, channelId, cmd.viewer_id);
+        const before = (await this.rb.chargesFor(q, channelId, cmd.viewer_id))
+          .charges.available;
+        const freed = await this.rb.refillCharges(q, channelId, cmd.viewer_id);
+        await audit(q, now, {
+          channelId,
+          actor,
+          role,
+          module: null,
+          action: 'random_ban.refill_charges',
+          viewerId: cmd.viewer_id,
+          reason,
+          before: { charges: before },
+          after: { charges: 'full', requests_freed: freed },
+        });
+        return { ok: true as const, freed };
+      });
+    }
     const one = cmd as Exclude<
       RbModerationCommand,
-      { action: 'pause' | 'resume' }
+      { action: 'pause' | 'resume' | 'refill_charges' }
     >;
     const permission =
       cmd.action === 'cancel'

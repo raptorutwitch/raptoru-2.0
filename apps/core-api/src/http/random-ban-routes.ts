@@ -73,6 +73,11 @@ const ModAct = z.strictObject({
         .nullable(),
       reason: Reason,
     }),
+    z.strictObject({
+      action: z.literal('refill_charges'),
+      viewer_id: z.string().regex(/^\d{1,32}$/),
+      reason: Reason,
+    }),
     z.strictObject({ action: z.literal('pause'), reason: Reason }),
     z.strictObject({ action: z.literal('resume'), reason: Reason }),
   ]),

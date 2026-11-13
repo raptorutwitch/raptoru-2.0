@@ -9,7 +9,11 @@ import {
   GlobalPauseError,
   LabWalletError,
 } from '../lab-moderation/store.js';
-import { waitText, type RbQuote } from '../random-ban/pricing.js';
+import {
+  refusalText,
+  sayRefusal,
+  type RbRefusal,
+} from '../random-ban/refusal.js';
 import { RbError, type RandomBanService } from '../random-ban/service.js';
 
 // `!rb` in the chat (docs/CHAT_COMMANDS.md): a SECOND way to pay the same Random Ban as the channel points reward —
@@ -22,22 +26,11 @@ import { RbError, type RandomBanService } from '../random-ban/service.js';
 // - refunded in Jetons, once, when the request ends without anything done (refund « needed »: executor absent or
 //   lost, missing scope, Twitch refusal); an « uncertain » one (the timeout may have happened) is never refunded
 //   automatically — it stays « à vérifier » like the channel points one.
-// Progressive price (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 2, shared with the extension): a bare `!rb` buys at the
-// normal price only; above it, Core answers the buyer's price and nothing is debited, and `!rb <montant>` (« 30000 »,
-// « 30 000 », « 30k ») buys at the current price if it is ≤ that amount. The confirmation is the amount itself: no
-// state kept between the two messages, never more than the amount typed.
+// V5 (13/11/2026): a fixed price (Studio's « Prix de Random Ban », shared with the extension) and the buyer's personal
+// charges, shared with the extension and the channel points (random-ban/pricing.ts). Refusals: one short line, at most
+// one per viewer every 5 minutes (random-ban/refusal.ts); nothing is ever debited by a refused `!rb`.
 
-const COMMAND =
-  /^!rb(?:\s+(\d{1,3}(?:[ \u00a0\u202f.]\d{3})+|\d+(?:[.,]\d+)?\s?k|\d+))?$/i;
-
-/** « 30000 », « 30 000 », « 30.000 », « 30k », « 7,5k » → Jetons (null: not an amount). */
-export function rbAmount(raw: string): number | null {
-  const t = raw.toLowerCase().replace(/\s/g, '');
-  const n = t.endsWith('k')
-    ? Math.round(Number(t.slice(0, -1).replace(',', '.')) * 1000)
-    : Number(t.replace(/[.]/g, ''));
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
+const COMMAND = /^!rb$/i;
 
 const fmt = (n: number) => n.toLocaleString('fr-FR').replace(/\s/g, ' ');
 
@@ -54,27 +47,25 @@ export class RandomBanChat {
   async chat(
     msg: LabChatMessage,
   ): Promise<{ outcome: string; replayed?: boolean }> {
-    // `!rb` alone or with an amount: `!rb salut`, `Salut !rb`… are not commands (nothing paid, no answer).
-    const m = COMMAND.exec(msg.text.trim());
-    if (!m) return { outcome: 'ignored' };
-    const typed = m[1] ? rbAmount(m[1]) : null;
-    if (m[1] && typed === null) return { outcome: 'ignored' };
+    // `!rb` alone: `!rb salut`, `Salut !rb`… are not commands (nothing paid, no answer).
+    if (!COMMAND.test(msg.text.trim())) return { outcome: 'ignored' };
     const name = msg.chatter.display_name;
-    const answer = (key: string, body: string) =>
-      this.db.tx((q) => this.say(q, msg.channel_id, key, `@${name} - ${body}`));
-    const key = `rb:msg:${msg.message_id}`;
-    if (!(await liveForPaid(this.db, this.economy))) {
-      await answer(
-        key,
-        'Random Ban disponible uniquement pendant le live · rien n’a été débité.',
+    const refuse = (body: string) =>
+      this.db.tx((q) =>
+        sayRefusal(q, {
+          channelId: msg.channel_id,
+          viewerId: msg.chatter.id,
+          ref: msg.message_id,
+          text: `@${name} - ${body[0]!.toUpperCase()}${body.slice(1)} · rien n’a été débité.`,
+          now: this.clock.now(),
+        }),
       );
+    if (!(await liveForPaid(this.db, this.economy))) {
+      await refuse('Random Ban disponible uniquement pendant le live');
       return { outcome: STREAM_OFFLINE };
     }
     if (!this.randomBan.executorReady(msg.channel_id)) {
-      await answer(
-        key,
-        'Random Ban indisponible pour le moment · rien n’a été débité.',
-      );
+      await refuse('Random Ban indisponible pour le moment');
       return { outcome: 'rb_unavailable' };
     }
     try {
@@ -91,8 +82,8 @@ export class RandomBanChat {
             login: msg.chatter.login,
             name,
           },
-          // A bare `!rb` agrees to the normal price only (Studio's « Prix de !rb »).
-          ceiling: typed ?? 'normal',
+          // The fixed price (Studio's « Prix de Random Ban »): the chat never shows another one.
+          ceiling: 'any',
         });
         if (!created) return { replayed: true };
         // No success message: the Random Ban itself (its animation, the timeout) is the answer.
@@ -102,71 +93,43 @@ export class RandomBanChat {
         ? { outcome: 'rb_replayed', replayed: true }
         : { outcome: 'rb_queued', replayed: false };
     } catch (e) {
-      if (e instanceof RbError && e.code === 'price_changed') {
-        const quote = e.details.quote as RbQuote;
-        await answer(key, this.priceLine(quote, typed !== null));
-        return { outcome: 'rb_quote' };
-      }
-      if (e instanceof RbError && e.code === 'viewer_blocked') {
-        await answer(
-          key,
-          'Random Ban indisponible pour ton compte · rien n’a été débité.',
-        );
-        return { outcome: 'rb_refused' };
-      }
-      if (e instanceof RbError && e.code === 'viewer_cooldown') {
-        await answer(
-          key,
-          `Délai personnel : encore ${waitText(Number(e.details.wait_ms ?? 0))} avant ton prochain Random Ban · rien n’a été débité.`,
-        );
-        return { outcome: 'rb_refused' };
-      }
-      if (e instanceof RbError && e.code === 'rb_paused') {
-        await answer(
-          key,
-          'Random Ban en pause pour le moment · rien n’a été débité.',
+      if (
+        e instanceof RbError &&
+        [
+          'no_charge',
+          'viewer_cooldown',
+          'viewer_blocked',
+          'rb_paused',
+          'rb_busy',
+        ].includes(e.code)
+      ) {
+        await refuse(
+          refusalText(e.code as RbRefusal, Number(e.details.wait_ms ?? 0)),
         );
         return { outcome: 'rb_refused' };
       }
       if (e instanceof RbError && e.code === 'too_many_pending') {
-        await answer(
-          key,
-          `Tu as déjà ${e.details.max_pending} Random Ban en attente · rien n’a été débité.`,
-        );
+        await refuse(`déjà ${e.details.max_pending} Random Ban en attente`);
         return { outcome: 'rb_refused' };
       }
       if (e instanceof LabWalletError && e.code === 'insufficient_tokens') {
         const needed = Number(e.details.needed);
         const balance = Number(e.details.balance ?? 0);
-        await answer(
-          key,
-          `Il te faut ${fmt(needed)} Jetons pour utiliser Random Ban. Solde : ${fmt(balance)} Jetons (il te manque ${fmt(Math.max(0, needed - balance))}).`,
+        await refuse(
+          `il te faut ${fmt(needed)} Jetons (solde : ${fmt(balance)})`,
         );
         return { outcome: 'rb_refused' };
       }
       if (e instanceof GlobalPauseError) {
-        await answer(key, 'Raptoru en pause · rien n’a été débité.');
+        await refuse('Raptoru en pause');
         return { outcome: 'rb_refused' };
       }
       if (e instanceof LabWalletError) {
-        await answer(
-          key,
-          'Portefeuille momentanément indisponible · rien n’a été débité.',
-        );
+        await refuse('portefeuille momentanément indisponible');
         return { outcome: 'rb_refused' };
       }
       throw e;
     }
-  }
-
-  /** The buyer's price above the normal one: what to type to confirm it (nothing debited). */
-  private priceLine(quote: RbQuote, risen: boolean) {
-    const now = Date.parse(quote.server_now);
-    const drop =
-      quote.next_price !== null && quote.next_drop_at
-        ? ` · ${fmt(quote.next_price)} dans ${waitText(Date.parse(quote.next_drop_at) - now)}`
-        : '';
-    return `${risen ? 'Le prix a changé : ' : ''}Random Ban à ${fmt(quote.price)} Jetons pour toi (série${drop}). Tape !rb ${quote.price} pour confirmer · rien n’a été débité.`;
   }
 
   /**

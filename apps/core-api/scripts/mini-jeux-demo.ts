@@ -28,6 +28,11 @@ import { createCore } from '../src/app.js';
 import { systemClock } from '../src/clock.js';
 import { DevFakeCreditProvider } from '../src/daily/credits.js';
 import { internalLabCall } from '../src/ext/lab-internal.js';
+import {
+  refusalText,
+  sayRefusal,
+  type RbRefusal,
+} from '../src/random-ban/refusal.js';
 import { randomBanRoutes } from '../src/http/random-ban-routes.js';
 import { modulesRoutes } from '../src/http/modules-routes.js';
 import { chatRouter } from '../src/lab-chat/games.js';
@@ -80,13 +85,15 @@ rb.avatarsOf = async (_q, ids) =>
   new Map(
     ids.filter((id) => !NO_PICTURE.has(id)).map((id) => [id, `/av/${id}.svg`]),
   );
-const step = Number(process.env.TIER_STEP_MIN ?? 5);
+// V5: fixed prices, 3 charges, one back every 10 min (RECHARGE_MIN to shorten it; the « Recharge rapide » button too).
+const rechargeMin = Number(process.env.RECHARGE_MIN ?? 10);
+let fastRecharge = rechargeMin === 1;
 for (const [k, v] of [
   ['random_ban_ext.enabled', 1],
   // The stream keeps its ban video (Studio's effects player); the reel is the extension's own (dissociated).
   ['random_ban.sequence', 0],
   ['random_ban.strike_offset_s', 1],
-  ['random_ban.tier_step_min', step],
+  ['random_ban.recharge_min', rechargeMin],
   // Demo only: every Sniper hit pays (no 30-min wait between two tries), to see the bonus without waiting.
   ['random_ban.sniper_window_min', 0],
 ] as const)
@@ -245,7 +252,8 @@ ul{margin:0;padding-left:18px;max-height:160px;overflow:auto}li{margin:2px 0}inp
 <main><div class="col"><div class="sizes"><button class="g s" data-size="651x434">Lecteur 651×434</button><button class="g s" data-size="480x320">Petit 480×320</button><button class="g s" data-size="318x496">Panneau 318×496</button></div>
 <iframe id="ext" src="/ext/video_component.html?anchor=component" width="651" height="434"></iframe>
 <div class="box"><h3>Le chat</h3><input id="t" value="!rb"> <button data-do="say">Alice écrit</button>
-<button class="g" data-do="other">Un autre viewer lance !rb</button><button class="g" data-do="refuse">Twitch refusera le prochain timeout</button><button class="g" data-do="small">Chat réduit (Pika + Alice) : oui/non</button> <b id="small"></b></div>
+<button data-do="cp">Alice utilise la récompense (3 000 points)</button>
+<button class="g" data-do="other">Un autre viewer lance !rb</button><button class="g" data-do="refill">Recharger les charges d’Alice</button><button class="g" data-do="fast">Recharge rapide (1 min) : oui/non</button> <b id="fast"></b><button class="g" data-do="refuse">Twitch refusera le prochain timeout</button><button class="g" data-do="small">Chat réduit (Pika + Alice) : oui/non</button> <b id="small"></b></div>
 <div class="box"><h3>Réponses de LeCroupier_</h3><ul id="replies"></ul></div></div>
 <div class="col"><iframe src="/stream" width="640" height="360"></iframe>
 <div class="box"><h3>Modération Random Ban (les mêmes commandes que Studio › Modération › Random Ban)</h3>
@@ -271,6 +279,9 @@ document.addEventListener('click', (e) => {
   if (b.dataset.size) { const [w, h] = b.dataset.size.split('x'); const f = document.getElementById('ext'); f.width = w; f.height = h; }
   if (b.dataset.do === 'say') post('/api/chat', { text: document.getElementById('t').value });
   if (b.dataset.do === 'other') post('/api/chat-other', {});
+  if (b.dataset.do === 'cp') post('/api/cp', {}).then(tick);
+  if (b.dataset.do === 'refill') mod({ action: 'refill_charges', viewer_id: '9001' });
+  if (b.dataset.do === 'fast') post('/api/fast').then((r) => { document.getElementById('fast').textContent = r.fast ? '1 charge / min' : ''; });
   if (b.dataset.do === 'refuse') post('/api/refuse-next');
   if (b.dataset.do === 'small') post('/api/small-chat').then((r) => { document.getElementById('small').textContent = r.small ? 'chat réduit' : ''; });
   if (b.dataset.mod) mod({ action: b.dataset.mod });
@@ -433,6 +444,46 @@ createServer(async (req, res) => {
       return void res.end(avatarSvg(p.slice(4, -4)));
     }
     if (p === '/api/chatters') return json(res, 200, DEMO_CHATTERS);
+    if (p === '/api/fast') {
+      fastRecharge = !fastRecharge;
+      await core.moduleSettings.set(
+        CH,
+        'random_ban.recharge_min',
+        fastRecharge ? 1 : 10,
+        'demo',
+      );
+      return json(res, 200, { fast: fastRecharge });
+    }
+    // A channel points redemption of the Random Ban reward (3 000 points): the SAME charges as the extension and `!rb`;
+    // refused → nothing created, the points would go back (CANCELED on Raptoru's reward), one short line at most.
+    if (p === '/api/cp') {
+      const out = await rb.requestChannelPoints({
+        channel_id: CH,
+        source_ref: `twitch:demo-cp-${++n}:0`,
+        mode: 'real',
+        buyer: { id: ME.id, login: ME.login, name: ME.display_name },
+      });
+      if (out.refused) {
+        const code = {
+          cooldown: 'viewer_cooldown',
+          blocked: 'viewer_blocked',
+          paused: 'rb_paused',
+          busy: 'rb_busy',
+          no_charge: 'no_charge',
+        }[out.refused] as RbRefusal;
+        const why = refusalText(code, out.cooling_ms);
+        await db.tx((q) =>
+          sayRefusal(q, {
+            channelId: CH,
+            viewerId: ME.id,
+            ref: `cp:demo-${n}`,
+            text: `@${ME.display_name} - ${why[0]!.toUpperCase()}${why.slice(1)} · points remboursés.`,
+            now: systemClock.now(),
+          }),
+        );
+      }
+      return json(res, 200, out);
+    }
     if (p === '/api/small-chat') {
       smallChat = !smallChat;
       return json(res, 200, { small: smallChat });

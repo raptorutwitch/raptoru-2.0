@@ -21,11 +21,10 @@ import type { EconomyPort } from '../economy/economy.js';
 import { activeBlock } from '../lab-moderation/store.js';
 import { avatarUrls } from '../raffle-lab/avatars.js';
 import {
-  lastCounted,
-  quote,
+  chargesOf,
   RB_PRICING_DEFAULT,
+  type RbCharges,
   type RbPricing,
-  type RbQuote,
 } from './pricing.js';
 import type { RandomBanModeration } from './moderation.js';
 import { buildStrip, REEL_MS, type ReelItem } from './reel.js';
@@ -97,9 +96,10 @@ interface Row {
   created_at: Date;
   updated_at: Date;
   ended_at: Date | null;
-  /** Jetons purchases (extension, `!rb`) since 20261123: the price charged and the series level it was charged at. */
+  /** Jetons purchases (extension, `!rb`) since 20261123: the price charged. */
   price_paid: number | null;
-  series_level: number | null;
+  /** Uses one of the buyer's charges while it counts (false: refilled by a moderator). */
+  charge: boolean;
   /** Sniper (extension): the wished viewer frozen at purchase (never read by the draw) and the decision. */
   wish_id: string | null;
   wish_login: string | null;
@@ -200,7 +200,6 @@ export const rbView = (r: Row) => ({
   animation: r.animation,
   animation_status: r.animation_status,
   price_paid: r.price_paid ?? null,
-  series_level: r.series_level ?? null,
   wish:
     r.wish_id || r.wish_text
       ? {
@@ -267,15 +266,16 @@ export class RandomBanService {
     false;
 
   /**
-   * The moderation's restrictions of one buyer (any source): the queue paused, a block (module « random_ban » or
-   * « all »), a personal cooldown (D4: `delay_s` between two counted Random Ban during its span). Null: free.
+   * What stops one buyer before his charges (any source), in this order: the queue paused, a block (module
+   * « random_ban » or « all »), a personal cooldown (D4: `delay_s` between two counted Random Ban during its span) —
+   * the moderation's decisions win over the charges — then the channel-wide limit (Studio, 0 = none). Null: free.
    */
   async restriction(
     q: Queryable,
     channelId: string,
     buyerId: string,
   ): Promise<{
-    code: 'rb_paused' | 'viewer_blocked' | 'viewer_cooldown';
+    code: 'rb_paused' | 'viewer_blocked' | 'viewer_cooldown' | 'rb_busy';
     wait_ms?: number;
   } | null> {
     if (await this.paused(q, channelId)) return { code: 'rb_paused' };
@@ -289,22 +289,89 @@ export class RandomBanService {
         [channelId, buyerId, now],
       )
     )[0];
-    if (!cd) return null;
-    const last = (
-      await q.query<{ created_at: Date }>(
-        `select created_at from rb_requests where channel_id = $1 and buyer_id = $2 and source <> 'test'
-           and status not in ('failed', 'canceled') order by seq desc limit 1`,
-        [channelId, buyerId],
-      )
-    )[0];
-    if (!last) return null;
-    const next = Math.min(
-      new Date(last.created_at).getTime() + cd.delay_s * 1000,
-      new Date(cd.until).getTime(),
+    const last = cd
+      ? (
+          await q.query<{ created_at: Date }>(
+            `select created_at from rb_requests where channel_id = $1 and buyer_id = $2 and source <> 'test'
+               and status not in ('failed', 'canceled') order by seq desc limit 1`,
+            [channelId, buyerId],
+          )
+        )[0]
+      : undefined;
+    if (cd && last) {
+      const next = Math.min(
+        new Date(last.created_at).getTime() + cd.delay_s * 1000,
+        new Date(cd.until).getTime(),
+      );
+      if (next > now.getTime())
+        return { code: 'viewer_cooldown', wait_ms: next - now.getTime() };
+    }
+    const p = await this.pricing(q, channelId);
+    if (p.channelMax > 0) {
+      const since = new Date(now.getTime() - p.channelWindowMs);
+      const rows = await q.query<{ created_at: Date }>(
+        `select created_at from rb_requests where channel_id = $1 and source <> 'test' and created_at > $2
+           and status not in ('failed', 'canceled') order by created_at desc limit $3`,
+        [channelId, since, p.channelMax],
+      );
+      if (rows.length >= p.channelMax)
+        return {
+          code: 'rb_busy',
+          wait_ms: Math.max(
+            1000,
+            new Date(rows[rows.length - 1]!.created_at).getTime() +
+              p.channelWindowMs -
+              now.getTime(),
+          ),
+        };
+    }
+    return null;
+  }
+
+  /** The buyer's charges now (inside the transaction that may use one, after lockBuyer). */
+  async chargesFor(q: Queryable, channelId: string, buyerId: string) {
+    const p = await this.pricing(q, channelId);
+    return {
+      pricing: p,
+      charges: await chargesOf(q, p, channelId, buyerId, this.now()),
+    };
+  }
+
+  /**
+   * Accepting one Random Ban: the moderation's restrictions, the channel-wide limit, then the buyer's charges — the
+   * ONE gate of the three ways (extension, `!rb`, channel points). Under the buyer's lock; with a channel-wide limit,
+   * also under the channel's launch lock (two buyers at once never both take the last place). Throws, nothing created.
+   */
+  private async admit(q: Queryable, channelId: string, buyerId: string) {
+    const p = await this.pricing(q, channelId);
+    if (p.channelMax > 0)
+      await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+        `random_ban:launch:${channelId}`,
+      ]);
+    const restricted = await this.restriction(q, channelId, buyerId);
+    if (restricted) throw new RbError(409, restricted.code, restricted);
+    const c = await chargesOf(q, p, channelId, buyerId, this.now());
+    if (c.max > 0 && c.available < 1)
+      throw new RbError(409, 'no_charge', {
+        wait_ms: Math.max(1000, Date.parse(c.next_at!) - this.now().getTime()),
+        charges: c,
+      });
+    return p;
+  }
+
+  /** Studio › Modération: the viewer's charges full again (his counted requests stop using one). */
+  async refillCharges(q: Queryable, channelId: string, viewerId: string) {
+    const rows = await q.query(
+      `update rb_requests set charge = false, updated_at = $3
+        where channel_id = $1 and buyer_id = $2 and charge and created_at > $4 returning request_id`,
+      [
+        channelId,
+        viewerId,
+        this.now(),
+        new Date(this.now().getTime() - 24 * 3_600_000),
+      ],
     );
-    return next > now.getTime()
-      ? { code: 'viewer_cooldown', wait_ms: next - now.getTime() }
-      : null;
+    return rows.length;
   }
 
   /** A moderation decision ended a request outside the executor: the refund paths follow at once. */
@@ -349,21 +416,13 @@ export class RandomBanService {
     );
   }
 
-  /** The buyer's price now (call inside the transaction that will charge it, after lockBuyer). */
-  async quoteFor(q: Queryable, channelId: string, buyerId: string) {
-    const p = await this.pricing(q, channelId);
-    return {
-      pricing: p,
-      quote: quote(p, await lastCounted(q, channelId, buyerId), this.now()),
-    };
-  }
-
   /**
-   * A Jetons purchase (extension or `!rb`) — the ONE place that prices and charges a Random Ban. Inside the caller's
-   * transaction, under the buyer's lock: the same trigger again is the same request (nothing more debited); more than
-   * `maxPending` open requests → `too_many_pending`; a current price above `ceiling` → `price_changed` (nothing
-   * debited: never more than the amount the buyer confirmed; a lower price is charged as it is); else the request and
-   * its debit (a refused debit — balance — rolls the request back).
+   * A Jetons purchase (extension or `!rb`) — the ONE place that charges a Random Ban. Inside the caller's
+   * transaction, under the buyer's lock: the same trigger again is the same request (nothing more debited, no charge
+   * more); the moderation's restrictions, the channel-wide limit, no charge left or more than `maxPending` open
+   * requests refuse before anything; a price above `ceiling` → `price_changed` (Studio changed it since the page
+   * showed it: never more than the amount the buyer saw); else the request (one charge) and its debit (a refused
+   * debit — balance — rolls the request back, the charge with it).
    */
   async buy(
     q: Queryable,
@@ -374,8 +433,8 @@ export class RandomBanService {
       source_ref: string;
       mode: 'real' | 'dry_run';
       buyer: RbTwitchUser;
-      /** The highest price the buyer confirmed (`normal`: the normal price only, a bare `!rb`). */
-      ceiling: number | 'normal';
+      /** The price the buyer saw (`any`: the current price, a bare `!rb`). */
+      ceiling: number | 'any';
       /**
        * Sniper (extension only): the viewer the buyer predicts — frozen here, never given to the draw. `id`: an account
        * the buyer picked in the suggestions; `text` alone: what he typed, matched only when exact, else kept unresolved.
@@ -385,7 +444,8 @@ export class RandomBanService {
   ): Promise<{
     request: ReturnType<typeof rbView>;
     created: boolean;
-    quote: RbQuote;
+    price: number;
+    charges: RbCharges;
     sniper_ready?: boolean;
   }> {
     await this.lockBuyer(q, r.channel_id, r.buyer.id);
@@ -395,23 +455,26 @@ export class RandomBanService {
         [r.channel_id, r.source, r.source_ref.slice(0, 200)],
       )
     )[0];
-    const { pricing, quote: price } = await this.quoteFor(
-      q,
-      r.channel_id,
-      r.buyer.id,
-    );
-    if (prior) return { request: rbView(prior), created: false, quote: price };
-    const restricted = await this.restriction(q, r.channel_id, r.buyer.id);
-    if (restricted) throw new RbError(409, restricted.code, restricted);
+    if (prior) {
+      const { pricing, charges } = await this.chargesFor(
+        q,
+        r.channel_id,
+        r.buyer.id,
+      );
+      return {
+        request: rbView(prior),
+        created: false,
+        price: prior.price_paid ?? pricing.price,
+        charges,
+      };
+    }
+    const pricing = await this.admit(q, r.channel_id, r.buyer.id);
     if ((await this.pending(q, r.channel_id, r.buyer.id)) >= pricing.maxPending)
       throw new RbError(409, 'too_many_pending', {
         max_pending: pricing.maxPending,
       });
-    if (price.price > (r.ceiling === 'normal' ? price.normal_price : r.ceiling))
-      throw new RbError(409, 'price_changed', {
-        price: price.price,
-        quote: price,
-      });
+    if (r.ceiling !== 'any' && pricing.price > r.ceiling)
+      throw new RbError(409, 'price_changed', { price: pricing.price });
     let wish: {
       wish_id: string | null;
       wish_login: string | null;
@@ -458,15 +521,14 @@ export class RandomBanService {
     }
     const { request, created } = await this.requestIfNew(r, q);
     await this.set(q, request.request_id, {
-      price_paid: price.price,
-      series_level: price.level,
+      price_paid: pricing.price,
       ...(wish ?? {}),
     });
     await economy.debit(q, this.now(), {
       channelId: r.channel_id,
       viewer: { id: r.buyer.id, display_name: r.buyer.name },
       currency: 'tokens',
-      amount: price.price,
+      amount: pricing.price,
       module: 'random_ban',
       interactionId: request.request_id,
     });
@@ -475,44 +537,28 @@ export class RandomBanService {
         ...rbView(await this.row(q, request.request_id)),
       },
       created,
-      quote: (await this.quoteFor(q, r.channel_id, r.buyer.id)).quote,
+      price: pricing.price,
+      charges: (await this.chargesFor(q, r.channel_id, r.buyer.id)).charges,
       /** Shown at purchase only: the final decision is taken at the result (§ 4.2). */
       sniper_ready: sniperReady,
     };
   }
 
   /**
-   * Channel points: the buyer's last ACCEPTED redemption (a request) that still counts — failed / canceled ones never
-   * hold the cooldown. Returns the ms left (0: free).
-   */
-  async cpCooldownLeft(q: Queryable, channelId: string, buyerId: string) {
-    const { cpCooldownMs } = await this.pricing(q, channelId);
-    if (cpCooldownMs <= 0) return 0;
-    const last = (
-      await q.query<{ created_at: Date }>(
-        `select created_at from rb_requests where channel_id = $1 and buyer_id = $2 and source = 'channel_points'
-           and status not in ('failed', 'canceled') order by seq desc limit 1`,
-        [channelId, buyerId],
-      )
-    )[0];
-    if (!last) return 0;
-    return Math.max(
-      0,
-      new Date(last.created_at).getTime() + cpCooldownMs - this.now().getTime(),
-    );
-  }
-
-  /**
    * A channel points redemption asks for a Random Ban (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 3): the same redemption
-   * again is its request; a buyer under his personal cooldown gets NO request (`cooling_ms` > 0: the caller refunds and
-   * explains) — the other viewers are never held. Serialized per buyer: two redemptions at once, one request.
+   * again is its request; a buyer the gate refuses (moderation, channel-wide limit, no charge left) gets NO request
+   * (`refused`, `cooling_ms`: the caller refunds and explains) — the other viewers are never held. Serialized per
+   * buyer: two redemptions at once, one charge each, never the same one twice.
    */
   async requestChannelPoints(r: {
     channel_id: string;
     source_ref: string;
     mode: 'real' | 'dry_run';
     buyer: RbTwitchUser;
-    /** false: no cooldown for this redemption (a reward whose points Raptoru cannot give back). */
+    /**
+     * false: a reward whose points Raptoru cannot give back — never refused for the charges nor the channel-wide
+     * limit (a refusal would cost the viewer his points); its Random Ban still uses a charge.
+     */
     cooldown?: boolean;
   }) {
     const { cooldown = true, ...req } = r;
@@ -526,32 +572,33 @@ export class RandomBanService {
       )[0];
       if (prior)
         return { request: rbView(prior), cooling_ms: 0, refused: null };
-      const restricted = await this.restriction(q, r.channel_id, r.buyer.id);
-      if (restricted?.code === 'viewer_cooldown')
+      try {
+        if (cooldown) await this.admit(q, r.channel_id, r.buyer.id);
+        else {
+          const restricted = await this.restriction(
+            q,
+            r.channel_id,
+            r.buyer.id,
+          );
+          if (restricted && restricted.code !== 'rb_busy')
+            throw new RbError(409, restricted.code, restricted);
+        }
+      } catch (e) {
+        if (!(e instanceof RbError)) throw e;
         return {
           request: null,
-          cooling_ms: restricted.wait_ms ?? 0,
-          refused: 'cooldown' as const,
+          cooling_ms: Number(e.details.wait_ms ?? 0),
+          refused: (
+            {
+              rb_paused: 'paused',
+              viewer_blocked: 'blocked',
+              viewer_cooldown: 'cooldown',
+              rb_busy: 'busy',
+              no_charge: 'no_charge',
+            } as const
+          )[e.code as 'rb_paused']!,
         };
-      if (restricted)
-        return {
-          request: null,
-          cooling_ms: 0,
-          refused:
-            restricted.code === 'rb_paused'
-              ? ('paused' as const)
-              : ('blocked' as const),
-        };
-      // The personal cooldown only where a refused redemption can be refunded (docs/RECOMPENSES_TWITCH.md).
-      const left = cooldown
-        ? await this.cpCooldownLeft(q, r.channel_id, r.buyer.id)
-        : 0;
-      if (left > 0)
-        return {
-          request: null,
-          cooling_ms: left,
-          refused: 'cooldown' as const,
-        };
+      }
       const { request } = await this.requestIfNew(
         { ...req, source: 'channel_points' },
         q,
@@ -591,11 +638,7 @@ export class RandomBanService {
   /** What the extension shows one buyer: the price and its gauge, the pending cap, the last own requests. */
   async buyerState(channelId: string, buyerId: string) {
     return this.db.tx(async (q) => {
-      const { pricing, quote: price } = await this.quoteFor(
-        q,
-        channelId,
-        buyerId,
-      );
+      const { pricing, charges } = await this.chargesFor(q, channelId, buyerId);
       const mine = await q.query<Row>(
         `select * from rb_requests where channel_id = $1 and buyer_id = $2 and source <> 'test'
            order by seq desc limit 10`,
@@ -644,9 +687,8 @@ export class RandomBanService {
           : { ...v, strip: null };
       };
       return {
-        price,
-        tiers: pricing.tiers,
-        step_ms: pricing.stepMs,
+        price: pricing.price,
+        charges,
         pending: mine.filter((m) => OPEN.includes(m.status)).length,
         max_pending: pricing.maxPending,
         mine: mine.map(view),
@@ -665,9 +707,8 @@ export class RandomBanService {
         candidates: candidates.map((c) =>
           withPic({ id: c.id, login: c.login, name: c.name }),
         ),
-        // What stops THIS buyer now (the moderation's pause, block or personal delay): said before he clicks.
-        // Distinct from the price recovery (`price`), the Sniper window (`sniper`) and the channel points' delay
-        // (channel points only, never shown here).
+        // What stops THIS buyer now (the moderation's pause, block or personal delay, the channel-wide limit): said
+        // before he clicks. Distinct from his charges (`charges`) and the Sniper window (`sniper`).
         restriction: await this.restriction(q, channelId, buyerId),
         // Kept for raptoru.fr (the game screen no longer shows them).
         stats: await this.personalStats(q, channelId, buyerId),

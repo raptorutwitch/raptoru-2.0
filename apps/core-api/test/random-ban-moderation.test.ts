@@ -136,7 +136,7 @@ describe('Random Ban moderation', () => {
     // Two in the queue: the first is being searched, the second still waits.
     await l.say('!rb');
     await l.rb.claim(CH, EXEC);
-    await l.say('!rb 30000');
+    await l.say('!rb');
     const queued = await l.last();
     expect(queued.status).toBe('queued');
     expect(
@@ -167,7 +167,7 @@ describe('Random Ban moderation', () => {
     ).rejects.toMatchObject({ code: 'not_cancelable' });
     expect(await l.tokens()).toBe(1_000_000 - 25_000);
     expect(await l.replies()).toContain(
-      '@Alice - Random Ban annulé par la modération · 30 000 Jetons remboursés.',
+      '@Alice - Random Ban annulé par la modération · 25 000 Jetons remboursés.',
     );
     expect(await l.audits('random_ban.cancel')).toMatchObject([
       {
@@ -176,8 +176,8 @@ describe('Random Ban moderation', () => {
         interaction_id: queued.request_id,
       },
     ]);
-    // A canceled request never raises the price: the next one is the 2nd tier again.
-    expect((await l.rb.buyerState(CH, ALICE.id)).price.price).toBe(30_000);
+    // A canceled request gives its charge back (the one being searched still uses one).
+    expect((await l.rb.buyerState(CH, ALICE.id)).charges.available).toBe(2);
   });
 
   it('a request being searched cannot be canceled (the executor holds it)', async () => {
@@ -315,6 +315,9 @@ describe('Random Ban moderation', () => {
       module: 'random_ban',
       reason: 'ok',
     });
+    // One refusal line per viewer every 5 min: the next one is told after that.
+    l.core.clock.advance(5 * 60_000);
+    await l.rb.claim(CH, EXEC);
     await l.d4act({
       action: 'set_cooldown',
       viewer_id: ALICE.id,
@@ -324,9 +327,9 @@ describe('Random Ban moderation', () => {
       reason: 'calme-toi',
     });
     expect(await l.say('!rb')).toBe('rb_queued');
-    expect(await l.say('!rb 30000')).toBe('rb_refused');
+    expect(await l.say('!rb')).toBe('rb_refused');
     expect((await l.replies()).at(-1)).toBe(
-      '@Alice - Délai personnel : encore 15 min avant ton prochain Random Ban · rien n’a été débité.',
+      '@Alice - Random Ban bloqué pour toi encore 15 min · rien n’a été débité.',
     );
     expect(await l.tokens()).toBe(1_000_000 - 25_000);
   });
@@ -372,7 +375,7 @@ describe('Random Ban moderation', () => {
       redeemed_at: l.core.clock.now().toISOString(),
     });
     expect(r.redemption.results[0]!.error).toContain(
-      'compte bloqué par la modération',
+      'Random Ban indisponible pour ton compte',
     );
     expect((await l.core.db.query('select 1 from rb_requests')).length).toBe(0);
     const { action } = await twitch.claim(CH);
@@ -381,7 +384,7 @@ describe('Random Ban moderation', () => {
       outcome: 'done',
     });
     expect((await l.replies()).at(-1)).toBe(
-      '@Alice - Random Ban indisponible pour le moment. Tes points de chaîne ont été remboursés.',
+      '@Alice - Random Ban indisponible pour ton compte · points remboursés.',
     );
   });
 
@@ -411,5 +414,22 @@ describe('Random Ban moderation', () => {
     });
     const rec = await l.m.reconciliation(CH, mod);
     expect(rec.items.map((i) => i.why)).toEqual(['timeout_incertain']);
+  });
+
+  it('refill_charges (any moderator): the viewer’s charges full again, audited; a viewer may not', async () => {
+    const l = await lab();
+    for (let i = 0; i < 3; i++) await l.say('!rb');
+    expect((await l.rb.buyerState(CH, ALICE.id)).charges.available).toBe(0);
+    const cmd = {
+      action: 'refill_charges' as const,
+      viewer_id: ALICE.id,
+      reason: 'geste',
+    };
+    expect(await l.forbidden(l.m.act(CH, viewer, cmd))).toBe(true);
+    await l.m.act(CH, mod, cmd);
+    expect((await l.rb.buyerState(CH, ALICE.id)).charges.available).toBe(3);
+    expect(await l.audits('random_ban.refill_charges')).toMatchObject([
+      { actor: 'modo', reason: 'geste' },
+    ]);
   });
 });

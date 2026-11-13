@@ -180,6 +180,7 @@ export function mountRandomBan(): View {
         r.sniper === 'hit' ? b('revoke_bonus', 'Retirer la prime…') : '',
         b('block', `${ic('ban')}Bloquer ${esc(r.buyer.name)}…`, 'ghost'),
         b('cooldown', `${ic('clock')}Délai Random Ban…`, 'ghost'),
+        b('refill', 'Recharger ses charges…', 'ghost'),
         b('lift', 'Lever blocage et délai…', 'ghost'),
         `<button type="button" class="d-btn ghost sm" data-see="${esc(r.buyer.id)}">${ic('user')}Fiche</button>`,
       ].join(''),
@@ -313,6 +314,18 @@ export function mountRandomBan(): View {
         }
         case 'resolve':
           return resolveForm(btn, r);
+        case 'refill': {
+          const reason = reasonOf(
+            `Recharger toutes les charges Random Ban de ${name} ? (extension, !rb et points de chaîne)`,
+          );
+          if (!reason) return;
+          await rbAct(
+            btn,
+            { action: 'refill_charges', viewer_id: id, reason },
+            `${name} · charges rechargées`,
+          );
+          return;
+        }
         case 'refund_points': {
           const reason = reasonOf(
             'Rembourser ses points de chaîne via Twitch ? Seulement sur une récompense créée par Raptoru ; sinon, à faire dans la file de Twitch.',
