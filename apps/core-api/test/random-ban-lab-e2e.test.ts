@@ -23,7 +23,7 @@ const CH = '83603689';
 const V = { id: '9001', display_name: 'Alice' };
 
 describe('Random Ban — Lab end to end (extension → real executor → result)', () => {
-  it('one purchase, one draw among the fictional chatters, one simulated timeout, the gauge moves', async () => {
+  it('one purchase, one draw among the fictional chatters, one simulated timeout, one charge used', async () => {
     const core = await setup();
     // A real-mode request (the main Core's extension door, not the Lab's dry run): the fake Twitch is the only target.
     const rb = new RandomBanService(core.db, core.clock);
@@ -102,11 +102,8 @@ describe('Random Ban — Lab end to end (extension → real executor → result)
     const target = s.mine[0]!.target!;
     expect([...LAB_CHATTERS.map((c) => c.id), V.id]).toContain(target.id);
     expect(bans[0]!.userId).toBe(target.id);
-    expect(s.price).toMatchObject({
-      level: 1,
-      price: 30_000,
-      next_price: 25_000,
-    });
+    expect(s.price).toBe(25_000);
+    expect(s.charges).toMatchObject({ available: 2, max: 3 });
   }, 30_000);
 
   it('Le Viseur + Sniper, end to end: the reel plays BEFORE the strike, then the ban video; a hit pays once', async () => {

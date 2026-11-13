@@ -5,9 +5,10 @@ import { CpTwitchActions } from '../src/channel-points/twitch-actions.js';
 import { RandomBanService } from '../src/random-ban/service.js';
 import { setup } from './helpers.js';
 
-// Random Ban by channel points (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 3, decided 12/11/2026): fixed price on Twitch,
-// a PERSONAL cooldown of 10 min checked by Core — a redemption under it creates no Random Ban, its points go back once
-// (CANCELED) when the reward is Raptoru's, and the chat says « remboursés » only after Twitch's answer.
+// Random Ban by channel points (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 3, V5 13/11/2026): fixed price on Twitch, the
+// buyer's PERSONAL charges (3, one back every 10 min, shared with the extension and `!rb`) checked by Core — a
+// redemption without a charge creates no Random Ban, its points go back once (CANCELED) when the reward is Raptoru's,
+// and the chat says « remboursés » only after Twitch's answer.
 
 const CH = '83603689';
 const EXEC = {
@@ -92,24 +93,41 @@ async function fixture(o: { managed: boolean }) {
   const chat = async () =>
     (
       await core.db.query<{ params: { text: string } }>(
-        `select params from cmd_steps where idempotency_key like 'rb:cp-%' order by seq_global`,
+        `select params from cmd_steps where idempotency_key like 'rb:%' order by seq_global`,
       )
     ).map((r) => r.params.text);
-  return { core, rb, cp, twitch, redeem, drain, requests, cancels, chat };
+  /** Three accepted redemptions: Kiwi's charges are used up. */
+  const empty = async () => {
+    for (let i = 0; i < 3; i++) {
+      await redeem();
+      await drain();
+    }
+  };
+  return {
+    core,
+    rb,
+    cp,
+    twitch,
+    redeem,
+    drain,
+    requests,
+    cancels,
+    chat,
+    empty,
+  };
 }
 
-describe('channel points Random Ban — personal cooldown', () => {
-  it('Raptoru reward: under cooldown → no Random Ban, one CANCELED asked, the chat told only after Twitch answered', async () => {
+describe('channel points Random Ban — personal charges', () => {
+  it('Raptoru reward: no charge left → no Random Ban, one CANCELED asked, the chat told only after Twitch answered', async () => {
     const f = await fixture({ managed: true });
-    await f.redeem();
-    await f.drain();
+    await f.empty();
     f.core.clock.advance(3 * 60_000 + 36_000);
     const second = await f.redeem();
-    expect(await f.requests()).toBe(1);
+    expect(await f.requests()).toBe(3);
     expect(second.redemption.results[0]).toMatchObject({
       status: 'failed',
       error:
-        'Random Ban : délai personnel (encore 6 min 24 s) · remboursement demandé à Twitch',
+        'Random Ban refusé : plus de charge Random Ban, la prochaine dans 6 min 24 s · remboursement demandé à Twitch',
     });
     const asked = await f.cancels();
     expect(asked).toHaveLength(1);
@@ -124,14 +142,13 @@ describe('channel points Random Ban — personal cooldown', () => {
       outcome: 'done',
     });
     expect(await f.chat()).toEqual([
-      '@Kiwi - Random Ban indisponible pour toi : encore 6 min 24 s avant ton prochain tirage. Tes points de chaîne ont été remboursés.',
+      '@Kiwi - Plus de charge Random Ban, la prochaine dans 6 min 24 s · points remboursés.',
     ]);
   });
 
   it('Twitch refuses the refund: the chat says a moderator will do it (never « remboursés »)', async () => {
     const f = await fixture({ managed: true });
-    await f.redeem();
-    await f.drain();
+    await f.empty();
     await f.redeem();
     const { action } = await f.twitch.claim(CH);
     await f.twitch.report(CH, action!.action_id, {
@@ -140,43 +157,47 @@ describe('channel points Random Ban — personal cooldown', () => {
       http_status: 400,
     });
     expect(await f.chat()).toEqual([
-      '@Kiwi - Random Ban indisponible pour toi : encore 10 min avant ton prochain tirage. Tes points n’ont pas pu être remboursés automatiquement : un modérateur va le faire.',
+      '@Kiwi - Plus de charge Random Ban, la prochaine dans 10 min · remboursement automatique impossible : un modérateur va le faire.',
     ]);
   });
 
-  it('the old reward (not created by Raptoru): NO cooldown — a refusal could not give the points back; the behaviour of today kept', async () => {
+  it('the old reward (not created by Raptoru): never refused for the charges — a refusal could not give the points back', async () => {
     const f = await fixture({ managed: false });
+    await f.empty();
     await f.redeem();
-    await f.drain();
-    await f.redeem();
-    expect(await f.requests()).toBe(2);
+    expect(await f.requests()).toBe(4);
     expect(await f.cancels()).toEqual([]);
     expect(await f.chat()).toEqual([]);
   });
 
   it('personal: another viewer is never held; after 10 min Kiwi plays again', async () => {
     const f = await fixture({ managed: true });
-    await f.redeem();
-    await f.drain();
+    await f.empty();
     await f.redeem(BOB);
     expect(await f.requests(BOB.id)).toBe(1);
     await f.drain();
     f.core.clock.advance(10 * 60_000);
     await f.redeem();
-    expect(await f.requests()).toBe(2);
+    expect(await f.requests()).toBe(4);
     expect(await f.cancels()).toEqual([]);
   });
 
-  it('a Random Ban that did nothing (failed, refunded) never holds the cooldown', async () => {
+  it('a Random Ban that did nothing (failed, refunded) gives its charge back', async () => {
     const f = await fixture({ managed: true });
     await f.redeem();
-    // The executor cannot time out: the request fails, nothing done.
-    await f.rb.claim(CH, { ...EXEC, can_timeout: false, missing: ['x'] });
+    await f.drain();
     await f.redeem();
-    expect(await f.requests()).toBe(2);
+    await f.drain();
+    await f.redeem();
+    // The executor cannot time out: the request fails, nothing done (its points asked back).
+    await f.rb.claim(CH, { ...EXEC, can_timeout: false, missing: ['x'] });
+    const before = (await f.cancels()).length;
+    await f.redeem();
+    expect(await f.requests()).toBe(4);
+    expect(await f.cancels()).toHaveLength(before);
   });
 
-  it('the same redemption delivered twice: one Random Ban, never refused by its own cooldown', async () => {
+  it('the same redemption delivered twice: one Random Ban, one charge, never refused by itself', async () => {
     const f = await fixture({ managed: true });
     const e = {
       channel_id: CH,
