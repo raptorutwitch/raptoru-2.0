@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   exactViewer,
+  recoveryModel,
+  reelSchedule,
   historyLine,
   matchViewers,
   resultModel,
@@ -248,5 +250,64 @@ describe('the stage and the history', () => {
     });
     expect(l.meta).toMatch(/extension · 30/);
     expect(l.sniper).toBe('🎯 Pikachuu · raté');
+  });
+});
+
+// V3 (14/11) — the recovery gauge slides continuously between the tier marks; the reel slows down to its stop.
+describe('recovery gauge', () => {
+  const TIERS = [25_000, 30_000, 50_000, 75_000, 100_000];
+  const STEP = 5 * MIN;
+  const at = (level, nextInMin) => ({
+    level,
+    price: TIERS[level],
+    next_price: TIERS[level - 1] ?? null,
+    server_now: '2026-11-14T00:00:00.000Z',
+    next_drop_at: level
+      ? new Date(
+          Date.parse('2026-11-14T00:00:00Z') + nextInMin * MIN,
+        ).toISOString()
+      : null,
+    normal_at: level
+      ? new Date(
+          Date.parse('2026-11-14T00:00:00Z') +
+            ((level - 1) * 5 + nextInMin) * MIN,
+        ).toISOString()
+      : null,
+  });
+  it('the top tier just bought: full; the normal price: empty', () => {
+    expect(recoveryModel(at(4, 5), TIERS, 0, 0, STEP).fill).toBeCloseTo(1);
+    expect(recoveryModel(at(0, 0), TIERS, 0, 0, STEP)).toMatchObject({
+      fill: 0,
+      price: 25_000,
+      level: 0,
+    });
+  });
+  it('continuous: it slides with the time elapsed, and reaches a mark exactly when the price drops to it', () => {
+    const m0 = recoveryModel(at(2, 5), TIERS, 0, 0, STEP);
+    const m1 = recoveryModel(at(2, 5), TIERS, 0, 60_000, STEP);
+    expect(m0.fill).toBeCloseTo(0.5); // 50 000: on its own mark
+    expect(m1.fill).toBeLessThan(m0.fill);
+    expect(m1.fill).toBeGreaterThan(0.25);
+    const end = recoveryModel(at(2, 5), TIERS, 0, 5 * MIN, STEP);
+    expect(end.fill).toBeCloseTo(0.25); // the 30 000 mark
+    expect(end.stale).toBe(true); // the Core is read again for the new price
+    expect(end.price).toBe(50_000); // never a price of its own
+  });
+  it('the marks: the five tiers, the current one marked', () => {
+    const m = recoveryModel(at(1, 3), TIERS, 0, 0, STEP);
+    expect(m.marks.map((x) => x.at)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    expect(m.marks.find((x) => x.current).amount).toBe(30_000);
+  });
+});
+
+describe('reel rhythm', () => {
+  it('fast first, slower at the end, about the total asked', () => {
+    const d = reelSchedule(23, 3400);
+    expect(d).toHaveLength(23);
+    expect(d[22]).toBeGreaterThan(d[0] * 5);
+    for (let i = 1; i < d.length; i++)
+      expect(d[i]).toBeGreaterThanOrEqual(d[i - 1]);
+    expect(Math.abs(d.reduce((a, b) => a + b, 0) - 3400)).toBeLessThan(25);
+    expect(reelSchedule(1)).toEqual([0]);
   });
 });

@@ -1,25 +1,26 @@
-// Mini-jeux › Random Ban — the game screen (UX refonte 13/11, docs/mini-jeux/UX_UI_MINI_JEUX.md). A host module view
-// (module-registry.js). The Core decides everything: the buyer's price, availability, the purchase, the draw and its
-// target. This view shows `GET /modules/v3/random_ban/state` and sends `launch` with the price the viewer confirmed
-// (input.expected_price: never charged above it). One key per intent (purchase.js): a double tap, a retry after a
-// lost answer or a reconnection resend the SAME key — one Random Ban, one debit.
-// The reel is a SHOW of the Core's result: it scrolls the strip the Core built AFTER its draw and stops where the Core
-// put the target. The extension never draws, and the Sniper never reaches the draw.
+// Mini-jeux › Random Ban V3 (14/11, docs/mini-jeux/UX_UI_MINI_JEUX.md § 0) — the game screen: the draw machine on the
+// left (random-ban-machine.js), the player's controls on the right (price recovery gauge, Sniper, launch, last draws).
+// A host module view (module-registry.js). The Core decides everything: the buyer's price, availability, the purchase,
+// the draw and its target. This view shows `GET /modules/v3/random_ban/state` and sends `launch` with the price the
+// viewer confirmed (input.expected_price: never charged above it). One key per intent (purchase.js): a double tap, a
+// retry after a lost answer or a reconnection resend the SAME key — one Random Ban, one debit. The machine replays the
+// Core's strip and stops on the Core's target: the extension never draws, and the Sniper never reaches the draw. The
+// stream's ban alerts are Studio's own, untouched and never synchronised with this screen.
 
 import { errorLabel } from './api.js';
 import { createMiniGames } from './mini-games.js';
+import { createMachine, face } from './random-ban-machine.js';
+import { createPriceGauge } from './random-ban-gauge.js';
 import { registerViewerModule } from './module-registry.js';
 import { createIntent, isRetryable } from './purchase.js';
 import {
   cleanWish,
   exactViewer,
-  gaugeModel,
   historyLine,
   matchViewers,
   priceShort,
   priceText,
   resultModel,
-  waitText,
 } from './random-ban-model.js';
 
 const SHEET = 'modules/arcade/arcade.css';
@@ -36,8 +37,9 @@ function ensureSheet(document) {
   document.head?.append(link);
 }
 
+/** Random Ban's mark: a die (chance) in a scope (the aim). */
 export const RB_ICON =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12 1.8v4M12 18.2v4M1.8 12h4M18.2 12h4"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3.2"/><circle cx="9.6" cy="9.6" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="14.4" cy="14.4" r="1" fill="currentColor" stroke="none"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg>';
 
 const REASONS = {
   module_disabled: 'Random Ban n’est pas encore ouvert.',
@@ -53,21 +55,7 @@ const REASONS = {
 };
 const reasonText = (code) => REASONS[code] ?? errorLabel(code);
 
-/** Twitch pictures (the Core's cache) or the Lab demo's own; anything else shows the initials. */
-const okPicture = (u) =>
-  typeof u === 'string' && (/^https:\/\/static-cdn\.jtvnw\.net\/[^\s"'<>]+$/.test(u) || /^\/av\/[\w-]+\.svg$/.test(u));
-const hue = (s) => [...String(s ?? '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 17);
-const initials = (n) => String(n ?? '?').replace(/^@/, '').slice(0, 2).toUpperCase();
-const face = (item, cls = 'rb-face') =>
-  `<span class="${cls}" style="--h:${hue(item?.name)}"><i>${esc(initials(item?.name))}</i>${
-    okPicture(item?.avatar) ? `<img src="${esc(item.avatar)}" alt="" loading="lazy" draggable="false">` : ''
-  }</span>`;
-const mmss = (ms) => {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-};
-
-/** The requests already shown on this device (a refresh never replays a reel, a Sniper never celebrates twice). */
+/** The requests already shown on this device (a refresh never replays a draw, a Sniper never celebrates twice). */
 function seenStore(win, key) {
   let set = new Set();
   try {
@@ -88,54 +76,56 @@ function seenStore(win, key) {
   };
 }
 
-const REEL_MS = 4200;
 const REPLAY_WINDOW_MS = 90_000;
-const RESULT_HOLD_MS = 9000;
+const RESULT_HOLD_MS = 10_000;
+const OPEN = ['queued', 'searching', 'timeout_requested'];
 
-export function createRandomBanGame({ document, client, module }) {
+export function createRandomBanGame({ document, client, module, back = null }) {
   ensureSheet(document);
   const win = document.defaultView ?? globalThis;
   const reduced = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const machine = createMachine(document, { reduced });
+  const gauge = createPriceGauge(document);
   const node = document.createElement('div');
   node.className = 'rb';
   node.innerHTML = `
-    <header class="rb__head">
-      <span class="rb__title"><span class="rb__icon">${RB_ICON}</span><b>Random Ban</b></span>
-      <span class="rb__price" data-k="price" tabindex="0">
-        <svg class="rb__ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" class="rb__ring-bg"/><circle cx="18" cy="18" r="15.5" class="rb__ring-fg" data-k="ring" pathLength="100"/></svg>
-        <span class="rb__coin" aria-hidden="true"></span>
-        <strong data-k="amount">—</strong>
-        <small data-k="drop" hidden></small>
-      </span>
+    <header class="rb__bar">
+      ${back ? '<button type="button" class="rb__back" data-k="back" aria-label="Retour aux Mini-jeux"><span aria-hidden="true">‹</span> Jeux</button>' : ''}
+      <span class="rb__title"><span class="rb__logo">${RB_ICON}</span><b>Random Ban</b></span>
+      <button type="button" class="rb__info" data-k="infobtn" aria-expanded="false" aria-label="Comment ça marche">?</button>
     </header>
-    <div class="rb__stage" data-k="stage" aria-live="polite">
-      <div class="rb__track" data-k="track"></div>
-      <div class="rb__sight" aria-hidden="true"><i></i></div>
-      <div class="rb__card" data-k="card" hidden></div>
-      <p class="rb__empty" data-k="empty" hidden></p>
-    </div>
-    <div class="rb__bar">
-      <div class="rb__sniper" data-k="sniper">
-        <span class="rb__scope" aria-hidden="true">🎯</span>
-        <input class="rb__input" data-k="wish" type="text" maxlength="40" autocomplete="off" spellcheck="false"
-          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="rb-sugg"
-          aria-label="Sniper : le viewer que tu prédis (facultatif)" placeholder="Sniper : @pseudo (facultatif)">
-        <span class="rb__picked" data-k="picked" hidden></span>
-        <button type="button" class="rb__clear" data-k="clear" aria-label="Effacer le Sniper" hidden>×</button>
-        <ul class="rb__sugg" id="rb-sugg" role="listbox" data-k="sugg" hidden></ul>
+    <div class="rb__body">
+      <div class="rb__left" data-k="left"></div>
+      <div class="rb__right">
+        <div data-k="gauge"></div>
+        <div class="rb__sniper" data-k="sniper">
+          <span class="rb__scope" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
+          <input class="rb__input" data-k="wish" type="text" maxlength="40" autocomplete="off" spellcheck="false"
+            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="rb-sugg"
+            aria-label="Sniper : le viewer que tu prédis (facultatif)" placeholder="Sniper : @pseudo (facultatif)">
+          <span class="rb__picked" data-k="picked" hidden></span>
+          <button type="button" class="rb__clear" data-k="clear" aria-label="Effacer le Sniper" hidden>×</button>
+          <ul class="rb__sugg" id="rb-sugg" role="listbox" data-k="sugg" hidden></ul>
+        </div>
+        <button type="button" class="rb__go" data-k="go" disabled>Lancer</button>
+        <p class="rb__msg" data-k="msg" role="status"></p>
+        <section class="rb__recent" aria-label="Derniers tirages">
+          <header><b>Derniers tirages</b><button type="button" class="rb__all" data-k="histbtn" aria-expanded="false">Tout voir</button></header>
+          <ul data-k="recent"></ul>
+        </section>
       </div>
-      <button type="button" class="rb__go" data-k="go" disabled>Lancer</button>
     </div>
-    <footer class="rb__foot">
-      <p class="rb__msg" data-k="msg" role="status"></p>
-      <button type="button" class="rb__histbtn" data-k="histbtn" aria-expanded="false">Historique</button>
-    </footer>
-    <div class="rb__hist" data-k="hist" hidden role="dialog" aria-label="Derniers Random Ban">
-      <div class="rb__histhead"><b>Derniers Random Ban</b><button type="button" class="rb__x" data-k="histclose" aria-label="Fermer">×</button></div>
+    <div class="rb__sheet" data-k="hist" hidden role="dialog" aria-label="Derniers Random Ban">
+      <div class="rb__sheethead"><b>Derniers Random Ban</b><button type="button" class="rb__x" data-k="histclose" aria-label="Fermer">×</button></div>
       <ul class="rb__histlist" data-k="histlist"></ul>
     </div>
-    <p class="rb__sr" data-k="sr" aria-live="polite"></p>`;
+    <div class="rb__sheet rb__sheet--info" data-k="info" hidden role="dialog" aria-label="Comment ça marche">
+      <div class="rb__sheethead"><b>Comment ça marche</b><button type="button" class="rb__x" data-k="infoclose" aria-label="Fermer">×</button></div>
+      <ul class="rb__rules" data-k="rules"></ul>
+    </div>`;
   const $ = (k) => node.querySelector(`[data-k="${k}"]`);
+  $('left').append(machine.node);
+  $('gauge').append(gauge.node);
   const intent = createIntent();
   const played = seenStore(win, 'rb:played');
   const celebrated = seenStore(win, 'rb:sniper');
@@ -150,10 +140,9 @@ export function createRandomBanGame({ document, client, module }) {
   let picked = null; // the Sniper account chosen in the suggestions
   let suggestions = [];
   let active = -1;
-  let animating = null; // request id whose reel runs
-  let shown = null; // request id the stage shows (after its reel)
+  let animating = null; // request id whose draw the machine replays
+  let shown = null; // request id the machine shows (after its draw)
   let shownAt = 0;
-  let lastSr = '';
   let flash = ''; // the message of the last action, kept a few seconds over the state's own
 
   const st = () => s?.state ?? null;
@@ -164,148 +153,47 @@ export function createRandomBanGame({ document, client, module }) {
   };
   const age = (r) => serverNow() - Date.parse(r.created_at);
   const candidates = () => st()?.candidates ?? [];
+  const avatarOf = (r, id) =>
+    r?.strip?.items?.find((x) => x.id === id)?.avatar ?? candidates().find((x) => x.id === id)?.avatar ?? null;
 
-  // --- Header: the price and its recovery ----------------------------------------------------------------------------
-  function drawPrice() {
-    const state = st();
-    const p = state?.price;
-    $('amount').textContent = p ? priceShort(p.price) : '—';
-    const g = p ? gaugeModel(p, readAt, Date.now(), state.step_ms, { reducedMotion: reduced }) : null;
-    node.classList.toggle('is-series', !!g);
-    $('drop').hidden = !g;
-    $('ring').style.strokeDasharray = g ? `${(100 * (1 - g.fraction)).toFixed(1)} 100` : '0 100';
-    $('price').title = !p
-      ? ''
-      : g
-        ? `Ton prix : ${priceText(g.price)} (série). ${priceText(g.next_price)} dans ${waitText(g.next_in_ms)}, tarif normal dans ${waitText(g.normal_in_ms)}.`
-        : `Ton prix : ${priceText(p.price)} (tarif normal).`;
-    if (g) $('drop').textContent = `↓ ${mmss(g.next_in_ms)}`;
-    const sr = p ? `Ton prix : ${priceText(p.price)}.` : '';
-    if (sr !== lastSr) $('sr').textContent = sr;
-    lastSr = sr;
-    if (g?.stale) void refresh();
-  }
-
-  // --- Stage: idle faces, the spin while drawing, the reel, the result ----------------------------------------------
-  const cells = (items) =>
-    items.map((it) => `<span class="rb__cell" data-id="${esc(it.id)}">${face(it)}<b>${esc(it.name)}</b></span>`).join('');
-
-  function idleStrip() {
-    const pool = candidates();
-    if (!pool.length) return [];
-    const out = [];
-    while (out.length < 14) out.push(...pool);
-    return out.slice(0, Math.max(14, Math.min(28, pool.length)));
-  }
-
-  const setStage = (mode) => {
-    node.dataset.stage = mode; // idle | spin | reel | result | empty
-  };
-
-  function drawIdle(spin = false) {
-    const pool = idleStrip();
-    $('card').hidden = true;
-    $('empty').hidden = !!pool.length;
-    if (!pool.length) {
-      setStage('empty');
-      $('track').innerHTML = '';
-      $('track').dataset.sig = '';
-      $('empty').textContent =
-        st() && !st().identity ? reasonText('identity_required') : 'Personne dans le chat pour l’instant.';
-      return;
-    }
-    const sig = `idle:${pool.map((p) => p.id).join(',')}`;
-    if ($('track').dataset.sig !== sig) {
-      $('track').dataset.sig = sig;
-      $('track').innerHTML = cells(pool);
-      $('track').style.transform = '';
-    }
-    setStage(spin ? 'spin' : 'idle');
-  }
-
-  /** Scrolls the Core's strip and stops on its target (the Core's `stop`). */
-  async function playReel(r) {
+  // --- The machine ------------------------------------------------------------------------------------------------------
+  async function play(r) {
     animating = r.request_id;
-    flash = ''; // « tirage en cours… » is over: the stage tells the rest
-    $('msg').textContent = '';
     played.add(r.request_id);
-    const { items, stop } = r.strip;
-    const track = $('track');
-    track.dataset.sig = `reel:${r.request_id}`;
-    track.innerHTML = cells(items);
-    track.style.transform = '';
-    $('card').hidden = true;
-    $('empty').hidden = true;
-    setStage('reel');
-    const stage = $('stage');
-    const cell = track.children[0];
-    const w = cell ? cell.getBoundingClientRect().width : 72;
-    const center = stage.clientWidth / 2;
-    const end = center - (stop * w + w / 2);
-    const start = center - w / 2 + w * 2;
-    if (reduced || typeof track.animate !== 'function') {
-      track.style.transform = `translateX(${end}px)`;
-    } else {
-      const a = track.animate([{ transform: `translateX(${start}px)` }, { transform: `translateX(${end}px)` }], {
-        duration: REEL_MS,
-        easing: 'cubic-bezier(.1,.75,.12,1)',
-        fill: 'forwards',
-      });
-      await a.finished.catch(() => {});
-      track.style.transform = `translateX(${end}px)`;
-      a.cancel();
-    }
+    flash = ''; // « tirage en cours… » is over: the machine tells the rest
+    drawButton();
+    await machine.play(r.strip);
     if (stopped) return;
-    track.children[stop]?.classList.add('is-target');
     animating = null;
     shown = r.request_id;
     shownAt = Date.now();
     draw();
   }
 
-  function drawResult(r) {
+  function result(r) {
     const m = resultModel(r);
-    setStage('result');
-    const card = $('card');
-    card.hidden = false;
-    card.dataset.tone = m.tone;
-    const avatar =
-      r.strip?.items?.find((x) => x.id === r.target?.id)?.avatar ??
-      candidates().find((x) => x.id === r.target?.id)?.avatar ??
-      null;
-    const sn = m.sniper;
-    const html = `${r.target ? face({ ...r.target, avatar }, 'rb-face rb-face--big') : ''}
-      <div class="rb__cardtxt"><b>${esc(m.who ?? 'Random Ban')}</b><span>${esc(m.text)}</span>${
-        sn?.text ? `<em class="rb__sn${sn.hit ? ' is-hit' : ''}">${esc(sn.text)}</em>` : ''
-      }</div>`;
-    if (card.dataset.html !== html) {
-      card.dataset.html = html;
-      card.innerHTML = html;
-    }
+    machine.result(r.target ? { ...r.target, avatar: avatarOf(r, r.target.id) } : null, m);
     // Sniper hit: celebrated once per request on this device (the bonus itself was paid once by the Core).
-    if (sn?.hit && !celebrated.has(r.request_id)) {
+    if (m.sniper?.hit && !celebrated.has(r.request_id)) {
       celebrated.add(r.request_id);
-      node.classList.remove('is-sniped');
-      void node.offsetWidth;
-      node.classList.add('is-sniped');
-      win.setTimeout(() => node.classList.remove('is-sniped'), 2600);
+      machine.sniped();
     }
   }
 
-  function drawStage() {
-    if (animating) return; // the reel owns the stage until it stops
+  function drawMachine() {
+    if (animating) return; // the machine replays a draw until it stops
     const mine = st()?.mine ?? [];
-    // Next reel: the oldest of my recent draws not shown yet on this device (two purchases: one after the other).
+    // Next draw to replay: the oldest of mine not shown yet on this device (two purchases: one after the other).
     const next = [...mine]
       .reverse()
       .find((r) => r.strip?.items?.length && !played.has(r.request_id) && age(r) < REPLAY_WINDOW_MS);
-    if (next) return void playReel(next);
+    if (next) return void play(next);
     for (const r of mine) if (r.strip && !played.has(r.request_id)) played.add(r.request_id); // too old: no replay
     const open = mine.find((r) => ['queued', 'searching'].includes(r.status));
     const current = mine.find((r) => r.request_id === shown);
     if (current && !open && (current.status === 'timeout_requested' || Date.now() - shownAt < RESULT_HOLD_MS))
-      return drawResult(current);
-    // A result without a reel (nobody eligible, refused, canceled): a card, for a few seconds.
+      return result(current);
+    // A result without a draw to replay (nobody eligible, refused, canceled): the card, for a few seconds.
     const fresh = mine.find(
       (r) => !r.strip && !['queued', 'searching'].includes(r.status) && age(r) < 20_000 && !played.has(r.request_id),
     );
@@ -313,11 +201,20 @@ export function createRandomBanGame({ document, client, module }) {
       played.add(fresh.request_id);
       shown = fresh.request_id;
       shownAt = Date.now();
-      return drawResult(fresh);
+      return result(fresh);
     }
-    if (open) return drawIdle(true);
+    const pool = candidates();
+    if (open) return machine.spin(pool);
     shown = null;
-    drawIdle();
+    const state = st();
+    machine.idle(
+      pool,
+      state && !state.identity
+        ? reasonText('identity_required')
+        : pool.length
+          ? `${pool.length} viewer${pool.length > 1 ? 's' : ''} dans le viseur`
+          : 'Personne dans le chat',
+    );
   }
 
   // --- Sniper: free text, suggestions, the picked account -----------------------------------------------------------
@@ -351,6 +248,7 @@ export function createRandomBanGame({ document, client, module }) {
     $('picked').innerHTML = picked ? `${face(picked, 'rb-face rb-face--xs')}<span>✓</span>` : '';
     $('clear').hidden = !has;
     node.classList.toggle('has-pick', !!picked);
+    node.classList.toggle('has-wish', has && !picked);
     $('wish').disabled = busy || armed;
     drawSuggestions();
   }
@@ -367,7 +265,7 @@ export function createRandomBanGame({ document, client, module }) {
       const n = suggestions.length;
       active = e.key === 'ArrowDown' ? (active + 1) % n : (active - 1 + n) % n;
       drawSuggestions();
-    } else if (e.key === 'Enter' && active >= 0 && suggestions[active]) {
+    } else if ((e.key === 'Enter' || e.key === 'Tab') && active >= 0 && suggestions[active]) {
       e.preventDefault();
       pick(suggestions[active]);
     } else if (e.key === 'Escape' && suggestions.length) {
@@ -422,17 +320,48 @@ export function createRandomBanGame({ document, client, module }) {
     go.innerHTML = busy
       ? 'Envoi…'
       : armed
-        ? `Confirmer <span>${esc(priceShort(price))}</span>`
+        ? `Confirmer <span>${esc(priceText(price))}</span>`
         : `Lancer${price === null ? '' : ` <span>${esc(priceShort(price))}</span>`}`;
     if (!armed) $('msg').textContent = flash || (why && !busy ? reasonText(why) : '');
   }
 
+  function drawRecent() {
+    const recent = st()?.recent ?? [];
+    $('recent').innerHTML = recent.length
+      ? recent
+          .slice(0, 3)
+          .map((r) => {
+            const l = historyLine(r);
+            return `<li data-tone="${l.tone}">${face({ name: r.target?.name ?? '?', avatar: avatarOf(r, r.target?.id) }, 'rb-face rb-face--xs')}<span class="rb__rl"><b>${esc(l.target ?? '—')}</b><small>par ${esc(l.buyer)}</small></span><span class="rb__rr">${
+              l.sniper && r.sniper === 'hit' ? '<i class="rb__hitdot" title="Sniper réussi">◎</i>' : ''
+            }${esc(l.result)}</span></li>`;
+          })
+          .join('')
+      : '<li class="rb__none">Aucun tirage pour l’instant.</li>';
+  }
+
+  function drawRules() {
+    const sn = st()?.sniper;
+    $('rules').innerHTML = [
+      'Le serveur tire au sort un viewer présent dans le chat (toi compris, avec 4 fois moins de chances).',
+      'Timeout de 3 min pour un abonné, 5 min sinon. Si rien ne se passe, tu es remboursé.',
+      'Chaque lancer monte ton prix d’un palier ; un palier revient toutes les 5 min sans nouveau lancer.',
+      `Sniper (facultatif) : prédis la personne tirée. Il ne change jamais le tirage. Touché : +${priceText(sn?.bonus ?? 2000)}${
+        sn?.window_ms ? ` (au plus une prime toutes les ${Math.round(sn.window_ms / 60_000)} min)` : ''
+      }.`,
+    ]
+      .map((t) => `<li>${esc(t)}</li>`)
+      .join('');
+  }
+
   function draw() {
     if (stopped) return;
-    drawPrice();
+    const m = gauge.update(st(), readAt);
+    if (m?.stale) void refresh();
     drawButton();
     drawSniper();
-    drawStage();
+    drawMachine();
+    drawRecent();
     if (!$('hist').hidden) drawHistory();
   }
 
@@ -449,12 +378,11 @@ export function createRandomBanGame({ document, client, module }) {
     draw();
     schedule();
   }
-  /** Fast while one of my Random Ban runs (the reel waits for the Core's draw), slow otherwise. */
+  /** Fast while one of my Random Ban runs (the machine waits for the Core's draw), slow otherwise. */
   function schedule() {
     win.clearTimeout(poll);
     if (stopped) return;
-    const running =
-      animating || (st()?.mine ?? []).some((r) => ['queued', 'searching', 'timeout_requested'].includes(r.status));
+    const running = animating || (st()?.mine ?? []).some((r) => OPEN.includes(r.status));
     poll = win.setTimeout(() => void refresh(), running ? 1000 : 4000);
   }
 
@@ -476,14 +404,14 @@ export function createRandomBanGame({ document, client, module }) {
       armed = true;
       const wish = wishInput();
       const aim = wish.wish_id
-        ? ` · 🎯 ${picked?.name ?? exactViewer(candidates(), wish.wish_text)?.name ?? wish.wish_text}`
+        ? ` · vise ${picked?.name ?? exactViewer(candidates(), wish.wish_text)?.name ?? wish.wish_text}`
         : wish.wish_text
-          ? ` · 🎯 « ${wish.wish_text} » (à vérifier)`
+          ? ` · vise « ${wish.wish_text} » (à vérifier)`
           : '';
       $('msg').innerHTML =
         state.price.level > 0
-          ? `<b class="rb__up">⬆ Prix en hausse : ${esc(priceText(price))}</b> (normal ${esc(priceShort(state.tiers?.[0] ?? price))})${esc(aim)}`
-          : `Confirme : ${esc(priceText(price))}${esc(aim)}`;
+          ? `<b class="rb__up">Prix en hausse : ${esc(priceText(price))}</b> (normal ${esc(priceShort(state.tiers?.[0] ?? price))})${esc(aim)}`
+          : `Confirme pour payer ${esc(priceText(price))}${esc(aim)}`;
       win.clearTimeout(disarm);
       disarm = win.setTimeout(() => {
         armed = false;
@@ -503,14 +431,14 @@ export function createRandomBanGame({ document, client, module }) {
       const paid = req?.price_paid;
       say(
         req?.sniper === 'unresolved'
-          ? `Payé. Pronostic « ${wish.wish_text} » gardé : un modérateur le vérifiera.`
+          ? `Payé. « ${wish.wish_text} » sera vérifié par un modérateur.`
           : Number.isInteger(paid) && paid < price
             ? `Payé ${priceText(paid)} (le prix avait baissé).`
             : 'Payé · tirage en cours…',
       );
       picked = null;
       $('wish').value = '';
-      setStage('spin');
+      machine.spin(candidates());
     } catch (e) {
       if (!isRetryable(e)) intent.close();
       const code = e?.code ?? e?.message;
@@ -528,7 +456,7 @@ export function createRandomBanGame({ document, client, module }) {
     }
   };
 
-  // --- History: a secondary panel -------------------------------------------------------------------------------------
+  // --- Sheets: the full history, the rules ----------------------------------------------------------------------------
   function drawHistory() {
     const recent = st()?.recent ?? [];
     const me = st()?.mine?.[0]?.buyer?.id ?? null;
@@ -541,22 +469,30 @@ export function createRandomBanGame({ document, client, module }) {
             }</span><span class="rb__hres">${esc(l.result)}</span><small>${esc(l.meta)}${l.sniper ? ` · ${esc(l.sniper)}` : ''}</small></li>`;
           })
           .join('')
-      : '<li class="rb__hnone">Aucun Random Ban pour l’instant.</li>';
+      : '<li class="rb__none">Aucun Random Ban pour l’instant.</li>';
   }
-  function toggleHistory(open) {
-    $('hist').hidden = !open;
-    $('histbtn').setAttribute('aria-expanded', String(open));
-    if (open) {
-      drawHistory();
-      $('histclose').focus();
-    } else $('histbtn').focus();
+  function sheet(k, open, opener) {
+    $(k).hidden = !open;
+    $(opener).setAttribute('aria-expanded', String(open));
+    if (open) $(k).querySelector('.rb__x').focus();
+    else $(opener).focus();
   }
-  const onHistBtn = () => toggleHistory($('hist').hidden);
-  const onHistClose = () => toggleHistory(false);
+  const onHistBtn = () => {
+    drawHistory();
+    sheet('hist', $('hist').hidden, 'histbtn');
+  };
+  const onHistClose = () => sheet('hist', false, 'histbtn');
+  const onInfo = () => {
+    drawRules();
+    sheet('info', $('info').hidden, 'infobtn');
+  };
+  const onInfoClose = () => sheet('info', false, 'infobtn');
+  const onBack = () => back?.();
 
   const onKey = (e) => {
     if (e.key !== 'Escape') return;
-    if (!$('hist').hidden) return toggleHistory(false);
+    if (!$('hist').hidden) return onHistClose();
+    if (!$('info').hidden) return onInfoClose();
     if (armed) {
       armed = false;
       win.clearTimeout(disarm);
@@ -579,7 +515,10 @@ export function createRandomBanGame({ document, client, module }) {
     [$('clear'), 'click', onClear],
     [$('histbtn'), 'click', onHistBtn],
     [$('histclose'), 'click', onHistClose],
+    [$('infobtn'), 'click', onInfo],
+    [$('infoclose'), 'click', onInfoClose],
     [node, 'keydown', onKey],
+    ...(back ? [[$('back'), 'click', onBack]] : []),
   ];
   for (const [el, ev, fn] of on) el.addEventListener(ev, fn);
   node.addEventListener('error', onImgError, true);
@@ -589,20 +528,25 @@ export function createRandomBanGame({ document, client, module }) {
     start() {
       stopped = false;
       void refresh();
-      tick = win.setInterval(drawPrice, 1000);
+      // The gauge slides continuously (several frames a second, eased by CSS); the amounts stay the Core's.
+      tick = win.setInterval(() => {
+        const m = gauge.update(st(), readAt);
+        if (m?.stale) void refresh();
+      }, 250);
     },
     destroy() {
       stopped = true;
       win.clearInterval(tick);
       win.clearTimeout(poll);
       win.clearTimeout(disarm);
+      machine.destroy();
       for (const [el, ev, fn] of on) el.removeEventListener(ev, fn);
       node.removeEventListener('error', onImgError, true);
     },
   };
 }
 
-/** The Hub's « Mini-jeux »: the games container, Random Ban first (the only game today). */
+/** The Hub's « Mini-jeux »: its catalog, Random Ban the first game. */
 export function createRandomBanView({ document, client, module }) {
   ensureSheet(document);
   return createMiniGames({
@@ -611,15 +555,22 @@ export function createRandomBanView({ document, client, module }) {
       {
         id: 'random_ban',
         label: 'Random Ban',
+        tagline: 'Un viewer tiré au sort, exclu quelques minutes. Vise juste avec le Sniper.',
         icon: RB_ICON,
-        create: () => createRandomBanGame({ document, client, module }),
+        create: ({ back }) => createRandomBanGame({ document, client, module, back }),
+        async peek() {
+          const st = (await client.moduleState(module.id))?.state;
+          if (!st?.price) return null;
+          const last = st.recent?.[0];
+          return `Ton prix : ${priceShort(st.price.price)}${last?.target ? ` · dernier : ${last.target.name}` : ''}`;
+        },
       },
     ],
   });
 }
 
 registerViewerModule('random_ban_ext', createRandomBanView, {
-  icon: '🎯',
+  icon: '🎲',
   label: 'Mini-jeux',
-  description: 'Random Ban : un viewer tiré au sort',
+  description: 'Random Ban et les jeux du stream',
 });

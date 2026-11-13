@@ -121,8 +121,8 @@ const HUB_MODULE_STYLES = Object.freeze({
   event_shop: { icon: 'bat', color: '#7a1220', color2: '#d4561a' },
   // Music Hub: an emerald of Raptoru's own (never a music service's brand colour).
   music: { icon: 'music', color: '#16a34a', color2: '#0f766e' },
-  // Mini-jeux: Tombola's warm family pulled to rose-red and magenta (never Tombola's pink-violet nor the TTS violet).
-  random_ban_ext: { icon: 'games', color: '#ff4d6d', color2: '#a21caf' },
+  // Mini-jeux V3: crimson to wine — an arcade at night, apart from Tombola's pink-violet and the TTS violet.
+  random_ban_ext: { icon: 'games', color: '#ff2f55', color2: '#6d0d2a' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 const MODERATION_MODULE = Object.freeze({

@@ -1,5 +1,16 @@
 # UX / UI — module Mini-jeux et Random Ban
 
+## 0bis. V3 du 14/11 (carte blanche d'Antoni) — remplace les lignes correspondantes du § 0
+
+| Sujet | V3 codée |
+| --- | --- |
+| Mini-jeux | un vrai catalogue (`shared/mini-games.js`) : en-tête Mini-jeux, une tuile par jeu réel (résumé vivant : ton prix, dernier tiré), « ‹ Jeux » pour revenir ; l'écran de la session est rouvert directement (pas de clic en plus pour un joueur qui revient) |
+| Identité | « arcade de nuit » : cramoisi → bordeaux (`#ff2f55` → `#6d0d2a` sur la carte du Hub), lueurs de viseur, vert de verrouillage réservé au Sniper ; logo : un dé dans un viseur (hasard + visée) |
+| Composition | inverse du TTS : à gauche la machine de tirage (`shared/random-ban-machine.js`), à droite la jauge de prix, le Sniper, « Lancer », les 3 derniers tirages et « Tout voir » ; « ? » ouvre les règles en 4 lignes ; empilé sous 400 px de large, compacté sous 360 px de haut |
+| Machine | un viseur (anneaux, graduations) avec un grand portrait central, le pseudo, l'état ; une bande de vignettes dessous ; au repos « N viewers dans le viseur » ; payé : les portraits défilent (aucune décision) ; tirage du Core : succession qui ralentit (`reelSchedule`, ~3,4 s) jusqu'à la cible du Core, coins de verrouillage ; Sniper réussi : tout passe au vert et se referme, « SNIPER ! +2 000 Jetons » une fois |
+| Jauge | `shared/random-ban-gauge.js` + `recoveryModel` : les 5 paliers en repères, un remplissage qui glisse EN CONTINU (4 fois par seconde, lissé en CSS) vers le tarif normal, « 30K dans 4:12 · normal dans 9:12 » ; le repère est atteint exactement quand le Core baisse le prix ; jamais un montant de l'extension |
+| Alertes du stream | inchangées (lecteur d'effets de Studio, phrases et vidéos d'Antoni) ; aucune synchronisation avec l'extension |
+
 ## 0. Refonte du 13/11 (demande d'Antoni) — ce qui remplace le reste de ce document là où ils divergent
 
 Les mécanismes serveur restent ; la présentation et l'interaction de l'extension sont refaites. Démo :

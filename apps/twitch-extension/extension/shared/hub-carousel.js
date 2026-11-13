@@ -19,8 +19,8 @@ export const HUB_ICON_PATHS = Object.freeze({
   module: '<rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   // Music Hub (docs/music/MUSIC_HUB_STATE.md): a double note.
   music: '<path d="M9 17.5V6.5l10-2v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.6" fill="currentColor"/><circle cx="16.6" cy="15.6" r="2.6" fill="currentColor"/><path d="M9 9.6l10-2" stroke="currentColor" stroke-width="1.8"/>',
-  // Mini-jeux: a crosshair (Random Ban today, other games later).
-  games: '<circle cx="12" cy="12" r="7.6" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="12" r="2.3" fill="currentColor"/><path d="M12 1.8v4.2M12 18v4.2M1.8 12H6M18 12h4.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+  // Mini-jeux: a die (chance) in a scope (the aim).
+  games: '<rect x="6" y="6" width="12" height="12" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="9.6" cy="9.6" r="1.1" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="14.4" cy="14.4" r="1.1" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
   chevL: '<path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   chevR: '<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   arrow: '<path d="M5 12h12m-4.5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',

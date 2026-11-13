@@ -222,3 +222,40 @@ export function historyLine(r) {
     at: r.created_at,
   };
 }
+
+// --- V3 (14/11): the price recovery gauge and the reel's rhythm ------------------------------------------------------
+
+/**
+ * The recovery gauge at `nowLocal`: where the buyer's price stands on the tier scale, CONTINUOUSLY (the time left to the
+ * normal price over the time from the top tier to it). `fill` 0 = normal price, 1 = the top tier just bought. The tier
+ * marks sit at i / (tiers − 1): the fill reaches a mark exactly when the Core's price drops to it. The amounts are the
+ * Core's (price, next_price, tiers); the local clock only measures the time elapsed since the read.
+ */
+export function recoveryModel(price, tiers, readAtLocal, nowLocal, stepMs) {
+  const list = Array.isArray(tiers) && tiers.length ? tiers : [price?.price ?? 0];
+  const span = Math.max(1, (list.length - 1) * stepMs);
+  const g = gaugeModel(price, readAtLocal, nowLocal, stepMs);
+  const fill = g ? Math.min(1, g.normal_in_ms / span) : 0;
+  return {
+    price: price?.price ?? null,
+    level: price?.level ?? 0,
+    tiers: list,
+    fill,
+    marks: list.map((t, i) => ({ amount: t, at: list.length > 1 ? i / (list.length - 1) : 0, current: i === (price?.level ?? 0) })),
+    next_price: g?.next_price ?? null,
+    next_in_ms: g?.next_in_ms ?? 0,
+    normal_in_ms: g?.normal_in_ms ?? 0,
+    stale: !!g?.stale,
+  };
+}
+
+/**
+ * The reel's rhythm: the delay before each of `steps` portraits (fast, then slowing down on the last ones), adding up
+ * to about `totalMs`. Pure, so the suspense is the same everywhere and testable.
+ */
+export function reelSchedule(steps, totalMs = 3400) {
+  if (steps <= 1) return [0];
+  const raw = Array.from({ length: steps }, (_, i) => 1 + 9 * Math.pow(i / (steps - 1), 2.6));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  return raw.map((r) => Math.round((r / sum) * totalMs));
+}

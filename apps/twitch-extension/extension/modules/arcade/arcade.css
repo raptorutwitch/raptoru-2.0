@@ -1,219 +1,461 @@
-/* Mini-jeux (refonte 13/11, docs/mini-jeux/UX_UI_MINI_JEUX.md) — la famille de Tombola (rose → violet) tirée vers le
-   rouge-rose et le magenta : chaude, de jeu, jamais confondue avec le rose/violet de Tombola ni le violet du TTS.
+/* Mini-jeux V3 (14/11, docs/mini-jeux/UX_UI_MINI_JEUX.md § 0) — « salle d'arcade de nuit » : cramoisi et bordeaux
+   (jamais le rose → violet de Tombola ni le violet du TTS), lueurs de viseur, un vert de verrouillage réservé au Sniper.
    Chargé par la vue elle-même (shared/random-ban-view.js), dans les deux shells : --g vaut 1px en legacy (repli),
-   l'échelle du socle en v2. Un écran d'action : la scène du tirage au centre, le reste discret. */
+   l'échelle du socle en v2. Composition : la machine de tirage à gauche, les commandes du joueur à droite ; empilées
+   en largeur étroite. */
 
 .mg {
-  --mg-a: #ff4d6d;
-  --mg-b: #c026d3;
-  --mg-ink: #fff4f7;
-  --mg-dim: rgba(255, 236, 242, 0.62);
-  --mg-night: #170d1f;
-  --mg-glass: rgba(255, 255, 255, 0.06);
-  --mg-line: rgba(255, 255, 255, 0.12);
-  --mg-hit: #22e07a;
+  --mg-a: #ff2f55;
+  --mg-b: #9b1238;
+  --mg-hot: #ff5c7a;
+  --mg-ink: #fff3f5;
+  --mg-dim: rgba(255, 232, 238, 0.6);
+  --mg-faint: rgba(255, 232, 238, 0.36);
+  --mg-panel: rgba(255, 255, 255, 0.035);
+  --mg-line: rgba(255, 255, 255, 0.09);
+  --mg-lock: #2bff88;
+  --mg-amber: #ffc24d;
   --u: var(--g, 1px);
-  display: grid;
-  gap: calc(6 * var(--u));
+  height: 100%;
+  min-height: 0;
   color: var(--mg-ink);
   font-size: calc(13 * var(--u));
 }
 
-/* Le sélecteur de jeux : de petites tuiles, seulement s'il y a plus d'un jeu. */
-.mg__nav {
+/* --- Le catalogue ---------------------------------------------------------------------------------------------- */
+.mg__home {
+  display: grid;
+  align-content: start;
+  gap: calc(12 * var(--u));
+  padding: calc(6 * var(--u)) calc(2 * var(--u));
+}
+.mg__hero {
   display: flex;
-  gap: calc(6 * var(--u));
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.mg__tile {
-  display: inline-flex;
-  flex: none;
   align-items: center;
-  gap: calc(6 * var(--u));
-  padding: calc(5 * var(--u)) calc(10 * var(--u));
-  border: 1px solid var(--mg-line);
-  border-radius: 999px;
-  background: var(--mg-glass);
-  color: var(--mg-dim);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
+  gap: calc(10 * var(--u));
 }
-.mg__tile.is-on {
-  border-color: transparent;
-  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+.mg__hero b {
+  display: block;
+  font-size: calc(17 * var(--u));
+}
+.mg__hero small {
+  color: var(--mg-dim);
+}
+.mg__mark,
+.mg__ticon,
+.rb__logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: calc(10 * var(--u));
+  background:
+    radial-gradient(120% 90% at 30% 15%, rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(150deg, var(--mg-a), var(--mg-b));
+  box-shadow:
+    0 calc(4 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   color: #fff;
 }
+.mg__mark {
+  width: calc(38 * var(--u));
+  height: calc(38 * var(--u));
+}
+.mg__mark svg,
 .mg__ticon svg {
-  display: block;
-  width: calc(15 * var(--u));
-  height: calc(15 * var(--u));
+  width: 62%;
+  height: 62%;
+}
+.mg__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(240 * var(--u)), 1fr));
+  gap: calc(10 * var(--u));
+}
+.mg__tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  padding: calc(14 * var(--u));
+  overflow: hidden;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(18 * var(--u));
+  background:
+    radial-gradient(90% 140% at 0% 0%, rgba(255, 47, 85, 0.22), transparent 60%),
+    var(--mg-panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
+}
+.mg__tile:hover,
+.mg__tile:focus-visible {
+  border-color: rgba(255, 92, 122, 0.6);
+  transform: translateY(calc(-1 * var(--u)));
+}
+.mg__ticon {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
+  border-radius: calc(14 * var(--u));
+}
+.mg__tbody {
+  display: grid;
+  gap: calc(3 * var(--u));
+  min-width: 0;
+}
+.mg__tbody b {
+  font-size: calc(15 * var(--u));
+}
+.mg__tbody small {
+  color: var(--mg-dim);
+  line-height: 1.35;
+}
+.mg__tbody em {
+  color: var(--mg-hot);
+  font-size: calc(11.5 * var(--u));
+  font-style: normal;
+  font-weight: 700;
+}
+.mg__play {
+  padding: calc(7 * var(--u)) calc(14 * var(--u));
+  border-radius: 999px;
+  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  font-weight: 800;
 }
 
-/* --- Random Ban ---------------------------------------------------------------------------------------------------- */
+/* --- Random Ban : le cadre ------------------------------------------------------------------------------------- */
 .rb {
   position: relative;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr;
   gap: calc(8 * var(--u));
+  height: 100%;
   min-height: 0;
   container-type: inline-size;
 }
-
-.rb__head {
+.rb__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: calc(8 * var(--u));
+  min-height: calc(28 * var(--u));
+}
+.rb__back,
+.rb__info,
+.rb__all,
+.rb__x {
+  border: 1px solid var(--mg-line);
+  border-radius: 999px;
+  background: var(--mg-panel);
+  color: var(--mg-dim);
+  font: inherit;
+  font-size: calc(12 * var(--u));
+  font-weight: 700;
+  cursor: pointer;
+}
+.rb__back {
+  padding: calc(4 * var(--u)) calc(10 * var(--u)) calc(4 * var(--u)) calc(8 * var(--u));
+}
+.rb__back:hover,
+.rb__info:hover,
+.rb__all:hover {
+  border-color: rgba(255, 92, 122, 0.55);
+  color: var(--mg-ink);
 }
 .rb__title {
   display: inline-flex;
+  flex: 1;
   align-items: center;
-  gap: calc(7 * var(--u));
+  gap: calc(8 * var(--u));
+  min-width: 0;
   font-size: calc(15 * var(--u));
-  letter-spacing: 0.01em;
 }
-.rb__icon {
-  display: grid;
-  place-items: center;
+.rb__logo {
   width: calc(26 * var(--u));
   height: calc(26 * var(--u));
   border-radius: calc(8 * var(--u));
-  background: linear-gradient(140deg, var(--mg-a), var(--mg-b));
-  box-shadow: 0 calc(4 * var(--u)) calc(12 * var(--u)) rgba(255, 77, 109, 0.35);
 }
-.rb__icon svg {
-  width: calc(17 * var(--u));
-  height: calc(17 * var(--u));
+.rb__logo svg {
+  width: calc(19 * var(--u));
+  height: calc(19 * var(--u));
+}
+.rb__info {
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  padding: 0;
 }
 
-/* Le prix : lisible mais discret ; l'anneau dit la récupération du palier (absent au tarif normal). */
-.rb__price {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: calc(6 * var(--u));
-  padding: calc(3 * var(--u)) calc(10 * var(--u)) calc(3 * var(--u)) calc(4 * var(--u));
+.rb__body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: calc(10 * var(--u));
+  min-height: 0;
+}
+.rb__left,
+.rb__right {
+  min-width: 0;
+  min-height: 0;
+}
+.rb__right {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--u));
+}
+
+/* --- La machine de tirage -------------------------------------------------------------------------------------- */
+.rbm {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: calc(8 * var(--u));
+  height: 100%;
+  padding: calc(8 * var(--u));
   border: 1px solid var(--mg-line);
-  border-radius: 999px;
-  background: var(--mg-glass);
-  font-variant-numeric: tabular-nums;
-  outline-offset: 2px;
+  border-radius: calc(18 * var(--u));
+  background: var(--mg-panel);
 }
-.rb__price strong {
-  font-size: calc(15 * var(--u));
-}
-.rb__price small {
-  color: #ffd2dc;
-  font-size: calc(11 * var(--u));
-  font-weight: 700;
-}
-.rb__ring {
-  position: absolute;
-  left: calc(1 * var(--u));
-  width: calc(28 * var(--u));
-  height: calc(28 * var(--u));
-  transform: rotate(-90deg);
-}
-.rb__ring circle {
-  fill: none;
-  stroke-width: 3;
-}
-.rb__ring-bg {
-  stroke: transparent;
-}
-.rb.is-series .rb__ring-bg {
-  stroke: rgba(255, 255, 255, 0.12);
-}
-.rb__ring-fg {
-  stroke: var(--mg-a);
-  stroke-linecap: round;
-  transition: stroke-dasharray 0.9s linear;
-}
-.rb__coin {
+.rbm__frame {
   position: relative;
-  width: calc(22 * var(--u));
-  height: calc(22 * var(--u));
-  margin: calc(2 * var(--u));
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffe9a8, #f5b82e 55%, #b7791f);
-  box-shadow: inset 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.25);
-}
-.rb.is-series .rb__price {
-  border-color: rgba(255, 77, 109, 0.5);
-}
-
-/* La scène : la bande de portraits, la mire au centre, le résultat par-dessus. */
-.rb__stage {
-  --cell: calc(76 * var(--u));
-  --face: calc(54 * var(--u));
-  position: relative;
-  min-height: calc(140 * var(--u));
+  display: grid;
+  place-items: center;
+  min-height: calc(150 * var(--u));
   overflow: hidden;
-  border: 1px solid var(--mg-line);
-  border-radius: calc(16 * var(--u));
+  border: 1px solid rgba(255, 92, 122, 0.25);
+  border-radius: calc(14 * var(--u));
   background:
-    radial-gradient(70% 120% at 50% 50%, rgba(255, 77, 109, 0.16), transparent 70%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.18)),
-    var(--mg-night);
+    radial-gradient(55% 55% at 50% 45%, rgba(255, 47, 85, 0.22), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px),
+    #12080f;
   isolation: isolate;
 }
-.rb__stage::before,
-.rb__stage::after {
+.rbm__scope,
+.rbm__lock {
   position: absolute;
-  z-index: 2;
-  top: 0;
-  bottom: 0;
-  width: 18%;
-  content: '';
+  top: 44%;
+  left: 50%;
+  width: min(84%, calc(100% * 0.84));
+  aspect-ratio: 1;
+  max-height: 88%;
+  translate: -50% -50%;
   pointer-events: none;
 }
-.rb__stage::before {
+.rbm__scope circle,
+.rbm__scope line,
+.rbm__scope path {
+  fill: none;
+  stroke: rgba(255, 92, 122, 0.55);
+  stroke-width: 1.4;
+}
+.rbm__r2 {
+  stroke-dasharray: 3 2;
+  opacity: 0.6;
+}
+.rbm__ticks line {
+  stroke-width: 2;
+}
+.rbm[data-mode='idle'] .rbm__scope {
+  animation: rbm-turn 24s linear infinite;
+}
+.rbm[data-mode='spin'] .rbm__scope,
+.rbm[data-mode='reel'] .rbm__scope {
+  animation: rbm-turn 2.4s linear infinite;
+}
+.rbm.is-locked .rbm__scope circle {
+  stroke: rgba(255, 92, 122, 0.9);
+}
+@keyframes rbm-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+.rbm__lock path {
+  fill: none;
+  stroke: var(--mg-hot);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+.rbm.is-locked .rbm__lock path {
+  opacity: 0.9;
+  animation: rbm-snap 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes rbm-snap {
+  from {
+    opacity: 0;
+    scale: 1.35;
+  }
+}
+
+.rbm__portrait {
+  position: absolute;
+  top: 44%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 46%;
+  max-width: calc(128 * var(--u));
+  aspect-ratio: 1;
+  translate: -50% -50%;
+}
+.rbm__q {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: calc(2 * var(--u)) dashed rgba(255, 92, 122, 0.45);
+  border-radius: 50%;
+  color: rgba(255, 92, 122, 0.85);
+  font-size: calc(40 * var(--u));
+  font-weight: 900;
+}
+.rbm__name {
+  position: absolute;
+  bottom: calc(30 * var(--u));
   left: 0;
-  background: linear-gradient(90deg, var(--mg-night), transparent);
-}
-.rb__stage::after {
   right: 0;
-  background: linear-gradient(270deg, var(--mg-night), transparent);
+  overflow: hidden;
+  padding: 0 calc(8 * var(--u));
+  font-size: calc(16 * var(--u));
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
 }
-.rb__track {
+.rbm__status {
+  position: absolute;
+  bottom: calc(7 * var(--u));
+  left: 50%;
+  max-width: calc(100% - 12 * var(--u));
+  overflow: hidden;
+  padding: calc(2 * var(--u)) calc(10 * var(--u));
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  font-weight: 800;
+  text-overflow: ellipsis;
+  translate: -50% 0;
+  white-space: nowrap;
+}
+.rbm__status:empty {
+  display: none;
+}
+.rbm__status[data-tone='wait'] {
+  color: var(--mg-amber);
+  animation: rbm-blink 1s ease-in-out infinite;
+}
+.rbm__status[data-tone='ok'] {
+  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  color: #fff;
+}
+@keyframes rbm-blink {
+  50% {
+    opacity: 0.55;
+  }
+}
+.rbm__badge {
+  position: absolute;
+  top: calc(7 * var(--u));
+  left: 50%;
+  padding: calc(2 * var(--u)) calc(9 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mg-dim);
+  font-size: calc(11 * var(--u));
+  font-weight: 900;
+  translate: -50% 0;
+  white-space: nowrap;
+}
+.rbm__badge[data-tone='hit'] {
+  background: var(--mg-lock);
+  color: #04210f;
+  box-shadow: 0 0 calc(16 * var(--u)) rgba(43, 255, 136, 0.6);
+}
+
+/* Le Sniper réussi : le viseur passe au vert et se referme sur le portrait — une fois. */
+.rbm.is-sniped .rbm__frame {
+  border-color: var(--mg-lock);
+  background:
+    radial-gradient(55% 55% at 50% 45%, rgba(43, 255, 136, 0.28), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 4px),
+    #06140c;
+  box-shadow: 0 0 calc(24 * var(--u)) rgba(43, 255, 136, 0.35);
+}
+.rbm.is-sniped .rbm__scope circle,
+.rbm.is-sniped .rbm__scope line,
+.rbm.is-sniped .rbm__scope path {
+  stroke: var(--mg-lock);
+}
+.rbm.is-sniped .rbm__lock path {
+  stroke: var(--mg-lock);
+  animation: rbm-close 0.8s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+.rbm.is-sniped .rb-face--main {
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) var(--mg-lock),
+    0 0 calc(30 * var(--u)) var(--mg-lock);
+}
+@keyframes rbm-close {
+  0% {
+    opacity: 0;
+    scale: 1.9;
+    rotate: 45deg;
+  }
+  70% {
+    opacity: 1;
+    scale: 0.94;
+    rotate: 0deg;
+  }
+}
+
+/* Les vignettes : la bande des viewers sous le viseur. */
+.rbm__strip {
+  position: relative;
+  height: calc(40 * var(--u));
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+}
+.rbm__track {
   position: absolute;
   top: 50%;
   left: 0;
   display: flex;
+  gap: calc(6 * var(--u));
   translate: 0 -50%;
-  will-change: transform;
 }
-.rb__cell {
-  display: grid;
+.rbm__thumb {
   flex: none;
-  justify-items: center;
-  gap: calc(5 * var(--u));
-  width: var(--cell);
+  opacity: 0.5;
+  transition:
+    opacity 0.15s,
+    scale 0.15s;
 }
-.rb__cell b {
-  max-width: calc(var(--cell) - 8 * var(--u));
-  overflow: hidden;
-  color: var(--mg-dim);
-  font-size: calc(10.5 * var(--u));
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.rbm__thumb.is-on {
+  opacity: 1;
+  scale: 1.18;
 }
+.rbm__thumb.is-on .rb-face {
+  box-shadow: 0 0 0 calc(2 * var(--u)) var(--mg-hot);
+}
+
+/* Les portraits. */
 .rb-face {
   position: relative;
   display: grid;
   flex: none;
   place-items: center;
-  width: var(--face, calc(54 * var(--u)));
-  height: var(--face, calc(54 * var(--u)));
+  width: var(--face, calc(30 * var(--u)));
+  height: var(--face, calc(30 * var(--u)));
   overflow: hidden;
   border-radius: 50%;
-  background: hsl(var(--h) 55% 46%);
-  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.14);
+  background: hsl(var(--h) 50% 42%);
+  box-shadow: 0 0 0 calc(1.5 * var(--u)) rgba(255, 255, 255, 0.14);
   color: #fff;
-  font-size: calc(var(--face, calc(54 * var(--u))) * 0.36);
+  font-size: calc(var(--face, calc(30 * var(--u))) * 0.38);
   font-weight: 800;
 }
 .rb-face i {
@@ -226,207 +468,148 @@
   height: 100%;
   object-fit: cover;
 }
+.rb-face--thumb {
+  --face: calc(28 * var(--u));
+}
 .rb-face--xs {
   --face: calc(22 * var(--u));
 }
-.rb-face--big {
-  --face: calc(72 * var(--u));
+.rb-face--main {
+  --face: 100%;
+  font-size: calc(36 * var(--u));
   box-shadow:
-    0 0 0 calc(3 * var(--u)) #fff,
-    0 0 calc(24 * var(--u)) rgba(255, 77, 109, 0.7);
+    0 0 0 calc(3 * var(--u)) rgba(255, 255, 255, 0.9),
+    0 0 calc(22 * var(--u)) rgba(255, 47, 85, 0.6);
 }
 
-/* Au repos : les viewers éligibles défilent doucement, en retrait. Pendant le tirage : plus vite. */
-.rb[data-stage='idle'] .rb__track,
-.rb[data-stage='spin'] .rb__track {
-  animation: rb-drift 38s linear infinite;
-  opacity: 0.45;
-}
-.rb[data-stage='spin'] .rb__track {
-  animation-duration: 2.4s;
-  opacity: 0.85;
-  filter: blur(0.6px);
-}
-@keyframes rb-drift {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-.rb__cell.is-target .rb-face {
-  box-shadow:
-    0 0 0 calc(3 * var(--u)) #fff,
-    0 0 calc(22 * var(--u)) var(--mg-a);
-  scale: 1.12;
-  transition: scale 0.25s;
-}
-.rb__cell.is-target b {
-  color: #fff;
-}
-
-/* La mire : un cadre fin au centre (il dit « ici s'arrête le tirage »). */
-.rb__sight {
-  position: absolute;
-  z-index: 3;
-  top: 50%;
-  left: 50%;
-  width: calc(var(--face) + 14 * var(--u));
-  height: calc(var(--face) + 14 * var(--u));
-  margin-top: calc(-9 * var(--u));
-  border: calc(2 * var(--u)) solid rgba(255, 255, 255, 0.0);
-  border-radius: 50%;
-  translate: -50% -50%;
-  pointer-events: none;
-}
-.rb[data-stage='reel'] .rb__sight,
-.rb[data-stage='spin'] .rb__sight {
-  border-color: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 0 calc(14 * var(--u)) rgba(255, 77, 109, 0.8);
-}
-.rb__sight i {
-  position: absolute;
-  inset: -40%;
-  background:
-    linear-gradient(var(--mg-a), var(--mg-a)) 50% 0 / 2px 26% no-repeat,
-    linear-gradient(var(--mg-a), var(--mg-a)) 50% 100% / 2px 26% no-repeat;
-  opacity: 0;
-}
-.rb[data-stage='reel'] .rb__sight i {
-  opacity: 0.9;
-}
-
-/* Le résultat : une carte au-dessus de la scène, le portrait tiré et ce qui s'est passé. */
-.rb__card {
-  position: absolute;
-  z-index: 4;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: calc(14 * var(--u));
-  padding: calc(10 * var(--u)) calc(16 * var(--u));
-  background:
-    radial-gradient(60% 120% at 50% 50%, rgba(255, 77, 109, 0.14), transparent 70%),
-    rgba(23, 13, 31, 0.94);
-  animation: rb-in 0.28s ease-out;
-}
-.rb__card[hidden] {
-  display: none;
-}
-.rb__cardtxt {
+/* --- La jauge de prix ------------------------------------------------------------------------------------------ */
+.rbg {
   display: grid;
-  gap: calc(3 * var(--u));
-  min-width: 0;
+  gap: calc(6 * var(--u));
+  padding: calc(9 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(14 * var(--u));
+  background: var(--mg-panel);
 }
-.rb__cardtxt b {
-  overflow: hidden;
-  font-size: calc(20 * var(--u));
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rb__cardtxt span {
-  font-size: calc(13 * var(--u));
-  font-weight: 700;
-}
-.rb__card[data-tone='ok'] .rb__cardtxt span {
-  color: #ffb3c1;
-}
-.rb__card[data-tone='bad'] .rb__cardtxt span,
-.rb__card[data-tone='info'] .rb__cardtxt span {
-  color: var(--mg-dim);
-}
-.rb__sn {
-  justify-self: start;
-  padding: calc(2 * var(--u)) calc(8 * var(--u));
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--mg-dim);
-  font-size: calc(11.5 * var(--u));
-  font-style: normal;
-  font-weight: 800;
-}
-.rb__sn.is-hit {
-  background: var(--mg-hit);
-  color: #062b16;
-}
-@keyframes rb-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-}
-
-/* Sniper réussi : la scène passe au vert, un réticule se referme sur le portrait — une fois. */
-.rb.is-sniped .rb__stage {
-  border-color: var(--mg-hit);
-  box-shadow:
-    0 0 0 1px var(--mg-hit),
-    0 0 calc(30 * var(--u)) rgba(34, 224, 122, 0.45);
-}
-.rb.is-sniped .rb__card {
-  background:
-    radial-gradient(60% 120% at 50% 50%, rgba(34, 224, 122, 0.22), transparent 70%),
-    rgba(8, 28, 18, 0.95);
-}
-.rb.is-sniped .rb-face--big {
-  box-shadow:
-    0 0 0 calc(3 * var(--u)) var(--mg-hit),
-    0 0 calc(28 * var(--u)) var(--mg-hit);
-  animation: rb-lock 0.7s cubic-bezier(0.2, 1.4, 0.4, 1);
-}
-@keyframes rb-lock {
-  from {
-    outline: calc(3 * var(--u)) solid var(--mg-hit);
-    outline-offset: calc(26 * var(--u));
-  }
-  to {
-    outline: calc(3 * var(--u)) solid transparent;
-    outline-offset: 0;
-  }
-}
-
-.rb__empty {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  margin: 0;
-  place-items: center;
-  color: var(--mg-dim);
-  text-align: center;
-}
-
-/* La barre d'action : le Sniper (facultatif) et le bouton, côte à côte. */
-.rb__bar {
+.rbg__top {
   display: flex;
-  align-items: stretch;
+  align-items: baseline;
+  justify-content: space-between;
   gap: calc(8 * var(--u));
 }
+.rbg__label {
+  color: var(--mg-faint);
+  font-size: calc(10.5 * var(--u));
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rbg__price {
+  font-size: calc(17 * var(--u));
+  font-variant-numeric: tabular-nums;
+}
+.rbg__price::after {
+  margin-left: calc(4 * var(--u));
+  color: var(--mg-faint);
+  font-size: calc(11 * var(--u));
+  font-weight: 700;
+  content: 'Jetons';
+}
+.rbg.is-up .rbg__price {
+  color: var(--mg-hot);
+}
+.rbg__bar {
+  position: relative;
+  height: calc(8 * var(--u));
+  margin: calc(2 * var(--u)) calc(8 * var(--u)) calc(16 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.rbg__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffb347, var(--mg-a) 55%, var(--mg-b));
+  box-shadow: 0 0 calc(10 * var(--u)) rgba(255, 47, 85, 0.45);
+  transform-origin: 0 50%;
+  transition: transform 0.26s linear;
+}
+.rbg__marks {
+  position: absolute;
+  inset: 0;
+}
+.rbg__mark {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at) * 100%);
+  display: grid;
+  justify-items: center;
+  translate: -50% -50%;
+}
+.rbg__mark i {
+  width: calc(10 * var(--u));
+  height: calc(10 * var(--u));
+  border: calc(2 * var(--u)) solid #1b0d16;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+}
+.rbg__mark b {
+  position: absolute;
+  top: calc(13 * var(--u));
+  color: var(--mg-faint);
+  font-size: calc(9.5 * var(--u));
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rbg__mark.is-on i {
+  scale: 1.35;
+  background: #fff;
+  box-shadow: 0 0 0 calc(2 * var(--u)) var(--mg-a);
+}
+.rbg__mark.is-on b {
+  color: var(--mg-ink);
+}
+.rbg__next {
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Le Sniper ------------------------------------------------------------------------------------------------- */
 .rb__sniper {
   position: relative;
   display: flex;
-  flex: 1;
   align-items: center;
-  min-width: 0;
+  min-height: calc(36 * var(--u));
   border: 1px solid var(--mg-line);
   border-radius: calc(12 * var(--u));
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.22);
 }
 .rb__sniper:focus-within {
-  border-color: rgba(255, 77, 109, 0.7);
+  border-color: rgba(255, 92, 122, 0.6);
 }
 .rb.has-pick .rb__sniper {
-  border-color: rgba(34, 224, 122, 0.6);
+  border-color: rgba(43, 255, 136, 0.55);
 }
 .rb__scope {
-  padding-left: calc(9 * var(--u));
-  font-size: calc(14 * var(--u));
+  display: grid;
+  padding-left: calc(10 * var(--u));
+  color: var(--mg-faint);
+}
+.rb__scope svg {
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+}
+.rb.has-pick .rb__scope {
+  color: var(--mg-lock);
+}
+.rb.has-wish .rb__scope {
+  color: var(--mg-amber);
 }
 .rb__input {
   flex: 1;
   min-width: 0;
-  padding: calc(9 * var(--u)) calc(8 * var(--u));
+  padding: calc(8 * var(--u));
   border: 0;
   background: transparent;
   color: var(--mg-ink);
@@ -434,135 +617,225 @@
   outline: none;
 }
 .rb__input::placeholder {
-  color: rgba(255, 236, 242, 0.42);
+  color: var(--mg-faint);
 }
 .rb__picked {
   display: inline-flex;
   align-items: center;
   gap: calc(4 * var(--u));
-  color: var(--mg-hit);
+  color: var(--mg-lock);
   font-weight: 900;
 }
 .rb__clear,
 .rb__x {
-  padding: 0 calc(9 * var(--u));
+  min-width: calc(26 * var(--u));
+  min-height: calc(26 * var(--u));
+  padding: 0 calc(8 * var(--u));
   border: 0;
   background: none;
   color: var(--mg-dim);
-  font-size: calc(18 * var(--u));
+  font-size: calc(17 * var(--u));
   line-height: 1;
   cursor: pointer;
 }
 .rb__sugg {
   position: absolute;
   z-index: 6;
+  top: calc(100% + 4 * var(--u));
   right: 0;
-  bottom: calc(100% + 4 * var(--u));
   left: 0;
-  max-height: calc(180 * var(--u));
+  max-height: calc(170 * var(--u));
   margin: 0;
   padding: calc(4 * var(--u));
   overflow-y: auto;
   border: 1px solid var(--mg-line);
   border-radius: calc(12 * var(--u));
-  background: #24142f;
-  box-shadow: 0 calc(-8 * var(--u)) calc(24 * var(--u)) rgba(0, 0, 0, 0.5);
+  background: #1f0e18;
+  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(0, 0, 0, 0.55);
   list-style: none;
 }
 .rb__sugg li {
   display: flex;
   align-items: center;
   gap: calc(8 * var(--u));
-  padding: calc(5 * var(--u)) calc(7 * var(--u));
+  min-height: calc(28 * var(--u));
+  padding: calc(3 * var(--u)) calc(7 * var(--u));
   border-radius: calc(8 * var(--u));
   cursor: pointer;
 }
 .rb__sugg li.is-on,
 .rb__sugg li:hover {
-  background: rgba(255, 77, 109, 0.18);
+  background: rgba(255, 47, 85, 0.18);
 }
 .rb__sugg small {
   color: var(--mg-dim);
 }
 .rb__sugg em {
   margin-left: auto;
-  color: var(--mg-hit);
-  font-size: calc(10.5 * var(--u));
+  color: var(--mg-lock);
+  font-size: calc(10 * var(--u));
   font-style: normal;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
 }
 
+/* --- Lancer ---------------------------------------------------------------------------------------------------- */
 .rb__go {
-  flex: none;
-  min-width: calc(128 * var(--u));
-  padding: calc(9 * var(--u)) calc(16 * var(--u));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8 * var(--u));
+  min-height: calc(40 * var(--u));
+  padding: calc(8 * var(--u)) calc(14 * var(--u));
   border: 0;
   border-radius: calc(12 * var(--u));
-  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
-  box-shadow: 0 calc(6 * var(--u)) calc(16 * var(--u)) rgba(255, 77, 109, 0.3);
+  background:
+    radial-gradient(120% 120% at 20% 0%, rgba(255, 255, 255, 0.28), transparent 50%),
+    linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  box-shadow:
+    0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(255, 47, 85, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   color: #fff;
   font: inherit;
-  font-size: calc(14 * var(--u));
-  font-weight: 800;
+  font-size: calc(14.5 * var(--u));
+  font-weight: 900;
+  letter-spacing: 0.02em;
   cursor: pointer;
+  transition:
+    transform 0.12s,
+    box-shadow 0.2s;
+}
+.rb__go:hover:not(:disabled) {
+  transform: translateY(calc(-1 * var(--u)));
+}
+.rb__go:active:not(:disabled) {
+  transform: translateY(calc(1 * var(--u)));
 }
 .rb__go span {
-  margin-left: calc(4 * var(--u));
-  padding: calc(1 * var(--u)) calc(7 * var(--u));
+  padding: calc(1 * var(--u)) calc(8 * var(--u));
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.25);
   font-variant-numeric: tabular-nums;
 }
 .rb__go.is-armed {
   background: #fff;
-  color: #b0103b;
-  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(255, 77, 109, 0.5);
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) rgba(255, 47, 85, 0.55),
+    0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(255, 47, 85, 0.35);
+  color: #a3102f;
+  animation: rb-armed 1s ease-in-out infinite;
 }
 .rb__go.is-armed span {
-  background: rgba(176, 16, 59, 0.12);
+  background: rgba(163, 16, 47, 0.1);
+}
+@keyframes rb-armed {
+  50% {
+    box-shadow:
+      0 0 0 calc(5 * var(--u)) rgba(255, 47, 85, 0.3),
+      0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(255, 47, 85, 0.35);
+  }
 }
 .rb__go:disabled {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
   box-shadow: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.38);
   cursor: default;
 }
-
-.rb__foot {
-  display: flex;
-  align-items: center;
-  gap: calc(8 * var(--u));
-  min-height: calc(20 * var(--u));
-}
 .rb__msg {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
+  min-height: calc(16 * var(--u));
+  margin: calc(-2 * var(--u)) 0 0;
   overflow: hidden;
   color: var(--mg-dim);
-  font-size: calc(12 * var(--u));
+  font-size: calc(11.5 * var(--u));
+  line-height: 1.35;
+}
+.rb__msg:empty {
+  display: none;
+}
+.rb__up {
+  color: var(--mg-hot);
+}
+
+/* --- Les derniers tirages -------------------------------------------------------------------------------------- */
+.rb__recent {
+  display: grid;
+  flex: 1;
+  grid-template-rows: auto 1fr;
+  gap: calc(4 * var(--u));
+  min-height: 0;
+  padding: calc(8 * var(--u)) calc(10 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(14 * var(--u));
+  background: var(--mg-panel);
+}
+.rb__recent header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rb__recent header b {
+  color: var(--mg-faint);
+  font-size: calc(10.5 * var(--u));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rb__all {
+  padding: calc(2 * var(--u)) calc(9 * var(--u));
+  font-size: calc(11 * var(--u));
+}
+.rb__recent ul {
+  display: grid;
+  align-content: start;
+  gap: calc(2 * var(--u));
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+.rb__recent li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  min-height: calc(28 * var(--u));
+}
+.rb__rl {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+.rb__rl b,
+.rb__rl small {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rb__up {
-  color: #ffb3c1;
+.rb__rl small {
+  color: var(--mg-faint);
+  font-size: calc(10.5 * var(--u));
 }
-.rb__histbtn {
-  flex: none;
-  padding: calc(3 * var(--u)) calc(9 * var(--u));
-  border: 1px solid var(--mg-line);
-  border-radius: 999px;
-  background: none;
-  color: var(--mg-dim);
-  font: inherit;
+.rb__rr {
+  color: var(--mg-hot);
   font-size: calc(11.5 * var(--u));
-  font-weight: 700;
-  cursor: pointer;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rb__recent li[data-tone='bad'] .rb__rr,
+.rb__recent li[data-tone='info'] .rb__rr {
+  color: var(--mg-faint);
+}
+.rb__hitdot {
+  margin-right: calc(4 * var(--u));
+  color: var(--mg-lock);
+  font-style: normal;
+}
+.rb__none {
+  color: var(--mg-faint);
 }
 
-/* L'historique : un panneau secondaire, par-dessus le jeu. */
-.rb__hist {
+/* --- Les feuilles (historique complet, règles) ----------------------------------------------------------------- */
+.rb__sheet {
   position: absolute;
   z-index: 8;
   inset: 0;
@@ -570,21 +843,28 @@
   grid-template-rows: auto 1fr;
   border: 1px solid var(--mg-line);
   border-radius: calc(16 * var(--u));
-  background: rgba(23, 13, 31, 0.97);
-  animation: rb-in 0.2s ease-out;
+  background: rgba(20, 9, 16, 0.98);
+  animation: rb-in 0.18s ease-out;
 }
-.rb__hist[hidden] {
+.rb__sheet[hidden] {
   display: none;
 }
-.rb__histhead {
+@keyframes rb-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(6 * var(--u)));
+  }
+}
+.rb__sheethead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: calc(8 * var(--u)) calc(6 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u));
+  padding: calc(8 * var(--u)) calc(6 * var(--u)) calc(4 * var(--u)) calc(14 * var(--u));
 }
-.rb__histlist {
+.rb__histlist,
+.rb__rules {
   margin: 0;
-  padding: 0 calc(8 * var(--u)) calc(8 * var(--u));
+  padding: 0 calc(10 * var(--u)) calc(10 * var(--u));
   overflow-y: auto;
   list-style: none;
 }
@@ -604,8 +884,8 @@
   white-space: nowrap;
 }
 .rb__hres {
-  color: #ffb3c1;
-  font-weight: 700;
+  color: var(--mg-hot);
+  font-weight: 800;
   text-align: right;
 }
 .rb__histlist li[data-tone='bad'] .rb__hres,
@@ -617,70 +897,128 @@
   color: var(--mg-dim);
   font-size: calc(11 * var(--u));
 }
-.rb__hnone {
+.rb__rules li {
+  position: relative;
+  margin: 0 0 calc(8 * var(--u));
+  padding-left: calc(16 * var(--u));
   color: var(--mg-dim);
-  text-align: center;
+  line-height: 1.4;
 }
-
-.rb__sr {
+.rb__rules li::before {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  top: 0.45em;
+  left: 0;
+  width: calc(7 * var(--u));
+  height: calc(7 * var(--u));
+  border-radius: 50%;
+  background: var(--mg-a);
+  content: '';
 }
 
-/* Faible largeur (panneau, mobile) : le Sniper au-dessus du bouton. */
-@container (max-width: 420px) {
-  .rb__bar {
-    flex-direction: column;
+/* --- Étroit (panneau, mobile) : la machine au-dessus, les commandes dessous. ------------------------------------- */
+@container (max-width: 400px) {
+  .rb__body {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    overflow-y: auto;
   }
-  .rb__go {
-    min-width: 0;
+  .rb__body {
+    align-content: start;
   }
-  .rb__stage {
-    --cell: calc(62 * var(--u));
-    --face: calc(44 * var(--u));
-    min-height: calc(104 * var(--u));
+  .rb__left,
+  .rb__right {
+    min-height: auto;
   }
-  .rb__cardtxt b {
-    font-size: calc(17 * var(--u));
+  .rbm {
+    height: auto;
   }
-}
-
-/* Faible hauteur (lecteur réduit) : une scène plus basse, sans les noms sous les portraits. */
-@media (max-height: 360px) {
-  .rb {
-    gap: calc(6 * var(--u));
+  .rbm__frame {
+    min-height: calc(168 * var(--u));
   }
-  .rb__stage {
-    --cell: calc(56 * var(--u));
-    --face: calc(40 * var(--u));
-    min-height: calc(76 * var(--u));
+  .rbm__portrait,
+  .rbm__scope,
+  .rbm__lock {
+    top: 40%;
   }
-  .rb__cell b {
+  .rbm__portrait {
+    width: calc(80 * var(--u));
+  }
+  .rbm__name {
+    bottom: calc(28 * var(--u));
+    font-size: calc(14 * var(--u));
+  }
+  .rb__recent {
+    flex: none;
+  }
+  .rb__recent li:nth-child(n + 3) {
     display: none;
   }
-  .rb__sight {
-    margin-top: 0;
+}
+
+/* --- Bas (lecteur réduit) : une machine plus basse, l'historique en deux lignes. --------------------------------- */
+@media (max-height: 360px) {
+  .rb {
+    gap: calc(5 * var(--u));
   }
-  .rb-face--big {
-    --face: calc(50 * var(--u));
+  .rb__bar {
+    min-height: calc(24 * var(--u));
   }
-  .rb__input,
+  .rbm {
+    gap: calc(4 * var(--u));
+    padding: calc(5 * var(--u));
+  }
+  .rbm__frame {
+    min-height: calc(110 * var(--u));
+  }
+  .rbm__strip {
+    height: calc(32 * var(--u));
+  }
+  .rb-face--thumb {
+    --face: calc(22 * var(--u));
+  }
+  .rbm__name {
+    bottom: calc(24 * var(--u));
+    font-size: calc(13 * var(--u));
+  }
+  .rbm__portrait {
+    top: 40%;
+    max-width: calc(72 * var(--u));
+  }
+  .rbm__scope,
+  .rbm__lock {
+    top: 40%;
+  }
+  .rbg {
+    gap: calc(3 * var(--u));
+    padding: calc(6 * var(--u)) calc(10 * var(--u));
+  }
+  .rbg__bar {
+    margin-bottom: calc(4 * var(--u));
+  }
+  .rbg__mark b {
+    display: none;
+  }
+  .rb__right {
+    gap: calc(5 * var(--u));
+  }
   .rb__go {
-    padding-top: calc(7 * var(--u));
-    padding-bottom: calc(7 * var(--u));
+    min-height: calc(34 * var(--u));
+  }
+  .rb__recent li:nth-child(n + 2) {
+    display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rb[data-stage='idle'] .rb__track,
-  .rb[data-stage='spin'] .rb__track {
-    animation: none;
+  .rbm__scope,
+  .rbm__status,
+  .rb__go.is-armed,
+  .rbm.is-locked .rbm__lock path,
+  .rbm.is-sniped .rbm__lock path {
+    animation: none !important;
   }
-  .rb__card,
-  .rb.is-sniped .rb-face--big {
-    animation: none;
+  .rbg__fill,
+  .rbm__track {
+    transition: none !important;
   }
 }
