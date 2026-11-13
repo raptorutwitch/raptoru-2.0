@@ -4,6 +4,7 @@
 garde les **constats** (ce qui existe, ce que permet Twitch, les risques) ; les règles en vigueur sont dans la
 [SPEC](SPEC_RANDOM_BAN_V2.md), l'avancement dans le [PLAN](PLAN_IMPLEMENTATION.md). Les « Aucun code modifié » ci-dessous
 valent pour la phase d'audit ; le développement a commencé ensuite dans le même worktree.
+
 - Worktree `Raptoru 2.0 - Worktrees\mini-jeux-random-ban`, branche locale `audit/mini-jeux-random-ban`, partie
   d'`origin/main` `c1632825`.
 - Le `main` local du checkout principal a **547 commits de retard** : il n'a pas servi.
@@ -11,6 +12,7 @@ valent pour la phase d'audit ; le développement a commencé ensuite dans le mê
 - Le site a été lu dans le worktree `raptoru-fr-refonte` (`e33d697`).
 
 **Légende :**
+
 - **[code]** : lu dans le code ;
 - **[test]** : couvert par un test automatisé ;
 - **[réel]** : validé en réel par Antoni, avec une trace écrite ;
@@ -27,6 +29,7 @@ valent pour la phase d'audit ; le développement a commencé ensuite dans le mê
    La file, le tirage, le timeout, le remboursement, l'animation et l'historique existent.
    - **Ce qui manque :** l'achat depuis l'extension, la cible souhaitée (Sniper), une animation de tirage, l'anti-rafale,
      les actions de modération (annuler, rembourser, bloquer pour ce module) et les statistiques Sniper.
+
 2. **Le tirage n'est pas fait par le Core, mais par l'exécuteur du bot** (`apps/twitch-bot/src/random-ban-executor.ts`).
    - Il lit les chatters, mélange au hasard cryptographique, puis prend le premier qui suit la chaîne.
    - Le Core enregistre la cible **avant** l'envoi du timeout, et tire lui-même le streamer (2 %).
@@ -64,22 +67,22 @@ valent pour la phase d'audit ; le développement a commencé ensuite dans le mê
 
 ## 1. Random Ban : ce qui existe
 
-| Élément | Où | État |
-| --- | --- | --- |
-| Règles fixes (durées, raisons, délais, poids de l'acheteur, streamer, animations) | `packages/schemas/src/random-ban.ts` | [code] |
-| Service : file, verrou par chaîne, états, cible, résultat, remboursement dû, animation, mute du streamer | `apps/core-api/src/random-ban/service.ts` (1 162 lignes), table `rb_requests` | [code] [test] (6 fichiers de tests Core, dont 3 sur un vrai PostgreSQL) |
-| `!rb` : débit et demande dans **une** transaction, rejeu sans 2ᵉ débit, refus avant débit, remboursement automatique une fois, rattrapage toutes les 15 s | `apps/core-api/src/chat-interactions/random-ban-chat.ts` | [code] [test] |
-| Points de chaîne « Ban aléatoire » (3 000 points) → même demande | `channel-points/service.ts` | [code] [test] ; validé en réel le 18/10 pour la V2 [réel] |
-| Prix de `!rb` réglable (1 000 à 1 000 000, défaut 25 000) | `module-settings/service.ts` (`random_ban.price`) | [code] |
-| Exécuteur Twitch (recherche, timeout unique, reprise après redémarrage par journal local) | `apps/twitch-bot/src/random-ban-executor.ts` | [code] [test] (600 lignes) |
-| Animation sur le lecteur d'effets de Studio (9 variantes + CSC + flop) | `apps/studio/server/src/random-ban/runtime.ts`, `effects-player/player.js` | [code] [test] |
-| Studio › Sanctions › Random Ban : règles, verrous, essais sans sanction, essais réels, suivi des demandes, fiche acheteur / cible | `apps/studio/web/src/pages/sanctions-random-ban.ts` | [code] |
-| Mute du streamer (2 %), Caution du mute, micro partagé | `service.ts`, `caution/`, `channel-points/mute-holds.ts` | V3 livrée le 27/10, **non validée en réel** (`RANDOM_BAN_V2.md`) |
-| Défis : `random_ban_sent`, `random_ban_landed`, `random_ban_received` | `challenges/metrics.ts` | [code] ; aucun défi créé |
-| Statistiques par viewer : `sent / landed / backfired / flops / received` | `module-stats/service.ts`, site `api/modules.js`, `public/app/profile.js` | [code] ; visibles par le viewer seul |
-| Historique SAMMI (avant le 20/10) | site `lib/random-ban-stats.js` | lu par le site, séparé |
-| Supervision du Centre de contrôle | `modules/status-adapters.ts` (`randomBanModule`) | [code] |
-| Dock OBS : demandes Random Ban dans le fil | `dock/service.ts` | [code] |
+| Élément                                                                                                                                                   | Où                                                                            | État                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Règles fixes (durées, raisons, délais, poids de l'acheteur, streamer, animations)                                                                         | `packages/schemas/src/random-ban.ts`                                          | [code]                                                                  |
+| Service : file, verrou par chaîne, états, cible, résultat, remboursement dû, animation, mute du streamer                                                  | `apps/core-api/src/random-ban/service.ts` (1 162 lignes), table `rb_requests` | [code] [test] (6 fichiers de tests Core, dont 3 sur un vrai PostgreSQL) |
+| `!rb` : débit et demande dans **une** transaction, rejeu sans 2ᵉ débit, refus avant débit, remboursement automatique une fois, rattrapage toutes les 15 s | `apps/core-api/src/chat-interactions/random-ban-chat.ts`                      | [code] [test]                                                           |
+| Points de chaîne « Ban aléatoire » (3 000 points) → même demande                                                                                          | `channel-points/service.ts`                                                   | [code] [test] ; validé en réel le 18/10 pour la V2 [réel]               |
+| Prix de `!rb` réglable (1 000 à 1 000 000, défaut 25 000)                                                                                                 | `module-settings/service.ts` (`random_ban.price`)                             | [code]                                                                  |
+| Exécuteur Twitch (recherche, timeout unique, reprise après redémarrage par journal local)                                                                 | `apps/twitch-bot/src/random-ban-executor.ts`                                  | [code] [test] (600 lignes)                                              |
+| Animation sur le lecteur d'effets de Studio (9 variantes + CSC + flop)                                                                                    | `apps/studio/server/src/random-ban/runtime.ts`, `effects-player/player.js`    | [code] [test]                                                           |
+| Studio › Sanctions › Random Ban : règles, verrous, essais sans sanction, essais réels, suivi des demandes, fiche acheteur / cible                         | `apps/studio/web/src/pages/sanctions-random-ban.ts`                           | [code]                                                                  |
+| Mute du streamer (2 %), Caution du mute, micro partagé                                                                                                    | `service.ts`, `caution/`, `channel-points/mute-holds.ts`                      | V3 livrée le 27/10, **non validée en réel** (`RANDOM_BAN_V2.md`)        |
+| Défis : `random_ban_sent`, `random_ban_landed`, `random_ban_received`                                                                                     | `challenges/metrics.ts`                                                       | [code] ; aucun défi créé                                                |
+| Statistiques par viewer : `sent / landed / backfired / flops / received`                                                                                  | `module-stats/service.ts`, site `api/modules.js`, `public/app/profile.js`     | [code] ; visibles par le viewer seul                                    |
+| Historique SAMMI (avant le 20/10)                                                                                                                         | site `lib/random-ban-stats.js`                                                | lu par le site, séparé                                                  |
+| Supervision du Centre de contrôle                                                                                                                         | `modules/status-adapters.ts` (`randomBanModule`)                              | [code]                                                                  |
+| Dock OBS : demandes Random Ban dans le fil                                                                                                                | `dock/service.ts`                                                             | [code]                                                                  |
 
 **Machine à états actuelle** (`rb_requests.status`) :
 
@@ -98,6 +101,7 @@ dry_run → simulated     ·     streamer tiré (2 %) → timeout_requested (rea
   les points de chaîne restent « nécessaire » à la main.
 
 **Ce qui n'existe pas :**
+
 - annulation (aucun état `canceled`) ;
 - retrait de la file par un modérateur ;
 - remboursement manuel d'un Random Ban `uncertain` depuis Studio ;
@@ -112,8 +116,7 @@ dry_run → simulated     ·     streamer tiré (2 %) → timeout_requested (rea
 D'après `searchTarget()` [code] [test] :
 
 1. Il lit **tous** les chatters (Get Chatters, pages de 1 000), sans le diffuseur.
-2. Il exclut les **modérateurs**, dont LeCroupier_ et les bots modérateurs, et les **bannis ou en timeout**, par lots de
-   100.
+2. Il exclut les **modérateurs**, dont LeCroupier_ et les bots modérateurs, et les **bannis ou en timeout**, par lots de 100.
 3. Il mélange avec Fisher–Yates et `crypto.randomInt`.
 4. Il vérifie le follow dans l'ordre mélangé, 8 à la fois, et **le premier qui suit est tiré**. C'est un tirage uniforme
    parmi les éligibles, sans avoir à tous les vérifier.
@@ -124,6 +127,7 @@ D'après `searchTarget()` [code] [test] :
 7. Sanction : timeout de 3 min pour un abonné, 5 min sinon, par LeCroupier_. Jamais de ban permanent.
 
 **Constats :**
+
 - **Les comptes exclus de la fidélité** (`loyalty_exclusions` : bots, tests) **ne sont pas exclus du Random Ban**. Un bot
   non modérateur qui suit la chaîne est tirable. Exclusion retenue (SPEC § 6), pas encore codée.
 - **Le nombre d'éligibles exact n'est jamais connu :** `candidates` compte les chatters avant la vérification du follow.
@@ -157,6 +161,7 @@ D'après `searchTarget()` [code] [test] :
 
   Les vues sont communes aux deux. Un nouveau module doit être écrit pour **v2** (guide `docs/extension/SOCLE.md`), et
   n'existera dans le legacy que si on l'y importe.
+
 - **Modèle à suivre :**
   - « module du module host » (`/modules/v3`) ;
   - `registerViewerModule` et `createPurchaseButton` (`shared/purchase.js`) : une clé d'idempotence par intention,
@@ -198,55 +203,56 @@ D'après `searchTarget()` [code] [test] :
 
 ## 6. Twitch : ce qui est possible
 
-| Besoin | Réalité | Source |
-| --- | --- | --- |
-| Liste exhaustive des spectateurs de la vidéo | **impossible** : aucun endpoint | [doc Twitch], index de l'API |
-| Comptes connectés au chat | Get Chatters : « users that are connected to the broadcaster's chat session », avec un délai de mise à jour ; jeton de modérateur `moderator:read:chatters` ; 1 000 par page | [doc Twitch] |
-| Spectateurs anonymes | non listés : ils n'ont pas de compte connecté au chat | déduction de la définition ci-dessus |
-| Lurkers | listés seulement s'ils sont connectés au chat ; la doc ne le précise pas | [hypothèse] |
-| Avatars | Get Users : 100 identifiants par appel, `profile_image_url` | [doc Twitch] |
-| Timeout | Ban User avec `duration` de 1 s à 1 209 600 s ; `moderator:manage:banned_users` ; 409 si un autre modifie l'état au même moment | [doc Twitch] |
-| Changer un timeout en cours | possible : un nouvel appel change la durée, d'où le risque d'écraser le timeout d'un modérateur | [doc Twitch] |
-| Lever un timeout | Unban User (`DELETE /moderation/bans`) : « Removes the ban or timeout » | [doc Twitch] |
-| Extension pour un utilisateur banni | masquée depuis le 09/11/2020 | annonce sur le forum développeurs (jbulava, 30/01/2021) |
-| Extension pendant un timeout | masquée selon des développeurs, sans texte officiel | [communauté] (BarryCarlyon, 05/12/2020) |
-| Extension bannie sur mobile | encore visible sur Android en mars 2021 ; « passed along to the Extensions team », sans suite | [communauté] et réponse Twitch |
-| Empêcher le plein écran au double-clic | relayé par le helper **seulement si `dblclick` atteint le `document`** (lu dans `twitch-ext.min.js`) ; Bonk l'empêche déjà sur son chargeur | script officiel ; code du dépôt |
-| Revue Twitch et double-clic | un membre du forum affirme qu'intervenir sur les raccourcis du lecteur fait « très probablement » échouer la revue ; mais la protection Bonk est dans la version publiée | [communauté] (2021) ; [code] |
-| Mobile | `isFullScreen` et `arePlayerControlsVisible` ne sont pas envoyés sur mobile | [doc Twitch] |
+| Besoin                                       | Réalité                                                                                                                                                                      | Source                                                  |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Liste exhaustive des spectateurs de la vidéo | **impossible** : aucun endpoint                                                                                                                                              | [doc Twitch], index de l'API                            |
+| Comptes connectés au chat                    | Get Chatters : « users that are connected to the broadcaster's chat session », avec un délai de mise à jour ; jeton de modérateur `moderator:read:chatters` ; 1 000 par page | [doc Twitch]                                            |
+| Spectateurs anonymes                         | non listés : ils n'ont pas de compte connecté au chat                                                                                                                        | déduction de la définition ci-dessus                    |
+| Lurkers                                      | listés seulement s'ils sont connectés au chat ; la doc ne le précise pas                                                                                                     | [hypothèse]                                             |
+| Avatars                                      | Get Users : 100 identifiants par appel, `profile_image_url`                                                                                                                  | [doc Twitch]                                            |
+| Timeout                                      | Ban User avec `duration` de 1 s à 1 209 600 s ; `moderator:manage:banned_users` ; 409 si un autre modifie l'état au même moment                                              | [doc Twitch]                                            |
+| Changer un timeout en cours                  | possible : un nouvel appel change la durée, d'où le risque d'écraser le timeout d'un modérateur                                                                              | [doc Twitch]                                            |
+| Lever un timeout                             | Unban User (`DELETE /moderation/bans`) : « Removes the ban or timeout »                                                                                                      | [doc Twitch]                                            |
+| Extension pour un utilisateur banni          | masquée depuis le 09/11/2020                                                                                                                                                 | annonce sur le forum développeurs (jbulava, 30/01/2021) |
+| Extension pendant un timeout                 | masquée selon des développeurs, sans texte officiel                                                                                                                          | [communauté] (BarryCarlyon, 05/12/2020)                 |
+| Extension bannie sur mobile                  | encore visible sur Android en mars 2021 ; « passed along to the Extensions team », sans suite                                                                                | [communauté] et réponse Twitch                          |
+| Empêcher le plein écran au double-clic       | relayé par le helper **seulement si `dblclick` atteint le `document`** (lu dans `twitch-ext.min.js`) ; Bonk l'empêche déjà sur son chargeur                                  | script officiel ; code du dépôt                         |
+| Revue Twitch et double-clic                  | un membre du forum affirme qu'intervenir sur les raccourcis du lecteur fait « très probablement » échouer la revue ; mais la protection Bonk est dans la version publiée     | [communauté] (2021) ; [code]                            |
+| Mobile                                       | `isFullScreen` et `arePlayerControlsVisible` ne sont pas envoyés sur mobile                                                                                                  | [doc Twitch]                                            |
 
 ## 7. Faisabilité par demande
 
-| Demande | Faisable | Condition, ou ce qu'il faut |
-| --- | --- | --- |
-| Lancer depuis l'extension | **oui** | nouvelle source `extension` (migration) et une action du module host qui crée la même demande |
-| Prix, solde, état, historique dans l'extension | **oui** | état de la demande exposé au viewer (route de façade) |
-| Tirage autoritaire | **déjà** | bot et Core ; à garder |
-| Animation des éligibles | **oui, sous forme d'échantillon** | le bot remonte un échantillon d'éligibles vérifiés et leurs avatars |
-| Synchronisation parfaite pour tous | **non** | la latence vidéo varie selon le spectateur ; on garantit l'ordre, pas l'instant (SPEC § 5) |
-| Cible souhaitée sans influence | **oui** | enregistrée à la demande, jamais transmise à la recherche du bot |
-| Vérifier l'éligibilité de la cible souhaitée | **oui, au tirage** | le bot vérifie aussi la cible souhaitée : chat, modérateur, banni, follow (1 à 2 appels) |
-| Liste de choix des cibles | **oui** | le dernier relevé de présence du Core (toutes les 120 s) ; aucun appel Twitch en plus |
-| Prime idempotente | **oui** | `economy.move` avec clé |
-| Anti-rafale | **oui** | prix progressif calculé par le Core sous le verrou de la chaîne |
-| Blocage, délai, timeout du module | **oui** | migration des contraintes D4, permissions existantes |
-| Annuler tant que la demande est en file | **oui** | état `canceled`, remboursement une fois, sous le verrou |
-| Annuler après le timeout | **non** | seule une **levée** (Unban) est possible ; ce n'est pas une annulation |
-| Levée de timeout | **oui** | nouvelle commande de l'exécuteur, même droit Twitch |
-| Extension accessible pendant un timeout sur PC | **non garanti, pas de notre ressort** | comportement de la plateforme (§ 8) |
-| Plus de plein écran involontaire | **probablement** | correctif central (§ 9), à confirmer en Hosted Test |
-| Défi Sniper | **oui** | une métrique de plus, dans le système existant |
+| Demande                                        | Faisable                              | Condition, ou ce qu'il faut                                                                   |
+| ---------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Lancer depuis l'extension                      | **oui**                               | nouvelle source `extension` (migration) et une action du module host qui crée la même demande |
+| Prix, solde, état, historique dans l'extension | **oui**                               | état de la demande exposé au viewer (route de façade)                                         |
+| Tirage autoritaire                             | **déjà**                              | bot et Core ; à garder                                                                        |
+| Animation des éligibles                        | **oui, sous forme d'échantillon**     | le bot remonte un échantillon d'éligibles vérifiés et leurs avatars                           |
+| Synchronisation parfaite pour tous             | **non**                               | la latence vidéo varie selon le spectateur ; on garantit l'ordre, pas l'instant (SPEC § 5)    |
+| Cible souhaitée sans influence                 | **oui**                               | enregistrée à la demande, jamais transmise à la recherche du bot                              |
+| Vérifier l'éligibilité de la cible souhaitée   | **oui, au tirage**                    | le bot vérifie aussi la cible souhaitée : chat, modérateur, banni, follow (1 à 2 appels)      |
+| Liste de choix des cibles                      | **oui**                               | le dernier relevé de présence du Core (toutes les 120 s) ; aucun appel Twitch en plus         |
+| Prime idempotente                              | **oui**                               | `economy.move` avec clé                                                                       |
+| Anti-rafale                                    | **oui**                               | prix progressif calculé par le Core sous le verrou de la chaîne                               |
+| Blocage, délai, timeout du module              | **oui**                               | migration des contraintes D4, permissions existantes                                          |
+| Annuler tant que la demande est en file        | **oui**                               | état `canceled`, remboursement une fois, sous le verrou                                       |
+| Annuler après le timeout                       | **non**                               | seule une **levée** (Unban) est possible ; ce n'est pas une annulation                        |
+| Levée de timeout                               | **oui**                               | nouvelle commande de l'exécuteur, même droit Twitch                                           |
+| Extension accessible pendant un timeout sur PC | **non garanti, pas de notre ressort** | comportement de la plateforme (§ 8)                                                           |
+| Plus de plein écran involontaire               | **probablement**                      | correctif central (§ 9), à confirmer en Hosted Test                                           |
+| Défi Sniper                                    | **oui**                               | une métrique de plus, dans le système existant                                                |
 
 ## 8. Diagnostic : timeout et accessibilité de l'extension
 
-| Couche | Qui contrôle | Constat |
-| --- | --- | --- |
-| Affichage ou masquage de l'extension pour un utilisateur sanctionné | **Twitch** (lecteur et site) | bannis masqués depuis 2020 ; timeouts selon la communauté ; mobile différent et non documenté |
-| Contenu reçu par l'extension (JWT, rôle) | Twitch | les rôles sont `broadcaster`, `moderator`, `viewer`, `external` ; **aucun indicateur de timeout** dans le JWT [doc Twitch] |
-| Notre code | nous | il ne lit nulle part l'état de timeout Twitch pour refuser une action ; `timeout-debug.js` sert seulement à tracer (éteint en Production) |
-| Règles du Core | nous | aucune action ne vérifie un timeout Twitch : un viewer en timeout qui voit l'extension (mobile) peut l'utiliser |
+| Couche                                                              | Qui contrôle                 | Constat                                                                                                                                   |
+| ------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Affichage ou masquage de l'extension pour un utilisateur sanctionné | **Twitch** (lecteur et site) | bannis masqués depuis 2020 ; timeouts selon la communauté ; mobile différent et non documenté                                             |
+| Contenu reçu par l'extension (JWT, rôle)                            | Twitch                       | les rôles sont `broadcaster`, `moderator`, `viewer`, `external` ; **aucun indicateur de timeout** dans le JWT [doc Twitch]                |
+| Notre code                                                          | nous                         | il ne lit nulle part l'état de timeout Twitch pour refuser une action ; `timeout-debug.js` sert seulement à tracer (éteint en Production) |
+| Règles du Core                                                      | nous                         | aucune action ne vérifie un timeout Twitch : un viewer en timeout qui voit l'extension (mobile) peut l'utiliser                           |
 
 **Conclusion :**
+
 - On **ne peut pas** rendre l'extension accessible sur PC pendant un timeout : c'est Twitch qui la retire. Tout
   contournement, comme une autre surface déguisée ou une injection, serait contraire aux règles.
 - On peut **garantir une politique cohérente côté serveur**, quel que soit l'appareil. Elle est décrite dans SPEC § 10.
@@ -275,22 +281,23 @@ D'après `searchTarget()` [code] [test] :
 
 ## 10. Risques de régression
 
-| Zone | Risque | Mesure |
-| --- | --- | --- |
-| `rb_requests`, utilisé par les défis, les statistiques, le Dock et la supervision | une nouvelle source ou un nouvel état casse un compte | migrations additives ; métriques testées avec `source = 'extension'` et `canceled` |
-| Exécuteur du bot (Production, bail unique) | toute modification touche le Random Ban réel | changements bornés : échantillon et cible souhaitée en lecture seule, jamais l'ordre du tirage ; tests existants (600 lignes) gardés |
-| Achat `!rb` | le prix progressif change ce que paie le chat | le même calcul pour les trois sources Jetons ; message de prix dans le chat |
-| Points de chaîne | hors Jetons : pas de prix progressif possible | réglages Twitch de la récompense (cooldown, maximum par stream) |
-| Extension legacy publiée | un correctif partagé change le legacy | double-clic : correctif dans les vues communes, testé dans les deux shells |
-| Studio | la page Sanctions gagne des actions sensibles | permissions D4, audit, confirmation |
-| Économie | la prime est payée deux fois | clé d'idempotence, test de concurrence sur un vrai PostgreSQL (règle CLAUDE.md) |
-| Mute du streamer (V3, non validé) | interactions avec les nouveaux états | ne rien changer à ce chemin ; Sniper sur le streamer exclu en V1 |
+| Zone                                                                              | Risque                                                | Mesure                                                                                                                               |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `rb_requests`, utilisé par les défis, les statistiques, le Dock et la supervision | une nouvelle source ou un nouvel état casse un compte | migrations additives ; métriques testées avec `source = 'extension'` et `canceled`                                                   |
+| Exécuteur du bot (Production, bail unique)                                        | toute modification touche le Random Ban réel          | changements bornés : échantillon et cible souhaitée en lecture seule, jamais l'ordre du tirage ; tests existants (600 lignes) gardés |
+| Achat `!rb`                                                                       | le prix progressif change ce que paie le chat         | le même calcul pour les trois sources Jetons ; message de prix dans le chat                                                          |
+| Points de chaîne                                                                  | hors Jetons : pas de prix progressif possible         | réglages Twitch de la récompense (cooldown, maximum par stream)                                                                      |
+| Extension legacy publiée                                                          | un correctif partagé change le legacy                 | double-clic : correctif dans les vues communes, testé dans les deux shells                                                           |
+| Studio                                                                            | la page Sanctions gagne des actions sensibles         | permissions D4, audit, confirmation                                                                                                  |
+| Économie                                                                          | la prime est payée deux fois                          | clé d'idempotence, test de concurrence sur un vrai PostgreSQL (règle CLAUDE.md)                                                      |
+| Mute du streamer (V3, non validé)                                                 | interactions avec les nouveaux états                  | ne rien changer à ce chemin ; Sniper sur le streamer exclu en V1                                                                     |
 
 ## 11. Points bloquants
 
 Aucun blocage technique. **Les décisions métier sont prises** (message d'Antoni du 12/11, appliqué dans la SPEC).
 
 **À confirmer en réel :**
+
 - la validation de Random Ban V3 en Production (`RANDOM_BAN_V2.md` : non validée) ;
 - les 6 anciennes rédemptions non régularisées (ROADMAP) ;
 - les mesures timeout, double-clic et latence du lot 0 ;
@@ -331,6 +338,7 @@ confirmera ; elle ne la renverserait que dans un cas très improbable.
    par Raptoru. C'est l'origine des 6 rédemptions non régularisées.
 
 **Migration proposée (sans interruption, rien supprimé) :**
+
 1. Lab : la nouvelle récompense est simulée (simulateur de rédemptions existant) ; toute la chaîne est testée.
 2. Production, sur GO : « Créer la récompense Raptoru » (bouton existant de Studio → Points de chaîne), titre distinct
    (Twitch exige un titre unique), 3 000 points, même description.
@@ -341,17 +349,18 @@ confirmera ; elle ne la renverserait que dans un cas très improbable.
 
 ### 12.2 Solde de Jetons « qui ne se met pas à jour »
 
-| Maillon | Constat | Source |
-| --- | --- | --- |
-| Gains passifs | crédités **à chaque tranche** de présence validée (6 min, 10 Jetons de base × multiplicateurs), clé unique | `loyalty/engine.ts`, `loyalty/config.ts` [code] |
-| Récompenses, dépenses, remboursements, mini-jeux | écrits dans le Wallet dans la transaction de l'action | `economy/economy.ts` [code + test] |
-| Lecture par l'extension | `economy.balances`, lu **en base à chaque requête**, sans cache | `ext-facade.ts` → `lab-moderation/service.ts` [code] |
-| Extension ouverte | relecture de `/state` toutes les **5 s** (panneau visible), 15 s sinon ou après une erreur ; un `broadcast` Twitch relit tout de suite | `overlay.js`, `mobile.js`, `app/main.js` [code] |
-| Retour après inactivité | relecture sur `visibilitychange`, `pageshow`, `focus`, `onVisibilityChanged` ; sur mobile, pas de relecture en arrière-plan, puis relecture au retour | idem [code] |
-| État local | `lastSession` fusionné avec `/state` ; un écran qui « absorbe » les mises à jour ne redessine pas l'en-tête | `shared/api.js`, `ui.js`, `app/panel.js` [code] |
-| Affichage | solde **abrégé**, dans une case de 40 px | `ui-primitives.js` [code] |
+| Maillon                                          | Constat                                                                                                                                               | Source                                               |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Gains passifs                                    | crédités **à chaque tranche** de présence validée (6 min, 10 Jetons de base × multiplicateurs), clé unique                                            | `loyalty/engine.ts`, `loyalty/config.ts` [code]      |
+| Récompenses, dépenses, remboursements, mini-jeux | écrits dans le Wallet dans la transaction de l'action                                                                                                 | `economy/economy.ts` [code + test]                   |
+| Lecture par l'extension                          | `economy.balances`, lu **en base à chaque requête**, sans cache                                                                                       | `ext-facade.ts` → `lab-moderation/service.ts` [code] |
+| Extension ouverte                                | relecture de `/state` toutes les **5 s** (panneau visible), 15 s sinon ou après une erreur ; un `broadcast` Twitch relit tout de suite                | `overlay.js`, `mobile.js`, `app/main.js` [code]      |
+| Retour après inactivité                          | relecture sur `visibilitychange`, `pageshow`, `focus`, `onVisibilityChanged` ; sur mobile, pas de relecture en arrière-plan, puis relecture au retour | idem [code]                                          |
+| État local                                       | `lastSession` fusionné avec `/state` ; un écran qui « absorbe » les mises à jour ne redessine pas l'en-tête                                           | `shared/api.js`, `ui.js`, `app/panel.js` [code]      |
+| Affichage                                        | solde **abrégé**, dans une case de 40 px                                                                                                              | `ui-primitives.js` [code]                            |
 
 **Diagnostic :**
+
 1. **Cause principale : l'abrégé cache les petits gains.** Un gain passif vaut de 10 à quelques dizaines de Jetons.
    « 125K » ne bouge qu'à 1 000 Jetons près, « 6M » à 100 000 près, « 12M » à 1 000 000 près. Le solde est à jour, mais
    rien ne change à l'écran.
@@ -362,6 +371,7 @@ confirmera ; elle ne la renverserait que dans un cas très improbable.
    lot 0 avec la build `timeout-debug`, qui trace déjà chaque relecture.
 
 **Correction (faite dans le worktree, testée, non commitée) :**
+
 - une pastille « +40 » apparaît 2,6 s à côté du solde quand il augmente entre deux lectures, avec le montant exact sous
   1 000 (`ui-primitives.js`, `currency-switch.css`) ; mouvement réduit respecté ;
 - le module Musique laisse passer un nouveau solde (`modules/music/module.js`) ;

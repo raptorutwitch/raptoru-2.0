@@ -2,34 +2,34 @@
 
 ## 0bis. V3 du 14/11 (carte blanche d'Antoni) — remplace les lignes correspondantes du § 0
 
-| Sujet | V3 codée |
-| --- | --- |
-| Mini-jeux | un vrai catalogue (`shared/mini-games.js`) : en-tête Mini-jeux, une tuile par jeu réel (résumé vivant : ton prix, dernier tiré), « ‹ Jeux » pour revenir ; l'écran de la session est rouvert directement (pas de clic en plus pour un joueur qui revient) |
-| Identité | « arcade de nuit » : cramoisi → bordeaux (`#ff2f55` → `#6d0d2a` sur la carte du Hub), lueurs de viseur, vert de verrouillage réservé au Sniper ; logo : un dé dans un viseur (hasard + visée) |
-| Composition | inverse du TTS : à gauche la machine de tirage (`shared/random-ban-machine.js`), à droite la jauge de prix, le Sniper, « Lancer », les 3 derniers tirages et « Tout voir » ; « ? » ouvre les règles en 4 lignes ; empilé sous 400 px de large, compacté sous 360 px de haut |
-| Machine | un viseur (anneaux, graduations) avec un grand portrait central, le pseudo, l'état ; une bande de vignettes dessous ; au repos « N viewers dans le viseur » ; payé : les portraits défilent (aucune décision) ; tirage du Core : succession qui ralentit (`reelSchedule`, ~3,4 s) jusqu'à la cible du Core, coins de verrouillage ; Sniper réussi : tout passe au vert et se referme, « SNIPER ! +2 000 Jetons » une fois |
-| Jauge | `shared/random-ban-gauge.js` + `recoveryModel` : les 5 paliers en repères, un remplissage qui glisse EN CONTINU (4 fois par seconde, lissé en CSS) vers le tarif normal, « 30K dans 4:12 · normal dans 9:12 » ; le repère est atteint exactement quand le Core baisse le prix ; jamais un montant de l'extension |
-| Alertes du stream | inchangées (lecteur d'effets de Studio, phrases et vidéos d'Antoni) ; aucune synchronisation avec l'extension |
+| Sujet             | V3 codée                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mini-jeux         | un vrai catalogue (`shared/mini-games.js`) : en-tête Mini-jeux, une tuile par jeu réel (résumé vivant : ton prix, dernier tiré), « ‹ Jeux » pour revenir ; l'écran de la session est rouvert directement (pas de clic en plus pour un joueur qui revient)                                                                                                                                                                 |
+| Identité          | « arcade de nuit » : cramoisi → bordeaux (`#ff2f55` → `#6d0d2a` sur la carte du Hub), lueurs de viseur, vert de verrouillage réservé au Sniper ; logo : un dé dans un viseur (hasard + visée)                                                                                                                                                                                                                             |
+| Composition       | inverse du TTS : à gauche la machine de tirage (`shared/random-ban-machine.js`), à droite la jauge de prix, le Sniper, « Lancer », les 3 derniers tirages et « Tout voir » ; « ? » ouvre les règles en 4 lignes ; empilé sous 400 px de large, compacté sous 360 px de haut                                                                                                                                               |
+| Machine           | un viseur (anneaux, graduations) avec un grand portrait central, le pseudo, l'état ; une bande de vignettes dessous ; au repos « N viewers dans le viseur » ; payé : les portraits défilent (aucune décision) ; tirage du Core : succession qui ralentit (`reelSchedule`, ~3,4 s) jusqu'à la cible du Core, coins de verrouillage ; Sniper réussi : tout passe au vert et se referme, « SNIPER ! +2 000 Jetons » une fois |
+| Jauge             | `shared/random-ban-gauge.js` + `recoveryModel` : les 5 paliers en repères, un remplissage qui glisse EN CONTINU (4 fois par seconde, lissé en CSS) vers le tarif normal, « 30K dans 4:12 · normal dans 9:12 » ; le repère est atteint exactement quand le Core baisse le prix ; jamais un montant de l'extension                                                                                                          |
+| Alertes du stream | inchangées (lecteur d'effets de Studio, phrases et vidéos d'Antoni) ; aucune synchronisation avec l'extension                                                                                                                                                                                                                                                                                                             |
 
 ## 0. Refonte du 13/11 (demande d'Antoni) — ce qui remplace le reste de ce document là où ils divergent
 
 Les mécanismes serveur restent ; la présentation et l'interaction de l'extension sont refaites. Démo :
 `cd apps/core-api && npx tsx scripts/mini-jeux-demo.ts` → http://127.0.0.1:4495 (tout fictif, aucun vrai timeout).
 
-| Sujet | Décision codée |
-| --- | --- |
-| Conteneur | `shared/mini-games.js` : une carte « Mini-jeux », des tuiles de jeux affichées seulement à partir de deux jeux ; Random Ban par défaut |
-| Hub | couleurs rose-rouge → magenta (famille de Tombola, distinctes) ; Bonk placé entre Mini-jeux et TTS (`app/panel.js`) |
-| Écran Random Ban | nom + icône, prix compact avec anneau de récupération (↓ m:ss), grande scène de tirage, Sniper, bouton « Lancer · 25 K », « Historique » discret ; plus d'encart rose, de règles, de liste déroulante, de stats ni de bloc « Modération » (`moderation.visible: false`) |
-| Confirmation | deuxième clic ; « ⬆ Prix en hausse » dans la ligne de message quand le palier est monté ; jamais d'écran en plus |
-| Sniper | champ libre (`Pseudo`, `@Pseudo`, collage), suggestions façon mentions (exact d'abord, préfixes, fautes de frappe), compte validé ✓ ; un texte sans compte sûr part en `unresolved` (`wish_text` gardé) et se résout dans Studio (`resolve_sniper`, prime une seule fois) |
-| Le Viseur | dans l'extension : le Core construit au tirage une bande (`stats.strip`, cible à `stop`, la cible du Sniper jamais voisine) ; l'extension la fait défiler et s'arrête dessus ; aucune décision côté client ; rouleau joué une fois par appareil (sessionStorage), animations réduites respectées |
-| Sniper réussi | scène verte, réticule sur le portrait, « SNIPER ! +2 000 Jetons » une fois |
-| Photos | cache des avatars Twitch du Core (celui de Tombola/Votekick), initiales sinon ; jamais d'appel Twitch à la lecture |
-| Historique | panneau secondaire : qui a lancé, qui a été tiré, résultat, prix, Sniper (`state.recent`, sans bande ni id de rachat) |
-| Stats | retirées de l'écran ; l'API (`personalStats`, `/v1/site/modules/random-ban/public`) reste pour raptoru.fr |
-| Modération | Studio › Modération › Random Ban (`pages/moderation-random-ban.ts`) : demandes, cible, sanction réelle, Sniper, annuler, rembourser Jetons (vérifié) ou points (récompense Raptoru), résoudre un Sniper, bloquer, délai, lever ; blocages et délais du module `random_ban` valent pour l'extension, `!rb` et les points |
-| Vidéo de ban | inchangée sur le stream (lecteur d'effets), séparée du rouleau de l'extension ; `sequence` reste à 0 par défaut |
+| Sujet            | Décision codée                                                                                                                                                                                                                                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Conteneur        | `shared/mini-games.js` : une carte « Mini-jeux », des tuiles de jeux affichées seulement à partir de deux jeux ; Random Ban par défaut                                                                                                                                                                                  |
+| Hub              | couleurs rose-rouge → magenta (famille de Tombola, distinctes) ; Bonk placé entre Mini-jeux et TTS (`app/panel.js`)                                                                                                                                                                                                     |
+| Écran Random Ban | nom + icône, prix compact avec anneau de récupération (↓ m:ss), grande scène de tirage, Sniper, bouton « Lancer · 25 K », « Historique » discret ; plus d'encart rose, de règles, de liste déroulante, de stats ni de bloc « Modération » (`moderation.visible: false`)                                                 |
+| Confirmation     | deuxième clic ; « ⬆ Prix en hausse » dans la ligne de message quand le palier est monté ; jamais d'écran en plus                                                                                                                                                                                                        |
+| Sniper           | champ libre (`Pseudo`, `@Pseudo`, collage), suggestions façon mentions (exact d'abord, préfixes, fautes de frappe), compte validé ✓ ; un texte sans compte sûr part en `unresolved` (`wish_text` gardé) et se résout dans Studio (`resolve_sniper`, prime une seule fois)                                               |
+| Le Viseur        | dans l'extension : le Core construit au tirage une bande (`stats.strip`, cible à `stop`, la cible du Sniper jamais voisine) ; l'extension la fait défiler et s'arrête dessus ; aucune décision côté client ; rouleau joué une fois par appareil (sessionStorage), animations réduites respectées                        |
+| Sniper réussi    | scène verte, réticule sur le portrait, « SNIPER ! +2 000 Jetons » une fois                                                                                                                                                                                                                                              |
+| Photos           | cache des avatars Twitch du Core (celui de Tombola/Votekick), initiales sinon ; jamais d'appel Twitch à la lecture                                                                                                                                                                                                      |
+| Historique       | panneau secondaire : qui a lancé, qui a été tiré, résultat, prix, Sniper (`state.recent`, sans bande ni id de rachat)                                                                                                                                                                                                   |
+| Stats            | retirées de l'écran ; l'API (`personalStats`, `/v1/site/modules/random-ban/public`) reste pour raptoru.fr                                                                                                                                                                                                               |
+| Modération       | Studio › Modération › Random Ban (`pages/moderation-random-ban.ts`) : demandes, cible, sanction réelle, Sniper, annuler, rembourser Jetons (vérifié) ou points (récompense Raptoru), résoudre un Sniper, bloquer, délai, lever ; blocages et délais du module `random_ban` valent pour l'extension, `!rb` et les points |
+| Vidéo de ban     | inchangée sur le stream (lecteur d'effets), séparée du rouleau de l'extension ; `sequence` reste à 0 par défaut                                                                                                                                                                                                         |
 
 Pas fait dans ce mandat : cooldown évolutif des points de chaîne (en discussion), tampon SNIPER sur le stream, pages du site.
 
@@ -38,6 +38,7 @@ récupéré par paliers de 5 min, Sniper 30 min, séquence hybride, stats). Cod�
 gain (§ 9), la vue Random Ban avec jauge, Sniper et « Mes stats », le rouleau « Le Viseur » (§ 6).
 
 Cadre imposé par le socle v2 ([`docs/extension/SOCLE.md`](../extension/SOCLE.md)) :
+
 - composition de référence 651×434, échelles `--g` et `--kt`, planchers de texte ;
 - cibles de 24 px au moins (32 px en tactile) ;
 - action principale dans le pied de la vue, jamais coupée ;
@@ -57,24 +58,26 @@ Cadre imposé par le socle v2 ([`docs/extension/SOCLE.md`](../extension/SOCLE.md
 ## 2. Direction artistique
 
 **Retenu (12/11) : un rose poudré sur nuit.**
+
 - L'extension est sombre (fond `#0f0a1c`, accent violet `#a855f7`).
 - Un module **entièrement clair** casserait l'en-tête commun (porte-monnaie, navigation) et ferait un flash blanc à
   chaque ouverture.
 - On garde donc la nuit, et le module est **teinté de rose**. Le rose clair est réservé à l'élément central : le
   « ticket » du jeu.
 
-| Rôle | Jeton | Couleur | Contraste (WCAG) |
-| --- | --- | --- | --- |
-| Fond du module | `--mj-bg` | `#24142c` (prune nuit) | — |
-| Accent et bouton principal | `--mj-accent` | `#f7b2cf` (rose poudré) | texte `#2b1020` sur l'accent : **10,2:1** ; accent sur fond : **10,1:1** |
-| Rose clair (titres, cadre du tirage) | `--mj-accent-soft` | `#ffd6e7` | 13,2:1 sur fond |
-| Ticket (carte claire) | `--mj-ticket` | `#ffe3ef`, encre `#2b1020` | **14,6:1** ; texte secondaire `#5c3b52` : 7,9:1 |
-| Secondaire Sniper | `--mj-sniper` | `#7fd8c9` (menthe) | 10,4:1 ; ressort sur le rose sans être une couleur d'état |
-| Jetons | `--rx-token` | `#f2c65f` (existant) | 10,8:1 |
-| Désactivé | `--mj-off` | `#9b8a9f`, bouton en **contour** (jamais rempli) | 5,4:1 |
-| Erreur | `--rx-danger` | `#ff7a8a` (existant) | 6,9:1 |
+| Rôle                                 | Jeton              | Couleur                                          | Contraste (WCAG)                                                         |
+| ------------------------------------ | ------------------ | ------------------------------------------------ | ------------------------------------------------------------------------ |
+| Fond du module                       | `--mj-bg`          | `#24142c` (prune nuit)                           | —                                                                        |
+| Accent et bouton principal           | `--mj-accent`      | `#f7b2cf` (rose poudré)                          | texte `#2b1020` sur l'accent : **10,2:1** ; accent sur fond : **10,1:1** |
+| Rose clair (titres, cadre du tirage) | `--mj-accent-soft` | `#ffd6e7`                                        | 13,2:1 sur fond                                                          |
+| Ticket (carte claire)                | `--mj-ticket`      | `#ffe3ef`, encre `#2b1020`                       | **14,6:1** ; texte secondaire `#5c3b52` : 7,9:1                          |
+| Secondaire Sniper                    | `--mj-sniper`      | `#7fd8c9` (menthe)                               | 10,4:1 ; ressort sur le rose sans être une couleur d'état                |
+| Jetons                               | `--rx-token`       | `#f2c65f` (existant)                             | 10,8:1                                                                   |
+| Désactivé                            | `--mj-off`         | `#9b8a9f`, bouton en **contour** (jamais rempli) | 5,4:1                                                                    |
+| Erreur                               | `--rx-danger`      | `#ff7a8a` (existant)                             | 6,9:1                                                                    |
 
 **Règles :**
+
 - **Le rose de l'accent est proche du rouge d'erreur.** Une erreur n'est donc jamais signalée par la couleur seule :
   elle a toujours une icône (⚠), un texte et un fond distinct (bandeau sombre bordé).
 - Les états passent par la forme autant que par la couleur : plein = action ; contour = indisponible ; pastille = état.
@@ -142,6 +145,7 @@ Cadre imposé par le socle v2 ([`docs/extension/SOCLE.md`](../extension/SOCLE.md
    ```
 
    Une nouvelle demande reste possible, dans la limite de 2 en attente.
+
 4. **Recherche de la cible :**
    - champ avec liste déroulante, navigation au clavier (↑ ↓ Entrée Échap) ;
    - 8 résultats au plus ;
@@ -171,26 +175,27 @@ Cadre imposé par le socle v2 ([`docs/extension/SOCLE.md`](../extension/SOCLE.md
 
 ## 5. États de la vue
 
-| État | Ce qu'on voit |
-| --- | --- |
-| Chargement | squelette du ticket, bouton en contour « Chargement… » |
-| Disponible | bouton plein, prix |
-| Prix de série | prix actuel et jauge de récupération (§ 4.7) |
-| Solde insuffisant | bouton en contour « Il te manque 7 300 Jetons » ; le prix reste affiché |
-| Indisponible (bot absent, hors live, pause) | bandeau sombre ⓘ avec la raison ; bouton désactivé |
-| Bloqué ou délai personnel | pastilles existantes de `viewer-restrictions.js`, avec Random Ban ajouté |
-| 2 demandes en attente | « Attends que tes Random Ban passent » |
-| Prix changé | « Le prix vient de changer : 37 500 Jetons » ; nouvelle confirmation |
-| Résultat | carte de résultat 6 s, puis elle rejoint l'historique |
-| Remboursé | « Rien n'a pu être fait · 25 000 Jetons remboursés » |
-| À vérifier | « Résultat incertain · un modérateur vérifie » (pas de faux succès) |
-| Erreur réseau | « Connexion perdue, on réessaie… » : la même clé est renvoyée |
+| État                                        | Ce qu'on voit                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| Chargement                                  | squelette du ticket, bouton en contour « Chargement… »                   |
+| Disponible                                  | bouton plein, prix                                                       |
+| Prix de série                               | prix actuel et jauge de récupération (§ 4.7)                             |
+| Solde insuffisant                           | bouton en contour « Il te manque 7 300 Jetons » ; le prix reste affiché  |
+| Indisponible (bot absent, hors live, pause) | bandeau sombre ⓘ avec la raison ; bouton désactivé                       |
+| Bloqué ou délai personnel                   | pastilles existantes de `viewer-restrictions.js`, avec Random Ban ajouté |
+| 2 demandes en attente                       | « Attends que tes Random Ban passent »                                   |
+| Prix changé                                 | « Le prix vient de changer : 37 500 Jetons » ; nouvelle confirmation     |
+| Résultat                                    | carte de résultat 6 s, puis elle rejoint l'historique                    |
+| Remboursé                                   | « Rien n'a pu être fait · 25 000 Jetons remboursés »                     |
+| À vérifier                                  | « Résultat incertain · un modérateur vérifie » (pas de faux succès)      |
+| Erreur réseau                               | « Connexion perdue, on réessaie… » : la même clé est renvoyée            |
 
 ## 6. Animation sur le stream (lecteur d'effets de Studio)
 
 Séquence et règles d'honnêteté : SPEC § 5.3.
 
 **Direction : « Le Viseur », ban synchronisé sur l'arrêt** (séquence hybride, SPEC § 5).
+
 - Un rouleau horizontal d'avatars ronds (16 au plus, 96 px) défile derrière une **lunette** centrale (anneau rose clair,
   réticule menthe).
 - Il accélère, puis ralentit doucement, en 3,2 s. Il s'arrête **exactement** sur la cible : le réticule se resserre,
@@ -230,16 +235,16 @@ arrêt direct sur la cible. Pas encore : le « clic », le tampon « SNIPER ! »
 
 ## 8. Améliorations proposées
 
-| Proposition | Bénéfice | Classe |
-| --- | --- | --- |
-| Ouverture directe du jeu tant qu'il est seul | un clic en moins | **V1** |
-| Barre d'étapes de la demande | le viewer sait toujours où il en est | **V1** |
-| Rappel « Sniper prêt » sur la carte du Hub | donne envie, sans pousser à la rafale | souhaitable |
-| « Tableau de chasse » personnel : tes Snipers et tes CSC | se raconte bien en live | souhaitable |
-| Avatar de la cible dans la puce Sniper | identification immédiate | souhaitable : avatars via le bot, en cache dans le Core |
-| Défi secret « Double Sniper » (2 dans le même stream) | relance l'intérêt sans changer le jeu | plus tard, avec le système de défis existant |
-| Stinger « Revanche ! » quand une victime relance contre son bourreau dans les 10 min | moment fort, aucun impact sur les chances | plus tard |
-| Ralenti « photo-finish » sur le dernier avatar | suspense | **rejeté** : ressemble à un faux presque-gagnant |
+| Proposition                                                                          | Bénéfice                                  | Classe                                                  |
+| ------------------------------------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------------- |
+| Ouverture directe du jeu tant qu'il est seul                                         | un clic en moins                          | **V1**                                                  |
+| Barre d'étapes de la demande                                                         | le viewer sait toujours où il en est      | **V1**                                                  |
+| Rappel « Sniper prêt » sur la carte du Hub                                           | donne envie, sans pousser à la rafale     | souhaitable                                             |
+| « Tableau de chasse » personnel : tes Snipers et tes CSC                             | se raconte bien en live                   | souhaitable                                             |
+| Avatar de la cible dans la puce Sniper                                               | identification immédiate                  | souhaitable : avatars via le bot, en cache dans le Core |
+| Défi secret « Double Sniper » (2 dans le même stream)                                | relance l'intérêt sans changer le jeu     | plus tard, avec le système de défis existant            |
+| Stinger « Revanche ! » quand une victime relance contre son bourreau dans les 10 min | moment fort, aucun impact sur les chances | plus tard                                               |
+| Ralenti « photo-finish » sur le dernier avatar                                       | suspense                                  | **rejeté** : ressemble à un faux presque-gagnant        |
 
 ## 9. Montants et solde (toute l'extension)
 

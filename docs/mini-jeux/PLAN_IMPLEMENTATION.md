@@ -16,19 +16,19 @@ ou pause d'une récompense, fusion dans `main`.
 
 ## 1. État des lots
 
-| Lot | Contenu | État |
-| --- | --- | --- |
-| **0. Préparation** | état Git, dépendances, tests existants, fixtures fictives, scénarios | fait en local ; **mesures réelles à faire avec toi** (§ 3) |
-| **1. Correctifs extension** | format K / M partagé, pastille « +N » (legacy **et** v2), en-tête Musique non figé, garde double-clic sur tous nos contrôles (protection Bonk réutilisée) | **fait**, tests auto + rendu Chromium (données fictives) ; à voir dans le vrai lecteur (Hosted Test) |
-| **2. Socle Core** | prix progressif 5 min, achat sous verrou par viewer, `!rb <montant>`, action extension `launch` (OFF par défaut), plafond de 2, cooldown points de chaîne + `CANCELED` + message après Twitch, migration additive | **fait**, tests PGlite + vrai PostgreSQL concurrent |
-| **3. Interface Mini-jeux** | vue Random Ban : prix, jauge, confirmation en deux appuis, états, historique personnel ; carte du Hub « Mini-jeux » | **fait** (première version) : modèle testé, parcours vu dans Chromium (banc, Core simulé), v2 et legacy, 651×434 et 318 px ; le solde est celui de l'en-tête |
-| 3b. Exécuteur simulé du Lab | l'exécuteur réel avec un faux Twitch (8 viewers fictifs) : `npm run rb:lab-simulator` (Core local seulement) | **fait** ; test de bout en bout ; pas encore lancé contre un Lab Core démarré |
-| 3c. Remboursement auto en points | demande `failed` d'une récompense Raptoru → `CANCELED` une fois + message après Twitch | **fait**, testé |
-| **4. Sniper** | prédiction figée, fenêtre 30 min toutes sources, prime unique, liste des présents, stats | **fait**, testé (y compris vrai PostgreSQL) |
-| **5. Le Viseur** | bande décidée par le Core, frappe différée par le bot, rouleau et « Esquivé ! » dans le lecteur d'effets, secours sans Studio | **fait**, OFF par défaut ; à régler en réel (`strike_offset_s`) ; release de Studio et déploiement du bot nécessaires |
-| **6. Modération** | historique, À vérifier, annuler, rembourser un incertain, retirer une prime, pause, blocages et délais D4 | **fait** (Core + page Studio) ; « lever la sanction » non fait (Unban du bot) |
-| **7. Statistiques et défi** | stats personnelles (extension, site), totaux publics (route du site), métriques du défi secret | **fait** côté Core ; page du site et défi à faire |
-| 8. Recette et Production | démo locale prête (`npx tsx scripts/mini-jeux-demo.ts`, http://127.0.0.1:4495) ; puis ta recette, puis Production sur GO | à faire, avec toi |
+| Lot                              | Contenu                                                                                                                                                                                                           | État                                                                                                                                                         |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **0. Préparation**               | état Git, dépendances, tests existants, fixtures fictives, scénarios                                                                                                                                              | fait en local ; **mesures réelles à faire avec toi** (§ 3)                                                                                                   |
+| **1. Correctifs extension**      | format K / M partagé, pastille « +N » (legacy **et** v2), en-tête Musique non figé, garde double-clic sur tous nos contrôles (protection Bonk réutilisée)                                                         | **fait**, tests auto + rendu Chromium (données fictives) ; à voir dans le vrai lecteur (Hosted Test)                                                         |
+| **2. Socle Core**                | prix progressif 5 min, achat sous verrou par viewer, `!rb <montant>`, action extension `launch` (OFF par défaut), plafond de 2, cooldown points de chaîne + `CANCELED` + message après Twitch, migration additive | **fait**, tests PGlite + vrai PostgreSQL concurrent                                                                                                          |
+| **3. Interface Mini-jeux**       | vue Random Ban : prix, jauge, confirmation en deux appuis, états, historique personnel ; carte du Hub « Mini-jeux »                                                                                               | **fait** (première version) : modèle testé, parcours vu dans Chromium (banc, Core simulé), v2 et legacy, 651×434 et 318 px ; le solde est celui de l'en-tête |
+| 3b. Exécuteur simulé du Lab      | l'exécuteur réel avec un faux Twitch (8 viewers fictifs) : `npm run rb:lab-simulator` (Core local seulement)                                                                                                      | **fait** ; test de bout en bout ; pas encore lancé contre un Lab Core démarré                                                                                |
+| 3c. Remboursement auto en points | demande `failed` d'une récompense Raptoru → `CANCELED` une fois + message après Twitch                                                                                                                            | **fait**, testé                                                                                                                                              |
+| **4. Sniper**                    | prédiction figée, fenêtre 30 min toutes sources, prime unique, liste des présents, stats                                                                                                                          | **fait**, testé (y compris vrai PostgreSQL)                                                                                                                  |
+| **5. Le Viseur**                 | bande décidée par le Core, frappe différée par le bot, rouleau et « Esquivé ! » dans le lecteur d'effets, secours sans Studio                                                                                     | **fait**, OFF par défaut ; à régler en réel (`strike_offset_s`) ; release de Studio et déploiement du bot nécessaires                                        |
+| **6. Modération**                | historique, À vérifier, annuler, rembourser un incertain, retirer une prime, pause, blocages et délais D4                                                                                                         | **fait** (Core + page Studio) ; « lever la sanction » non fait (Unban du bot)                                                                                |
+| **7. Statistiques et défi**      | stats personnelles (extension, site), totaux publics (route du site), métriques du défi secret                                                                                                                    | **fait** côté Core ; page du site et défi à faire                                                                                                            |
+| 8. Recette et Production         | démo locale prête (`npx tsx scripts/mini-jeux-demo.ts`, http://127.0.0.1:4495) ; puis ta recette, puis Production sur GO                                                                                          | à faire, avec toi                                                                                                                                            |
 
 **Démonstration locale** (aucun réseau, tout fictif) : `cd apps/core-api && npx tsx scripts/mini-jeux-demo.ts`, puis
 http://127.0.0.1:4495 — la vraie extension (Hub › Mini-jeux), le vrai Core en mémoire, le vrai exécuteur du bot sur un
@@ -78,15 +78,15 @@ modération (pause, annulation). `TIER_STEP_MIN=1` raccourcit la récupération 
 
 ## 6. Risques
 
-| Risque | Parade |
-| --- | --- |
-| Régression du Random Ban en Production (bot) | recherche inchangée ; propriété « tirage identique » ; Core avant bot ; `random_ban.sequence` = 0 par défaut |
-| Facturation surprise | `expected_price` / `!rb <montant>` = plafond ; jamais de débit au-dessus |
-| Double prime, double remboursement | clés d'idempotence, tests de concurrence sur vrai PostgreSQL |
-| Points annoncés remboursés à tort | message seulement après la réponse de Twitch |
-| Ban après l'arrêt du rouleau qui échoue | « Esquivé ! », remboursement ; « BANNI » seulement après confirmation |
-| Revue Twitch et double-clic | protection limitée aux contrôles, lot séparé et retirable |
-| Case de 40 px trop étroite avec l'espace fine | vérifié au banc Chromium (6,2 M tient) ; à revoir dans le vrai lecteur |
+| Risque                                        | Parade                                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Régression du Random Ban en Production (bot)  | recherche inchangée ; propriété « tirage identique » ; Core avant bot ; `random_ban.sequence` = 0 par défaut |
+| Facturation surprise                          | `expected_price` / `!rb <montant>` = plafond ; jamais de débit au-dessus                                     |
+| Double prime, double remboursement            | clés d'idempotence, tests de concurrence sur vrai PostgreSQL                                                 |
+| Points annoncés remboursés à tort             | message seulement après la réponse de Twitch                                                                 |
+| Ban après l'arrêt du rouleau qui échoue       | « Esquivé ! », remboursement ; « BANNI » seulement après confirmation                                        |
+| Revue Twitch et double-clic                   | protection limitée aux contrôles, lot séparé et retirable                                                    |
+| Case de 40 px trop étroite avec l'espace fine | vérifié au banc Chromium (6,2 M tient) ; à revoir dans le vrai lecteur                                       |
 
 ## 7. Retour arrière
 
