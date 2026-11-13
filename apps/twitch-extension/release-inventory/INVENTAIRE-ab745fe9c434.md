@@ -1,16 +1,17 @@
-# Inventaire de l'emballage de Production — source 39b65349a385
+# Inventaire de l'emballage de Production — source ab745fe9c434
 
-Écart : 84 commits de l'extension depuis `PUBLISHED` = `0bf7907` (**présumé, non prouvé**).
+Écart : 85 commits de l'extension depuis `PUBLISHED` = `0bf7907` (**présumé, non prouvé**).
 Si la version servie n'est pas `0bf7907`, corriger `PUBLISHED` et régénérer cet inventaire.
 
-Préparé par l'agent le 2026-11-13 (Mini-jeux V5, dernière passe). **Non validé** : la ligne de validation appartient à Antoni ; tant
+Préparé par l'agent le 2026-11-13 (Mini-jeux V5, dernière passe et anti-spoil). **Non validé** : la ligne de validation appartient à Antoni ; tant
 qu'elle manque, l'emballage de Production refuse d'écrire le ZIP (`npm run package:production -- --shell v2`).
 Remplace l'inventaire `INVENTAIRE-bb8700814939.md` (78 commits, non validé) : ses commits sont repris ci-dessous,
 ceux de Mini-jeux dans la première section. Prérequis côté Core : la livraison Mini-jeux (docs/mini-jeux/LIVRAISON_V5.md).
 Sans `random_ban_ext` activé, aucun viewer ne voit Mini-jeux.
 
-## Mini-jeux / Random Ban (catalogue, machine de tirage, Sniper, jauge des charges) — 6
+## Mini-jeux / Random Ban (catalogue, machine de tirage, Sniper, jauge des charges) — 7
 
+- ab745fe9 2026-11-13 feat(mini-jeux): Random Ban anti-spoil — the historical alert first, the extension reveals with the stream, the timeout after
 - 39b65349 2026-11-13 feat(mini-jeux): Random Ban V5 final pass — Sniper 1 000 once per 30 min, charges tooltip, smoother machine
 - bd415851 2026-11-13 feat(mini-jeux): Random Ban V5 — fixed prices, personal charges shared by the extension, !rb and channel points
 - 53760e2c 2026-11-13 feat(mini-jeux): V4 — carousel draw machine, compact price gauge, availability before the click
