@@ -524,6 +524,13 @@ export class RandomBanService {
       price_paid: pricing.price,
       ...(wish ?? {}),
     });
+    // The Sniper's chance as seen at purchase (shown to the player; decided again at the result with final statuses).
+    if (wish && created)
+      await q.query(
+        `update rb_requests set stats = coalesce(stats, '{}'::jsonb) || jsonb_build_object('sniper_prized', $2::boolean)
+          where request_id = $1`,
+        [request.request_id, sniperReady],
+      );
     await economy.debit(q, this.now(), {
       channelId: r.channel_id,
       viewer: { id: r.buyer.id, display_name: r.buyer.name },
@@ -1741,6 +1748,24 @@ export class RandomBanService {
         // A Studio test is the mic only: no animation, no chat line, no redemption to settle.
         ...(test ? {} : this.animated(r, this.animationFor(r))),
       });
+      // The extension's machine lands on the streamer too (Mini-jeux): a strip built once the mute is REAL (a mute that
+      // fails goes back to a viewers' draw, never shown first). Studio's reel stays off for him (no `reel`).
+      if (!test) {
+        const strip = buildStrip(
+          (await this.candidates(q, r.channel_id)).map((c) => ({
+            id: c.id,
+            name: c.name,
+          })),
+          { id: r.target_id!, name: r.target_name ?? r.target_login ?? '?' },
+          r.wish_id,
+          this.draw,
+        );
+        await q.query(
+          `update rb_requests set stats = coalesce(stats, '{}'::jsonb) || jsonb_build_object('strip', $2::jsonb)
+            where request_id = $1`,
+          [id, JSON.stringify(strip)],
+        );
+      }
       if (test)
         return {
           view: rbView(await this.row(q, id)),

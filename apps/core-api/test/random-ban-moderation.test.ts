@@ -271,7 +271,7 @@ describe('Random Ban moderation', () => {
       request_id: c.request_id,
       reason: 'multicompte',
     });
-    expect(await l.tokens()).toBe(paid - 2_000);
+    expect(await l.tokens()).toBe(paid - 1_000);
     await expect(
       l.m.act(CH, studio, {
         action: 'revoke_bonus',
@@ -279,7 +279,7 @@ describe('Random Ban moderation', () => {
         reason: 'encore',
       }),
     ).rejects.toMatchObject({ code: 'no_bonus' });
-    expect(await l.tokens()).toBe(paid - 2_000);
+    expect(await l.tokens()).toBe(paid - 1_000);
     expect(await l.audits('random_ban.revoke_bonus')).toHaveLength(1);
   });
 

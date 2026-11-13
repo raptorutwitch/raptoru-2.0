@@ -88,14 +88,15 @@ rb.avatarsOf = async (_q, ids) =>
 // V5: fixed prices, 3 charges, one back every 10 min (RECHARGE_MIN to shorten it; the « Recharge rapide » button too).
 const rechargeMin = Number(process.env.RECHARGE_MIN ?? 10);
 let fastRecharge = rechargeMin === 1;
+// The Sniper's real rule (one rewarded attempt every 30 min); « Sniper toujours primé » lifts it for the demo.
+let sniperFree = false;
 for (const [k, v] of [
   ['random_ban_ext.enabled', 1],
   // The stream keeps its ban video (Studio's effects player); the reel is the extension's own (dissociated).
   ['random_ban.sequence', 0],
   ['random_ban.strike_offset_s', 1],
   ['random_ban.recharge_min', rechargeMin],
-  // Demo only: every Sniper hit pays (no 30-min wait between two tries), to see the bonus without waiting.
-  ['random_ban.sniper_window_min', 0],
+  ['random_ban.sniper_window_min', 30],
 ] as const)
   await core.moduleSettings.set(CH, k, v, 'demo');
 await editWallet(
@@ -248,12 +249,12 @@ button.g{background:#3a2a44}button.s{padding:3px 7px;font-size:12px}
 table{width:100%;border-collapse:collapse;font-size:12.5px}td{padding:4px 6px;border-bottom:1px solid #ffffff12;vertical-align:top}
 .ok{color:#7dffb0}.bad{color:#ff9aa9}.w{color:#ffd27a}small{opacity:.7}
 ul{margin:0;padding-left:18px;max-height:160px;overflow:auto}li{margin:2px 0}input{padding:5px;border-radius:6px;border:0;width:150px}</style></head><body>
-<header><b>Mini-jeux · démo Lab</b> — tout est local et fictif : Core en mémoire, faux Twitch (aucun vrai timeout), Jetons fictifs. Tu es <b>Alice</b> (1 000 000 Jetons). Les autres viewers sont inventés. Réglage de démo : la prime Sniper est versée sans l’attente de 30 min.</header>
+<header><b>Mini-jeux · démo Lab</b> — tout est local et fictif : Core en mémoire, faux Twitch (aucun vrai timeout), Jetons fictifs. Tu es <b>Alice</b> (1 000 000 Jetons). Les autres viewers sont inventés. Sniper : une tentative primée toutes les 30 min (bouton « Sniper toujours primé » pour la démo).</header>
 <main><div class="col"><div class="sizes"><button class="g s" data-size="651x434">Lecteur 651×434</button><button class="g s" data-size="480x320">Petit 480×320</button><button class="g s" data-size="318x496">Panneau 318×496</button></div>
 <iframe id="ext" src="/ext/video_component.html?anchor=component" width="651" height="434"></iframe>
 <div class="box"><h3>Le chat</h3><input id="t" value="!rb"> <button data-do="say">Alice écrit</button>
 <button data-do="cp">Alice utilise la récompense (3 000 points)</button>
-<button class="g" data-do="other">Un autre viewer lance !rb</button><button class="g" data-do="refill">Recharger les charges d’Alice</button><button class="g" data-do="fast">Recharge rapide (1 min) : oui/non</button> <b id="fast"></b><button class="g" data-do="refuse">Twitch refusera le prochain timeout</button><button class="g" data-do="small">Chat réduit (Pika + Alice) : oui/non</button> <b id="small"></b></div>
+<button class="g" data-do="other">Un autre viewer lance !rb</button><button class="g" data-do="refill">Recharger les charges d’Alice</button><button class="g" data-do="fast">Recharge rapide (1 min) : oui/non</button> <b id="fast"></b><button class="g" data-do="sniper">Sniper toujours primé : oui/non</button> <b id="sniper"></b><button class="g" data-do="refuse">Twitch refusera le prochain timeout</button><button class="g" data-do="small">Chat réduit (Pika + Alice) : oui/non</button> <b id="small"></b></div>
 <div class="box"><h3>Réponses de LeCroupier_</h3><ul id="replies"></ul></div></div>
 <div class="col"><iframe src="/stream" width="640" height="360"></iframe>
 <div class="box"><h3>Modération Random Ban (les mêmes commandes que Studio › Modération › Random Ban)</h3>
@@ -282,6 +283,7 @@ document.addEventListener('click', (e) => {
   if (b.dataset.do === 'cp') post('/api/cp', {}).then(tick);
   if (b.dataset.do === 'refill') mod({ action: 'refill_charges', viewer_id: '9001' });
   if (b.dataset.do === 'fast') post('/api/fast').then((r) => { document.getElementById('fast').textContent = r.fast ? '1 charge / min' : ''; });
+  if (b.dataset.do === 'sniper') post('/api/sniper-free').then((r) => { document.getElementById('sniper').textContent = r.free ? 'toujours primé' : ''; });
   if (b.dataset.do === 'refuse') post('/api/refuse-next');
   if (b.dataset.do === 'small') post('/api/small-chat').then((r) => { document.getElementById('small').textContent = r.small ? 'chat réduit' : ''; });
   if (b.dataset.mod) mod({ action: b.dataset.mod });
@@ -444,6 +446,16 @@ createServer(async (req, res) => {
       return void res.end(avatarSvg(p.slice(4, -4)));
     }
     if (p === '/api/chatters') return json(res, 200, DEMO_CHATTERS);
+    if (p === '/api/sniper-free') {
+      sniperFree = !sniperFree;
+      await core.moduleSettings.set(
+        CH,
+        'random_ban.sniper_window_min',
+        sniperFree ? 0 : 30,
+        'demo',
+      );
+      return json(res, 200, { free: sniperFree });
+    }
     if (p === '/api/fast') {
       fastRecharge = !fastRecharge;
       await core.moduleSettings.set(

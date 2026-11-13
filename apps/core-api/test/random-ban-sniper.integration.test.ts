@@ -104,7 +104,7 @@ describe.skipIf(!isLocal)('Sniper on a real Postgres', () => {
       rbA.result(c.request_id, report),
       rbB.result(c.request_id, report),
     ]);
-    expect(await tokens()).toBe(100_000 - 25_000 + 2_000);
+    expect(await tokens()).toBe(100_000 - 25_000 + 1_000);
   });
 
   it('two attempts bought at once on two Cores: serialized — at most one rewardable', async () => {

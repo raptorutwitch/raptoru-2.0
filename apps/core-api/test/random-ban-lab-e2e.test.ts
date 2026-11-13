@@ -213,10 +213,10 @@ describe('Random Ban — Lab end to end (extension → real executor → result)
     expect(s.mine[0]).toMatchObject({
       status: 'confirmed',
       sniper: 'hit',
-      sniper_bonus: 2_000,
+      sniper_bonus: 1_000,
     });
     expect(s.stats).toMatchObject({
-      earned: 2_000,
+      earned: 1_000,
       spent: 25_000,
       sniper_hits: 1,
     });

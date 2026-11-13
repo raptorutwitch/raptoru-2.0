@@ -264,13 +264,23 @@
   box-shadow: 0 0 calc(8 * var(--u)) rgba(255, 47, 85, 0.45);
 }
 .rbg__next {
+  display: inline-flex;
   flex: none;
-  min-width: calc(44 * var(--u));
+  align-items: center;
+  gap: calc(3 * var(--u));
   color: var(--mg-dim);
   font-size: calc(11.5 * var(--u));
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   text-align: right;
+}
+.rbg__next[hidden] {
+  display: none;
+}
+.rbg__clock {
+  width: calc(11 * var(--u));
+  height: calc(11 * var(--u));
+  opacity: 0.8;
 }
 .rbg.is-empty .rbg__next {
   color: var(--mg-hot);
@@ -283,6 +293,8 @@
   display: grid;
   gap: calc(3 * var(--u));
   width: calc(230 * var(--u));
+  max-width: calc(100vw - 12px);
+  transform: translateX(var(--dx, 0px));
   padding: calc(9 * var(--u)) calc(11 * var(--u));
   border: 1px solid var(--mg-line);
   border-radius: calc(12 * var(--u));
@@ -343,6 +355,9 @@
 .rbm__deck {
   position: absolute;
   inset: 0 0 var(--foot);
+  /* The portraits fade into both edges: never cut by the frame. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
 }
 .rbm__slot {
   position: absolute;
@@ -353,8 +368,14 @@
   transform: translate(-50%, -50%);
   will-change: transform, opacity;
 }
-.rbm__slot:not(.is-front) {
-  filter: saturate(0.7) brightness(0.75);
+.rbm__slot::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #12060c;
+  content: '';
+  opacity: var(--dim, 0);
+  pointer-events: none;
 }
 .rb-face--slot {
   --face: 100%;
@@ -654,6 +675,10 @@
   font-size: calc(10.5 * var(--u));
   font-weight: 800;
   white-space: nowrap;
+}
+.rb__snhint[data-tone='glory'] {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--mg-faint);
 }
 .rb__picked {
   display: inline-flex;

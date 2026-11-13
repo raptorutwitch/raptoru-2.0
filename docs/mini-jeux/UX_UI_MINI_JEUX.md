@@ -11,6 +11,18 @@
 | Machine         | portraits plus grands (centre jusqu'à la moitié de la largeur), voisins rapprochés, même transparence et échelle secondaire, centrés verticalement ; viseur et carrousel V4 inchangés                     |
 | Livraison       | [LIVRAISON_V5.md](LIVRAISON_V5.md)                                                                                                                                                                        |
 
+## 0quinquies. Dernière passe V5 (13/11)
+
+- **Jauge :** les trois segments seuls au repos ; pendant une recharge, une petite horloge et `m:ss` (rien quand la
+  réserve est pleine). Infobulle masquée au repos : survol à la souris (fermée en quittant la zone), focus clavier /
+  Entrée / Échap, appui tactile (fermée par un second appui ou un appui ailleurs), décalée pour rester dans la fenêtre.
+- **Machine :** portrait central plus grand (jusqu'à 168 px), courbes continues pour l'écart, l'échelle, l'assombrissement
+  et la transparence des voisins (aucune bascule de classe), fondu sur les deux bords du cadre ; la décélération reste
+  `reelProgress` (sans dépassement). Le streamer tiré (2 %, mute OBS inchangé) a lui aussi sa bande dans l'extension,
+  construite une fois le mute confirmé.
+- **Sniper :** dans le champ, « +1 000 » (la prochaine tentative est primée) ou « pour la gloire » (délai dans
+  l'infobulle) ; texte d'aide « @pseudo ».
+
 ## 0ter. V4 du 14/11 (finition) — remplace les lignes correspondantes des § 0 et 0bis
 
 | Sujet            | V4 codée                                                                                                                                                                                                                                                                                                                                                  |
@@ -30,7 +42,7 @@
 | Mini-jeux         | un vrai catalogue (`shared/mini-games.js`) : en-tête Mini-jeux, une tuile par jeu réel (résumé vivant : ton prix, dernier tiré), « ‹ Jeux » pour revenir ; l'écran de la session est rouvert directement (pas de clic en plus pour un joueur qui revient)                                                                                                                                                                 |
 | Identité          | « arcade de nuit » : cramoisi → bordeaux (`#ff2f55` → `#6d0d2a` sur la carte du Hub), lueurs de viseur, vert de verrouillage réservé au Sniper ; logo : un dé dans un viseur (hasard + visée)                                                                                                                                                                                                                             |
 | Composition       | inverse du TTS : à gauche la machine de tirage (`shared/random-ban-machine.js`), à droite la jauge de prix, le Sniper, « Lancer », les 3 derniers tirages et « Tout voir » ; « ? » ouvre les règles en 4 lignes ; empilé sous 400 px de large, compacté sous 360 px de haut                                                                                                                                               |
-| Machine           | un viseur (anneaux, graduations) avec un grand portrait central, le pseudo, l'état ; une bande de vignettes dessous ; au repos « N viewers dans le viseur » ; payé : les portraits défilent (aucune décision) ; tirage du Core : succession qui ralentit (`reelSchedule`, ~3,4 s) jusqu'à la cible du Core, coins de verrouillage ; Sniper réussi : tout passe au vert et se referme, « SNIPER ! +2 000 Jetons » une fois |
+| Machine           | un viseur (anneaux, graduations) avec un grand portrait central, le pseudo, l'état ; une bande de vignettes dessous ; au repos « N viewers dans le viseur » ; payé : les portraits défilent (aucune décision) ; tirage du Core : succession qui ralentit (`reelSchedule`, ~3,4 s) jusqu'à la cible du Core, coins de verrouillage ; Sniper réussi : tout passe au vert et se referme, « SNIPER ! +1 000 Jetons » une fois |
 | Jauge             | `shared/random-ban-gauge.js` + `recoveryModel` : les 5 paliers en repères, un remplissage qui glisse EN CONTINU (4 fois par seconde, lissé en CSS) vers le tarif normal, « 30K dans 4:12 · normal dans 9:12 » ; le repère est atteint exactement quand le Core baisse le prix ; jamais un montant de l'extension                                                                                                          |
 | Alertes du stream | inchangées (lecteur d'effets de Studio, phrases et vidéos d'Antoni) ; aucune synchronisation avec l'extension                                                                                                                                                                                                                                                                                                             |
 
@@ -47,7 +59,7 @@ Les mécanismes serveur restent ; la présentation et l'interaction de l'extensi
 | Confirmation     | deuxième clic ; « ⬆ Prix en hausse » dans la ligne de message quand le palier est monté ; jamais d'écran en plus                                                                                                                                                                                                        |
 | Sniper           | champ libre (`Pseudo`, `@Pseudo`, collage), suggestions façon mentions (exact d'abord, préfixes, fautes de frappe), compte validé ✓ ; un texte sans compte sûr part en `unresolved` (`wish_text` gardé) et se résout dans Studio (`resolve_sniper`, prime une seule fois)                                               |
 | Le Viseur        | dans l'extension : le Core construit au tirage une bande (`stats.strip`, cible à `stop`, la cible du Sniper jamais voisine) ; l'extension la fait défiler et s'arrête dessus ; aucune décision côté client ; rouleau joué une fois par appareil (sessionStorage), animations réduites respectées                        |
-| Sniper réussi    | scène verte, réticule sur le portrait, « SNIPER ! +2 000 Jetons » une fois                                                                                                                                                                                                                                              |
+| Sniper réussi    | scène verte, réticule sur le portrait, « SNIPER ! +1 000 Jetons » une fois                                                                                                                                                                                                                                              |
 | Photos           | cache des avatars Twitch du Core (celui de Tombola/Votekick), initiales sinon ; jamais d'appel Twitch à la lecture                                                                                                                                                                                                      |
 | Historique       | panneau secondaire : qui a lancé, qui a été tiré, résultat, prix, Sniper (`state.recent`, sans bande ni id de rachat)                                                                                                                                                                                                   |
 | Stats            | retirées de l'écran ; l'API (`personalStats`, `/v1/site/modules/random-ban/public`) reste pour raptoru.fr                                                                                                                                                                                                               |
@@ -122,7 +134,7 @@ Cadre imposé par le socle v2 ([`docs/extension/SOCLE.md`](../extension/SOCLE.md
 │ │ au hasard · 3 à 5 min      │ │ └──────────────────────────┘ │
 │ │ 42 viewers dans le chat    │ │ Kiwi · @kiwi_42        ✕     │
 │ │ ⓘ Les règles               │ │ ne change pas le tirage ·    │
-│ └───────────────────────────┘ │ +2 000 si tu tombes dessus   │
+│ └───────────────────────────┘ │ +1 000 si tu tombes dessus   │
 │ Ma dernière demande :          │ Sniper : ● prêt               │
 │ ✔ Moustache banni 5 min       │                              │
 │ Derniers tirages ▸             │                              │
@@ -228,7 +240,7 @@ Séquence et règles d'honnêteté : SPEC § 5.3.
 - **Pourquoi pas une roue :** elle tourne autour d'un centre, ce qui la rend illisible avec 16 visages. Elle est aussi
   déjà associée à la Roue du Sub. La lunette rejoint le thème Sniper, et le rouleau reste lisible sur un petit écran
   de téléphone.
-- **Sniper réussi :** le réticule devient menthe, puis tampon « SNIPER ! » et « +2 000 Jetons », 1,5 s. C'est la seule
+- **Sniper réussi :** le réticule devient menthe, puis tampon « SNIPER ! » et « +1 000 Jetons », 1,5 s. C'est la seule
   célébration : pas de confettis.
 - **Prédiction ratée :** rien sur le stream. Il n'y a pas d'humiliation publique d'un pari qui n'a rien coûté.
 - **Sobriété :** aucun flash plein écran, aucun tremblement de caméra, une seule source sonore à la fois, volume de

@@ -41,7 +41,7 @@ export const RB_PRICING_DEFAULT: RbPricing = Object.freeze({
   channelMax: 0,
   channelWindowMs: 10 * 60_000,
   maxPending: 3,
-  sniperBonus: 2_000,
+  sniperBonus: 1_000,
   sniperWindowMs: 30 * 60_000,
   revealFirst: false,
   strikeOffsetMs: 3_000,

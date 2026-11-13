@@ -133,8 +133,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
             <span class="rb__scope" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
             <input class="rb__input" data-k="wish" type="text" maxlength="40" autocomplete="off" spellcheck="false"
               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="rb-sugg"
-              aria-label="Sniper : le viewer que tu prédis (facultatif)" placeholder="Sniper : @pseudo">
-            <span class="rb__snhint" data-k="snhint" hidden></span>
+              aria-label="Sniper : le viewer que tu prédis (facultatif)" aria-describedby="rb-snhint" placeholder="@pseudo">
+            <span class="rb__snhint" id="rb-snhint" data-k="snhint" hidden></span>
             <span class="rb__picked" data-k="picked" hidden></span>
             <button type="button" class="rb__clear" data-k="clear" aria-label="Effacer le Sniper" hidden>×</button>
             <ul class="rb__sugg" id="rb-sugg" role="listbox" data-k="sugg" hidden></ul>
@@ -365,17 +365,27 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   const onBlur = () => win.setTimeout(drawSuggestions, 0);
   const onFocus = () => drawSuggestions();
 
-  /** The Sniper's own window (its bonus), never mixed with the price or a moderation delay. */
+  /**
+   * The Sniper's own chance (the Core's: one rewarded attempt every 30 min, never the charges): « +1 000 » when the next
+   * Sniper can pay, « pour la gloire » otherwise (the time before the next rewarded one in its title). Never mixed with
+   * the price or a moderation delay.
+   */
   function drawSnHint() {
     const sn = st()?.sniper;
     const hint = $('snhint');
     const at = sn && !sn.ready && sn.ready_at ? Date.parse(sn.ready_at) - serverNow() : 0;
-    hint.hidden = !(at > 0) || !!picked;
-    if (at > 0) {
-      const min = Math.ceil(at / 60_000);
-      hint.textContent = `prime dans ${min} min`;
-      hint.title = `Sniper pour la gloire d’ici là : la prime de ${priceText(sn.bonus)} revient ${min} min après ton dernier Random Ban.`;
-    }
+    hint.hidden = !(sn?.bonus > 0);
+    if (hint.hidden) return;
+    const glory = at > 0;
+    hint.dataset.tone = glory ? 'glory' : 'prize';
+    hint.textContent = glory ? 'pour la gloire' : `+${priceText(sn.bonus).replace(/ Jetons$/, '')}`;
+    hint.title = glory
+      ? `Ton prochain Sniper est pour la gloire, sans prime : une tentative primée toutes les ${Math.round(
+          sn.window_ms / 60_000,
+        )} min, la prochaine dans ${Math.ceil(at / 60_000)} min.`
+      : `Ton prochain Sniper peut rapporter ${priceText(sn.bonus)} s’il est juste (une tentative primée toutes les ${Math.round(
+          sn.window_ms / 60_000,
+        )} min, réussie ou non).`;
   }
 
   /** What the purchase sends for the Sniper: the picked account, else the exact one, else the text as typed. */
@@ -448,9 +458,11 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       st()?.charges?.max > 0
         ? `${st().charges.max} charges au plus, communes à l’extension, !rb et aux points de chaîne : un Random Ban lancé en utilise une, une charge revient toutes les ${Math.round(st().charges.recharge_ms / 60_000)} min.`
         : 'Aucune limite de charges pour le moment.',
-      `Sniper (facultatif) : prédis la personne tirée. Il ne change jamais le tirage. Touché : +${priceText(sn?.bonus ?? 2000)}${
-        sn?.window_ms ? ` (au plus une prime toutes les ${Math.round(sn.window_ms / 60_000)} min)` : ''
-      }.`,
+      `Sniper (facultatif) : prédis la personne tirée. Il ne change jamais le tirage. Touché : +${priceText(sn?.bonus ?? 1000)}${
+        sn?.window_ms
+          ? `, pour une tentative primée toutes les ${Math.round(sn.window_ms / 60_000)} min (réussie ou non ; une demande annulée ou remboursée ne compte pas). Entre deux, tes Sniper sont pour la gloire.`
+          : '.'
+      }`,
     ]
       .map((t) => `<li>${esc(t)}</li>`)
       .join('');

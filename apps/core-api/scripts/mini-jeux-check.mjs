@@ -123,9 +123,34 @@ try {
     'le bouton dit le prix (25K)',
   );
   check(
-    (await fr.locator('.rbg__next').textContent()).includes('3/3') &&
-      (await fr.locator('.rbg__cell.is-full').count()) === 3,
-    'la jauge montre 3 charges pleines',
+    (await fr.locator('.rbg__next').isHidden()) &&
+      (await fr.locator('.rbg__cell.is-full').count()) === 3 &&
+      (await fr.locator('.rbg__tip').isHidden()),
+    'la jauge montre 3 charges pleines, sans texte ni infobulle au repos',
+  );
+  check(
+    /^\+1\s000$/.test(await fr.locator('.rb__snhint').textContent()),
+    'le Sniper annonce une tentative primée (+1 000)',
+  );
+  await fr.locator('.rbg__btn').hover();
+  await sleep(200);
+  const tipShown = await fr.locator('.rbg__tip').isVisible();
+  await fr.locator('.rb__title').hover();
+  await sleep(200);
+  check(
+    tipShown && (await fr.locator('.rbg__tip').isHidden()),
+    'survol : l’infobulle s’ouvre, quitter la zone la referme',
+  );
+  await fr.locator('.rbg__btn').focus();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await sleep(150);
+  const kbOpen = await fr.locator('.rbg__tip').isVisible();
+  await page.keyboard.press('Escape');
+  await sleep(150);
+  check(
+    kbOpen && (await fr.locator('.rbg__tip').isHidden()),
+    'clavier : le focus ouvre l’infobulle, Échap la referme',
   );
   await page.locator('#ext').screenshot({ path: join(SHOTS, '1-game.png') });
 
@@ -152,9 +177,13 @@ try {
     `la machine s’arrête sur la cible du Core (${shown})`,
   );
   check(
-    (await fr.locator('.rbg__next').textContent()).startsWith('+1') &&
+    /^\d+:\d\d$/.test((await fr.locator('.rbg__next').textContent()).trim()) &&
       (await fr.locator('.rbg__cell.is-full').count()) === 2,
-    'une charge utilisée, la recharge compte à rebours (2 pleines)',
+    'une charge utilisée, la recharge compte à rebours (horloge m:ss, 2 pleines)',
+  );
+  check(
+    (await fr.locator('.rb__snhint').textContent()) === 'pour la gloire',
+    'après une tentative primée, le Sniper suivant est « pour la gloire »',
   );
   await page.locator('#ext').screenshot({ path: join(SHOTS, '2-result.png') });
 
@@ -263,6 +292,7 @@ try {
   await fr.locator('.rb__sheet--info .rb__x').click();
   await refill();
 
+  await api('/api/sniper-free', {}); // the demo's « always rewarded »: see a paid hit without waiting 30 min
   await api('/api/small-chat', {});
   let hit = false;
   for (let t = 0; t < 10 && !hit; t++) {
@@ -282,11 +312,11 @@ try {
       const last = (await history())[0];
       check(
         last.sniper === 'hit' &&
-          (await tokens()) === w0 - last.price_paid + 2_000,
-        'Sniper réussi : verrou vert, prime de 2 000 versée une fois',
+          (await tokens()) === w0 - last.price_paid + 1_000,
+        'Sniper réussi : verrou vert, prime de 1 000 versée une fois',
       );
       check(
-        (await fr.locator('.rbm__badge').textContent()).includes('2'),
+        (await fr.locator('.rbm__badge').textContent()).includes('1'),
         'la prime est affichée sur la machine',
       );
       await page
@@ -296,6 +326,7 @@ try {
   }
   check(hit, 'un Sniper réussi a été vu (chat réduit à Pika)');
   await api('/api/small-chat', {});
+  await api('/api/sniper-free', {});
   check(
     errors.length === 0,
     `aucune erreur de page (${errors.slice(0, 2).join(' | ')})`,
@@ -340,6 +371,44 @@ try {
       .locator('#ext')
       .screenshot({ path: join(SHOTS, `5-${w}x${h}.png`) });
   }
+  await ctx.close();
+
+  // Phone / touch: a tap opens the charges' details, a tap elsewhere or a second tap closes them, never past the edge.
+  console.log('Tactile (mobile)');
+  ({ ctx, page, fr } = await open({ hasTouch: true }));
+  if (await fr.locator('.mg__tile').count())
+    await fr.locator('.mg__tile').tap();
+  await page.evaluate(() => {
+    const e = document.getElementById('ext');
+    e.width = 318;
+    e.height = 496;
+  });
+  await refill();
+  await sleep(4500);
+  await fr.locator('.rbg__btn').tap();
+  await sleep(200);
+  const tapOpen = await fr.locator('.rbg__tip').isVisible();
+  const inside = await fr.evaluate(() => {
+    const r = document.querySelector('.rbg__tip').getBoundingClientRect();
+    return r.left >= 0 && r.right <= globalThis.innerWidth;
+  });
+  await page
+    .locator('#ext')
+    .screenshot({ path: join(SHOTS, '6-touch-tip.png') });
+  await fr.locator('.rb__recent').tap();
+  await sleep(200);
+  const outsideClosed = await fr.locator('.rbg__tip').isHidden();
+  await fr.locator('.rbg__btn').tap();
+  await sleep(150);
+  await fr.locator('.rbg__btn').tap();
+  await sleep(150);
+  check(
+    tapOpen &&
+      inside &&
+      outsideClosed &&
+      (await fr.locator('.rbg__tip').isHidden()),
+    'tactile : un appui ouvre, un appui ailleurs ou un second appui ferme, l’infobulle reste dans la fenêtre',
+  );
   await ctx.close();
   await browser.close();
 } finally {

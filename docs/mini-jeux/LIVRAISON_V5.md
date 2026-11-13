@@ -6,13 +6,13 @@ suit ce document sans autre phase de développement. Remplace LIVRAISON_V4 (prix
 
 ## 1. Ce que la livraison contient
 
-| Composant | Changements                                                                                                                                                                                                                                                                                                               | Nécessaire pour                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Core      | prix fixes (25 000 Jetons extension et `!rb`), **charges communes** aux trois moyens (3, une toutes les 10 min), limite de la chaîne (OFF), refus du chat limités à 1 / 5 min par viewer, achat depuis l'extension (`random_ban_ext`, **OFF par défaut**), Sniper, modération Random Ban (dont « Recharger ses charges ») | tout                                                |
-| Migration | `20261123130000_random_ban_purchase.sql` (+ jumelle Lab) : colonnes ajoutées (`price_paid`, `charge`, `wish_*`, `wish_text`, `sniper`, `canceled_by`, `cancel_reason`), contraintes élargies (`source` + `extension`, `status` + `canceled`, modules de blocage/délai + `random_ban`), un index                           | le Core                                             |
-| Bot       | attente `delay_ms` avant le timeout **seulement** si le Core l'envoie (`random_ban.sequence` = 1) ; simulateur Lab                                                                                                                                                                                                        | rien en Production tant que `sequence` = 0 (défaut) |
-| Studio    | Modération › Random Ban (demandes, annuler, rembourser Jetons ou points, résoudre un Sniper, bloquer, délai, lever, **recharger les charges**) ; Sanctions › Random Ban : « Prix et charges », « Limite de la chaîne », « Sniper et extension »                                                                           | la modération et les réglages                       |
-| Extension | catalogue Mini-jeux, écran Random Ban V5 (jauge des charges, achat en un clic, machine agrandie)                                                                                                                                                                                                                          | le jeu côté viewers                                 |
+| Composant | Changements                                                                                                                                                                                                                                                                                                                                                                                 | Nécessaire pour                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Core      | prix fixes (25 000 Jetons extension et `!rb`), **charges communes** aux trois moyens (3, une toutes les 10 min), limite de la chaîne (OFF), refus du chat limités à 1 / 5 min par viewer, achat depuis l'extension (`random_ban_ext`, **OFF par défaut**), Sniper (1 000 Jetons, une tentative primée par viewer toutes les 30 min), modération Random Ban (dont « Recharger ses charges ») | tout                                                |
+| Migration | `20261123130000_random_ban_purchase.sql` (+ jumelle Lab) : colonnes ajoutées (`price_paid`, `charge`, `wish_*`, `wish_text`, `sniper`, `canceled_by`, `cancel_reason`), contraintes élargies (`source` + `extension`, `status` + `canceled`, modules de blocage/délai + `random_ban`), un index                                                                                             | le Core                                             |
+| Bot       | attente `delay_ms` avant le timeout **seulement** si le Core l'envoie (`random_ban.sequence` = 1) ; simulateur Lab                                                                                                                                                                                                                                                                          | rien en Production tant que `sequence` = 0 (défaut) |
+| Studio    | Modération › Random Ban (demandes, annuler, rembourser Jetons ou points, résoudre un Sniper, bloquer, délai, lever, **recharger les charges**) ; Sanctions › Random Ban : « Prix et charges », « Limite de la chaîne », « Sniper et extension »                                                                                                                                             | la modération et les réglages                       |
+| Extension | catalogue Mini-jeux, écran Random Ban V5 (jauge des charges, achat en un clic, machine agrandie)                                                                                                                                                                                                                                                                                            | le jeu côté viewers                                 |
 
 Ce qui ne change pas : les alertes de ban du stream (lecteur d'effets de Studio, vidéos et phrases d'Antoni), la
 récompense Twitch « Random Ban » déjà créée et son coût (3 000 points), les durées de timeout, l'immunité et le
@@ -24,11 +24,14 @@ tirage du streamer, les probabilités, les remboursements existants.
   viewer sans charge est refusé avant tout : `!rb` ne débite rien, la rédemption de la récompense Raptoru est annulée
   et remboursée par Twitch. Le cooldown individuel de 10 min des points de chaîne disparaît (remplacé).
 - Les demandes acceptées des 24 dernières heures comptent dès le déploiement (colonne `charge` à vrai par défaut).
+- Le Sniper n'existe que dans l'extension : aucun effet tant que `random_ban_ext.enabled` = 0.
+- Un streamer tiré (2 %) : inchangé sur le stream (mute OBS, pas de rouleau Studio) ; l'extension montre en plus sa bande
+  une fois le mute confirmé.
 - **Levier immédiat sans redéploiement :** Studio › Sanctions › Random Ban › « Charges par viewer » = **0** (aucune
   limite). Les autres nouveautés restent invisibles tant que `random_ban_ext.enabled` = 0 et que l'extension n'est pas
   publiée.
 
-## 3. Vérifications faites (Lab, 13/11)
+## 3. Vérifications faites (Lab, 13/11, dernière passe comprise)
 
 - Core : suite complète ; intégration PostgreSQL (migrations prod/Lab, Sniper, **5 achats simultanés d'un viewer sur
   deux Cores, `!rb` et points mélangés : exactement 3 acceptés**) ; tests des charges (règle pure, recharge, refus qui
@@ -38,7 +41,11 @@ tirage du streamer, les probabilités, les remboursements existants.
 - **Parcours de bout en bout dans Chromium** : `npm run mini-jeux:check -w @raptoru/core-api` lance sa propre démo et
   vérifie 23 points, dont : un double-clic n'achète pas ; un achat = un débit = une charge ; plus de charge (points
   compris) = bouton fermé, attente affichée, refus court dans le chat ; recharge par la modération ; achat en un clic
-  (un double clic paie une fois) ; Sniper payé une fois ; animations réduites ; 651×434, 480×320, 318×496.
+  (un double clic paie une fois) ; Sniper payé une fois (1 000) ; « +1 000 » puis « pour la gloire » ; infobulle des
+  charges au survol, au clavier, au toucher (fermée par un appui ailleurs, dans la fenêtre) ; animations réduites ;
+  651×434, 480×320, 318×496.
+- Sniper (Core) : tentative primée réussie / ratée, pour la gloire, fenêtre de 30 min par viewer, demande échouée
+  remboursée qui rend le droit, prédiction non résolue figée (jamais deux primes), deux Cores sur vrai PostgreSQL.
 - Emballage de l'extension : `node scripts/package.mjs --target production --check` (voir § 5).
 
 Ce qui ne peut pas être vérifié ici : les vraies photos Twitch, la charge réelle d'un live, le rendu dans le lecteur

@@ -21,14 +21,14 @@ cooldowns, Sniper, résultat, primes. L'extension et le chat affichent ce que le
 
 1. **Hub → « Mini-jeux ».** Tant que Random Ban est le seul jeu, la carte l'ouvre directement.
 2. **Écran Random Ban :** le prix (fixe) sur le bouton Lancer et la jauge de tes charges (§ 2.4), ton solde, les règles en
-   3 lignes, le nombre de viewers dans le chat, l'état du Sniper (« prêt » ou « prêt dans 12 min »).
+   3 lignes, le nombre de viewers dans le chat, l'état du Sniper (« +1 000 » : tentative primée, ou « pour la gloire »).
 3. **Option « 🎯 Viser quelqu'un » (Sniper)**, facultative : « Ça ne change pas le tirage. Si le tirage tombe dessus :
-   +2 000 Jetons. »
+   +1 000 Jetons. »
 4. **« Lancer — 25 000 Jetons »** : premier appui → récapitulatif (prix, cible visée, prime possible) ; second appui →
    envoi, avec une clé par intention (`purchase.js`).
 5. **Suivi dans le même écran :** payé → en file (2ᵉ) → tirage → résultat ; ou remboursé, ou à vérifier. Rouvrir
    l'extension retrouve l'état, relu sur le Core.
-6. **Résultat et historique :** cible, durée, « SNIPER ! +2 000 », CSC, prix payé, remboursement ; tes derniers lancers.
+6. **Résultat et historique :** cible, durée, « SNIPER ! +1 000 », CSC, prix payé, remboursement ; tes derniers lancers.
 
 ## 2. Prix fixes et charges personnelles (V5, décision du 13/11)
 
@@ -124,40 +124,46 @@ remboursés.
 - Choix : parmi le dernier relevé de présence du Core (toutes les 120 s, sans appel Twitch) ; l'identifiant est vérifié
   côté Core. Exclus : toi-même et le streamer.
 
-### 4.2 Récupération Sniper : 30 minutes
+### 4.2 Une tentative primée toutes les 30 minutes (règle définitive du 13/11)
 
-**Une tentative est récompensable** si l'acheteur n'a lancé **aucun autre Random Ban compté**, par aucun moyen, dans les
-**30 minutes** qui précèdent la création de cette demande.
+Le Sniper reste disponible à chaque Random Ban de l'extension, mais **une seule tentative par viewer et par 30 minutes
+peut rapporter la prime** (« tentative primée »). Ce délai est **indépendant des charges** (§ 2) : un Random Ban sans
+Sniper (extension, `!rb`, points de chaîne) ne le consomme jamais, et la prime ne se déduit jamais des charges.
 
-- **Compté :** toute demande réelle de l'acheteur, extension, `!rb` ou points de chaîne, sauf `failed` (rien fait),
-  `canceled`, `simulated`, et les rédemptions refusées sous cooldown (elles ne créent pas de demande).
-- Une tentative Sniper est elle-même un Random Ban : réussie ou non, elle relance les 30 minutes.
-- **Quand c'est décidé :** l'état « prêt » est **affiché** à l'achat, mais la décision **définitive** est prise au
-  résultat, sous verrou, avec les statuts finaux des demandes précédentes. La file exécute les demandes une par une
-  dans l'ordre : au moment du résultat, toutes les demandes antérieures de l'acheteur sont terminées.
-  - Conséquence : une demande antérieure qui échoue et se fait rembourser **ne consomme pas** le droit. L'écart entre
-    affichage et décision ne peut jouer qu'en faveur du viewer.
-- **Demandes simultanées :** sérialisées par le verrou de l'acheteur. La seconde voit la première (en attente =
-  comptée) : elle est affichée « pour la gloire », sauf si la première échoue avant le résultat de la seconde.
-- **Hors fenêtre :** la prédiction reste permise « pour la gloire » : affichée, comptée dans les statistiques, sans
-  prime ni défi. L'écran dit « Sniper prêt dans 12 min ».
+- **Tentative primée :** la première tentative Sniper valide quand aucune autre tentative primée de l'acheteur n'a été
+  faite dans les 30 minutes précédentes. **Réussie ou ratée, elle consomme le droit** : touché → +1 000 Jetons ; raté →
+  rien ; dans les deux cas la prochaine tentative primée est possible 30 minutes après elle.
+- **Pendant ces 30 minutes :** Random Ban reste utilisable (avec ses charges) et le Sniper aussi, **« pour la gloire »** :
+  affiché, compté dans les statistiques, sans Jetons ni défi. Une tentative pour la gloire ne repousse rien.
+- **Ne consomment pas le droit :** une demande annulée avant exécution, échouée (`failed`) et remboursée, `uncertain`
+  (`void`), une tentative pour la gloire, un test Studio.
+- **Prédiction non résolue** (texte sans compte exact) : elle consomme le droit comme une autre ; la décision « primée ou
+  non » est **figée au résultat** (`stats.sniper_prized`, `sniper_decided`) et réutilisée par la résolution du modérateur
+  — jamais deux tentatives primées dans la même fenêtre, jamais deux primes (clé `rb:sniper:<id>`). « Aucun compte » la
+  rend `void` (le droit revient pour la suite).
+- **Quand c'est décidé :** l'état est **affiché** à l'achat (`stats.sniper_prized`, prédiction), la décision
+  **définitive** est prise au résultat, sous verrou, avec les statuts finaux des demandes précédentes (la file les
+  exécute une par une dans l'ordre). Une tentative antérieure qui échoue et se fait rembourser rend donc le droit.
+- **Demandes simultanées :** sérialisées par le verrou de l'acheteur ; la seconde voit la première (en attente = primée).
+- **Calcul (Core, persistant) :** dernière tentative primée de l'acheteur (`hit`, `miss`, `revoked`, ou ouverte et primée)
+  dans les 30 min ; `sniper.ready` / `ready_at` dans l'état du module. L'extension affiche « +1 000 » ou « pour la
+  gloire » (le délai restant dans l'infobulle).
 
-| Cas                                          | Effet                             |
-| -------------------------------------------- | --------------------------------- |
-| Aucun lancer depuis 30 min                   | récompensable                     |
-| `!rb` il y a 10 min, puis Sniper             | pour la gloire ; prêt dans 20 min |
-| Points de chaîne il y a 31 min               | récompensable                     |
-| Tentative Sniper, puis une autre 5 min après | la seconde est pour la gloire     |
-| Demande précédente `failed` et remboursée    | ne compte pas                     |
-| Demande précédente en flop                   | compte (un tirage a eu lieu)      |
-| Même intention envoyée deux fois             | une seule demande (clé)           |
-| Changement de pseudo                         | aucun effet (identifiant)         |
+| Cas                                                 | Effet                                     |
+| --------------------------------------------------- | ----------------------------------------- |
+| Première tentative Sniper                           | primée                                    |
+| Tentative primée ratée, puis une autre 5 min après  | la seconde est pour la gloire             |
+| Tentative primée à 0, pour la gloire à 10 et 25 min | à 31 min : primée à nouveau               |
+| `!rb`, points de chaîne ou extension sans Sniper    | ne consomme rien                          |
+| Tentative primée `failed` et remboursée, ou annulée | ne consomme rien : la suivante est primée |
+| Même intention envoyée deux fois                    | une seule demande (clé)                   |
+| Changement de pseudo                                | aucun effet (identifiant)                 |
 
 ### 4.3 Réussite et prime
 
 Toutes les conditions à la fois :
 
-1. demande récompensable (§ 4.2, décision au résultat) ;
+1. tentative primée (§ 4.2, décision au résultat) ;
 2. statut final `confirmed` (timeout confirmé par Twitch ; `simulated` dans le Lab, en Jetons fictifs) ;
 3. cible tirée = cible visée (même identifiant). Une cible tirée est par définition éligible : la V1 ne demande donc pas
    au bot de dire si la cible visée l'était (`wish_eligible` reste une piste pour les statistiques, non codée).
@@ -166,14 +172,14 @@ Décisions enregistrées (`sniper`) : `armed` (prédiction pas encore décidée)
 `miss`, `glory` / `glory_hit` (raté / réussi hors fenêtre, sans prime), `void` (rien ne s'est passé : `failed`,
 `uncertain`, `canceled`), `revoked` (prime retirée par un modérateur).
 
-- **Prime : 2 000 Jetons**, par `economy.move` avec la clé `rb:sniper:<request_id>`, dans la transaction du résultat.
+- **Prime : 1 000 Jetons** (réglage `random_ban.sniper_bonus`), par `economy.move` avec la clé `rb:sniper:<request_id>`, dans la transaction du résultat.
   Rejouer le résultat ne paie jamais deux fois. Le balayage de 15 s rattrape une prime due après un redémarrage.
 - `flop`, `failed`, `uncertain`, `canceled` : jamais de prime. Pas de prime rétroactive : un `uncertain` réglé plus tard
   par un modérateur ne la déclenche pas (le modérateur peut créditer à la main, c'est audité).
 - Retrait par un modérateur (`wallet.admin`) : mouvement négatif à clé `rb:sniper-revoke:<id>`, avec raison ; la
   demande passe à `sniper = revoked`.
 - Économie [estimation] : réussite ≈ 1/N pour N éligibles ; N = 20 → espérance ≈ 100 Jetons par tentative
-  récompensable ; au plus 2 par heure et par viewer.
+  primée ; au plus 2 tentatives primées par heure et par viewer.
 
 ### 4.4 Défi secret
 
@@ -220,7 +226,7 @@ découvre son sort en même temps que le chat.
 | 5     | Core → Studio | confirmé → la vidéo de ban existante (choisie comme aujourd'hui)                                                                                                                                                                                                                                                     |
 | 5′    | Core → Studio | refus Twitch → carte « Esquivé ! » + remboursement automatique ; résultat incertain → rien d'annoncé, « à vérifier »                                                                                                                                                                                                 |
 
-Codé (V1) : étapes 1 à 5′. Pas encore : le tampon « SNIPER ! +2 000 » à l'écran (la prime est versée et visible dans
+Codé (V1) : étapes 1 à 5′. Pas encore : le tampon « SNIPER ! +1 000 » à l'écran (la prime est versée et visible dans
 l'extension), les vrais avatars Twitch (le cache d'avatars du Core existe, non branché ici).
 
 **Règles d'honnêteté :** l'ordre du rouleau est un mélange aléatoire de l'échantillon ; on ne place **jamais** la cible
@@ -348,7 +354,7 @@ Colonnes ajoutées (migration additive) : `price_paid`, `series_level`, `wish_id
 | `random_ban.channel_max` · `channel_window_min` (limite de la chaîne, 0 = aucune) | 0 · 10            |
 | `random_ban.max_pending`                                                          | 3                 |
 | `random_ban_ext.enabled` (achat depuis l'extension, interrupteur du socle)        | OFF               |
-| `random_ban.sniper_window_min` · `sniper_bonus`                                   | 30 · 2 000        |
+| `random_ban.sniper_window_min` · `sniper_bonus`                                   | 30 · 1 000        |
 | `random_ban.sequence` (0 = timeout puis vidéo, 1 = Le Viseur) · `strike_offset_s` | 0 · 3 (à mesurer) |
 | `random_ban.queue_paused` (réglé par la modération)                               | 0                 |
 

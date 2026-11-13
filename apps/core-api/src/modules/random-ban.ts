@@ -75,14 +75,14 @@ export function randomBanModule(
         default: RB_PRICING_DEFAULT.sniperBonus,
         min: 0,
         max: 100_000,
-        help: 'si le tirage tombe sur la cible visée (extension) ; 0 = pas de prime',
+        help: 'si le tirage tombe sur la cible visée (extension), pour une tentative primée ; 0 = pas de prime',
       },
       sniper_window_min: min(
-        'Sniper récompensable après',
+        'Une tentative Sniper primée toutes les',
         RB_PRICING_DEFAULT.sniperWindowMs / 60_000,
         0,
         240,
-        'sans autre Random Ban du viewer (extension, !rb, points de chaîne)',
+        'par viewer, indépendant des charges ; entre deux, les Sniper sont pour la gloire (sans prime) ; 0 = toujours primé',
       ),
       sequence: {
         label: 'Le Viseur : rouleau avant la sanction',

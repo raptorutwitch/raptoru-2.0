@@ -3,9 +3,10 @@ import { CHALLENGE_METRICS } from '../src/challenges/metrics.js';
 import { editWallet } from '../src/lab-moderation/store.js';
 import { setup } from './helpers.js';
 
-// Random Ban — Sniper (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 4, decided 12/11): a prediction frozen at purchase, never
-// handed to the draw; rewardable when the buyer launched no other counted Random Ban (extension, !rb, channel points)
-// in the 30 min before; 2 000 Jetons for a rewardable hit, paid once; a request that did nothing is void.
+// Random Ban — Sniper (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 4, final rule of 13/11): a prediction frozen at purchase,
+// never handed to the draw; ONE rewarded attempt per viewer every 30 min (hit or miss), independent of the charges and
+// of the Random Ban without a prediction; 1 000 Jetons for a rewarded hit, paid once; in between « pour la gloire »; a
+// request that did nothing is void and gives the chance back.
 
 const CH = '83603689';
 const MIN = 60_000;
@@ -117,12 +118,12 @@ describe('Sniper', () => {
     expect(withWish.buyer).toEqual(withoutWish.buyer);
   });
 
-  it('a rewardable hit pays 2 000 Jetons once — a replayed result and the sweep never pay again', async () => {
+  it('a rewardable hit pays 1 000 Jetons once — a replayed result and the sweep never pay again', async () => {
     const l = await lab();
     await l.launch(KIWI.id);
     const after = await l.tokens();
     const c = await l.resolve(KIWI);
-    expect(await l.tokens()).toBe(after + 2_000);
+    expect(await l.tokens()).toBe(after + 1_000);
     // The executor reports again; the sweep passes again.
     await l.rb.result(c.request_id, {
       executor_id: EXEC.executor_id,
@@ -130,55 +131,66 @@ describe('Sniper', () => {
       event: 'confirmed',
     });
     await l.rb.state(CH);
-    expect(await l.tokens()).toBe(after + 2_000);
+    expect(await l.tokens()).toBe(after + 1_000);
     expect(await l.snipers()).toEqual(['hit']);
     const s = await l.rb.buyerState(CH, V.id);
     expect(s.mine[0]).toMatchObject({
       sniper: 'hit',
-      sniper_bonus: 2_000,
+      sniper_bonus: 1_000,
       wish: { id: KIWI.id, name: 'Kiwi' },
     });
     expect(s.stats).toMatchObject({
       sniper_tries: 1,
       sniper_hits: 1,
-      earned: 2_000,
+      earned: 1_000,
       spent: 25_000,
     });
   });
 
-  it('miss: no bonus; another target → miss; nothing happened (failed, refunded) → void', async () => {
+  it('a rewarded miss uses the chance: the next Sniper is for glory; a failed (refunded) request gives it back', async () => {
     const l = await lab();
     await l.launch(KIWI.id);
-    await l.resolve(PIKA);
+    await l.resolve(PIKA); // rewarded attempt, missed
+    await l.launch(KIWI.id);
+    const before = await l.tokens();
+    await l.resolve(KIWI); // right, but for glory
+    expect(await l.tokens()).toBe(before);
     await l.advance(31 * MIN);
     await l.launch(KIWI.id);
-    await l.resolve('fail');
-    expect(await l.snipers()).toEqual(['miss', 'void']);
+    await l.resolve('fail'); // did nothing: void, the chance stays
+    await l.launch(KIWI.id);
+    await l.resolve(KIWI);
+    expect(await l.snipers()).toEqual(['miss', 'glory_hit', 'void', 'hit']);
   });
 
-  it('30 min window, all sources: a !rb 10 min before → « pour la gloire » (hit without bonus); 31 min → rewardable', async () => {
+  it('30 min per viewer from the rewarded attempt: for glory in between (shown in the state), rewarded again after', async () => {
     const l = await lab();
-    await l.launch(); // a Random Ban without prediction (same rule as !rb: a counted Random Ban)
-    await l.resolve(PIKA);
+    await l.launch(KIWI.id);
+    await l.resolve(KIWI); // hit at 0
     await l.advance(10 * MIN);
     expect((await l.rb.buyerState(CH, V.id)).sniper).toMatchObject({
       ready: false,
+      ready_at: new Date(
+        new Date('2026-11-12T20:00:00Z').getTime() + 30 * MIN,
+      ).toISOString(),
     });
     await l.launch(KIWI.id);
-    const before = await l.tokens();
-    await l.resolve(KIWI);
-    expect(await l.tokens()).toBe(before);
-    await l.advance(31 * MIN);
+    await l.resolve(PIKA); // glory miss: never pushes the window
+    await l.advance(15 * MIN); // 25 min
+    await l.launch(KIWI.id);
+    await l.resolve(KIWI); // glory hit
+    await l.advance(6 * MIN); // 31 min
     expect((await l.rb.buyerState(CH, V.id)).sniper).toMatchObject({
       ready: true,
       ready_at: null,
     });
     await l.launch(KIWI.id);
     await l.resolve(KIWI);
-    expect(await l.snipers()).toEqual(['none', 'glory_hit', 'hit']);
+    expect(await l.snipers()).toEqual(['hit', 'glory', 'glory_hit', 'hit']);
+    expect(await l.tokens()).toBe(START - 4 * 25_000 + 2 * 1_000);
   });
 
-  it('channel points count for the window; a failed (refunded) Random Ban never takes the chance away', async () => {
+  it('independent of the charges and of the other sources: Random Ban without a prediction never use the chance', async () => {
     const l = await lab();
     await l.rb.request({
       channel_id: CH,
@@ -187,27 +199,21 @@ describe('Sniper', () => {
       mode: 'real',
       buyer: { id: V.id, login: 'alice', name: 'Alice' },
     });
-    await l.resolve('fail'); // did nothing: does not count
-    await l.launch(KIWI.id);
-    await l.resolve(KIWI);
-    expect(await l.snipers()).toEqual(['none', 'hit']);
-    await l.advance(31 * MIN);
-    await l.rb.request({
-      channel_id: CH,
-      source: 'channel_points',
-      source_ref: 'r-2',
-      mode: 'real',
-      buyer: { id: V.id, login: 'alice', name: 'Alice' },
+    await l.resolve(PIKA); // a real channel points Random Ban
+    await l.launch(); // an extension Random Ban without a Sniper
+    await l.resolve(PIKA);
+    expect((await l.rb.buyerState(CH, V.id)).sniper).toMatchObject({
+      ready: true,
     });
-    await l.resolve(PIKA); // a real channel points Random Ban: it counts
     await l.launch(KIWI.id);
     await l.resolve(KIWI);
-    expect((await l.snipers()).at(-1)).toBe('glory_hit');
+    expect(await l.snipers()).toEqual(['none', 'none', 'hit']);
   });
 
   it('two attempts bought together: the second sees the first (pending counts) — unless the first fails before', async () => {
     const l = await lab();
     await l.launch(KIWI.id);
+    expect((await l.rb.buyerState(CH, V.id)).sniper.ready).toBe(false); // shown before the result
     await l.launch(KIWI.id);
     await l.resolve(KIWI);
     await l.resolve(KIWI);
@@ -246,7 +252,7 @@ describe('Sniper', () => {
     ]);
     expect(s.sniper).toMatchObject({
       ready: true,
-      bonus: 2_000,
+      bonus: 1_000,
       window_ms: 30 * MIN,
     });
   });
@@ -326,7 +332,7 @@ describe('Sniper — free text and the moderator’s resolution', () => {
       reason: 'il visait Pika',
     });
     expect(await row(l)).toMatchObject({ sniper: 'hit', wish_id: PIKA.id });
-    expect(await l.tokens()).toBe(before + 2_000);
+    expect(await l.tokens()).toBe(before + 1_000);
     // A second resolution (double click, another moderator): refused, never a second bonus.
     await expect(
       l.rb.moderation!.act(CH, studio, {
@@ -336,7 +342,25 @@ describe('Sniper — free text and the moderator’s resolution', () => {
         reason: 'encore',
       }),
     ).rejects.toMatchObject({ code: 'sniper_not_unresolved' });
-    expect(await l.tokens()).toBe(before + 2_000);
+    expect(await l.tokens()).toBe(before + 1_000);
+  });
+
+  it('an unresolved attempt uses the chance like any other: the next one is for glory; its late resolution never pays twice', async () => {
+    const l = await lab();
+    await l.launch(undefined, 'Pikka');
+    await l.resolve(PIKA); // unresolved, rewarded (decided now)
+    const first = await row(l);
+    await l.launch(KIWI.id);
+    await l.resolve(KIWI); // for glory: the unresolved one holds the chance
+    const before = await l.tokens();
+    await l.rb.moderation!.act(CH, studio, {
+      action: 'resolve_sniper',
+      request_id: first.request_id,
+      viewer_id: PIKA.id,
+      reason: 'il visait Pika',
+    });
+    expect(await l.tokens()).toBe(before + 1_000);
+    expect(await l.snipers()).toEqual(['hit', 'glory_hit']);
   });
 
   it('« no account »: void; a request that did nothing makes an unresolved prediction void by itself', async () => {

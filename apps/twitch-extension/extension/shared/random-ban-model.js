@@ -245,10 +245,15 @@ export function reelSchedule(steps, totalMs = 3400) {
  */
 export function carouselSlot(d) {
   const a = Math.min(Math.abs(d), 3);
+  const k = Math.min(a / 2.2, 1);
   return {
-    x: Math.sign(d) * (a <= 1 ? a * 0.84 : 0.84 + (a - 1) * 0.62),
-    scale: 1 - Math.min(a, 2) * 0.24,
-    opacity: a >= 2.6 ? 0 : Math.max(0, 1 - a * 0.42),
+    // Smooth curves only (no kink): the spacing tightens, the scale and the light fall off with the distance, the
+    // opacity reaches 0 before the edge (a portrait fades out, it is never cut).
+    x: Math.sign(d) * ((0.9 * a) / (1 + 0.07 * a)),
+    scale: 1 - 0.38 * k * (2 - k),
+    opacity: Math.max(0, 1 - Math.pow(a / 2.6, 1.6)),
+    /** 0 at the centre → 0.45 at one step and beyond: the darkening, continuous (never a class switching). */
+    dim: 0.45 * Math.min(a, 1) * (2 - Math.min(a, 1)),
     front: a < 0.5,
   };
 }

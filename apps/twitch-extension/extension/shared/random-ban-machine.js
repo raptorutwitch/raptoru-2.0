@@ -1,4 +1,4 @@
-// Mini-jeux › Random Ban V4 — the draw machine (left of the game screen). A carousel: the viewers pass THROUGH the
+// Mini-jeux › Random Ban V4/V5 — the draw machine (left of the game screen). A carousel: the viewers pass THROUGH the
 // centre (the big portrait), their neighbours smaller and darker on each side; a light scope frames the centre. It
 // SHOWS the Core's draw: `play()` scrolls the strip the Core built after its draw and stops on the Core's target
 // (`stop`). It never picks anyone. The stream's own ban alerts are Studio's, untouched: this is the player's view only.
@@ -72,7 +72,7 @@ export function createMachine(document, { reduced = false } = {}) {
     const base = Math.floor(pos);
     const frac = pos - base;
     const width = deck.clientWidth || 200;
-    const size = Math.min(width * 0.5, deck.clientHeight * 0.78 || 999, 150);
+    const size = Math.min(width * 0.54, deck.clientHeight * 0.84 || 999, 168);
     node.style.setProperty('--size', `${size.toFixed(1)}px`);
     slots.forEach((el, k) => {
       const idx = base + k - 3;
@@ -87,6 +87,7 @@ export function createMachine(document, { reduced = false } = {}) {
       }
       el.style.transform = `translate(-50%, -50%) translateX(${(s.x * size).toFixed(1)}px) scale(${s.scale.toFixed(3)})`;
       el.style.opacity = key ? s.opacity.toFixed(3) : '0';
+      el.style.setProperty('--dim', s.dim.toFixed(3));
       el.style.zIndex = String(10 - Math.round(Math.abs(d) * 2));
       el.classList.toggle('is-front', s.front);
     });
