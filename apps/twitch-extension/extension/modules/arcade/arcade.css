@@ -1,147 +1,686 @@
-/* Mini-jeux › Random Ban (docs/mini-jeux/UX_UI_MINI_JEUX.md § 2) — rose poudré sur nuit : le module reste sombre,
-   seul le « ticket » du jeu est rose clair. Chargé par la vue elle-même (shared/random-ban-view.js), dans les deux
-   shells : --g vaut 1px en legacy (repli), l'échelle du socle en v2. */
+/* Mini-jeux (refonte 13/11, docs/mini-jeux/UX_UI_MINI_JEUX.md) — la famille de Tombola (rose → violet) tirée vers le
+   rouge-rose et le magenta : chaude, de jeu, jamais confondue avec le rose/violet de Tombola ni le violet du TTS.
+   Chargé par la vue elle-même (shared/random-ban-view.js), dans les deux shells : --g vaut 1px en legacy (repli),
+   l'échelle du socle en v2. Un écran d'action : la scène du tirage au centre, le reste discret. */
 
-.rbx {
-  --rb-rose: #f4d3dc;
-  --rb-rose-deep: #e58aa6;
-  --rb-ink: #3b1530;
-  --rb-night: #1a1024;
-  --rb-u: var(--g, 1px);
+.mg {
+  --mg-a: #ff4d6d;
+  --mg-b: #c026d3;
+  --mg-ink: #fff4f7;
+  --mg-dim: rgba(255, 236, 242, 0.62);
+  --mg-night: #170d1f;
+  --mg-glass: rgba(255, 255, 255, 0.06);
+  --mg-line: rgba(255, 255, 255, 0.12);
+  --mg-hit: #22e07a;
+  --u: var(--g, 1px);
   display: grid;
-  gap: calc(10 * var(--rb-u));
-  padding: calc(4 * var(--rb-u)) 0;
-  color: #f3e9f2;
-  font-size: calc(13 * var(--rb-u));
+  gap: calc(6 * var(--u));
+  color: var(--mg-ink);
+  font-size: calc(13 * var(--u));
 }
 
-.rbx__ticket {
+/* Le sélecteur de jeux : de petites tuiles, seulement s'il y a plus d'un jeu. */
+.mg__nav {
+  display: flex;
+  gap: calc(6 * var(--u));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mg__tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: calc(6 * var(--u));
+  padding: calc(5 * var(--u)) calc(10 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: 999px;
+  background: var(--mg-glass);
+  color: var(--mg-dim);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mg__tile.is-on {
+  border-color: transparent;
+  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  color: #fff;
+}
+.mg__ticon svg {
+  display: block;
+  width: calc(15 * var(--u));
+  height: calc(15 * var(--u));
+}
+
+/* --- Random Ban ---------------------------------------------------------------------------------------------------- */
+.rb {
   position: relative;
   display: grid;
-  gap: calc(8 * var(--rb-u));
-  padding: calc(14 * var(--rb-u)) calc(16 * var(--rb-u));
-  border-radius: calc(14 * var(--rb-u));
-  background:
-    radial-gradient(circle at 0 50%, var(--rb-night) calc(7 * var(--rb-u)), transparent calc(7.5 * var(--rb-u))),
-    radial-gradient(circle at 100% 50%, var(--rb-night) calc(7 * var(--rb-u)), transparent calc(7.5 * var(--rb-u))),
-    var(--rb-rose);
-  color: var(--rb-ink);
-  box-shadow: 0 calc(6 * var(--rb-u)) calc(18 * var(--rb-u)) rgba(229, 138, 166, 0.18);
+  grid-template-rows: auto 1fr auto auto;
+  gap: calc(8 * var(--u));
+  min-height: 0;
+  container-type: inline-size;
 }
 
-.rbx__price {
+.rb__head {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: calc(4 * var(--rb-u)) calc(10 * var(--rb-u));
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8 * var(--u));
 }
-.rbx__label {
-  font-size: calc(11 * var(--rb-u));
+.rb__title {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(7 * var(--u));
+  font-size: calc(15 * var(--u));
+  letter-spacing: 0.01em;
+}
+.rb__icon {
+  display: grid;
+  place-items: center;
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  border-radius: calc(8 * var(--u));
+  background: linear-gradient(140deg, var(--mg-a), var(--mg-b));
+  box-shadow: 0 calc(4 * var(--u)) calc(12 * var(--u)) rgba(255, 77, 109, 0.35);
+}
+.rb__icon svg {
+  width: calc(17 * var(--u));
+  height: calc(17 * var(--u));
+}
+
+/* Le prix : lisible mais discret ; l'anneau dit la récupération du palier (absent au tarif normal). */
+.rb__price {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--u));
+  padding: calc(3 * var(--u)) calc(10 * var(--u)) calc(3 * var(--u)) calc(4 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: 999px;
+  background: var(--mg-glass);
+  font-variant-numeric: tabular-nums;
+  outline-offset: 2px;
+}
+.rb__price strong {
+  font-size: calc(15 * var(--u));
+}
+.rb__price small {
+  color: #ffd2dc;
+  font-size: calc(11 * var(--u));
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.7;
 }
-.rbx__amount {
-  font-size: calc(24 * var(--rb-u));
+.rb__ring {
+  position: absolute;
+  left: calc(1 * var(--u));
+  width: calc(28 * var(--u));
+  height: calc(28 * var(--u));
+  transform: rotate(-90deg);
+}
+.rb__ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+.rb__ring-bg {
+  stroke: transparent;
+}
+.rb.is-series .rb__ring-bg {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+.rb__ring-fg {
+  stroke: var(--mg-a);
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.9s linear;
+}
+.rb__coin {
+  position: relative;
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
+  margin: calc(2 * var(--u));
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe9a8, #f5b82e 55%, #b7791f);
+  box-shadow: inset 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.25);
+}
+.rb.is-series .rb__price {
+  border-color: rgba(255, 77, 109, 0.5);
+}
+
+/* La scène : la bande de portraits, la mire au centre, le résultat par-dessus. */
+.rb__stage {
+  --cell: calc(76 * var(--u));
+  --face: calc(54 * var(--u));
+  position: relative;
+  min-height: calc(140 * var(--u));
+  overflow: hidden;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(16 * var(--u));
+  background:
+    radial-gradient(70% 120% at 50% 50%, rgba(255, 77, 109, 0.16), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.18)),
+    var(--mg-night);
+  isolation: isolate;
+}
+.rb__stage::before,
+.rb__stage::after {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  width: 18%;
+  content: '';
+  pointer-events: none;
+}
+.rb__stage::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--mg-night), transparent);
+}
+.rb__stage::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--mg-night), transparent);
+}
+.rb__track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: flex;
+  translate: 0 -50%;
+  will-change: transform;
+}
+.rb__cell {
+  display: grid;
+  flex: none;
+  justify-items: center;
+  gap: calc(5 * var(--u));
+  width: var(--cell);
+}
+.rb__cell b {
+  max-width: calc(var(--cell) - 8 * var(--u));
+  overflow: hidden;
+  color: var(--mg-dim);
+  font-size: calc(10.5 * var(--u));
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rb-face {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--face, calc(54 * var(--u)));
+  height: var(--face, calc(54 * var(--u)));
+  overflow: hidden;
+  border-radius: 50%;
+  background: hsl(var(--h) 55% 46%);
+  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: calc(var(--face, calc(54 * var(--u))) * 0.36);
+  font-weight: 800;
+}
+.rb-face i {
+  font-style: normal;
+}
+.rb-face img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rb-face--xs {
+  --face: calc(22 * var(--u));
+}
+.rb-face--big {
+  --face: calc(72 * var(--u));
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) #fff,
+    0 0 calc(24 * var(--u)) rgba(255, 77, 109, 0.7);
+}
+
+/* Au repos : les viewers éligibles défilent doucement, en retrait. Pendant le tirage : plus vite. */
+.rb[data-stage='idle'] .rb__track,
+.rb[data-stage='spin'] .rb__track {
+  animation: rb-drift 38s linear infinite;
+  opacity: 0.45;
+}
+.rb[data-stage='spin'] .rb__track {
+  animation-duration: 2.4s;
+  opacity: 0.85;
+  filter: blur(0.6px);
+}
+@keyframes rb-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.rb__cell.is-target .rb-face {
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) #fff,
+    0 0 calc(22 * var(--u)) var(--mg-a);
+  scale: 1.12;
+  transition: scale 0.25s;
+}
+.rb__cell.is-target b {
+  color: #fff;
+}
+
+/* La mire : un cadre fin au centre (il dit « ici s'arrête le tirage »). */
+.rb__sight {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--face) + 14 * var(--u));
+  height: calc(var(--face) + 14 * var(--u));
+  margin-top: calc(-9 * var(--u));
+  border: calc(2 * var(--u)) solid rgba(255, 255, 255, 0.0);
+  border-radius: 50%;
+  translate: -50% -50%;
+  pointer-events: none;
+}
+.rb[data-stage='reel'] .rb__sight,
+.rb[data-stage='spin'] .rb__sight {
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 calc(14 * var(--u)) rgba(255, 77, 109, 0.8);
+}
+.rb__sight i {
+  position: absolute;
+  inset: -40%;
+  background:
+    linear-gradient(var(--mg-a), var(--mg-a)) 50% 0 / 2px 26% no-repeat,
+    linear-gradient(var(--mg-a), var(--mg-a)) 50% 100% / 2px 26% no-repeat;
+  opacity: 0;
+}
+.rb[data-stage='reel'] .rb__sight i {
+  opacity: 0.9;
+}
+
+/* Le résultat : une carte au-dessus de la scène, le portrait tiré et ce qui s'est passé. */
+.rb__card {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(14 * var(--u));
+  padding: calc(10 * var(--u)) calc(16 * var(--u));
+  background:
+    radial-gradient(60% 120% at 50% 50%, rgba(255, 77, 109, 0.14), transparent 70%),
+    rgba(23, 13, 31, 0.94);
+  animation: rb-in 0.28s ease-out;
+}
+.rb__card[hidden] {
+  display: none;
+}
+.rb__cardtxt {
+  display: grid;
+  gap: calc(3 * var(--u));
+  min-width: 0;
+}
+.rb__cardtxt b {
+  overflow: hidden;
+  font-size: calc(20 * var(--u));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rb__cardtxt span {
+  font-size: calc(13 * var(--u));
+  font-weight: 700;
+}
+.rb__card[data-tone='ok'] .rb__cardtxt span {
+  color: #ffb3c1;
+}
+.rb__card[data-tone='bad'] .rb__cardtxt span,
+.rb__card[data-tone='info'] .rb__cardtxt span {
+  color: var(--mg-dim);
+}
+.rb__sn {
+  justify-self: start;
+  padding: calc(2 * var(--u)) calc(8 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  font-style: normal;
+  font-weight: 800;
+}
+.rb__sn.is-hit {
+  background: var(--mg-hit);
+  color: #062b16;
+}
+@keyframes rb-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* Sniper réussi : la scène passe au vert, un réticule se referme sur le portrait — une fois. */
+.rb.is-sniped .rb__stage {
+  border-color: var(--mg-hit);
+  box-shadow:
+    0 0 0 1px var(--mg-hit),
+    0 0 calc(30 * var(--u)) rgba(34, 224, 122, 0.45);
+}
+.rb.is-sniped .rb__card {
+  background:
+    radial-gradient(60% 120% at 50% 50%, rgba(34, 224, 122, 0.22), transparent 70%),
+    rgba(8, 28, 18, 0.95);
+}
+.rb.is-sniped .rb-face--big {
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) var(--mg-hit),
+    0 0 calc(28 * var(--u)) var(--mg-hit);
+  animation: rb-lock 0.7s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes rb-lock {
+  from {
+    outline: calc(3 * var(--u)) solid var(--mg-hit);
+    outline-offset: calc(26 * var(--u));
+  }
+  to {
+    outline: calc(3 * var(--u)) solid transparent;
+    outline-offset: 0;
+  }
+}
+
+.rb__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  place-items: center;
+  color: var(--mg-dim);
+  text-align: center;
+}
+
+/* La barre d'action : le Sniper (facultatif) et le bouton, côte à côte. */
+.rb__bar {
+  display: flex;
+  align-items: stretch;
+  gap: calc(8 * var(--u));
+}
+.rb__sniper {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(12 * var(--u));
+  background: rgba(0, 0, 0, 0.25);
+}
+.rb__sniper:focus-within {
+  border-color: rgba(255, 77, 109, 0.7);
+}
+.rb.has-pick .rb__sniper {
+  border-color: rgba(34, 224, 122, 0.6);
+}
+.rb__scope {
+  padding-left: calc(9 * var(--u));
+  font-size: calc(14 * var(--u));
+}
+.rb__input {
+  flex: 1;
+  min-width: 0;
+  padding: calc(9 * var(--u)) calc(8 * var(--u));
+  border: 0;
+  background: transparent;
+  color: var(--mg-ink);
+  font: inherit;
+  outline: none;
+}
+.rb__input::placeholder {
+  color: rgba(255, 236, 242, 0.42);
+}
+.rb__picked {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  color: var(--mg-hit);
   font-weight: 900;
+}
+.rb__clear,
+.rb__x {
+  padding: 0 calc(9 * var(--u));
+  border: 0;
+  background: none;
+  color: var(--mg-dim);
+  font-size: calc(18 * var(--u));
+  line-height: 1;
+  cursor: pointer;
+}
+.rb__sugg {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: calc(100% + 4 * var(--u));
+  left: 0;
+  max-height: calc(180 * var(--u));
+  margin: 0;
+  padding: calc(4 * var(--u));
+  overflow-y: auto;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(12 * var(--u));
+  background: #24142f;
+  box-shadow: 0 calc(-8 * var(--u)) calc(24 * var(--u)) rgba(0, 0, 0, 0.5);
+  list-style: none;
+}
+.rb__sugg li {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  padding: calc(5 * var(--u)) calc(7 * var(--u));
+  border-radius: calc(8 * var(--u));
+  cursor: pointer;
+}
+.rb__sugg li.is-on,
+.rb__sugg li:hover {
+  background: rgba(255, 77, 109, 0.18);
+}
+.rb__sugg small {
+  color: var(--mg-dim);
+}
+.rb__sugg em {
+  margin-left: auto;
+  color: var(--mg-hit);
+  font-size: calc(10.5 * var(--u));
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.rb__go {
+  flex: none;
+  min-width: calc(128 * var(--u));
+  padding: calc(9 * var(--u)) calc(16 * var(--u));
+  border: 0;
+  border-radius: calc(12 * var(--u));
+  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  box-shadow: 0 calc(6 * var(--u)) calc(16 * var(--u)) rgba(255, 77, 109, 0.3);
+  color: #fff;
+  font: inherit;
+  font-size: calc(14 * var(--u));
+  font-weight: 800;
+  cursor: pointer;
+}
+.rb__go span {
+  margin-left: calc(4 * var(--u));
+  padding: calc(1 * var(--u)) calc(7 * var(--u));
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
   font-variant-numeric: tabular-nums;
 }
-.rbx__tier {
-  font-size: calc(12 * var(--rb-u));
-  font-weight: 700;
+.rb__go.is-armed {
+  background: #fff;
+  color: #b0103b;
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(255, 77, 109, 0.5);
 }
-.rbx.is-series .rbx__tier { color: #a3244f; }
+.rb__go.is-armed span {
+  background: rgba(176, 16, 59, 0.12);
+}
+.rb__go:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: default;
+}
 
-.rbx__gauge { display: grid; gap: calc(4 * var(--rb-u)); }
-.rbx__gauge[hidden] { display: none; }
-.rbx__bar {
-  height: calc(8 * var(--rb-u));
-  border-radius: 999px;
-  background: rgba(59, 21, 48, 0.14);
+.rb__foot {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  min-height: calc(20 * var(--u));
+}
+.rb__msg {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   overflow: hidden;
+  color: var(--mg-dim);
+  font-size: calc(12 * var(--u));
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.rbx__bar > i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--rb-rose-deep);
-  transition: width 1s linear;
+.rb__up {
+  color: #ffb3c1;
 }
-.rbx__next, .rbx__normal { margin: 0; font-size: calc(12 * var(--rb-u)); font-variant-numeric: tabular-nums; }
-.rbx__next { font-weight: 800; }
-.rbx__normal { opacity: 0.75; }
+.rb__histbtn {
+  flex: none;
+  padding: calc(3 * var(--u)) calc(9 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: 999px;
+  background: none;
+  color: var(--mg-dim);
+  font: inherit;
+  font-size: calc(11.5 * var(--u));
+  font-weight: 700;
+  cursor: pointer;
+}
 
-.rbx__sr {
+/* L'historique : un panneau secondaire, par-dessus le jeu. */
+.rb__hist {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(16 * var(--u));
+  background: rgba(23, 13, 31, 0.97);
+  animation: rb-in 0.2s ease-out;
+}
+.rb__hist[hidden] {
+  display: none;
+}
+.rb__histhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(8 * var(--u)) calc(6 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u));
+}
+.rb__histlist {
+  margin: 0;
+  padding: 0 calc(8 * var(--u)) calc(8 * var(--u));
+  overflow-y: auto;
+  list-style: none;
+}
+.rb__histlist li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 calc(8 * var(--u));
+  padding: calc(6 * var(--u)) calc(6 * var(--u));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.rb__histlist li.is-me {
+  border-left: calc(2 * var(--u)) solid var(--mg-a);
+}
+.rb__hwho {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rb__hres {
+  color: #ffb3c1;
+  font-weight: 700;
+  text-align: right;
+}
+.rb__histlist li[data-tone='bad'] .rb__hres,
+.rb__histlist li[data-tone='info'] .rb__hres {
+  color: var(--mg-dim);
+}
+.rb__histlist small {
+  grid-column: 1 / -1;
+  color: var(--mg-dim);
+  font-size: calc(11 * var(--u));
+}
+.rb__hnone {
+  color: var(--mg-dim);
+  text-align: center;
+}
+
+.rb__sr {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
+  clip-path: inset(50%);
 }
 
-.rbx__rules { margin: 0; font-size: calc(11.5 * var(--rb-u)); line-height: 1.4; opacity: 0.78; }
+/* Faible largeur (panneau, mobile) : le Sniper au-dessus du bouton. */
+@container (max-width: 420px) {
+  .rb__bar {
+    flex-direction: column;
+  }
+  .rb__go {
+    min-width: 0;
+  }
+  .rb__stage {
+    --cell: calc(62 * var(--u));
+    --face: calc(44 * var(--u));
+    min-height: calc(104 * var(--u));
+  }
+  .rb__cardtxt b {
+    font-size: calc(17 * var(--u));
+  }
+}
 
-.rbx__foot { display: grid; gap: calc(6 * var(--rb-u)); }
-.rbx__cta {
-  min-height: calc(36 * var(--rb-u));
-  padding: calc(8 * var(--rb-u)) calc(16 * var(--rb-u));
-  border: 0;
-  border-radius: 999px;
-  background: var(--rb-rose-deep);
-  color: #2a0d20;
-  font: inherit;
-  font-size: calc(14 * var(--rb-u));
-  font-weight: 900;
-  cursor: pointer;
+/* Faible hauteur (lecteur réduit) : une scène plus basse, sans les noms sous les portraits. */
+@media (max-height: 360px) {
+  .rb {
+    gap: calc(6 * var(--u));
+  }
+  .rb__stage {
+    --cell: calc(56 * var(--u));
+    --face: calc(40 * var(--u));
+    min-height: calc(76 * var(--u));
+  }
+  .rb__cell b {
+    display: none;
+  }
+  .rb__sight {
+    margin-top: 0;
+  }
+  .rb-face--big {
+    --face: calc(50 * var(--u));
+  }
+  .rb__input,
+  .rb__go {
+    padding-top: calc(7 * var(--u));
+    padding-bottom: calc(7 * var(--u));
+  }
 }
-.rbx__cta.is-armed { background: #ffffff; box-shadow: 0 0 0 calc(2 * var(--rb-u)) var(--rb-rose-deep); }
-.rbx__cta:disabled { opacity: 0.45; cursor: default; }
-.rbx__cta:focus-visible { outline: calc(2 * var(--rb-u)) solid var(--rb-rose); outline-offset: calc(2 * var(--rb-u)); }
-.rbx__msg { margin: 0; min-height: 1.3em; font-size: calc(12 * var(--rb-u)); color: var(--rb-rose); }
-
-.rbx__h { margin: calc(2 * var(--rb-u)) 0 0; font-size: calc(12 * var(--rb-u)); letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
-.rbx__list { display: grid; gap: calc(4 * var(--rb-u)); margin: 0; padding: 0; list-style: none; }
-.rbx__list li {
-  display: flex;
-  justify-content: space-between;
-  gap: calc(8 * var(--rb-u));
-  padding: calc(6 * var(--rb-u)) calc(10 * var(--rb-u));
-  border-radius: calc(8 * var(--rb-u));
-  background: rgba(244, 211, 220, 0.07);
-  font-size: calc(12 * var(--rb-u));
-}
-.rbx__list li span { opacity: 0.7; white-space: nowrap; }
-.rbx__list li.is-open b { color: var(--rb-rose); }
-.rbx__list .rbx__empty { opacity: 0.7; }
-
-.rbx__sniper { display: grid; gap: calc(4 * var(--rb-u)); }
-.rbx__slabel { font-size: calc(12 * var(--rb-u)); font-weight: 800; }
-.rbx__select {
-  min-height: calc(32 * var(--rb-u));
-  padding: 0 calc(10 * var(--rb-u));
-  border: calc(1 * var(--rb-u)) solid rgba(244, 211, 220, 0.35);
-  border-radius: calc(8 * var(--rb-u));
-  background: #1f1428;
-  color: #f3e9f2;
-  font: inherit;
-  font-size: calc(13 * var(--rb-u));
-}
-.rbx__select:focus-visible { outline: calc(2 * var(--rb-u)) solid var(--rb-rose); outline-offset: calc(1 * var(--rb-u)); }
-.rbx__snote { margin: 0; font-size: calc(11.5 * var(--rb-u)); opacity: 0.8; }
-.rbx__list li b small { display: block; font-weight: 600; opacity: 0.8; }
-.rbx__list li.is-hit b small { color: #9ff0c9; opacity: 1; }
-.rbx__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(130 * var(--rb-u)), 1fr));
-  gap: calc(6 * var(--rb-u));
-  margin: 0;
-}
-.rbx__stats div { padding: calc(6 * var(--rb-u)) calc(10 * var(--rb-u)); border-radius: calc(8 * var(--rb-u)); background: rgba(244, 211, 220, 0.07); }
-.rbx__stats dt { font-size: calc(11 * var(--rb-u)); opacity: 0.7; }
-.rbx__stats dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
 
 @media (prefers-reduced-motion: reduce) {
-  .rbx__bar > i { transition: none; }
+  .rb[data-stage='idle'] .rb__track,
+  .rb[data-stage='spin'] .rb__track {
+    animation: none;
+  }
+  .rb__card,
+  .rb.is-sniped .rb-face--big {
+    animation: none;
+  }
 }

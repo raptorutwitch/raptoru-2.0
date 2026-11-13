@@ -303,6 +303,10 @@ export class RandomBanRuntime {
           action: c.action,
           reason: c.reason,
           ...(c.request_id !== undefined ? { request_id: c.request_id } : {}),
+          // Sniper resolution: the account the moderator chose (null: none).
+          ...(c.action === 'resolve_sniper'
+            ? { viewer_id: c.viewer_id ?? null }
+            : {}),
         },
       });
     }

@@ -25,7 +25,8 @@ import {
 import { ApiError, STUDIO_HEADERS } from '../http.js';
 
 /** `music`: Music Hub purchases (post-live 11/11) — in the history and refundable, never a desk module. */
-export type ModModule = 'tts' | 'soundboard' | 'bonk' | 'raffle' | 'music';
+export type ModModule =
+  'tts' | 'soundboard' | 'bonk' | 'raffle' | 'music' | 'random_ban';
 export interface ModItem {
   interaction_id: string;
   module?: ModModule;
@@ -72,6 +73,7 @@ export const MODS: Record<
   bonk: { label: 'Bonk', unit: 'bonk', units: 'bonks' },
   raffle: { label: 'Tombola', unit: 'ticket', units: 'tickets' },
   music: { label: 'Musique', unit: 'demande', units: 'demandes' },
+  random_ban: { label: 'Random Ban', unit: 'demande', units: 'demandes' },
 };
 export const SCOPE: Record<string, string> = {
   all: 'Tout Raptoru',
@@ -80,6 +82,7 @@ export const SCOPE: Record<string, string> = {
   bonk: 'Bonk',
   raffle: 'Tombola',
   music: 'Musique',
+  random_ban: 'Random Ban',
 };
 const STATUS: Record<string, string> = {
   queued: 'En attente',
@@ -553,6 +556,7 @@ const SEG_MOD = [
   ['tts', 'TTS'],
   ['soundboard', 'Sons'],
   ['bonk', 'Bonk'],
+  ['random_ban', 'Random Ban'],
 ] as const;
 
 /** Blocage complet : portée, durée, raison. Tout Raptoru ou plus d'une heure : le Core exige « Sanctions sensibles ». */
@@ -654,7 +658,7 @@ export function cooldownForm(
   m: string,
 ) {
   const s = {
-    module: ['tts', 'soundboard', 'bonk'].includes(m) ? m : 'tts',
+    module: ['tts', 'soundboard', 'bonk', 'random_ban'].includes(m) ? m : 'tts',
     d: '300',
     cv: 2,
     cu: 'min',
@@ -670,9 +674,12 @@ export function cooldownForm(
         ? Math.max(60, toSecs(s.sv, s.su))
         : Number(s.span);
   const sum = () => {
-    const u = { tts: 'deux TTS', soundboard: 'deux sons', bonk: 'deux bonks' }[
-      s.module
-    ];
+    const u = {
+      tts: 'deux TTS',
+      soundboard: 'deux sons',
+      bonk: 'deux bonks',
+      random_ban: 'deux Random Ban',
+    }[s.module];
     const t = span();
     return `Attente de <b>${dur(delay())}</b> entre ${u} <b>${t === 'stream' ? 'jusqu’à la fin du stream' : `pendant ${dur(t)}`}</b>.`;
   };
@@ -950,6 +957,7 @@ const WHAT: Record<ModModule, (i: ModItem) => string> = {
   bonk: (i) => `Bonk ${i.emote_glyph ?? ''}`,
   raffle: () => 'Ticket tombola',
   music: (i) => `Musique · ${i.detail ?? ''}`,
+  random_ban: () => 'Random Ban',
 };
 export const whatOf = (i: ModItem, m: ModModule) => WHAT[m](i);
 export const refundable = (i: ModItem, m: ModModule) =>

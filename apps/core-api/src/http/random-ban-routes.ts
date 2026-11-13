@@ -64,6 +64,15 @@ const ModAct = z.strictObject({
       request_id: z.uuid(),
       reason: Reason,
     }),
+    z.strictObject({
+      action: z.literal('resolve_sniper'),
+      request_id: z.uuid(),
+      viewer_id: z
+        .string()
+        .regex(/^\d{1,32}$/)
+        .nullable(),
+      reason: Reason,
+    }),
     z.strictObject({ action: z.literal('pause'), reason: Reason }),
     z.strictObject({ action: z.literal('resume'), reason: Reason }),
   ]),

@@ -96,7 +96,8 @@ export function mountDesk(ctx: Ctx): View {
   let sel: { id: string; m: ModModule } | null = null;
   let col = 'tts';
   const stateOf = (m: ModModule): ModState =>
-    (m === 'music' ? null : ctx.o?.[m]?.module_state) ?? 'active';
+    (m === 'music' || m === 'random_ban' ? null : ctx.o?.[m]?.module_state) ??
+    'active';
   const waiting = (m: ModModule): ModItem[] =>
     m === 'tts'
       ? (ctx.o?.tts.waiting ?? [])

@@ -19,6 +19,8 @@ export const HUB_ICON_PATHS = Object.freeze({
   module: '<rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 12h6M12 9v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   // Music Hub (docs/music/MUSIC_HUB_STATE.md): a double note.
   music: '<path d="M9 17.5V6.5l10-2v11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.6" fill="currentColor"/><circle cx="16.6" cy="15.6" r="2.6" fill="currentColor"/><path d="M9 9.6l10-2" stroke="currentColor" stroke-width="1.8"/>',
+  // Mini-jeux: a crosshair (Random Ban today, other games later).
+  games: '<circle cx="12" cy="12" r="7.6" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="12" r="2.3" fill="currentColor"/><path d="M12 1.8v4.2M12 18v4.2M1.8 12H6M18 12h4.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
   chevL: '<path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   chevR: '<path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   arrow: '<path d="M5 12h12m-4.5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -42,6 +44,9 @@ const MOTIFS = Object.freeze({
   }).join('')}</g>`,
   raffle_join: `<g fill="currentColor">${[[18, 22, 20], [160, 18, -25], [30, 118, -15], [168, 110, 30], [70, 12, 40], [128, 128, -35], [8, 70, 10], [186, 64, -10]]
     .map(([x, y, r]) => `<rect x="${x}" y="${y}" width="16" height="9" rx="2" transform="rotate(${r} ${x + 8} ${y + 4})"/>`).join('')}</g>`,
+  // Mini-jeux: scattered crosshair rings and dots.
+  games: `<g fill="none" stroke="currentColor" stroke-width="2">${[[24, 26, 12], [172, 30, 16], [36, 116, 10], [160, 112, 13], [100, 14, 7]]
+    .map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}"/><path d="M${x} ${y - r - 5}v6M${x} ${y + r - 1}v6M${x - r - 5} ${y}h6M${x + r - 1} ${y}h6"/>`).join('')}</g>`,
   moderation: `<g fill="none" stroke="currentColor" stroke-width="1.6">${Array.from({ length: 5 }, (_, r) => Array.from({ length: 7 }, (_, c) => `<path d="M${14 + c * 30 + (r % 2) * 15} ${10 + r * 30}l9 5v10l-9 5-9-5V${15 + r * 30}Z"/>`).join('')).join('')}</g>`,
 });
 

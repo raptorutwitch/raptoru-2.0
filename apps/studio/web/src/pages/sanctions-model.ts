@@ -41,8 +41,14 @@ export interface RbView {
   /** Mini-jeux: the Jetons price paid and its tier; the Sniper prediction and its decision. */
   price_paid?: number | null;
   series_level?: number | null;
-  wish?: { id: string; name: string | null } | null;
+  wish?: {
+    id: string | null;
+    name: string | null;
+    text?: string | null;
+  } | null;
   sniper?: string;
+  /** Points de chaîne (Twitch) : le rachat, remboursable par Raptoru si la récompense est la sienne. */
+  redemption_id?: string | null;
   sniper_bonus?: number;
   /** Le streamer tiré : son micro coupé, jamais de timeout Twitch. */
   streamer_mute?: boolean;
@@ -149,6 +155,7 @@ const SNIPER: Record<string, string> = {
   glory: 'raté · pour la gloire',
   glory_hit: 'réussi · pour la gloire (sans prime)',
   void: 'sans effet',
+  unresolved: 'pronostic à vérifier (aucun compte sûr)',
   revoked: 'réussi · prime retirée',
 };
 
@@ -236,7 +243,7 @@ export function rbDetail(r: RbView) {
     ${kv('Acheteur', esc(r.buyer.name))}
     ${kv('Origine', RB_SOURCE[r.source] ?? esc(r.source))}
     ${kv('Prix payé', Number.isInteger(r.price_paid) ? `${r.price_paid!.toLocaleString('fr-FR')} Jetons${r.series_level ? ` (palier ${r.series_level + 1})` : ''}` : '')}
-    ${kv('Sniper', r.wish ? `vise ${esc(r.wish.name ?? r.wish.id)} · ${esc(SNIPER[r.sniper ?? ''] ?? r.sniper ?? '')}${r.sniper_bonus ? ` (+${r.sniper_bonus.toLocaleString('fr-FR')})` : ''}` : '')}
+    ${kv('Sniper', r.wish ? `vise ${esc(r.wish.name ?? `« ${r.wish.text ?? r.wish.id ?? '?'} »`)} · ${esc(SNIPER[r.sniper ?? ''] ?? r.sniper ?? '')}${r.sniper_bonus ? ` (+${r.sniper_bonus.toLocaleString('fr-FR')})` : ''}` : '')}
     ${kv('Mode', r.mode === 'real' ? 'Réel' : r.mode === 'dry_run' ? 'À blanc' : 'Animation seule')}
     ${kv('Résultat', rbWho(r))}
     ${kv('Remboursement', rbRefund(r))}

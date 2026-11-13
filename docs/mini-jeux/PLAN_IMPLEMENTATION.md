@@ -11,7 +11,7 @@ worktree `mini-jeux-random-ban`, **non commité**.
 migration distante, déploiement du Core et du bot, release de Studio, Hosted Test, publication de l'extension, création
 ou pause d'une récompense, fusion dans `main`.
 
-**Priorité (13/11, Antoni) : les récompenses Twitch dans Studio** — voir [RECOMPENSES_TWITCH.md](RECOMPENSES_TWITCH.md)
+**Priorité (13/11, Antoni) : les récompenses Twitch dans Studio** — voir [RECOMPENSES_TWITCH.md](../RECOMPENSES_TWITCH.md)
 (statut de « Ban aléatoire », inventaire, procédure de migration). Le reste du chantier est conservé, en pause.
 
 ## 1. État des lots

@@ -122,6 +122,7 @@ export function createLabCore({
   raffle: RaffleLabService;
   wordGame: WordGameService;
   votekick: VotekickService;
+  randomBan: RandomBanService;
   spotify: SpotifyService;
   /** Défis: one recount pass (the Lab process's timer). */
   challenges: { tick: () => Promise<unknown> };
@@ -412,6 +413,7 @@ export function createLabCore({
     raffle,
     wordGame,
     votekick,
+    randomBan,
     spotify,
     challenges: { tick: () => challenges.tick(LAB_PROGRESSION_CHANNEL) },
     modules,

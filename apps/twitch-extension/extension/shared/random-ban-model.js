@@ -79,13 +79,14 @@ const SNIPER = {
   glory: 'Sniper raté (pour la gloire)',
   glory_hit: 'SNIPER ! pour la gloire (sans prime)',
   void: 'Sniper sans effet',
+  unresolved: 'pronostic à vérifier par un modérateur',
   revoked: 'Sniper : prime retirée',
 };
 
 /** The Sniper line of one request (null: no prediction). */
 export function sniperLine(r) {
   if (!r?.wish) return null;
-  const name = r.wish.name ?? '?';
+  const name = r.wish.name ?? r.wish.text ?? '?';
   const what = SNIPER[r.sniper] ?? '';
   return `🎯 ${name} · ${what}${r.sniper === 'hit' && r.sniper_bonus ? ` +${fr(r.sniper_bonus)}` : ''}`;
 }
@@ -103,3 +104,121 @@ export function sniperReadyText(sniper, readAtLocal, nowLocal, serverNow) {
 /** « 50 K » in tight places, the exact amount elsewhere. */
 export const priceText = (n) => `${fr(n)} Jetons`;
 export const priceShort = (n) => formatCompactAmount(n);
+
+// --- Sniper: free text with suggestions (UX refonte 13/11) ---------------------------------------------------------
+
+/** What the viewer typed, as the Core reads it: trimmed, « @ » dropped. */
+export const cleanWish = (text) => String(text ?? '').trim().replace(/^@+/, '').trim().slice(0, 40);
+
+function distance(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 3;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++)
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * The suggestions for a typed name, best first (at most `limit`): the exact account first (login or display name),
+ * then the names that start with it, contain it, or are one or two typos away. `exact` marks the only sure match —
+ * a suggestion is never picked for the viewer.
+ */
+export function matchViewers(candidates, text, limit = 5) {
+  const q = cleanWish(text).toLowerCase();
+  if (!q) return [];
+  const scored = [];
+  for (const c of candidates ?? []) {
+    const login = String(c.login ?? '').toLowerCase();
+    const name = String(c.name ?? '').toLowerCase();
+    let score = null;
+    if (login === q || name === q) score = 0;
+    else if (login.startsWith(q) || name.startsWith(q)) score = 1;
+    else if (login.includes(q) || name.includes(q)) score = 2;
+    else if (q.length >= 3) {
+      const d = Math.min(distance(q, login), distance(q, name));
+      if (d <= (q.length >= 6 ? 2 : 1)) score = 2 + d;
+    }
+    if (score !== null) scored.push({ ...c, score, exact: score === 0 });
+  }
+  return scored
+    .sort((a, b) => a.score - b.score || String(a.name).localeCompare(String(b.name), 'fr'))
+    .slice(0, limit);
+}
+
+/** The one sure account for a typed name (null: none, or ambiguous). Same rule as the Core's. */
+export function exactViewer(candidates, text) {
+  const q = cleanWish(text).toLowerCase();
+  if (!q) return null;
+  const byLogin = (candidates ?? []).find((c) => String(c.login ?? '').toLowerCase() === q);
+  if (byLogin) return byLogin;
+  const byName = (candidates ?? []).filter((c) => String(c.name ?? '').toLowerCase() === q);
+  return byName.length === 1 ? byName[0] : null;
+}
+
+// --- The result of one draw, as the game screen tells it ------------------------------------------------------------
+
+/**
+ * What the stage shows for one request: `phase` (wait: paid, not drawn yet · reel: a strip to scroll · done: nothing to
+ * scroll, only a card), the outcome in a few words, its tone, and the Sniper's.
+ */
+export function resultModel(r) {
+  if (!r) return null;
+  const open = OPEN_STATUSES.includes(r.status);
+  const phase = r.strip?.items?.length ? 'reel' : open ? 'wait' : 'done';
+  const who = r.target?.name ?? null;
+  const self = !!r.target && r.target.id === r.buyer?.id;
+  const minutes = Math.round((r.duration_s ?? 0) / 60);
+  const outcome = {
+    queued: ['Tirage en préparation…', 'wait'],
+    searching: ['Tirage en cours…', 'wait'],
+    timeout_requested: ['Sanction en cours…', 'wait'],
+    confirmed: [r.streamer_mute ? 'Micro coupé !' : self ? 'CSC ! Tiré toi-même' : `Exclu ${minutes} min`, 'ok'],
+    simulated: ['Essai à blanc : personne n’est exclu', 'info'],
+    flop: ['Personne d’éligible', 'info'],
+    failed: ['Sans effet · remboursé', 'bad'],
+    uncertain: ['Sanction non confirmée : un modérateur vérifie', 'bad'],
+    canceled: ['Annulé · remboursé', 'bad'],
+  }[r.status] ?? [r.status, 'info'];
+  const sniper = !r.wish
+    ? null
+    : {
+        name: r.wish.name ?? r.wish.text ?? '?',
+        state: r.sniper,
+        hit: r.sniper === 'hit' || r.sniper === 'glory_hit',
+        bonus: r.sniper === 'hit' ? r.sniper_bonus || 0 : 0,
+        text:
+          r.sniper === 'hit'
+            ? `SNIPER ! +${fr(r.sniper_bonus)} Jetons`
+            : r.sniper === 'glory_hit'
+              ? 'SNIPER ! pour la gloire'
+              : r.sniper === 'unresolved'
+                ? 'Pronostic à vérifier'
+                : r.sniper === 'armed'
+                  ? `Visé : ${r.wish.name ?? r.wish.text}`
+                  : ['miss', 'glory'].includes(r.sniper)
+                    ? 'Sniper raté'
+                    : '',
+      };
+  return { phase, who, self, text: outcome[0], tone: outcome[1], open, sniper };
+}
+
+/** One line of the « Historique » panel: who launched, who was drawn, the result, the price, the Sniper. */
+export function historyLine(r) {
+  const res = resultModel(r);
+  const via = { extension: 'extension', chat: '!rb', channel_points: 'points de chaîne' }[r.source] ?? '';
+  const paid = Number.isInteger(r.price_paid) ? priceShort(r.price_paid) : r.source === 'channel_points' ? 'points' : '';
+  return {
+    id: r.request_id,
+    buyer: r.buyer?.name ?? '?',
+    target: res.who,
+    result: res.text,
+    tone: res.tone,
+    meta: [via, paid].filter(Boolean).join(' · '),
+    sniper: res.sniper ? `🎯 ${res.sniper.name} · ${res.sniper.hit ? 'touché' : r.sniper === 'unresolved' ? 'à vérifier' : r.sniper === 'armed' ? 'en attente' : 'raté'}` : null,
+    at: r.created_at,
+  };
+}

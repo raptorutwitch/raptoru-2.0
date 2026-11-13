@@ -32,6 +32,7 @@ import { randomBanRoutes } from '../src/http/random-ban-routes.js';
 import { modulesRoutes } from '../src/http/modules-routes.js';
 import { chatRouter } from '../src/lab-chat/games.js';
 import { editWallet } from '../src/lab-moderation/store.js';
+import { LabModerationService } from '../src/lab-moderation/service.js';
 import { createTestDb } from '../test/helpers.js';
 
 const PORT = Number(process.env.PORT || 4495);
@@ -45,13 +46,49 @@ const FX = join(ROOT, 'studio', 'server', 'effects-player');
 const db = await createTestDb();
 const core = createCore(db, systemClock, new DevFakeCreditProvider());
 const rb = core.randomBan;
-rb.candidates = async () => RB_LAB_CHATTERS.map((c) => ({ ...c }));
+// The fictional chat: the Lab's chatters and a few more (look-alike names for the Sniper's suggestions).
+const DEMO_CHATTERS = [
+  ...RB_LAB_CHATTERS,
+  ...[
+    'KiwiTV',
+    'LunaBlue',
+    'xXNoxXx',
+    'Ir1s',
+    'MokaChoco',
+    'ZedLeRoux',
+    'Pikachuu',
+    'Baobab',
+    'Raven',
+    'Sushi',
+  ].map((name, i) => ({
+    id: String(990_101 + i),
+    login: name.toLowerCase(),
+    name,
+  })),
+];
+// « Chat réduit » (demo button): only Pika and Alice are present — the honest way to see a Sniper hit (Alice has one
+// chance in five), the draw stays the Core's own.
+let smallChat = false;
+const present = () =>
+  smallChat ? DEMO_CHATTERS.filter((c) => c.name === 'Pika') : DEMO_CHATTERS;
+rb.candidates = async () => present().map((c) => ({ ...c }));
+// Pictures: the demo's own drawings (no Twitch); every 6th viewer has none (the initials fallback is shown).
+const NO_PICTURE = new Set(
+  DEMO_CHATTERS.filter((_, i) => i % 6 === 5).map((c) => c.id),
+);
+rb.avatarsOf = async (_q, ids) =>
+  new Map(
+    ids.filter((id) => !NO_PICTURE.has(id)).map((id) => [id, `/av/${id}.svg`]),
+  );
 const step = Number(process.env.TIER_STEP_MIN ?? 5);
 for (const [k, v] of [
   ['random_ban_ext.enabled', 1],
-  ['random_ban.sequence', 1],
+  // The stream keeps its ban video (Studio's effects player); the reel is the extension's own (dissociated).
+  ['random_ban.sequence', 0],
   ['random_ban.strike_offset_s', 1],
   ['random_ban.tier_step_min', step],
+  // Demo only: every Sniper hit pays (no 30-min wait between two tries), to see the bonus without waiting.
+  ['random_ban.sniper_window_min', 0],
 ] as const)
   await core.moduleSettings.set(CH, k, v, 'demo');
 await editWallet(
@@ -91,7 +128,7 @@ const executor = createRandomBanExecutor({
     ...fake,
     chattersPage: async () => ({
       chatters: [
-        ...RB_LAB_CHATTERS.map((c) => ({ ...c })),
+        ...present().map((c) => ({ ...c })),
         { id: ME.id, login: ME.login, name: ME.display_name },
       ],
       cursor: null,
@@ -110,6 +147,17 @@ const executor = createRandomBanExecutor({
 void executor.run();
 
 const host = internalLabCall(modulesRoutes(core.modules));
+// Blocks and personal cooldowns (module « random_ban »): the moderation's own commands, as Studio sends them.
+const labMod = new LabModerationService(
+  db,
+  systemClock,
+  core.ttsLab,
+  core.soundLab,
+  core.bonkLab,
+  core.raffleLab,
+  core.economy,
+  core.spotify,
+);
 const router = chatRouter(core.raffleLab, core.chat.chatModules);
 const studio = {
   id: 'demo',
@@ -181,39 +229,105 @@ export const RUNTIME = Object.freeze({ mode: 'demo', environment: 'calibration',
 `;
 
 const INDEX = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Mini-jeux — démo Lab</title>
-<style>body{margin:0;font:14px system-ui,sans-serif;background:#140d1c;color:#f3e9f2}
-header{padding:10px 16px;background:#2a1636}header b{color:#f4d3dc}
-main{display:grid;grid-template-columns:651px 1fr;gap:16px;padding:16px}
-iframe{border:0;border-radius:10px;background:#000}
-.col{display:grid;gap:12px;align-content:start}
-.box{background:#1f1428;border-radius:10px;padding:10px 12px}
-.box h3{margin:0 0 6px;font-size:13px;text-transform:uppercase;opacity:.7}
-button{margin:2px 4px 2px 0;padding:6px 10px;border:0;border-radius:8px;background:#e58aa6;color:#2a0d20;font-weight:700;cursor:pointer}
-ul{margin:0;padding-left:18px;max-height:220px;overflow:auto}li{margin:2px 0}
-input{padding:6px;border-radius:6px;border:0;width:160px}</style></head><body>
-<header><b>Mini-jeux · démo Lab</b> — tout est local et fictif : Core en mémoire, faux Twitch, Jetons fictifs. Tu es <b>Alice</b> (1 000 000 Jetons).</header>
-<main><div class="col"><iframe src="/ext/video_component.html?anchor=component" width="651" height="434"></iframe>
-<div class="box"><h3>Chat (Alice)</h3><input id="t" value="!rb"> <button onclick="say()">Envoyer</button>
-<button onclick="refuse()">Twitch refusera le prochain timeout</button></div>
+<style>body{margin:0;font:14px system-ui,sans-serif;background:#120b18;color:#f6eef3}
+header{padding:10px 16px;background:linear-gradient(90deg,#3a0f22,#2a0f33)}header b{color:#ffb3c1}
+main{display:grid;grid-template-columns:auto 1fr;gap:16px;padding:16px;align-items:start}
+iframe{border:0;border-radius:10px;background:#000;display:block}
+.col{display:grid;gap:12px;align-content:start}.sizes{display:flex;gap:6px;margin-bottom:6px}
+.box{background:#1d1225;border-radius:10px;padding:10px 12px}
+.box h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;opacity:.7}
+button{margin:2px 4px 2px 0;padding:5px 9px;border:0;border-radius:7px;background:#ff4d6d;color:#fff;font-weight:700;cursor:pointer}
+button.g{background:#3a2a44}button.s{padding:3px 7px;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}td{padding:4px 6px;border-bottom:1px solid #ffffff12;vertical-align:top}
+.ok{color:#7dffb0}.bad{color:#ff9aa9}.w{color:#ffd27a}small{opacity:.7}
+ul{margin:0;padding-left:18px;max-height:160px;overflow:auto}li{margin:2px 0}input{padding:5px;border-radius:6px;border:0;width:150px}</style></head><body>
+<header><b>Mini-jeux · démo Lab</b> — tout est local et fictif : Core en mémoire, faux Twitch (aucun vrai timeout), Jetons fictifs. Tu es <b>Alice</b> (1 000 000 Jetons). Les autres viewers sont inventés. Réglage de démo : la prime Sniper est versée sans l’attente de 30 min.</header>
+<main><div class="col"><div class="sizes"><button class="g s" data-size="651x434">Lecteur 651×434</button><button class="g s" data-size="480x320">Petit 480×320</button><button class="g s" data-size="318x496">Panneau 318×496</button></div>
+<iframe id="ext" src="/ext/video_component.html?anchor=component" width="651" height="434"></iframe>
+<div class="box"><h3>Le chat</h3><input id="t" value="!rb"> <button data-do="say">Alice écrit</button>
+<button class="g" data-do="other">Un autre viewer lance !rb</button><button class="g" data-do="refuse">Twitch refusera le prochain timeout</button><button class="g" data-do="small">Chat réduit (Pika + Alice) : oui/non</button> <b id="small"></b></div>
 <div class="box"><h3>Réponses de LeCroupier_</h3><ul id="replies"></ul></div></div>
-<div class="col"><iframe src="/stream" width="960" height="540"></iframe>
-<div class="box"><h3>Modération (Studio)</h3><button onclick="mod('pause')">Pause file</button><button onclick="mod('resume')">Reprise</button>
-<button onclick="cancelLast()">Annuler la dernière demande en attente</button><ul id="hist"></ul></div></div></main>
+<div class="col"><iframe src="/stream" width="640" height="360"></iframe>
+<div class="box"><h3>Modération Random Ban (les mêmes commandes que Studio › Modération › Random Ban)</h3>
+<div><button class="g s" data-mod="pause">Pause de la file</button><button class="g s" data-mod="resume">Reprise</button> <span id="paused"></span></div>
+<table><tbody id="hist"></tbody></table></div></div></main>
 <script>
-const post = (u, b) => fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b ?? {}) }).then((r) => r.json());
-const say = () => post('/api/chat', { text: document.getElementById('t').value });
-const refuse = () => post('/api/refuse-next');
-const mod = (action, request_id) => post('/api/mod', { action, request_id, reason: 'démo' }).then((r) => r.error && alert(r.error));
-async function cancelLast() { const h = await (await fetch('/api/history')).json(); const q = h.requests.find((r) => r.status === 'queued'); if (q) mod('cancel', q.request_id); else alert('Aucune demande en attente'); }
+const post = (u, b) => fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b || {}) }).then((r) => r.json());
+const mod = (cmd) => post('/api/mod', Object.assign({ reason: 'démo' }, cmd)).then((r) => { if (r.error) alert(r.error); tick(); });
+const lab = (cmd) => post('/api/lab-mod', Object.assign({ reason: 'démo' }, cmd)).then((r) => { if (r.error) alert(r.error); tick(); });
+let rows = [];
+async function resolve(x) {
+  const who = prompt('Quel compte « ' + x.wish.text + ' » visait-il ? (pseudo exact, vide = aucun)', x.wish.text);
+  if (who === null) return;
+  const chatters = await (await fetch('/api/chatters')).json();
+  const w = who.trim().toLowerCase();
+  const c = chatters.find((v) => v.name.toLowerCase() === w || v.login === w);
+  if (w && !c) return alert('Aucun viewer « ' + who + ' »');
+  mod({ action: 'resolve_sniper', request_id: x.request_id, viewer_id: c ? c.id : null });
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.size) { const [w, h] = b.dataset.size.split('x'); const f = document.getElementById('ext'); f.width = w; f.height = h; }
+  if (b.dataset.do === 'say') post('/api/chat', { text: document.getElementById('t').value });
+  if (b.dataset.do === 'other') post('/api/chat-other', {});
+  if (b.dataset.do === 'refuse') post('/api/refuse-next');
+  if (b.dataset.do === 'small') post('/api/small-chat').then((r) => { document.getElementById('small').textContent = r.small ? 'chat réduit' : ''; });
+  if (b.dataset.mod) mod({ action: b.dataset.mod });
+  const x = rows[Number(b.dataset.row)];
+  if (!x) return;
+  const v = x.buyer.id;
+  const a = b.dataset.a;
+  if (a === 'cancel' || a === 'refund_uncertain' || a === 'revoke_bonus') mod({ action: a, request_id: x.request_id });
+  if (a === 'resolve') resolve(x);
+  if (a === 'block') lab({ action: 'block_viewer', viewer_id: v, module: 'random_ban', duration_s: 300 });
+  if (a === 'cooldown') lab({ action: 'set_cooldown', viewer_id: v, module: 'random_ban', delay_s: 600, span: 3600 });
+  if (a === 'lift') { lab({ action: 'unblock_viewer', viewer_id: v, module: 'random_ban' }); lab({ action: 'clear_cooldown', viewer_id: v, module: 'random_ban' }); }
+});
+const RES = { queued: ['en file', 'w'], searching: ['tirage', 'w'], timeout_requested: ['sanction envoyée', 'w'], confirmed: ['sanction appliquée', 'ok'], failed: ['sans effet · remboursé', 'bad'], uncertain: ['à vérifier', 'bad'], canceled: ['annulé', 'bad'], flop: ['personne', ''], simulated: ['à blanc', ''] };
+const SRC = { extension: 'extension', chat: '!rb', channel_points: 'points' };
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';');
+const btn = (i, a, label, g) => '<button class="s' + (g ? ' g' : '') + '" data-row="' + i + '" data-a="' + a + '">' + label + '</button>';
 async function tick() {
   const r = await (await fetch('/api/replies')).json();
-  document.getElementById('replies').innerHTML = r.map((x) => '<li>' + x.replace(/</g, '&lt;') + '</li>').join('');
+  document.getElementById('replies').innerHTML = r.map((x) => '<li>' + esc(x) + '</li>').join('');
   const h = await (await fetch('/api/history')).json();
-  document.getElementById('hist').innerHTML = (h.paused ? '<li><b>File en pause</b></li>' : '') + h.requests.slice(0, 8).map((x) =>
-    '<li>' + [x.source, x.buyer.name, x.status, x.target?.name ?? '', x.price_paid ? x.price_paid + ' J' : '', x.wish ? '🎯' + x.wish.name + ' ' + x.sniper : ''].join(' · ') + '</li>').join('');
+  document.getElementById('paused').innerHTML = h.paused ? '<b class="w">File en pause</b>' : '';
+  rows = h.requests.slice(0, 10);
+  document.getElementById('hist').innerHTML = rows.map((x, i) => {
+    const res = RES[x.status] || [x.status, ''];
+    const sn = x.wish ? '🎯 ' + esc(x.wish.name || '« ' + x.wish.text + ' »') + ' <small>' + x.sniper + '</small>' : '';
+    return '<tr><td><b>' + esc(x.buyer.name) + '</b> → ' + esc(x.target ? x.target.name : '—') + '<br><small>' + (SRC[x.source] || x.source) + (x.price_paid ? ' · ' + x.price_paid.toLocaleString('fr-FR') + ' J' : '') + '</small></td>'
+      + '<td class="' + res[1] + '">' + res[0] + '<br>' + sn + '</td><td>'
+      + (x.status === 'queued' ? btn(i, 'cancel', 'Annuler') : '')
+      + (x.status === 'uncertain' && x.refund === 'to_verify' ? btn(i, 'refund_uncertain', 'Rembourser') : '')
+      + (x.sniper === 'unresolved' ? btn(i, 'resolve', 'Résoudre le Sniper') : '')
+      + (x.sniper === 'hit' ? btn(i, 'revoke_bonus', 'Retirer la prime', 1) : '')
+      + btn(i, 'block', 'Bloquer 5 min', 1) + btn(i, 'cooldown', 'Délai 10 min', 1) + btn(i, 'lift', 'Lever', 1)
+      + '</td></tr>';
+  }).join('');
 }
-setInterval(tick, 1000); tick();
+setInterval(tick, 1500); tick();
 </script></body></html>`;
+
+/** A fictional profile picture (the demo has no Twitch): a gradient, a face, a hairstyle — stable per id. */
+function avatarSvg(id: string) {
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360;
+  const skin = ['#f2c9a0', '#d9a273', '#a86b45', '#7a4a2e', '#ffd9b8'][h % 5];
+  const hair = [
+    '#2b1b10',
+    '#7a3d12',
+    '#e8c45a',
+    '#c2185b',
+    '#3949ab',
+    '#f5f5f5',
+  ][h % 6];
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h} 70% 55%)"/><stop offset="1" stop-color="hsl(${(h + 60) % 360} 70% 35%)"/></linearGradient></defs>
+<rect width="64" height="64" fill="url(#g)"/><ellipse cx="32" cy="64" rx="22" ry="16" fill="hsl(${(h + 180) % 360} 45% 40%)"/>
+<circle cx="32" cy="30" r="14" fill="${skin}"/><path d="M17 28c0-11 8-16 15-16s15 5 15 16c-4-5-9-7-15-7s-11 2-15 7z" fill="${hair}"/>
+<circle cx="27" cy="31" r="1.8" fill="#222"/><circle cx="37" cy="31" r="1.8" fill="#222"/><path d="M27 37q5 4 10 0" stroke="#222" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>`;
+}
 
 const STREAM = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;overflow:hidden;background:linear-gradient(135deg,#2c3a4a,#4a3c5a)}
 #wrap{width:1920px;height:1080px;transform:scale(.5);transform-origin:0 0;position:relative}#stage{position:absolute;inset:0}
@@ -310,6 +424,60 @@ createServer(async (req, res) => {
         200,
         rows.map((r) => r.params.text),
       );
+    }
+    if (p.startsWith('/av/') && p.endsWith('.svg')) {
+      res.writeHead(200, {
+        'content-type': 'image/svg+xml',
+        'cache-control': 'max-age=3600',
+      });
+      return void res.end(avatarSvg(p.slice(4, -4)));
+    }
+    if (p === '/api/chatters') return json(res, 200, DEMO_CHATTERS);
+    if (p === '/api/small-chat') {
+      smallChat = !smallChat;
+      return json(res, 200, { small: smallChat });
+    }
+    if (p === '/api/chat-other') {
+      const c =
+        DEMO_CHATTERS[Math.floor(Math.random() * DEMO_CHATTERS.length)]!;
+      await editWallet(
+        db,
+        systemClock.now(),
+        CH,
+        c.id,
+        'set',
+        { tokens: 500_000 },
+        'demo',
+      ).catch(() => {});
+      const msg: LabChatMessage = {
+        channel_id: CH,
+        message_id: `demo-${++n}`,
+        text: '!rb',
+        chatter: {
+          id: c.id,
+          login: c.login,
+          display_name: c.name,
+          role: 'viewer',
+        },
+        source: 'twitch',
+      };
+      return json(res, 200, await router.message(msg));
+    }
+    if (p === '/api/lab-mod') {
+      const b = await body(req);
+      try {
+        return json(
+          res,
+          200,
+          await labMod.act(CH, { actor: studio, command: b as never }),
+        );
+      } catch (e) {
+        return json(res, 200, {
+          error:
+            (e as { code?: string; message: string }).code ??
+            (e as Error).message,
+        });
+      }
     }
     if (p === '/api/refuse-next') {
       refuseNext = true;

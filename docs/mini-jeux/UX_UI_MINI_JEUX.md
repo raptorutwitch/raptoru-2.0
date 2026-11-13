@@ -1,5 +1,27 @@
 # UX / UI — module Mini-jeux et Random Ban
 
+## 0. Refonte du 13/11 (demande d'Antoni) — ce qui remplace le reste de ce document là où ils divergent
+
+Les mécanismes serveur restent ; la présentation et l'interaction de l'extension sont refaites. Démo :
+`cd apps/core-api && npx tsx scripts/mini-jeux-demo.ts` → http://127.0.0.1:4495 (tout fictif, aucun vrai timeout).
+
+| Sujet | Décision codée |
+| --- | --- |
+| Conteneur | `shared/mini-games.js` : une carte « Mini-jeux », des tuiles de jeux affichées seulement à partir de deux jeux ; Random Ban par défaut |
+| Hub | couleurs rose-rouge → magenta (famille de Tombola, distinctes) ; Bonk placé entre Mini-jeux et TTS (`app/panel.js`) |
+| Écran Random Ban | nom + icône, prix compact avec anneau de récupération (↓ m:ss), grande scène de tirage, Sniper, bouton « Lancer · 25 K », « Historique » discret ; plus d'encart rose, de règles, de liste déroulante, de stats ni de bloc « Modération » (`moderation.visible: false`) |
+| Confirmation | deuxième clic ; « ⬆ Prix en hausse » dans la ligne de message quand le palier est monté ; jamais d'écran en plus |
+| Sniper | champ libre (`Pseudo`, `@Pseudo`, collage), suggestions façon mentions (exact d'abord, préfixes, fautes de frappe), compte validé ✓ ; un texte sans compte sûr part en `unresolved` (`wish_text` gardé) et se résout dans Studio (`resolve_sniper`, prime une seule fois) |
+| Le Viseur | dans l'extension : le Core construit au tirage une bande (`stats.strip`, cible à `stop`, la cible du Sniper jamais voisine) ; l'extension la fait défiler et s'arrête dessus ; aucune décision côté client ; rouleau joué une fois par appareil (sessionStorage), animations réduites respectées |
+| Sniper réussi | scène verte, réticule sur le portrait, « SNIPER ! +2 000 Jetons » une fois |
+| Photos | cache des avatars Twitch du Core (celui de Tombola/Votekick), initiales sinon ; jamais d'appel Twitch à la lecture |
+| Historique | panneau secondaire : qui a lancé, qui a été tiré, résultat, prix, Sniper (`state.recent`, sans bande ni id de rachat) |
+| Stats | retirées de l'écran ; l'API (`personalStats`, `/v1/site/modules/random-ban/public`) reste pour raptoru.fr |
+| Modération | Studio › Modération › Random Ban (`pages/moderation-random-ban.ts`) : demandes, cible, sanction réelle, Sniper, annuler, rembourser Jetons (vérifié) ou points (récompense Raptoru), résoudre un Sniper, bloquer, délai, lever ; blocages et délais du module `random_ban` valent pour l'extension, `!rb` et les points |
+| Vidéo de ban | inchangée sur le stream (lecteur d'effets), séparée du rouleau de l'extension ; `sequence` reste à 0 par défaut |
+
+Pas fait dans ce mandat : cooldown évolutif des points de chaîne (en discussion), tampon SNIPER sur le stream, pages du site.
+
 12/11/2026. Conception active, alignée sur la [SPEC](SPEC_RANDOM_BAN_V2.md) (règles décidées : prix progressif
 récupéré par paliers de 5 min, Sniper 30 min, séquence hybride, stats). Codé (Lab) : le format des montants et la pastille de
 gain (§ 9), la vue Random Ban avec jauge, Sniper et « Mes stats », le rouleau « Le Viseur » (§ 6).

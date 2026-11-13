@@ -165,6 +165,8 @@ export function randomBanExtModule(
           const input = (call.input ?? {}) as {
             expected_price?: unknown;
             wish_id?: unknown;
+            /** The Sniper as typed (« @Pseudo »): matched only when exact, else kept for the moderation. */
+            wish_text?: unknown;
           };
           const ceiling = input.expected_price;
           if (
@@ -180,6 +182,10 @@ export function randomBanExtModule(
             (typeof wish !== 'string' || !/^\d{1,32}$/.test(wish))
           )
             throw new ModuleError(400, 'wish_unknown');
+          const wishText =
+            typeof input.wish_text === 'string'
+              ? input.wish_text.slice(0, 64)
+              : null;
           if (!(await ctx.live(q))) throw new ModuleError(409, STREAM_OFFLINE);
           if (!service.executorReady(call.channelId))
             throw new ModuleError(409, 'rb_unavailable');
@@ -196,7 +202,7 @@ export function randomBanExtModule(
                 name: call.viewer.display_name.slice(0, 64),
               },
               ceiling,
-              wish: wish ? { id: wish } : null,
+              wish: wish || wishText ? { id: wish, text: wishText } : null,
             });
             return {
               status: 'done',
@@ -223,10 +229,11 @@ export function randomBanExtModule(
         ...(await service.buyerState(channelId, viewer.id)),
       };
     },
+    // Moderated in Studio › Modération › Random Ban (refonte Mini-jeux 13/11), never under the game in the extension.
     moderation: {
-      visible: true,
+      visible: false,
       refund: 'never',
-      note: 'Random Ban rembourse lui-même une demande sans effet (une fois) ; le reste se règle dans son historique.',
+      note: 'Random Ban rembourse lui-même une demande sans effet (une fois) ; le reste se règle dans Studio › Modération › Random Ban.',
     },
   };
 }

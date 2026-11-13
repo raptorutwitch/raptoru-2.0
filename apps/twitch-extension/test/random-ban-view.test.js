@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  exactViewer,
+  historyLine,
+  matchViewers,
+  resultModel,
   gaugeModel,
   requestLine,
   sniperLine,
@@ -131,5 +135,118 @@ describe('Sniper texts', () => {
     expect(sniperLine({ wish: { name: 'Kiwi' }, sniper: 'glory_hit' })).toBe(
       '🎯 Kiwi · SNIPER ! pour la gloire (sans prime)',
     );
+  });
+});
+
+// Refonte 13/11 — the Sniper typed freely, with suggestions; the stage's result and the history panel's lines.
+const POOL = [
+  { id: '1', login: 'pika', name: 'Pika' },
+  { id: '2', login: 'pikachuu', name: 'Pikachuu' },
+  { id: '3', login: 'kiwitv', name: 'KiwiTV' },
+  { id: '4', login: 'kiwi', name: 'Kiwi' },
+  { id: '5', login: 'lunablue', name: 'LunaBlue' },
+];
+
+describe('Sniper suggestions', () => {
+  it('the exact account first (login or name, « @ » and case aside), then prefixes', () => {
+    const s = matchViewers(POOL, '@PIKA');
+    expect(s.map((x) => x.id)).toEqual(['1', '2']);
+    expect(s[0].exact).toBe(true);
+    expect(s[1].exact).toBe(false);
+  });
+  it('a small typo is suggested, never marked exact', () => {
+    const s = matchViewers(POOL, 'lunablu3');
+    expect(s.map((x) => x.id)).toEqual(['5']);
+    expect(s[0].exact).toBe(false);
+    expect(matchViewers(POOL, 'zz')).toEqual([]);
+    expect(matchViewers(POOL, '   ')).toEqual([]);
+  });
+  it('exactViewer: the one sure account only', () => {
+    expect(exactViewer(POOL, ' @kiwi ')?.id).toBe('4');
+    expect(exactViewer(POOL, 'kiw')).toBeNull();
+    expect(
+      exactViewer(
+        [
+          { id: 'a', login: 'x1', name: 'Same' },
+          { id: 'b', login: 'x2', name: 'same' },
+        ],
+        'same',
+      ),
+    ).toBeNull();
+  });
+});
+
+describe('the stage and the history', () => {
+  const base = {
+    request_id: 'r1',
+    source: 'extension',
+    buyer: { id: '9', name: 'Alice' },
+    target: { id: '1', name: 'Pika' },
+    duration_s: 300,
+    price_paid: 30_000,
+    created_at: '2026-11-13T20:00:00Z',
+  };
+  it('a strip to scroll, then the outcome', () => {
+    expect(
+      resultModel({ ...base, status: 'searching', target: null }),
+    ).toMatchObject({ phase: 'wait', open: true });
+    expect(
+      resultModel({
+        ...base,
+        status: 'timeout_requested',
+        strip: { items: [{ id: '1' }], stop: 0 },
+      }),
+    ).toMatchObject({ phase: 'reel', text: 'Sanction en cours…' });
+    expect(resultModel({ ...base, status: 'confirmed' })).toMatchObject({
+      text: 'Exclu 5 min',
+      tone: 'ok',
+    });
+    expect(
+      resultModel({
+        ...base,
+        status: 'confirmed',
+        target: { id: '9', name: 'Alice' },
+      }).text,
+    ).toMatch(/CSC/);
+    expect(resultModel({ ...base, status: 'failed' })).toMatchObject({
+      tone: 'bad',
+    });
+  });
+  it('the Sniper: hit with its bonus once in the words, unresolved said as such', () => {
+    const hit = resultModel({
+      ...base,
+      status: 'confirmed',
+      wish: { id: '1', name: 'Pika' },
+      sniper: 'hit',
+      sniper_bonus: 2000,
+    });
+    expect(hit.sniper).toMatchObject({ hit: true, bonus: 2000 });
+    expect(hit.sniper.text).toMatch(/SNIPER ! \+2.000 Jetons/);
+    const un = resultModel({
+      ...base,
+      status: 'confirmed',
+      wish: { id: null, name: null, text: 'Pikka' },
+      sniper: 'unresolved',
+    });
+    expect(un.sniper).toMatchObject({
+      hit: false,
+      name: 'Pikka',
+      text: 'Pronostic à vérifier',
+    });
+  });
+  it('a history line: who, who was drawn, the result, the price, the Sniper', () => {
+    const l = historyLine({
+      ...base,
+      status: 'confirmed',
+      wish: { id: '2', name: 'Pikachuu' },
+      sniper: 'miss',
+    });
+    expect(l).toMatchObject({
+      buyer: 'Alice',
+      target: 'Pika',
+      result: 'Exclu 5 min',
+    });
+    expect(l.meta).toMatch(/extension · 30/);
+    expect(l.sniper).toBe('🎯 Pikachuu · raté');
   });
 });

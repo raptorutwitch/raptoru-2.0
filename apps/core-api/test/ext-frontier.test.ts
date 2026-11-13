@@ -945,13 +945,7 @@ describe('module host through the real Production doors (architecture socle)', (
         enabled: true,
         moderation: { visible: true, refund: 'moderator' },
       },
-      // Mini-jeux (switched off by default): its journal is the team's too; refunds are Random Ban's own.
-      {
-        id: 'random_ban_ext',
-        label: 'Mini-jeux · Random Ban',
-        enabled: false,
-        moderation: { visible: true, refund: 'never' },
-      },
+      // Mini-jeux: moderated in Studio › Modération › Random Ban, never under the game (refonte 13/11).
     ]);
     // A module the policy hides from the team (or an unknown one): no journal.
     expect(

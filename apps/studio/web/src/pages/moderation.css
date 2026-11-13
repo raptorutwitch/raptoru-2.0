@@ -1033,3 +1033,75 @@ button.mj-r:hover {
   gap: 10px;
   color: var(--ink2);
 }
+
+/* Modération › Random Ban (refonte Mini-jeux) : une ligne par demande — qui, qui a été tiré, la sanction, le Sniper. */
+.mrb {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+.mrb-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mrb-list {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+.mrb-l {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--hair);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.mrb-l:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.08));
+}
+.mrb-l time {
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.mrb-who,
+.mrb-src {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mrb-src {
+  opacity: 0.7;
+  font-size: 12px;
+}
+.mrb-end {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.mrb-sn {
+  opacity: 0.8;
+}
+.mrb-sn.ok {
+  color: var(--ok, #22c55e);
+  opacity: 1;
+}
+.mrb-sn.warn {
+  color: var(--warn, #f59e0b);
+  opacity: 1;
+}
+.mrb-hits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}

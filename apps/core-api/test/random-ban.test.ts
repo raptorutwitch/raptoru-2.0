@@ -570,7 +570,7 @@ describe('Random Ban migrations', () => {
     await migrate(prod, 'prod');
     await migrate(lab, 'lab');
     const p = await schema(prod);
-    expect(p.columns.length).toBe(38);
+    expect(p.columns.length).toBe(39);
     expect(p).toEqual(await schema(lab));
     const all = fresh();
     closers.push(() => all.close());

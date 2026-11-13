@@ -19,6 +19,7 @@ import { insertWordGameSteps } from '../commands/steps.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { EconomyPort } from '../economy/economy.js';
 import { activeBlock } from '../lab-moderation/store.js';
+import { avatarUrls } from '../raffle-lab/avatars.js';
 import {
   lastCounted,
   quote,
@@ -30,6 +31,8 @@ import type { RandomBanModeration } from './moderation.js';
 import { buildStrip, REEL_MS, type ReelItem } from './reel.js';
 import {
   presenceCandidates,
+  cleanWishText,
+  exactWish,
   settleSniper,
   sniperWindow,
   type RbCandidates,
@@ -101,6 +104,8 @@ interface Row {
   wish_id: string | null;
   wish_login: string | null;
   wish_name: string | null;
+  /** The Sniper as typed (« @Pseudo »), kept even when no account matched for sure (`unresolved`). */
+  wish_text: string | null;
   sniper:
     | 'none'
     | 'armed'
@@ -109,10 +114,13 @@ interface Row {
     | 'glory'
     | 'glory_hit'
     | 'void'
+    | 'unresolved'
     | 'revoked';
 }
 
 const OPEN: RbStatus[] = ['queued', 'searching', 'timeout_requested'];
+const stripOf = (r: Row) =>
+  (r.stats?.strip as { items: ReelItem[]; stop: number } | undefined) ?? null;
 
 /**
  * V3 (27/10) — the streamer as an exceptional target: no Twitch timeout, his mic muted in OBS by Studio. Such a request
@@ -189,9 +197,23 @@ export const rbView = (r: Row) => ({
   animation_status: r.animation_status,
   price_paid: r.price_paid ?? null,
   series_level: r.series_level ?? null,
-  wish: r.wish_id
-    ? { id: r.wish_id, login: r.wish_login, name: r.wish_name }
-    : null,
+  wish:
+    r.wish_id || r.wish_text
+      ? {
+          id: r.wish_id,
+          login: r.wish_login,
+          name: r.wish_name,
+          text: r.wish_text ?? null,
+        }
+      : null,
+  /** A channel points redemption (Twitch): its id, for a refund from the moderation (Raptoru's own rewards only). */
+  redemption_id:
+    r.source === 'channel_points' && r.source_ref.startsWith('twitch:')
+      ? r.source_ref.split(':')[1]!
+      : null,
+  /** The strip the extension's reel scrolls (built AFTER the draw, the target at `stop`); absent before the draw. */
+  strip:
+    (r.stats?.strip as { items: ReelItem[]; stop: number } | undefined) ?? null,
   sniper: r.sniper ?? 'none',
   sniper_bonus: Number(r.stats?.sniper_bonus ?? 0) || 0,
   created_at: iso(r.created_at),
@@ -350,8 +372,11 @@ export class RandomBanService {
       buyer: RbTwitchUser;
       /** The highest price the buyer confirmed (`normal`: the normal price only, a bare `!rb`). */
       ceiling: number | 'normal';
-      /** Sniper (extension only): the viewer the buyer predicts — frozen here, never given to the draw. */
-      wish?: { id: string } | null;
+      /**
+       * Sniper (extension only): the viewer the buyer predicts — frozen here, never given to the draw. `id`: an account
+       * the buyer picked in the suggestions; `text` alone: what he typed, matched only when exact, else kept unresolved.
+       */
+      wish?: { id?: string | null; text?: string | null } | null;
     },
   ): Promise<{
     request: ReturnType<typeof rbView>;
@@ -384,25 +409,39 @@ export class RandomBanService {
         quote: price,
       });
     let wish: {
-      wish_id: string;
-      wish_login: string;
-      wish_name: string;
-      sniper: 'armed';
+      wish_id: string | null;
+      wish_login: string | null;
+      wish_name: string | null;
+      wish_text: string | null;
+      sniper: 'armed' | 'unresolved';
     } | null = null;
     let sniperReady = false;
-    if (r.wish) {
+    const typed = cleanWishText(r.wish?.text);
+    if (r.wish?.id || typed) {
       const streamer = this.v3.streamer?.();
-      const c = (await this.candidates(q, r.channel_id)).find(
-        (x) => x.id === r.wish!.id,
+      const pool = (await this.candidates(q, r.channel_id)).filter(
+        (x) => x.id !== r.buyer.id && x.id !== streamer?.id,
       );
-      if (!c || c.id === r.buyer.id || c.id === streamer?.id)
-        throw new RbError(400, 'wish_unknown');
-      wish = {
-        wish_id: c.id,
-        wish_login: c.login,
-        wish_name: c.name,
-        sniper: 'armed',
-      };
+      const c = r.wish?.id
+        ? pool.find((x) => x.id === r.wish!.id)
+        : exactWish(pool, typed!);
+      // A picked account must still be aimable; a typed name with no exact account is kept for the moderation.
+      if (r.wish?.id && !c) throw new RbError(400, 'wish_unknown');
+      wish = c
+        ? {
+            wish_id: c.id,
+            wish_login: c.login,
+            wish_name: c.name,
+            wish_text: typed ?? c.name,
+            sniper: 'armed',
+          }
+        : {
+            wish_id: null,
+            wish_login: null,
+            wish_name: null,
+            wish_text: typed,
+            sniper: 'unresolved',
+          };
       sniperReady = (
         await sniperWindow(
           q,
@@ -558,6 +597,12 @@ export class RandomBanService {
            order by seq desc limit 10`,
         [channelId, buyerId],
       );
+      // The channel's last results (the extension's « Historique »: public — a ban is seen in the chat anyway).
+      const recent = await q.query<Row>(
+        `select * from rb_requests where channel_id = $1 and source <> 'test'
+           and status not in ('queued', 'searching') order by seq desc limit 12`,
+        [channelId],
+      );
       const streamer = this.v3.streamer?.();
       const window = await sniperWindow(
         q,
@@ -566,27 +611,71 @@ export class RandomBanService {
         this.now(),
         pricing.sniperWindowMs,
       );
+      const pool = await this.candidates(q, channelId);
+      // Who may be aimed at: present viewers, never yourself nor the streamer (identity checked again at purchase).
+      const candidates = pool.filter(
+        (c) => c.id !== buyerId && c.id !== streamer?.id,
+      );
+      // Pictures: the cache only (never a Twitch call on a read); the missing ones are fetched in the background.
+      const shown = mine.slice(0, 3).flatMap((m) => stripOf(m)?.items ?? []);
+      const ids = [
+        ...new Set([...candidates.map((c) => c.id), ...shown.map((x) => x.id)]),
+      ].slice(0, 300);
+      void this.avatars?.ensure(ids.slice(0, 100)).catch(() => {});
+      const pics = await this.avatarsOf(q, ids);
+      const withPic = <T extends { id: string }>(x: T) => ({
+        ...x,
+        avatar: pics.get(x.id) ?? null,
+      });
+      const view = (m: Row, i: number) => {
+        const v = rbView(m);
+        return i < 3 && v.strip
+          ? { ...v, strip: { ...v.strip, items: v.strip.items.map(withPic) } }
+          : { ...v, strip: null };
+      };
       return {
         price,
         tiers: pricing.tiers,
         step_ms: pricing.stepMs,
         pending: mine.filter((m) => OPEN.includes(m.status)).length,
         max_pending: pricing.maxPending,
-        mine: mine.map(rbView),
+        mine: mine.map(view),
+        recent: recent.map((m) => ({
+          ...rbView(m),
+          strip: null,
+          stats: null,
+          redemption_id: null,
+        })),
         sniper: {
           ready: window.ready,
           ready_at: window.ready_at,
           bonus: pricing.sniperBonus,
           window_ms: pricing.sniperWindowMs,
         },
-        // Who may be aimed at: present viewers, never yourself nor the streamer (identity checked again at purchase).
-        candidates: (await this.candidates(q, channelId))
-          .filter((c) => c.id !== buyerId && c.id !== streamer?.id)
-          .map((c) => ({ id: c.id, name: c.name })),
+        candidates: candidates.map((c) =>
+          withPic({ id: c.id, login: c.login, name: c.name }),
+        ),
+        // Kept for raptoru.fr (the game screen no longer shows them).
         stats: await this.personalStats(q, channelId, buyerId),
       };
     });
   }
+
+  /** The Twitch profile pictures (the Tombola's cache, lab_viewer_avatars), set by the Core's host. */
+  private avatars: { ensure(ids: string[]): Promise<unknown> } | null = null;
+  attachAvatars(cache: { ensure(ids: string[]): Promise<unknown> }) {
+    this.avatars = cache;
+  }
+  /** Lab demo: its own fictional pictures (no Twitch). */
+  avatarsOf: (q: Queryable, ids: string[]) => Promise<Map<string, string>> =
+    async (q, ids) => {
+      const ok = (
+        await q.query<{ ok: boolean }>(
+          `select to_regclass('lab_viewer_avatars') is not null as ok`,
+        )
+      )[0]?.ok;
+      return ok ? avatarUrls(q, ids) : new Map();
+    };
 
   private async lock(q: Queryable, channelId: string) {
     await q.query('select pg_advisory_xact_lock(hashtext($1))', [
@@ -1066,10 +1155,19 @@ export class RandomBanService {
       };
       // Le Viseur (reveal_first): the target is frozen; Studio's reel stops on it, the timeout follows the stop. Only
       // while Studio said it is there (else the historical order: timeout at once, the video after).
-      const reel = await this.reelFor(q, r, {
-        id: t.target.id,
-        name: t.target.name,
-      });
+      // The strip the extension's reel scrolls (Mini-jeux), built AFTER the draw: the target is frozen, the strip only
+      // dresses it (the Sniper's wish is never right beside it). Studio's reel, when on, scrolls the same strip.
+      const strip = buildStrip(
+        (await this.candidates(q, r.channel_id)).map((c) => ({
+          id: c.id,
+          name: c.name,
+        })),
+        { id: t.target.id, name: t.target.name },
+        r.wish_id,
+        this.draw,
+      );
+      fields.stats = { ...fields.stats, strip };
+      const reel = await this.reelFor(q, r, strip);
       if (reel) fields.stats = { ...fields.stats, reel };
       if (r.mode !== 'real') {
         const done = { ...r, ...fields } as Row;
@@ -1103,17 +1201,16 @@ export class RandomBanService {
   }
 
   /** The reel of a request whose target was just drawn, or null (sequence off, Studio absent, the streamer). */
-  private async reelFor(q: Queryable, r: Row, target: ReelItem) {
+  private async reelFor(
+    q: Queryable,
+    r: Row,
+    strip: { items: ReelItem[]; stop: number },
+  ) {
     const p = await this.pricing(q, r.channel_id);
     if (!p.revealFirst) return null;
     const studio = this.studios.get(r.channel_id);
     if (!studio || this.now().getTime() - studio.at > RANDOM_BAN.studioReadyMs)
       return null;
-    const pool = (await this.candidates(q, r.channel_id)).map((c) => ({
-      id: c.id,
-      name: c.name,
-    }));
-    const strip = buildStrip(pool, target, r.wish_id, this.draw);
     return {
       ...strip,
       status: 'pending' as const,

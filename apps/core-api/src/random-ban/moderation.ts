@@ -4,6 +4,7 @@ import type { EconomyPort } from '../economy/economy.js';
 import { assertAllowed, audit, type Actor } from '../lab-moderation/store.js';
 import type { ModuleSettings } from '../module-settings/service.js';
 import { RbError, rbView, type RandomBanService } from './service.js';
+import { resolveSniper, type RbCandidate } from './sniper.js';
 
 // Random Ban in the moderation (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 8) — the EXISTING mechanisms: D4 permissions
 // (assertAllowed), the moderation audit (lab_moderation_audit), the blocks and personal cooldowns of every module
@@ -14,6 +15,8 @@ import { RbError, rbView, type RandomBanService } from './service.js';
 //   chat/extension settle; channel points: CANCELED on a Raptoru reward);
 // - refund_uncertain (refund.manual): an `uncertain` request checked on Twitch (timeout NOT applied) → refunded once;
 // - revoke_bonus (wallet.admin): a Sniper bonus taken back (negative movement, keyed), `revoked`;
+// - resolve_sniper (wallet.admin): an `unresolved` prediction (a typed name no account matched for sure) settled by a
+//   moderator — the account it meant, or none; never the draw, the bonus once (sniper.ts resolveSniper);
 // - pause / resume (module.pause): no new purchase, the executor takes nothing (queued ones are refunded by the usual
 //   2-min expiry when the pause lasts).
 
@@ -21,6 +24,13 @@ export type RbModerationCommand =
   | { action: 'cancel'; request_id: string; reason: string }
   | { action: 'refund_uncertain'; request_id: string; reason: string }
   | { action: 'revoke_bonus'; request_id: string; reason: string }
+  | {
+      action: 'resolve_sniper';
+      request_id: string;
+      /** The account the typed name meant (a Twitch id), or null: no account (the prediction is void). */
+      viewer_id: string | null;
+      reason: string;
+    }
   | { action: 'pause' | 'resume'; reason: string };
 
 export class RandomBanModeration {
@@ -66,10 +76,11 @@ export class RandomBanModeration {
            when status = 'uncertain' then 'timeout_incertain'
            when refund = 'needed' then 'remboursement_en_attente'
            when sniper = 'armed' and status not in ('queued', 'searching', 'timeout_requested') then 'prime_non_decidee'
+           when sniper = 'unresolved' and status not in ('queued', 'searching', 'timeout_requested') then 'sniper_a_resoudre'
            else 'demande_bloquee' end as why
          from rb_requests where channel_id = $1 and source <> 'test' and (
            status = 'uncertain' or refund = 'needed'
-           or (sniper = 'armed' and status not in ('queued', 'searching', 'timeout_requested'))
+           or (sniper in ('armed', 'unresolved') and status not in ('queued', 'searching', 'timeout_requested'))
            or (status in ('queued', 'searching', 'timeout_requested') and created_at < $2))
          order by seq desc limit 100`,
       [channelId, new Date(now.getTime() - 2 * 60_000)],
@@ -123,7 +134,7 @@ export class RandomBanModeration {
         ? 'queue.cancel'
         : cmd.action === 'refund_uncertain'
           ? 'refund.manual'
-          : 'wallet.admin';
+          : 'wallet.admin'; // revoke_bonus, resolve_sniper: Jetons may move
     const out = await this.db.tx(async (q) => {
       const role = await assertAllowed(q, channelId, actor, permission);
       // The channel's Random Ban lock: a cancel and the executor's claim never both win.
@@ -162,6 +173,23 @@ export class RandomBanModeration {
           [r.request_id, now],
         );
         after = { refund: 'needed' };
+      } else if (cmd.action === 'resolve_sniper') {
+        const account = cmd.viewer_id
+          ? await this.account(q, channelId, cmd.viewer_id)
+          : null;
+        if (cmd.viewer_id && !account) throw new RbError(404, 'viewer_unknown');
+        const p = await this.rb.pricing(q, channelId);
+        try {
+          after = await resolveSniper(q, r.request_id, account, {
+            economy: this.economy,
+            bonus: p.sniperBonus,
+            windowMs: p.sniperWindowMs,
+            now,
+          });
+        } catch (e) {
+          const err = e as { status?: number; message: string };
+          throw new RbError(err.status ?? 500, err.message);
+        }
       } else {
         if (r.sniper !== 'hit') throw new RbError(409, 'no_bonus');
         const bonus = Number(r.stats?.sniper_bonus ?? 0);
@@ -196,8 +224,34 @@ export class RandomBanModeration {
       return { ok: true as const, request_id: r.request_id };
     });
     // After the commit: the refund paths (Jetons, channel points) follow at once, as after an executor result.
-    if (cmd.action !== 'revoke_bonus')
+    if (cmd.action === 'cancel' || cmd.action === 'refund_uncertain')
       await this.rb.notifySettled(channelId, one.request_id);
     return out;
+  }
+
+  /** A known Twitch account: present now (the Sniper's pool), else seen once on the channel (viewers). */
+  private async account(
+    q: Queryable,
+    channelId: string,
+    id: string,
+  ): Promise<RbCandidate | null> {
+    const present = (await this.rb.candidates(q, channelId)).find(
+      (c) => c.id === id,
+    );
+    if (present) return present;
+    const ok = (
+      await q.query<{ ok: boolean }>(
+        `select to_regclass('viewers') is not null as ok`,
+      )
+    )[0]?.ok;
+    if (!ok) return null;
+    return (
+      (
+        await q.query<RbCandidate>(
+          'select twitch_user_id as id, login, display_name as name from viewers where twitch_user_id = $1',
+          [id],
+        )
+      )[0] ?? null
+    );
   }
 }

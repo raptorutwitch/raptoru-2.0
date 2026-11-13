@@ -22,11 +22,14 @@ alter table rb_requests
   add column if not exists wish_id text,
   add column if not exists wish_login text,
   add column if not exists wish_name text,
+  -- the Sniper as the buyer typed it (« @Pseudo », a pasted name): kept as is, resolved or not
+  add column if not exists wish_text text,
   -- none (no prediction) · armed (a prediction not decided yet) · decided at the result: hit (bonus paid) · miss ·
-  -- glory / glory_hit (missed / hit outside the 30 min window: no bonus) · void (nothing happened) · revoked (bonus
+  -- glory / glory_hit (missed / hit outside the 30 min window: no bonus) · void (nothing happened) · unresolved (a
+  -- typed name no account matched for sure: waits for a moderator, never guessed) · revoked (bonus
   -- taken back by a moderator)
   add column if not exists sniper text not null default 'none'
-    check (sniper in ('none', 'armed', 'hit', 'miss', 'glory', 'glory_hit', 'void', 'revoked')),
+    check (sniper in ('none', 'armed', 'hit', 'miss', 'glory', 'glory_hit', 'void', 'unresolved', 'revoked')),
   add column if not exists canceled_by text,
   add column if not exists cancel_reason text;
 

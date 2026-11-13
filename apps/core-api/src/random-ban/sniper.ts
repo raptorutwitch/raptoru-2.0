@@ -41,6 +41,25 @@ export const presenceCandidates: RbCandidates = async (q) => {
   );
 };
 
+/** What the buyer typed, cleaned: trimmed, « @ » dropped, at most 40 characters (null: nothing). */
+export function cleanWishText(text: unknown): string | null {
+  if (typeof text !== 'string') return null;
+  const t = text.trim().replace(/^@+/, '').trim().slice(0, 40);
+  return t || null;
+}
+
+/**
+ * The ONE account a typed name designates for sure: the login or the display name, case-insensitive (Twitch logins are
+ * unique). Nothing else is ever guessed: a typo stays unresolved, for a moderator to settle.
+ */
+export function exactWish<T extends RbCandidate>(pool: T[], text: string) {
+  const t = text.toLowerCase();
+  const byLogin = pool.find((c) => c.login.toLowerCase() === t);
+  if (byLogin) return byLogin;
+  const byName = pool.filter((c) => c.name.toLowerCase() === t);
+  return byName.length === 1 ? byName[0]! : null;
+}
+
 /** Counted for the Sniper window: a real trigger of the buyer that did something or still may (not test, failed, canceled). */
 const COUNTED = `source <> 'test' and status not in ('failed', 'canceled')`;
 
@@ -114,8 +133,17 @@ export async function settleSniper(
       [requestId],
     )
   )[0];
-  if (!r || !r.wish_id || r.sniper !== 'armed' || !FINAL.includes(r.status))
+  if (!r || !FINAL.includes(r.status)) return 0;
+  // An unresolved prediction (a typed name, no sure account) waits for a moderator — unless nothing happened.
+  if (r.sniper === 'unresolved') {
+    if (['failed', 'uncertain', 'canceled'].includes(r.status))
+      await q.query(
+        `update rb_requests set sniper = 'void', updated_at = $2 where request_id = $1`,
+        [requestId, o.now],
+      );
     return 0;
+  }
+  if (!r.wish_id || r.sniper !== 'armed') return 0;
   const set = (sniper: string, bonus = 0) =>
     q.query(
       `update rb_requests set sniper = $2, updated_at = $3,
@@ -159,4 +187,55 @@ export async function settleSniper(
   });
   await set('hit', o.bonus);
   return o.bonus;
+}
+
+/**
+ * A moderator settles an UNRESOLVED prediction (Studio › Modération › Random Ban): the account the typed name meant, or
+ * none. Under the request's row lock and only from `unresolved` (a second resolution finds it decided: refused). The
+ * draw is untouched (its target was frozen long before); a resolved hit pays through settleSniper, once per request
+ * (ledger key `rb:sniper:<request_id>`).
+ */
+export async function resolveSniper(
+  q: Queryable,
+  requestId: string,
+  account: RbCandidate | null,
+  o: {
+    economy: EconomyPort | null;
+    bonus: number;
+    windowMs: number;
+    now: Date;
+  },
+): Promise<{ sniper: string; bonus: number }> {
+  const r = (
+    await q.query<{ sniper: string; buyer_id: string }>(
+      `select sniper, buyer_id from rb_requests where request_id = $1 for update`,
+      [requestId],
+    )
+  )[0];
+  if (!r)
+    throw Object.assign(new Error('random_ban_not_found'), { status: 404 });
+  if (r.sniper !== 'unresolved')
+    throw Object.assign(new Error('sniper_not_unresolved'), { status: 409 });
+  if (account && account.id === r.buyer_id)
+    throw Object.assign(new Error('wish_self'), { status: 400 });
+  if (!account) {
+    await q.query(
+      `update rb_requests set sniper = 'void', updated_at = $2 where request_id = $1`,
+      [requestId, o.now],
+    );
+    return { sniper: 'void', bonus: 0 };
+  }
+  await q.query(
+    `update rb_requests set wish_id = $2, wish_login = $3, wish_name = $4, sniper = 'armed', updated_at = $5
+       where request_id = $1`,
+    [requestId, account.id, account.login, account.name, o.now],
+  );
+  const bonus = await settleSniper(q, requestId, o);
+  const after = (
+    await q.query<{ sniper: string }>(
+      'select sniper from rb_requests where request_id = $1',
+      [requestId],
+    )
+  )[0]!;
+  return { sniper: after.sniper, bonus };
 }

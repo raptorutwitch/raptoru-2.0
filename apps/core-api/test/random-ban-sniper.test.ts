@@ -38,12 +38,16 @@ async function lab() {
   );
   let k = 0;
   /** An extension purchase (at the current price), optionally aiming at someone. */
-  const launch = async (wish_id?: string) => {
+  const launch = async (wish_id?: string, wish_text?: string) => {
     const s = await rb.buyerState(CH, V.id);
     return core.modules.viewer(CH, 'random_ban_ext', 'launch', {
       viewer: V,
       idempotency_key: `intent-${++k}-sniper`,
-      input: { expected_price: s.price.price, ...(wish_id ? { wish_id } : {}) },
+      input: {
+        expected_price: s.price.price,
+        ...(wish_id ? { wish_id } : {}),
+        ...(wish_text ? { wish_text } : {}),
+      },
     });
   };
   /** The executor runs the next request to the given target (or fails it). */
@@ -237,8 +241,8 @@ describe('Sniper', () => {
     ];
     const s = await l.rb.buyerState(CH, V.id);
     expect(s.candidates).toEqual([
-      { id: KIWI.id, name: 'Kiwi' },
-      { id: PIKA.id, name: 'Pika' },
+      { id: KIWI.id, login: 'kiwi', name: 'Kiwi', avatar: null },
+      { id: PIKA.id, login: 'pika', name: 'Pika', avatar: null },
     ]);
     expect(s.sniper).toMatchObject({
       ready: true,
@@ -264,5 +268,112 @@ describe('Sniper', () => {
       ).map((r) => [r.viewer_id, Number(r.n)]);
     expect(await count('random_ban_sniper')).toEqual([[V.id, 1]]);
     expect(await count('random_ban_self')).toEqual([]);
+  });
+});
+
+// Refonte Mini-jeux (13/11): the Sniper is typed freely. An exact account (login or name, « @ » or not) is the
+// prediction; anything else is kept as typed (`unresolved`) for a moderator — never guessed, never given to the draw.
+describe('Sniper — free text and the moderator’s resolution', () => {
+  const studio = {
+    id: 'antoni',
+    role: 'broadcaster' as const,
+    via: 'studio' as const,
+  };
+  const row = async (l: Awaited<ReturnType<typeof lab>>) =>
+    (
+      await l.core.db.query<{
+        request_id: string;
+        sniper: string;
+        wish_id: string | null;
+        wish_text: string | null;
+      }>(
+        'select request_id, sniper, wish_id, wish_text from rb_requests where buyer_id = $1 order by seq desc limit 1',
+        [V.id],
+      )
+    )[0]!;
+
+  it('an exact name, « @ » and case aside, is the prediction; the text is kept as typed', async () => {
+    const l = await lab();
+    await l.launch(undefined, '  @PIKA ');
+    expect(await row(l)).toMatchObject({
+      sniper: 'armed',
+      wish_id: PIKA.id,
+      wish_text: 'PIKA',
+    });
+  });
+
+  it('a typo is never guessed: unresolved, no bonus at the result, then a moderator settles it once', async () => {
+    const l = await lab();
+    await l.launch(undefined, 'Pikka');
+    expect(await row(l)).toMatchObject({
+      sniper: 'unresolved',
+      wish_id: null,
+      wish_text: 'Pikka',
+    });
+    const before = await l.tokens();
+    await l.resolve(PIKA);
+    expect((await row(l)).sniper).toBe('unresolved'); // the result decides nothing for it
+    expect(await l.tokens()).toBe(before);
+    const r = await row(l);
+    const reco = await l.rb.moderation!.reconciliation(CH, studio);
+    expect(
+      reco.items.find((x) => x.request.request_id === r.request_id)?.why,
+    ).toBe('sniper_a_resoudre');
+    await l.rb.moderation!.act(CH, studio, {
+      action: 'resolve_sniper',
+      request_id: r.request_id,
+      viewer_id: PIKA.id,
+      reason: 'il visait Pika',
+    });
+    expect(await row(l)).toMatchObject({ sniper: 'hit', wish_id: PIKA.id });
+    expect(await l.tokens()).toBe(before + 2_000);
+    // A second resolution (double click, another moderator): refused, never a second bonus.
+    await expect(
+      l.rb.moderation!.act(CH, studio, {
+        action: 'resolve_sniper',
+        request_id: r.request_id,
+        viewer_id: PIKA.id,
+        reason: 'encore',
+      }),
+    ).rejects.toMatchObject({ code: 'sniper_not_unresolved' });
+    expect(await l.tokens()).toBe(before + 2_000);
+  });
+
+  it('« no account »: void; a request that did nothing makes an unresolved prediction void by itself', async () => {
+    const l = await lab();
+    await l.launch(undefined, 'personne');
+    await l.resolve(KIWI);
+    const r = await row(l);
+    await l.rb.moderation!.act(CH, studio, {
+      action: 'resolve_sniper',
+      request_id: r.request_id,
+      viewer_id: null,
+      reason: 'aucun compte',
+    });
+    expect((await row(l)).sniper).toBe('void');
+    await l.advance(31 * MIN);
+    await l.launch(undefined, 'xyz');
+    await l.resolve('fail');
+    expect((await row(l)).sniper).toBe('void');
+  });
+
+  it('the strip of the extension’s reel is built after the draw, the Core’s target at its stop', async () => {
+    const l = await lab();
+    await l.launch(PIKA.id);
+    await l.resolve(KIWI);
+    const mine = (await l.rb.buyerState(CH, V.id)).mine[0]!;
+    expect(mine.strip).not.toBeNull();
+    expect(mine.strip!.items[mine.strip!.stop]!.id).toBe(KIWI.id);
+    // The predicted viewer is never right beside the target (no false « so close »).
+    const { items, stop } = mine.strip!;
+    expect([items[stop - 1]?.id, items[stop + 1]?.id]).not.toContain(PIKA.id);
+    // The public history: who launched, who was drawn — never the strip nor a redemption id.
+    const recent = (await l.rb.buyerState(CH, KIWI.id)).recent[0]!;
+    expect(recent).toMatchObject({
+      buyer: { id: V.id },
+      target: { id: KIWI.id },
+    });
+    expect(recent.strip).toBeNull();
+    expect(recent.redemption_id).toBeNull();
   });
 });

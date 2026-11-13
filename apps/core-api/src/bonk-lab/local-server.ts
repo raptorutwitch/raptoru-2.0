@@ -16,14 +16,22 @@ if (secret.length < 32) throw new Error('bonk_secret_required');
 const db = createPgDb(url.href, SERVER_DB_LIMITS);
 const clientId = process.env.BONK_LAB_TWITCH_CLIENT_ID ?? '';
 const clientSecret = process.env.BONK_LAB_TWITCH_CLIENT_SECRET ?? '';
-const { server, raffle, wordGame, votekick, spotify, challenges, modules } =
-  createLabCore({
-    db,
-    clock: systemClock,
-    secret,
-    twitch: clientId && clientSecret ? { clientId, clientSecret } : null,
-    channelTwitchId: process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '',
-  });
+const {
+  server,
+  raffle,
+  wordGame,
+  votekick,
+  randomBan,
+  spotify,
+  challenges,
+  modules,
+} = createLabCore({
+  db,
+  clock: systemClock,
+  secret,
+  twitch: clientId && clientSecret ? { clientId, clientSecret } : null,
+  channelTwitchId: process.env.BONK_LAB_CHANNEL_TWITCH_ID ?? '',
+});
 // The module host's periodic jobs, as on the main Core (one loop for every module).
 setInterval(() => void modules.tick(), 5000);
 // 4301 by default (Studio runtime); another port only for isolated end-to-end tests.
@@ -42,6 +50,7 @@ const avatars = new AvatarCache(
     : null,
 );
 votekick.attachAvatars(avatars);
+randomBan.attachAvatars(avatars);
 let ticking = false;
 const raffleTick = setInterval(() => {
   if (ticking) return;
