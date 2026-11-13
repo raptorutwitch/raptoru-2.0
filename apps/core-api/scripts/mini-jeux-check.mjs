@@ -6,6 +6,11 @@
 // a refresh never replays a draw · moderation pause / personal delay said before the click · a Sniper hit pays once ·
 // reduced motion · the three usual extension sizes. Nothing leaves the machine.
 import { spawn } from 'node:child_process';
+import console from 'node:console';
+import process from 'node:process';
+import { setTimeout } from 'node:timers';
+import { URL } from 'node:url';
+/* global fetch, document -- Node's fetch; `document` only inside the browser callbacks of page.evaluate */
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
