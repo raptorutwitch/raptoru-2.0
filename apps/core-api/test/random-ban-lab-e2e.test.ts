@@ -106,7 +106,7 @@ describe('Random Ban — Lab end to end (extension → real executor → result)
     expect(s.charges).toMatchObject({ available: 2, max: 3 });
   }, 30_000);
 
-  it('Le Viseur + Sniper, end to end: the reel plays BEFORE the strike, then the ban video; a hit pays once', async () => {
+  it('anti-spoil + Sniper, end to end: the historical alert plays BEFORE the strike, the timeout after its reveal; a hit pays once', async () => {
     const core = await setup();
     const rb = new RandomBanService(core.db, core.clock);
     rb.economy = core.economy;
@@ -115,7 +115,6 @@ describe('Random Ban — Lab end to end (extension → real executor → result)
     rb.candidates = async () => LAB_CHATTERS.map((c) => ({ ...c }));
     core.modules.add({ ...randomBanExtModule(rb), id: 'random_ban_e2e' });
     await core.moduleSettings.set(CH, 'random_ban_e2e.enabled', 1, 'test');
-    await core.moduleSettings.set(CH, 'random_ban.sequence', 1, 'test');
     await editWallet(
       core.db,
       core.clock.now(),
@@ -161,9 +160,9 @@ describe('Random Ban — Lab end to end (extension → real executor → result)
         },
       },
       journal: memoryRbJournal(),
-      // The strike delay: Studio plays the reel meanwhile (its own poll, here by hand).
+      // The strike delay: Studio starts the alert meanwhile (its own poll, here by hand), the time passes.
       pause: async (ms) => {
-        events.push(`pause:${ms}`);
+        events.push('pause');
         const a = (await rb.claimAnimation(CH, 'studio-e2e')).animation as {
           animation?: string;
           request_id?: string;
@@ -174,6 +173,7 @@ describe('Random Ban — Lab end to end (extension → real executor → result)
             consumer_id: 'studio-e2e',
             event: 'completed',
           });
+        core.clock.advance(ms);
       },
       log: () => {},
     });
@@ -206,9 +206,12 @@ describe('Random Ban — Lab end to end (extension → real executor → result)
       await new Promise((r) => setTimeout(r, 20));
     executor.stop();
     await run.catch(() => {});
-    expect(events).toEqual([`pause:${7_500}`, 'reel', 'ban']);
-    const video = (await rb.claimAnimation(CH, 'studio-e2e')).animation;
-    expect(video).toMatchObject({ banned: 'Kiwi', trigger: 'Alice' });
+    // The alert (one of the historical ones) first, the timeout after; never a second video after the confirmation.
+    expect(events).toHaveLength(3);
+    expect(events[0]).toBe('pause');
+    expect(events[1]).toMatch(/^ban_/);
+    expect(events[2]).toBe('ban');
+    expect((await rb.claimAnimation(CH, 'studio-e2e')).animation).toBeNull();
     const s = await rb.buyerState(CH, V.id);
     expect(s.mine[0]).toMatchObject({
       status: 'confirmed',

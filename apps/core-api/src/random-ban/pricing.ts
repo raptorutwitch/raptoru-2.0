@@ -28,10 +28,10 @@ export interface RbPricing {
   /** Sniper: the bonus of a rewardable hit, and the calm before an attempt is rewardable (all sources). */
   sniperBonus: number;
   sniperWindowMs: number;
-  /** Le Viseur: reel before the timeout (`reveal_first`) or the historical order (ban, then video), and the strike's
-   * extra delay after the reel stops (the stream's latency, measured with Antoni). */
-  revealFirst: boolean;
-  strikeOffsetMs: number;
+  /** Anti-spoil (13/11): the stream's latency (the alert's reveal reaches the viewers this long after it shows; the
+   * extension reveals then), and the timeout's delay after that reveal. */
+  streamDelayMs: number;
+  strikeAfterMs: number;
 }
 
 export const RB_PRICING_DEFAULT: RbPricing = Object.freeze({
@@ -43,8 +43,8 @@ export const RB_PRICING_DEFAULT: RbPricing = Object.freeze({
   maxPending: 3,
   sniperBonus: 1_000,
   sniperWindowMs: 30 * 60_000,
-  revealFirst: false,
-  strikeOffsetMs: 3_000,
+  streamDelayMs: 4_000,
+  strikeAfterMs: 2_000,
 });
 
 /** The module settings behind the rules (module `random_ban`, modules/random-ban.ts declares them). */
@@ -60,8 +60,8 @@ export function randomBanPricing(settings: ModuleSettings) {
       maxPending: await get('max_pending'),
       sniperBonus: await get('sniper_bonus'),
       sniperWindowMs: (await get('sniper_window_min')) * 60_000,
-      revealFirst: (await get('sequence')) === 1,
-      strikeOffsetMs: (await get('strike_offset_s')) * 1000,
+      streamDelayMs: (await get('stream_delay_s')) * 1000,
+      strikeAfterMs: (await get('strike_after_s')) * 1000,
     };
   };
 }

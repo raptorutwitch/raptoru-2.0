@@ -103,6 +103,8 @@ function prefStore(win, key) {
 }
 
 const REPLAY_WINDOW_MS = 90_000;
+/** The Core hands the strip this long before the reveal (service.ts SPOIL.stripLeadMs). */
+const STRIP_LEAD_MS = 3_000;
 const RESULT_HOLD_MS = 10_000;
 const OPEN = ['queued', 'searching', 'timeout_requested'];
 
@@ -196,12 +198,18 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     r?.strip?.items?.find((x) => x.id === id)?.avatar ?? candidates().find((x) => x.id === id)?.avatar ?? null;
 
   // --- The machine ------------------------------------------------------------------------------------------------------
+  /** Anti-spoil: ms until the Core's reveal (the stream's alert reaching the viewers), null without one. */
+  const revealIn = (r) => (r?.reveal_at ? Date.parse(r.reveal_at) - serverNow() : null);
   async function play(r) {
     animating = r.request_id;
     played.add(r.request_id);
     flash = ''; // « tirage en cours… » is over: the machine tells the rest
     drawButton();
-    await machine.play(r.strip);
+    // The reel lands on the reveal (never before: the Core sends the strip only in the last seconds).
+    const lands = revealIn(r);
+    if (reduced && lands > 0) await new Promise((ok) => win.setTimeout(ok, lands));
+    if (stopped) return;
+    await machine.play(r.strip, lands > 0 ? Math.min(6000, Math.max(1200, lands)) : undefined);
     if (stopped) return;
     animating = null;
     shown = r.request_id;
@@ -210,6 +218,9 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   }
 
   function result(r) {
+    // Landed on the reveal before the next read: the strip's stop is the target (the Core says it at the next read).
+    if (!r.target && r.strip?.items?.length)
+      r = { ...r, status: 'timeout_requested', target: r.strip.items[r.strip.stop] };
     const m = resultModel(r);
     machine.result(r.target ? { ...r.target, avatar: avatarOf(r, r.target.id) } : null, m);
     // Sniper hit: celebrated once per request on this device (the bonus itself was paid once by the Core).
@@ -228,7 +239,10 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       .find((r) => r.strip?.items?.length && !played.has(r.request_id) && age(r) < REPLAY_WINDOW_MS);
     if (next) return void play(next);
     for (const r of mine) if (r.strip && !played.has(r.request_id)) played.add(r.request_id); // too old: no replay
-    const open = mine.find((r) => ['queued', 'searching'].includes(r.status));
+    // (A draw already landed here is not « open » any more, even while the Core still hides it from the others.)
+    const open = mine.find(
+      (r) => ['queued', 'searching'].includes(r.status) && !(r.strip && played.has(r.request_id)),
+    );
     const current = mine.find((r) => r.request_id === shown);
     if (current && !open && (current.status === 'timeout_requested' || Date.now() - shownAt < RESULT_HOLD_MS))
       return result(current);
@@ -506,8 +520,15 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   function schedule() {
     win.clearTimeout(poll);
     if (stopped) return;
-    const running = animating || (st()?.mine ?? []).some((r) => OPEN.includes(r.status));
-    poll = win.setTimeout(() => void refresh(), offline ? 3000 : running ? 1000 : 4000);
+    const mine = st()?.mine ?? [];
+    const running = animating || mine.some((r) => OPEN.includes(r.status));
+    // Anti-spoil: read again right when the Core hands the strip (a few seconds before the reveal).
+    const hidden = mine.find((r) => r.reveal_at && !r.strip && r.status === 'searching');
+    const lead = hidden ? revealIn(hidden) - STRIP_LEAD_MS + 80 : Infinity;
+    poll = win.setTimeout(
+      () => void refresh(),
+      offline ? 3000 : Math.max(150, Math.min(lead, running ? 1000 : 4000)),
+    );
   }
 
   function say(text, ms = 6000) {

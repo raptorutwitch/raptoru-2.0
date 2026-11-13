@@ -17,6 +17,10 @@ import { type Helix, HelixError } from './twitch/helix.js';
 //    outcome, reports it. An ambiguous answer (timeout, 5xx) is checked in Twitch's list of bans — confirmed, not
 //    applied, or « uncertain » if Twitch cannot be read — and never sent again. After a crash, a journal entry
 //    without outcome is settled the same way.
+// Anti-spoil (13/11): Core may answer « strike in N ms » (the stream's alert reveals the target first). The wait is
+// JOURNALED (`scheduled`, before it starts) and ends with a check: the same target report again, Core answering the
+// time still to wait (an alert that started late) or refusing (canceled, swept) — nothing is sent then. A restart
+// during the wait resumes it from the journal (never a sanction lost, never one sent twice).
 
 export const RB_SCOPES = {
   bot: ['moderator:read:chatters', 'moderator:read:followers'],
@@ -294,8 +298,12 @@ interface JournalEntry {
   request_id: string;
   attempt_id: string;
   target_id: string;
-  state: 'about_to_timeout' | 'done';
+  state: 'scheduled' | 'about_to_timeout' | 'done';
   outcome?: TimeoutOutcome;
+  /** `scheduled`: what the check sends to Core again (its target report) and the sanction Core answered. */
+  report?: { target: RbUser; is_sub: boolean; stats: unknown };
+  duration_s?: number;
+  reason?: string;
 }
 export interface RbJournal {
   entries(): JournalEntry[];
@@ -426,6 +434,14 @@ export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
   /** Journaled outcomes to Core; an entry without outcome (crash during the call) is settled from Twitch first. */
   async function recover(): Promise<boolean> {
     for (const e of d.journal.entries()) {
+      if (e.state === 'scheduled') {
+        // A strike waiting when the bot stopped: Core says whether (and when) it is still due.
+        const due = await checkStrike(e, 0);
+        if (due === 'retry') return false;
+        if (due === 'drop') continue;
+        await strike(e, due);
+        return recover(); // its outcome is now in the journal: report it (the list read above is stale)
+      }
       const outcome =
         e.outcome ??
         (await settle(
@@ -500,7 +516,7 @@ export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
       proceed?: boolean;
       duration_s?: number;
       reason?: string;
-      /** Le Viseur (Mini-jeux, `reveal_first`): strike when Studio's reel stops — an older Core never sends it. */
+      /** Anti-spoil: strike after the stream's alert revealed the target (journaled wait, checked again). */
       delay_ms?: number;
     };
     try {
@@ -517,40 +533,107 @@ export function createRandomBanExecutor(d: RandomBanExecutorDeps) {
       return 'worked';
     }
     if (!answer.proceed || req.mode !== 'real') return 'worked';
-    // Bounded (10 s, within Core's lease); nothing is sent before it ends, and a stop during it sends nothing.
-    const strikeIn = Math.min(
-      Math.max(0, Number(answer.delay_ms) || 0),
-      10_000,
-    );
-    if (strikeIn) await (d.pause ?? sleep)(strikeIn);
-    // Stopped while waiting: nothing sent (Core's lease ends: « à vérifier », never a second timeout).
-    if (strikeIn && stopped) return 'worked';
-    d.journal.put({
+    const entry: JournalEntry = {
       request_id: req.request_id,
       attempt_id: req.attempt_id,
       target_id: found.target.id,
+      state: 'scheduled',
+      report: {
+        target: found.target,
+        is_sub: found.is_sub,
+        stats: found.stats,
+      },
+      duration_s: answer.duration_s!,
+      reason: answer.reason!,
+    };
+    const wait = Math.max(0, Number(answer.delay_ms) || 0);
+    if (wait) {
+      // Journaled before the wait: a restart resumes it (recover), Core's lease covers it.
+      d.journal.put(entry);
+      const due = await checkStrike(entry, wait);
+      if (due === 'retry' || due === 'drop') return 'worked';
+      await strike(entry, due);
+    } else await strike(entry, answer);
+    await recover();
+    return 'worked';
+  }
+
+  /**
+   * Waits `wait` ms, then asks Core again (the same target report) until it says « now »: the sanction to send, 'drop'
+   * (Core refused: canceled, swept — nothing sent, the entry removed) or 'retry' (Core unreachable, or the bot stopping:
+   * the entry stays for the next recover). Core bounds the total wait (its anti-spoil limit).
+   */
+  async function checkStrike(
+    e: JournalEntry,
+    wait: number,
+  ): Promise<{ duration_s: number; reason: string } | 'drop' | 'retry'> {
+    for (let i = 0; i < 12; i++) {
+      if (wait) await (d.pause ?? sleep)(Math.min(wait, 30_000));
+      if (stopped) return 'retry';
+      let r: { status: number; body: unknown };
+      try {
+        r = await d.core(`${base}/requests/${e.request_id}/target`, {
+          executor_id: d.executorId,
+          attempt_id: e.attempt_id,
+          ...e.report,
+        });
+      } catch {
+        return 'retry';
+      }
+      if (r.status >= 500) return 'retry';
+      const a = r.body as {
+        proceed?: boolean;
+        duration_s?: number;
+        reason?: string;
+        delay_ms?: number;
+      };
+      if (r.status !== 200 || !a.proceed) {
+        log(
+          `[random-ban] ${e.target_id}: plus de sanction à envoyer (${r.status})`,
+        );
+        d.journal.remove(e.request_id);
+        return 'drop';
+      }
+      wait = Math.max(0, Number(a.delay_ms) || 0);
+      if (!wait)
+        return {
+          duration_s: a.duration_s ?? e.duration_s!,
+          reason: a.reason ?? e.reason!,
+        };
+    }
+    // Core keeps asking to wait (it bounds the alert's hold itself): strike with the sanction it answered.
+    return { duration_s: e.duration_s!, reason: e.reason! };
+  }
+
+  /** Journals « about to time out », calls Ban User ONCE, journals and reports the outcome. */
+  async function strike(
+    e: JournalEntry,
+    s: { duration_s?: number; reason?: string },
+  ) {
+    d.journal.put({
+      request_id: e.request_id,
+      attempt_id: e.attempt_id,
+      target_id: e.target_id,
       state: 'about_to_timeout',
     });
     const outcome = await timeoutOnce({
       twitch: d.twitch,
-      target: found.target.id,
-      durationS: answer.duration_s!,
-      reason: answer.reason!,
+      target: e.target_id,
+      durationS: s.duration_s!,
+      reason: s.reason!,
       pause: d.pause,
       now,
     });
     d.journal.put({
-      request_id: req.request_id,
-      attempt_id: req.attempt_id,
-      target_id: found.target.id,
+      request_id: e.request_id,
+      attempt_id: e.attempt_id,
+      target_id: e.target_id,
       state: 'done',
       outcome,
     });
     log(
-      `[random-ban] ${found.target.login}: ${outcome.event}${'error' in outcome ? ` (${outcome.error})` : ''}`,
+      `[random-ban] ${e.report?.target.login ?? e.target_id}: ${outcome.event}${'error' in outcome ? ` (${outcome.error})` : ''}`,
     );
-    await recover();
-    return 'worked';
   }
 
   let stopped = false;

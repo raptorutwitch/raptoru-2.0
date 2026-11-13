@@ -92,9 +92,7 @@ let fastRecharge = rechargeMin === 1;
 let sniperFree = false;
 for (const [k, v] of [
   ['random_ban_ext.enabled', 1],
-  // The stream keeps its ban video (Studio's effects player); the reel is the extension's own (dissociated).
-  ['random_ban.sequence', 0],
-  ['random_ban.strike_offset_s', 1],
+  // Anti-spoil: the stream's alert first, the extension reveals with the stream's latency, the timeout after.
   ['random_ban.recharge_min', rechargeMin],
   ['random_ban.sniper_window_min', 30],
 ] as const)
@@ -348,16 +346,13 @@ const STREAM = `<!doctype html><html><head><meta charset="utf-8"><style>html,bod
 font:900 54px system-ui;text-align:center;box-shadow:0 20px 60px #000a}.card small{display:block;font-size:24px;opacity:.7;font-weight:600}
 .tag{position:absolute;left:24px;top:20px;color:#fff;font:700 28px system-ui;opacity:.6}</style></head>
 <body><div id="wrap"><div class="tag">Flux du stream (démo) — lecteur d’effets</div><div id="stage"></div></div><script type="module">
-import { playReel, playDodge } from '/fx/reel.js';
 const stage = document.getElementById('stage');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const card = async (title, small) => { const c = document.createElement('div'); c.className = 'card'; c.innerHTML = title + '<small>' + small + '</small>'; stage.append(c); await wait(2600); c.remove(); };
 for (;;) {
   const a = (await (await fetch('/api/stream/next', { method: 'POST' })).json()).animation;
   if (a) {
-    if (a.animation === 'reel') await playReel(stage, { ...a.reel, trigger: a.trigger });
-    else if (a.animation === 'dodge') await playDodge(stage, { trigger: a.trigger, banned: a.banned });
-    else if (a.animation === 'flop') await card(a.trigger + ' a flop cheh !', 'personne d’éligible');
+    if (a.animation === 'flop') await card(a.trigger + ' a flop cheh !', 'personne d’éligible');
     else await card('BANNI : ' + (a.banned ?? '?'), 'Random Ban de ' + a.trigger + ' — ici la vidéo de ban de Studio (« ' + a.animation + ' »)');
     await fetch('/api/stream/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ request_id: a.request_id }) });
   }

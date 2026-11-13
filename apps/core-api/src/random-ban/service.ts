@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import {
   RANDOM_BAN,
+  RANDOM_BAN_ANIMATIONS,
   RANDOM_BAN_DRAW,
   type RandomBanAnimationId,
   type RbAnimationReport,
@@ -27,7 +28,7 @@ import {
   type RbPricing,
 } from './pricing.js';
 import type { RandomBanModeration } from './moderation.js';
-import { buildStrip, REEL_MS, type ReelItem } from './reel.js';
+import { buildStrip, type ReelItem } from './reel.js';
 import {
   presenceCandidates,
   cleanWishText,
@@ -170,6 +171,40 @@ export interface StreamerMuteSource {
   ): Promise<{ id: string; endsAt: Date } | null>;
 }
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
+
+/**
+ * Anti-spoil (13/11, docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 5): a viewers' Random Ban shows the stream's historical
+ * alert BEFORE its timeout. At the draw Core queues the alert and decides, server side, when the target is revealed in
+ * the extension (the alert's own reveal `showAt` + the stream's latency) and when the bot strikes (that reveal + the
+ * setting). Studio claiming the alert (every 500 ms) gives the real start; an alert that does not start (Studio absent,
+ * another one playing) holds the strike at most `maxMs` after the draw: bounded, never a sanction left waiting.
+ */
+const SPOIL = {
+  /** Studio's pickup of a queued alert (its poll is 500 ms). */
+  pickupMs: 1_000,
+  /** From the draw to the strike, whatever happens to the alert. */
+  maxMs: 20_000,
+  /** Core's lease after the strike time: covers a bot restarting during the wait (its journal keeps the strike). */
+  leaseAfterMs: 90_000,
+  /** The extension gets the strip this long before the reveal: its reel slows down and lands on the reveal. */
+  stripLeadMs: 3_000,
+};
+export interface RbSpoil {
+  drawn_at: string;
+  alert_at?: string;
+  reveal_at: string;
+  strike_at: string;
+}
+const spoilOf = (r: Row) => (r.stats?.spoil as RbSpoil | undefined) ?? null;
+/** The target is not public yet (the extension, the history): the alert has not revealed it to the viewers. */
+export const spoilerHidden = (r: Row, now: number) => {
+  const sp = spoilOf(r);
+  return (
+    !!sp &&
+    ['searching', 'timeout_requested'].includes(r.status) &&
+    now < Date.parse(sp.reveal_at)
+  );
+};
 
 export const rbView = (r: Row) => ({
   request_id: r.request_id,
@@ -651,12 +686,18 @@ export class RandomBanService {
            order by seq desc limit 10`,
         [channelId, buyerId],
       );
-      // The channel's last results (the extension's « Historique »: public — a ban is seen in the chat anyway).
-      const recent = await q.query<Row>(
-        `select * from rb_requests where channel_id = $1 and source <> 'test'
-           and status not in ('queued', 'searching') order by seq desc limit 12`,
-        [channelId],
-      );
+      // The channel's last results (the extension's « Historique »: public — a ban is seen in the chat anyway), never
+      // one the stream's alert has not revealed yet (anti-spoil).
+      const nowMs = this.now().getTime();
+      const recent = (
+        await q.query<Row>(
+          `select * from rb_requests where channel_id = $1 and source <> 'test'
+             and status not in ('queued', 'searching') order by seq desc limit 13`,
+          [channelId],
+        )
+      )
+        .filter((m) => !spoilerHidden(m, nowMs))
+        .slice(0, 12);
       const streamer = this.v3.streamer?.();
       const window = await sniperWindow(
         q,
@@ -689,9 +730,27 @@ export class RandomBanService {
       });
       const view = (m: Row, i: number) => {
         const v = rbView(m);
-        return i < 3 && v.strip
-          ? { ...v, strip: { ...v.strip, items: v.strip.items.map(withPic) } }
-          : { ...v, strip: null };
+        const shown =
+          i < 3 && v.strip
+            ? { ...v, strip: { ...v.strip, items: v.strip.items.map(withPic) } }
+            : { ...v, strip: null };
+        const sp = spoilOf(m);
+        if (!spoilerHidden(m, nowMs))
+          return { ...shown, reveal_at: sp?.reveal_at ?? null };
+        // Anti-spoil: still « drawing » for the buyer too — no target, no sanction, no stats; the strip only in the
+        // last seconds (the reel slows down and lands on the reveal, `reveal_at`).
+        const reveal = Date.parse(sp!.reveal_at);
+        return {
+          ...shown,
+          status: 'searching' as RbStatus,
+          target: null,
+          duration_s: null,
+          stats: null,
+          animation: null,
+          animation_status: null,
+          strip: nowMs >= reveal - SPOIL.stripLeadMs ? shown.strip : null,
+          reveal_at: sp!.reveal_at,
+        };
       };
       return {
         price: pricing.price,
@@ -802,10 +861,43 @@ export class RandomBanService {
     );
   }
 
+  /** When the target is revealed and struck, for an alert starting at `alertAt` (drawn at `drawnAt`). */
+  private spoilPlan(
+    p: RbPricing,
+    animation: string | null,
+    drawnAt: number,
+    alertAt: number,
+  ) {
+    const show =
+      RANDOM_BAN_ANIMATIONS.find((a) => a.id === animation)?.showAt ?? 500;
+    const strike = Math.min(
+      drawnAt + SPOIL.maxMs,
+      alertAt + show + p.streamDelayMs + p.strikeAfterMs,
+    );
+    const reveal = Math.min(strike, alertAt + show + p.streamDelayMs);
+    return {
+      reveal_at: new Date(reveal).toISOString(),
+      strike_at: new Date(strike).toISOString(),
+    };
+  }
+
+  /** Studio polled within the last seconds (its alerts can play). */
+  private studioHere(channelId: string) {
+    const s = this.studios.get(channelId);
+    return !!s && this.now().getTime() - s.at <= RANDOM_BAN.studioReadyMs;
+  }
+
   /** The animation of a confirmed ban: CSC when the buyer banned himself, else one of the nine at random. */
   private animationFor(r: Row): RandomBanAnimationId {
     if (r.target_id && r.target_id === r.buyer_id) return 'ban_csc';
     return RANDOM_BAN_DRAW[this.draw(RANDOM_BAN_DRAW.length)]!;
+  }
+
+  /** Anti-spoil: an alert queued at the draw and not started yet is dropped when the ban did not happen. */
+  private unplayed(r: Row): Partial<Row> {
+    return spoilOf(r) && r.animation_status === 'pending'
+      ? { animation_status: 'skipped' }
+      : {};
   }
 
   /** Animation of a result: pending, unless the result came too late to be shown (never an old animation). */
@@ -1070,6 +1162,7 @@ export class RandomBanService {
           refund: 'to_verify',
           lease_expires_at: null,
           ended_at: now,
+          ...this.unplayed(r),
         });
         this.ended.push(r.request_id);
       }
@@ -1219,12 +1312,32 @@ export class RandomBanService {
       const r = await this.row(q, id, true);
       this.current(r, t.executor_id, t.attempt_id);
       if (r.status === 'timeout_requested' && r.target_id === t.target.id) {
-        // The same report again: the same answer, the strike time unchanged (never a new delay).
-        const at = (r.stats?.reel as { strike_at?: string } | undefined)
-          ?.strike_at;
-        const left = at
-          ? Math.max(0, Date.parse(at) - this.now().getTime())
-          : 0;
+        // The same report again — the bot's check right before it strikes (or after its restart): the same sanction,
+        // and the time still to wait. An alert Studio has not started yet holds the strike (bounded by SPOIL.maxMs).
+        const sp = spoilOf(r);
+        let strike = sp ? Date.parse(sp.strike_at) : 0;
+        const now = this.now().getTime();
+        if (
+          sp &&
+          !sp.alert_at &&
+          r.animation_status === 'pending' &&
+          this.studioHere(r.channel_id)
+        ) {
+          const plan = this.spoilPlan(
+            await this.pricing(q, r.channel_id),
+            r.animation,
+            Date.parse(sp.drawn_at),
+            now + SPOIL.pickupMs,
+          );
+          if (Date.parse(plan.strike_at) > strike) {
+            strike = Date.parse(plan.strike_at);
+            await this.set(q, id, {
+              stats: { ...r.stats, spoil: { ...sp, ...plan } },
+              lease_expires_at: new Date(strike + SPOIL.leaseAfterMs),
+            });
+          }
+        }
+        const left = Math.max(0, strike - now);
         return {
           proceed: true,
           duration_s: r.duration_s!,
@@ -1246,10 +1359,8 @@ export class RandomBanService {
         reason,
         stats: { ...t.stats, streamer: r.stats?.streamer },
       };
-      // Le Viseur (reveal_first): the target is frozen; Studio's reel stops on it, the timeout follows the stop. Only
-      // while Studio said it is there (else the historical order: timeout at once, the video after).
       // The strip the extension's reel scrolls (Mini-jeux), built AFTER the draw: the target is frozen, the strip only
-      // dresses it (the Sniper's wish is never right beside it). Studio's reel, when on, scrolls the same strip.
+      // dresses it (the Sniper's wish is never right beside it).
       const strip = buildStrip(
         (await this.candidates(q, r.channel_id)).map((c) => ({
           id: c.id,
@@ -1260,8 +1371,6 @@ export class RandomBanService {
         this.draw,
       );
       fields.stats = { ...fields.stats, strip };
-      const reel = await this.reelFor(q, r, strip);
-      if (reel) fields.stats = { ...fields.stats, reel };
       if (r.mode !== 'real') {
         const done = { ...r, ...fields } as Row;
         await this.set(q, id, {
@@ -1274,15 +1383,26 @@ export class RandomBanService {
         await this.sniper(q, id, r.channel_id);
         return { proceed: false as const };
       }
-      const delay = reel
-        ? Date.parse(reel.strike_at) - this.now().getTime()
-        : 0;
+      // Anti-spoil: the historical alert is queued NOW (before the timeout), the reveal and the strike decided here.
+      const now = this.now().getTime();
+      const animation = this.animationFor({ ...r, ...fields } as Row);
+      const plan = this.spoilPlan(
+        await this.pricing(q, r.channel_id),
+        animation,
+        now,
+        now + SPOIL.pickupMs,
+      );
+      fields.stats = {
+        ...fields.stats,
+        spoil: { drawn_at: new Date(now).toISOString(), ...plan },
+      };
+      const delay = Date.parse(plan.strike_at) - now;
       await this.set(q, id, {
         ...fields,
         status: 'timeout_requested',
-        lease_expires_at: new Date(
-          this.now().getTime() + delay + RANDOM_BAN.timeoutLeaseMs,
-        ),
+        animation,
+        animation_status: 'pending',
+        lease_expires_at: new Date(now + delay + SPOIL.leaseAfterMs),
       });
       return {
         proceed: true as const,
@@ -1291,40 +1411,6 @@ export class RandomBanService {
         ...(delay > 0 ? { delay_ms: delay } : {}),
       };
     });
-  }
-
-  /** The reel of a request whose target was just drawn, or null (sequence off, Studio absent, the streamer). */
-  private async reelFor(
-    q: Queryable,
-    r: Row,
-    strip: { items: ReelItem[]; stop: number },
-  ) {
-    const p = await this.pricing(q, r.channel_id);
-    if (!p.revealFirst) return null;
-    const studio = this.studios.get(r.channel_id);
-    if (!studio || this.now().getTime() - studio.at > RANDOM_BAN.studioReadyMs)
-      return null;
-    return {
-      ...strip,
-      status: 'pending' as const,
-      duration_ms: REEL_MS,
-      strike_at: new Date(
-        this.now().getTime() + REEL_MS + p.strikeOffsetMs,
-      ).toISOString(),
-    };
-  }
-
-  /** Updates the reel's state (or its dodge card) in the request's stats. */
-  private async setReel(
-    q: Queryable,
-    id: string,
-    patch: Record<string, unknown>,
-  ) {
-    await q.query(
-      `update rb_requests set stats = jsonb_set(stats, '{reel}', coalesce(stats->'reel', '{}'::jsonb) || $2::jsonb),
-         updated_at = $3 where request_id = $1`,
-      [id, JSON.stringify(patch), this.now()],
-    );
   }
 
   /** The outcome (idempotent: a final result stays; only an « uncertain » can still be settled by the executor). */
@@ -1358,6 +1444,7 @@ export class RandomBanService {
             : r.stats,
           lease_expires_at: null,
           ended_at: now,
+          ...this.unplayed(r),
         });
       else if (o.event === 'confirmed' && settles)
         await this.set(q, id, {
@@ -1366,7 +1453,8 @@ export class RandomBanService {
           refund: 'none',
           lease_expires_at: null,
           ended_at: now,
-          ...this.animated(r, this.animationFor(r)),
+          // Anti-spoil: its alert was queued at the draw (played or playing): never a second one.
+          ...(spoilOf(r) ? {} : this.animated(r, this.animationFor(r))),
         });
       else if (o.event === 'refused' && settles) {
         await this.set(q, id, {
@@ -1375,9 +1463,8 @@ export class RandomBanService {
           refund: 'needed',
           lease_expires_at: null,
           ended_at: now,
+          ...this.unplayed(r),
         });
-        // The reel already showed the drawn viewer: the stream sees « Esquivé ! » (never « BANNI »), refunded.
-        if (r.stats?.reel) await this.setReel(q, id, { dodge: 'pending' });
       } else if (o.event === 'uncertain' && r.status === 'timeout_requested')
         await this.set(q, id, {
           status: 'uncertain',
@@ -1385,6 +1472,7 @@ export class RandomBanService {
           refund: 'to_verify',
           lease_expires_at: null,
           ended_at: now,
+          ...this.unplayed(r),
         });
       await this.sniper(q, id, r.channel_id);
       return { view: rbView(await this.row(q, id)), channelId: r.channel_id };
@@ -1420,8 +1508,6 @@ export class RandomBanService {
         [channelId],
       );
       if (playing.length) return { animation: null };
-      const viseur = await this.claimReel(q, channelId, consumerId);
-      if (viseur) return { animation: viseur };
       const r = (
         await q.query<Row>(
           `select * from rb_requests where channel_id = $1 and animation_status = 'pending'
@@ -1430,12 +1516,39 @@ export class RandomBanService {
         )
       )[0];
       if (!r) return { animation: null };
+      const now = this.now().getTime();
+      // Anti-spoil: the alert really starts now — the reveal and the strike follow its real start (never before
+      // what the bot was told: it checks again before striking; never later than SPOIL.maxMs after the draw).
+      const sp = spoilOf(r);
+      const plan =
+        sp && !sp.alert_at
+          ? this.spoilPlan(
+              await this.pricing(q, channelId),
+              r.animation,
+              Date.parse(sp.drawn_at),
+              now,
+            )
+          : null;
+      const spoil = plan
+        ? {
+            stats: {
+              ...r.stats,
+              spoil: { ...sp, alert_at: new Date(now).toISOString(), ...plan },
+            },
+            ...(r.status === 'timeout_requested'
+              ? {
+                  lease_expires_at: new Date(
+                    Date.parse(plan.strike_at) + SPOIL.leaseAfterMs,
+                  ),
+                }
+              : {}),
+          }
+        : {};
       await this.set(q, r.request_id, {
         animation_status: 'playing',
         animation_consumer: consumerId,
-        animation_lease_expires_at: new Date(
-          this.now().getTime() + RANDOM_BAN.animationLeaseMs,
-        ),
+        animation_lease_expires_at: new Date(now + RANDOM_BAN.animationLeaseMs),
+        ...spoil,
       });
       return {
         animation: {
@@ -1450,91 +1563,9 @@ export class RandomBanService {
     return out;
   }
 
-  /**
-   * Le Viseur: a reel to play now (before the strike; too late → skipped, never a reel after the fact), or a dodge
-   * card. One at a time; the reel's state lives in the request's stats (no column).
-   */
-  private async claimReel(q: Queryable, channelId: string, consumerId: string) {
-    const r = (
-      await q.query<Row>(
-        `select * from rb_requests where channel_id = $1
-           and (stats->'reel'->>'status' = 'pending' or stats->'reel'->>'dodge' = 'pending')
-         order by seq limit 1 for update`,
-        [channelId],
-      )
-    )[0];
-    if (!r) return null;
-    const reel = r.stats!.reel as {
-      items: ReelItem[];
-      stop: number;
-      status: string;
-      dodge?: string;
-      duration_ms: number;
-      strike_at: string;
-    };
-    const base = {
-      request_id: r.request_id,
-      trigger: r.buyer_name,
-      banned: r.target_name,
-    };
-    if (reel.status === 'pending') {
-      if (this.now().getTime() > Date.parse(reel.strike_at)) {
-        await this.setReel(q, r.request_id, { status: 'skipped' });
-        return null;
-      }
-      await this.setReel(q, r.request_id, {
-        status: 'playing',
-        consumer: consumerId,
-      });
-      return {
-        ...base,
-        animation: 'reel' as const,
-        reel: {
-          target: { id: r.target_id!, name: r.target_name ?? '' },
-          items: reel.items,
-          stop: reel.stop,
-          self: r.target_id === r.buyer_id,
-          wish: r.wish_name,
-          duration_ms: reel.duration_ms,
-        },
-      };
-    }
-    await this.setReel(q, r.request_id, {
-      dodge: 'playing',
-      consumer: consumerId,
-    });
-    return {
-      ...base,
-      animation: 'dodge' as const,
-      reel: {
-        target: { id: r.target_id!, name: r.target_name ?? '' },
-        items: [],
-        stop: 0,
-        self: false,
-        wish: null,
-        duration_ms: 2_500,
-      },
-    };
-  }
-
   async reportAnimation(id: string, a: RbAnimationReport) {
     return this.db.tx(async (q) => {
       const r = await this.row(q, id, true);
-      // Le Viseur: the reel's or the dodge's report (its own state, not the result's animation).
-      const reel = r.stats?.reel as
-        { status?: string; dodge?: string; consumer?: string } | undefined;
-      if (
-        reel &&
-        reel.consumer === a.consumer_id &&
-        (reel.status === 'playing' || reel.dodge === 'playing')
-      ) {
-        await this.setReel(
-          q,
-          id,
-          reel.status === 'playing' ? { status: a.event } : { dodge: a.event },
-        );
-        return { animation_status: a.event };
-      }
       if (r.animation_consumer !== a.consumer_id)
         throw new RbError(409, 'not_current_consumer');
       if (r.animation_status !== 'playing')
@@ -1749,7 +1780,7 @@ export class RandomBanService {
         ...(test ? {} : this.animated(r, this.animationFor(r))),
       });
       // The extension's machine lands on the streamer too (Mini-jeux): a strip built once the mute is REAL (a mute that
-      // fails goes back to a viewers' draw, never shown first). Studio's reel stays off for him (no `reel`).
+      // fails goes back to a viewers' draw, never shown first).
       if (!test) {
         const strip = buildStrip(
           (await this.candidates(q, r.channel_id)).map((c) => ({

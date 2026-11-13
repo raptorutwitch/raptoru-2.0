@@ -190,7 +190,46 @@ Décisions enregistrées (`sniper`) : `armed` (prédiction pas encore décidée)
   métriques Random Ban existantes ; métrique `random_ban_self` pour les CSC. Aucun défi n'est créé par nous : le
   catalogue est le tien (visibilité « secret » déjà gérée par les défis).
 
-## 5. Animation : « Le Viseur » (séquence hybride retenue, à valider en recette)
+## 5. Anti-spoil : l'alerte d'abord, le timeout ensuite (décision du 13/11, remplace « Le Viseur »)
+
+**Problème :** le timeout efface les messages de la victime dans le chat (temps réel) avant que l'alerte arrive sur le
+stream (en retard de quelques secondes) : le chat connaissait la victime avant l'alerte.
+
+**Chronologie (Random Ban de viewers ; le Core décide, Studio joue, le bot exécute) :**
+
+| Phase | Ce qui se passe                                                                                                                                                      |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A     | Achat accepté : l'extension fait tourner la machine aussitôt                                                                                                         |
+| B     | Tirage : le bot cherche les éligibles, le Core enregistre la cible (une seule fois) ; **rien de public ne la nomme encore**                                          |
+| C     | Le Core met **l'alerte historique** en file dès le tirage (vidéos, phrases et timings d'origine, inchangés) ; Studio la lance à son prochain relevé (500 ms)         |
+| D     | Révélation dans l'extension = début réel de l'alerte + moment où sa phrase apparaît (`showAt` de l'animation tirée) + **retard du stream** (réglage, 4 s par défaut) |
+| E     | Timeout = révélation + **« Timeout après la révélation »** (réglage, 2 s par défaut), envoyé par le bot ; la confirmation n'ajoute pas de seconde alerte             |
+
+- **Côté serveur :** le Core écrit `stats.spoil` { `drawn_at`, `alert_at`, `reveal_at`, `strike_at` } et répond au bot
+  « frappe dans N ms ». Le début réel de l'alerte (relevé de Studio) recalcule la révélation et le timeout.
+- **Le bot** journalise l'attente (`scheduled`, fichier sur le volume `/data`), puis **redemande au Core** avant de
+  frapper (même rapport de cible, idempotent) : le Core répond le temps restant (alerte partie en retard), ou refuse
+  (demande balayée, annulée) — rien n'est envoyé. Un redémarrage pendant l'attente la reprend depuis le journal.
+- **Repli borné :** une alerte qui ne démarre pas (Studio occupé par une autre, Studio absent) retient le timeout au
+  plus **20 s après le tirage** ; Studio absent : le timeout part au moment prévu. Le bail du Core court 90 s après le
+  timeout prévu (un bot qui redémarre retrouve la demande) ; au-delà : « à vérifier », jamais une seconde sanction.
+- **Échec du timeout** (Twitch refuse, demande échouée) : remboursement habituel ; une alerte pas encore lancée est
+  abandonnée. Une alerte déjà jouée ne peut pas être reprise (le stream a montré un ban qui n'a pas eu lieu, rare).
+- **Anti-spoil des vues publiques :** tant que `reveal_at` n'est pas passé, l'état de l'extension montre la demande
+  « en tirage » (sans cible, durée, statistiques ni bande) et l'historique public ne la liste pas. La bande arrive 3 s
+  avant la révélation : la machine ralentit et s'arrête dessus à `reveal_at` (animations réduites : affichée à
+  `reveal_at`). Studio, la modération et le Dock voient tout. Limite assumée : la bande des 3 dernières secondes est
+  dans la réponse réseau ; les indices natifs de Twitch (liste des chatters, message de timeout reçu par la victime)
+  restent hors de notre contrôle.
+- **Le streamer tiré** (2 %) : inchangé — mute OBS par Studio, pas de timeout Twitch, pas d'attente anti-spoil ; un
+  mute qui échoue repart vers un tirage de viewers ; l'extension n'affiche sa bande qu'après la confirmation du mute.
+- **Essai à blanc / Tester** : inchangés (aucun timeout).
+- Réglages : Studio › Sanctions › Random Ban › « Révélation et sanction » : `random_ban.stream_delay_s` (4) et
+  `random_ban.strike_after_s` (2). Les anciens réglages du Viseur (`sequence`, `strike_offset_s`) sont retirés.
+
+<details><summary>Historique : « Le Viseur » (rouleau Raptoru sur le stream), abandonné le 13/11</summary>
+
+### Le Viseur (abandonné)
 
 ### 5.1 Contraintes mesurées ou connues
 
@@ -254,6 +293,8 @@ comportement qu'à ce moment-là.
 **Ce que la séquence ne promet pas :** une simultanéité exacte. Chaque spectateur a sa propre latence (2 à 6 s,
 variable) ; le décalage `strike_offset_ms` vise le spectateur moyen. La séquence garantit seulement l'honnêteté (rien
 d'annoncé qui ne soit vrai) et une seule sanction.
+
+</details>
 
 ## 6. Éligibles (inchangé, écrit honnêtement)
 

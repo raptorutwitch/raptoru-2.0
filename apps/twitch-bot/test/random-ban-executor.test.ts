@@ -598,3 +598,135 @@ describe('Random Ban V3 — the buyer drawn less often, never impossible', () =>
     }
   }, 60_000);
 });
+
+// Anti-spoil (13/11): Core answers « strike in N ms » (the stream's alert reveals the target first). The wait is
+// journaled and ends with a check (the same target report again): Core may hold it (an alert that started late),
+// refuse it (canceled, swept: nothing sent), and a restart during the wait resumes it — one timeout, never two.
+describe('Random Ban — anti-spoil: the strike after the reveal', () => {
+  const REQ = '55555555-5555-4555-8555-555555555555';
+  const ATT = '66666666-6666-4666-8666-666666666666';
+  /** A Core whose answers to the target reports are given in order; claim hands one request once. */
+  function scriptedCore(targets: { status: number; body: object }[]) {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    let claimed = false;
+    return {
+      calls,
+      core: async (path: string, body: unknown) => {
+        calls.push({ path, body: body as Record<string, unknown> });
+        if (path.endsWith('/claim')) {
+          if (claimed) return { status: 200, body: { request: null } };
+          claimed = true;
+          return {
+            status: 200,
+            body: {
+              request: { request_id: REQ, attempt_id: ATT, mode: 'real' },
+            },
+          };
+        }
+        if (path.endsWith('/target'))
+          return targets.shift() ?? { status: 409, body: {} };
+        return { status: 200, body: {} };
+      },
+    };
+  }
+  const go = (delay_ms?: number) => ({
+    status: 200,
+    body: {
+      proceed: true,
+      duration_s: 300,
+      reason: 'Pas de chance gros fdp',
+      ...(delay_ms ? { delay_ms } : {}),
+    },
+  });
+  const make = (
+    core: ReturnType<typeof scriptedCore>,
+    twitch: ReturnType<typeof fakeTwitch>,
+    journal: ReturnType<typeof memoryRbJournal>,
+    waits: number[],
+  ) =>
+    createRandomBanExecutor({
+      core: core.core,
+      channelId: '900100',
+      broadcasterId: BROADCASTER,
+      executorId: 'lab-chat-1',
+      login: 'lecroupier_',
+      botScopes: [
+        'moderator:read:chatters',
+        'moderator:read:followers',
+        'moderator:manage:banned_users',
+      ],
+      broadcasterScopes: ['moderation:read', 'channel:read:subscriptions'],
+      twitch,
+      journal,
+      pause: async (ms) => {
+        waits.push(ms);
+      },
+      now: () => NOW,
+      log: () => {},
+    });
+
+  it('waits what Core said, checks again (an alert started late: waits more), then ONE timeout', async () => {
+    const core = scriptedCore([go(7_500), go(1_200), go()]);
+    const twitch = fakeTwitch({ chatters: [u('5')], follows: ['5'] });
+    const waits: number[] = [];
+    const journal = memoryRbJournal();
+    await make(core, twitch, journal, waits).tick();
+    expect(waits.filter((w) => w > 100)).toEqual([7_500, 1_200]);
+    expect(core.calls.map((c) => c.path.split('/').pop())).toEqual([
+      'claim',
+      'target',
+      'target',
+      'target',
+      'result',
+    ]);
+    expect(twitch.calls.ban).toEqual([['5', 300, 'Pas de chance gros fdp']]);
+    expect(journal.entries()).toEqual([]);
+  });
+
+  it('Core refuses at the check (canceled, swept): nothing is sent, the entry is dropped', async () => {
+    const core = scriptedCore([go(5_000), { status: 409, body: {} }]);
+    const twitch = fakeTwitch({ chatters: [u('5')], follows: ['5'] });
+    const journal = memoryRbJournal();
+    await make(core, twitch, journal, []).tick();
+    expect(twitch.calls.ban).toEqual([]);
+    expect(journal.entries()).toEqual([]);
+  });
+
+  it('a restart during the wait: the journal keeps the strike, the next bot checks with Core and strikes ONCE', async () => {
+    const journal = memoryRbJournal();
+    const twitch = fakeTwitch({ chatters: [u('5')], follows: ['5'] });
+    // The first bot stops during its wait (Core unreachable for its check: the entry stays).
+    const first = scriptedCore([go(6_000)]);
+    const firstCore = {
+      ...first,
+      core: async (path: string, body: unknown) => {
+        if (
+          path.endsWith('/target') &&
+          first.calls.some((c) => c.path.endsWith('/target'))
+        )
+          throw new Error('fetch failed');
+        return first.core(path, body);
+      },
+    };
+    await make(firstCore, twitch, journal, []).tick();
+    expect(twitch.calls.ban).toEqual([]);
+    expect(journal.entries()).toMatchObject([
+      { request_id: REQ, state: 'scheduled', target_id: '5' },
+    ]);
+    // The new bot: recover asks Core (2 s still to wait), then strikes and reports, once.
+    const second = scriptedCore([go(2_000), go()]);
+    const waits: number[] = [];
+    await make(second, twitch, journal, waits).tick();
+    expect(twitch.calls.ban).toEqual([['5', 300, 'Pas de chance gros fdp']]);
+    expect(second.calls.filter((c) => c.path.endsWith('/result'))).toHaveLength(
+      1,
+    );
+    expect(second.calls[0]!.body).toMatchObject({
+      attempt_id: ATT,
+      target: { id: '5' },
+    });
+    expect(journal.entries()).toEqual([]);
+    await make(second, twitch, journal, waits).tick();
+    expect(twitch.calls.ban).toHaveLength(1);
+  });
+});

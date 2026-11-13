@@ -169,6 +169,37 @@ try {
     (await tokens()) === before - 25_000,
     'un achat débite une seule fois (25 000)',
   );
+  // Anti-spoil: the stream's alert first (the extension still spinning), the extension's reveal a few seconds later
+  // (the stream's latency), the timeout after the alert.
+  const streamFr = page.frames().find((x) => x.url().includes('/stream'));
+  let alertAt = 0;
+  let modeAtAlert = '';
+  let revealAt = 0;
+  let confirmedAt = 0;
+  for (let i = 0; i < 200 && !(revealAt && confirmedAt); i++) {
+    await sleep(100);
+    if (!alertAt && (await streamFr.locator('.card').count())) {
+      alertAt = Date.now();
+      modeAtAlert = await fr.locator('.rbm').getAttribute('data-mode');
+    }
+    if (
+      !revealAt &&
+      (await fr.locator('.rbm').getAttribute('data-mode')) === 'result'
+    )
+      revealAt = Date.now();
+    if (!confirmedAt && (await history())[0]?.status === 'confirmed')
+      confirmedAt = Date.now();
+  }
+  check(
+    alertAt > 0 && modeAtAlert === 'spin',
+    `anti-spoil : l’alerte du stream part pendant que la machine tourne encore (${modeAtAlert})`,
+  );
+  check(
+    revealAt - alertAt >= 3_000 &&
+      confirmedAt > alertAt &&
+      confirmedAt >= revealAt,
+    `révélation dans l’extension ${((revealAt - alertAt) / 1000).toFixed(1)} s après l’alerte, timeout ensuite (${((confirmedAt - alertAt) / 1000).toFixed(1)} s)`,
+  );
   await settle(fr);
   const first = (await history())[0];
   const shown = await fr.locator('.rbm__name').textContent();
@@ -248,6 +279,16 @@ try {
   await api('/api/cp', {});
   await api('/api/cp', {});
   const refusedCp = await api('/api/cp', {});
+  // The two accepted ones run first (each: the alert, the reveal, the timeout).
+  for (
+    let i = 0;
+    i < 60 &&
+    (await history()).some((h) =>
+      ['queued', 'searching', 'timeout_requested'].includes(h.status),
+    );
+    i++
+  )
+    await sleep(500);
   await sleep(4500);
   check(
     refusedCp.refused === 'no_charge' &&

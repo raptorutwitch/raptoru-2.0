@@ -100,7 +100,7 @@ export function createMachine(document, { reduced = false } = {}) {
     if (!anim) return;
     if (anim.kind === 'spin') pos = anim.from + ((now - anim.at) / 1000) * SPIN_SPEED;
     else {
-      const t = (now - anim.at) / REEL_MS;
+      const t = (now - anim.at) / (anim.ms || REEL_MS);
       pos = anim.from + (anim.to - anim.from) * reelProgress(t);
       if (t >= 1) {
         pos = anim.to;
@@ -176,8 +176,11 @@ export function createMachine(document, { reduced = false } = {}) {
       }
       run({ kind: 'spin', from: pos, at: win.performance?.now?.() ?? Date.now() });
     },
-    /** The Core's strip: through the centre, slowing down, a clean stop on the Core's target. Resolves when stopped. */
-    play(strip) {
+    /**
+     * The Core's strip: through the centre, slowing down, a clean stop on the Core's target. Resolves when stopped.
+     * `ms`: the reel's length (anti-spoil: it lands when the stream's alert reveals the target).
+     */
+    play(strip, ms = REEL_MS) {
       halt();
       reset();
       mode('reel');
@@ -198,7 +201,7 @@ export function createMachine(document, { reduced = false } = {}) {
         }
         pos = 0;
         layout();
-        run({ kind: 'reel', from: 0, to: strip.stop, at: win.performance?.now?.() ?? Date.now(), done: land });
+        run({ kind: 'reel', from: 0, to: strip.stop, ms, at: win.performance?.now?.() ?? Date.now(), done: land });
       });
     },
     /** The outcome on the target (the Core's words), and the Sniper's. */
