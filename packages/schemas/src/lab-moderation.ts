@@ -113,7 +113,14 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
   z.strictObject({
     action: z.literal('block_viewer'),
     viewer_id: Id,
-    module: z.enum(['all', 'tts', 'soundboard', 'bonk', 'raffle']),
+    module: z.enum([
+      'all',
+      'tts',
+      'soundboard',
+      'bonk',
+      'raffle',
+      'random_ban',
+    ]),
     /** null = until unblocked (addition to D4, sensitive sanction). */
     duration_s: z
       .number()
@@ -126,14 +133,21 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
   z.strictObject({
     action: z.literal('unblock_viewer'),
     viewer_id: Id,
-    module: z.enum(['all', 'tts', 'soundboard', 'bonk', 'raffle']),
+    module: z.enum([
+      'all',
+      'tts',
+      'soundboard',
+      'bonk',
+      'raffle',
+      'random_ban',
+    ]),
     reason: Reason,
   }),
   /** D4 personal cooldown: « délai imposé » between two uses, « pendant » a span. */
   z.strictObject({
     action: z.literal('set_cooldown'),
     viewer_id: Id,
-    module: z.enum(['tts', 'soundboard', 'bonk']),
+    module: z.enum(['tts', 'soundboard', 'bonk', 'random_ban']),
     delay_s: z.number().int().min(1).max(86_400),
     span: CooldownSpan,
     reason: Reason,
@@ -142,7 +156,7 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
   z.strictObject({
     action: z.literal('clear_cooldown'),
     viewer_id: Id,
-    module: z.enum(['tts', 'soundboard', 'bonk']),
+    module: z.enum(['tts', 'soundboard', 'bonk', 'random_ban']),
     reason: Reason,
   }),
   z.strictObject({

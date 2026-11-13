@@ -39,6 +39,20 @@ export const RANDOM_BAN = {
   studioMuteLeaseMs: 15_000,
 } as const;
 
+/**
+ * LAB ONLY — the fictional chatters of the Random Ban Lab (Mini-jeux): the bot's fake Twitch (twitch-bot
+ * rb-lab-twitch.ts) draws among them, the Lab Core offers them as Sniper targets. Never a real account.
+ */
+export const RB_LAB_CHATTERS: readonly {
+  id: string;
+  login: string;
+  name: string;
+}[] = Object.freeze(
+  ['Kiwi', 'Pika', 'Moka', 'Zed', 'Luna', 'Nox', 'Iris', 'Bao'].map((name, i) =>
+    Object.freeze({ id: String(990_001 + i), login: name.toLowerCase(), name }),
+  ),
+);
+
 /** The phrase pools of the legacy page (`banPhrases`), copied as they are. */
 export const RANDOM_BAN_PHRASES = {
   classic: [
@@ -249,6 +263,8 @@ export const RbStatus = z.enum([
   'failed',
   'uncertain',
   'simulated',
+  // Mini-jeux: withdrawn from the queue by a moderator (refunded once).
+  'canceled',
 ]);
 export type RbStatus = z.infer<typeof RbStatus>;
 

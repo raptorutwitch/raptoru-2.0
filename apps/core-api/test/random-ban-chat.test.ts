@@ -136,7 +136,7 @@ describe('!rb in the chat', () => {
     await l.poll();
     await l.router.message(msg('!rb'));
     expect(await l.replies()).toEqual([
-      '@Alice - Il te faut 25 000 Jetons pour utiliser Random Ban. Solde : 12 000 Jetons (il te manque 13 000).',
+      '@Alice - Il te faut 25 000 Jetons (solde : 12 000) · rien n’a été débité.',
     ]);
     expect(await l.requests()).toEqual([]);
     expect(await l.tokensOf()).toBe(12_000);
@@ -150,6 +150,9 @@ describe('!rb in the chat', () => {
       `insert into lab_global_state (channel_id, paused, paused_at, paused_by, updated_at) values ($1, true, now(), 'mod', now())`,
       [CH],
     );
+    // One refusal line per viewer every 5 min.
+    l.core.clock.advance(5 * 60_000);
+    await l.poll();
     await l.router.message(msg('!rb'));
     expect(await l.replies()).toEqual([
       '@Alice - Random Ban indisponible pour le moment · rien n’a été débité.',
@@ -293,14 +296,13 @@ describe('!rb in the chat', () => {
       { tokens: 100_000 },
       'test',
     );
+    // Studio's « Prix de Random Ban » (extension and !rb).
+    await core.moduleSettings.set(CH, 'random_ban.price', 30_000, 'test');
     const chat = new RandomBanChat(
       core.db,
       core.clock,
       core.randomBan,
       core.economy,
-      {
-        price: async (_c, i) => (i === 'random_ban' ? 30_000 : 0),
-      },
     );
     await core.randomBan.claim(CH, EXEC);
     await chat.chat(msg('!rb'));
@@ -317,8 +319,6 @@ describe('Refonte H1: `!rb` only during the canonical live', () => {
     const l = await lab();
     await l.poll();
     const { coreWalletEconomy } = await import('../src/economy/economy.js');
-    const { defaultChatPrices } =
-      await import('../src/chat-interactions/prices.js');
     const port = coreWalletEconomy(l.core.wallet.wallet);
     await l.core.wallet.wallet.credit({
       key: 'fund-h1',
@@ -330,13 +330,7 @@ describe('Refonte H1: `!rb` only during the canonical live', () => {
       amount: 100_000,
       source: 'test',
     });
-    const chat = new RandomBanChat(
-      l.core.db,
-      l.core.clock,
-      l.rb,
-      port,
-      defaultChatPrices,
-    );
+    const chat = new RandomBanChat(l.core.db, l.core.clock, l.rb, port);
     expect(await chat.chat(msg('!rb'))).toEqual({ outcome: 'stream_offline' });
     expect(await l.requests()).toEqual([]);
     expect(await l.replies()).toEqual([

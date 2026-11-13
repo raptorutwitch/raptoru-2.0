@@ -1,14 +1,14 @@
+import { RB_LAB_CHATTERS } from '@raptoru/schemas';
 import { ThirdPartyEmotes } from './bonk-lab/third-party-emotes.js';
 import { ALERT_RULES, AlertsService } from './alerts/service.js';
-import {
-  eventShopModule,
-  randomBanModule,
-  wordGameModule,
-} from './modules/status-adapters.js';
+import { eventShopModule, wordGameModule } from './modules/status-adapters.js';
 import { cautionModule, cautionRates } from './modules/caution.js';
 import { miniGameLimits } from './modules/mini-games.js';
 import { votekickLimits, votekickModule } from './modules/votekick.js';
 import { MODULES } from './modules/index.js';
+import { randomBanExtModule, randomBanModule } from './modules/random-ban.js';
+import { RandomBanModeration } from './random-ban/moderation.js';
+import { randomBanPricing } from './random-ban/pricing.js';
 import { ModuleHost } from './modules/host.js';
 import { ModuleSettings } from './module-settings/service.js';
 import { BotInstanceService } from './bot-instance/service.js';
@@ -170,6 +170,21 @@ export function createCore(
         : null,
     otherMutes: votekick,
   });
+  // Mini-jeux: the progressive price of the extension and `!rb`, the per-buyer limits (module settings).
+  randomBan.pricing = randomBanPricing(moduleSettings);
+  // Sniper: its bonus on this Core's economy; the Lab environment aims at the Lab's fictional chatters.
+  randomBan.economy = economy;
+  randomBan.paused = async (q, ch) =>
+    (await moduleSettings.get(q, ch, 'random_ban.queue_paused')) === 1;
+  randomBan.moderation = new RandomBanModeration(
+    db,
+    clock,
+    randomBan,
+    economy,
+    moduleSettings,
+  );
+  if (channel.lab === true)
+    randomBan.candidates = async () => RB_LAB_CHATTERS.map((c) => ({ ...c }));
   // The broadcaster's caution ends ONE of his OBS mutes: Votekick's or the Random Ban's.
   const caution = new CautionService(db, clock, economy, broadcasterOf, [
     { kind: 'votekick', label: 'Votekick', source: votekick },
@@ -253,6 +268,7 @@ export function createCore(
   });
   // Module host: supervision adapters of historical modules (they only READ their module's own state).
   modules.add(randomBanModule(randomBan));
+  modules.add(randomBanExtModule(randomBan, { lab: channel.lab === true }));
   modules.add(wordGameModule(chat.wordGame));
   modules.add(eventShopModule);
   return {

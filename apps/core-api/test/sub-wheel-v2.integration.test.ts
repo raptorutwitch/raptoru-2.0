@@ -51,6 +51,8 @@ const MODULE_ORIGIN = '20261121190000_cmd_steps_module_origin_lab.sql';
 const MODULE_SETTINGS = '20261121160000_module_settings.sql';
 const MODULE_ACTIVITY = '20261121180000_module_activity.sql';
 const MUSIC_HUB = '20261122130000_music_hub.sql';
+// Mini-jeux (Random Ban purchases), after 25/10 too.
+const RB_PURCHASE = '20261123130000_random_ban_purchase.sql';
 const CP_ADMIN = '20261124130000_cp_reward_admin.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
@@ -650,6 +652,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== MODULE_SETTINGS &&
           f !== MODULE_ACTIVITY &&
           f !== MUSIC_HUB &&
+          f !== RB_PURCHASE &&
           f !== CP_ADMIN,
       ),
       lab: [
@@ -674,6 +677,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         MODULE_SETTINGS,
         MODULE_ACTIVITY,
         MUSIC_HUB,
+        RB_PURCHASE,
         CP_ADMIN,
       ],
       // Refonte H8: a main Core file production did not hold on 25/10.
@@ -735,6 +739,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       MODULE_ACTIVITY,
       MODULE_ORIGIN,
       MUSIC_HUB,
+      RB_PURCHASE,
       CP_ADMIN,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.

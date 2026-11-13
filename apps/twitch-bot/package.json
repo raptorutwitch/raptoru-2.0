@@ -12,6 +12,7 @@
     "twitch:auth": "tsx --env-file-if-exists=.env src/scripts/twitch-auth.ts",
     "loyalty:preflight": "tsx --env-file-if-exists=.env src/scripts/loyalty-preflight.ts",
     "stream:reconcile": "tsx --env-file-if-exists=.env src/scripts/stream-reconcile.ts",
+    "rb:lab-simulator": "tsx src/scripts/rb-lab-simulator.ts",
     "rewards:audit": "tsx src/scripts/rewards-audit.ts"
   },
   "dependencies": {

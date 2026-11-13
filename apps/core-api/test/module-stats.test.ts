@@ -201,3 +201,70 @@ describe('module statistics (owner view, site token)', () => {
     ).toBe(404);
   });
 });
+
+describe('Random Ban public totals (raptoru.fr, Mini-jeux)', () => {
+  it('site token only; channel totals (Sniper, CSC, Jetons), never a viewer; tests and refunded requests excluded', async () => {
+    const { core, get } = await fixture(SITE);
+    const now = new Date();
+    const row = async (
+      buyer: string,
+      status: string,
+      o: {
+        target?: string;
+        price?: number;
+        sniper?: string;
+        wish?: string;
+        bonus?: number;
+        source?: string;
+      } = {},
+    ) =>
+      core.db.query(
+        `insert into rb_requests (request_id, channel_id, source, source_ref, mode, buyer_id, buyer_login, buyer_name,
+           status, target_id, price_paid, sniper, wish_id, stats, created_at, updated_at)
+         values ($1, $2, $3, $12, 'real', $4, $4, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
+        [
+          randomUUID(),
+          CH,
+          o.source ?? 'extension',
+          buyer,
+          status,
+          o.target ?? null,
+          o.price ?? null,
+          o.sniper ?? 'none',
+          o.wish ?? null,
+          o.bonus ? JSON.stringify({ sniper_bonus: o.bonus }) : null,
+          now,
+          randomUUID(),
+        ],
+      );
+    await row('1', 'confirmed', {
+      target: '2',
+      price: 25_000,
+      sniper: 'hit',
+      wish: '2',
+      bonus: 2_000,
+    });
+    await row('1', 'confirmed', { target: '1', price: 30_000 }); // CSC
+    await row('3', 'flop', { price: 25_000, sniper: 'miss', wish: '2' });
+    await row('3', 'failed', { price: 25_000 }); // refunded: never counted
+    await row('4', 'confirmed', { target: '2', source: 'test' }); // a Studio test
+    expect((await get('/v1/site/modules/random-ban/public')).status).toBe(401);
+    const out = await get(
+      '/v1/site/modules/random-ban/public',
+      `Bearer ${SITE}`,
+    );
+    expect(out.status).toBe(200);
+    expect(out.body).toMatchObject({
+      launched: 3,
+      executed: 2,
+      distinct_banned: 2,
+      self: 1,
+      flops: 1,
+      sniper_tries: 2,
+      sniper_hits: 1,
+      tokens_spent: 80_000,
+      tokens_won: 2_000,
+    });
+    expect(JSON.stringify(out.body)).not.toMatch(/buyer|viewer|wish/);
+  });
+});

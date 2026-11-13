@@ -640,6 +640,56 @@ describe('Effects player — the music card (Music Hub V2)', () => {
   });
 });
 
+describe('Effects player: Random Ban « Le Viseur » (Mini-jeux)', () => {
+  it('the reel and the dodge card are silent (no media, even on a muted page), their strip goes to the page as decided', async () => {
+    const { p, origin, token } = await player();
+    const pg = page(origin, token);
+    await pg.heartbeat(false); // a muted page: a silent effect still plays
+    const playing = p.play({
+      kind: 'reel',
+      reel: {
+        trigger: 'Alice',
+        target: { id: '990001', name: 'Kiwi' },
+        items: [
+          { id: '990002', name: 'Pika' },
+          { id: '990001', name: 'Kiwi' },
+        ],
+        stop: 1,
+        self: false,
+        wish: 'Kiwi',
+        duration_ms: 4500,
+      },
+    });
+    const [got] = (await taken(pg)) as unknown as {
+      delivery_id: string;
+      kind: string;
+      url: string;
+      reel: Record<string, unknown>;
+    }[];
+    expect(got).toMatchObject({
+      kind: 'reel',
+      url: '',
+      reel: {
+        trigger: 'Alice',
+        target: { id: '990001', name: 'Kiwi' },
+        stop: 1,
+        wish: 'Kiwi',
+        duration_ms: 4500,
+      },
+    });
+    await pg.report(got!.delivery_id, 'started');
+    const { end } = await playing;
+    await pg.report(got!.delivery_id, 'completed');
+    expect(await end).toMatchObject({ event: 'completed' });
+    void p.play({
+      kind: 'dodge',
+      reel: { trigger: 'Alice', target: { id: '990001', name: 'Kiwi' } },
+    });
+    const [dodge] = await taken(pg);
+    expect(dodge).toMatchObject({ kind: 'dodge', url: '' });
+  });
+});
+
 describe('Effects player: a reloaded OBS source (audit 09/11)', () => {
   it('an effect started by a page that is gone ends as « unknown » as soon as the new page calls, not after endMs', async () => {
     const { p, origin, token } = await player({

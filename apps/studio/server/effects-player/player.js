@@ -415,6 +415,29 @@ function wheelElement(effect) {
   return { el, doneEvent: 'effect-done', release() {} };
 }
 
+/** Random Ban « Le Viseur »: the reel / the dodge card (stand-in elements, silent; reel.js loaded only for them). */
+function reelElement(effect) {
+  const el = document.createElement('div');
+  el.duration = 15;
+  el.pause = () => {};
+  el.load = () => {};
+  el.play = () => {
+    el.dispatchEvent(new Event('playing'));
+    import('./reel.js')
+      .then(({ playReel, playDodge }) =>
+        effect.kind === 'reel'
+          ? playReel(stage, effect.reel)
+          : playDodge(stage, effect.reel),
+      )
+      .then(
+        () => el.dispatchEvent(new Event('effect-done')),
+        () => el.dispatchEvent(new Event('error')),
+      );
+    return Promise.resolve();
+  };
+  return { el, doneEvent: 'effect-done', release() {} };
+}
+
 /** Music Hub V2: the music card (a stand-in element for the play cycle); its optional alert sound plays alongside. */
 function musicElement(effect) {
   const m = effect.music;
@@ -516,6 +539,9 @@ async function play(effect) {
     effect.kind === 'music' &&
     typeof effect.music?.title === 'string' &&
     (effect.url === '' || MEDIA_URL.test(effect.url));
+  const reel =
+    (effect.kind === 'reel' || effect.kind === 'dodge') &&
+    typeof effect.reel?.trigger === 'string';
   if (
     (effect.kind !== 'sound' &&
       !video &&
@@ -523,8 +549,9 @@ async function play(effect) {
       !ban &&
       !flop &&
       !wheel &&
-      !music) ||
-    (!music && !MEDIA_URL.test(effect.url))
+      !music &&
+      !reel) ||
+    (!music && !reel && !MEDIA_URL.test(effect.url))
   ) {
     await report(effect, 'failed', 'invalid_effect');
     return;
@@ -539,9 +566,11 @@ async function play(effect) {
           ? wheelElement(effect)
           : music
             ? musicElement(effect)
-            : video
-              ? videoElement(effect)
-              : audioElement(effect);
+            : reel
+              ? reelElement(effect)
+              : video
+                ? videoElement(effect)
+                : audioElement(effect);
   const el = media.el;
   let started = false;
   let endGuard = null;

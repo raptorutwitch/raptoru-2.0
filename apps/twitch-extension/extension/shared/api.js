@@ -114,7 +114,8 @@ export function createClient({
 
   async function call(method, path, { body, idempotencyKey } = {}) {
     if (demoMode) {
-      const responsePayload = await (fixtureCall ?? demoCall)(method, path, body);
+      // The intent's key goes along (a local Lab demo source keys its purchases like the real EBS; the fixtures ignore it).
+      const responsePayload = await (fixtureCall ?? demoCall)(method, path, body, idempotencyKey);
       if (sessionRoute(path) === '/session') rememberSession(responsePayload);
       return responsePayload;
     }

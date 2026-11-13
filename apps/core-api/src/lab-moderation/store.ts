@@ -269,7 +269,7 @@ export interface AuditEntry {
   channelId: string;
   actor: Actor;
   role?: LabRole;
-  module?: LabModule | 'all' | 'music' | null;
+  module?: LabModule | 'all' | 'music' | 'random_ban' | null;
   action: string;
   viewerId?: string | null;
   interactionId?: string | null;
@@ -408,7 +408,7 @@ export async function activeBlock(
   channelId: string,
   viewerId: string,
   /** A module, or 'all' (a module without its own block — Halloween — honours the « everywhere » one only). */
-  module: LabModule | 'all',
+  module: LabModule | 'random_ban' | 'all',
   now: Date,
 ) {
   return (

@@ -5,7 +5,6 @@
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
 import type { LabChatMessage } from '@raptoru/schemas';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { defaultChatPrices } from '../src/chat-interactions/prices.js';
 import { RandomBanChat } from '../src/chat-interactions/random-ban-chat.js';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
@@ -57,8 +56,8 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
     b = createPgDb(url!);
     rbA = new RandomBanService(a, clock);
     rbB = new RandomBanService(b, clock);
-    chatA = new RandomBanChat(a, clock, rbA, labEconomy, defaultChatPrices);
-    chatB = new RandomBanChat(b, clock, rbB, labEconomy, defaultChatPrices);
+    chatA = new RandomBanChat(a, clock, rbA, labEconomy);
+    chatB = new RandomBanChat(b, clock, rbB, labEconomy);
     // Both Cores saw the executor poll.
     await rbA.claim(CH, EXEC);
     await rbB.claim(CH, EXEC);
@@ -127,6 +126,7 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
       chatA.chat(msg('tw-bal-1', '9002')),
       chatB.chat(msg('tw-bal-2', '9002')),
     ]);
+    // The second sees the first (buyer's lock): 5 000 left — refused, nothing debited.
     expect(out.map((o) => o.outcome).sort()).toEqual([
       'rb_queued',
       'rb_refused',
@@ -135,6 +135,49 @@ describe.skipIf(!isLocal)('!rb from the chat on a real Postgres', () => {
     expect(
       await n(`select count(*) as n from rb_requests where buyer_id = '9002'`),
     ).toBe(1);
+  });
+
+  it('charges (V5): 2 `!rb` and 3 redemptions of one buyer at once on 2 Cores — exactly 3 accepted, never a charge used twice', async () => {
+    await editWallet(
+      a,
+      clock.now(),
+      CH,
+      '9010',
+      'set',
+      { tokens: 1_000_000 },
+      'test',
+    );
+    const buyer = { id: '9010', login: 'v9010', name: 'V9010' };
+    const cp = (rb: RandomBanService, ref: string) =>
+      rb.requestChannelPoints({
+        channel_id: CH,
+        source_ref: `twitch:${ref}:0`,
+        mode: 'real',
+        buyer,
+      });
+    const out = await Promise.all([
+      chatA.chat(msg('tw-ch-1', '9010')),
+      cp(rbB, 'cp-ch-1'),
+      chatB.chat(msg('tw-ch-2', '9010')),
+      cp(rbA, 'cp-ch-2'),
+      cp(rbB, 'cp-ch-3'),
+    ]);
+    const accepted = out.filter(
+      (o) =>
+        ('outcome' in o && o.outcome === 'rb_queued') ||
+        ('request' in o && o.request),
+    );
+    expect(accepted).toHaveLength(3);
+    expect(
+      await n(`select count(*) as n from rb_requests where buyer_id = '9010'`),
+    ).toBe(3);
+    const chats = await n(
+      `select count(*) as n from rb_requests where buyer_id = '9010' and source = 'chat'`,
+    );
+    expect(await tokens('9010')).toBe(1_000_000 - chats * 25_000);
+    expect(
+      (await a.tx((q) => rbA.chargesFor(q, CH, '9010'))).charges.available,
+    ).toBe(0);
   });
 
   it('a failed request settled by both Cores at once: refunded exactly once', async () => {

@@ -179,6 +179,15 @@ export class RandomBanRuntime {
         animation: RandomBanAnimationId;
         trigger: string;
         banned: string | null;
+        /** Le Viseur: the reel Core decided (before the timeout), or the dodge card (Twitch refused it after). */
+        reel?: {
+          target: { id: string; name: string };
+          items: { id: string; name: string }[];
+          stop: number;
+          self: boolean;
+          wish: string | null;
+          duration_ms: number;
+        };
       } | null;
     }>(`${this.base}/${this.d.channelId}/animations/claim`, {
       consumer_id: this.consumer,
@@ -188,15 +197,34 @@ export class RandomBanRuntime {
     let error: string | undefined;
     try {
       if (!this.d.effects) throw new EffectError('effects_player_unavailable');
+      const kind =
+        (a.animation as string) === 'reel'
+          ? 'reel'
+          : (a.animation as string) === 'dodge'
+            ? 'dodge'
+            : null;
       const { end } = await this.d.effects.play(
-        a.animation === 'flop'
-          ? { kind: 'flop', trigger: a.trigger }
-          : {
-              kind: 'ban',
-              animation: a.animation,
-              trigger: a.trigger,
-              banned: a.banned ?? '',
-            },
+        kind
+          ? {
+              kind,
+              reel: {
+                trigger: a.trigger,
+                target: a.reel?.target ?? { id: '0', name: a.banned ?? '' },
+                items: a.reel?.items,
+                stop: a.reel?.stop,
+                self: a.reel?.self,
+                wish: a.reel?.wish ?? null,
+                duration_ms: a.reel?.duration_ms,
+              },
+            }
+          : a.animation === 'flop'
+            ? { kind: 'flop', trigger: a.trigger }
+            : {
+                kind: 'ban',
+                animation: a.animation,
+                trigger: a.trigger,
+                banned: a.banned ?? '',
+              },
       );
       const r = await end;
       event = r.event;
@@ -253,6 +281,34 @@ export class RandomBanRuntime {
         `${ch}/test-streamer-mute`,
         b.caution === true ? { caution: true } : {},
       );
+    }
+    // Mini-jeux moderation (docs/mini-jeux/SPEC_RANDOM_BAN_V2.md § 8): Studio acts as the broadcaster; Core checks,
+    // audits and moves the money (once). Only the command's own fields are passed on.
+    const studio = {
+      id: 'studio',
+      display_name: 'Studio',
+      role: 'broadcaster',
+      via: 'studio',
+    };
+    if (method === 'GET' && path === '/moderation/history')
+      return this.d.core(`${ch}/moderation/history`, { actor: studio });
+    if (method === 'GET' && path === '/moderation/reconciliation')
+      return this.d.core(`${ch}/moderation/reconciliation`, { actor: studio });
+    if (method === 'POST' && path === '/moderation/act') {
+      const b = await body();
+      const c = (b.command ?? {}) as Record<string, unknown>;
+      return this.d.core(`${ch}/moderation/act`, {
+        actor: studio,
+        command: {
+          action: c.action,
+          reason: c.reason,
+          ...(c.request_id !== undefined ? { request_id: c.request_id } : {}),
+          // Sniper resolution: the account the moderator chose (null: none).
+          ...(c.action === 'resolve_sniper'
+            ? { viewer_id: c.viewer_id ?? null }
+            : {}),
+        },
+      });
     }
     throw Object.assign(new Error('not_found'), { status: 404 });
   }

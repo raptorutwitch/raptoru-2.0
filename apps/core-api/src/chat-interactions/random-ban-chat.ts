@@ -9,8 +9,12 @@ import {
   GlobalPauseError,
   LabWalletError,
 } from '../lab-moderation/store.js';
-import type { RandomBanService } from '../random-ban/service.js';
-import type { ChatPrices } from './prices.js';
+import {
+  refusalText,
+  sayRefusal,
+  type RbRefusal,
+} from '../random-ban/refusal.js';
+import { RbError, type RandomBanService } from '../random-ban/service.js';
 
 // `!rb` in the chat (docs/CHAT_COMMANDS.md): a SECOND way to pay the same Random Ban as the channel points reward —
 // the same request, executor, target search, immunities, timeout, animation and result (random-ban/service.ts), paid in
@@ -22,6 +26,9 @@ import type { ChatPrices } from './prices.js';
 // - refunded in Jetons, once, when the request ends without anything done (refund « needed »: executor absent or
 //   lost, missing scope, Twitch refusal); an « uncertain » one (the timeout may have happened) is never refunded
 //   automatically — it stays « à vérifier » like the channel points one.
+// V5 (13/11/2026): a fixed price (Studio's « Prix de Random Ban », shared with the extension) and the buyer's personal
+// charges, shared with the extension and the channel points (random-ban/pricing.ts). Refusals: one short line, at most
+// one per viewer every 5 minutes (random-ban/refusal.ts); nothing is ever debited by a refused `!rb`.
 
 const COMMAND = /^!rb$/i;
 
@@ -33,7 +40,6 @@ export class RandomBanChat {
     private readonly clock: Clock,
     private readonly randomBan: RandomBanService,
     private readonly economy: EconomyPort,
-    private readonly prices: ChatPrices,
   ) {
     randomBan.onResult((channelId) => this.settle(channelId));
   }
@@ -44,51 +50,42 @@ export class RandomBanChat {
     // `!rb` alone: `!rb salut`, `Salut !rb`… are not commands (nothing paid, no answer).
     if (!COMMAND.test(msg.text.trim())) return { outcome: 'ignored' };
     const name = msg.chatter.display_name;
-    const price = await this.prices.price(msg.channel_id, 'random_ban');
-    const answer = (key: string, body: string) =>
-      this.db.tx((q) => this.say(q, msg.channel_id, key, `@${name} - ${body}`));
-    const key = `rb:msg:${msg.message_id}`;
-    if (!(await liveForPaid(this.db, this.economy))) {
-      await answer(
-        key,
-        'Random Ban disponible uniquement pendant le live · rien n’a été débité.',
+    const refuse = (body: string) =>
+      this.db.tx((q) =>
+        sayRefusal(q, {
+          channelId: msg.channel_id,
+          viewerId: msg.chatter.id,
+          ref: msg.message_id,
+          text: `@${name} - ${body[0]!.toUpperCase()}${body.slice(1)} · rien n’a été débité.`,
+          now: this.clock.now(),
+        }),
       );
+    if (!(await liveForPaid(this.db, this.economy))) {
+      await refuse('Random Ban disponible uniquement pendant le live');
       return { outcome: STREAM_OFFLINE };
     }
     if (!this.randomBan.executorReady(msg.channel_id)) {
-      await answer(
-        key,
-        'Random Ban indisponible pour le moment · rien n’a été débité.',
-      );
+      await refuse('Random Ban indisponible pour le moment');
       return { outcome: 'rb_unavailable' };
     }
     try {
       const out = await this.db.tx(async (q) => {
         await assertNotGloballyPaused(q, msg.channel_id);
-        const { request, created } = await this.randomBan.requestIfNew(
-          {
-            channel_id: msg.channel_id,
-            source: 'chat',
-            source_ref: msg.message_id,
-            // The Studio simulator never times anyone out (the real search only), like a channel points test.
-            mode: msg.source === 'simulator' ? 'dry_run' : 'real',
-            buyer: {
-              id: msg.chatter.id,
-              login: msg.chatter.login,
-              name,
-            },
+        const { created } = await this.randomBan.buy(q, this.economy, {
+          channel_id: msg.channel_id,
+          source: 'chat',
+          source_ref: msg.message_id,
+          // The Studio simulator never times anyone out (the real search only), like a channel points test.
+          mode: msg.source === 'simulator' ? 'dry_run' : 'real',
+          buyer: {
+            id: msg.chatter.id,
+            login: msg.chatter.login,
+            name,
           },
-          q,
-        );
-        if (!created) return { replayed: true };
-        await this.economy.debit(q, this.clock.now(), {
-          channelId: msg.channel_id,
-          viewer: { id: msg.chatter.id, display_name: name },
-          currency: 'tokens',
-          amount: price,
-          module: 'random_ban',
-          interactionId: request.request_id,
+          // The fixed price (Studio's « Prix de Random Ban »): the chat never shows another one.
+          ceiling: 'any',
         });
+        if (!created) return { replayed: true };
         // No success message: the Random Ban itself (its animation, the timeout) is the answer.
         return { replayed: false };
       });
@@ -96,24 +93,39 @@ export class RandomBanChat {
         ? { outcome: 'rb_replayed', replayed: true }
         : { outcome: 'rb_queued', replayed: false };
     } catch (e) {
+      if (
+        e instanceof RbError &&
+        [
+          'no_charge',
+          'viewer_cooldown',
+          'viewer_blocked',
+          'rb_paused',
+          'rb_busy',
+        ].includes(e.code)
+      ) {
+        await refuse(
+          refusalText(e.code as RbRefusal, Number(e.details.wait_ms ?? 0)),
+        );
+        return { outcome: 'rb_refused' };
+      }
+      if (e instanceof RbError && e.code === 'too_many_pending') {
+        await refuse(`déjà ${e.details.max_pending} Random Ban en attente`);
+        return { outcome: 'rb_refused' };
+      }
       if (e instanceof LabWalletError && e.code === 'insufficient_tokens') {
         const needed = Number(e.details.needed);
         const balance = Number(e.details.balance ?? 0);
-        await answer(
-          key,
-          `Il te faut ${fmt(needed)} Jetons pour utiliser Random Ban. Solde : ${fmt(balance)} Jetons (il te manque ${fmt(Math.max(0, needed - balance))}).`,
+        await refuse(
+          `il te faut ${fmt(needed)} Jetons (solde : ${fmt(balance)})`,
         );
         return { outcome: 'rb_refused' };
       }
       if (e instanceof GlobalPauseError) {
-        await answer(key, 'Raptoru en pause · rien n’a été débité.');
+        await refuse('Raptoru en pause');
         return { outcome: 'rb_refused' };
       }
       if (e instanceof LabWalletError) {
-        await answer(
-          key,
-          'Portefeuille momentanément indisponible · rien n’a été débité.',
-        );
+        await refuse('portefeuille momentanément indisponible');
         return { outcome: 'rb_refused' };
       }
       throw e;
@@ -129,9 +141,10 @@ export class RandomBanChat {
       request_id: string;
       buyer_name: string;
       error: string | null;
+      status: string;
     }>(
-      `select request_id, buyer_name, error from rb_requests
-       where channel_id = $1 and source = 'chat' and refund = 'needed' order by seq limit 50`,
+      `select request_id, buyer_name, error, status from rb_requests
+       where channel_id = $1 and source in ('chat', 'extension') and refund = 'needed' order by seq limit 50`,
       [channelId],
     );
     for (const r of owed)
@@ -146,7 +159,7 @@ export class RandomBanChat {
           this.clock.now(),
           r.request_id,
           'random_ban',
-          `!rb sans effet (${r.error ?? 'échec'})`.slice(0, 200),
+          `Random Ban sans effet (${r.error ?? 'échec'})`.slice(0, 200),
         );
         await this.randomBan.markRefunded(q, r.request_id);
         if (back.amount > 0)
@@ -154,7 +167,9 @@ export class RandomBanChat {
             q,
             channelId,
             `rb:refund:${r.request_id}`,
-            `@${r.buyer_name} - Random Ban impossible pour le moment · ${fmt(back.amount)} Jetons remboursés.`,
+            r.status === 'canceled'
+              ? `@${r.buyer_name} - Random Ban annulé par la modération · ${fmt(back.amount)} Jetons remboursés.`
+              : `@${r.buyer_name} - Random Ban impossible pour le moment · ${fmt(back.amount)} Jetons remboursés.`,
           );
       });
   }
@@ -166,7 +181,7 @@ export class RandomBanChat {
    */
   async settleAll() {
     const channels = await this.db.query<{ channel_id: string }>(
-      `select distinct channel_id from rb_requests where source = 'chat' and refund = 'needed'`,
+      `select distinct channel_id from rb_requests where source in ('chat', 'extension') and refund = 'needed'`,
     );
     for (const c of channels) await this.settle(c.channel_id);
   }

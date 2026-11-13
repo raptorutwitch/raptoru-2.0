@@ -105,6 +105,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Music Hub: the extension's entry into Spotify V2 (Jetons), search / control jobs, removal trace (additive, OFF by
   // default); Lab twin 20261122120000_music_hub_lab.sql.
   '20261122130000_music_hub.sql',
+  // Random Ban purchases (Mini-jeux): price paid, series level, extension source, Sniper wish, cancellation (additive);
+  // Lab twin 20261123120000_random_ban_purchase_lab.sql.
+  '20261123130000_random_ban_purchase.sql',
   // Points de chaîne: Studio administers Raptoru's rewards (reward_update, pause, migration); Lab twin 20261124120000.
   '20261124130000_cp_reward_admin.sql',
 ]);
@@ -215,6 +218,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261121190000_cmd_steps_module_origin_lab.sql',
   // Music Hub: the Lab twin of 20261122130000_music_hub.sql (same content).
   '20261122120000_music_hub_lab.sql',
+  // Random Ban purchases: the Lab twin of 20261123130000_random_ban_purchase.sql (same content).
+  '20261123120000_random_ban_purchase_lab.sql',
   // Points de chaîne reward administration: the Lab twin of 20261124130000_cp_reward_admin.sql (same content).
   '20261124120000_cp_reward_admin_lab.sql',
 ]);

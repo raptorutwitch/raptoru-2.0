@@ -35,6 +35,7 @@ import { mountDesk } from './moderation-desk.js';
 import { mountJournal } from './moderation-journal.js';
 import { mountLabWallet, mountOthers } from './moderation-others.js';
 import { mountRestrictions } from './moderation-restrictions.js';
+import { mountRandomBan } from './moderation-random-ban.js';
 import { mountTeam, mountWords } from './moderation-team.js';
 import type { Ctx, Overview, View } from './moderation-ui.js';
 
@@ -43,10 +44,18 @@ import type { Ctx, Overview, View } from './moderation-ui.js';
 // fonctions : docs/studio-refonte/INVENTAIRE_MODERATION.md.
 
 type Tab =
-  'desk' | 'journal' | 'restrictions' | 'team' | 'words' | 'others' | 'wallet';
+  | 'desk'
+  | 'journal'
+  | 'random_ban'
+  | 'restrictions'
+  | 'team'
+  | 'words'
+  | 'others'
+  | 'wallet';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'desk', label: 'Files' },
   { id: 'journal', label: 'Historique' },
+  { id: 'random_ban', label: 'Random Ban' },
   { id: 'restrictions', label: 'Restrictions' },
   { id: 'team', label: 'Équipe' },
   { id: 'words', label: 'Mots surveillés' },
@@ -55,7 +64,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 const KEYS = [
   ['/', 'Chercher un viewer'],
-  ['1 à 7', 'Changer de vue'],
+  ['1 à 8', 'Changer de vue'],
   ['↑ ↓ ou J K', 'Parcourir une file'],
   ['← →', 'Changer de file'],
   ['L', 'Laisser passer'],
@@ -88,6 +97,7 @@ export function mountModeration(root: HTMLElement) {
   const views: Record<Tab, View> = {
     desk: mountDesk(ctx),
     journal: mountJournal(),
+    random_ban: mountRandomBan(),
     restrictions: mountRestrictions((n) => {
       restrCount = n;
       paintTabs();

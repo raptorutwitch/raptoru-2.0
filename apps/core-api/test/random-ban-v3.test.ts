@@ -125,6 +125,8 @@ describe('Random Ban V3 — the streamer drawn', () => {
       target: { id: CH, login: 'raptoru_' },
       refund: 'none',
     });
+    // Mini-jeux V5: the extension's machine lands on him too, once the mute is real (the rules of his draw unchanged).
+    expect(done.strip?.items[done.strip.stop]).toMatchObject({ id: CH });
     // Same report again (answer lost): the state, nothing more.
     expect(await f.report(r.request_id, c.mute!.attempt_id)).toMatchObject({
       status: 'confirmed',

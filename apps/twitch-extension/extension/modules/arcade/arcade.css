@@ -1,0 +1,1108 @@
+/* Mini-jeux V4 (14/11, docs/mini-jeux/UX_UI_MINI_JEUX.md § 0) — « salle d'arcade de nuit » : cramoisi et bordeaux
+   (jamais le rose → violet de Tombola ni le violet du TTS), un vert de verrouillage réservé au Sniper.
+   Chargé par la vue elle-même (shared/random-ban-view.js), dans les deux shells : --g vaut 1px en legacy (repli),
+   l'échelle du socle en v2. Composition : bandeau (titre, jauge de prix compacte, aide) ; la machine de tirage à
+   gauche, le jeu du joueur à droite ; empilées en largeur étroite. */
+
+.mg {
+  --mg-a: #ff2f55;
+  --mg-b: #9b1238;
+  --mg-hot: #ff5c7a;
+  --mg-ink: #fff3f5;
+  --mg-dim: rgba(255, 232, 238, 0.62);
+  --mg-faint: rgba(255, 232, 238, 0.38);
+  --mg-panel: rgba(255, 255, 255, 0.035);
+  --mg-line: rgba(255, 255, 255, 0.09);
+  --mg-lock: #2bff88;
+  --mg-amber: #ffc24d;
+  --u: var(--g, 1px);
+  height: 100%;
+  min-height: 0;
+  color: var(--mg-ink);
+  font-size: calc(13 * var(--u));
+}
+
+/* --- Le catalogue ---------------------------------------------------------------------------------------------- */
+.mg__home {
+  display: grid;
+  align-content: start;
+  gap: calc(12 * var(--u));
+  padding: calc(6 * var(--u)) calc(2 * var(--u));
+}
+.mg__hero {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+}
+.mg__hero b {
+  display: block;
+  font-size: calc(17 * var(--u));
+}
+.mg__hero small {
+  color: var(--mg-dim);
+}
+.mg__mark,
+.mg__ticon,
+.rb__logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: calc(10 * var(--u));
+  background:
+    radial-gradient(120% 90% at 30% 15%, rgba(255, 255, 255, 0.35), transparent 55%),
+    linear-gradient(150deg, var(--mg-a), var(--mg-b));
+  box-shadow:
+    0 calc(4 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+.mg__mark {
+  width: calc(38 * var(--u));
+  height: calc(38 * var(--u));
+}
+.mg__mark svg,
+.mg__ticon svg {
+  width: 62%;
+  height: 62%;
+}
+.mg__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(240 * var(--u)), 1fr));
+  gap: calc(10 * var(--u));
+}
+.mg__tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  padding: calc(14 * var(--u));
+  overflow: hidden;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(18 * var(--u));
+  background:
+    radial-gradient(90% 140% at 0% 0%, rgba(255, 47, 85, 0.22), transparent 60%),
+    var(--mg-panel);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
+}
+.mg__tile:hover,
+.mg__tile:focus-visible {
+  border-color: rgba(255, 92, 122, 0.6);
+  transform: translateY(calc(-1 * var(--u)));
+}
+.mg__ticon {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
+  border-radius: calc(14 * var(--u));
+}
+.mg__tbody {
+  display: grid;
+  gap: calc(3 * var(--u));
+  min-width: 0;
+}
+.mg__tbody b {
+  font-size: calc(15 * var(--u));
+}
+.mg__tbody small {
+  color: var(--mg-dim);
+  line-height: 1.35;
+}
+.mg__tbody em {
+  color: var(--mg-hot);
+  font-size: calc(11.5 * var(--u));
+  font-style: normal;
+  font-weight: 700;
+}
+.mg__play {
+  padding: calc(7 * var(--u)) calc(14 * var(--u));
+  border-radius: 999px;
+  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  font-weight: 800;
+}
+
+/* --- Random Ban : le cadre ------------------------------------------------------------------------------------- */
+.rb {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: calc(8 * var(--u));
+  height: 100%;
+  min-height: 0;
+  container-type: inline-size;
+}
+/* The top bar follows the body's two columns: the title over the machine, the charges over the Sniper and Launch. */
+.rb__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: calc(10 * var(--u));
+  align-items: center;
+  min-height: calc(30 * var(--u));
+}
+.rb__head,
+.rb__tools {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  min-width: 0;
+}
+.rb__back,
+.rb__info,
+.rb__all {
+  border: 1px solid var(--mg-line);
+  border-radius: 999px;
+  background: var(--mg-panel);
+  color: var(--mg-dim);
+  font: inherit;
+  font-size: calc(12 * var(--u));
+  font-weight: 700;
+  cursor: pointer;
+}
+.rb__back {
+  flex: none;
+  min-height: calc(26 * var(--u));
+  padding: 0 calc(10 * var(--u)) 0 calc(8 * var(--u));
+}
+.rb__back:hover,
+.rb__info:hover,
+.rb__all:hover,
+.rb__back:focus-visible,
+.rb__info:focus-visible,
+.rb__all:focus-visible {
+  border-color: rgba(255, 92, 122, 0.55);
+  color: var(--mg-ink);
+}
+.rb__title {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  font-size: calc(15 * var(--u));
+}
+.rb__logo {
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  border-radius: calc(8 * var(--u));
+}
+.rb__logo svg {
+  width: calc(19 * var(--u));
+  height: calc(19 * var(--u));
+}
+.rb__gauge {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.rb__info {
+  flex: none;
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  padding: 0;
+}
+
+/* --- La jauge de charges (V5) : un segment par charge, celle qui revient se remplit en continu -------------------- */
+.rbg {
+  position: relative;
+  width: 100%;
+}
+.rbg__btn {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  width: 100%;
+  min-height: calc(28 * var(--u));
+  padding: calc(3 * var(--u)) calc(8 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: 999px;
+  background: var(--mg-panel);
+  color: inherit;
+  font: inherit;
+  cursor: help;
+}
+.rbg__btn:hover,
+.rbg__btn:focus-visible,
+.rbg__btn[aria-expanded='true'] {
+  border-color: rgba(255, 92, 122, 0.55);
+}
+.rbg__label {
+  flex: none;
+  color: var(--mg-faint);
+  font-size: calc(10.5 * var(--u));
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rbg__cells {
+  display: flex;
+  flex: 1;
+  gap: calc(4 * var(--u));
+  min-width: 0;
+}
+.rbg__cell {
+  position: relative;
+  flex: 1;
+  height: calc(8 * var(--u));
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+.rbg__cell i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 179, 71, 0.75);
+  transform-origin: 0 50%;
+  transition: transform 0.26s linear;
+}
+.rbg__cell.is-full i {
+  background: linear-gradient(90deg, #ffb347, var(--mg-a));
+  box-shadow: 0 0 calc(8 * var(--u)) rgba(255, 47, 85, 0.45);
+}
+.rbg__next {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: calc(3 * var(--u));
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: right;
+}
+.rbg__next[hidden] {
+  display: none;
+}
+.rbg__clock {
+  width: calc(11 * var(--u));
+  height: calc(11 * var(--u));
+  opacity: 0.8;
+}
+.rbg.is-empty .rbg__next {
+  color: var(--mg-hot);
+}
+.rbg__tip {
+  position: absolute;
+  z-index: 9;
+  top: calc(100% + 6 * var(--u));
+  right: 0;
+  display: grid;
+  gap: calc(3 * var(--u));
+  width: calc(230 * var(--u));
+  max-width: calc(100vw - 12px);
+  transform: translateX(var(--dx, 0px));
+  padding: calc(9 * var(--u)) calc(11 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(12 * var(--u));
+  background: #1f0e18;
+  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(0, 0, 0, 0.55);
+  font-size: calc(12 * var(--u));
+  line-height: 1.35;
+}
+.rbg__tip[hidden] {
+  display: none;
+}
+.rbg__tip span {
+  color: var(--mg-dim);
+}
+.rbg__tip small {
+  margin-top: calc(3 * var(--u));
+  color: var(--mg-faint);
+  font-size: calc(11 * var(--u));
+}
+
+.rb__body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: calc(10 * var(--u));
+  min-height: 0;
+}
+.rb__left,
+.rb__right {
+  min-width: 0;
+  min-height: 0;
+}
+.rb__right {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--u));
+}
+
+/* --- La machine de tirage : un carrousel qui passe par le viseur ------------------------------------------------ */
+.rbm {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: calc(6 * var(--u));
+  height: 100%;
+}
+.rbm__frame {
+  --foot: calc(46 * var(--u));
+  position: relative;
+  min-height: calc(150 * var(--u));
+  overflow: hidden;
+  border: 1px solid rgba(255, 92, 122, 0.22);
+  border-radius: calc(18 * var(--u));
+  background:
+    radial-gradient(42% 52% at 50% 44%, rgba(255, 47, 85, 0.26), transparent 72%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.2)),
+    #12080f;
+  isolation: isolate;
+}
+.rbm__deck {
+  position: absolute;
+  inset: 0 0 var(--foot);
+  /* The portraits fade into both edges: never cut by the frame. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+.rbm__slot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--size);
+  height: var(--size);
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+.rbm__slot::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #12060c;
+  content: '';
+  opacity: var(--dim, 0);
+  pointer-events: none;
+}
+.rb-face--slot {
+  --face: 100%;
+  font-size: calc(var(--size) * 0.34);
+  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(255, 255, 255, 0.16);
+}
+.rbm__slot.is-front .rb-face--slot {
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) rgba(255, 255, 255, 0.92),
+    0 0 calc(22 * var(--u)) rgba(255, 47, 85, 0.55);
+}
+
+/* Le viseur, réduit à l'essentiel : un anneau fin, quatre repères, des coins qui se referment sur la cible. */
+.rbm__sight {
+  position: absolute;
+  z-index: 20;
+  top: calc((100% - var(--foot)) * 0.5);
+  left: 50%;
+  width: calc(var(--size, 110px) + 26 * var(--u));
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  pointer-events: none;
+}
+.rbm__sight * {
+  fill: none;
+  stroke: rgba(255, 92, 122, 0.6);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+.rbm__ticks {
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.rbm__corners {
+  stroke: var(--mg-hot);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+.rbm[data-mode='idle'] .rbm__ring {
+  stroke-dasharray: 4 6;
+  animation: rbm-breathe 3.2s ease-in-out infinite;
+}
+.rbm[data-mode='spin'] .rbm__ring,
+.rbm[data-mode='reel'] .rbm__ring {
+  stroke: rgba(255, 92, 122, 0.9);
+}
+.rbm.is-locked .rbm__corners {
+  opacity: 1;
+  animation: rbm-snap 0.32s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes rbm-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes rbm-snap {
+  from {
+    opacity: 0;
+    transform: scale(1.25);
+    transform-origin: 50% 50%;
+  }
+}
+.rbm[data-mode='idle'] .rbm__deck::after {
+  position: absolute;
+  z-index: 15;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: var(--size);
+  height: var(--size);
+  border: calc(2 * var(--u)) dashed rgba(255, 92, 122, 0.5);
+  border-radius: 50%;
+  color: rgba(255, 92, 122, 0.9);
+  font-size: calc(var(--size) * 0.36);
+  font-weight: 900;
+  translate: -50% -50%;
+  content: '?';
+}
+
+.rbm__name {
+  position: absolute;
+  bottom: calc(26 * var(--u));
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  padding: 0 calc(10 * var(--u));
+  font-size: calc(16 * var(--u));
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+.rbm__status {
+  position: absolute;
+  bottom: calc(6 * var(--u));
+  left: 50%;
+  max-width: calc(100% - 12 * var(--u));
+  overflow: hidden;
+  padding: calc(1 * var(--u)) calc(10 * var(--u));
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  font-weight: 800;
+  text-overflow: ellipsis;
+  translate: -50% 0;
+  white-space: nowrap;
+}
+.rbm__status:empty {
+  display: none;
+}
+.rbm__status[data-tone='wait'] {
+  color: var(--mg-amber);
+  animation: rbm-blink 1s ease-in-out infinite;
+}
+.rbm__status[data-tone='ok'] {
+  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  color: #fff;
+}
+.rbm__status[data-tone='bad'] {
+  color: var(--mg-dim);
+}
+@keyframes rbm-blink {
+  50% {
+    opacity: 0.55;
+  }
+}
+.rbm__badge {
+  position: absolute;
+  z-index: 25;
+  top: calc(8 * var(--u));
+  left: 50%;
+  padding: calc(2 * var(--u)) calc(9 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mg-dim);
+  font-size: calc(11 * var(--u));
+  font-weight: 900;
+  translate: -50% 0;
+  white-space: nowrap;
+}
+.rbm__badge[hidden] {
+  display: none;
+}
+.rbm__badge[data-tone='hit'] {
+  background: var(--mg-lock);
+  color: #04210f;
+  box-shadow: 0 0 calc(16 * var(--u)) rgba(43, 255, 136, 0.6);
+}
+
+/* Le Sniper réussi : le viseur passe au vert et se referme sur le portrait — une fois. */
+.rbm.is-sniped .rbm__frame {
+  border-color: var(--mg-lock);
+  background:
+    radial-gradient(42% 52% at 50% 44%, rgba(43, 255, 136, 0.3), transparent 72%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.2)),
+    #06140c;
+  box-shadow: 0 0 calc(24 * var(--u)) rgba(43, 255, 136, 0.3);
+}
+.rbm.is-sniped .rbm__sight * {
+  stroke: var(--mg-lock);
+}
+.rbm.is-sniped .rbm__corners {
+  animation: rbm-close 0.8s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+.rbm.is-sniped .rbm__slot.is-front .rb-face--slot {
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) var(--mg-lock),
+    0 0 calc(30 * var(--u)) var(--mg-lock);
+}
+@keyframes rbm-close {
+  0% {
+    opacity: 0;
+    transform: scale(1.8) rotate(45deg);
+    transform-origin: 50% 50%;
+  }
+  70% {
+    opacity: 1;
+    transform: scale(0.94);
+    transform-origin: 50% 50%;
+  }
+}
+
+.rbm__info {
+  min-height: calc(16 * var(--u));
+  margin: 0;
+  overflow: hidden;
+  color: var(--mg-faint);
+  font-size: calc(11.5 * var(--u));
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rbm__info[data-tone='wait'] {
+  color: var(--mg-amber);
+}
+.rbm__info[data-tone='warn'] {
+  color: #ffd27a;
+}
+.rbm__info[data-tone='bad'] {
+  color: var(--mg-hot);
+}
+
+/* Les portraits. */
+.rb-face {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--face, calc(30 * var(--u)));
+  height: var(--face, calc(30 * var(--u)));
+  overflow: hidden;
+  border-radius: 50%;
+  background: hsl(var(--h) 50% 42%);
+  box-shadow: 0 0 0 calc(1.5 * var(--u)) rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: calc(var(--face, calc(30 * var(--u))) * 0.38);
+  font-weight: 800;
+}
+.rb-face i {
+  font-style: normal;
+}
+.rb-face img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rb-face--xs {
+  --face: calc(24 * var(--u));
+}
+
+/* --- Le jeu du joueur : Sniper et Lancer sur une ligne ---------------------------------------------------------- */
+.rb__play {
+  display: flex;
+  align-items: stretch;
+  gap: calc(8 * var(--u));
+}
+.rb__sniper {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  min-height: calc(38 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(12 * var(--u));
+  background: rgba(0, 0, 0, 0.22);
+}
+.rb__sniper:focus-within {
+  border-color: rgba(255, 92, 122, 0.6);
+}
+.rb.has-pick .rb__sniper {
+  border-color: rgba(43, 255, 136, 0.55);
+}
+.rb__scope {
+  display: grid;
+  padding-left: calc(10 * var(--u));
+  color: var(--mg-faint);
+}
+.rb__scope svg {
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+}
+.rb.has-pick .rb__scope {
+  color: var(--mg-lock);
+}
+.rb.has-wish .rb__scope {
+  color: var(--mg-amber);
+}
+.rb__input {
+  flex: 1;
+  min-width: 0;
+  padding: calc(8 * var(--u));
+  border: 0;
+  background: transparent;
+  color: var(--mg-ink);
+  font: inherit;
+  outline: none;
+}
+.rb__input::placeholder {
+  color: var(--mg-faint);
+}
+.rb__snhint {
+  flex: none;
+  margin-right: calc(6 * var(--u));
+  padding: calc(1 * var(--u)) calc(7 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 194, 77, 0.12);
+  color: var(--mg-amber);
+  font-size: calc(10.5 * var(--u));
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rb__snhint[data-tone='glory'] {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--mg-faint);
+}
+.rb__picked {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  color: var(--mg-lock);
+  font-weight: 900;
+}
+.rb__clear,
+.rb__x {
+  min-width: calc(26 * var(--u));
+  min-height: calc(26 * var(--u));
+  padding: 0 calc(8 * var(--u));
+  border: 0;
+  background: none;
+  color: var(--mg-dim);
+  font-size: calc(17 * var(--u));
+  line-height: 1;
+  cursor: pointer;
+}
+.rb__sugg {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 4 * var(--u));
+  left: 0;
+  width: max(100%, calc(220 * var(--u)));
+  max-height: calc(170 * var(--u));
+  margin: 0;
+  padding: calc(4 * var(--u));
+  overflow-y: auto;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(12 * var(--u));
+  background: #1f0e18;
+  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(0, 0, 0, 0.55);
+  list-style: none;
+}
+.rb__sugg li {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  min-height: calc(28 * var(--u));
+  padding: calc(3 * var(--u)) calc(7 * var(--u));
+  border-radius: calc(8 * var(--u));
+  cursor: pointer;
+}
+.rb__sugg li.is-on,
+.rb__sugg li:hover {
+  background: rgba(255, 47, 85, 0.18);
+}
+.rb__sugg small {
+  color: var(--mg-dim);
+}
+.rb__sugg em {
+  margin-left: auto;
+  color: var(--mg-lock);
+  font-size: calc(10 * var(--u));
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.rb__go {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: calc(7 * var(--u));
+  min-width: calc(112 * var(--u));
+  min-height: calc(38 * var(--u));
+  padding: 0 calc(12 * var(--u));
+  border: 0;
+  border-radius: calc(12 * var(--u));
+  background:
+    radial-gradient(120% 120% at 20% 0%, rgba(255, 255, 255, 0.28), transparent 50%),
+    linear-gradient(120deg, var(--mg-a), var(--mg-b));
+  box-shadow:
+    0 calc(5 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font: inherit;
+  font-size: calc(14 * var(--u));
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 0.12s,
+    box-shadow 0.2s;
+}
+.rb__go:hover:not(:disabled) {
+  transform: translateY(calc(-1 * var(--u)));
+}
+.rb__go:active:not(:disabled) {
+  transform: translateY(calc(1 * var(--u)));
+}
+.rb__go:focus-visible {
+  outline: calc(2 * var(--u)) solid #fff;
+  outline-offset: calc(2 * var(--u));
+}
+.rb__go span {
+  padding: calc(1 * var(--u)) calc(7 * var(--u));
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  font-variant-numeric: tabular-nums;
+}
+.rb__go.is-armed {
+  background: #fff;
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) rgba(255, 47, 85, 0.55),
+    0 calc(5 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.35);
+  color: #a3102f;
+  animation: rb-armed 1s ease-in-out infinite;
+}
+.rb__go.is-armed span {
+  background: rgba(163, 16, 47, 0.1);
+}
+@keyframes rb-armed {
+  50% {
+    box-shadow:
+      0 0 0 calc(5 * var(--u)) rgba(255, 47, 85, 0.3),
+      0 calc(5 * var(--u)) calc(14 * var(--u)) rgba(255, 47, 85, 0.35);
+  }
+}
+.rb__go:disabled {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.38);
+  cursor: default;
+}
+.rb__msg {
+  margin: calc(-3 * var(--u)) 0 0;
+  overflow: hidden;
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  line-height: 1.35;
+}
+.rb__msg:empty {
+  display: none;
+}
+.rb__up {
+  color: var(--mg-hot);
+}
+
+/* --- Les derniers tirages -------------------------------------------------------------------------------------- */
+.rb__recent {
+  display: grid;
+  flex: 1;
+  grid-template-rows: auto 1fr;
+  gap: calc(4 * var(--u));
+  min-height: 0;
+  padding: calc(8 * var(--u)) calc(10 * var(--u)) calc(6 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(16 * var(--u));
+  background: var(--mg-panel);
+}
+.rb__recent header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rb__recent header b {
+  color: var(--mg-faint);
+  font-size: calc(10.5 * var(--u));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rb__all {
+  min-height: calc(24 * var(--u));
+  padding: 0 calc(10 * var(--u));
+  font-size: calc(11 * var(--u));
+}
+.rb__recent ul {
+  display: grid;
+  align-content: start;
+  grid-auto-rows: calc(36 * var(--u));
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+.rb__recent li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(9 * var(--u));
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.rb__recent li:first-child {
+  border-top: 0;
+}
+.rb__rl {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+.rb__rl b,
+.rb__rl small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rb__rl small {
+  color: var(--mg-faint);
+  font-size: calc(10.5 * var(--u));
+}
+.rb__rr {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(5 * var(--u));
+}
+.rb__pill {
+  padding: calc(2 * var(--u)) calc(8 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 47, 85, 0.16);
+  color: var(--mg-hot);
+  font-size: calc(11 * var(--u));
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rb__recent li[data-tone='bad'] .rb__pill,
+.rb__recent li[data-tone='info'] .rb__pill {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--mg-faint);
+}
+.rb__hitdot {
+  color: var(--mg-lock);
+  font-style: normal;
+  font-weight: 900;
+}
+.rb__none {
+  color: var(--mg-faint);
+}
+
+/* --- Les feuilles (historique complet, règles) ----------------------------------------------------------------- */
+.rb__sheet {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border: 1px solid var(--mg-line);
+  border-radius: calc(16 * var(--u));
+  background: rgba(20, 9, 16, 0.98);
+  animation: rb-in 0.18s ease-out;
+}
+.rb__sheet[hidden] {
+  display: none;
+}
+@keyframes rb-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(6 * var(--u)));
+  }
+}
+.rb__sheethead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(8 * var(--u)) calc(6 * var(--u)) calc(4 * var(--u)) calc(14 * var(--u));
+}
+.rb__histlist,
+.rb__rules {
+  margin: 0;
+  padding: 0 calc(10 * var(--u)) calc(10 * var(--u));
+  overflow-y: auto;
+  list-style: none;
+}
+.rb__histlist li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 calc(8 * var(--u));
+  padding: calc(6 * var(--u)) calc(6 * var(--u));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.rb__histlist li.is-me {
+  border-left: calc(2 * var(--u)) solid var(--mg-a);
+}
+.rb__hwho {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rb__hres {
+  color: var(--mg-hot);
+  font-weight: 800;
+  text-align: right;
+}
+.rb__histlist li[data-tone='bad'] .rb__hres,
+.rb__histlist li[data-tone='info'] .rb__hres {
+  color: var(--mg-dim);
+}
+.rb__histlist small {
+  grid-column: 1 / -1;
+  color: var(--mg-dim);
+  font-size: calc(11 * var(--u));
+}
+.rb__pref {
+  display: flex;
+  gap: calc(8 * var(--u));
+  align-items: flex-start;
+  margin: 0 calc(10 * var(--u)) calc(10 * var(--u));
+  padding: calc(8 * var(--u)) calc(10 * var(--u));
+  border: 1px solid var(--mg-line);
+  border-radius: calc(10 * var(--u));
+  cursor: pointer;
+}
+.rb__pref input {
+  margin-top: calc(2 * var(--u));
+  accent-color: var(--mg-a);
+}
+.rb__pref span {
+  display: grid;
+  gap: calc(2 * var(--u));
+}
+.rb__pref small {
+  color: var(--mg-faint);
+  font-size: calc(11 * var(--u));
+}
+.rb__once {
+  margin-left: calc(4 * var(--u));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mg-dim);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.rb__once:hover,
+.rb__once:focus-visible {
+  color: var(--mg-ink);
+}
+.rb__rules li {
+  position: relative;
+  margin: 0 0 calc(8 * var(--u));
+  padding-left: calc(16 * var(--u));
+  color: var(--mg-dim);
+  line-height: 1.4;
+}
+.rb__rules li::before {
+  position: absolute;
+  top: 0.45em;
+  left: 0;
+  width: calc(7 * var(--u));
+  height: calc(7 * var(--u));
+  border-radius: 50%;
+  background: var(--mg-a);
+  content: '';
+}
+
+/* --- Étroit (panneau, mobile) : la jauge sous le titre, la machine au-dessus du jeu. ----------------------------- */
+@container (max-width: 400px) {
+  .rb__bar {
+    grid-template-columns: 1fr;
+    gap: calc(6 * var(--u));
+  }
+  .rb__body {
+    grid-template-columns: 1fr;
+    align-content: start;
+    overflow-y: auto;
+  }
+  .rb__left,
+  .rb__right {
+    min-height: auto;
+  }
+  .rbm {
+    height: auto;
+  }
+  .rbm__frame {
+    min-height: calc(210 * var(--u));
+  }
+  .rb__recent {
+    flex: none;
+  }
+  .rb__recent li:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+/* --- Bas (lecteur réduit) : tout se resserre, l'historique garde ses premières lignes. -------------------------- */
+@media (max-height: 360px) {
+  .rb {
+    gap: calc(5 * var(--u));
+  }
+  .rb__bar {
+    min-height: calc(26 * var(--u));
+  }
+  .rbm__frame {
+    min-height: calc(110 * var(--u));
+  }
+  .rbm__frame {
+    --foot: calc(40 * var(--u));
+  }
+  .rbm__name {
+    bottom: calc(22 * var(--u));
+    font-size: calc(13.5 * var(--u));
+  }
+  .rbm__status {
+    bottom: calc(4 * var(--u));
+    font-size: calc(10.5 * var(--u));
+  }
+  .rbm__info {
+    display: none;
+  }
+  .rb__right {
+    gap: calc(5 * var(--u));
+  }
+  .rb__go,
+  .rb__sniper {
+    min-height: calc(34 * var(--u));
+  }
+  .rb__recent ul {
+    grid-auto-rows: calc(30 * var(--u));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rbm__ring,
+  .rbm__status,
+  .rb__go.is-armed,
+  .rbm.is-locked .rbm__corners,
+  .rbm.is-sniped .rbm__corners {
+    animation: none !important;
+  }
+  .rbg__cell i {
+    transition: none !important;
+  }
+}

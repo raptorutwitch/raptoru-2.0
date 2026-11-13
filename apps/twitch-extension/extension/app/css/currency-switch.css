@@ -360,6 +360,34 @@
   display: none;
 }
 
+/* Gain entre deux lectures du solde (« +40 ») : le solde abrégé (125 K) ne bouge pas pour un petit gain,
+   la pastille le montre une fois, à gauche de la pill, puis s'efface (même règle que la feuille legacy). */
+.rl-cswitch__gain {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 4 * var(--g));
+  padding: calc(3 * var(--g)) calc(6 * var(--g));
+  border-radius: calc(999 * var(--g));
+  background: rgba(242, 198, 95, 0.16);
+  color: var(--cs-token-ink);
+  font-size: var(--fs-11);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(0, -50%);
+  animation: rl-cswitch-gain 2.6s ease-out forwards;
+}
+@keyframes rl-cswitch-gain {
+  0% { opacity: 0; transform: translate(calc(6 * var(--g)), -50%); }
+  12%, 70% { opacity: 1; transform: translate(0, -50%); }
+  100% { opacity: 0; transform: translate(0, -50%); }
+}
+@keyframes rl-cswitch-gain-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rl-cswitch__chip,
   .rl-cswitch__coin,
@@ -367,6 +395,9 @@
   .rl-cswitch__tip,
   .rl-pay__cta {
     transition: none;
+  }
+  .rl-cswitch__gain {
+    animation-name: rl-cswitch-gain-fade;
   }
 }
 

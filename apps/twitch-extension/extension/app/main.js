@@ -15,12 +15,14 @@ import {
   timeoutDebugMetadata,
   traceTimeoutDebug,
 } from '../shared/timeout-debug.js';
+import { installDblclickGuard } from '../shared/dblclick-guard.js';
 import { mountEnvironmentBadge } from '../shared/env-badge.js';
 import { createModulePanel } from './panel.js';
 import { createPoller } from './store.js';
 
 export function startViewer({ surface }) {
   mountEnvironmentBadge();
+  installDblclickGuard(); // a double-click on OUR controls never asks the player for full screen
   const video = surface === 'video';
   const query = new URLSearchParams(window.location.search);
   const isStudio = query.get('studio') === '1';

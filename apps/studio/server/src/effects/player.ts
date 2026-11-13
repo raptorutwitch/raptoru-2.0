@@ -67,7 +67,16 @@ type Presentation = {
 
 interface Delivery {
   delivery_id: string;
-  kind: 'sound' | 'video' | 'wbrb' | 'ban' | 'flop' | 'wheel' | 'music';
+  kind:
+    | 'sound'
+    | 'video'
+    | 'wbrb'
+    | 'ban'
+    | 'flop'
+    | 'wheel'
+    | 'music'
+    | 'reel'
+    | 'dodge';
   /** Catalogue id (the page groups the plays of one video for its ducking). */
   effect_id: string;
   label: string;
@@ -83,6 +92,8 @@ interface Delivery {
   wheel: Record<string, unknown> | null;
   /** Music Hub V2: the music card (title, artist, requester, how long, where), never the music itself. */
   music: Record<string, unknown> | null;
+  /** Random Ban « Le Viseur »: the reel (strip decided by Core, stop on the drawn target) or the dodge card. */
+  reel: Record<string, unknown> | null;
   player: string | null;
   started: boolean;
   onStart: (ok: true | EffectError) => void;
@@ -95,6 +106,8 @@ const PLAYER_FILES: Record<string, string> = {
   'player.js': 'text/javascript; charset=utf-8',
   // Roue du Sub: the legacy wheel (module imported by player.js; part of the page version).
   'wheel.js': 'text/javascript; charset=utf-8',
+  // Random Ban « Le Viseur »: the reel (module imported by player.js; part of the page version).
+  'reel.js': 'text/javascript; charset=utf-8',
 };
 const MEDIA_TYPES: Record<string, string> = {
   '.ogg': 'audio/ogg',
@@ -351,6 +364,18 @@ export class EffectsPlayer {
         }
       | { kind: 'flop'; trigger: string }
       | {
+          kind: 'reel' | 'dodge';
+          reel: {
+            trigger: string;
+            target: { id: string; name: string };
+            items?: { id: string; name: string }[];
+            stop?: number;
+            self?: boolean;
+            wish?: string | null;
+            duration_ms?: number;
+          };
+        }
+      | {
           kind: 'wheel';
           spin: {
             name: string;
@@ -391,22 +416,28 @@ export class EffectsPlayer {
             ? CATALOGUE.find((c) => c.id === RANDOM_BAN_FLOP.media)
             : effect.kind === 'wheel'
               ? CATALOGUE.find((c) => c.id === 'sw-incr')
-              : effect.kind === 'music'
-                ? effect.sound
-                  ? (CATALOGUE.find(
-                      (c) => c.kind === 'sound' && c.id === effect.sound,
+              : effect.kind === 'reel' || effect.kind === 'dodge'
+                ? null
+                : effect.kind === 'music'
+                  ? effect.sound
+                    ? (CATALOGUE.find(
+                        (c) => c.kind === 'sound' && c.id === effect.sound,
+                      ) ??
+                      this.upload(effect.sound)?.item ??
+                      undefined)
+                    : null
+                  : (CATALOGUE.find(
+                      (c) => c.kind === effect.kind && c.id === effect.id,
                     ) ??
-                    this.upload(effect.sound)?.item ??
-                    undefined)
-                  : null
-                : (CATALOGUE.find(
-                    (c) => c.kind === effect.kind && c.id === effect.id,
-                  ) ??
-                  (effect.kind === 'sound'
-                    ? (this.upload(effect.id)?.item ?? null)
-                    : null));
+                    (effect.kind === 'sound'
+                      ? (this.upload(effect.id)?.item ?? null)
+                      : null));
     // A silent music card has no media (item null); anything else needs its file.
-    if (item === undefined || (item === null && effect.kind !== 'music'))
+    const silent =
+      effect.kind === 'music' ||
+      effect.kind === 'reel' ||
+      effect.kind === 'dodge';
+    if (item === undefined || (item === null && !silent))
       throw new EffectError('effect_unknown');
     if (item && !this.d.media.path(item.file) && !this.upload(item.id))
       throw new EffectError('effect_media_missing');
@@ -430,7 +461,7 @@ export class EffectsPlayer {
     const page = this.status();
     if (!page.connected) throw new EffectError('effects_player_offline');
     // A silent music card needs no sound allowed on the page.
-    if (!page.audio && !(effect.kind === 'music' && !item))
+    if (!page.audio && !(silent && !item))
       throw new EffectError('effects_player_muted');
     if (!page.current) throw new EffectError('effects_player_outdated');
     if (this.deliveries.size >= this.rules.maxActive)
@@ -491,8 +522,18 @@ export class EffectsPlayer {
         const x: Delivery = {
           delivery_id: randomUUID(),
           kind: effect.kind,
-          effect_id: item?.id ?? 'music-card',
-          label: item?.label ?? 'Carte musique',
+          effect_id:
+            item?.id ??
+            (silent && effect.kind !== 'music'
+              ? `rb-${effect.kind}`
+              : 'music-card'),
+          label:
+            item?.label ??
+            (effect.kind === 'reel'
+              ? 'Random Ban — Le Viseur'
+              : effect.kind === 'dodge'
+                ? 'Random Ban — Esquivé'
+                : 'Carte musique'),
           url: item ? `media/${item.id}` : '',
           // BRB: the legacy video element's volume (never set: 1).
           volume:
@@ -502,14 +543,37 @@ export class EffectsPlayer {
                 ? RANDOM_BAN_VIDEO_VOLUME
                 : effect.kind === 'flop'
                   ? RANDOM_BAN_FLOP.volume
-                  : effect.kind === 'wheel'
+                  : effect.kind === 'wheel' ||
+                      effect.kind === 'reel' ||
+                      effect.kind === 'dodge'
                     ? 1
-                    : Math.min(100, Math.max(0, effect.volume)) / 100,
+                    : 'volume' in effect
+                      ? Math.min(100, Math.max(0, effect.volume)) / 100
+                      : 1,
           music,
           presentation,
           images,
           ban,
           wheel,
+          reel:
+            effect.kind === 'reel' || effect.kind === 'dodge'
+              ? {
+                  trigger: effect.reel.trigger.slice(0, 64),
+                  target: {
+                    id: effect.reel.target.id.slice(0, 32),
+                    name: effect.reel.target.name.slice(0, 64),
+                  },
+                  items: (effect.reel.items ?? []).slice(0, 40).map((i) => ({
+                    id: i.id.slice(0, 32),
+                    name: i.name.slice(0, 64),
+                  })),
+                  stop: effect.reel.stop ?? 0,
+                  self: !!effect.reel.self,
+                  wish: effect.reel.wish?.slice(0, 64) ?? null,
+                  banned: effect.reel.target.name.slice(0, 64),
+                  duration_ms: effect.reel.duration_ms ?? 4500,
+                }
+              : null,
           player: null,
           started: false,
           onStart,
@@ -632,6 +696,7 @@ export class EffectsPlayer {
         ...(x.ban ? { ban: x.ban } : {}),
         ...(x.wheel ? { wheel: x.wheel } : {}),
         ...(x.music ? { music: x.music } : {}),
+        ...(x.reel ? { reel: x.reel } : {}),
       });
     }
     return out;

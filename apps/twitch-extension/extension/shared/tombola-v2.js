@@ -13,7 +13,7 @@
 import { registerModuleVariant } from './module-registry.js';
 import { errorLabel } from './api.js';
 import { hoverMarquee } from './hover-marquee.js';
-import { fitMoney, moneyHtml, unitHtml } from './currency.js';
+import { fitMoney, formatCompactAmount, moneyHtml, unitHtml } from './currency.js';
 
 const POLL_ACTIVE_MS = 1000;
 const POLL_IDLE_MS = 3000;
@@ -58,13 +58,8 @@ const srcPill = (s) => (s === 'extension'
   : s === 'manual'
     ? `<span class="t-pill">${ic('plus')}Ajouté</span>`
     : `<span class="t-pill t-pill--chat">${ic('chat')}Chat</span>`);
-/** Header balance, as the prototype shows it (« 12,4K »). */
-const compact = (n) => {
-  const v = Number(n);
-  if (!Number.isFinite(v)) return '—';
-  if (Math.abs(v) < 1000) return fmt(v);
-  return `${(Math.floor(v / 100) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}K`;
-};
+/** Header balance (« 12,4 K », « 6,25 M »): the extension's shared format, never « 6 000K » (12/11 report). */
+const compact = (n) => formatCompactAmount(n);
 
 /** Why a join is refused (Core's code) — the viewer's wording. */
 const REFUSAL = {

@@ -357,6 +357,30 @@
   display: none;
 }
 
+/* Gain entre deux lectures du solde (« +40 ») : le solde abrégé (125 K) ne bouge pas pour un petit gain,
+   la pastille le montre une fois, à gauche de la pill, puis s'efface. */
+.rl-cswitch__gain {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 4px);
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(242, 198, 95, 0.16);
+  color: var(--cs-token-ink);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
+  animation: rl-cswitch-gain 2.6s ease-out forwards;
+}
+@keyframes rl-cswitch-gain {
+  0% { opacity: 0; transform: translate(6px, -50%); }
+  12%, 70% { opacity: 1; transform: translate(0, -50%); }
+  100% { opacity: 0; transform: translate(0, -50%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rl-cswitch__chip,
   .rl-cswitch__coin,
@@ -365,6 +389,13 @@
   .rl-pay__cta {
     transition: none;
   }
+  .rl-cswitch__gain {
+    animation-name: rl-cswitch-gain-fade;
+  }
+}
+@keyframes rl-cswitch-gain-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* TTS : la zone d'action révélée (max-height hérité) laisse la place à la ligne sur deux niveaux. */

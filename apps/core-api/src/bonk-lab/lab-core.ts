@@ -1,9 +1,9 @@
+import { RB_LAB_CHATTERS } from '@raptoru/schemas';
 import { ProgressionService } from '../progression/service.js';
-import {
-  eventShopModule,
-  randomBanModule,
-  wordGameModule,
-} from '../modules/status-adapters.js';
+import { randomBanExtModule, randomBanModule } from '../modules/random-ban.js';
+import { RandomBanModeration } from '../random-ban/moderation.js';
+import { randomBanPricing } from '../random-ban/pricing.js';
+import { eventShopModule, wordGameModule } from '../modules/status-adapters.js';
 import { cautionModule, cautionRates } from '../modules/caution.js';
 import { miniGameLimits } from '../modules/mini-games.js';
 import { votekickLimits, votekickModule } from '../modules/votekick.js';
@@ -122,6 +122,7 @@ export function createLabCore({
   raffle: RaffleLabService;
   wordGame: WordGameService;
   votekick: VotekickService;
+  randomBan: RandomBanService;
   spotify: SpotifyService;
   /** Défis: one recount pass (the Lab process's timer). */
   challenges: { tick: () => Promise<unknown> };
@@ -186,6 +187,20 @@ export function createLabCore({
     },
     otherMutes: votekick,
   });
+  // Mini-jeux: the progressive price of the extension and `!rb`, the per-buyer limits (module settings).
+  randomBan.pricing = randomBanPricing(moduleSettings);
+  // Sniper: its bonus on the Lab economy; the Lab's fictional chatters are the ones present.
+  randomBan.economy = economy;
+  randomBan.paused = async (q, ch) =>
+    (await moduleSettings.get(q, ch, 'random_ban.queue_paused')) === 1;
+  randomBan.moderation = new RandomBanModeration(
+    db,
+    systemClock,
+    randomBan,
+    economy,
+    moduleSettings,
+  );
+  randomBan.candidates = async () => RB_LAB_CHATTERS.map((c) => ({ ...c }));
   // The broadcaster's caution ends ONE of his OBS mutes: Votekick's or the Random Ban's.
   const caution = new CautionService(db, systemClock, economy, broadcasterOf, [
     { kind: 'votekick', label: 'Votekick', source: votekick },
@@ -261,6 +276,7 @@ export function createLabCore({
     });
   // Module host: supervision adapters of historical modules (they only READ their module's own state).
   modules.add(randomBanModule(randomBan));
+  modules.add(randomBanExtModule(randomBan, { lab: true }));
   modules.add(wordGameModule(wordGame));
   modules.add(eventShopModule);
   const alertsService = new AlertsService(db, systemClock);
@@ -397,6 +413,7 @@ export function createLabCore({
     raffle,
     wordGame,
     votekick,
+    randomBan,
     spotify,
     challenges: { tick: () => challenges.tick(LAB_PROGRESSION_CHANNEL) },
     modules,

@@ -13,7 +13,7 @@ const clockS = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR');
 
 export interface RbView {
   request_id: string;
-  source: 'channel_points' | 'chat' | 'test';
+  source: 'channel_points' | 'chat' | 'test' | 'extension';
   mode: 'real' | 'dry_run' | 'animation';
   buyer: { id: string; name: string };
   status:
@@ -24,7 +24,8 @@ export interface RbView {
     | 'flop'
     | 'failed'
     | 'uncertain'
-    | 'simulated';
+    | 'simulated'
+    | 'canceled';
   target: { id: string; name: string | null; is_sub: boolean | null } | null;
   duration_s: number | null;
   error: string | null;
@@ -37,6 +38,17 @@ export interface RbView {
   animation: string | null;
   animation_status: string;
   created_at: string;
+  /** Mini-jeux: the Jetons price paid and its tier; the Sniper prediction and its decision. */
+  price_paid?: number | null;
+  wish?: {
+    id: string | null;
+    name: string | null;
+    text?: string | null;
+  } | null;
+  sniper?: string;
+  /** Points de chaîne (Twitch) : le rachat, remboursable par Raptoru si la récompense est la sienne. */
+  redemption_id?: string | null;
+  sniper_bonus?: number;
   /** Le streamer tiré : son micro coupé, jamais de timeout Twitch. */
   streamer_mute?: boolean;
   /** Une sanction de test que Caution peut lever, avec de vrais Jetons. */
@@ -126,11 +138,24 @@ const RB_STATUS: Record<RbView['status'], [string, string]> = {
   failed: ['Échec', 'warn'],
   uncertain: ['Résultat incertain', 'warn'],
   simulated: ['Simulation', 'off'],
+  canceled: ['Annulé (modération)', 'off'],
 };
 const RB_SOURCE: Record<RbView['source'], string> = {
   channel_points: 'Points de chaîne',
   chat: 'Chat (!rb)',
   test: 'Test Studio',
+  extension: 'Extension (Mini-jeux)',
+};
+
+const SNIPER: Record<string, string> = {
+  armed: 'en attente du résultat',
+  hit: 'réussi · prime versée',
+  miss: 'raté',
+  glory: 'raté · pour la gloire',
+  glory_hit: 'réussi · pour la gloire (sans prime)',
+  void: 'sans effet',
+  unresolved: 'pronostic à vérifier (aucun compte sûr)',
+  revoked: 'réussi · prime retirée',
 };
 
 const ANIMATION: Record<string, string> = {
@@ -199,7 +224,8 @@ const rbStats = (r: RbView) =>
 
 /** Une demande dans le suivi. Ce qui appelle une action (remboursement dû, à vérifier) se lit sans ouvrir la ligne. */
 export function rbRow(r: RbView) {
-  const [label, tone] = RB_STATUS[r.status];
+  // A status or a source this Studio does not know yet (a newer Core) is shown as it is, never a broken page.
+  const [label, tone] = RB_STATUS[r.status] ?? [r.status, ''];
   const test = r.mode !== 'real' || r.source === 'test';
   return `<button type="button" class="sx-l d-in" data-rq="${esc(r.request_id)}">
     <time>${esc(clockS(r.created_at))}</time>
@@ -214,7 +240,9 @@ export function rbDetail(r: RbView) {
   const kv = (k: string, v: string) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : '');
   return `<dl class="d-kv">
     ${kv('Acheteur', esc(r.buyer.name))}
-    ${kv('Origine', RB_SOURCE[r.source])}
+    ${kv('Origine', RB_SOURCE[r.source] ?? esc(r.source))}
+    ${kv('Prix payé', Number.isInteger(r.price_paid) ? `${r.price_paid!.toLocaleString('fr-FR')} Jetons` : '')}
+    ${kv('Sniper', r.wish ? `vise ${esc(r.wish.name ?? `« ${r.wish.text ?? r.wish.id ?? '?'} »`)} · ${esc(SNIPER[r.sniper ?? ''] ?? r.sniper ?? '')}${r.sniper_bonus ? ` (+${r.sniper_bonus.toLocaleString('fr-FR')})` : ''}` : '')}
     ${kv('Mode', r.mode === 'real' ? 'Réel' : r.mode === 'dry_run' ? 'À blanc' : 'Animation seule')}
     ${kv('Résultat', rbWho(r))}
     ${kv('Remboursement', rbRefund(r))}

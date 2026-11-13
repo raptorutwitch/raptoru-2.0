@@ -160,6 +160,33 @@ export const CHALLENGE_METRICS: readonly ChallengeMetric[] = Object.freeze([
         and buyer_id <> target_id and ${W('created_at')} group by 1`,
     first: `select min(created_at) as at from rb_requests where channel_id = $1 and mode = 'real'`,
   },
+  {
+    // Mini-jeux (SPEC § 4.4): the metric of Antoni's SECRET challenge « Sniper » (the challenge is his to create).
+    key: 'random_ban_sniper',
+    label: 'Snipers réussis (Random Ban, prime gagnée)',
+    unit: 'Snipers',
+    source:
+      'Random Ban : rb_requests dont la cible tirée est la cible visée, dans la fenêtre récompensable (prime versée, non retirée)',
+    granularity: 'exact',
+    tables: ['rb_requests'],
+    history: 'Depuis le Sniper (Mini-jeux). Rien avant.',
+    exact: `select buyer_id as viewer_id, count(*) as n from rb_requests
+      where channel_id = $1 and mode = 'real' and sniper = 'hit' and ${W('created_at')} group by 1`,
+    first: `select min(created_at) as at from rb_requests where channel_id = $1 and mode = 'real' and wish_id is not null`,
+  },
+  {
+    key: 'random_ban_self',
+    label: 'Random Ban retournés contre soi (CSC)',
+    unit: 'CSC',
+    source: 'Random Ban : rb_requests confirmés dont la cible est l’acheteur',
+    granularity: 'exact',
+    tables: ['rb_requests'],
+    history: 'Comme « Random Ban lancés ».',
+    exact: `select buyer_id as viewer_id, count(*) as n from rb_requests
+      where channel_id = $1 and mode = 'real' and status = 'confirmed' and target_id = buyer_id
+        and ${W('created_at')} group by 1`,
+    first: `select min(created_at) as at from rb_requests where channel_id = $1 and mode = 'real'`,
+  },
   paid('bonk'),
   paid('tts'),
   paid('soundboard'),

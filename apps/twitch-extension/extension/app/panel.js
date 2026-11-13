@@ -40,6 +40,7 @@ import { raffleIsActive } from '../shared/tombola-v1.js';
 import { hostModules, loadHostModules, moduleVariant, sessionModule, sessionModules, viewerModuleView } from '../shared/module-registry.js';
 import { createModuleModerationPanel } from '../shared/module-moderation.js';
 import '../shared/coffre-mystere.js';
+import '../shared/random-ban-view.js';
 import {
   hideRestrictions,
   holdsAction,
@@ -120,6 +121,8 @@ const HUB_MODULE_STYLES = Object.freeze({
   event_shop: { icon: 'bat', color: '#7a1220', color2: '#d4561a' },
   // Music Hub: an emerald of Raptoru's own (never a music service's brand colour).
   music: { icon: 'music', color: '#16a34a', color2: '#0f766e' },
+  // Mini-jeux V3: crimson to wine — an arcade at night, apart from Tombola's pink-violet and the TTS violet.
+  random_ban_ext: { icon: 'games', color: '#ff2f55', color2: '#6d0d2a' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 const MODERATION_MODULE = Object.freeze({
@@ -1341,6 +1344,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     // Modules of the module host: listed by the server, shown only when this build has their view.
     void loadHostModules(client, () => renderPreservingViewport());
     for (const mod of hostModules()) if (!modules.some((m) => m.id === mod.id)) modules.push(mod);
+    // The Hub loops: Bonk sits between Mini-jeux (last) and TTS (first), two warm/violet cards never side by side.
+    const bonkAt = modules.findIndex((m) => m.id === 'bonk');
+    if (bonkAt >= 0 && modules.some((m) => m.id === 'random_ban_ext')) modules.push(...modules.splice(bonkAt, 1));
     if (openModule && !modules.some((mod) => mod.id === openModule)) openModule = null;
     // Its view goes with it (as navigateTo does): no timer, audio, listener or tour left behind.
     if (hostView && hostViewId !== openModule) {

@@ -1,3 +1,4 @@
+import { RB_PRICING_DEFAULT } from '../src/random-ban/pricing.js';
 import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { RANDOM_BAN, RANDOM_BAN_DRAW } from '@raptoru/schemas';
@@ -71,12 +72,14 @@ describe('Random Ban — requests, serialization, sanction', () => {
     const c1 = await claim();
     expect(c1.request_id).toBe(a.request_id);
     expect(await rb.claim(CH, EXEC)).toEqual({ request: null, reason: 'busy' });
-    // Non-subscriber: 5 min, the legacy reason.
-    expect(await target(c1.request_id, c1.attempt_id, false)).toEqual({
+    // Non-subscriber: 5 min, the legacy reason — struck after the stream's alert (anti-spoil, a few seconds).
+    const told = await target(c1.request_id, c1.attempt_id, false);
+    expect(told).toMatchObject({
       proceed: true,
       duration_s: 300,
       reason: 'Pas de chance gros fdp',
     });
+    expect((told as { delay_ms?: number }).delay_ms).toBeGreaterThan(5_000);
     // Same report again (answer lost): same answer, never a second target.
     expect(await target(c1.request_id, c1.attempt_id, false)).toMatchObject({
       proceed: true,
@@ -97,7 +100,7 @@ describe('Random Ban — requests, serialization, sanction', () => {
     // The next one, now; a subscriber gets 3 min.
     const c2 = await claim();
     expect(c2.request_id).toBe(b.request_id);
-    expect(await target(c2.request_id, c2.attempt_id, true)).toEqual({
+    expect(await target(c2.request_id, c2.attempt_id, true)).toMatchObject({
       proceed: true,
       duration_s: 180,
       reason: 'Pas de chance fdp',
@@ -129,7 +132,7 @@ describe('Random Ban — requests, serialization, sanction', () => {
     ).toMatchObject({
       status: 'failed',
       refund: 'needed',
-      animation_status: 'none',
+      animation_status: 'skipped', // its alert, queued at the draw and never started, is dropped
     });
     await ask();
     const d = await claim();
@@ -248,7 +251,8 @@ describe('Random Ban — lost executor, restarts, late results (never a doubled 
     const b = await ask();
     const c = await claim();
     await target(c.request_id, c.attempt_id);
-    core.clock.advance(RANDOM_BAN.timeoutLeaseMs + 1);
+    // Anti-spoil: the lease runs 90 s past the strike (≤ 20 s after the draw): a restarting bot still finds it.
+    core.clock.advance(20_000 + 90_000 + 1);
     expect(await rb.claim(CH, EXEC)).toEqual({ request: null, reason: 'idle' });
     expect(await rb.outcome(b.request_id)).toMatchObject({
       status: 'uncertain',
@@ -354,8 +358,8 @@ describe('Random Ban — from the channel points rule', () => {
   it('a real redemption → one real request (no Studio job); a redelivery → nothing more; the result reaches the history', async () => {
     const { core, rb } = await fixture();
     const cp = new ChannelPointsService(core.db, core.clock, core.soundLab, rb);
-    // Several redemptions of one buyer in a row: the personal cooldown is off here.
-    rb.cpCooldownMs = 0;
+    // Several redemptions of one buyer in a row: the personal cooldown (Mini-jeux) is off here.
+    rb.pricing = async () => ({ ...RB_PRICING_DEFAULT, cpCooldownMs: 0 });
     await cp.syncRewards({
       channel_id: CH,
       rewards: [
@@ -465,8 +469,8 @@ describe('Random Ban — the redemption follows the result without Studio (live 
   it('confirmed → the redemption is done at the executor report, no Studio read; another pending one is untouched', async () => {
     const { core, rb } = await fixture();
     const cp = new ChannelPointsService(core.db, core.clock, core.soundLab, rb);
-    // Several redemptions of one buyer in a row: the personal cooldown is off here.
-    rb.cpCooldownMs = 0;
+    // Several redemptions of one buyer in a row: the personal cooldown (Mini-jeux) is off here.
+    rb.pricing = async () => ({ ...RB_PRICING_DEFAULT, cpCooldownMs: 0 });
     await cp.syncRewards({
       channel_id: CH,
       rewards: [
@@ -569,7 +573,7 @@ describe('Random Ban migrations', () => {
     await migrate(prod, 'prod');
     await migrate(lab, 'lab');
     const p = await schema(prod);
-    expect(p.columns.length).toBe(30);
+    expect(p.columns.length).toBe(39);
     expect(p).toEqual(await schema(lab));
     const all = fresh();
     closers.push(() => all.close());
