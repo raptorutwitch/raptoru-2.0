@@ -72,6 +72,10 @@ async function chain(o: {
     return { status: res.status, body: (await res.json()) as unknown };
   };
   const timeouts: [string, number, string][] = [];
+  /** What happened, in order (the alert shown, the timeout sent). */
+  const events: string[] = [];
+  /** The bot's wait (anti-spoil): a test may let Studio poll meanwhile. */
+  let onPause = async () => {};
   const twitch: RbTwitch = {
     chattersPage: async () => ({
       chatters: o.chatters.map((c) => ({ ...c, login: c.name.toLowerCase() })),
@@ -81,7 +85,10 @@ async function chain(o: {
     bans: async () => [],
     follows: async (id) => o.follows.includes(id),
     subscribers: async (ids) => ids.filter((i) => (o.subs ?? []).includes(i)),
-    ban: async (id, d, r) => void timeouts.push([id, d, r]),
+    ban: async (id, d, r) => {
+      events.push('timeout');
+      timeouts.push([id, d, r]);
+    },
   };
   const executor = createRandomBanExecutor({
     core: botCore,
@@ -97,7 +104,7 @@ async function chain(o: {
     broadcasterScopes: ['moderation:read', 'channel:read:subscriptions'],
     twitch,
     journal: memoryRbJournal(),
-    pause: async () => {},
+    pause: () => onPause(),
     log: () => {},
   });
   const shown: Record<string, unknown>[] = [];
@@ -111,6 +118,7 @@ async function chain(o: {
     }),
     play: async (e: Record<string, unknown>) => {
       shown.push(e);
+      events.push(`alert:${String(e.kind)}`);
       return { end: Promise.resolve({ event: 'completed' as const }) };
     },
     handle: async () => false,
@@ -163,33 +171,38 @@ async function chain(o: {
     core<{ recent: Record<string, unknown>[] }>(
       `/v1/lab/random-ban/${CH}/state`,
     );
-  return { core, executor, rt, redeem, timeouts, shown, rbState };
+  return {
+    core,
+    executor,
+    rt,
+    redeem,
+    timeouts,
+    shown,
+    rbState,
+    events,
+    whileWaiting: (fn: () => Promise<unknown>) => {
+      onPause = async () => void (await fn());
+    },
+  };
 }
 
 describe('Random Ban — Lab chain (real Lab Core, bot executor on a simulated Twitch, Studio runtime)', () => {
-  it('Le Viseur (sequence 1): the Studio runtime plays the reel that lands on the drawn target, then the ban video', async () => {
+  it('anti-spoil: the historical alert plays BEFORE the timeout (Studio polls while the bot waits), never a second one', async () => {
     const c = await chain({
       chatters: [{ id: '5', name: 'Lurker' }],
       follows: ['5'],
     });
-    await c.core(`/v1/lab/module-settings/${CH}`, {
-      key: 'random_ban.sequence',
-      value: 1,
-    });
     await c.core(`/v1/lab/channel-points/${CH}/settings`, { enabled: true });
-    await c.rt.randomBan.once(); // Studio's poll: it is there (no reel is offered to an absent Studio)
+    await c.rt.randomBan.once(); // Studio's poll: it is there
+    c.whileWaiting(() => c.rt.randomBan.once());
     await c.redeem();
     expect(await c.executor.tick()).toBe('worked');
     expect(c.timeouts).toHaveLength(1);
-    expect(await c.rt.randomBan.once()).toBe(true);
-    expect(c.shown[0]).toMatchObject({
-      kind: 'reel',
-      reel: { trigger: 'Buyer', target: { id: '5', name: 'Lurker' } },
-    });
-    const reel = c.shown[0]!.reel as { items: { id: string }[]; stop: number };
-    expect(reel.items[reel.stop]!.id).toBe('5');
-    expect(await c.rt.randomBan.once()).toBe(true);
-    expect(c.shown[1]).toMatchObject({ kind: 'ban', banned: 'Lurker' });
+    expect(c.events[0]).toBe('alert:ban');
+    expect(c.events.indexOf('timeout')).toBeGreaterThan(0);
+    expect(c.shown[0]).toMatchObject({ kind: 'ban', banned: 'Lurker' });
+    expect(await c.rt.randomBan.once()).toBe(false); // the confirmation queues nothing more
+    expect(c.shown.filter((x) => x.kind === 'ban')).toHaveLength(1);
   });
 
   it('a real redemption: one target among the followers present, ONE timeout by LeCroupier_ (sub 3 min), then the animation with both names', async () => {
