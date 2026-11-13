@@ -1,16 +1,17 @@
-# Inventaire de l'emballage de Production — source 53760e2c4599
+# Inventaire de l'emballage de Production — source bd4158511302
 
-Écart : 82 commits de l'extension depuis `PUBLISHED` = `0bf7907` (**présumé, non prouvé**).
+Écart : 83 commits de l'extension depuis `PUBLISHED` = `0bf7907` (**présumé, non prouvé**).
 Si la version servie n'est pas `0bf7907`, corriger `PUBLISHED` et régénérer cet inventaire.
 
-Préparé par l'agent le 2026-11-14 (Mini-jeux V4). **Non validé** : la ligne de validation appartient à Antoni ; tant
+Préparé par l'agent le 2026-11-13 (Mini-jeux V5). **Non validé** : la ligne de validation appartient à Antoni ; tant
 qu'elle manque, l'emballage de Production refuse d'écrire le ZIP (`npm run package:production -- --shell v2`).
 Remplace l'inventaire `INVENTAIRE-bb8700814939.md` (78 commits, non validé) : ses commits sont repris ci-dessous,
-ceux de Mini-jeux dans la première section. Prérequis côté Core : la livraison Mini-jeux (docs/mini-jeux/LIVRAISON_V4.md).
+ceux de Mini-jeux dans la première section. Prérequis côté Core : la livraison Mini-jeux (docs/mini-jeux/LIVRAISON_V5.md).
 Sans `random_ban_ext` activé, aucun viewer ne voit Mini-jeux.
 
-## Mini-jeux / Random Ban (catalogue, machine de tirage, Sniper, jauge) — 4
+## Mini-jeux / Random Ban (catalogue, machine de tirage, Sniper, jauge des charges) — 5
 
+- bd415851 2026-11-13 feat(mini-jeux): Random Ban V5 — fixed prices, personal charges shared by the extension, !rb and channel points
 - 53760e2c 2026-11-13 feat(mini-jeux): V4 — carousel draw machine, compact price gauge, availability before the click
 - 66cc3b40 2026-11-13 feat(mini-jeux): V3 — Mini-jeux catalog, draw machine, continuous price recovery gauge, arcade identity
 - 1cf11d90 2026-11-13 feat(mini-jeux): Random Ban refonte — game screen, in-extension reel, free-text Sniper, Studio moderation
