@@ -116,6 +116,8 @@ try {
     '20261121190000_cmd_steps_module_origin_lab.sql',
     // Music Hub: the Lab twin of 20261122130000_music_hub.sql (docs/music/MUSIC_HUB_STATE.md).
     '20261122120000_music_hub_lab.sql',
+    // Points de chaîne reward administration: the Lab twin of 20261124130000_cp_reward_admin.sql.
+    '20261124120000_cp_reward_admin_lab.sql',
   ]) {
     if (
       (

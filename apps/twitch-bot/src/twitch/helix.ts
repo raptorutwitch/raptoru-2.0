@@ -278,9 +278,16 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       throw new Error('eventsub subscriptions: too many pages');
     },
 
-    /** The broadcaster's custom rewards (Points de chaîne V1, read only: channel:read:redemptions). */
-    async getCustomRewards(broadcasterId: string) {
+    /**
+     * The broadcaster's custom rewards (Points de chaîne V1, read only: channel:read:redemptions). `manageableOnly`:
+     * only those THIS app created — the ones it may pause, edit, and whose redemptions it may refund (Twitch's rule).
+     */
+    async getCustomRewards(
+      broadcasterId: string,
+      o: { manageableOnly?: boolean } = {},
+    ) {
       const qs = new URLSearchParams({ broadcaster_id: broadcasterId });
+      if (o.manageableOnly) qs.set('only_manageable_rewards', 'true');
       const res = await request('GET', `/channel_points/custom_rewards?${qs}`);
       return (res.data ?? []) as {
         id: string;
@@ -323,6 +330,8 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
         cost: number;
         prompt: string;
         is_user_input_required: boolean;
+        /** false: created hidden from the viewers. */
+        is_enabled?: boolean;
       },
     ) {
       const qs = new URLSearchParams({ broadcaster_id: broadcasterId });
@@ -334,6 +343,25 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       const id = (res.data?.[0] as { id?: string } | undefined)?.id;
       if (!id) throw new HelixError(502, 'create custom reward: no id');
       return id;
+    },
+
+    /** Pause / resume / edit a reward THIS app created (Update Custom Reward; Twitch answers 403 for any other). */
+    async updateCustomReward(
+      broadcasterId: string,
+      rewardId: string,
+      patch: {
+        title?: string;
+        cost?: number;
+        prompt?: string;
+        is_enabled?: boolean;
+        is_paused?: boolean;
+      },
+    ) {
+      const qs = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        id: rewardId,
+      });
+      await request('PATCH', `/channel_points/custom_rewards?${qs}`, patch);
     },
 
     // --- Random Ban V2 (docs/RANDOM_BAN_V2.md) -------------------------------------------------------------------

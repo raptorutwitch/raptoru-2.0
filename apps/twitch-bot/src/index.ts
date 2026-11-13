@@ -454,6 +454,13 @@ if (
             broadcasterHelix.subscribe(type, condition, sessionId, version),
           getCustomRewards: () =>
             broadcasterHelix.getCustomRewards(config.TWITCH_BROADCASTER_ID),
+          getManageableRewardIds: async () =>
+            (
+              await broadcasterHelix.getCustomRewards(
+                config.TWITCH_BROADCASTER_ID,
+                { manageableOnly: true },
+              )
+            ).map((r) => r.id),
         })
       : null;
     events?.resumePending(); // events a previous run could not deliver to Core
@@ -613,6 +620,8 @@ if (cpActionsOn) {
             ),
           createCustomReward: (reward) =>
             bh.helix.createCustomReward(broadcasterId, reward),
+          updateCustomReward: (rewardId, patch) =>
+            bh.helix.updateCustomReward(broadcasterId, rewardId, patch),
         }
       : null,
   });

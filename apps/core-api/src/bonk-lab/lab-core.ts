@@ -205,6 +205,8 @@ export function createLabCore({
     randomBan,
     economy,
     spotify,
+    // Studio's reward administration and the refunds (cooldown, failures): the same Twitch actions as Production.
+    cpTwitch,
   );
   // Roue du Sub: the gains pay the runtime's economy — the canonical Wallet, or here the Lab test wallet (test data,
   // its own ledger kind, one row per spin). The Lab simulators (presence, events) only exist in the Lab database.

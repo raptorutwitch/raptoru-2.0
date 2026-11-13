@@ -18,6 +18,7 @@ import {
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { type EconomyPort, labEconomy } from '../economy/economy.js';
+import { insertWordGameSteps } from '../commands/steps.js';
 import type { RandomBanService } from '../random-ban/service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import type { SpotifyRequestView, SpotifyService } from '../spotify/service.js';
@@ -55,6 +56,18 @@ export const CP_RULES = {
    */
   queuedMaxMs: 120_000,
 } as const;
+
+/** « 4 min 10 s » / « 45 s » (chat). */
+function waitText(ms: number) {
+  const s = Math.max(1, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m ? `${m} min${s % 60 ? ` ${s % 60} s` : ''}` : `${s} s`;
+}
+
+/** The result text of a Random Ban redemption refused by the buyer's cooldown (read back by afterTwitchAction). */
+const RB_COOLDOWN = 'Random Ban : délai personnel';
+/** A failed Random Ban whose points Raptoru asked Twitch to give back (read back by afterTwitchAction). */
+const RB_REFUND_ASKED = 'remboursement des points demandé à Twitch';
 
 /** Why a queued OBS job expired, in the streamer's words (history). */
 export const CP_EXPIRED_TEXT: Record<string, string> = {
@@ -348,6 +361,7 @@ export class ChannelPointsService {
       this.settleRandomBans(channelId, requestId),
     );
     spotify?.onResult((channelId, ref) => this.settleSongs(channelId, ref));
+    twitch?.onResult((channelId, a) => this.afterTwitchAction(channelId, a));
   }
 
   /**
@@ -433,9 +447,11 @@ export class ChannelPointsService {
       for (const r of s.rewards)
         await q.query(
           `insert into cp_rewards (channel_id, reward_id, title, cost, prompt, is_enabled, user_input_required, source,
-             last_seen_at) values ($1, $2, $3, $4, $5, $6, $7, 'twitch_api', $8)
+             last_seen_at, is_paused, managed_by_raptoru) values ($1, $2, $3, $4, $5, $6, $7, 'twitch_api', $8, $9,
+             coalesce($10, false))
            on conflict (channel_id, reward_id) do update set title = $3, cost = $4, prompt = $5, is_enabled = $6,
-             user_input_required = $7, source = 'twitch_api', last_seen_at = $8`,
+             user_input_required = $7, source = 'twitch_api', last_seen_at = $8, is_paused = $9,
+             managed_by_raptoru = coalesce($10, cp_rewards.managed_by_raptoru)`,
           [
             s.channel_id,
             r.id,
@@ -445,6 +461,9 @@ export class ChannelPointsService {
             r.is_enabled && !r.is_paused,
             r.user_input_required ?? false,
             now,
+            r.is_paused ?? null,
+            // Twitch's own answer (only_manageable_rewards) when the bot read it; else what the Core recorded.
+            r.manageable ?? null,
           ],
         );
       // Listed before, absent now: deleted on Twitch (rule kept, shown as missing).
@@ -470,9 +489,13 @@ export class ChannelPointsService {
       rule_enabled: boolean | null;
       rule_actions: CpAction[] | null;
       rule_version: number | null;
+      managed_by_raptoru: boolean | null;
+      is_paused: boolean | null;
+      migrated_from: string | null;
     }>(
       `select w.reward_id, w.title, w.cost, w.prompt, w.is_enabled, w.user_input_required, w.source, w.last_seen_at,
-         r.enabled as rule_enabled, r.actions as rule_actions, r.version as rule_version
+         r.enabled as rule_enabled, r.actions as rule_actions, r.version as rule_version,
+         w.managed_by_raptoru, w.is_paused, w.migrated_from
        from cp_rewards w left join cp_rules r on r.channel_id = w.channel_id and r.reward_id = w.reward_id
        where w.channel_id = $1 order by w.cost, w.title`,
       [channelId],
@@ -487,6 +510,12 @@ export class ChannelPointsService {
       user_input_required: r.user_input_required,
       listed_by_twitch: r.source === 'twitch_api',
       last_seen_at: iso(r.last_seen_at),
+      /** Created by Raptoru's Twitch app: Raptoru may pause / edit it and refund its redemptions (Twitch's rule). */
+      managed: r.managed_by_raptoru === true,
+      /** The Twitch pause (null: not known yet — an older sync). */
+      paused: r.is_paused,
+      /** The old reward this one replaces (a migration). */
+      migrated_from: r.migrated_from,
       rule: r.rule_actions
         ? {
             enabled: r.rule_enabled!,
@@ -654,8 +683,13 @@ export class ChannelPointsService {
       );
       // Refonte H1: a stream effect bought outside the live is refused; its points go back once on Twitch when the
       // reward is Raptoru's and nothing was granted (a song request is refunded by Spotify's own refusal below).
+      // Récompenses Twitch: the same when its rule or the automations are OFF (a reward being migrated, a pause of
+      // Raptoru): a reward Raptoru owns never keeps points for nothing.
       if (
-        reason === STREAM_OFFLINE &&
+        e.source === 'twitch' &&
+        (reason === STREAM_OFFLINE ||
+          reason === 'rule_disabled' ||
+          reason === 'automations_off') &&
         !actions.length &&
         !rule!.actions.some(isSongRequest) &&
         this.twitch &&
@@ -761,23 +795,31 @@ export class ChannelPointsService {
       let update: ResultUpdate;
       try {
         if (!this.randomBan) throw new Error('random_ban_unavailable');
-        const request = await this.randomBan.request({
-          channel_id: e.channel_id,
-          source: 'channel_points',
-          source_ref: `${e.source}:${e.redemption_id}:${index}`,
-          mode: e.source === 'simulation' ? 'dry_run' : 'real',
-          buyer: {
-            id: e.user.id,
-            login: e.user.login,
-            name: e.user.display_name,
-          },
-        });
-        update = {
-          index,
-          ok: false,
-          progress: 'queued',
-          random_ban_id: request.request_id,
-        };
+        // The personal cooldown only where a refused redemption can be refunded (a reward Raptoru owns): on an old
+        // reward a refusal would cost the viewer his points — the old reward keeps today's behaviour.
+        const refundable =
+          !!this.twitch &&
+          (await this.twitch.managed(this.db, e.channel_id, e.reward.id));
+        const { request, cooling_ms } =
+          await this.randomBan.requestChannelPoints({
+            channel_id: e.channel_id,
+            source_ref: `${e.source}:${e.redemption_id}:${index}`,
+            mode: e.source === 'simulation' ? 'dry_run' : 'real',
+            buyer: {
+              id: e.user.id,
+              login: e.user.login,
+              name: e.user.display_name,
+            },
+            cooldown: refundable,
+          });
+        update = request
+          ? {
+              index,
+              ok: false,
+              progress: 'queued',
+              random_ban_id: request.request_id,
+            }
+          : await this.randomBanCooling(e, index, cooling_ms);
       } catch (err) {
         update = { index, ok: false, error: (err as Error).message };
       }
@@ -1500,6 +1542,156 @@ export class ChannelPointsService {
   }
 
   /**
+   * Récompenses Twitch (docs/RECOMPENSES_TWITCH.md): a Random Ban redemption under the buyer's personal cooldown — no Random Ban.
+   * Its points go back once (CANCELED) when the reward is Raptoru's; the chat is told AFTER Twitch's answer (the
+   * listener below), never « remboursé » before it. Another reward (the SAMMI-era one): no refund promised.
+   */
+  private async randomBanCooling(
+    e: {
+      channel_id: string;
+      source: string;
+      redemption_id: string;
+      reward: { id: string };
+      user: { display_name: string };
+    },
+    index: number,
+    coolingMs: number,
+  ): Promise<ResultUpdate> {
+    const wait = waitText(coolingMs);
+    const head = `@${e.user.display_name} - Random Ban indisponible pour toi : encore ${wait} avant ton prochain tirage.`;
+    const key = `rb:cp-cooldown:${e.redemption_id}`;
+    const refund = await this.db.tx(async (q) => {
+      if (e.source !== 'twitch') {
+        await this.say(
+          q,
+          e.channel_id,
+          key,
+          `${head} (simulation : rien à rembourser)`,
+        );
+        return 'simulation';
+      }
+      if (
+        this.twitch &&
+        (await this.twitch.managed(q, e.channel_id, e.reward.id))
+      ) {
+        await this.twitch.redemptionStatus(q, {
+          channel_id: e.channel_id,
+          reward_id: e.reward.id,
+          redemption_id: e.redemption_id,
+          status: 'CANCELED',
+        });
+        return 'asked';
+      }
+      await this.say(
+        q,
+        e.channel_id,
+        key,
+        `${head} Un modérateur peut te rembourser tes points depuis Twitch.`,
+      );
+      return 'unmanaged';
+    });
+    return {
+      index,
+      ok: false,
+      error: `${RB_COOLDOWN} (encore ${wait}) · ${
+        refund === 'asked'
+          ? 'remboursement demandé à Twitch'
+          : refund === 'unmanaged'
+            ? 'à rembourser à la main (récompense non gérée par Raptoru)'
+            : 'simulation'
+      }`,
+    };
+  }
+
+  /** A failed Random Ban of a real redemption of Raptoru's reward: CANCELED asked once, the request owes nothing more. */
+  private async refundRandomBan(row: RedemptionRow, requestId: string) {
+    if (row.source !== 'twitch' || !this.twitch || !this.randomBan)
+      return false;
+    const twitch = this.twitch;
+    const randomBan = this.randomBan;
+    return this.db.tx(async (q) => {
+      if (!(await twitch.managed(q, row.channel_id, row.reward_id)))
+        return false;
+      await twitch.redemptionStatus(q, {
+        channel_id: row.channel_id,
+        reward_id: row.reward_id,
+        redemption_id: row.redemption_id,
+        status: 'CANCELED',
+      });
+      await randomBan.markRefunded(q, requestId);
+      return true;
+    });
+  }
+
+  /** Twitch answered a refund: the chat line of a Random Ban cooldown refusal says what really happened. */
+  private async afterTwitchAction(
+    channelId: string,
+    a: { kind: string; status: string; payload: unknown },
+  ) {
+    const p = a.payload as { redemption_id?: string; status?: string };
+    if (
+      a.kind !== 'redemption_status' ||
+      p.status !== 'CANCELED' ||
+      !p.redemption_id
+    )
+      return;
+    if (a.status !== 'done' && a.status !== 'failed' && a.status !== 'unknown')
+      return;
+    const row = (
+      await this.db.query<RedemptionRow>(
+        `select * from cp_redemptions where channel_id = $1 and source = 'twitch' and redemption_id = $2`,
+        [channelId, p.redemption_id],
+      )
+    )[0];
+    const failed = row?.results.find((r) => r.error?.includes(RB_REFUND_ASKED));
+    if (
+      row &&
+      failed &&
+      !row.results.some((r) => r.error?.startsWith(RB_COOLDOWN))
+    ) {
+      await this.db.tx((q) =>
+        this.say(
+          q,
+          channelId,
+          `rb:cp-refund:${p.redemption_id}`,
+          `@${row.user_name} - Random Ban impossible pour le moment. ${
+            a.status === 'done'
+              ? 'Tes points de chaîne ont été remboursés.'
+              : 'Tes points n’ont pas pu être remboursés automatiquement : un modérateur va le faire.'
+          }`,
+        ),
+      );
+      return;
+    }
+    const cooled = row?.results.find((r) => r.error?.startsWith(RB_COOLDOWN));
+    if (!row || !cooled) return;
+    const wait =
+      /encore ([^)]+)\)/.exec(cooled.error!)?.[1] ?? 'quelques minutes';
+    await this.db.tx((q) =>
+      this.say(
+        q,
+        channelId,
+        `rb:cp-cooldown:${p.redemption_id}`,
+        `@${row.user_name} - Random Ban indisponible pour toi : encore ${wait} avant ton prochain tirage. ${
+          a.status === 'done'
+            ? 'Tes points de chaîne ont été remboursés.'
+            : 'Tes points n’ont pas pu être remboursés automatiquement : un modérateur va le faire.'
+        }`,
+      ),
+    );
+  }
+
+  /** One chat line per key (a replayed redemption or a second Twitch report writes nothing new). */
+  private say(q: Queryable, channelId: string, key: string, text: string) {
+    return insertWordGameSteps(q, {
+      channelId,
+      now: this.clock.now(),
+      origin: 'mini_game',
+      drafts: [{ idempotencyKey: key, mode: 'normal', text }],
+    });
+  }
+
+  /**
    * Random Ban actions follow their request until it ends (Random Ban's own history holds the details): at each
    * Studio read, and for one request as soon as the executor reports its result.
    */
@@ -1520,7 +1712,19 @@ export class ChannelPointsService {
         if (r.status !== 'pending' || !r.random_ban_id) continue;
         if (requestId && r.random_ban_id !== requestId) continue;
         const rb = await this.randomBan.outcome(r.random_ban_id);
-        const update = rb && randomBanResult(r.index, rb);
+        let update = rb && randomBanResult(r.index, rb);
+        // Récompenses Twitch: a Random Ban that did nothing, paid on a reward Raptoru created — its points go back
+        // once (CANCELED, keyed per redemption); the chat is told after Twitch's answer (afterTwitchAction).
+        if (
+          update &&
+          rb?.status === 'failed' &&
+          rb.refund === 'needed' &&
+          (await this.refundRandomBan(row, rb.request_id))
+        )
+          update = {
+            ...update,
+            error: `${rb.error ?? 'échec'} — ${RB_REFUND_ASKED}`,
+          };
         if (update)
           await this.setResults(channelId, row.source, row.redemption_id, [
             update,
@@ -1618,6 +1822,131 @@ export class ChannelPointsService {
       recent: recent.map(redemptionView),
       jobs_waiting: Number(inFlight[0]!.n),
       sounds,
+      // Studio's reward administration: the Twitch actions (create, pause, refunds) and their outcome.
+      twitch_actions: this.twitch ? await this.twitch.list(channelId, 20) : [],
+      attention: await this.attention(channelId),
+    };
+  }
+
+  // --- Studio's reward administration (docs/RECOMPENSES_TWITCH.md) -------------------------------------
+
+  private needTwitch() {
+    if (!this.twitch) throw new CpError(503, 'twitch_actions_unavailable');
+    return this.twitch;
+  }
+
+  /** A new reward owned by Raptoru (Twitch creates it; the bot runs it once; recorded as managed when done). */
+  async createManagedReward(
+    channelId: string,
+    r: {
+      title: string;
+      cost: number;
+      prompt: string;
+      user_input: boolean;
+      migrated_from?: string | null;
+      /** Created hidden from the viewers (default for a migration: shown once its rule is ready). */
+      hidden?: boolean;
+    },
+  ) {
+    const twitch = this.needTwitch();
+    const same = await this.db.query(
+      `select 1 from cp_rewards where channel_id = $1 and lower(title) = lower($2) and is_enabled is not null`,
+      [channelId, r.title.trim()],
+    );
+    // Twitch refuses a title already used on the channel (the old SAMMI reward included): said before asking it.
+    if (same.length) throw new CpError(409, 'reward_title_taken');
+    if (r.migrated_from) {
+      const old = await this.db.query<{ managed_by_raptoru: boolean }>(
+        `select managed_by_raptoru from cp_rewards where channel_id = $1 and reward_id = $2`,
+        [channelId, r.migrated_from],
+      );
+      if (!old.length) throw new CpError(404, 'unknown_reward');
+    }
+    return twitch.createReward(channelId, {
+      title: r.title.trim(),
+      cost: r.cost,
+      prompt: r.prompt,
+      is_user_input_required: r.user_input,
+      migrated_from: r.migrated_from ?? null,
+      ...((r.hidden ?? !!r.migrated_from) ? { is_enabled: false } : {}),
+    });
+  }
+
+  /** Pause / resume / edit a reward Raptoru owns (another reward: refused, Twitch would refuse it too). */
+  async updateManagedReward(
+    channelId: string,
+    rewardId: string,
+    patch: Record<string, unknown>,
+  ) {
+    return this.needTwitch().updateReward(channelId, rewardId, patch);
+  }
+
+  /**
+   * A moderator's (Studio's) refund of ONE pending redemption of a reward Raptoru owns: CANCELED, once per redemption
+   * (the existing key) — never after a fulfilment, never twice. Recorded in the redemption's results.
+   */
+  async refundRedemption(
+    channelId: string,
+    source: string,
+    redemptionId: string,
+  ) {
+    const twitch = this.needTwitch();
+    const row = (
+      await this.db.query<RedemptionRow>(
+        'select * from cp_redemptions where channel_id = $1 and source = $2 and redemption_id = $3',
+        [channelId, source, redemptionId],
+      )
+    )[0];
+    if (!row) throw new CpError(404, 'unknown_redemption');
+    if (row.source !== 'twitch')
+      throw new CpError(409, 'simulation_not_refundable');
+    const out = await this.db.tx(async (q) => {
+      if (!(await twitch.managed(q, channelId, row.reward_id)))
+        throw new CpError(409, 'reward_not_managed');
+      const done = await twitch.ofRedemption(q, channelId, redemptionId);
+      if (done) return { status: 'exists' as const, action: done };
+      await twitch.redemptionStatus(q, {
+        channel_id: channelId,
+        reward_id: row.reward_id,
+        redemption_id: redemptionId,
+        status: 'CANCELED',
+      });
+      return {
+        status: 'queued' as const,
+        action: await twitch.ofRedemption(q, channelId, redemptionId),
+      };
+    });
+    return out;
+  }
+
+  /**
+   * What needs a human (Studio « À traiter »): redemptions whose points must be refunded by hand (a reward Raptoru does
+   * not own), Twitch actions refused or without an answer, rewards whose rule exists but Twitch no longer lists.
+   */
+  async attention(channelId: string) {
+    const handRefunds = await this.db.query<RedemptionRow>(
+      `select * from cp_redemptions where channel_id = $1 and source = 'twitch' and received_at > now() - interval '7 days'
+         and (results::text like '%à rembourser à la main%' or results::text like '%remboursement nécessaire%')
+       order by received_at desc limit 30`,
+      [channelId],
+    );
+    const actions = this.twitch
+      ? (await this.twitch.list(channelId, 50)).filter(
+          (a) => a.status === 'failed' || a.status === 'unknown',
+        )
+      : [];
+    const missing = await this.db.query<{ reward_id: string; title: string }>(
+      `select w.reward_id, w.title from cp_rewards w join cp_rules r on r.channel_id = w.channel_id
+         and r.reward_id = w.reward_id where w.channel_id = $1 and r.enabled and w.is_enabled is null`,
+      [channelId],
+    );
+    return {
+      hand_refunds: handRefunds.map(redemptionView),
+      twitch_actions: actions,
+      missing_rewards: missing.map((m) => ({
+        id: m.reward_id,
+        title: m.title,
+      })),
     };
   }
 }

@@ -104,6 +104,8 @@ function setup(
     outbox?: Outbox<CpOutboxEvent>;
     /** Core's answer to a status change. */
     updateOutcome?: () => string;
+    /** The ids Twitch lists with only_manageable_rewards ('fail': that read is refused). */
+    manageable?: string[] | 'fail';
   } = {},
 ) {
   const posted: unknown[] = [];
@@ -145,6 +147,14 @@ function setup(
         is_user_input_required: false,
       },
     ],
+    ...(o.manageable
+      ? {
+          getManageableRewardIds: async () => {
+            if (o.manageable === 'fail') throw new Error('helix_403');
+            return o.manageable as string[];
+          },
+        }
+      : {}),
     log: (...a: unknown[]) => logs.push(a.join(' ')),
   });
   const route = createEventSubRouter({
@@ -195,6 +205,24 @@ describe('channel points events (bot)', () => {
         ],
       },
     ]);
+  });
+
+  it('reward administration: each reward says whether Raptoru may manage it (Twitch only_manageable_rewards); unknown when that read fails', async () => {
+    const s = setup({ manageable: ['r1'] });
+    await s.events.syncRewards();
+    expect(s.rewards[0]).toMatchObject({
+      rewards: [{ id: 'r1', manageable: true }],
+    });
+    const none = setup({ manageable: [] });
+    await none.events.syncRewards();
+    expect(none.rewards[0]).toMatchObject({
+      rewards: [{ id: 'r1', manageable: false }],
+    });
+    const failed = setup({ manageable: 'fail' });
+    await failed.events.syncRewards();
+    expect(
+      (failed.rewards[0] as { rewards: Record<string, unknown>[] }).rewards[0],
+    ).not.toHaveProperty('manageable');
   });
 
   it('a refused subscription is logged, never thrown (the connection and other events go on)', async () => {
