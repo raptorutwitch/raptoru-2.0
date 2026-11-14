@@ -257,6 +257,29 @@ export class CautionService {
   rates: (q: Queryable, channelId: string) => Promise<CautionRates> =
     async () => DEFAULT_CAUTION_RATES;
 
+  /**
+   * 14/11: the timeout Twitch lists is a Random Ban's — a confirmed one on this viewer whose end (confirmation +
+   * duration) is Twitch's end within a minute. Extended or replaced since (the moderation): not one, the general rate.
+   */
+  private async randomBanTimeout(
+    q: Queryable,
+    ch: string,
+    targetId: string,
+    endsAt: Date,
+  ) {
+    const rows = await q.query(
+      `select 1 from rb_requests where channel_id = $1 and target_id = $2 and status = 'confirmed'
+         and ended_at + make_interval(secs => duration_s) between $3 and $4 limit 1`,
+      [
+        ch,
+        targetId,
+        new Date(endsAt.getTime() - 60_000),
+        new Date(endsAt.getTime() + 60_000),
+      ],
+    );
+    return rows.length > 0;
+  }
+
   executorReady(channelId: string) {
     const e = this.executors.get(channelId);
     return !!e && this.now().getTime() - e.at < 15_000 && e.can_read;
@@ -656,7 +679,12 @@ export class CautionService {
         const price =
           kind === 'mute'
             ? cautionMutePrice(remainingS, rates.mutePricePer10s)
-            : cautionPrice(remainingS, rates.pricePerMinute);
+            : cautionPrice(
+                remainingS,
+                (await this.randomBanTimeout(q, ch, who.target_id, endsAt))
+                  ? rates.randomBanPricePerMinute
+                  : rates.pricePerMinute,
+              );
         await this.set(q, r.request_id, {
           ...who,
           kind,

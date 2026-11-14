@@ -27,7 +27,9 @@ export interface MusicRules {
 const DEFAULTS: MusicRules = {
   viewer_skip: {
     enabled: false,
-    protect_requests: true,
+    // 14/11 (Antoni, post-launch): the paid skip passes the track playing even when another viewer requested it; the
+    // switch stays in Studio for whoever wants the protection back.
+    protect_requests: false,
     base_price: MUSIC_RULES.skipBasePriceTokens,
     multiplier: MUSIC_RULES.skipMultiplier,
     window_minutes: MUSIC_RULES.skipWindowMs / 60_000,

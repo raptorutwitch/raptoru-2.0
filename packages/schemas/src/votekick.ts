@@ -42,6 +42,8 @@ export const VOTEKICK_SETTINGS = {
 export const CAUTION = {
   /** CAUTION_START: 1 000 Jetons per started minute still to serve. */
   pricePerMinute: 1_000,
+  /** A Random Ban's timeout: 3 000 Jetons per started minute (decided 14/11, post-launch rebalancing). */
+  randomBanPricePerMinute: 3_000,
   /** The streamer's OBS mute (Votekick, Random Ban): 300 Jetons per started 10 s still to serve (decided 27/10). */
   mutePricePer10s: 300,
   /** CAUTION_START: the quote waits 30 s for the payer's `oui` / `non`. */

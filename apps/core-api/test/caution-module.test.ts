@@ -101,6 +101,54 @@ describe('Caution on the module host (adapter)', () => {
     expect(await l.tokens()).toBe(16_000); // ONE debit, the quoted price
   });
 
+  it('14/11: a Random Ban timeout costs 3 000 per started minute; any other timeout, or a Random Ban extended by the moderation, the general rate', async () => {
+    const l = await lab();
+    const rb = async (confirmedAgoMs: number, durationS: number) =>
+      l.core.db.query(
+        `insert into rb_requests (request_id, channel_id, source, source_ref, mode, buyer_id, buyer_login, buyer_name,
+           status, target_id, target_login, target_name, duration_s, created_at, updated_at, ended_at)
+         values (gen_random_uuid(), $1, 'chat', $2, 'real', '9999', 'acheteur', 'Acheteur', 'confirmed', $3, $4, $5, $6,
+           $7, $7, $7)`,
+        [
+          CH,
+          `chat:${++n}`,
+          TARGET.id,
+          TARGET.login,
+          TARGET.name,
+          durationS,
+          new Date(l.core.clock.now().getTime() - confirmedAgoMs),
+        ],
+      );
+    // A moderator's 4-minute timeout: 1 000 per minute.
+    expect((await l.quote(4 * 60_000)).q).toEqual({
+      status: 'quoted',
+      price: 4_000,
+    });
+    await l.core.clock.advance(31_000); // the quote expires
+    // A Random Ban of 5 min confirmed 1 min ago: 4 min left (Twitch's end within a few seconds of ours).
+    await rb(60_000, 300);
+    const { id, q } = await l.quote(4 * 60_000 - 3_000);
+    expect(q).toEqual({ status: 'quoted', price: 12_000 });
+    // The price announced is the price debited (ONE debit).
+    expect(await l.pay(id, 4 * 60_000 - 5_000)).toEqual({
+      proceed: true,
+      target_id: TARGET.id,
+    });
+    expect(await l.tokens()).toBe(8_000);
+    // Extended to 20 min by the moderation: no longer the Random Ban's end — the general rate.
+    const l2 = await lab();
+    await l2.core.db.query(
+      `insert into rb_requests (request_id, channel_id, source, source_ref, mode, buyer_id, buyer_login, buyer_name,
+         status, target_id, target_login, target_name, duration_s, created_at, updated_at, ended_at)
+       values (gen_random_uuid(), $1, 'chat', 'chat:x', 'real', '9999', 'a', 'A', 'confirmed', $2, $3, $3, 300, $4, $4, $4)`,
+      [CH, TARGET.id, TARGET.login, l2.core.clock.now()],
+    );
+    expect((await l2.quote(20 * 60_000)).q).toEqual({
+      status: 'quoted',
+      price: 20_000,
+    });
+  });
+
   it('supervision: waiting without the Twitch executor, ready once it reports; bounds refused', async () => {
     const l = await lab();
     expect(await l.core.modules.status(CH, 'caution')).toMatchObject({

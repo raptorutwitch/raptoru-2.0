@@ -198,7 +198,7 @@ describe('Music Hub — paid viewer skip: the price', () => {
     const m = await music();
     expect((await m.spotify.musicRules(CH)).viewer_skip).toMatchObject({
       enabled: false,
-      protect_requests: true,
+      protect_requests: false,
       price: 25_000,
       base_price: 25_000,
       window_minutes: 30,
@@ -411,44 +411,66 @@ describe('Music Hub — paid viewer skip: refusals, refunds, concurrency', () =>
     expect(await m.balance(viewer(1))).toBe(100_000);
   });
 
-  it('a request paid by a viewer is protected (the moderation can still skip it); the switch exists, ON by default', async () => {
+  it('a request paid by another viewer: skipped by the paid skip (OFF protection, the default) — only the track playing, the queue kept, the requester never refunded; ON: refused before any debit', async () => {
     const m = await music();
     await m.rules({ viewer_skip_enabled: true });
     await m.fund(viewer(1), 100_000);
-    // A reward request queued by Studio, then seen playing by Core (its own attribution).
-    await m.spotify.admit({
-      channel_id: CH,
-      source: 'simulation',
-      source_ref: `simulation:test-${randomUUID()}`,
-      reward_id: 'lab-simulated',
-      redemption_id: `r-${randomUUID()}`,
-      viewer: { id: '9499', login: 'demandeur', name: 'Demandeur' },
-      user_input: sp(7).uri,
-    });
-    const a = await m.sync();
-    const job = a.jobs.find((j) => j.kind === 'song_request')!;
-    const attempt_id = randomUUID();
-    await m.spotify.startJob(CH, job.job_id, attempt_id);
-    await m.spotify.reportJob(CH, job.job_id, {
-      kind: 'song_request',
-      attempt_id,
-      outcome: 'queued',
-      track: sp(7),
-      confirmation: 'http_204',
-    });
+    /** A reward request queued by Studio on Spotify (its own attribution). */
+    const requested = async (n: number, login: string) => {
+      await m.spotify.admit({
+        channel_id: CH,
+        source: 'simulation',
+        source_ref: `simulation:test-${randomUUID()}`,
+        reward_id: 'lab-simulated',
+        redemption_id: `r-${randomUUID()}`,
+        viewer: { id: String(9490 + n), login, name: login },
+        user_input: sp(n).uri,
+      });
+      const a = await m.sync();
+      for (const job of a.jobs.filter((j) => j.kind === 'song_request')) {
+        const attempt_id = randomUUID();
+        await m.spotify.startJob(CH, job.job_id, attempt_id);
+        await m.spotify.reportJob(CH, job.job_id, {
+          kind: 'song_request',
+          attempt_id,
+          outcome: 'queued',
+          track: sp(n),
+          confirmation: 'http_204',
+        });
+      }
+    };
+    const row = async (login: string) =>
+      (
+        await m.core.db.query<{ state: string; skipped_by: string | null }>(
+          'select state, skipped_by from spotify_requests where viewer_login = $1',
+          [login],
+        )
+      )[0]!;
+    await requested(7, 'demandeur');
+    await requested(8, 'suivant');
     await m.play(7);
-    const state = (await m.spotify.extensionState(
-      CH,
-      { id: viewer(1).id, login: 'fan1' },
-      false,
-    )) as unknown as { viewer_skip: { blocked: string | null } };
-    expect(state.viewer_skip.blocked).toBe(null); // no SMTC link here: Core still refuses at the purchase
+    expect((await row('demandeur')).state).toBe('PLAYING');
+    // ON (Studio's switch): refused before any debit, the moderation keeps its free skip.
+    await m.rules({ viewer_skip_protect_requests: true });
     expect(await m.code(m.buy(viewer(1)))).toBe('protected_request');
     expect(await m.balance(viewer(1))).toBe(100_000);
-    // The moderation keeps its free skip of it.
-    expect(await m.spotify.skip(CH, 'spotify:test:mod-req', 'Lab_Modo')).toBe(
-      'songskip',
-    );
+    // OFF (the default): the paid skip takes the request playing, aimed at its exact track.
+    await m.rules({ viewer_skip_protect_requests: false });
+    const r = await m.buy(viewer(1), 25_000);
+    expect(r.skip.status).toBe('pending');
+    expect(await m.balance(viewer(1))).toBe(75_000);
+    const jobs = await m.runSkips('skipped');
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ expect_uri: sp(7).uri });
+    await m.play(8);
+    expect(await row('demandeur')).toMatchObject({
+      state: 'SKIPPED',
+      skipped_by: 'fan1',
+    });
+    // The next request still waits (a skip never cancels the queue); nothing is given back to anyone.
+    expect((await row('suivant')).state).toBe('PLAYING');
+    expect((await m.skipRow(r.skip.id)).status).toBe('done');
+    expect(await m.balance(viewer(1))).toBe(75_000);
   });
 });
 
