@@ -145,7 +145,11 @@ describe.skipIf(!isLocal)(
         all.filter((t) => !LEVEL_TABLES.includes(t)),
       );
       expect(await columns()).toEqual(
-        cols.filter((c) => !LEVEL_TABLES.some((t) => c.startsWith(`${t}.`))),
+        cols.filter(
+          (c) =>
+            !LEVEL_TABLES.some((t) => c.startsWith(`${t}.`)) &&
+            c !== 'progression_accounts.last_message_fp',
+        ),
       );
       // The movement already written stays; a new one of that kind is refused again.
       expect(

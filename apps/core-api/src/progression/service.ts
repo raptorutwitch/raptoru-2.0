@@ -7,6 +7,8 @@ import {
   ProgressionRulesSchema,
   WizebotExport,
 } from '@raptoru/schemas';
+import { createHash } from 'node:crypto';
+import { insertAnnouncement } from '../commands/steps.js';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { LabChatModule } from '../lab-chat/router.js';
@@ -117,6 +119,28 @@ interface ImportRequest {
     watch_seconds: number;
     messages: number;
   }[];
+}
+
+/** How many different letters or digits a message has (« aaaa » → 1, « ????? » → 0, « salut » → 4). */
+export function distinctChars(text: string) {
+  return new Set(
+    [...text.toLowerCase().normalize('NFKD')].filter((c) =>
+      /[\p{L}\p{N}]/u.test(c),
+    ),
+  ).size;
+}
+
+/**
+ * A message's fingerprint (never the text itself): case, accents, spaces, punctuation and stretched letters ignored —
+ * « Salut !! », « salut » and « saluuuut » are the same message.
+ */
+export function messageFingerprint(text: string) {
+  const norm = text
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .replace(/(.)\1+/gu, '$1');
+  return createHash('sha256').update(norm).digest('hex').slice(0, 32);
 }
 
 /** raptoru.fr's WizeBot export (public, read-only); WIZEBOT_EXPORT_URL points elsewhere (staging, tests). */
@@ -365,7 +389,10 @@ export class ProgressionService {
     return true;
   }
 
-  /** Records a level-up and its notification (the viewer's mode; skipped when off or the channel's notices are off). */
+  /**
+   * Records a level-up, its stream notification (Studio's OBS source) and its chat announcement — each skipped when the
+   * channel's switch is off or the viewer chose « Désactivé ». The chat line itself is written by flushLevelUpChat.
+   */
   private async levelUpEvent(
     q: Queryable,
     channelId: string,
@@ -375,36 +402,183 @@ export class ProgressionService {
     key: string,
     rules: ProgressionRules,
   ) {
-    const mode = await this.notifyMode(q, channelId, viewerId);
-    const name =
-      (
-        await q.query<{ name: string | null }>(
-          `select coalesce(display_name, login) as name from ${this.dir(channelId)} d where twitch_user_id = $1`,
-          [viewerId],
-        )
-      )[0]?.name ?? viewerId;
+    const mode = await this.notifyMode(q, channelId, viewerId, rules);
+    const who = (
+      await q.query<{ name: string | null; login: string | null }>(
+        `select coalesce(display_name, login) as name, login from ${this.dir(channelId)} d where twitch_user_id = $1`,
+        [viewerId],
+      )
+    )[0];
+    const name = who?.name ?? viewerId;
     const reason = !rules.level_up_notifications
       ? 'notifications_off'
       : mode === 'off'
         ? 'viewer_off'
         : null;
+    const chatReason = !rules.level_up_chat
+      ? 'chat_off'
+      : mode === 'off'
+        ? 'viewer_off'
+        : null;
     await q.query(
-      `insert into progression_level_events (channel_id, twitch_user_id, display_name, from_level, to_level, source_key,
-         notify_mode, status, reason, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) on conflict (channel_id, source_key) do nothing`,
+      `insert into progression_level_events (channel_id, twitch_user_id, display_name, login, from_level, to_level,
+         source_key, notify_mode, status, reason, chat_status, chat_reason, created_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) on conflict (channel_id, source_key) do nothing`,
       [
         channelId,
         viewerId,
         name.slice(0, 64),
+        who?.login ?? null,
         from,
         to,
         key.slice(0, 200),
         mode,
         reason ? 'skipped' : 'pending',
         reason,
+        chatReason ? 'skipped' : 'pending',
+        chatReason,
         this.now(),
       ],
     );
+  }
+
+  /**
+   * The chat announcements of the level-ups waiting (in the caller's transaction, after the XP it moved): ONE line on
+   * the commands' outbox (LeCroupier_ sends it; « Sortie chat réelle » and the bot's rate limit apply), at most one per
+   * level_up_chat_interval_s — the level-ups in between wait and are grouped in the next line; a viewer who climbed
+   * several levels is announced once, at the final level; an announcement older than level_up_max_age_s is dropped
+   * (never a late flood after a pause). An outbox refusal is logged and skipped, never its caller.
+   */
+  async flushLevelUpChat(
+    q: Queryable,
+    channelId: string,
+    rules: ProgressionRules,
+  ) {
+    await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+      `levelups-chat:${channelId}`,
+    ]);
+    const now = this.now();
+    const settle = (ids: string[], status: string, reason: string | null) =>
+      ids.length
+        ? q.query(
+            `update progression_level_events set chat_status = $3, chat_reason = $4, chat_at = $5
+             where channel_id = $1 and id = any($2::bigint[])`,
+            [channelId, ids, status, reason, now],
+          )
+        : null;
+    const rows = await q.query<{
+      id: string;
+      twitch_user_id: string;
+      display_name: string;
+      login: string | null;
+      to_level: number;
+      created_at: Date;
+    }>(
+      `select id, twitch_user_id, display_name, login, to_level, created_at from progression_level_events
+       where channel_id = $1 and chat_status = 'pending' order by id limit 500`,
+      [channelId],
+    );
+    if (!rows.length) return { sent: 0, waiting: 0 };
+    if (!rules.level_up_chat) {
+      await settle(
+        rows.map((r) => r.id),
+        'skipped',
+        'chat_off',
+      );
+      return { sent: 0, waiting: 0 };
+    }
+    // « Sortie chat réelle » off (Lab without Twitch, chat muted): nothing is queued, nothing piles up for later.
+    const output = (
+      await q.query<{ chat_output: boolean }>(
+        'select chat_output from cmd_channels where channel_id = $1',
+        [channelId],
+      )
+    )[0]?.chat_output;
+    if (!output) {
+      await settle(
+        rows.map((r) => r.id),
+        'skipped',
+        'chat_output_off',
+      );
+      return { sent: 0, waiting: 0 };
+    }
+    const maxAge = rules.level_up_max_age_s * 1000;
+    const fresh = rows.filter(
+      (r) => now.getTime() - new Date(r.created_at).getTime() <= maxAge,
+    );
+    await settle(
+      rows.filter((r) => !fresh.includes(r)).map((r) => r.id),
+      'expired',
+      'too_old',
+    );
+    const latest = new Map<string, (typeof fresh)[number]>();
+    for (const r of fresh) latest.set(r.twitch_user_id, r);
+    await settle(
+      fresh.filter((r) => latest.get(r.twitch_user_id) !== r).map((r) => r.id),
+      'merged',
+      'newer_level_up',
+    );
+    if (!latest.size) return { sent: 0, waiting: 0 };
+    const last = (
+      await q.query<{ at: Date | null }>(
+        `select max(chat_at) as at from progression_level_events where channel_id = $1 and chat_status = 'sent'`,
+        [channelId],
+      )
+    )[0]?.at;
+    if (
+      last &&
+      now.getTime() - new Date(last).getTime() <
+        rules.level_up_chat_interval_s * 1000
+    )
+      return { sent: 0, waiting: latest.size };
+    // A Twitch mention needs the login; the display name when it is the same name (only the case differs).
+    const pseudo = (r: (typeof fresh)[number]) =>
+      !r.login || r.display_name.toLowerCase() === r.login
+        ? r.display_name
+        : r.login;
+    const wanted = [...latest.values()];
+    const included: typeof wanted = [];
+    let text = '';
+    if (wanted.length === 1) {
+      const r = wanted[0]!;
+      included.push(r);
+      text = rules.level_up_chat_text
+        .replaceAll('{pseudo}', pseudo(r))
+        .replaceAll('{niveau}', String(r.to_level));
+    } else {
+      // Several viewers: one grouped line, as many as fit (the others wait for the next line).
+      const parts: string[] = [];
+      for (const r of wanted) {
+        const part = `@${pseudo(r)} (niveau ${r.to_level})`;
+        const next = `Montées de niveau : ${[...parts, part].join(', ')} !`;
+        if (parts.length >= 10 || next.length > 450) break;
+        parts.push(part);
+        included.push(r);
+      }
+      text = `Montées de niveau : ${parts.join(', ')} !`;
+    }
+    const ids = included.map((r) => r.id);
+    const written = await insertAnnouncement(q, {
+      channelId,
+      now,
+      origin: 'module:level_up',
+      drafts: [
+        {
+          idempotencyKey: `levelup:${channelId}:${ids.join('-')}`.slice(0, 200),
+          mode: 'normal',
+          text: text.slice(0, 450),
+        },
+      ],
+    });
+    await settle(
+      ids,
+      written ? 'sent' : 'skipped',
+      written ? null : 'outbox_refused',
+    );
+    return {
+      sent: written ? ids.length : 0,
+      waiting: latest.size - included.length,
+    };
   }
 
   /** Viewers excluded by login (bots, from the rules) and the broadcaster. */
@@ -468,6 +642,8 @@ export class ProgressionService {
       );
     // Viewers seen again: their waiting WizeBot history, if certainly theirs.
     await this.attachReturning(q, channelId, ids);
+    // Everyone who levelled up in this cycle: one grouped chat line (never one per viewer).
+    await this.flushLevelUpChat(q, channelId, s.rules);
   }
 
   private async live(q: Queryable, channelId: string) {
@@ -520,18 +696,30 @@ export class ProgressionService {
           ],
         );
       const acc = (
-        await q.query<{ last_message_xp_at: Date | null }>(
-          'select last_message_xp_at from progression_accounts where channel_id = $1 and twitch_user_id = $2',
+        await q.query<{
+          last_message_xp_at: Date | null;
+          last_message_fp: string | null;
+        }>(
+          'select last_message_xp_at, last_message_fp from progression_accounts where channel_id = $1 and twitch_user_id = $2',
           [channelId, msg.chatter.id],
         )
       )[0];
       const now = this.now();
-      const ready =
-        !acc?.last_message_xp_at ||
-        now.getTime() - new Date(acc.last_message_xp_at).getTime() >=
-          s.rules.message_cooldown_s * 1000;
-      const long = [...text].length >= s.rules.message_min_chars;
-      const amount = ready && long && !command ? s.rules.message_xp : 0;
+      const since = acc?.last_message_xp_at
+        ? now.getTime() - new Date(acc.last_message_xp_at).getTime()
+        : Infinity;
+      const ready = since >= s.rules.message_cooldown_s * 1000;
+      // Anti-farming (docs/LEVEL_UP_V2.md § 3): a real sentence, not « aaaa » nor « ?????? », and not the same text
+      // as the last rewarded one.
+      const long =
+        [...text].length >= s.rules.message_min_chars &&
+        distinctChars(text) >= s.rules.message_min_distinct;
+      const fp = messageFingerprint(text);
+      const repeated =
+        acc?.last_message_fp === fp &&
+        since < s.rules.message_repeat_window_s * 1000;
+      const amount =
+        ready && long && !repeated && !command ? s.rules.message_xp : 0;
       // Every message is counted once (the counter WizeBot showed); only a rewarded one moves the cooldown.
       const done = await this.move(
         q,
@@ -547,16 +735,26 @@ export class ProgressionService {
         },
         s.rules,
       );
-      if (done) await this.attachReturning(q, channelId, [msg.chatter.id]);
+      if (done && amount > 0)
+        await q.query(
+          'update progression_accounts set last_message_fp = $3 where channel_id = $1 and twitch_user_id = $2',
+          [channelId, msg.chatter.id, fp],
+        );
+      if (done) {
+        await this.attachReturning(q, channelId, [msg.chatter.id]);
+        await this.flushLevelUpChat(q, channelId, s.rules);
+      }
       return !done
         ? 'replayed'
         : command
           ? 'command'
           : amount > 0
             ? 'xp'
-            : ready
-              ? 'too_short'
-              : 'cooldown';
+            : !ready
+              ? 'cooldown'
+              : !long
+                ? 'too_short'
+                : 'repeated';
     });
   }
 
@@ -629,8 +827,13 @@ export class ProgressionService {
           now,
         ],
       );
-      // A level reward: every viewer already at that level gets it now (never a second copy).
-      if (r.unlock_level !== null && r.active) {
+      // A level reward: every viewer already at that level gets it now (never a second copy) — or at the Level Up V2
+      // activation while WizeBot levels wait for their normalization (levelRewardsReady).
+      if (
+        r.unlock_level !== null &&
+        r.active &&
+        (await this.levelRewardsReady(q, channelId))
+      ) {
         const ids = await q.query<{ id: string }>(
           'select twitch_user_id as id from progression_accounts where channel_id = $1 and level >= $2',
           [channelId, r.unlock_level],
@@ -689,12 +892,30 @@ export class ProgressionService {
     return r[0]?.revoked_at === null;
   }
 
+  /**
+   * Level rewards (the badges every 10 levels) follow the level the viewer KEEPS: while attached WizeBot histories wait
+   * for the Level Up V2 normalization, a level read on the old scale (a WizeBot 135 before it becomes 50) would give a
+   * badge lost the day after — so they wait for the activation, which gives them on the recalculated levels. A channel
+   * without WizeBot history, or already on Level Up V2: given at once, as always.
+   */
+  private async levelRewardsReady(q: Queryable, channelId: string) {
+    const { rules } = await this.settings(channelId, q);
+    if (rules.level_model === 'fixed') return true;
+    return !(
+      await q.query(
+        `select 1 from progression_accounts where channel_id = $1 and imported_level is not null limit 1`,
+        [channelId],
+      )
+    ).length;
+  }
+
   private async grantLevelRewards(
     q: Queryable,
     channelId: string,
     viewerId: string,
     level: number,
   ) {
+    if (!(await this.levelRewardsReady(q, channelId))) return;
     const rewards = await q.query<{ reward_id: string; unlock_level: number }>(
       `select reward_id, unlock_level from progression_rewards
        where channel_id = $1 and active and unlock_level is not null and unlock_level <= $2`,
@@ -1459,20 +1680,38 @@ export class ProgressionService {
     q: Queryable,
     channelId: string,
     viewerId: string,
+    rules?: ProgressionRules,
   ): Promise<LevelUpNotifyMode> {
-    const r = (
-      await q.query<{ mode: LevelUpNotifyMode }>(
-        'select level_up_notify as mode from progression_viewer_prefs where channel_id = $1 and twitch_user_id = $2',
-        [channelId, viewerId],
-      )
-    )[0];
-    return r?.mode ?? 'off';
+    return (
+      (await this.chosenMode(q, channelId, viewerId)) ??
+      (rules ?? (await this.settings(channelId, q)).rules).level_up_default_mode
+    );
   }
 
-  /** The viewer's own level-up notification mode (the extension, their Twitch identity). Absent: off. */
+  private async chosenMode(q: Queryable, channelId: string, viewerId: string) {
+    return (
+      (
+        await q.query<{ mode: LevelUpNotifyMode }>(
+          'select level_up_notify as mode from progression_viewer_prefs where channel_id = $1 and twitch_user_id = $2',
+          [channelId, viewerId],
+        )
+      )[0]?.mode ?? null
+    );
+  }
+
+  /**
+   * The viewer's level-up mode (the extension, their Twitch identity): their own choice, else the channel's default
+   * (`chosen`: false). Since the reprise of 14/11/2026 the default is « sound » (Studio can change it).
+   */
   async viewerPrefs(channelId: string, viewerId: string) {
-    const mode = await this.notifyMode(this.db, channelId, viewerId);
-    return { level_up_notify: mode, level_up_sfx_opt_in: mode === 'sound' };
+    const chosen = await this.chosenMode(this.db, channelId, viewerId);
+    const mode =
+      chosen ?? (await this.settings(channelId)).rules.level_up_default_mode;
+    return {
+      level_up_notify: mode,
+      level_up_sfx_opt_in: mode === 'sound',
+      chosen: chosen !== null,
+    };
   }
 
   async setViewerPrefs(
@@ -1505,9 +1744,12 @@ export class ProgressionService {
       sound: boolean;
       created_at: Date;
       delivered_at: Date | null;
+      chat_status: string;
+      chat_reason: string | null;
+      chat_at: Date | null;
     }>(
       `select id, twitch_user_id, display_name, from_level, to_level, notify_mode, status, reason, sound, created_at,
-         delivered_at
+         delivered_at, chat_status, chat_reason, chat_at
        from progression_level_events where channel_id = $1 order by id desc limit $2`,
       [channelId, Math.min(limit, 200)],
     );
@@ -1525,6 +1767,11 @@ export class ProgressionService {
       deliveredAt: r.delivered_at
         ? new Date(r.delivered_at).toISOString()
         : null,
+      chat: {
+        status: r.chat_status,
+        reason: r.chat_reason,
+        at: r.chat_at ? new Date(r.chat_at).toISOString() : null,
+      },
     }));
   }
 
@@ -1710,9 +1957,36 @@ export class ProgressionService {
         ];
       }),
     );
+    const badges = await this.db.query<{
+      reward_id: string;
+      label: string;
+      unlock_level: number;
+      active: boolean;
+      status: string;
+      image_id: string | null;
+      owners: string;
+    }>(
+      `select r.reward_id, r.label, r.unlock_level, r.active, r.status, r.image_id,
+         (select count(*) from progression_grants g where g.channel_id = r.channel_id and g.reward_id = r.reward_id
+            and g.revoked_at is null) as owners
+       from progression_rewards r
+       where r.channel_id = $1 and r.kind = 'badge' and r.unlock_level is not null order by r.unlock_level, r.reward_id`,
+      [channelId],
+    );
+    const levels = await this.levelBuckets(this.db, channelId);
     return {
       levelModel: rules.level_model,
       normalization: rules.wizebot_normalization,
+      levels,
+      levelBadges: badges.map((b) => ({
+        id: b.reward_id,
+        label: b.label,
+        level: b.unlock_level,
+        active: b.active,
+        status: b.status,
+        image: b.image_id ? `/v1/cosmetics/images/${b.image_id}` : null,
+        owners: Number(b.owners),
+      })),
       xpPerLevel: LEVEL_V2.xpPerLevel,
       historyRows: d.history.length,
       maxWizebotLevel: d.maxLevel,
@@ -1736,10 +2010,74 @@ export class ProgressionService {
    * - a second activation is refused (never lowered twice).
    */
   async activateLevelV2(channelId: string, actor: Actor) {
+    return this.db.tx((q) => this.runActivateLevelV2(q, channelId, actor));
+  }
+
+  /**
+   * Studio's « Simuler » : the very same activation in a savepoint rolled back — the exact numbers (accounts changed,
+   * levels after, badges and titles that would be given), nothing written, nothing announced.
+   */
+  async simulateLevelV2(channelId: string, actor: Actor) {
     return this.db.tx(async (q) => {
+      await q.query('savepoint level_v2_simulation');
+      try {
+        return {
+          dry_run: true,
+          ...(await this.runActivateLevelV2(q, channelId, actor)),
+        };
+      } finally {
+        await q.query('rollback to savepoint level_v2_simulation');
+      }
+    });
+  }
+
+  private async levelBuckets(q: Queryable, channelId: string) {
+    const rows = await q.query<{ level: number }>(
+      'select level from progression_accounts where channel_id = $1',
+      [channelId],
+    );
+    const out: Record<string, number> = {};
+    for (const [a, b] of [
+      [1, 1],
+      [2, 5],
+      [6, 9],
+      [10, 19],
+      [20, 29],
+      [30, 39],
+      [40, 49],
+      [50, 1_000_000],
+    ] as const)
+      out[b > 1000 ? `${a}+` : a === b ? `${a}` : `${a}-${b}`] = rows.filter(
+        (r) => r.level >= a && r.level <= b,
+      ).length;
+    return {
+      buckets: out,
+      max: rows.reduce((m, r) => Math.max(m, r.level), 1),
+    };
+  }
+
+  private async grantCount(q: Queryable, channelId: string) {
+    return Number(
+      (
+        await q.query<{ n: string }>(
+          `select count(*) as n from progression_grants where channel_id = $1 and source = 'level'`,
+          [channelId],
+        )
+      )[0]?.n ?? 0,
+    );
+  }
+
+  private async runActivateLevelV2(
+    q: Queryable,
+    channelId: string,
+    actor: Actor,
+  ) {
+    {
       await q.query('select pg_advisory_xact_lock(hashtext($1))', [
         `level-v2:${channelId}`,
       ]);
+      const before = await this.levelBuckets(q, channelId);
+      const grantsBefore = await this.grantCount(q, channelId);
       const s = await this.settings(channelId, q);
       if (s.rules.wizebot_normalization)
         throw new ProgressionError(409, 'already_applied');
@@ -1820,16 +2158,21 @@ export class ProgressionService {
         `update progression_settings set rules = $2, updated_at = $3 where channel_id = $1`,
         [channelId, JSON.stringify(rules), now],
       );
-      // Every account reads its level on the new scale (the ones without a movement too).
+      // Every account reads its level on the new scale (the ones without a movement too); the level rewards (the
+      // badges every 10 levels) are given to whoever already reached them — never announced, never twice.
       await this.relevelAll(q, channelId, rules);
+      const after = await this.levelBuckets(q, channelId);
       return {
         applied: true,
         version: LEVEL_V2.version,
         accounts: d.accounts.length,
         changed,
         maxWizebotLevel: d.maxLevel,
+        levelsBefore: before,
+        levelsAfter: after,
+        levelRewardsGiven: (await this.grantCount(q, channelId)) - grantsBefore,
       };
-    });
+    }
   }
 
   /**

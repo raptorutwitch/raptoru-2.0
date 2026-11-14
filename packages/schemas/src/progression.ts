@@ -29,6 +29,28 @@ export const ProgressionRulesSchema = z.strictObject({
   /** A notification not shown within this delay is dropped (never an old level-up much later). */
   level_up_max_age_s: z.number().int().min(10).max(3600),
   /**
+   * The mode of a viewer who never chose one in the extension (docs/LEVEL_UP_V2.md § 5): « sound » since the reprise of
+   * 14/11/2026 (announced in chat and on stream with the sound); a viewer's own choice always wins.
+   */
+  level_up_default_mode: z.enum(['off', 'text', 'sound']),
+  /** Level Up announcements in the Twitch chat (LeCroupier_, the commands' outbox); OFF until Antoni turns them on. */
+  level_up_chat: z.boolean(),
+  /** The chat text for ONE viewer: {pseudo} and {niveau} are replaced (several viewers: one grouped line). */
+  level_up_chat_text: z
+    .string()
+    .trim()
+    .min(5)
+    .max(200)
+    .refine((t) => t.includes('{niveau}'), { message: 'missing_level' }),
+  /** At most one announcement per this delay, whole channel: the level-ups in between are grouped in the next one. */
+  level_up_chat_interval_s: z.number().int().min(5).max(3600),
+  /**
+   * Chat anti-farming: a message needs this many DIFFERENT letters or digits (« aaaa », « ????? », « 1111 » earn
+   * nothing), and the same text as the viewer's last rewarded message within `message_repeat_window_s` earns nothing.
+   */
+  message_min_distinct: z.number().int().min(1).max(20),
+  message_repeat_window_s: z.number().int().min(0).max(86_400),
+  /**
    * The frozen WizeBot normalization (set once by the activation; null before): every WizeBot history, attached now or
    * months later, gets the same level — newLevel = floor(1 + (target_max − 1) × ((L − 1) / (max_level − 1)) ^ exponent).
    */
@@ -61,6 +83,12 @@ export const DEFAULT_PROGRESSION_RULES: ProgressionRules = {
   level_up_notifications: false,
   level_up_sound_cooldown_s: 300,
   level_up_max_age_s: 120,
+  level_up_default_mode: 'sound',
+  level_up_chat: false,
+  level_up_chat_text: '@{pseudo} vient d’atteindre le niveau {niveau} !',
+  level_up_chat_interval_s: 30,
+  message_min_distinct: 3,
+  message_repeat_window_s: 600,
   wizebot_normalization: null,
   excluded_logins: [
     'lecroupier_',

@@ -281,6 +281,14 @@ export function progressionRoutes(
       handle: () => svc.levelV2Status(ch),
     },
     {
+      // The same activation, rolled back: the exact numbers, nothing written (Studio's « Simuler »).
+      method: 'POST',
+      pattern: admin('/level-v2/simulate'),
+      auth,
+      handle: ({ installation }) =>
+        mapped(() => svc.simulateLevelV2(ch, actor(installation))),
+    },
+    {
       // Once, with the typed confirmation (never a plain click).
       method: 'POST',
       pattern: admin('/level-v2/activate'),
