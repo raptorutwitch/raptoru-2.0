@@ -369,6 +369,7 @@ export interface CautionView {
     | 'checking'
     | 'quoting'
     | 'quoted'
+    | 'pooling'
     | 'confirmed'
     | 'rechecking'
     | 'releasing'
@@ -387,6 +388,12 @@ export interface CautionView {
   reason: string | null;
   error: string | null;
   money: 'none' | 'debited' | 'refunded' | 'to_verify';
+  /** Caution collective (14/11): the sign-ups' end, the cap per participant, who joined and what each paid. */
+  pool?: {
+    ends_at: string | null;
+    cap: number;
+    participants?: { login: string; share: number | null }[];
+  } | null;
   created_at: string;
 }
 
@@ -408,6 +415,7 @@ const CT_STATUS: Record<CautionView['status'], [string, string]> = {
   checking: ['Lecture Twitch en attente', ''],
   quoting: ['Lecture Twitch', ''],
   quoted: ['Devis envoyé (30 s)', ''],
+  pooling: ['Caution collective (30 s)', 'warn'],
   confirmed: ['« oui » reçu', ''],
   rechecking: ['Revérification avant paiement', ''],
   releasing: ['Payé · levée en cours', 'warn'],
@@ -423,6 +431,7 @@ export const cautionOpen = (c: CautionView) =>
     'checking',
     'quoting',
     'quoted',
+    'pooling',
     'confirmed',
     'rechecking',
     'releasing',
@@ -451,6 +460,11 @@ const CT_REASON: Record<string, string> = {
   dry_run: 'simulation (aucun appel Twitch)',
   quote_expired: 'pas de réponse en 30 s',
   cancelled: 'annulé',
+  pool_empty: 'caution collective : personne n’a rejoint',
+  pool_alone: 'caution collective : un seul participant',
+  pool_insufficient: 'caution collective : pas assez de participants solvables',
+  pool_over_cap: 'caution collective : prix au-dessus du plafond',
+  pool_cancelled_by_moderator: 'caution collective annulée par la modération',
 };
 const CT_MONEY: Record<CautionView['money'], string> = {
   none: 'aucun jeton débité',
@@ -482,15 +496,16 @@ export const toVerifyText = (n: number) => `${n} caution(s) à vérifier`;
 
 /** Une caution : le sort des Jetons se lit sur la ligne. */
 export function cautionRow(r: CautionView) {
-  const [label, tone] = CT_STATUS[r.status];
+  const [label, tone] = CT_STATUS[r.status] ?? [r.status, ''];
   const who = r.target?.name ?? r.target_input;
+  const people = r.pool?.participants ?? [];
   const money =
     r.money === 'to_verify'
       ? `<b>${esc(CT_MONEY[r.money])}</b>`
       : esc(CT_MONEY[r.money]);
   return `<button type="button" class="sx-l d-in ${r.money === 'to_verify' ? 'is-due' : ''}" data-rq="${esc(r.request_id)}">
     <time>${esc(clockS(r.created_at))}</time>
-    <span class="sx-who">${r.mode === 'dry_run' ? '<i class="sx-test">Test</i> ' : ''}${esc(r.payer.name)}</span>
+    <span class="sx-who">${r.mode === 'dry_run' ? '<i class="sx-test">Test</i> ' : ''}${esc(r.payer.name)}${r.pool ? ` <i class="sx-test">groupe · ${people.length}</i>` : ''}</span>
     <span class="sx-what">${esc(who)}${r.kind === 'mute' ? ' (mute)' : ''}${r.price !== null ? ` · ${fmt(r.price)} jetons` : ''}<small class="${r.money === 'to_verify' ? 'sx-due' : ''}">${money}${r.reason ? ` · ${esc(CT_REASON[r.reason] ?? r.reason)}` : ''}</small></span>
     <span class="sx-end"><span class="d-tag ${tone}">${label}</span></span>
   </button>`;
@@ -503,6 +518,8 @@ export function cautionDetail(r: CautionView) {
     ${kv('Pour', esc(r.target?.name ?? r.target_input))}
     ${kv('Sanction', r.kind === 'mute' ? 'Sourdine du streamer' : r.kind === 'timeout' ? 'Timeout Twitch' : '')}
     ${kv('Prix', r.price !== null ? `${fmt(r.price)} jetons` : '')}
+    ${r.pool ? kv('Caution collective', `plafond ${fmt(r.pool.cap)} jetons par personne${r.pool.ends_at ? ` · inscriptions jusqu’à ${esc(clockS(r.pool.ends_at))}` : ''}`) : ''}
+    ${r.pool ? kv('Participants', esc((r.pool.participants ?? []).map((p) => `${p.login}${p.share ? ` (${fmt(p.share)})` : ''}`).join(', ') || 'aucun')) : ''}
     ${kv('Jetons', esc(CT_MONEY[r.money]))}
     ${kv('Raison', esc(r.reason ? (CT_REASON[r.reason] ?? r.reason) : ''))}
     ${kv('Erreur', esc(r.error ?? ''))}

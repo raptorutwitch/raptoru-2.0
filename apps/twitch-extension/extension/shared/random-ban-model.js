@@ -184,25 +184,37 @@ export function resultModel(r) {
     uncertain: ['Sanction non confirmée : un modérateur vérifie', 'bad'],
     canceled: ['Annulé · remboursé', 'bad'],
   }[r.status] ?? [r.status, 'info'];
+  // 14/11: the Sniper's verdict on the machine itself, with the name predicted — green touched (the bonus only when the
+  // Core paid it), red missed, neutral while the Core has not decided (never a success announced early).
+  const aimed = r.wish ? (r.wish.name ?? r.wish.text ?? '?') : null;
   const sniper = !r.wish
     ? null
     : {
-        name: r.wish.name ?? r.wish.text ?? '?',
+        name: aimed,
         state: r.sniper,
         hit: r.sniper === 'hit' || r.sniper === 'glory_hit',
         bonus: r.sniper === 'hit' ? r.sniper_bonus || 0 : 0,
+        tone: ['hit', 'glory_hit'].includes(r.sniper)
+          ? 'hit'
+          : ['miss', 'glory', 'revoked'].includes(r.sniper)
+            ? 'miss'
+            : 'wait',
         text:
           r.sniper === 'hit'
-            ? `SNIPER ! +${fr(r.sniper_bonus)} Jetons`
+            ? `🎯 Touché : ${aimed} · +${fr(r.sniper_bonus)} Jetons`
             : r.sniper === 'glory_hit'
-              ? 'SNIPER ! pour la gloire'
-              : r.sniper === 'unresolved'
-                ? 'Pronostic à vérifier'
-                : r.sniper === 'armed'
-                  ? `Visé : ${r.wish.name ?? r.wish.text}`
-                  : ['miss', 'glory'].includes(r.sniper)
-                    ? 'Sniper raté'
-                    : '',
+              ? `🎯 Touché : ${aimed} · pour la gloire`
+              : r.sniper === 'miss'
+                ? `🎯 Raté · tu visais ${aimed}`
+                : r.sniper === 'glory'
+                  ? `🎯 Raté · tu visais ${aimed} (pour la gloire)`
+                  : r.sniper === 'unresolved'
+                    ? `🎯 « ${aimed} » · vérifié par un modérateur`
+                    : r.sniper === 'void'
+                      ? `🎯 ${aimed} · sans effet`
+                      : r.sniper === 'revoked'
+                        ? `🎯 ${aimed} · prime retirée`
+                        : `🎯 Visé : ${aimed} · verdict…`,
       };
   return { phase, who, self, text: outcome[0], tone: outcome[1], open, sniper };
 }

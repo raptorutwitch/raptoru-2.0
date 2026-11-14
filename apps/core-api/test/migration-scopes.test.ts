@@ -235,7 +235,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     const files = await readdir(DEFAULT_MIGRATIONS_DIR);
     const prod = selectMigrations(files, 'prod');
     const old = selectMigrations(files, 'prod', OLD_PROD);
-    expect(old.length).toBe(52);
+    expect(old.length).toBe(53);
     expect(prod.filter((f) => !old.includes(f))).toEqual([
       ...MAIN_CORE_LAB_MIGRATIONS,
     ]);
@@ -246,7 +246,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(70);
+    expect((await migrate(db, 'prod')).length).toBe(71);
     expect(await migrate(db, 'prod')).toEqual([]);
     for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
       expect(
@@ -301,6 +301,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     // Random Ban purchases (docs/mini-jeux/): price, series level, extension source, Sniper wish.
     '20261123130000_random_ban_purchase.sql',
     '20261124130000_cp_reward_admin.sql',
+    '20261125130000_caution_pool.sql',
   ];
   const prodBeforeWheel = PROD_MIGRATIONS.filter(
     (f) => !AFTER_25_10.includes(f),
@@ -443,7 +444,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a database migrated by the previous production selection: only the main Core files, once', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(52);
+    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(53);
     expect(await migrate(db, 'prod')).toEqual([...MAIN_CORE_LAB_MIGRATIONS]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
@@ -455,7 +456,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
     };
     expect((await migrate(db, 'staging', undefined, OLD_STAGING)).length).toBe(
-      56,
+      57,
     );
     expect(await migrate(db, 'prod')).toEqual(
       MAIN_CORE_LAB_MIGRATIONS.filter(

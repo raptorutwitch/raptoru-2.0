@@ -2640,8 +2640,8 @@ export class SpotifyService {
         current?.state === 'PLAYING' && current.track?.uri === t.uri
           ? current
           : null;
-      // Decided 09/11 for this delivery: a request a viewer paid for (points or Jetons) is never skipped by another
-      // viewer's purchase — the moderation keeps its free skip. The switch exists, it is not turned off by Core.
+      // Studio › Musique « Protéger les demandes payées » (OFF by default since 14/11): ON, a request a viewer paid for
+      // is never skipped by another viewer's purchase — the moderation keeps its free skip.
       if (request && rules.viewer_skip.protect_requests)
         throw new SpotifyError(409, 'protected_request', {
           requested_by: request.viewer_name,

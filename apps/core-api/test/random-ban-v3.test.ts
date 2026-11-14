@@ -670,7 +670,7 @@ describe('« Test Caution Random Ban » (27/10): a real streamer sanction Cautio
     ).toBe(1);
     expect((await f.studio()).active).toEqual([]); // Studio restores the whole scene at its next poll
     expect(await f.lines()).toEqual([
-      'raptoru_ est réduit au silence (Random Ban) encore 50 secondes. Le libérer coûte 1 500 jetons, @viewer3. Oui ou non ?',
+      'raptoru_ est réduit au silence (Random Ban) encore 50 secondes. Le libérer coûte 1 500 jetons, @viewer3. Oui ou non ? (!groupe : à plusieurs)',
       '@viewer3 a libéré raptoru_ pour 1 500 jetons !',
     ]); // no « 🔇 » line, no animation: only Caution's own messages
     expect((await f.rb.claimAnimation(CH, 'studio-anim')).animation).toBeNull();

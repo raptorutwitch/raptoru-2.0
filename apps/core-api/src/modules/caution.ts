@@ -10,17 +10,25 @@ import type { ModuleDefinition } from './kit.js';
 
 export interface CautionRates {
   pricePerMinute: number;
+  /** 14/11: the minute of a Random Ban timeout (its own rate; every other timeout keeps pricePerMinute). */
+  randomBanPricePerMinute: number;
   mutePricePer10s: number;
 }
 
 export const DEFAULT_CAUTION_RATES: CautionRates = {
   pricePerMinute: CAUTION.pricePerMinute,
+  randomBanPricePerMinute: CAUTION.randomBanPricePerMinute,
   mutePricePer10s: CAUTION.mutePricePer10s,
 };
 
 export function cautionRates(settings: ModuleSettings) {
   return async (q: Queryable, ch: string): Promise<CautionRates> => ({
     pricePerMinute: await settings.get(q, ch, 'caution.price_per_minute'),
+    randomBanPricePerMinute: await settings.get(
+      q,
+      ch,
+      'caution.random_ban_price_per_minute',
+    ),
     mutePricePer10s: await settings.get(q, ch, 'caution.mute_price_per_10s'),
   });
 }
@@ -47,7 +55,15 @@ export function cautionModule(
         default: CAUTION.pricePerMinute,
         min: 100,
         max: 100_000,
-        help: 'chaque minute commencée compte ; un devis garde son prix',
+        help: 'chaque minute commencée compte ; un devis garde son prix ; tout timeout sauf Random Ban (Votekick, modération…)',
+      },
+      random_ban_price_per_minute: {
+        label: 'Prix par minute d’un timeout Random Ban',
+        unit: 'Jetons',
+        default: CAUTION.randomBanPricePerMinute,
+        min: 100,
+        max: 100_000,
+        help: 'le timeout en cours est celui d’un Random Ban confirmé (prolongé depuis par la modération : prix ci-dessus)',
       },
       mute_price_per_10s: {
         label: 'Prix par 10 s de sourdine du streamer',

@@ -106,6 +106,7 @@ const REPLAY_WINDOW_MS = 90_000;
 /** The Core hands the strip this long before the reveal (service.ts SPOIL.stripLeadMs). */
 const STRIP_LEAD_MS = 3_000;
 const RESULT_HOLD_MS = 10_000;
+const SNIPER_HOLD_MS = 20_000; // a Sniper's verdict, from the moment the Core gives it
 const OPEN = ['queued', 'searching', 'timeout_requested'];
 
 export function createRandomBanGame({ document, client, module, back = null }) {
@@ -180,6 +181,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   let animating = null; // request id whose draw the machine replays
   let shown = null; // request id the machine shows (after its draw)
   let shownAt = 0;
+  let sniperSeen = null; // the Sniper state last seen on the request shown (its verdict restarts the hold)
   let flash = ''; // the message of the last action, kept a few seconds over the state's own
   let offline = false; // the last read failed: the last state stays shown, nothing can be bought
   let armedPrice = null; // the price the first click armed (a change disarms: never a price the player did not see)
@@ -244,7 +246,19 @@ export function createRandomBanGame({ document, client, module, back = null }) {
       (r) => ['queued', 'searching'].includes(r.status) && !(r.strip && played.has(r.request_id)),
     );
     const current = mine.find((r) => r.request_id === shown);
-    if (current && !open && (current.status === 'timeout_requested' || Date.now() - shownAt < RESULT_HOLD_MS))
+    // 14/11: a Sniper's verdict stays readable — held while the Core decides, then SNIPER_HOLD_MS from the verdict.
+    if (current?.wish && current.sniper !== sniperSeen) {
+      sniperSeen = current.sniper;
+      if (!['armed', undefined, null].includes(current.sniper)) shownAt = Date.now();
+    }
+    const hold = current?.wish ? SNIPER_HOLD_MS : RESULT_HOLD_MS;
+    if (
+      current &&
+      !open &&
+      (current.status === 'timeout_requested' ||
+        (current.wish && current.sniper === 'armed') ||
+        Date.now() - shownAt < hold)
+    )
       return result(current);
     // A result without a draw to replay (nobody eligible, refused, canceled): the card, for a few seconds.
     const fresh = mine.find(
@@ -468,7 +482,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
     $('rules').innerHTML = [
       'Le serveur tire au sort un viewer présent dans le chat (toi compris, avec 4 fois moins de chances).',
       'Timeout de 3 min pour un abonné, 5 min sinon. Si rien ne se passe, tu es remboursé.',
-      `Prix fixe : ${priceText(st()?.price ?? 25000)} ici et avec !rb, 3 000 points de chaîne avec la récompense.`,
+      `Prix fixe : ${priceText(st()?.price ?? 20000)} ici et avec !rb, ou en points de chaîne avec la récompense Random Ban.`,
       st()?.charges?.max > 0
         ? `${st().charges.max} charges au plus, communes à l’extension, !rb et aux points de chaîne : un Random Ban lancé en utilise une, une charge revient toutes les ${Math.round(st().charges.recharge_ms / 60_000)} min.`
         : 'Aucune limite de charges pour le moment.',

@@ -137,3 +137,30 @@ droits Twitch LeCroupier\_ `moderator:manage:banned_users` et raptoru\_ `moderat
 3. **Activation en Production avec la bascule économique** (Jetons sur le Wallet Raptoru) : d'ici là, déployée
    mais OFF (`CAUTION_CHAT=false`, `CAUTION=false`). Révision du 23/10 : SAMMI est débranché depuis la bascule, aucune
    Caution n'est active en attendant. Prochaine étape : validation Lab (§ 7.1).
+
+## 9. Caution collective et tarif Random Ban (14/11/2026)
+
+**Tarifs.** `caution.price_per_minute` (1 000) reste le tarif de **tout** timeout (Votekick, modération, AutoMod…).
+Un timeout Random Ban a son propre tarif, `caution.random_ban_price_per_minute` (**3 000** par minute commencée) :
+il s'applique quand le timeout lu sur Twitch est celui d'un Random Ban confirmé (fin à une minute près). Prolongé
+depuis par la modération : tarif général. Le mute du streamer garde son tarif par 10 s. Le devis garde son prix
+jusqu'au débit (inchangé).
+
+**Caution collective.** Le devis se termine par « Oui ou non ? (!groupe : à plusieurs) ».
+
+| Étape                   | Règle                                                                                                                                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `!groupe` (ou `groupe`) | seulement le payeur, pendant son devis ; la réponse individuelle est fermée (jamais deux paiements)                                                                                                                                                                                  |
+| Ouverture               | 30 s exactement, horloge du Core ; plafond annoncé = ⌈devis ÷ 2⌉ jetons par personne ; rien n'est débité                                                                                                                                                                             |
+| `!oui`                  | inscription gratuite, une par compte (rejouée : rien), silencieuse ; le `!` est obligatoire (un « oui » nu reste à la Roue du Sub) ; la cible ne peut pas payer                                                                                                                      |
+| `!non`                  | retire son inscription avant la clôture                                                                                                                                                                                                                                              |
+| `!annuler`              | modérateur ou streamer : annule la cagnotte (rien n'était débité)                                                                                                                                                                                                                    |
+| Clôture                 | par le Core (balayage à chaque message ou passage du bot) ; < 2 participants : annulée, aucun débit                                                                                                                                                                                  |
+| Timeout                 | le bot relit Twitch, **prix réel** recalculé sur le temps restant (taux du devis), partagé au jeton près (les premiers inscrits paient 1 de plus si besoin) ; un participant sans assez de jetons est écarté et les parts recalculées, toujours ≤ plafond ; sinon annulée sans débit |
+| Débit                   | tous ou aucun (un savepoint), une interaction Wallet par participant ; puis la levée habituelle                                                                                                                                                                                      |
+| Échec certain           | chaque participant remboursé une fois ; « incertain » : à vérifier, comme avant                                                                                                                                                                                                      |
+| Mute du streamer        | même cagnotte, payée et terminée à la clôture (pas d'appel Twitch)                                                                                                                                                                                                                   |
+
+Studio › Sanctions › Caution : statut « Caution collective (30 s) », participants et parts dans le détail, réglage du
+tarif Random Ban. Migrations additives `20261125130000_caution_pool.sql` (Lab : `20261125120000_caution_pool_lab.sql`).
+Tests : `caution-pool.test.ts`, `caution.integration.test.ts` (deux Cores, PostgreSQL réel).

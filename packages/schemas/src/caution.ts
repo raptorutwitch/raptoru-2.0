@@ -15,6 +15,10 @@ export const CAUTION_EXEC = {
   releaseLeaseMs: 30_000,
   /** Reads that never reported (executor lost before any debit): offered again, at most this many times. */
   maxAttempts: 3,
+  /** Caution collective (14/11): `!groupe` opens 30 s of free sign-ups (`!oui`), closed by Core (server time). */
+  poolMs: 30_000,
+  /** At least this many participants; each pays at most the cap told at the opening: ceil(quote / poolMin). */
+  poolMin: 2,
   /** `!caution` alone: one help answer per viewer at most every 30 s. */
   helpCooldownMs: 30_000,
 } as const;
@@ -23,6 +27,7 @@ export const CautionStatus = z.enum([
   'checking', // waiting for the executor: target and sanction to read
   'quoting', // the executor reads Twitch
   'quoted', // price told, waiting for the payer's `oui` / `non`
+  'pooling', // caution collective (14/11): 30 s of free sign-ups with `!oui`, nothing debited before the closing
   'confirmed', // `oui` received, waiting for the executor's re-check (nothing debited yet)
   'rechecking', // the executor re-reads the sanction (nothing debited yet)
   'releasing', // DEBITED, the executor lifts the timeout
@@ -39,6 +44,7 @@ export const CAUTION_OPEN: readonly CautionStatus[] = [
   'checking',
   'quoting',
   'quoted',
+  'pooling',
   'confirmed',
   'rechecking',
   'releasing',

@@ -237,7 +237,52 @@ describe('the stage and the history', () => {
       sniper_bonus: 2000,
     });
     expect(hit.sniper).toMatchObject({ hit: true, bonus: 2000 });
-    expect(hit.sniper.text).toMatch(/SNIPER ! \+2.000 Jetons/);
+    expect(hit.sniper).toMatchObject({ tone: 'hit' });
+    expect(hit.sniper.text).toMatch(/^🎯 Touché : Pika · \+2.000 Jetons$/);
+    const miss = resultModel({
+      ...base,
+      status: 'confirmed',
+      wish: { id: '1', name: 'Pika' },
+      sniper: 'miss',
+    });
+    expect(miss.sniper).toMatchObject({
+      hit: false,
+      tone: 'miss',
+      text: '🎯 Raté · tu visais Pika',
+    });
+    const gloryMiss = resultModel({
+      ...base,
+      status: 'confirmed',
+      wish: { id: '1', name: 'Pika' },
+      sniper: 'glory',
+    });
+    expect(gloryMiss.sniper.text).toBe(
+      '🎯 Raté · tu visais Pika (pour la gloire)',
+    );
+    const gloryHit = resultModel({
+      ...base,
+      status: 'confirmed',
+      wish: { id: '1', name: 'Pika' },
+      sniper: 'glory_hit',
+    });
+    expect(gloryHit.sniper).toMatchObject({
+      hit: true,
+      bonus: 0,
+      tone: 'hit',
+      text: '🎯 Touché : Pika · pour la gloire',
+    });
+    // Not decided yet (the target may already show): never a success, never a failure.
+    const armed = resultModel({
+      ...base,
+      status: 'timeout_requested',
+      wish: { id: '1', name: 'Pika' },
+      sniper: 'armed',
+    });
+    expect(armed.sniper).toMatchObject({
+      hit: false,
+      tone: 'wait',
+      text: '🎯 Visé : Pika · verdict…',
+    });
     const un = resultModel({
       ...base,
       status: 'confirmed',
@@ -247,7 +292,8 @@ describe('the stage and the history', () => {
     expect(un.sniper).toMatchObject({
       hit: false,
       name: 'Pikka',
-      text: 'Pronostic à vérifier',
+      tone: 'wait',
+      text: '🎯 « Pikka » · vérifié par un modérateur',
     });
   });
   it('a history line: who, who was drawn, the result, the price, the Sniper', () => {

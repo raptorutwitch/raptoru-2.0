@@ -184,7 +184,7 @@ describe('Caution: the normal payment', () => {
       money: 'debited',
     });
     expect(await l.replies()).toEqual([
-      'viewer2 est banni encore 8 minutes. Le libérer coûte 8 000 jetons, @viewer1. Oui ou non ?',
+      'viewer2 est banni encore 8 minutes. Le libérer coûte 8 000 jetons, @viewer1. Oui ou non ? (!groupe : à plusieurs)',
       '@viewer1 a libéré viewer2 pour 8 000 jetons !',
     ]);
     expect(await l.ledger()).toEqual([{ kind: 'debit', amount: -8000 }]);
@@ -204,7 +204,7 @@ describe('Caution: the normal payment', () => {
       'Lève le ban de quelqu’un en payant pour lui - !caution "pseudo"',
       'viewer1, tu ne peux pas payer ta propre caution',
       expect.stringContaining(
-        'Le libérer coûte 8 000 jetons, @viewer1. Oui ou non ?',
+        'Le libérer coûte 8 000 jetons, @viewer1. Oui ou non ? (!groupe : à plusieurs)',
       ),
       'Caution annulée par viewer1. Aucun jeton débité.',
     ]);
@@ -672,7 +672,7 @@ describe('Caution: the broadcaster’s Votekick mute', () => {
     });
     // 27/10: an OBS mute costs 300 Jetons per started 10 s (65 s → 7 × 300).
     expect((await l.replies()).at(-1)).toBe(
-      'raptoru_ est réduit au silence (Votekick) encore 65 secondes. Le libérer coûte 2 100 jetons, @viewer3. Oui ou non ?',
+      'raptoru_ est réduit au silence (Votekick) encore 65 secondes. Le libérer coûte 2 100 jetons, @viewer3. Oui ou non ? (!groupe : à plusieurs)',
     );
     expect((await l.say(OTHER, 'oui')).outcome).toBe('released');
     expect(m.ended).toEqual(['mute:vk-1']);
@@ -770,7 +770,7 @@ describe('Caution: the streamer’s OBS mutes — Votekick and Random Ban (V3, 2
     const t = await two(null, 60_000);
     await t.ask('!caution raptoru_');
     expect((await t.l.replies()).at(-1)).toBe(
-      'raptoru_ est réduit au silence (Random Ban) encore 60 secondes. Le libérer coûte 1 800 jetons, @viewer3. Oui ou non ?',
+      'raptoru_ est réduit au silence (Random Ban) encore 60 secondes. Le libérer coûte 1 800 jetons, @viewer3. Oui ou non ? (!groupe : à plusieurs)',
     );
     t.l.core.clock.advance(5_000); // the price is the quote's
     expect((await t.l.say(OTHER, 'oui')).outcome).toBe('released');
