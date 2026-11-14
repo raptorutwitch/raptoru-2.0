@@ -222,7 +222,7 @@ export function createMachine(document, { reduced = false } = {}) {
       if (!target) $('name').textContent = '';
       status(m.text, m.tone);
       const sn = m.sniper;
-      badge(sn?.text || null, sn?.hit ? 'hit' : '');
+      badge(sn?.text || null, sn?.tone ?? '');
     },
     /** A Sniper hit: the sight turns green and closes in — once (the caller remembers it). */
     sniped() {

@@ -517,10 +517,21 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--mg-dim);
-  font-size: calc(11 * var(--u));
+  font-size: calc(12 * var(--u));
   font-weight: 900;
   translate: -50% 0;
   white-space: nowrap;
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rbm__badge[data-tone='miss'] {
+  background: rgba(255, 70, 90, 0.92);
+  color: #fff;
+}
+.rbm__badge[data-tone='wait'] {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 .rbm__badge[hidden] {
   display: none;
