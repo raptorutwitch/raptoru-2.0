@@ -268,7 +268,15 @@ describe.skipIf(!isLocal)('Caution on a real Postgres (two Cores)', () => {
     const { channel, A, B, msg, n, quote } = await twoCores();
     const people = ['21', '22', '23'].map(payer);
     for (const p of people)
-      await editWallet(a, clock.now(), channel, p.id, 'set', { tokens: 10_000 }, 'test');
+      await editWallet(
+        a,
+        clock.now(),
+        channel,
+        p.id,
+        'set',
+        { tokens: 10_000 },
+        'test',
+      );
     const opener = payer('20');
     const id = await quote(opener);
     const open = await Promise.all([
@@ -285,12 +293,21 @@ describe.skipIf(!isLocal)('Caution on a real Postgres (two Cores)', () => {
       ]),
     );
     expect(
-      await n('select count(*) as n from caution_pool where request_id = $1', [id]),
+      await n('select count(*) as n from caution_pool where request_id = $1', [
+        id,
+      ]),
     ).toBe(3);
     clock.advance(30_000);
     const claim = (c: typeof A) =>
-      c.claim(channel, { ...EXEC, can_read: true, can_release: true, missing: [] });
-    const jobs = (await Promise.all([claim(A), claim(B)])).map((x) => x.job).filter(Boolean);
+      c.claim(channel, {
+        ...EXEC,
+        can_read: true,
+        can_release: true,
+        missing: [],
+      });
+    const jobs = (await Promise.all([claim(A), claim(B)]))
+      .map((x) => x.job)
+      .filter(Boolean);
     expect(jobs).toHaveLength(1);
     const rep = {
       ...EXEC,
@@ -300,16 +317,29 @@ describe.skipIf(!isLocal)('Caution on a real Postgres (two Cores)', () => {
         ends_at: new Date(clock.now().getTime() + 3 * 60_000).toISOString(),
       },
     };
-    const [r1, r2] = await Promise.all([A.recheck(id, rep), B.recheck(id, rep)]);
+    const [r1, r2] = await Promise.all([
+      A.recheck(id, rep),
+      B.recheck(id, rep),
+    ]);
     expect(r1).toEqual({ proceed: true, target_id: TARGET.id });
     expect(r2).toEqual(r1);
     const debits = await a.query<{ viewer_id: string; amount: string }>(
       `select viewer_id, amount from lab_wallet_ledger where module_id = 'caution' and kind = 'debit' and channel_id = $1`,
       [channel],
     );
-    expect(debits.map((d) => Number(d.amount)).sort()).toEqual([-1000, -1000, -1000]);
-    const fail = { ...EXEC, attempt_id: jobs[0]!.attempt_id, event: 'not_applied' as const };
-    await Promise.all([A.result(id, fail), B.result(id, fail), A.result(id, fail)]);
+    expect(debits.map((d) => Number(d.amount)).sort()).toEqual([
+      -1000, -1000, -1000,
+    ]);
+    const fail = {
+      ...EXEC,
+      attempt_id: jobs[0]!.attempt_id,
+      event: 'not_applied' as const,
+    };
+    await Promise.all([
+      A.result(id, fail),
+      B.result(id, fail),
+      A.result(id, fail),
+    ]);
     expect(
       await n(
         `select count(*) as n from lab_wallet_ledger where module_id = 'caution' and kind = 'refund' and channel_id = $1`,

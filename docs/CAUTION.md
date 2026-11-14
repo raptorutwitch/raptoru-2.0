@@ -148,18 +148,18 @@ jusqu'au débit (inchangé).
 
 **Caution collective.** Le devis se termine par « Oui ou non ? (!groupe : à plusieurs) ».
 
-| Étape | Règle |
-| --- | --- |
-| `!groupe` (ou `groupe`) | seulement le payeur, pendant son devis ; la réponse individuelle est fermée (jamais deux paiements) |
-| Ouverture | 30 s exactement, horloge du Core ; plafond annoncé = ⌈devis ÷ 2⌉ jetons par personne ; rien n'est débité |
-| `!oui` | inscription gratuite, une par compte (rejouée : rien), silencieuse ; le `!` est obligatoire (un « oui » nu reste à la Roue du Sub) ; la cible ne peut pas payer |
-| `!non` | retire son inscription avant la clôture |
-| `!annuler` | modérateur ou streamer : annule la cagnotte (rien n'était débité) |
-| Clôture | par le Core (balayage à chaque message ou passage du bot) ; < 2 participants : annulée, aucun débit |
-| Timeout | le bot relit Twitch, **prix réel** recalculé sur le temps restant (taux du devis), partagé au jeton près (les premiers inscrits paient 1 de plus si besoin) ; un participant sans assez de jetons est écarté et les parts recalculées, toujours ≤ plafond ; sinon annulée sans débit |
-| Débit | tous ou aucun (un savepoint), une interaction Wallet par participant ; puis la levée habituelle |
-| Échec certain | chaque participant remboursé une fois ; « incertain » : à vérifier, comme avant |
-| Mute du streamer | même cagnotte, payée et terminée à la clôture (pas d'appel Twitch) |
+| Étape                   | Règle                                                                                                                                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `!groupe` (ou `groupe`) | seulement le payeur, pendant son devis ; la réponse individuelle est fermée (jamais deux paiements)                                                                                                                                                                                  |
+| Ouverture               | 30 s exactement, horloge du Core ; plafond annoncé = ⌈devis ÷ 2⌉ jetons par personne ; rien n'est débité                                                                                                                                                                             |
+| `!oui`                  | inscription gratuite, une par compte (rejouée : rien), silencieuse ; le `!` est obligatoire (un « oui » nu reste à la Roue du Sub) ; la cible ne peut pas payer                                                                                                                      |
+| `!non`                  | retire son inscription avant la clôture                                                                                                                                                                                                                                              |
+| `!annuler`              | modérateur ou streamer : annule la cagnotte (rien n'était débité)                                                                                                                                                                                                                    |
+| Clôture                 | par le Core (balayage à chaque message ou passage du bot) ; < 2 participants : annulée, aucun débit                                                                                                                                                                                  |
+| Timeout                 | le bot relit Twitch, **prix réel** recalculé sur le temps restant (taux du devis), partagé au jeton près (les premiers inscrits paient 1 de plus si besoin) ; un participant sans assez de jetons est écarté et les parts recalculées, toujours ≤ plafond ; sinon annulée sans débit |
+| Débit                   | tous ou aucun (un savepoint), une interaction Wallet par participant ; puis la levée habituelle                                                                                                                                                                                      |
+| Échec certain           | chaque participant remboursé une fois ; « incertain » : à vérifier, comme avant                                                                                                                                                                                                      |
+| Mute du streamer        | même cagnotte, payée et terminée à la clôture (pas d'appel Twitch)                                                                                                                                                                                                                   |
 
 Studio › Sanctions › Caution : statut « Caution collective (30 s) », participants et parts dans le détail, réglage du
 tarif Random Ban. Migrations additives `20261125130000_caution_pool.sql` (Lab : `20261125120000_caution_pool_lab.sql`).

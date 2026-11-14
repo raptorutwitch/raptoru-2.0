@@ -625,7 +625,8 @@ export class CautionService {
       if (list.length < CAUTION_EXEC.poolMin)
         return { ok: false, reason: 'pool_insufficient' };
       shares = poolShares(price, list.length);
-      if (shares[0]! > r.pool_cap!) return { ok: false, reason: 'pool_over_cap' };
+      if (shares[0]! > r.pool_cap!)
+        return { ok: false, reason: 'pool_over_cap' };
       const poor: string[] = [];
       for (const [i, p] of list.entries())
         if (
