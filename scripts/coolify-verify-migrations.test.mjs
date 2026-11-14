@@ -28,6 +28,8 @@ const ROOT =
 const pg = createRequire(join(ROOT, 'apps/core-api/package.json'))('pg');
 const CAUTION = '20261105130000_caution.sql';
 const VOTEKICK = '20261106130000_votekick.sql';
+// Caution collective (14/11): alters caution_requests — it goes with the caution file in this scenario.
+const POOL = '20261125130000_caution_pool.sql';
 // Spotify V2 (24/10): a file made only of ALTER TABLE (cmd_steps origin widened to « music »).
 const MUSIC = '20261108140000_cmd_steps_music_lab.sql';
 const NAME = `raptoru-verify-test-${process.pid}`;
@@ -40,6 +42,7 @@ const beforeDir = join(tmp, 'before');
 cpSync(allDir, beforeDir, { recursive: true });
 rmSync(join(beforeDir, CAUTION));
 rmSync(join(beforeDir, VOTEKICK));
+rmSync(join(beforeDir, POOL));
 // The database as Production had it before the Spotify GO's second file: everything but the music origin.
 const hasMusic = readdirSync(allDir).includes(MUSIC);
 const beforeMusicDir = join(tmp, 'before-music');
@@ -138,7 +141,7 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
   it('absent: refused, nothing written (no table, nothing recorded)', async () => {
     const db = await database();
     const before = await recorded(db);
-    const r = db.verify([CAUTION, VOTEKICK]);
+    const r = db.verify([CAUTION, VOTEKICK, POOL]);
     assert.equal(r.code, 1);
     assert.equal(r.ok, false);
     assert.match(r.problems.join(), /caution_requests absent/);
@@ -158,7 +161,7 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
       'alter table caution_requests alter column channel_id type varchar(40)',
     );
     const before = await recorded(db);
-    const r = db.verify([CAUTION, VOTEKICK]);
+    const r = db.verify([CAUTION, VOTEKICK, POOL]);
     assert.equal(r.ok, false);
     assert.match(r.problems.join(), /votekick_one_mute absent/);
     assert.match(r.problems.join(), /caution_requests différent/);
@@ -177,7 +180,7 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
   it('partial: only one of the two files applied → refused for the other one', async () => {
     const db = await database();
     await db.exec(sql(CAUTION));
-    const r = db.verify([CAUTION, VOTEKICK]);
+    const r = db.verify([CAUTION, VOTEKICK, POOL]);
     assert.equal(r.ok, false);
     assert.deepEqual(r.conforming, [CAUTION]);
     assert.match(r.problems.join(), /votekick/);
@@ -187,21 +190,23 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
 
   it('pre-applied by hand (as on 23/10): conforming, then recorded by the migrator with their checksum', async () => {
     const db = await database();
-    await db.exec(`begin; ${sql(CAUTION)} ${sql(VOTEKICK)} commit;`);
-    const r = db.verify([CAUTION, VOTEKICK]);
+    await db.exec(
+      `begin; ${sql(CAUTION)} ${sql(VOTEKICK)} ${sql(POOL)} commit;`,
+    );
+    const r = db.verify([CAUTION, VOTEKICK, POOL]);
     assert.equal(r.code, 0);
     assert.equal(r.ok, true, r.problems.join());
-    assert.deepEqual(r.conforming, [CAUTION, VOTEKICK]);
-    assert.deepEqual(r.applied, [CAUTION, VOTEKICK]);
+    assert.deepEqual(r.conforming, [CAUTION, VOTEKICK, POOL]);
+    assert.deepEqual(r.applied, [CAUTION, VOTEKICK, POOL]);
     const rows = await db.rows(
       `select name, checksum from schema_migrations where name in ('${CAUTION}', '${VOTEKICK}')`,
     );
     assert.equal(rows.length, 2);
     assert.ok(rows.every((x) => /^[0-9a-f]{64}$/.test(x.checksum)));
     // Run again (a redeploy): already recorded, nothing applied.
-    const again = db.verify([CAUTION, VOTEKICK]);
+    const again = db.verify([CAUTION, VOTEKICK, POOL]);
     assert.equal(again.ok, true);
-    assert.deepEqual(again.recorded, [CAUTION, VOTEKICK]);
+    assert.deepEqual(again.recorded, [CAUTION, VOTEKICK, POOL]);
     assert.deepEqual(again.applied, []);
     await db.close();
   });
@@ -212,20 +217,22 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
       cwd: ROOT,
       env: { ...process.env, DATABASE_URL: db.url, MIGRATIONS_DIR: allDir },
     });
-    const r = db.verify([CAUTION, VOTEKICK]);
+    const r = db.verify([CAUTION, VOTEKICK, POOL]);
     assert.equal(r.ok, true);
-    assert.deepEqual(r.recorded, [CAUTION, VOTEKICK]);
+    assert.deepEqual(r.recorded, [CAUTION, VOTEKICK, POOL]);
     assert.deepEqual(r.applied, []);
     await db.close();
   });
 
   it('recorded with another checksum: refused', async () => {
     const db = await database();
-    await db.exec(`begin; ${sql(CAUTION)} ${sql(VOTEKICK)} commit;`);
+    await db.exec(
+      `begin; ${sql(CAUTION)} ${sql(VOTEKICK)} ${sql(POOL)} commit;`,
+    );
     await db.exec(
       `insert into schema_migrations (name, checksum) values ('${CAUTION}', 'x'), ('${VOTEKICK}', 'y')`,
     );
-    const r = db.verify([CAUTION, VOTEKICK]);
+    const r = db.verify([CAUTION, VOTEKICK, POOL]);
     assert.equal(r.ok, false);
     assert.match(r.problems.join(), /autre empreinte/);
     await db.close();

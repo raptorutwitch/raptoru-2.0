@@ -16,7 +16,8 @@
 //   there; missing, the replay would change it).
 // - files applied together that build on each other (one creates a table, a later one alters it — Roue du Sub V2): when
 //   one of them does not conform alone, ALL the pending files are replayed in order, as the bundle was applied; they
-//   conform together when that replay recreates exactly what public holds and changes nothing in it.
+//   conform together when that replay recreates exactly what public holds and changes nothing in it. A file that cannot
+//   be replayed alone (it alters a table an earlier pending file creates) does not conform alone: the bundle decides.
 //   Then only the Core's migrator runs; it must apply exactly those files, recorded with their checksum.
 // A file of the migrator's scope that is neither recorded nor expected stops everything before any write.
 
@@ -103,7 +104,7 @@ export async function verifyMigrations({
         throw rollback;
       });
     } catch (e) {
-      if (e !== rollback) throw e;
+      if (e !== rollback) return [`rejeu impossible (${e.message})`];
     }
     return rollback.diff;
   };
