@@ -23,7 +23,8 @@ message, import) : un message ou un relevé renvoyé ne paie jamais deux fois. L
 défaut : niveau 10 ≈ 2 000 XP, niveau 50 ≈ 30 000, niveau 135 ≈ 152 000). Changer la courbe recalcule les niveaux,
 jamais l'XP.
 
-**Level Up V2** (1 000 XP par niveau, normalisation WizeBot figée, annonces par viewer) : prêt, non actif —
+**Level Up V2** (1 000 XP par niveau, normalisation WizeBot figée, annonces chat et stream groupées, anti-farm du chat,
+badges tous les 10 niveaux, « Mon niveau » dans l'extension) : prêt en Lab, non actif en Production —
 [LEVEL_UP_V2.md](LEVEL_UP_V2.md).
 
 ## Titres et badges

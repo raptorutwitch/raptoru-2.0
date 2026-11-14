@@ -538,7 +538,7 @@ export class ProgressionService {
         : r.login;
     const wanted = [...latest.values()];
     const included: typeof wanted = [];
-    let text = '';
+    let text: string;
     if (wanted.length === 1) {
       const r = wanted[0]!;
       included.push(r);

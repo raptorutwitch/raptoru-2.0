@@ -18,7 +18,9 @@ export interface Rules {
 
 /** The rules Studio may send: the level model and the normalization change only through the guarded activation. */
 export const editableRules = (r: Rules) => {
-  const { level_model: _m, wizebot_normalization: _n, ...rest } = r;
+  const rest = { ...r };
+  delete rest.level_model;
+  delete rest.wizebot_normalization;
   return rest;
 };
 

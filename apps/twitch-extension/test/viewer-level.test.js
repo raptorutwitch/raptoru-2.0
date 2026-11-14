@@ -1,3 +1,4 @@
+/* global Response */
 import { describe, expect, it, vi } from 'vitest';
 import { createClient } from '../extension/shared/api.js';
 import { viewerLevelSummary } from '../extension/shared/viewer-level.js';
@@ -22,7 +23,14 @@ describe('Mon niveau', () => {
     });
     // A new viewer: level 1, nothing yet; no badge line.
     expect(
-      viewerLevelSummary({ enabled: true, level: 1, xp: 0, levelXp: 0, nextLevelXp: 1000, badges: [] }),
+      viewerLevelSummary({
+        enabled: true,
+        level: 1,
+        xp: 0,
+        levelXp: 0,
+        nextLevelXp: 1000,
+        badges: [],
+      }),
     ).toMatchObject({ title: 'Niveau 1', ratio: 0, badges: '' });
     // The progression off, or no answer: nothing to show.
     expect(viewerLevelSummary({ enabled: false, level: 3 })).toBeNull();
@@ -33,10 +41,13 @@ describe('Mon niveau', () => {
     const urls = [];
     const fetchImpl = vi.fn(async (url, init) => {
       urls.push([init.method, String(url)]);
-      return new Response(JSON.stringify({ ok: true, enabled: true, level: 2 }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({ ok: true, enabled: true, level: 2 }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
     });
     const api = createClient({
       getToken: () => 'tok',
@@ -44,7 +55,9 @@ describe('Mon niveau', () => {
       demoMode: false,
       fetchImpl,
     });
-    await expect(api.getViewerProgression()).resolves.toMatchObject({ level: 2 });
+    await expect(api.getViewerProgression()).resolves.toMatchObject({
+      level: 2,
+    });
     expect(urls).toEqual([['GET', '/ext-lab/api/viewer/progression']]);
   });
 });

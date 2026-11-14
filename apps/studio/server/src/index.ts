@@ -1571,7 +1571,13 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
             origin: `http://${host}:${port}`,
             // The local Lab on the main Core keeps its own token, sound and volume (lab-main/level-up).
             dir: labModuleDir('level-up'),
-            playerDir: join(REPO_ROOT, 'apps', 'studio', 'server', 'level-up-player'),
+            playerDir: join(
+              REPO_ROOT,
+              'apps',
+              'studio',
+              'server',
+              'level-up-player',
+            ),
           })
         : null),
     labPanel:
