@@ -14,6 +14,7 @@ import {
 } from './notifications.js';
 import { createEmoteAccess } from './emote-access.js';
 import { walletPaymentMethods } from './wallet-payment.js';
+import { viewerLevelBlock } from './viewer-level.js';
 import {
   createWalletFace,
   createCurrencySwitch,
@@ -240,6 +241,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     : response?.level_up_sfx_opt_in === true ? 'sound' : 'off');
   let viewerPreferenceError = false;
   let viewerPreferenceRequest = 0;
+  // Level Up V2: « Mon niveau » (GET /viewer/progression), read when the preferences open.
+  let viewerProgression = null;
+  let viewerProgressionState = 'idle'; // idle | loading | loaded | error
   let tutorialStep = 0;
   let tutorialAutoOpened = false;
   let tutorialDisabled = false;
@@ -889,6 +893,31 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     viewerPreferenceValue = 'off';
     viewerPreferenceError = false;
     viewerPreferenceRequest += 1;
+    viewerProgression = null;
+    viewerProgressionState = 'idle';
+  }
+
+  function loadViewerProgression() {
+    if (!viewerPreferencesOpen || state?.identity_shared !== true || viewerProgressionState !== 'idle') return;
+    if (typeof client?.getViewerProgression !== 'function') {
+      viewerProgressionState = 'error';
+      return;
+    }
+    viewerProgressionState = 'loading';
+    const identity = viewerPreferenceIdentity;
+    void Promise.resolve()
+      .then(() => client.getViewerProgression())
+      .then((response) => {
+        if (identity !== viewerPreferenceIdentity) return;
+        viewerProgression = response;
+        viewerProgressionState = 'loaded';
+        if (viewerPreferencesOpen) renderPreservingViewport();
+      })
+      .catch(() => {
+        if (identity !== viewerPreferenceIdentity) return;
+        viewerProgressionState = 'error';
+        if (viewerPreferencesOpen) renderPreservingViewport();
+      });
   }
 
   function loadViewerPreference() {
@@ -958,6 +987,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function viewerPreferencesPanel() {
     syncViewerPreferenceIdentity();
     loadViewerPreference();
+    loadViewerProgression();
     const panel = el('section', 'jdm-viewer-preferences');
     panel.id = 'jdm-viewer-preferences';
     panel.setAttribute('role', 'dialog');
@@ -1024,10 +1054,17 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     refreshAction.type = 'button';
     refreshAction.addEventListener('click', async () => {
       refreshAction.disabled = true;
+      viewerProgressionState = 'idle'; // « Mon niveau » is read again
       try { await onRefresh?.(); } catch { /* le polling reprendra */ }
       refreshAction.disabled = false;
     });
-    panel.append(header, option, ...choices, refreshAction);
+    const level = state?.identity_shared === true
+      ? [viewerLevelBlock(el, viewerProgression, {
+        loading: viewerProgressionState === 'loading',
+        error: viewerProgressionState === 'error',
+      })]
+      : [];
+    panel.append(header, ...level, option, ...choices, refreshAction);
     return panel;
   }
 

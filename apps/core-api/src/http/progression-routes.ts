@@ -67,6 +67,26 @@ export function progressionViewerPrefsRoutes(
           parse(ViewerPrefsRequest, body),
         ),
     },
+    {
+      // The extension's « Mon niveau »: the JWT viewer's level and the way to the next one (never someone else's).
+      method: 'GET',
+      pattern: /^\/v1\/lab\/progression\/me\/(\d{1,32})$/,
+      auth: 'studio',
+      handle: async ({ params }) => {
+        const v = await svc.viewer(channelId, params[0]!);
+        return {
+          enabled: v.enabled,
+          level: v.level,
+          xp: v.xp,
+          levelXp: v.levelXp,
+          nextLevelXp: v.nextLevelXp,
+          rank: v.rank,
+          badges: v.inventory
+            .filter((i) => i.kind === 'badge')
+            .map((i) => ({ id: i.id, label: i.label, image: i.image })),
+        };
+      },
+    },
   ];
 }
 

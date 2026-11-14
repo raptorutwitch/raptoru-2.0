@@ -50,6 +50,7 @@ const { RaffleRuntime } = await import('../src/raffle-lab/runtime.js');
 const { ProgressionRelay } = await import('../src/progression/relay.js');
 const { CosmeticsRelay } = await import('../src/cosmetics/relay.js');
 const { ChallengesRelay } = await import('../src/challenges/relay.js');
+const { LevelUpRuntime } = await import('../src/level-up/runtime.js');
 const { loadOrCreateInstallation } =
   await import('../src/prod-transport/installation.js');
 const { prodCoreClient } = await import('../src/prod-transport/core-client.js');
@@ -359,6 +360,15 @@ const studio = createStudioServer({
   progression: new ProgressionRelay({ core: labCore, environment: 'lab' }),
   cosmetics: new CosmeticsRelay({ core: labCore, environment: 'lab' }),
   challenges: new ChallengesRelay({ core: labCore, environment: 'lab' }),
+  // Level Up V2: its OBS source, on this Core (docs/LEVEL_UP_V2.md).
+  levelUp: await LevelUpRuntime.create({
+    core: labCore,
+    environment: 'lab',
+    origin,
+    dir: join(dir, 'level-up'),
+    playerDir: join(import.meta.dirname, '..', 'level-up-player'),
+    claimEveryMs: 500,
+  }),
 });
 
 // The specs' own door to the Lab Core (a simulated live, fixtures): a test-only shim speaking their /v1/lab/* vocabulary,

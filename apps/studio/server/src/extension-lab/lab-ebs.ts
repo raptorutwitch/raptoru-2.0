@@ -1600,6 +1600,25 @@ export class LabEbs {
         );
       }
     }
+    // Level Up V2: « Mon niveau » — the Lab Core's level and XP of the viewer of the token (never another one).
+    if (
+      method === 'GET' &&
+      path.split('?')[0] === '/viewer/progression' &&
+      this.labCore
+    ) {
+      try {
+        return this.ok(
+          await this.labCore<Json>(
+            `/v1/lab/progression/me/${caller.identity.twitchUserId}`,
+          ),
+        );
+      } catch (e) {
+        return this.fail(
+          (e as { status?: number }).status ?? 503,
+          (e as Error).message,
+        );
+      }
+    }
     // Level Up V2: the Lab Core keeps the viewer's mode (as the main Core does), for the viewer of the token.
     if (path.split('?')[0] === '/viewer/preferences' && this.labCore) {
       const mode = body?.level_up_notify;

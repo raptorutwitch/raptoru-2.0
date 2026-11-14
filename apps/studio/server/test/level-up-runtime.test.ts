@@ -152,4 +152,63 @@ describe('Level Up OBS source', () => {
       'ID3fake',
     ]);
   });
+
+  it('the streamer’s own sound sent from Studio: checked by its first bytes, replaces the previous one, removable', async () => {
+    const { origin, api } = await start([]);
+    const send = (data: Buffer, headers: Record<string, string> = {}) =>
+      fetch(`${origin}/api/level-up/sound`, {
+        method: 'POST',
+        headers: {
+          'x-raptoru-studio': '1',
+          'content-type': 'application/octet-stream',
+          ...headers,
+        },
+        body: new Uint8Array(data),
+      });
+    // Not a sound (a renamed image, a page): refused, nothing written.
+    expect((await send(Buffer.from('<html>not a sound</html>'))).status).toBe(
+      415,
+    );
+    // Without the Studio header: refused.
+    expect(
+      (
+        await send(Buffer.from('OggS________________'), {
+          'x-raptoru-studio': '0',
+        })
+      ).status,
+    ).toBe(403);
+    const ogg = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(60, 1)]);
+    expect(await (await send(ogg)).json()).toEqual({
+      custom_sound: true,
+      format: 'ogg',
+      bytes: 64,
+    });
+    const played = await fetch(`${origin}/level-up/sound`);
+    expect(played.headers.get('content-type')).toBe('audio/ogg');
+    expect(Buffer.from(await played.arrayBuffer()).equals(ogg)).toBe(true);
+    // A new file replaces the previous one (never two custom sounds).
+    const mp3 = Buffer.concat([
+      Buffer.from([0xff, 0xfb, 0x90, 0x00]),
+      Buffer.alloc(60),
+    ]);
+    expect((await (await send(mp3)).json()).format).toBe('mp3');
+    expect((await api('/api/level-up/state')).body).toMatchObject({
+      custom_sound: true,
+      custom_sound_type: 'audio/mpeg',
+    });
+    // Too big: refused.
+    expect(
+      (await send(Buffer.concat([mp3, Buffer.alloc(2 * 1024 * 1024)]))).status,
+    ).toBe(413);
+    // Removed: the chime again.
+    const del = await fetch(`${origin}/api/level-up/sound`, {
+      method: 'DELETE',
+      headers: { 'x-raptoru-studio': '1' },
+    });
+    expect(await del.json()).toEqual({ custom_sound: false });
+    const back = Buffer.from(
+      await (await fetch(`${origin}/level-up/sound`)).arrayBuffer(),
+    );
+    expect(back.equals(synthChime())).toBe(true);
+  });
 });

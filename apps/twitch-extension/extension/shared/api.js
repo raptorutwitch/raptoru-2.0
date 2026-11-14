@@ -296,6 +296,9 @@ export function createClient({
     }
     if (path === '/session') return Promise.resolve(structuredClone(demo));
     if (path === '/state') return Promise.resolve(dynamicSessionState(demo));
+    if (path === '/viewer/progression' && method === 'GET') {
+      return Promise.resolve({ ok: true, enabled: true, level: 12, xp: 11_340, levelXp: 11_000, nextLevelXp: 12_000, rank: 42, badges: [{ id: 'niveau-10', label: 'Niveau 10', image: null }] });
+    }
     if (path === '/viewer/preferences') {
       if (method === 'GET') {
         const mode = demo.viewer_preferences?.level_up_notify ?? 'off';
@@ -480,6 +483,8 @@ export function createClient({
     session: () => call('GET', '/session'),
     state: () => call('GET', '/state'),
     getViewerPreference: () => call('GET', '/viewer/preferences'),
+    // Level Up V2: « Mon niveau » (level, XP, the next level's threshold, badges owned).
+    getViewerProgression: () => call('GET', '/viewer/progression'),
     // Level Up V2: 'off' | 'text' | 'sound'.
     setViewerPreference: (mode) => call('POST', '/viewer/preferences', {
       body: { level_up_notify: ['off', 'text', 'sound'].includes(mode) ? mode : 'off' },

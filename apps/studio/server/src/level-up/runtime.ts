@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
@@ -23,6 +23,23 @@ const CUSTOM_SOUNDS: [string, string][] = [
   ['sound.ogg', 'audio/ogg'],
   ['sound.wav', 'audio/wav'],
 ];
+/** A level-up sound is short: 2 MB is far more than a few seconds of MP3 / OGG (a WAV of ~10 s). */
+export const MAX_SOUND_BYTES = 2 * 1024 * 1024;
+
+/** The file's real format from its first bytes (never trusted from a name or a header sent by the page). */
+export function soundFormat(data: Buffer): 'mp3' | 'ogg' | 'wav' | null {
+  if (data.length < 12) return null;
+  if (data.toString('latin1', 0, 4) === 'OggS') return 'ogg';
+  if (
+    data.toString('latin1', 0, 4) === 'RIFF' &&
+    data.toString('latin1', 8, 12) === 'WAVE'
+  )
+    return 'wav';
+  // An ID3 tag, or an MPEG audio frame sync (11 bits set).
+  if (data.toString('latin1', 0, 3) === 'ID3') return 'mp3';
+  if (data[0] === 0xff && (data[1]! & 0xe0) === 0xe0) return 'mp3';
+  return null;
+}
 
 export type LevelUpNotice = {
   id: number;
@@ -220,7 +237,31 @@ export class LevelUpRuntime {
         shown: this.shown,
         last_error: this.lastError,
         custom_sound: (await this.customSound()) !== null,
+        custom_sound_type: (await this.customSound())?.type ?? null,
       });
+    // Antoni's own level-up sound (the raw file as the body), checked by its first bytes; replaces the previous one.
+    if (req.method === 'POST' && p === '/sound') {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += (chunk as Buffer).length;
+        if (size > MAX_SOUND_BYTES)
+          return reply(413, { error: 'sound_too_large' });
+        chunks.push(chunk as Buffer);
+      }
+      const data = Buffer.concat(chunks);
+      const format = soundFormat(data);
+      if (!format) return reply(415, { error: 'unsupported_sound' });
+      for (const [file] of CUSTOM_SOUNDS)
+        await rm(join(this.d.dir, file), { force: true });
+      await writeFile(join(this.d.dir, `sound.${format}`), data);
+      return reply(200, { custom_sound: true, format, bytes: data.length });
+    }
+    if (req.method === 'DELETE' && p === '/sound') {
+      for (const [file] of CUSTOM_SOUNDS)
+        await rm(join(this.d.dir, file), { force: true });
+      return reply(200, { custom_sound: false });
+    }
     let raw = '';
     for await (const chunk of req) {
       raw += String(chunk);

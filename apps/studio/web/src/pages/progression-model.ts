@@ -11,7 +11,16 @@ export interface Rules {
   curve_base: number;
   curve_exponent: number;
   excluded_logins?: string[];
+  /** Level Up V2: 'fixed' (1 000 XP per level) once activated — the curve is locked then. */
+  level_model?: 'curve' | 'fixed';
+  wizebot_normalization?: unknown;
 }
+
+/** The rules Studio may send: the level model and the normalization change only through the guarded activation. */
+export const editableRules = (r: Rules) => {
+  const { level_model: _m, wizebot_normalization: _n, ...rest } = r;
+  return rest;
+};
 
 export const curveXp = (
   level: number,

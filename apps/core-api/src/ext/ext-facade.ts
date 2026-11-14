@@ -210,6 +210,8 @@ export class ExtFacade {
     if (method === 'GET' && path === '/tts/state') return this.ttsState(who);
     if (path === '/viewer/preferences')
       return this.viewerPreferences(who, method, body);
+    if (method === 'GET' && path === '/viewer/progression')
+      return this.viewerProgression(who);
     // Bonk « Twitch » source: always the account of the JWT (never an id sent by the client).
     if (path === '/emotes' || path === '/emotes/refresh')
       return ok(await this.emotes(caller, path === '/emotes/refresh'));
@@ -780,6 +782,18 @@ export class ExtFacade {
               ? { level_up_notify: mode }
               : { level_up_sfx_opt_in: body!.level_up_sfx_opt_in },
         ),
+      );
+    } catch (e) {
+      return refused(e);
+    }
+  }
+
+  /** Level Up V2: « Mon niveau » in the extension — the JWT viewer's level, XP and the way to the next level. */
+  private async viewerProgression(who: Who): Promise<ExtReply> {
+    if (!who.viewer) return fail(403, 'identity_required');
+    try {
+      return ok(
+        await this.core<Json>(`/v1/lab/progression/me/${who.viewer.id}`),
       );
     } catch (e) {
       return refused(e);
