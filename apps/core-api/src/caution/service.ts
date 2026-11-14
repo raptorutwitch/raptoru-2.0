@@ -104,6 +104,10 @@ interface Row {
   error: string | null;
   money: 'none' | 'debited' | 'refunded' | 'to_verify';
   mute_id: string | null;
+  /** The quote's rate (per started minute, or per started 10 s of mute): the pool's closing re-prices with it. */
+  unit_price: number | null;
+  pool_ends_at: Date | null;
+  pool_cap: number | null;
   executor_id: string | null;
   attempt_id: string | null;
   attempts: number;
@@ -137,10 +141,32 @@ export const cautionView = (r: Row) => ({
   reason: r.reason,
   error: r.error,
   money: r.money,
+  pool: r.pool_cap
+    ? {
+        ends_at: r.pool_ends_at ? new Date(r.pool_ends_at).toISOString() : null,
+        cap: r.pool_cap,
+      }
+    : null,
   attempts: r.attempts,
   created_at: new Date(r.created_at).toISOString(),
   ended_at: r.ended_at ? new Date(r.ended_at).toISOString() : null,
 });
+
+interface PoolRow {
+  viewer_id: string;
+  viewer_login: string;
+  viewer_name: string;
+  joined_at: Date;
+  share: number | null;
+  interaction_id: string | null;
+}
+
+/** `price` shared by `n` as evenly as possible: the first (by sign-up) pay one Jeton more; the sum is exactly `price`. */
+export function poolShares(price: number, n: number): number[] {
+  const base = Math.floor(price / n);
+  const extra = price - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+}
 
 interface Executor {
   login: string;
@@ -290,8 +316,17 @@ export class CautionService {
   async chat(msg: LabChatMessage): Promise<{ outcome: string }> {
     const text = msg.text.trim();
     const lower = text.toLowerCase();
-    if (lower === CAUTION.confirmWord || lower === CAUTION.cancelWord)
-      return this.answer(msg, lower === CAUTION.confirmWord);
+    // `oui` / `non` (SAMMI), also `!oui` / `!non`; `!groupe` (or `groupe`) opens a caution collective; `!annuler`
+    // (moderation) closes one. Joining a pool needs the `!`: a bare « oui » stays free for the Roue du Sub.
+    const bang = lower.startsWith('!');
+    const word = bang ? lower.slice(1) : lower;
+    if (
+      word === CAUTION.confirmWord ||
+      word === CAUTION.cancelWord ||
+      word === 'groupe' ||
+      (bang && word === 'annuler')
+    )
+      return this.answer(msg, word, bang);
     const m = COMMAND.exec(text);
     if (!m) return { outcome: 'ignored' };
     const payer = msg.chatter;
@@ -385,17 +420,27 @@ export class CautionService {
     }
   }
 
-  /** `oui` / `non`: only the payer of the quoted caution; anything else is silent. */
-  private async answer(msg: LabChatMessage, yes: boolean) {
+  /** `oui` / `non` / `groupe`: only the payer of the quoted caution; a pool: anyone (`!oui`, `!non`, `!annuler`). */
+  private async answer(msg: LabChatMessage, word: string, bang: boolean) {
+    const yes = word === CAUTION.confirmWord;
     const out = await this.db.tx(async (q) => {
       await this.lock(q, msg.channel_id);
-      const r = await this.open(q, msg.channel_id);
+      let r = await this.open(q, msg.channel_id);
+      // A pool whose 30 s are over is closed before this message is read (a late `!oui` never joins).
+      if (r?.status === 'pooling' && new Date(r.pool_ends_at!) <= this.now()) {
+        await this.closePool(q, r);
+        r = await this.open(q, msg.channel_id);
+      }
+      if (r?.status === 'pooling')
+        return this.poolAnswer(q, r, msg, word, bang);
       if (!r || r.payer_id !== msg.chatter.id)
         return { outcome: 'ignored' } as const;
       if (r.confirm_ref === msg.message_id)
         return { outcome: 'replayed' } as const;
-      if (r.status !== 'quoted') return { outcome: 'ignored' } as const;
+      if (r.status !== 'quoted' || word === 'annuler')
+        return { outcome: 'ignored' } as const;
       const key = `${r.request_id}:answer`;
+      if (word === 'groupe') return this.openPool(q, r, msg.message_id);
       if (!yes) {
         await this.end(q, r, 'cancelled', {
           reason: 'cancelled',
@@ -435,6 +480,265 @@ export class CautionService {
       return { outcome: 'confirmed' } as const;
     });
     return out;
+  }
+
+  // --- caution collective (14/11, docs/CAUTION.md § 9) ---------------------------------------------------------------
+
+  /** The payer's `!groupe` on his quote: 30 s of free sign-ups; the individual answer is closed (never two payments). */
+  private async openPool(q: Queryable, r: Row, ref: string) {
+    if (this.now() >= new Date(r.quote_expires_at!) || !r.unit_price) {
+      await this.end(q, r, 'expired', {
+        reason: 'quote_expired',
+        confirm_ref: ref,
+      });
+      await this.say(
+        q,
+        r.channel_id,
+        `${r.request_id}:answer`,
+        'Cette proposition de caution a expiré. Relance !caution @pseudo.',
+      );
+      return { outcome: 'expired' } as const;
+    }
+    const cap = Math.ceil(r.price! / CAUTION_EXEC.poolMin);
+    await this.set(q, r.request_id, {
+      status: 'pooling',
+      confirm_ref: ref,
+      pool_cap: cap,
+      pool_ends_at: this.ms(CAUTION_EXEC.poolMs),
+      lease_expires_at: null,
+    });
+    await this.say(
+      q,
+      r.channel_id,
+      `${r.request_id}:pool`,
+      `Caution collective pour ${r.target_login} ! 30 s pour rejoindre avec !oui · prix partagé, ${fmt(cap)} jetons max chacun · rien n'est débité avant la fin.`,
+    );
+    return { outcome: 'pooling' } as const;
+  }
+
+  /** During the 30 s: `!oui` joins (once, silent), `!non` withdraws (silent), `!annuler` (moderation) closes it. */
+  private async poolAnswer(
+    q: Queryable,
+    r: Row,
+    msg: LabChatMessage,
+    word: string,
+    bang: boolean,
+  ) {
+    const who = msg.chatter;
+    if (bang && word === 'annuler') {
+      if (who.role !== 'moderator' && who.role !== 'broadcaster')
+        return { outcome: 'ignored' } as const;
+      await this.end(q, r, 'cancelled', {
+        reason: 'pool_cancelled_by_moderator',
+      });
+      await this.say(
+        q,
+        r.channel_id,
+        `${r.request_id}:end`,
+        `Caution collective pour ${r.target_login} annulée par la modération. Aucun jeton débité.`,
+      );
+      return { outcome: 'pool_cancelled' } as const;
+    }
+    if (!bang) return { outcome: 'ignored' } as const; // a bare « oui » is not a sign-up
+    if (who.id === r.target_id) return { outcome: 'ignored' } as const;
+    if (word === CAUTION.confirmWord) {
+      const added = await q.query(
+        `insert into caution_pool (request_id, viewer_id, viewer_login, viewer_name, joined_ref, joined_at)
+         values ($1, $2, $3, $4, $5, $6) on conflict (request_id, viewer_id) do nothing returning viewer_id`,
+        [
+          r.request_id,
+          who.id,
+          who.login,
+          who.display_name,
+          msg.message_id,
+          this.now(),
+        ],
+      );
+      return {
+        outcome: added.length ? 'pool_joined' : 'pool_already',
+      } as const;
+    }
+    if (word === CAUTION.cancelWord) {
+      const left = await q.query(
+        'delete from caution_pool where request_id = $1 and viewer_id = $2 returning viewer_id',
+        [r.request_id, who.id],
+      );
+      return { outcome: left.length ? 'pool_left' : 'ignored' } as const;
+    }
+    return { outcome: 'ignored' } as const;
+  }
+
+  private participants(q: Queryable, id: string) {
+    return q.query<PoolRow>(
+      'select * from caution_pool where request_id = $1 order by joined_at, joined_ref',
+      [id],
+    );
+  }
+
+  /** The 30 s are over (Core's clock): fewer than two → cancelled; a timeout → the executor re-reads it; a mute → paid. */
+  private async closePool(q: Queryable, r: Row) {
+    const list = await this.participants(q, r.request_id);
+    if (list.length < CAUTION_EXEC.poolMin) {
+      await this.end(q, r, 'cancelled', {
+        reason: list.length ? 'pool_alone' : 'pool_empty',
+      });
+      await this.say(
+        q,
+        r.channel_id,
+        `${r.request_id}:end`,
+        list.length
+          ? 'Caution collective annulée : un seul participant (il en faut 2). Aucun jeton débité.'
+          : `Personne n'a rejoint la caution collective de ${r.target_login}. Aucun jeton débité.`,
+      );
+      return;
+    }
+    if (r.kind === 'mute') return this.payMutePool(q, r);
+    await this.set(q, r.request_id, {
+      status: 'confirmed',
+      attempts: 0,
+      executor_id: null,
+      attempt_id: null,
+      lease_expires_at: this.ms(CAUTION_EXEC.pickupMs),
+    });
+  }
+
+  /**
+   * The closing's debit, in the caller's transaction: the real price shared among the participants who can pay their
+   * share (the others set aside, the shares computed again), never above the cap told at the opening. Every debit or
+   * none (one savepoint): `ok: false` = nothing debited, the pool ends without a fee.
+   */
+  private async debitPool(
+    q: Queryable,
+    r: Row,
+    price: number,
+  ): Promise<
+    | { ok: true; paid: { p: PoolRow; share: number }[]; aside: number }
+    | {
+        ok: false;
+        reason: 'pool_insufficient' | 'pool_over_cap' | 'wallet_unavailable';
+      }
+  > {
+    const all = await this.participants(q, r.request_id);
+    let list = all;
+    let shares: number[] = [];
+    for (;;) {
+      if (list.length < CAUTION_EXEC.poolMin)
+        return { ok: false, reason: 'pool_insufficient' };
+      shares = poolShares(price, list.length);
+      if (shares[0]! > r.pool_cap!) return { ok: false, reason: 'pool_over_cap' };
+      const poor: string[] = [];
+      for (const [i, p] of list.entries())
+        if (
+          (await this.economy.balances(q, r.channel_id, p.viewer_id)).tokens <
+          shares[i]!
+        )
+          poor.push(p.viewer_id);
+      if (!poor.length) break;
+      list = list.filter((p) => !poor.includes(p.viewer_id));
+    }
+    const paid = list.map((p, i) => ({ p, share: shares[i]! }));
+    await q.query('savepoint caution_pool_debit');
+    try {
+      for (const { p, share } of paid) {
+        const interaction = randomUUID();
+        await this.economy.debit(q, this.now(), {
+          channelId: r.channel_id,
+          viewer: { id: p.viewer_id, display_name: p.viewer_name },
+          currency: 'tokens',
+          amount: share,
+          module: 'caution',
+          interactionId: interaction,
+        });
+        await q.query(
+          'update caution_pool set share = $3, interaction_id = $4 where request_id = $1 and viewer_id = $2',
+          [r.request_id, p.viewer_id, share, interaction],
+        );
+      }
+      await q.query('release savepoint caution_pool_debit');
+    } catch (e) {
+      await q.query('rollback to savepoint caution_pool_debit');
+      if (!(e instanceof LabWalletError)) throw e;
+      return {
+        ok: false,
+        reason:
+          e.code === 'insufficient_tokens'
+            ? 'pool_insufficient'
+            : 'wallet_unavailable',
+      };
+    }
+    return { ok: true, paid, aside: all.length - paid.length };
+  }
+
+  private poolPaidText(
+    r: Row,
+    price: number,
+    paid: { share: number }[],
+    aside: number,
+  ) {
+    const lo = Math.min(...paid.map((x) => x.share));
+    const hi = Math.max(...paid.map((x) => x.share));
+    return `${paid.length} sauveteurs ! Caution de ${fmt(price)} jetons, soit ${lo === hi ? fmt(lo) : `${fmt(lo)} à ${fmt(hi)}`} chacun${aside ? ` (${aside} sans assez de jetons, écarté${aside > 1 ? 's' : ''})` : ''}. Libération de ${r.target_login}…`;
+  }
+
+  private poolFailText(reason: string) {
+    return reason === 'pool_over_cap'
+      ? 'Caution collective annulée : le prix dépasse le plafond annoncé. Aucun jeton débité.'
+      : reason === 'wallet_unavailable'
+        ? 'Caution collective annulée : soldes illisibles pour le moment. Aucun jeton débité.'
+        : 'Caution collective annulée : pas assez de participants avec assez de jetons. Aucun jeton débité.';
+  }
+
+  /** A pool on the broadcaster's mute: re-checked, re-priced, debited and ended at the closing (no Twitch call). */
+  private async payMutePool(q: Queryable, r: Row) {
+    const key = `${r.request_id}:end`;
+    const mute = (await this.activeMutes(q, r.channel_id)).find(
+      (m) => m.id === r.mute_id,
+    );
+    if (!mute || mute.endsAt <= this.now()) {
+      await this.end(q, r, 'refused', { reason: 'mute_over' });
+      await this.say(
+        q,
+        r.channel_id,
+        key,
+        `Le mute de ${r.target_login} vient de se terminer. Caution collective annulée, aucun jeton débité.`,
+      );
+      return;
+    }
+    const price = cautionMutePrice(
+      Math.ceil((mute.endsAt.getTime() - this.now().getTime()) / 1000),
+      r.unit_price!,
+    );
+    const d = await this.debitPool(q, r, price);
+    if (!d.ok) {
+      await this.end(q, r, 'refused', { reason: d.reason });
+      await this.say(q, r.channel_id, key, this.poolFailText(d.reason));
+      return;
+    }
+    await mute.source.end(q, r.channel_id, mute.id);
+    await this.end(q, r, 'released', { money: 'debited', price });
+    await this.say(
+      q,
+      r.channel_id,
+      key,
+      `${r.target_login} est libre ! Caution de ${fmt(price)} jetons payée à ${d.paid.length}. Merci les sauveteurs !`,
+    );
+  }
+
+  /** Refunds a settled pool's participants, each once (their own interaction). Returns how many were refunded. */
+  private async refundPool(q: Queryable, r: Row, reason: string) {
+    let n = 0;
+    for (const p of await this.participants(q, r.request_id)) {
+      if (!p.interaction_id || !p.share) continue;
+      const back = await this.economy.refund(
+        q,
+        this.now(),
+        p.interaction_id,
+        'system',
+        reason,
+      );
+      if (back.amount) n++;
+    }
+    return n;
   }
 
   /** The broadcaster's mute: re-checked, debited and ended in ONE transaction (no Twitch call). */
@@ -539,6 +843,8 @@ export class CautionService {
         await this.end(q, r, 'failed', { reason: 'executor_lost' });
         await this.say(q, channelId, `${r.request_id}:end`, unavailable);
       }
+    } else if (r.status === 'pooling' && over(r.pool_ends_at)) {
+      await this.closePool(q, r);
     } else if (r.status === 'quoted' && over(r.quote_expires_at)) {
       // Silent, like SAMMI: the payer is told only if he answers late.
       await this.end(q, r, 'expired', { reason: 'quote_expired' });
@@ -552,7 +858,7 @@ export class CautionService {
         q,
         channelId,
         `${r.request_id}:end`,
-        `Libération de ${r.target_login} à vérifier par la modération (${fmt(r.price!)} jetons payés par ${r.payer_login}).`,
+        `Libération de ${r.target_login} à vérifier par la modération (${fmt(r.price!)} jetons payés par ${r.pool_cap ? 'les participants' : r.payer_login}).`,
       );
     }
   }
@@ -676,21 +982,23 @@ export class CautionService {
         const remainingS = Math.ceil((endsAt.getTime() - now.getTime()) / 1000);
         // The rates set in Studio (H10), read in this transaction; the quote then keeps ITS price until « oui ».
         const rates = await this.rates(q, ch);
+        const unit =
+          kind === 'mute'
+            ? rates.mutePricePer10s
+            : (await this.randomBanTimeout(q, ch, who.target_id, endsAt))
+              ? rates.randomBanPricePerMinute
+              : rates.pricePerMinute;
         const price =
           kind === 'mute'
-            ? cautionMutePrice(remainingS, rates.mutePricePer10s)
-            : cautionPrice(
-                remainingS,
-                (await this.randomBanTimeout(q, ch, who.target_id, endsAt))
-                  ? rates.randomBanPricePerMinute
-                  : rates.pricePerMinute,
-              );
+            ? cautionMutePrice(remainingS, unit)
+            : cautionPrice(remainingS, unit);
         await this.set(q, r.request_id, {
           ...who,
           kind,
           status: 'quoted',
           sanction_ends_at: endsAt,
           price,
+          unit_price: unit,
           mute_id: muteId ?? null,
           // From the SAME instant as the price (the confirmation re-derives the quote's time from it).
           quote_expires_at: new Date(now.getTime() + CAUTION.quoteMs),
@@ -730,7 +1038,7 @@ export class CautionService {
           'mute',
           mute.endsAt,
           (price, s) =>
-            `${t.login} est réduit au silence (${mute.label}) encore ${s} ${s > 1 ? 'secondes' : 'seconde'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ?`,
+            `${t.login} est réduit au silence (${mute.label}) encore ${s} ${s > 1 ? 'secondes' : 'seconde'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ? (!groupe : à plusieurs)`,
           mute.id,
         );
       }
@@ -752,7 +1060,7 @@ export class CautionService {
         );
       return quote('timeout', ends, (price, sec) => {
         const min = Math.ceil(sec / 60);
-        return `${t.login} est banni encore ${min} ${min > 1 ? 'minutes' : 'minute'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ?`;
+        return `${t.login} est banni encore ${min} ${min > 1 ? 'minutes' : 'minute'}. Le libérer coûte ${fmt(price)} jetons, @${r.payer_login}. Oui ou non ? (!groupe : à plusieurs)`;
       });
     });
   }
@@ -823,6 +1131,42 @@ export class CautionService {
           'extended',
           `Le timeout de ${r.target_login} a été prolongé : relance !caution ${r.target_login}. Aucun jeton débité.`,
         );
+      if (r.pool_cap) {
+        // Caution collective: the REAL price now (the time left at this fresh read, the quote's rate), shared.
+        const price = cautionPrice(remainingS, r.unit_price!);
+        const d = await this.debitPool(q, r, price);
+        if (!d.ok)
+          return stop('refused', d.reason, this.poolFailText(d.reason));
+        await this.say(
+          q,
+          ch,
+          `${r.request_id}:pool:paid`,
+          this.poolPaidText(r, price, d.paid, d.aside),
+        );
+        if (r.mode === 'dry_run') {
+          await this.end(q, r, 'released', {
+            money: 'debited',
+            price,
+            sanction_ends_at: new Date(s.ends_at),
+            reason: 'dry_run',
+          });
+          await this.say(
+            q,
+            ch,
+            key,
+            `[test] ${r.target_login} serait libéré (simulation, aucun appel Twitch).`,
+          );
+          return { proceed: false as const, reason: 'dry_run' };
+        }
+        await this.set(q, r.request_id, {
+          status: 'releasing',
+          money: 'debited',
+          price,
+          sanction_ends_at: new Date(s.ends_at),
+          lease_expires_at: this.ms(CAUTION_EXEC.releaseLeaseMs),
+        });
+        return { proceed: true as const, target_id: r.target_id! };
+      }
       try {
         await q.query('savepoint caution_debit');
         await this.economy.debit(q, now, {
@@ -878,16 +1222,49 @@ export class CautionService {
       if (!settles) return cautionView(r);
       const ch = r.channel_id;
       const key = `${r.request_id}:end:${rep.event}`;
+      const pool = !!r.pool_cap;
       if (rep.event === 'released') {
         await this.end(q, r, 'released', {
           money: 'debited',
           error: rep.verified ? 'verified_after_ambiguous_answer' : null,
         });
+        const n = pool
+          ? (await this.participants(q, r.request_id)).filter((p) => p.share)
+              .length
+          : 0;
         await this.say(
           q,
           ch,
           key,
-          `@${r.payer_login} a libéré ${r.target_login} pour ${fmt(r.price!)} jetons !`,
+          pool
+            ? `${r.target_login} est libre ! Caution payée à ${n}. Merci les sauveteurs !`
+            : `@${r.payer_login} a libéré ${r.target_login} pour ${fmt(r.price!)} jetons !`,
+        );
+      } else if (
+        pool &&
+        (rep.event === 'not_applied' || rep.event === 'not_banned')
+      ) {
+        // Every participant gets his share back, once (his own interaction).
+        const n = await this.refundPool(
+          q,
+          r,
+          `Caution collective : ${rep.event === 'not_banned' ? 'timeout déjà terminé' : 'libération refusée'} (${r.target_login})`.slice(
+            0,
+            200,
+          ),
+        );
+        await this.end(q, r, 'failed', {
+          reason: rep.event,
+          error: (rep.error ?? null)?.slice(0, 300) ?? null,
+          money: 'refunded',
+        });
+        await this.say(
+          q,
+          ch,
+          key,
+          rep.event === 'not_banned'
+            ? `${r.target_login} n'était plus en timeout : les ${n} participants sont remboursés.`
+            : `La libération de ${r.target_login} a échoué : les ${n} participants sont remboursés.`,
         );
       } else if (rep.event === 'not_applied' || rep.event === 'not_banned') {
         const back = await this.economy.refund(
@@ -923,7 +1300,7 @@ export class CautionService {
           q,
           ch,
           `${r.request_id}:end`,
-          `Libération de ${r.target_login} à vérifier par la modération (${fmt(r.price!)} jetons payés par ${r.payer_login}).`,
+          `Libération de ${r.target_login} à vérifier par la modération (${fmt(r.price!)} jetons payés par ${pool ? 'les participants' : r.payer_login}).`,
         );
       }
       return cautionView(await this.row(q, id));
@@ -949,7 +1326,23 @@ export class CautionService {
         : null,
       ready: this.executorReady(channelId),
       to_verify: recent.filter((r) => r.money === 'to_verify').length,
-      recent: recent.map(cautionView),
+      recent: await Promise.all(
+        recent.map(async (r) => {
+          const v = cautionView(r);
+          if (!v.pool) return v;
+          const people = await this.participants(this.db, r.request_id);
+          return {
+            ...v,
+            pool: {
+              ...v.pool,
+              participants: people.map((p) => ({
+                login: p.viewer_login,
+                share: p.share,
+              })),
+            },
+          };
+        }),
+      ),
     };
   }
 }

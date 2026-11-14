@@ -36,7 +36,7 @@ describe('Caution migrations', () => {
     await migrate(prod, 'prod');
     await migrate(lab, 'lab');
     const p = await schema(prod);
-    expect(p.columns.length).toBe(29);
+    expect(p.columns.length).toBe(32);
     expect(p).toEqual(await schema(lab));
     expect(
       p.indexes.map((i) => (i as { indexname: string }).indexname),

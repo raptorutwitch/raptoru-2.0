@@ -120,6 +120,7 @@ try {
     '20261123120000_random_ban_purchase_lab.sql',
     // Points de chaîne reward administration: the Lab twin of 20261124130000_cp_reward_admin.sql.
     '20261124120000_cp_reward_admin_lab.sql',
+    '20261125120000_caution_pool_lab.sql',
   ]) {
     if (
       (

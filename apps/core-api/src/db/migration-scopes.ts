@@ -110,6 +110,9 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261123130000_random_ban_purchase.sql',
   // Points de chaîne: Studio administers Raptoru's rewards (reward_update, pause, migration); Lab twin 20261124120000.
   '20261124130000_cp_reward_admin.sql',
+  // Caution collective: the `pooling` status, the unit price and cap, one row per participant (additive); Lab twin
+  // 20261125120000_caution_pool_lab.sql.
+  '20261125130000_caution_pool.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -222,6 +225,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261123120000_random_ban_purchase_lab.sql',
   // Points de chaîne reward administration: the Lab twin of 20261124130000_cp_reward_admin.sql (same content).
   '20261124120000_cp_reward_admin_lab.sql',
+  // Caution collective: the Lab twin of 20261125130000_caution_pool.sql (same content).
+  '20261125120000_caution_pool_lab.sql',
 ]);
 
 /**

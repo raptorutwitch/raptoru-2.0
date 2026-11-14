@@ -135,6 +135,7 @@ export function mountCautionPage(root: HTMLElement) {
       z('rates'),
       settingRows(settings, [
         'caution.price_per_minute',
+        'caution.random_ban_price_per_minute',
         'caution.mute_price_per_10s',
       ]),
     );
