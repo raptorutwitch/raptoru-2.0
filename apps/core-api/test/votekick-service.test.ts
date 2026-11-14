@@ -653,7 +653,7 @@ describe('Votekick: the broadcaster is muted in OBS, never timed out; his Cautio
       ).at(-1)!.params.text,
     ).toBe(
       // 27/10: 300 Jetons per started 10 s of an OBS mute (55 s → 6 × 300).
-      'raptoru_ est réduit au silence (Votekick) encore 55 secondes. Le libérer coûte 1 800 jetons, @viewer5. Oui ou non ?',
+      'raptoru_ est réduit au silence (Votekick) encore 55 secondes. Le libérer coûte 1 800 jetons, @viewer5. Oui ou non ? (!groupe : à plusieurs)',
     );
     expect((await caution.chat(l.msg(V5, 'oui'))).outcome).toBe('released');
     expect((await caution.chat(l.msg(V5, 'oui'))).outcome).not.toBe('released');
