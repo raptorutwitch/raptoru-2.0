@@ -96,6 +96,7 @@ import { dockStudioApi, type DockRuntime } from './dock/studio-api.js';
 import { HalloweenRuntime } from './halloween/runtime.js';
 import { CosmeticsRelay } from './cosmetics/relay.js';
 import { ChallengesRelay } from './challenges/relay.js';
+import { LevelUpRuntime } from './level-up/runtime.js';
 import { ProgressionRelay } from './progression/relay.js';
 import {
   createLocalRuntime,
@@ -508,6 +509,8 @@ export interface StudioServerOptions {
   labFrontier?: LabFrontier | null;
   /** The Extension Lab page's state and controls on that Core (no state of its own). */
   labPanel?: CoreLabPanel | null;
+  /** Level Up V2 (docs/LEVEL_UP_V2.md): its own OBS source (the viewers' level-ups), apart from every other overlay. */
+  levelUp?: LevelUpRuntime | null;
 }
 
 export function createStudioServer(o: StudioServerOptions) {
@@ -538,6 +541,7 @@ export function createStudioServer(o: StudioServerOptions) {
     challenges = null,
     labFrontier = null,
     labPanel = null,
+    levelUp = null,
   } = o;
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -632,6 +636,7 @@ export function createStudioServer(o: StudioServerOptions) {
       if (progression && (await progression.handle(req, res, url))) return;
       if (cosmetics && (await cosmetics.handle(req, res, url))) return;
       if (challenges && (await challenges.handle(req, res, url))) return;
+      if (levelUp && (await levelUp.handle(req, res, url))) return;
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
       if (alerts && (await alerts.handle(req, res, url))) return;
       if (points && (await points.handle(req, res, url))) return;
@@ -958,6 +963,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   let seRef: SeTipsLink | null = null;
   let dockRef: DockRuntime | null = null;
   let halloweenRef: HalloweenRuntime | null = null;
+  let levelUpRef: LevelUpRuntime | null = null;
   let pointsRef: ChannelPointsRuntime | null = null;
   let twitchConnectionsRef: TwitchConnections | null = null;
   let stopping = false;
@@ -985,6 +991,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     seRef?.close();
     void dockRef?.server.close();
     halloweenRef?.stop();
+    levelUpRef?.stop();
     pointsRef?.stop();
     lab.logs.add(
       'studio',
@@ -1555,6 +1562,18 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       core: alertsCore,
       environment: alertsEnv,
     }),
+    // Level Up V2 (docs/LEVEL_UP_V2.md): the profile's Core decides; this OBS source shows.
+    levelUp: (levelUpRef =
+      alertsCore && alertsEnv
+        ? await LevelUpRuntime.create({
+            core: alertsCore,
+            environment: alertsEnv,
+            origin: `http://${host}:${port}`,
+            // The local Lab on the main Core keeps its own token, sound and volume (lab-main/level-up).
+            dir: labModuleDir('level-up'),
+            playerDir: join(REPO_ROOT, 'apps', 'studio', 'server', 'level-up-player'),
+          })
+        : null),
     labPanel:
       mainLab && labCore
         ? new CoreLabPanel(labCore, MAIN_LAB_CHANNEL.id)

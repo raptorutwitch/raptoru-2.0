@@ -113,6 +113,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   // Caution collective: the `pooling` status, the unit price and cap, one row per participant (additive); Lab twin
   // 20261125120000_caution_pool_lab.sql.
   '20261125130000_caution_pool.sql',
+  // Level Up V2 (normalization audit, level-up events, viewer notification modes); Lab twin 20261126120000.
+  '20261126130000_progression_level_up.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -227,6 +229,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261124120000_cp_reward_admin_lab.sql',
   // Caution collective: the Lab twin of 20261125130000_caution_pool.sql (same content).
   '20261125120000_caution_pool_lab.sql',
+  // Level Up V2: the Lab twin of 20261126130000_progression_level_up.sql (same content).
+  '20261126120000_progression_level_up_lab.sql',
 ]);
 
 /**

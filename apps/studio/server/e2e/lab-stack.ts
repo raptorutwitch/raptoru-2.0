@@ -300,6 +300,7 @@ for (const [i, status] of (
 const { ProgressionRelay } = await import('../src/progression/relay.js');
 const { CosmeticsRelay } = await import('../src/cosmetics/relay.js');
 const { ChallengesRelay } = await import('../src/challenges/relay.js');
+const { LevelUpRuntime } = await import('../src/level-up/runtime.js');
 const ext = await LabEbs.create(EXTENSION_DIR);
 const labCore = localLabCoreClient(coreUrl, secret);
 ext.connectLab(labCore);
@@ -503,6 +504,15 @@ const studio = createStudioServer({
   cosmetics: new CosmeticsRelay({ core: labCore, environment: 'lab' }),
   // Défis: Studio's « Défis » tab relay to this Lab Core.
   challenges: new ChallengesRelay({ core: labCore, environment: 'lab' }),
+  // Level Up V2: its OBS source, on this Lab Core.
+  levelUp: await LevelUpRuntime.create({
+    core: labCore,
+    environment: 'lab',
+    origin,
+    dir: join(data, 'level-up'),
+    playerDir: join(import.meta.dirname, '..', 'level-up-player'),
+    claimEveryMs: 500,
+  }),
 });
 // The browser tests that need the Lab Core itself (a simulated live, a chat message) read where it is here.
 await writeFile(
