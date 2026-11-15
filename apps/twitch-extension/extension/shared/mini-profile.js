@@ -229,7 +229,7 @@ function navHtml(d, nRestr) {
     <span class="mp-nav__sep" aria-hidden="true"></span>
     <button type="button" class="mp-short" data-mp="history" title="Historique${unread}" aria-label="Historique${unread}"${d.history ? '' : ' disabled'}><span class="mp-short__icon" data-icon="clock"></span>${n ? `<em class="mp-badge">${n > 9 ? '9+' : n}</em>` : ''}</button>
     ${d.rankingUrl
-      ? `<a class="mp-short" data-mp="ranking" href="${esc(d.rankingUrl)}" target="_blank" rel="noopener noreferrer" title="Classement — raptoru.fr, nouvel onglet" aria-label="Classement (raptoru.fr, nouvel onglet)"><span class="mp-short__icon" data-icon="trophy"></span></a>`
+      ? `<a class="mp-short" data-mp="ranking" href="${esc(d.rankingUrl)}" target="_blank" rel="noopener noreferrer" title="Classement — le site Raptoru, nouvel onglet" aria-label="Classement (site Raptoru, nouvel onglet)"><span class="mp-short__icon" data-icon="trophy"></span></a>`
       : '<button type="button" class="mp-short" data-mp="ranking" title="Classement — indisponible ici" aria-label="Classement (indisponible)" disabled><span class="mp-short__icon" data-icon="trophy"></span></button>'}`;
 }
 
@@ -358,7 +358,7 @@ function onClick(e) {
   if (act === 'history') {
     closeProfile();
     ctx?.openHistory?.();
-  } else if (act === 'ranking') closeProfile(); // the link opens raptoru.fr in a new tab
+  } else if (act === 'ranking') closeProfile(); // the link opens the site (site_url) in a new tab
 }
 
 function attach(document, hub, entering) {

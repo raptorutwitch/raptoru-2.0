@@ -304,7 +304,7 @@
 }
 
 /* Navigation : quatre petites icônes équilibrées. Accueil et Restrictions changent la vue ; Historique et Classement
-   ouvrent leur destination habituelle (l'écran Historique, raptoru.fr). L'onglet actif : icône blanche, léger fond et
+   ouvrent leur destination habituelle (l'écran Historique, le site Raptoru). L'onglet actif : icône blanche, léger fond et
    un trait d'accent — jamais un gros aplat. */
 .mp-nav {
   display: grid;
