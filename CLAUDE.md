@@ -1,5 +1,11 @@
 # Raptoru 2.0 — working rules
 
+## Méthode de travail
+
+- Lire `docs/AGENT_WORKFLOW.md` § 0 (« Démarrage express », moins d'une minute) au début de chaque demande ; le
+  reste du guide au besoin. Il précise comment appliquer les règles ci-dessous : classes A/B/C/D, diagnostic,
+  tests ciblés, CI, attentes, livraison, pièges connus. Il ne les remplace pas et ne les assouplit pas.
+
 ## Resuming work
 
 - Start with `docs/REPRISE.md` (single entry point for agents: limits, workspaces, read-only checks, next

@@ -31,6 +31,7 @@ déplacer**.
 | Document                                           | Rôle                                                                                                            | Statut    |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------- |
 | [REPRISE.md](REPRISE.md)                           | reprise pour un agent : limites, espaces de travail, commandes, prochain travail, « si on change de modèle »    | Référence |
+| [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md)             | méthode de travail d'un agent : classes A/B/C/D, tests et CI, attentes, livraison, outils, pièges connus        | Référence |
 | [PROJECT_STATUS.md](PROJECT_STATUS.md)             | photographie du projet : versions, environnements, fonctionnalités, tests, bugs, décisions, actions d'Antoni    | Référence |
 | [ROADMAP.md](ROADMAP.md)                           | état de chaque module (livré, développé, à valider, à développer), chantiers, prochaines fonctionnalités        | Référence |
 | [../CLAUDE.md](../CLAUDE.md)                       | règles de travail des agents                                                                                    | Référence |
