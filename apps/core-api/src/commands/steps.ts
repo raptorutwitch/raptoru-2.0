@@ -243,6 +243,8 @@ export interface WordGameStepDraft {
   idempotencyKey: string;
   mode: 'normal' | 'announce';
   text: string;
+  /** An announcement's colour (Twitch: primary, blue, green, orange, purple); absent: the channel's accent colour. */
+  color?: 'primary' | 'blue' | 'green' | 'orange' | 'purple';
   /** Send no earlier than now + delayMs (legacy delays: 500 / 2 000 / 2 100 ms). */
   delayMs?: number;
 }
@@ -290,7 +292,11 @@ export async function insertWordGameSteps(
         s.channelId,
         seq,
         d.idempotencyKey,
-        JSON.stringify({ mode: d.mode, text: d.text }),
+        JSON.stringify({
+          mode: d.mode,
+          text: d.text,
+          ...(d.mode === 'announce' && d.color ? { color: d.color } : {}),
+        }),
         available,
         new Date(available.getTime() + ttlMs),
         s.now,
@@ -585,18 +591,19 @@ export class CommandSteps {
           break;
         }
       }
-      // Music Hub `!song`: an announcement LeCroupier_ could not send (no moderator:manage:announcements, not a
-      // moderator…) is written again once as a plain message — never after an `unknown` send (it may have been seen).
+      // Music Hub `!song` and the Level Up announcements: an announcement LeCroupier_ could not send (no
+      // moderator:manage:announcements, not a moderator…) is written again once as a plain message — never after an
+      // `unknown` send (it may have been seen).
       if (
         row.status === 'failed' &&
-        cur.origin === 'music' &&
+        (cur.origin === 'music' || cur.origin === 'module:level_up') &&
         cur.params.mode === 'announce' &&
         !cur.idempotency_key.endsWith(':plain')
       )
         await insertWordGameSteps(q, {
           channelId,
           now,
-          origin: 'music',
+          origin: cur.origin,
           drafts: [
             {
               idempotencyKey: `${cur.idempotency_key.slice(0, 190)}:plain`,

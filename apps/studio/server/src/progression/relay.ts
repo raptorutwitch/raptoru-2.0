@@ -70,6 +70,9 @@ export class ProgressionRelay {
         'GET /api/progression/import/waiting': `/import/waiting?q=${q('q')}`,
         'GET /api/progression/level-v2': '/level-v2',
         'GET /api/progression/levelups': '/levelups',
+        // « Viewers avec son activé » (read-only) and the last pseudo refresh from Twitch.
+        'GET /api/progression/prefs/sound': '/prefs/sound',
+        'GET /api/progression/names': '/names',
       };
       if (reads[route])
         return (reply(200, await core(`${this.base}${reads[route]}`)), true);
@@ -96,6 +99,8 @@ export class ProgressionRelay {
         'POST /api/progression/level-v2/revert': '/level-v2/revert',
         // « Tester un Level Up » › a real « [TEST] » line in the chat (typed confirmation, checked by Core).
         'POST /api/progression/level-v2/test-chat': '/level-v2/test-chat',
+        // The rankings' pseudos from Twitch, by the stable id (the Core also runs it daily).
+        'POST /api/progression/names/refresh': '/names/refresh',
       };
       const notify = /^\/api\/progression\/viewers\/(\d{1,32})\/notify$/.exec(
         p,

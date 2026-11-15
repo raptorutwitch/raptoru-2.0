@@ -304,6 +304,37 @@ export function createPublicFrontier(
             console.error('[core-api] event shop sweep failed', e.message),
           );
       }, 5000);
+      // Level Up: an announcement whose grouping window ended goes out even when nobody chats (every 30 s; the
+      // channel's lock inside: never two at a time).
+      let levelUpTicking = false;
+      const levelUpTick = setInterval(() => {
+        if (levelUpTicking) return;
+        levelUpTicking = true;
+        core.progression
+          .tick()
+          .catch((e: Error) =>
+            console.error('[core-api] level up tick failed', e.message),
+          )
+          .finally(() => (levelUpTicking = false));
+      }, 30_000);
+      // The rankings' pseudos from Twitch by the stable id (Helix, the Core's app): 2 min after the start, then daily.
+      // Production only (the Lab's viewers are fictional).
+      const refreshNames = () =>
+        core.progression
+          .refreshNames(channelId)
+          .then((r) =>
+            console.log(
+              `[core-api] pseudos: ${r.checked} checked, ${r.added} added, ${r.updated} updated, ${r.unresolved} unknown to Twitch`,
+            ),
+          )
+          .catch((e: Error) =>
+            console.error('[core-api] pseudos refresh failed', e.message),
+          );
+      if (!lab && app) core.progression.userLookup = app;
+      const namesFirst =
+        !lab && app ? setTimeout(() => void refreshNames(), 120_000) : null;
+      const namesDaily =
+        !lab && app ? setInterval(() => void refreshNames(), 86_400_000) : null;
       // Défis: the recount (only with CHALLENGES_ENGINE=true; nothing without the tables or a live challenge).
       core.challenges.engineEnabled = config.CHALLENGES_ENGINE === 'true';
       let counting = false;
@@ -321,6 +352,9 @@ export function createPublicFrontier(
             }, 60_000)
           : null;
       return () => {
+        clearInterval(levelUpTick);
+        if (namesFirst) clearTimeout(namesFirst);
+        if (namesDaily) clearInterval(namesDaily);
         if (challengesTick) clearInterval(challengesTick);
         clearInterval(eventShopTick);
         clearInterval(spotifyTick);

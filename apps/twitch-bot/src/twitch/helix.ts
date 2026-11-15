@@ -1,6 +1,15 @@
 import type { Chatter } from '@raptoru/schemas';
 import type { HelixStream } from '../stream-watch.js';
 
+/** Twitch's announcement colours (Send Chat Announcement). */
+export const ANNOUNCEMENT_COLORS = [
+  'primary',
+  'blue',
+  'green',
+  'orange',
+  'purple',
+];
+
 /** Token provider for Helix; implemented by TwitchAuth. */
 export interface HelixAuth {
   clientId: string;
@@ -234,17 +243,24 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       };
     },
 
-    /** Send Chat Announcement (scope moderator:manage:announcements; token user = a moderator). 204. */
+    /**
+     * Send Chat Announcement (scope moderator:manage:announcements; token user = a moderator). 204. `color`: one of
+     * Twitch's five (anything else: the channel's accent colour, `primary`).
+     */
     async sendAnnouncement(
       broadcasterId: string,
       moderatorId: string,
       message: string,
+      color: string | null = null,
     ): Promise<void> {
       const qs = new URLSearchParams({
         broadcaster_id: broadcasterId,
         moderator_id: moderatorId,
       });
-      await request('POST', `/chat/announcements?${qs}`, { message });
+      await request('POST', `/chat/announcements?${qs}`, {
+        message,
+        ...(color && ANNOUNCEMENT_COLORS.includes(color) ? { color } : {}),
+      });
     },
 
     /** Enabled EventSub subscriptions of this token (all pages): used to detect another consumer. */

@@ -199,7 +199,13 @@ export interface ClaimedStep {
   step_id: string;
   attempt_id: string;
   type: 'chat' | 'module';
-  params: { mode?: string; text?: string; reply_to?: string | null };
+  params: {
+    mode?: string;
+    text?: string;
+    reply_to?: string | null;
+    /** An announcement's colour (Twitch's five); absent: the channel's accent colour. */
+    color?: string;
+  };
   status: string;
 }
 
@@ -249,7 +255,7 @@ export interface LabChatOutputDeps {
       is_sent: boolean;
       drop_reason: { code: string; message: string } | null;
     }>;
-    announce(text: string): Promise<void>;
+    announce(text: string, color: string | null): Promise<void>;
   };
   journal: SendJournal;
   limiter: RateLimiter;
@@ -303,7 +309,7 @@ export function createLabChatOutput(d: LabChatOutputDeps) {
     const text = step.params.text ?? '';
     try {
       if (step.params.mode === 'announce') {
-        await d.send.announce(text);
+        await d.send.announce(text, step.params.color ?? null);
         return { event: 'succeeded' };
       }
       const r = await d.send.chat(
