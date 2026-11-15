@@ -281,7 +281,7 @@ Studio › Progression › Level Up › **Tester un Level Up** : un test adminis
 
 ## 11. Ce qui attend Antoni
 
-- **Installer Studio 0.1.35** (« Rechercher une mise à jour ») : réglages de l'annonce et du décalage du son, liste des
+- ~~Installer Studio 0.1.35~~ : fait (Studio 0.1.38 installé le 15/11). Pour mémoire : réglages de l'annonce et du décalage du son, liste des
   viewers avec son, pseudos du classement, test de l'annonce réelle.
 - Studio › Level Up › **Envoyer une vraie annonce test…** (source OBS « Level Up » connectée) : le son, puis le bandeau
   `[TEST]` 3 s après ; « Dernière annonce test » affiche les deux heures.

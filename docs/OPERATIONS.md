@@ -42,7 +42,9 @@ Applications : `raptoru-core` `3m7cputub9wt7nwx2k78cme3`, `raptoru-bot`
   (la base est vidée), par exemple un conteneur `postgres:17-alpine` dédié ; liste : script `test:integration` de
   `apps/core-api/package.json`.
 - E2E navigateur : `npm run e2e` (pile isolée, port 4399).
-- Pendant le développement : typage et tests ciblés ; avant livraison : suites globales, intégration, lint, build.
+- Pendant le développement : typage et tests ciblés ; avant livraison : lint, typage et tests de ce qui a changé ;
+  les suites globales et l'intégration tournent dans la CI de `main`, barrière de tout déploiement
+  ([AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) § 7).
 - Échecs intermittents connus sous charge (relancer seuls) : crash Windows vitest `0xC0000409`, Studio `brb`,
   `alerts-twitch-chain`, `creepy`, `word-game-service`, `bonk-lab`, `sub-wheel` « bad port », `random-ban` (délai).
 
@@ -87,7 +89,7 @@ Variables de Production notables : Core `CAUTION_CHAT=true`, `VOTEKICK_CHAT=true
 ### Release officielle (`npm run studio:release`)
 
 Pipeline et règles : [README](../README.md) « Studio releases ». Publie sur `raptorutwitch/raptoru-studio-releases`
-(au 08/11 : **0.1.27**, 07/11 ; workflow GitHub — [CICD.md](CICD.md) § 3). Depuis le 21/10 (CLAUDE.md) :
+(au 15/11 : **0.1.38** ; en pratique par le workflow GitHub « Studio — construire / publier » — [CICD.md](CICD.md) § 3). Depuis le 21/10 (CLAUDE.md) :
 commit, push et release **seulement sur demande explicite d'Antoni** ; un lot « validé en local » ne suffit pas. Exige
 un `main` propre : jamais depuis le checkout principal (fichiers non commités).
 

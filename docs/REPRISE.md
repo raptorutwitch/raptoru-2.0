@@ -1,6 +1,7 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 15/11/2026** (Commandes Chat V2.1 livré, sons de commandes immédiats). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+**Mis à jour le 15/11/2026** (clôture : Commandes Chat V2.1, sons de commandes immédiats, méthode de travail
+[AGENT_WORKFLOW.md](AGENT_WORKFLOW.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
@@ -17,10 +18,11 @@ Règle de partage : le Core décide (données, Jetons, règles, files), le bot L
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (15/11 ~21:30 UTC) : Core c1da930a, bot d2fd5bb7 (sains), Studio 0.1.38 publié (installation = Antoni),
-site inchangé. origin/main = c1da930a (+ cette documentation).
+Production (relevé du 15/11, clôture) : Core c1da930a, bot d2fd5bb7 (sains), Studio 0.1.38 publié ET installé sur le
+PC (build-info), site inchangé. Dernier code sur main : c1da930a ; ensuite documentation seule (PR #81, #82, clôture).
 Sons de commandes immédiats : la demande de Studio attend sur le Core (wait_ms) au lieu d'interroger toutes les 2 s ;
-mesuré dans le Lab : 30–120 ms du message reçu par le Core au son joué (avant : + 0 à 2 s d'attente).
+mesuré dans le Lab : 30–120 ms du message reçu par le Core au son joué (avant : + 0 à 2 s d'attente). Pas mesuré
+dans le vrai OBS ni avec le vrai chat Twitch.
 Commandes Chat (docs/COMMANDS_V2_STATUS.md) : action « son » (joué par la source OBS sonore « Level Up »), viewers
 précis par ID Twitch ; V2.1 : déclencheur « message contenant une expression » (sans « ! », une fois par message, mot
 entier ou n'importe où) et édition déléguée (Studio › Règles › Modification déléguée : le viewer active / coupe la
@@ -37,8 +39,9 @@ et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE P
 release-inventory/INVENTAIRE-a971386f8c8d.md (95 commits, remplace 7355c44acce2) à valider par Antoni, puis
 npm run package:production -- --shell v2 (--check déjà vert), Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Gestes d'Antoni restants : installer Studio 0.1.38 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) ;
-essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension et la publier.
+Gestes d'Antoni restants : régler la commande d'Aouh (Déclenchement, Modification déléguée) et essayer en vrai les
+expressions et la latence ; essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension (sa ligne),
+puis ZIP, Hosted Test, revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md § 15.
 Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
@@ -46,8 +49,11 @@ publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git cl
 le checkout principal (c'est le dossier de données du Studio installé). Travailler dans
 Documents\Raptoru 2.0 - Worktrees\<nom>. « Validé » = testé à la main par Antoni.
 
-À lire avant de coder : docs/REPRISE.md, CLAUDE.md, docs/AGENT_WORKFLOW.md § 0 (méthode), docs/PROJECT_STATUS.md,
-docs/ROADMAP.md, puis le document du module.
+Méthode (adoptée le 15/11) : docs/AGENT_WORKFLOW.md — classes A/B/C/D, tests locaux ciblés, une seule CI (celle de
+main), attentes en arrière-plan, doc dans la même PR. Le checkout principal est en retard sur main : lire les documents
+avec git show origin/main:<chemin> ou dans Documents\Raptoru 2.0 - Worktrees\agent (worktree réutilisable).
+À lire avant de coder : docs/AGENT_WORKFLOW.md § 0, docs/REPRISE.md § 0, puis au besoin docs/PROJECT_STATUS.md,
+docs/ROADMAP.md et le document du module.
 ```
 
 ## 1. Le projet en dix lignes
@@ -172,10 +178,14 @@ Activation du matin (GO d'Antoni) :
   [archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md](archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md).
 - **Studio** : 0.1.34 publié.
 
+**Ensuite (15/11)** : Commandes Chat (action son, viewers par ID, V2.1 expressions et édition déléguée, sons
+immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS_V2_STATUS.md)) ; méthode de travail
+[AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) (PR #82). Studio 0.1.38 est installé sur le PC.
+
 **En attente d'Antoni** :
 
-- installer Studio 0.1.35 ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
+- régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
   plus de Level Up V2 et du mini-profil), puis la publication. Il remplace les inventaires non validés
   `7355c44acce2`, `4799eb697eee` et `bb8700814939`.

@@ -8,7 +8,7 @@
 >
 > - le Core qui le sert est **en Production** (`f04b41a2`) ;
 > - l'extension qui l'affiche attend la ligne de validation d'Antoni
->   (`apps/twitch-extension/release-inventory/INVENTAIRE-7355c44acce2.md`), puis la publication Twitch ;
+>   (`apps/twitch-extension/release-inventory/INVENTAIRE-a971386f8c8d.md`, qui remplace `7355c44acce2`), puis la publication Twitch ;
 > - tant qu'elle n'est pas publiée, **les viewers ne le voient pas**.
 >
 > Effet immédiat du Core sur l'extension publiée actuelle : les restrictions du viewer arrivent dans sa session, et les
