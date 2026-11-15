@@ -21,6 +21,7 @@ import {
   syntax,
 } from './decide.js';
 import {
+  commandSoundsQueued,
   draftSteps,
   insertSounds,
   insertSteps,
@@ -193,6 +194,13 @@ export class CommandsAdmission {
    * A message that launches nothing is `ignored`.
    */
   async chat(msg: LabChatMessage): Promise<ChatOutcome> {
+    const out = await this.launch(msg);
+    // Committed: Studio's waiting claim takes the sounds now (steps.ts, long-poll).
+    if (Number(out.sounds) > 0) commandSoundsQueued(msg.channel_id);
+    return out;
+  }
+
+  private async launch(msg: LabChatMessage): Promise<ChatOutcome> {
     const cmd = splitCommand(msg.text);
     if (cmd) {
       const out = await this.exactCommand(msg, cmd);
@@ -435,14 +443,15 @@ export class CommandsAdmission {
       drafts,
     });
     // The « sound » actions: Studio's OBS sound source plays them (not chat steps).
+    const sounds = (d.rendered?.actions ?? []).flatMap((a) =>
+      a.type === 'sound' ? [{ action_id: a.id, sound: a.sound }] : [],
+    );
     await insertSounds(q, {
       invocationId: id,
       channelId: msg.channel_id,
       now: ev.now,
       ttlMs: this.deps.stepTtlMs ?? STEP_RULES.ttlMs,
-      sounds: (d.rendered?.actions ?? []).flatMap((a) =>
-        a.type === 'sound' ? [{ action_id: a.id, sound: a.sound }] : [],
-      ),
+      sounds,
     });
     return {
       outcome: d.decision,
@@ -450,6 +459,7 @@ export class CommandsAdmission {
       message: d.message,
       invocation_id: id,
       steps,
+      sounds: sounds.length,
     };
   }
 

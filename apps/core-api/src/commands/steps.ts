@@ -381,6 +381,14 @@ export async function insertAnnouncement(
 /** The executor polls every second while idle: silent for longer than this = absent. */
 export const EXECUTOR_ABSENT_AFTER_MS = 5_000;
 
+/** Longest wait of a sound claim (long-poll): well under the proxies' timeouts. */
+export const SOUND_MAX_WAIT_MS = 25_000;
+const soundWaiters = new Map<string, Set<() => void>>();
+/** An admission committed sounds for this channel: the waiting claims read them now. */
+export function commandSoundsQueued(channelId: string) {
+  for (const wake of [...(soundWaiters.get(channelId) ?? [])]) wake();
+}
+
 export class CommandSteps {
   readonly rules: StepRules;
   /**
@@ -663,7 +671,35 @@ export class CommandSteps {
    * Studio's OBS sound source (every 2 s while a source listens): the command sounds to play now, each handed out ONCE
    * (played, with the consumer); one older than its minute of life is expired, never played late.
    */
-  async claimSounds(channelId: string, consumer: string) {
+  /**
+   * The command sounds of the channel, each handed out once. `waitMs` (long-poll, Studio's OBS sound source): with none
+   * queued, the call waits until an admission queues one (commandSoundsQueued, after its commit) or the delay ends —
+   * the sound leaves the Core as soon as it is decided, with no polling interval. The waiter is set before the first
+   * read: a sound committed in between is never missed.
+   */
+  async claimSounds(channelId: string, consumer: string, waitMs = 0) {
+    const wait = Math.min(Math.max(waitMs, 0), SOUND_MAX_WAIT_MS);
+    if (!wait) return this.claimSoundsNow(channelId, consumer);
+    let wake = () => {};
+    const woken = new Promise<void>((resolve) => (wake = resolve));
+    const set = soundWaiters.get(channelId) ?? new Set();
+    soundWaiters.set(channelId, set);
+    set.add(wake);
+    const timer = setTimeout(wake, wait);
+    timer.unref?.();
+    try {
+      const first = await this.claimSoundsNow(channelId, consumer);
+      if (first.sounds.length) return first;
+      await woken;
+      return await this.claimSoundsNow(channelId, consumer);
+    } finally {
+      clearTimeout(timer);
+      set.delete(wake);
+      if (!set.size) soundWaiters.delete(channelId);
+    }
+  }
+
+  private async claimSoundsNow(channelId: string, consumer: string) {
     return this.db.tx(async (q) => {
       const now = this.clock.now();
       await q.query(

@@ -55,8 +55,11 @@ Mis à jour le 2026-10-05. Vérifier `git status` / `git log` avant de se fier a
   - Le Core le met en file à l'admission (`cmd_sounds`, migration additive `20261128130000_cmd_sounds.sql`) : une fois
     par utilisation acceptée, expiré après la minute de vie des étapes (jamais en retard), sans lien avec « Sortie chat
     réelle » ni avec l'économie.
-  - Studio le prend toutes les 2 s tant qu'une source écoute (`/v1/lab/commands/<chaîne>/sounds/claim`, par le cockpit
-    en Production), chaque son une seule fois.
+  - Studio le prend **dès qu'il est décidé** tant qu'une source écoute : sa demande attend sur le Core (`wait_ms`,
+    20 s au plus, `/v1/lab/commands/<chaîne>/sounds/claim`, par le cockpit en Production), qui répond dès qu'une
+    admission a mis un son en file. Mesuré dans le Lab (15/11) : 30 à 120 ms du message reçu par le Core au son joué
+    par la source OBS, contre 0 à 2 s d'attente avant (`e2e/commands-sound-latency.e2e.ts`). Chaque son une seule fois ;
+    les sons Level Up gardent leur interrogation toutes les 2 s.
 - **Viewers précis par ID Twitch** (`audience.allow_ids`) : ils gardent le droit s'ils changent de pseudo.
   - Studio convertit un pseudo saisi en ID grâce à l'annuaire du Core ; un pseudo inconnu est refusé, jamais deviné.
   - Même droit d'équipe et même historique que « Autoriser aussi » (`audience.allow`).
