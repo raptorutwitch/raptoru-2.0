@@ -92,6 +92,7 @@ interface LuRules {
   level_model: 'curve' | 'fixed';
   level_up_sound: boolean;
   level_up_sound_cooldown_s: number;
+  level_up_sound_lead_s: number;
   level_up_max_age_s: number;
   level_up_chat: boolean;
   level_up_chat_text: string;
@@ -115,6 +116,16 @@ interface SoundViewer {
   login: string | null;
   source: 'extension' | 'legacy';
   changedAt: string;
+}
+interface Announcement {
+  id: number;
+  test: boolean;
+  names: number;
+  sound: { status: string; reason: string | null };
+  announce: { status: string; reason: string | null };
+  queuedAt: string;
+  playedAt: string | null;
+  announcedAt: string | null;
 }
 interface NamesRefresh {
   at: string;
@@ -174,6 +185,9 @@ const REASON_FR: Record<string, string> = {
   newer_level_up: 'regroupé avec un niveau plus haut',
   sound_cooldown: 'délai entre deux sons',
   outbox_refused: 'file du chat indisponible',
+  no_announcement: 'pas d’annonce (le son va avec l’annonce)',
+  no_obs_source: 'aucune source OBS à temps : pas de son après le bandeau',
+  announcement_failed: 'annonce refusée par Twitch',
 };
 const WAITING_FR: Record<string, string> = {
   pending: 'inconnu pour l’instant',
@@ -290,6 +304,7 @@ export function mountLevelUpScene(
   let listeners: { count: number; viewers: SoundViewer[] } | null = null;
   let listenersAt = '';
   let names: NamesRefresh | null = null;
+  let announced: Announcement[] = [];
   let titles: { id: string; label: string }[] = [];
   let sim: Simulation | null = null;
   let prefRows: LegacyPrefRow[] | null = null;
@@ -332,6 +347,9 @@ export function mountLevelUpScene(
         ),
         getJson<{ last: NamesRefresh | null }>('/api/progression/names'),
       ]);
+      announced = await getJson<Announcement[]>(
+        '/api/progression/announcements',
+      ).catch(() => announced);
       status = s;
       rules = st.rules;
       titles = (st.catalog ?? [])
@@ -451,7 +469,7 @@ export function mountLevelUpScene(
         <h4 class="pg-h">Anti-farm du chat</h4>
         ${numrow('Lettres ou chiffres différents', fld('data-lu-num="message_min_distinct" min="1" max="20"', r.message_min_distinct))}
         ${numrow('Même message sans XP pendant', fld('data-lu-num="message_repeat_window_s" min="0" max="86400"', r.message_repeat_window_s, 's'))}
-        <p class="d-note">Une vraie annonce Twitch (bandeau coloré). Le premier Level Up ouvre la fenêtre de regroupement : à sa fin, une seule annonce nomme tout le monde (8 pseudos au plus, le reste une minute après). Un viewer monté plusieurs fois n’apparaît qu’une fois, à son plus haut niveau. Les pseudos sont écrits sans @ : personne n’est notifié. Le titre équipé sur raptoru.fr s’affiche entre crochets, rien sans titre. Le son reste à part (immédiat, selon le choix du viewer). La « Sortie chat réelle » et la limite du bot s’appliquent.</p>
+        <p class="d-note">Une vraie annonce Twitch (bandeau coloré). Le premier Level Up ouvre la fenêtre de regroupement : à sa fin, une seule annonce nomme tout le monde (8 pseudos au plus, le reste une minute après). Un viewer monté plusieurs fois n’apparaît qu’une fois, à son plus haut niveau. Les pseudos sont écrits sans @ : personne n’est notifié. Le titre équipé sur raptoru.fr s’affiche entre crochets, rien sans titre. Si au moins un viewer nommé a activé le son, un seul son part dans OBS juste avant le bandeau (réglage dans « Son sur le stream ») ; sinon l’annonce part tout de suite. La « Sortie chat réelle » et la limite du bot s’appliquent.</p>
         <button type="button" class="d-btn" data-lu="save-text">Enregistrer le texte et les délais</button>`,
       ),
     );
@@ -513,6 +531,7 @@ export function mountLevelUpScene(
         'Son sur le stream',
         'sound',
         `${r ? row('Sons Level Up', sw(r.level_up_sound, 'data-lu-rule="level_up_sound"', 'Sons Level Up')) : ''}
+        ${r ? numrow('Le son précède l’annonce de', fld('data-lu-num2="level_up_sound_lead_s" min="0" max="5"', r.level_up_sound_lead_s, 's'), 'avance decalage bandeau') : ''}
         ${r ? numrow('Un son au plus toutes les', fld('data-lu-num2="level_up_sound_cooldown_s" min="0" max="86400"', r.level_up_sound_cooldown_s, 's')) : ''}
         ${
           s
@@ -523,7 +542,7 @@ export function mountLevelUpScene(
           <div class="pg-lu-acts"><button type="button" class="d-btn" data-lu="sound-pick">${s.custom_sound ? 'Remplacer le son…' : 'Choisir un son…'}</button>${s.custom_sound ? '<button type="button" class="d-btn ghost" data-lu="sound-reset">Supprimer mon son</button>' : ''}<button type="button" class="d-btn" data-lu="test-sound">Tester le son</button></div>`
             : '<div class="d-empty">Source indisponible : Studio n’a pas de profil Core.</div>'
         }
-        <p class="d-note">Le son n’est joué que pour les viewers qui l’ont activé dans l’extension (« Jouer un son lorsque je monte de niveau ») : jamais par défaut. Rien ne s’affiche sur le stream. Le fichier reste sur ce PC ; vérifie que tu as le droit de diffuser ce son en public.</p>`,
+        <p class="d-note">Un seul son par annonce, joué dans OBS juste avant le bandeau Twitch (l’annonce part ensuite, après le décalage réglé), et seulement si au moins un viewer nommé l’a activé dans l’extension (« Jouer un son lorsque je monte de niveau ») : jamais par défaut. Personne à l’écoute : l’annonce part tout de suite, sans son. Sans source OBS connectée à temps, pas de son (jamais après le bandeau). Rien ne s’affiche sur le stream. Le fichier reste sur ce PC ; vérifie que tu as le droit de diffuser ce son en public.</p>`,
       ),
     );
   }
@@ -641,6 +660,7 @@ export function mountLevelUpScene(
           <label class="pg-fl"><span>Titre (facultatif)</span><select class="d-in" data-lu-test-title aria-label="Titre du test"><option value="">Aucun</option>${titles.map((t) => `<option value="${esc(t.id)}" ${t.id === testTitle ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label>
         </div>
         <div class="pg-lu-chat" aria-label="Aperçu du message de LeCroupier_"><b>LeCroupier_</b><span data-lu-test-line>${esc(testLine())}</span></div>
+        <div data-lu-last-test-slot>${lastTestHtml()}</div>
         ${row(
           'Source OBS « Level Up »',
           s
@@ -654,14 +674,44 @@ export function mountLevelUpScene(
           <button type="button" class="d-btn pri" data-lu="test-levelup">Tester un Level Up</button>
           <button type="button" class="d-btn" data-lu="test-chat">Envoyer une vraie annonce test…</button>
         </div>
-        <p class="d-note">« Tester un Level Up » joue ton son dans OBS par la vraie source (rien ne s’affiche sur le stream) et montre ci-dessus le message de LeCroupier_, sans l’envoyer. Aucune XP, aucun niveau, aucun badge, aucun historique. « Envoyer une vraie annonce test » publie l’annonce Twitch « [TEST] … » (bandeau coloré) dans ton vrai chat, après confirmation.</p>`,
+        <p class="d-note">« Tester un Level Up » joue ton son dans OBS par la vraie source (rien ne s’affiche sur le stream) et montre ci-dessus le message de LeCroupier_, sans l’envoyer. Aucune XP, aucun niveau, aucun badge, aucun historique. « Envoyer une vraie annonce test » suit le chemin du live, après confirmation : le son dans OBS d’abord, puis l’annonce Twitch « [TEST] … » (bandeau coloré) dans ton vrai chat, après le décalage réglé.</p>`,
       ),
     );
+  }
+
+  /** The last test announcement: when its sound played, when Twitch showed the banner (the timing, measured). */
+  function lastTestHtml() {
+    const t = announced.find((a) => a.test);
+    if (!t) return '';
+    const hms = (iso: string | null) =>
+      iso ? new Date(iso).toLocaleTimeString('fr-FR') : '';
+    const gap =
+      t.playedAt && t.announcedAt
+        ? ` (${((Date.parse(t.announcedAt) - Date.parse(t.playedAt)) / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s après le son)`
+        : '';
+    const sound =
+      t.sound.status === 'played'
+        ? `son joué à ${hms(t.playedAt)}`
+        : t.sound.status === 'waiting'
+          ? 'son en attente de la source OBS'
+          : `pas de son (${REASON_FR[t.sound.reason ?? ''] ?? t.sound.status})`;
+    const banner =
+      t.announce.status === 'sent'
+        ? `bandeau affiché par Twitch à ${hms(t.announcedAt)}${gap}`
+        : t.announce.status === 'failed'
+          ? 'bandeau refusé par Twitch'
+          : 'bandeau en attente';
+    return `<p class="d-note" data-lu-last-test>Dernière annonce test : ${esc(sound)} · ${esc(banner)}.</p>`;
   }
 
   function paint() {
     paintModel();
     paintTest();
+    // The last test's timing: refreshed even while the test block keeps the focus (its button after a click).
+    patch(
+      host.querySelector<HTMLElement>('[data-lu-last-test-slot]'),
+      lastTestHtml(),
+    );
     paintAnnounce();
     paintSound();
     paintListeners();

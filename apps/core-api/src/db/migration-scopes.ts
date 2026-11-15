@@ -115,6 +115,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261125130000_caution_pool.sql',
   // Level Up V2 (normalization audit, level-up events, viewer notification modes); Lab twin 20261126120000.
   '20261126130000_progression_level_up.sql',
+  // Level Up: one row per announcement, its sound played once Twitch confirmed it; Lab twin 20261127120000.
+  '20261127130000_level_up_announcements.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -231,6 +233,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261125120000_caution_pool_lab.sql',
   // Level Up V2: the Lab twin of 20261126130000_progression_level_up.sql (same content).
   '20261126120000_progression_level_up_lab.sql',
+  // Level Up announcements and their synchronized sound: the Lab twin of 20261127130000 (same content).
+  '20261127120000_level_up_announcements_lab.sql',
 ]);
 
 /**

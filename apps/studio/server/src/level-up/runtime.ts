@@ -42,13 +42,15 @@ export function soundFormat(data: Buffer): 'mp3' | 'ogg' | 'wav' | null {
   return null;
 }
 
+/**
+ * One announcement's sound (Core: one per announcement, just before its banner, delivered once). Only `id` and `sound`
+ * reach the OBS page; the rest is for the logs.
+ */
 export type LevelUpNotice = {
   id: number;
-  twitchUserId: string;
-  displayName: string;
-  level: number;
-  fromLevel: number;
   sound: boolean;
+  test?: boolean;
+  names?: number;
 };
 
 /** The default level-up chime: a rising arpeggio (C5 E5 G5 C6), about 2.4 s, 22 050 Hz mono 16-bit WAV. */
@@ -280,14 +282,7 @@ export class LevelUpRuntime {
     // « Tester le son »: the sound on the connected sources only, at the volume set (no viewer, no Core).
     if (req.method === 'POST' && p === '/test') {
       if (!this.clients.size) return reply(409, { error: 'no_source' });
-      this.push({
-        id: 0,
-        twitchUserId: '0',
-        displayName: 'Test',
-        level: 0,
-        fromLevel: 0,
-        sound: true,
-      });
+      this.push({ id: 0, sound: true, test: true });
       return reply(200, { sent: true });
     }
     reply(404, { error: 'not_found' });

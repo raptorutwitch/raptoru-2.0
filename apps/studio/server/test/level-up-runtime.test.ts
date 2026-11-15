@@ -85,14 +85,8 @@ describe('Level Up OBS source', () => {
   it('nothing asked from Core without a source; with one: the notices pushed once, with the volume; wrong token refused', async () => {
     const { origin, token, calls, api } = await start([
       [
-        {
-          id: 7,
-          twitchUserId: '1',
-          displayName: 'Ana',
-          level: 12,
-          fromLevel: 11,
-          sound: true,
-        },
+        // One announcement's sound (Core's shape since the sound goes just before the banner).
+        { id: 7, sound: true, test: false, names: 2 },
       ],
     ]);
     await new Promise((r) => setTimeout(r, 80));
