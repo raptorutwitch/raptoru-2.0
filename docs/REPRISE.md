@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 15/11/2026** (livraison Level Up V2 et mini-profil). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+**Mis à jour le 15/11/2026** (Level Up V2 clôturé : finitions déployées). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
@@ -8,26 +8,29 @@ précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-1
 
 ```text
 Raptoru 2.0 — reprise au 15/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
-Livraison du 15/11 FAITE (GO d'Antoni) : Level Up V2 ACTIF en Production et mini-profil viewer fusionné.
-Journal : docs/archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md ; modules : docs/LEVEL_UP_V2.md, docs/MINI_PROFIL.md.
+Level Up V2 CLÔTURÉ (15/11, GO d'Antoni) : actif en Production, finitions déployées ; mini-profil fusionné.
+Journaux : docs/archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md, docs/archive/LIVRAISON_2026-11-15_LEVEL_UP_FINITIONS.md ;
+modules : docs/LEVEL_UP_V2.md, docs/MINI_PROFIL.md.
 
 Projet : plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
 Règle de partage : le Core décide (données, Jetons, règles, files), le bot LeCroupier_ parle à Twitch (EventSub, chat),
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (15/11) : Core f04b41a2 (sain), bot 13969a8c, Studio 0.1.34 publié (installation = Antoni), site inchangé.
-origin/main = f04b41a2 (+ cette documentation).
+Production (15/11 ~14:25 UTC) : Core et bot d2fd5bb7 (sains), Studio 0.1.35 publié (installation = Antoni), site
+inchangé. origin/main = d2fd5bb7 (+ cette documentation).
 Level Up V2 : 1 000 XP/niveau, normalisation WizeBot appliquée (910 comptes, 441 niveaux changés), 11 badges sub
-(266 attributions), préférences historiques restaurées, annonces LeCroupier_ et sons allumés. Studio › Level Up :
-« Tester un Level Up » (son par la vraie source OBS, aperçu du message, test public [TEST] sur confirmation).
+(266 attributions), préférences historiques restaurées. Vraie annonce Twitch « 🚀 LEVEL UP — Pseudo [Titre] (niveau) »
+groupée sur 5 min (8 pseudos), sans @ ; un seul son par annonce, 3 s avant le bandeau (0–5 s), seulement si un viewer
+nommé l'a activé. Pseudos du classement repris de Twitch par l'identifiant (0 numérique). Studio › Level Up : réglages,
+« Viewers avec son activé », « Pseudos du classement », vraie annonce [TEST] sur confirmation.
 Extension : mini-profil (avatar, Jetons/Crédits, niveau et rang, abonnement et multiplicateur, restrictions, Préférences)
 fusionné dans les deux shells, PAS ENCORE PUBLIC : inventaire release-inventory/INVENTAIRE-7355c44acce2.md à valider
 par Antoni, puis npm run package:production -- --shell v2, Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Gestes d'Antoni restants : installer Studio 0.1.34, envoyer son son, ajouter la source OBS « Level Up », tester ;
-valider l'inventaire de l'extension et la publier.
-Prochain chantier possible : Chaos V2 lot 0 (docs/chaos/), ou au choix d'Antoni.
+Gestes d'Antoni restants : installer Studio 0.1.35, essayer « Envoyer une vraie annonce test » ; valider l'inventaire
+de l'extension et la publier.
+Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
@@ -148,7 +151,10 @@ live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.
 
 ## 5. Situation au 15/11
 
-**Livraison Level Up V2 et mini-profil : FAITE le 15/11** (GO d'Antoni).
+**Level Up V2 : CLÔTURÉ le 15/11** (GO d'Antoni). Finitions déployées vers 14:25 UTC (Core et bot `d2fd5bb7`,
+Studio 0.1.35) : [archive/LIVRAISON_2026-11-15_LEVEL_UP_FINITIONS.md](archive/LIVRAISON_2026-11-15_LEVEL_UP_FINITIONS.md).
+
+Activation du matin (GO d'Antoni) :
 
 - **Fusions** : PR #70 puis #71, `main` = `f04b41a2`.
 - **Core** : `f04b41a2` déployé, migration `20261126130000_progression_level_up.sql` appliquée.
@@ -158,9 +164,8 @@ live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.
 
 **En attente d'Antoni** :
 
-- installer Studio 0.1.34 ;
-- son fichier son ;
-- la source OBS « Level Up » et « Tester un Level Up » ;
+- installer Studio 0.1.35 ;
+- « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-7355c44acce2.md`, 94 commits), puis la publication.
   Elle remplace les inventaires non validés `4799eb697eee` et `bb8700814939`.
 
