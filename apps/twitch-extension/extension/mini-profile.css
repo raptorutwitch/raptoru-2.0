@@ -1,5 +1,6 @@
-/* Mini-profil viewer — MAQUETTE (shared/mini-profile.js). Classes mp-*, chargées après hub.css (app/boot.js).
-   Avatar dans l'en-tête du Hub ; panneau flottant ancré sous l'avatar, dans les limites du Hub. */
+/* Mini-profil viewer — MAQUETTE V2 (shared/mini-profile.js). Classes mp-*, chargées après hub.css (app/boot.js).
+   Avatar dans l'en-tête du Hub ; panneau flottant ancré sous l'avatar, dans les limites du Hub, sans défilement :
+   en-tête commun, navigation (onglets + accès directs), vues empilées dans une même case (hauteur stable). */
 
 /* --- Avatar de l'en-tête -------------------------------------------------------------------- */
 .mp-avatar-btn {
@@ -20,6 +21,7 @@
   outline: 2px solid #dcc4ff;
   outline-offset: 1px;
 }
+/* Restriction active : un point ambre, discret mais identifiable. */
 .mp-avatar-btn__dot {
   position: absolute;
   right: 1px;
@@ -35,8 +37,11 @@
 /* Avatar rond : un fin anneau de progression (XP du niveau en cours) autour de la photo. */
 .mp-ava {
   --mp-ring: 2px;
+  --mp-size: 30px;
   position: relative;
   display: grid;
+  width: var(--mp-size);
+  height: var(--mp-size);
   flex: none;
   place-items: center;
   border-radius: 50%;
@@ -47,6 +52,9 @@
 }
 .mp-ava__img {
   display: grid;
+  width: calc(var(--mp-size) - 2 * var(--mp-ring));
+  height: calc(var(--mp-size) - 2 * var(--mp-ring));
+  box-sizing: border-box;
   overflow: hidden;
   place-items: center;
   border: 2px solid #170f29;
@@ -57,26 +65,12 @@
   height: 66%;
   user-select: none;
 }
-.mp-ava--sm {
-  width: 30px;
-  height: 30px;
-}
-.mp-ava--sm .mp-ava__img {
-  width: calc(30px - 2 * var(--mp-ring));
-  height: calc(30px - 2 * var(--mp-ring));
-  box-sizing: border-box;
-}
 .mp-ava--lg {
-  --mp-ring: 3px;
-  width: 52px;
-  height: 52px;
-  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
+  --mp-ring: 2.5px;
+  --mp-size: 46px;
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.32);
 }
 .mp-ava--lg .mp-ava__img {
-  width: calc(52px - 2 * var(--mp-ring));
-  height: calc(52px - 2 * var(--mp-ring));
-  box-sizing: border-box;
-  border-width: 3px;
   border-color: #2a1f45;
 }
 .mp-avatar-btn:hover .mp-ava,
@@ -102,6 +96,11 @@
   }
 }
 
+/* Panneau ouvert : le Hub ne peut plus défiler par programme (un focus ou un scrollIntoView l'aurait décalé). */
+.rh-hub:has(> .mp-panel) {
+  overflow: clip;
+}
+
 /* --- Panneau ---------------------------------------------------------------------------------- */
 .mp-panel {
   --mp-line: rgba(214, 180, 255, 0.14);
@@ -112,6 +111,7 @@
   --mp-credit: #7cc4ff;
   --mp-credit-ink: #cfe8ff;
   --mp-amber: #f5b84a;
+  --mp-pad: 12px;
   /* Les sections s'adaptent à la largeur du panneau lui-même (zoom, panneau étroit), pas à celle de la fenêtre. */
   container: mp / inline-size;
   position: absolute;
@@ -123,6 +123,8 @@
   max-height: calc(100% - 56px);
   box-sizing: border-box;
   flex-direction: column;
+  gap: 10px;
+  padding: var(--mp-pad);
   border: 1px solid rgba(214, 180, 255, 0.24);
   border-radius: 14px;
   /* Surface relevée : nettement plus claire que le fond du Hub, jamais un voile sombre par-dessus. */
@@ -138,9 +140,10 @@
   text-align: left;
   transform-origin: calc(100% - 17px) -6px;
 }
-/* Petite pointe vers l'avatar. */
+/* Petite pointe vers l'avatar (derrière le contenu). */
 .mp-panel::before {
   position: absolute;
+  z-index: 0;
   top: -6px;
   right: 13px;
   width: 10px;
@@ -151,23 +154,9 @@
   content: '';
   transform: rotate(45deg);
 }
-/* Encore du contenu plus bas : un léger fondu en bas du panneau (le panneau défile seul, jamais le Hub). */
-.mp-panel::after {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  left: 1px;
-  z-index: 2;
-  height: 26px;
-  border-radius: 0 0 13px 13px;
-  background: linear-gradient(180deg, transparent, #221939);
-  content: '';
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s;
-}
-.mp-panel.has-more::after {
-  opacity: 1;
+.mp-panel > * {
+  position: relative;
+  z-index: 1;
 }
 .mp-panel.is-entering {
   animation: mp-open 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.1);
@@ -178,47 +167,31 @@
     transform: translateY(-4px) scale(0.97);
   }
 }
-.mp-scroll {
-  /* Au-dessus de la pointe : le contenu qui défile passe devant elle, jamais dessous. */
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-color: rgba(214, 180, 255, 0.3) transparent;
-  scrollbar-width: thin;
-}
 .mp-i {
   width: 15px;
   height: 15px;
   flex: none;
 }
 
-/* Identité */
-.mp-id {
+/* En-tête commun : avatar, pseudo, statut ; ⚙ Préférences à droite. */
+.mp-head {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 11px;
-  padding: 0 0 10px;
-  border-bottom: 1px solid var(--mp-line);
 }
-.mp-id__text {
+.mp-head__text {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .mp-name {
   /* Pseudo long : une ligne, un peu plus petit s'il le faut (mini-profile.js), puis « … » et le pseudo entier au survol. */
   display: block;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 15.5px;
   font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.2;
@@ -227,15 +200,18 @@
 }
 .mp-tags {
   display: flex;
+  min-width: 0;
+  max-height: 19px;
   flex-wrap: wrap;
   gap: 4px;
+  overflow: hidden;
 }
 .mp-tag {
-  padding: 2px 7px;
+  padding: 1px 7px;
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.5;
   white-space: nowrap;
 }
 .mp-tag--sub {
@@ -250,8 +226,221 @@
   background: rgba(255, 255, 255, 0.07);
   color: var(--mp-muted);
 }
+.mp-gear {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  align-self: flex-start;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--mp-faint);
+  cursor: pointer;
+  transition:
+    color 0.14s,
+    background 0.14s,
+    border-color 0.14s;
+}
+.mp-gear .mp-i {
+  width: 17px;
+  height: 17px;
+  transition: transform 0.3s ease;
+}
+.mp-gear:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+.mp-gear[aria-pressed='true'] {
+  border-color: rgba(214, 180, 255, 0.35);
+  background: rgba(168, 85, 247, 0.22);
+  color: #fff;
+}
+.mp-gear[aria-pressed='true'] .mp-i {
+  transform: rotate(60deg);
+}
 
-/* Wallet : deux monnaies côte à côte, chacune dans sa couleur. */
+/* Navigation : deux onglets dans un rail (Accueil, Restrictions) ; deux accès directs à côté (Historique, Classement),
+   marqués d'une flèche : ils ouvrent l'écran existant ou raptoru.fr, jamais une fausse page dans le panneau. */
+.mp-nav {
+  display: grid;
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.875fr) minmax(0, 0.875fr);
+  align-items: stretch;
+  gap: 3px;
+}
+.mp-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(8, 4, 18, 0.38);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.mp-tabs__pill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(168, 85, 247, 0.42), rgba(124, 58, 237, 0.32));
+  box-shadow:
+    0 2px 8px rgba(124, 58, 237, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition:
+    transform 0.24s cubic-bezier(0.3, 1.25, 0.5, 1),
+    opacity 0.15s;
+}
+.mp-panel[data-view='restr'] .mp-tabs__pill {
+  transform: translateX(100%);
+}
+.mp-panel[data-view='prefs'] .mp-tabs__pill {
+  opacity: 0;
+}
+.mp-tab,
+.mp-short {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 1px 5px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--mp-faint);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mp-tab > span,
+.mp-short > span:not(.mp-short__icon) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-tab .mp-i,
+.mp-short .rh-icon {
+  width: 17px;
+  height: 17px;
+}
+.mp-tab:hover,
+.mp-short:hover,
+.mp-tab[aria-selected='true'] {
+  color: #fff;
+}
+.mp-short:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.mp-tab:focus-visible,
+.mp-short:focus-visible,
+.mp-gear:focus-visible,
+.mp-cur--credits:focus-visible,
+.mp-switch:focus-visible,
+.mp-pref-row:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 1px;
+}
+.mp-short {
+  padding-right: 0;
+  padding-left: 0;
+}
+.mp-short__icon {
+  display: grid;
+  place-items: center;
+}
+.mp-short--history .mp-short__icon {
+  color: #dcc4ff;
+}
+.mp-short--ranking .mp-short__icon {
+  color: var(--mp-token-ink);
+}
+.mp-short__go {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 9px;
+  height: 9px;
+  opacity: 0.7;
+}
+.mp-tab__count,
+.mp-short__count {
+  position: absolute;
+  top: 2px;
+  left: calc(50% + 5px);
+  min-width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border: 2px solid #261c40;
+  border-radius: 999px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 11px;
+  text-align: center;
+}
+.mp-tab__count {
+  background: var(--mp-amber);
+  color: #3a2504;
+}
+.mp-short__count {
+  background: #a855f7;
+  color: #fff;
+}
+.mp-short.is-unset span:not(.mp-short__icon) {
+  text-decoration: line-through dotted;
+}
+
+/* Vues empilées dans la même case : le panneau garde la hauteur de la plus haute. */
+.mp-body {
+  display: grid;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(214, 180, 255, 0.3) transparent;
+  scrollbar-width: thin;
+}
+.mp-view {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+.mp-view.is-on {
+  visibility: visible;
+}
+.mp-view.is-entering {
+  animation: mp-view 0.18s ease-out;
+}
+/* Fondu et très léger zoom, jamais un glissement : une vue décalée dépasserait de sa case, et le navigateur ferait alors
+   défiler le Hub pour la « montrer » (clic ou focus pendant la transition). */
+@keyframes mp-view {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+/* Accueil — wallet : les deux soldes principaux, chacun dans sa couleur. */
 .mp-wallet {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -261,18 +450,31 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px 10px 9px;
+  gap: 4px;
+  margin: 0;
+  padding: 9px 11px 10px;
   border: 1px solid;
-  border-radius: 11px;
+  border-radius: 12px;
+  color: #f6f1ff;
+  font: inherit;
+  text-align: left;
 }
 .mp-cur--tokens {
   border-color: rgba(242, 198, 95, 0.3);
-  background: linear-gradient(180deg, rgba(242, 198, 95, 0.13), rgba(242, 198, 95, 0.03));
+  background: linear-gradient(180deg, rgba(242, 198, 95, 0.14), rgba(242, 198, 95, 0.03));
 }
 .mp-cur--credits {
   border-color: rgba(124, 196, 255, 0.3);
-  background: linear-gradient(180deg, rgba(124, 196, 255, 0.13), rgba(124, 196, 255, 0.03));
+  background: linear-gradient(180deg, rgba(124, 196, 255, 0.14), rgba(124, 196, 255, 0.03));
+}
+button.mp-cur--credits {
+  cursor: pointer;
+  transition:
+    border-color 0.14s,
+    background 0.14s;
+}
+button.mp-cur--credits:hover {
+  border-color: rgba(124, 196, 255, 0.55);
 }
 .mp-cur__head {
   display: flex;
@@ -286,6 +488,12 @@
 }
 .mp-cur--credits .mp-cur__head {
   color: var(--mp-credit-ink);
+}
+.mp-cur__more {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  opacity: 0.6;
 }
 /* Pièces : les mêmes que le wallet de l'en-tête (currency-switch.css). */
 .mp-coin {
@@ -314,48 +522,67 @@
 .mp-coin--credits::before {
   content: '✦';
 }
+/* Le total et, au toucher des crédits, leur détail par module : à la même place (aucune hauteur ne bouge). */
 .mp-cur__box {
-  display: block;
+  display: grid;
   min-width: 0;
+  min-height: 26px;
+  align-items: center;
+}
+.mp-cur__box > * {
+  grid-area: 1 / 1;
 }
 .mp-cur__val {
   display: inline-block;
-  font-size: 19px;
+  justify-self: start;
+  font-size: 21px;
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.15;
   white-space: nowrap;
 }
-.mp-cur__sub {
+.mp-cur__split {
+  display: -webkit-box;
   overflow: hidden;
-  color: var(--mp-faint);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--mp-credit-ink);
   font-size: 10.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 700;
+  line-height: 1.25;
+  visibility: hidden;
+}
+.mp-cur.is-split .mp-cur__val {
+  visibility: hidden;
+}
+.mp-cur.is-split .mp-cur__split {
+  visibility: visible;
 }
 
-/* Progression : niveau, barre, XP restante, estimation. */
+/* Accueil — progression : le niveau, la barre, l'XP restante. */
 .mp-prog {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
+  gap: 11px;
+  padding: 11px 12px;
   border: 1px solid var(--mp-line);
-  border-radius: 11px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.035);
 }
 .mp-lvl {
   display: flex;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   flex: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 13px;
   background: linear-gradient(135deg, #c98cff, #7c3aed);
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 4px 12px rgba(124, 58, 237, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
   line-height: 1;
 }
 .mp-lvl small {
@@ -366,7 +593,7 @@
   text-transform: uppercase;
 }
 .mp-lvl b {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 900;
 }
 .mp-prog__body {
@@ -374,7 +601,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 .mp-prog__top,
 .mp-prog__foot {
@@ -385,8 +612,14 @@
   gap: 6px;
 }
 .mp-prog__title {
-  font-size: 13px;
+  overflow: hidden;
+  color: var(--mp-muted);
+  font-size: 10px;
   font-weight: 800;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .mp-prog__xp {
   color: var(--mp-muted);
@@ -398,7 +631,7 @@
   color: #fff;
 }
 .mp-bar {
-  height: 7px;
+  height: 8px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
@@ -411,9 +644,8 @@
   box-shadow: 0 0 8px rgba(201, 140, 255, 0.55);
 }
 .mp-prog__foot {
-  flex-wrap: wrap;
   color: var(--mp-muted);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .mp-prog__foot b {
   color: #f1e6ff;
@@ -424,333 +656,270 @@
   white-space: nowrap;
 }
 
-/* Restrictions : discrètes sans rien, visibles (ambre, jamais rouge) quand une restriction joue. */
-.mp-restr {
+/* Restrictions : un état vide calme, ou une carte par restriction (ambre bloqué, lavande délai). */
+.mp-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--mp-faint);
+  font-size: 11.5px;
+  text-align: center;
+}
+.mp-empty__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 5px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(143, 214, 176, 0.12);
+  color: #8fd6b0;
+}
+.mp-empty__icon .mp-i {
+  width: 22px;
+  height: 22px;
+}
+.mp-empty strong {
+  color: #f1e6ff;
+  font-size: 13px;
+}
+.mp-rlist {
+  display: flex;
+  max-height: 168px;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+.mp-r {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid;
   border-radius: 11px;
 }
-.mp-restr.is-none {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--mp-line);
-  color: var(--mp-muted);
+.mp-r--block {
+  border-color: rgba(245, 184, 74, 0.32);
+  background: rgba(245, 184, 74, 0.08);
 }
-.mp-restr__icon {
-  position: relative;
+.mp-r--cooldown {
+  border-color: rgba(200, 182, 255, 0.24);
+  background: rgba(200, 182, 255, 0.06);
+}
+.mp-r__icon {
   display: grid;
   place-items: center;
 }
-.mp-restr.is-none .mp-restr__icon {
-  color: #8fd6b0;
-}
-.mp-i--over {
-  position: absolute;
-  width: 15px;
-  height: 15px;
-}
-.mp-restr__title {
-  flex: 1;
-  font-weight: 700;
-}
-.mp-restr__state {
-  color: var(--mp-faint);
-  font-size: 11px;
-}
-.mp-restr.is-active {
-  border: 1px solid rgba(245, 184, 74, 0.38);
-  background: linear-gradient(180deg, rgba(245, 184, 74, 0.11), rgba(245, 184, 74, 0.04));
-}
-.mp-restr__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px 6px;
-  color: #ffe1a6;
-}
-.mp-restr__head .mp-restr__title {
-  color: #fff3dc;
-}
-.mp-restr__count {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(245, 184, 74, 0.2);
-  color: #ffe1a6;
-  font-size: 10.5px;
-  font-weight: 800;
-}
-.mp-restr__list {
-  display: flex;
-  flex-direction: column;
-  padding: 0 4px 4px;
-}
-.mp-r summary {
-  display: flex;
-  min-height: 32px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 6px;
-  border-radius: 8px;
-  cursor: pointer;
-  list-style: none;
-}
-.mp-r summary::-webkit-details-marker {
-  display: none;
-}
-.mp-r summary:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-.mp-r summary:focus-visible {
-  outline: 2px solid #dcc4ff;
-  outline-offset: -2px;
-}
-.mp-r--block summary > .mp-i:first-child {
+.mp-r--block .mp-r__icon {
   color: var(--mp-amber);
 }
-.mp-r--cooldown summary > .mp-i:first-child {
+.mp-r--cooldown .mp-r__icon {
   color: #c8b6ff;
 }
-.mp-r__what {
+.mp-r__main {
   display: flex;
   min-width: 0;
-  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+.mp-r__line {
+  display: flex;
+  min-width: 0;
   align-items: baseline;
   gap: 6px;
 }
-.mp-r__what b {
+.mp-r__line b {
   overflow: hidden;
+  font-size: 12.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mp-r__what span {
+.mp-r__kind {
   color: var(--mp-faint);
-  font-size: 11px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.mp-r__detail {
+  overflow: hidden;
+  color: var(--mp-muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mp-r__left {
-  color: #fff3dc;
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   white-space: nowrap;
 }
-.mp-r__chev {
-  width: 13px;
-  height: 13px;
-  color: var(--mp-faint);
-  transition: transform 0.15s;
+.mp-r--block .mp-r__left {
+  color: #ffe1a6;
 }
-.mp-r[open] .mp-r__chev {
-  transform: rotate(90deg);
+.mp-r--cooldown .mp-r__left {
+  color: #e2d8ff;
 }
-.mp-r__detail {
-  margin: 0 6px 6px 29px;
+
+/* Préférences (⚙) : les réglages du compte — aujourd'hui « Actualiser » ; le son de Level Up arrive avec Level Up V2. */
+.mp-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mp-pref {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--mp-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.mp-pref__text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+.mp-pref__text b {
+  font-size: 12.5px;
+}
+.mp-pref__text span {
   color: var(--mp-muted);
   font-size: 11px;
 }
-.mp-r__detail span {
-  color: var(--mp-faint);
-}
-
-/* Raccourcis : Historique et Classement (déplacés du bas de l'accueil), mêmes icônes. */
-.mp-links {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.mp-link {
+.mp-switch {
   position: relative;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
-  border: 1px solid var(--mp-line);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f6f1ff;
-  font: inherit;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    border-color 0.14s,
-    background 0.14s;
-}
-.mp-link:hover {
-  border-color: rgba(214, 180, 255, 0.4);
-  background: rgba(255, 255, 255, 0.08);
-}
-.mp-link:focus-visible,
-.mp-row:focus-visible,
-.mp-lab__seg button:focus-visible {
-  outline: 2px solid #dcc4ff;
-  outline-offset: 2px;
-}
-.mp-link__icon {
-  display: grid;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 21px;
   flex: none;
-  place-items: center;
-  border-radius: 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: background 0.18s;
 }
-.mp-link__icon .rh-icon {
-  width: 16px;
-  height: 16px;
+.mp-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.18s cubic-bezier(0.3, 1.3, 0.5, 1);
 }
-.mp-link--history .mp-link__icon {
-  background: rgba(168, 85, 247, 0.2);
-  color: #dcc4ff;
+.mp-switch[aria-checked='true'] {
+  background: #8b5cf6;
 }
-.mp-link--ranking .mp-link__icon {
-  background: rgba(242, 198, 95, 0.16);
-  color: var(--mp-token-ink);
+.mp-switch[aria-checked='true'] i {
+  transform: translateX(15px);
 }
-.mp-link__text {
+.mp-pref__note {
   display: flex;
-  min-width: 0;
-  flex-direction: column;
-  line-height: 1.2;
-}
-.mp-link__text b {
-  font-size: 12.5px;
-}
-.mp-link__text small {
-  overflow: hidden;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 2px;
   color: var(--mp-faint);
   font-size: 10.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.mp-link__count {
-  position: absolute;
-  top: -5px;
-  right: -4px;
-  min-width: 17px;
-  height: 17px;
-  box-sizing: border-box;
-  padding: 0 4px;
-  border: 2px solid #261c40;
-  border-radius: 999px;
-  background: #a855f7;
-  color: #fff;
-  font-size: 9.5px;
-  font-weight: 800;
-  line-height: 13px;
-  text-align: center;
-}
-.mp-link__ext {
+.mp-pref__note .mp-i {
   width: 12px;
   height: 12px;
-  margin-left: auto;
-  color: var(--mp-faint);
+  margin-top: 1px;
 }
-
-/* Préférences : une ligne de menu. */
-.mp-row {
+.mp-pref-row {
   display: flex;
   min-height: 34px;
   align-items: center;
   gap: 9px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 9px;
+  padding: 0 10px;
+  border: 1px solid var(--mp-line);
+  border-radius: 10px;
   background: none;
   color: var(--mp-muted);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
 }
-.mp-row span {
-  flex: 1;
-  text-align: left;
-}
-.mp-row:hover {
+.mp-pref-row:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
-.mp-row__chev {
-  width: 13px;
-  height: 13px;
+.mp-pref-row:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 
-/* Lab seulement : la maquette se dit maquette ; cas de démonstration. */
-.mp-lab {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 9px;
-  border-top: 1px dashed rgba(214, 180, 255, 0.22);
-}
-.mp-lab__tag {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--mp-faint);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.mp-lab__tag .mp-i {
-  width: 12px;
-  height: 12px;
-}
-.mp-lab__seg {
-  display: flex;
-  padding: 2px;
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.25);
-}
-.mp-lab__seg button {
-  flex: 1;
-  min-width: 0;
-  padding: 5px 4px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--mp-faint);
-  font: inherit;
-  font-size: 10.5px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.mp-lab__seg button[aria-pressed='true'] {
-  background: rgba(168, 85, 247, 0.3);
-  color: #fff;
-}
-
-/* Panneau étroit (zoom 125–150 %) : les blocs passent l'un sous l'autre plutôt que d'être réduits ou coupés. */
-@container mp (max-width: 259px) {
-  .mp-wallet,
-  .mp-links {
-    grid-template-columns: 1fr;
+/* Panneau étroit (zoom 125–150 % ; largeur intérieure du panneau) : la navigation garde ses icônes, les intitulés
+   passent en infobulle. */
+@container mp (max-width: 229px) {
+  .mp-tab > span,
+  .mp-short > span:not(.mp-short__icon) {
+    display: none;
+  }
+  .mp-tab,
+  .mp-short {
+    padding: 8px 2px;
+  }
+  .mp-tab__count,
+  .mp-short__count {
+    top: 0;
+  }
+  /* Le médaillon dit déjà « Niv. » : le titre laisse la place à l'XP. */
+  .mp-prog__title {
+    display: none;
   }
   .mp-prog__top {
-    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
-@container mp (max-width: 219px) {
+@container mp (max-width: 169px) {
+  .mp-wallet {
+    grid-template-columns: 1fr;
+  }
   .mp-lvl {
     display: none;
   }
   .mp-ava--lg {
-    --mp-ring: 2px;
-    width: 42px;
-    height: 42px;
+    --mp-size: 38px;
   }
-  .mp-ava--lg .mp-ava__img {
-    width: calc(42px - 4px);
-    height: calc(42px - 4px);
-    border-width: 2px;
+}
+/* Hauteur courte (Video Component 565 × 376) : un peu moins d'air, rien ne défile. */
+@media (max-height: 400px) {
+  .mp-panel {
+    --mp-pad: 10px;
+    gap: 8px;
+  }
+  .mp-ava--lg {
+    --mp-size: 40px;
+  }
+  .mp-cur {
+    padding: 7px 10px 8px;
+  }
+  .mp-prog {
+    padding: 9px 11px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mp-panel.is-entering {
+  .mp-panel.is-entering,
+  .mp-view.is-entering {
     animation: none;
   }
   .mp-ava,
-  .mp-r__chev {
+  .mp-tabs__pill,
+  .mp-switch i,
+  .mp-gear .mp-i {
     transition: none;
   }
 }

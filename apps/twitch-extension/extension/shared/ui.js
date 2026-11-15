@@ -1444,12 +1444,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       void preferencesToggle;
       const profile = profileAvatar(document, {
         openHistory: () => navigateTo(ACTIONS_MODULE.id),
-        openPreferences: () => {
-          viewerPreferencesOpen = true;
-          notificationCenterOpen = false;
-          renderPreservingViewport();
-          queueMicrotask(() => root.querySelector('.jdm-viewer-preferences__close')?.focus({ preventScroll: true }));
-        },
+        // Préférences vit dans le panneau (⚙) : « Actualiser » y appelle le même rafraîchissement qu'avant.
+        refresh: () => onRefresh?.(),
         rankingUrl: state.site_url || '',
         closeDrawers: () => {
           if (!notificationCenterOpen && !viewerPreferencesOpen) return;
