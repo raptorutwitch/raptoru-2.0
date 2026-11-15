@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 15/11/2026** (Commandes Chat V2.1 livré : rôles, expressions, édition déléguée). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+**Mis à jour le 15/11/2026** (Commandes Chat V2.1 livré, sons de commandes immédiats). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
@@ -17,8 +17,10 @@ Règle de partage : le Core décide (données, Jetons, règles, files), le bot L
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (15/11 ~19:20 UTC) : Core f9146944, bot d2fd5bb7 (sains), Studio 0.1.37 publié (installation = Antoni),
-site inchangé. origin/main = f9146944 (+ cette documentation).
+Production (15/11 ~21:30 UTC) : Core c1da930a, bot d2fd5bb7 (sains), Studio 0.1.38 publié (installation = Antoni),
+site inchangé. origin/main = c1da930a (+ cette documentation).
+Sons de commandes immédiats : la demande de Studio attend sur le Core (wait_ms) au lieu d'interroger toutes les 2 s ;
+mesuré dans le Lab : 30–120 ms du message reçu par le Core au son joué (avant : + 0 à 2 s d'attente).
 Commandes Chat (docs/COMMANDS_V2_STATUS.md) : action « son » (joué par la source OBS sonore « Level Up »), viewers
 précis par ID Twitch ; V2.1 : déclencheur « message contenant une expression » (sans « ! », une fois par message, mot
 entier ou n'importe où) et édition déléguée (Studio › Règles › Modification déléguée : le viewer active / coupe la
@@ -35,7 +37,7 @@ et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE P
 release-inventory/INVENTAIRE-a971386f8c8d.md (95 commits, remplace 7355c44acce2) à valider par Antoni, puis
 npm run package:production -- --shell v2 (--check déjà vert), Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Gestes d'Antoni restants : installer Studio 0.1.37 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) ;
+Gestes d'Antoni restants : installer Studio 0.1.38 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) ;
 essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension et la publier.
 Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
 
