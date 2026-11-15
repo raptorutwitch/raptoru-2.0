@@ -46,7 +46,8 @@ publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git cl
 le checkout principal (c'est le dossier de données du Studio installé). Travailler dans
 Documents\Raptoru 2.0 - Worktrees\<nom>. « Validé » = testé à la main par Antoni.
 
-À lire avant de coder : docs/REPRISE.md, CLAUDE.md, docs/PROJECT_STATUS.md, docs/ROADMAP.md, puis le document du module.
+À lire avant de coder : docs/REPRISE.md, CLAUDE.md, docs/AGENT_WORKFLOW.md § 0 (méthode), docs/PROJECT_STATUS.md,
+docs/ROADMAP.md, puis le document du module.
 ```
 
 ## 1. Le projet en dix lignes
