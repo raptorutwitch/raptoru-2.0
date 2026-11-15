@@ -1,7 +1,18 @@
 # Mini-profil viewer (extension Twitch)
 
-> Livré le 15/11/2026 avec Level Up V2. Maquette validée par Antoni (V2, onglets sans défilement), puis retouches A1–A4 et
-> raccordement aux vraies données. Dans les **deux shells** : legacy (`shared/ui.js`, celui de la Production aujourd'hui) et v2 (`app/panel.js`).
+> Code fusionné le 15/11/2026 (PR #71, `f04b41a2`). Maquette validée par Antoni (V2, onglets sans défilement), puis
+> retouches A1–A4 et raccordement aux vraies données. Dans les **deux shells** : legacy (`shared/ui.js`) et v2
+> (`app/panel.js`, celui des prochains paquets de Production).
+>
+> **Disponibilité** :
+>
+> - le Core qui le sert est **en Production** (`f04b41a2`) ;
+> - l'extension qui l'affiche attend la ligne de validation d'Antoni
+>   (`apps/twitch-extension/release-inventory/INVENTAIRE-7355c44acce2.md`), puis la publication Twitch ;
+> - tant qu'elle n'est pas publiée, **les viewers ne le voient pas**.
+>
+> Effet immédiat du Core sur l'extension publiée actuelle : les restrictions du viewer arrivent dans sa session, et les
+> pastilles de restriction déjà prévues dans le Hub peuvent s'afficher.
 
 ## Ce que voit le viewer
 
