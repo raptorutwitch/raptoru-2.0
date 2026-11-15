@@ -1,7 +1,7 @@
 # Mini-profil viewer (extension Twitch)
 
 > Livré le 15/11/2026 avec Level Up V2. Maquette validée par Antoni (V2, onglets sans défilement), puis retouches A1–A4 et
-> raccordement aux vraies données. Shell **legacy** (celui du Lab et de la Production) ; le shell v2 (`app/`) ne l'a pas.
+> raccordement aux vraies données. Dans les **deux shells** : legacy (`shared/ui.js`, celui de la Production aujourd'hui) et v2 (`app/panel.js`).
 
 ## Ce que voit le viewer
 
@@ -51,8 +51,8 @@ Une donnée absente reste neutre : « — », « Pas encore classé », « duré
 ## Fichiers
 
 - `extension/shared/mini-profile.js` et `extension/mini-profile.css` : le module ;
-- `shared/ui.js` : le câblage (données et comportements existants) ;
-- `app/boot.js` : la feuille.
+- `shared/ui.js` (legacy) et `app/panel.js` (v2) : le câblage, identique (données et comportements existants) ;
+- `app/boot.js` : la feuille, dans les deux shells.
 - Core : `ext/twitch-names.ts` (avatar), `ext/ext-facade.ts` (restrictions, `viewer_avatar`, `loyalty`),
   `loyalty/viewer-status.ts` (+ route interne `/v1/lab/loyalty/me/:id`, jamais en HTTP public).
 - Lab : `extension/lab-modules/mini-profil.html` (vitrine des formats, jamais empaquetée) ;
@@ -65,10 +65,9 @@ Une donnée absente reste neutre : « — », « Pas encore classé », « duré
   - `ext-frontier.test.ts` : avatar du CDN Twitch seulement, restrictions du viewer seul et sans nom de modérateur,
     niveau avec Loyalty.
 - E2E `progression-v2-level-up.e2e.ts` : interrupteur du son désactivé par défaut et gardé après rechargement.
-- Lab, 6 formats × 3 vues : aucun défilement (sauf au zoom 150 %, 181 × 260 px), hauteur identique sur chaque vue, rien
+- Lab, 6 formats × 3 vues, shell legacy et shell v2 : aucun défilement (sauf au zoom 150 %, 181 × 260 px), hauteur identique sur chaque vue, rien
   hors du Hub, aucun solde coupé. Formats : panneau 320, zoom 125 % et 150 %, mobile 360, vidéo 565 et 960.
 
 ## Reste à faire (non bloquant)
 
-- Shell v2 (`app/panel.js`) : à porter le jour de la bascule v2.
 - Ancien Lab (`studio:legacy`, Lab EBS) : sans Loyalty ni avatar (états neutres).
