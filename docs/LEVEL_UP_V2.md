@@ -86,7 +86,7 @@ la Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu l
 | Palier | Fichier |
 | --- | --- |
 | 10 → 100 | `1. UglyTitan` … `10. FoundingTitan` : 10 dessins de 990 px, un par numéro |
-| 110 | `11. Badge HK` (1980 px) : **identique octet pour octet** à `Badges Bits/Badge Bits sans nom aussi.png`. Badge sub ou badge Bits ? **À confirmer par Antoni** ; non importé par défaut |
+| 110 | `11. Badge HK` (1980 px) : badge sub, **confirmé par Antoni le 15/11** même s'il est aussi rangé, identique, dans `Badges Bits/` (`Badge Bits sans nom aussi.png`) |
 | — | `Obsolète/` : anciennes versions des badges 1 à 8, écartées |
 | — | `Badges Bits/` : badges de Bits, écartés |
 
@@ -97,7 +97,9 @@ la Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu l
 - **Il ne devine jamais** :
   - deux images différentes sous un même numéro laissent le palier vide ;
   - un numéro manquant est signalé ;
-  - une image identique à un autre fichier est « à confirmer » et ne s'importe que cochée.
+  - une même image utilisée pour deux paliers à la racine est « à confirmer » et ne s'importe que cochée ;
+  - une image aussi présente dans un sous-dossier (le n° 11 dans `Badges Bits`) n'est qu'une remarque : elle est importée.
+- **L'ordre des 11 badges est validé par Antoni (15/11)** : n° 1 → niveau 10, …, n° 11 → niveau 110.
 - Chaque image est réduite à **128 px** (règle des badges du Core, 40 Ko au plus) ; le dessin ne change pas.
 - Le badge s'appelle « Niveau X ». Nom et image se retouchent dans Boutique.
 
@@ -183,7 +185,7 @@ d'origine sont gardées).
 3. Release Studio (onglet Level Up et source OBS), installation par Antoni.
 4. Extension : publier la version avec la case à cocher et « Mon niveau », téléversement par Antoni.
 5. Préférences historiques : export Supabase, puis Studio › Level Up : simulation, puis import.
-6. Badges : Studio › Level Up › « Importer mes badges sub… » (le palier 110 seulement si Antoni le confirme).
+6. Badges : Studio › Level Up › « Importer mes badges sub… » (les 11 badges, niveaux 10 à 110, cochés d’office).
 7. Studio › Level Up › **Simuler** sur les données du jour, puis **Activer Level Up V2…**.
 8. OBS : ajouter la source navigateur « Level Up » (invisible), choisir le son, « Tester le son ».
 9. Allumer « Annoncer les Level Up » et « Sons Level Up » quand Antoni le décide.
@@ -212,7 +214,7 @@ d'origine sont gardées).
 - **Studio** :
   - la source OBS **ne dessine rien** (vérifié sur la page et le script) et ne reçoit que « joue le son » ;
   - son envoyé, remplacé, supprimé ; volume ; test ;
-  - **ordre des badges sub** sur le dossier réel (10 badges dans l'ordre, le 11ᵉ « à confirmer », `Obsolète` et
+  - **ordre des badges sub** sur le dossier réel (11 badges dans l'ordre, le 11ᵉ importé avec une simple remarque, `Obsolète` et
     `Badges Bits` écartés, deux images sous un numéro jamais devinées) ;
   - lecture de l'export Supabase (CSV et JSON).
 - **Extension** : la case envoie un booléen ; « Mon niveau ».
@@ -227,5 +229,4 @@ d'origine sont gardées).
 
 - **Le fichier son** : à envoyer depuis Studio. Le droit de le diffuser en public reste à clarifier avant la Production.
 - **L'import des choix historiques** (export lu le 15/11 : 5 son activé, 1 coupé), après le déploiement du Core.
-- **Le badge n° 11** : badge sub ou badge Bits ?
 - Le GO de chaque étape du § 9.

@@ -460,7 +460,7 @@ export function mountLevelUpScene(
       ? `<h4 class="pg-h">Tes badges sub trouvés</h4><table class="d-tbl pg-lu-t"><thead><tr><th>Importer</th><th>Palier</th><th>Badge</th><th>Remarque</th></tr></thead><tbody>${plan.badges
           .map(
             (b) =>
-              `<tr><td><input type="checkbox" data-lu-take="${b.n}" ${plan!.take.has(b.n) ? 'checked' : ''} aria-label="Importer le badge ${b.n}"></td><td>${fmt(b.level)}</td><td>n°${b.n} · ${esc(b.name)}</td><td>${b.doubt ? `<span class="d-tag off">à confirmer</span> ${esc(b.doubt)}` : ''}</td></tr>`,
+              `<tr><td><input type="checkbox" data-lu-take="${b.n}" ${plan!.take.has(b.n) ? 'checked' : ''} aria-label="Importer le badge ${b.n}"></td><td>${fmt(b.level)}</td><td>n°${b.n} · ${esc(b.name)}</td><td>${b.doubt ? `<span class="d-tag off">à confirmer</span> ${esc(b.doubt)}` : b.note ? `<span class="d-faint">${esc(b.note)}</span>` : ''}</td></tr>`,
           )
           .join('')}</tbody></table>
         ${plan.issues.map((i) => `<p class="d-note">${esc(i)}</p>`).join('')}

@@ -7,8 +7,9 @@ import {
 // Level Up V2 (docs/LEVEL_UP_V2.md): what Studio decides before sending anything — the order of the sub badges (one every
 // 10 levels) and the rows of the first extension's sound choices.
 
-// The streamer's folder as it is (« Badge de ma chaine », inspected on 15/11/2026): ten numbered Titans at 990 px, an 11th
-// identical to a Bits badge, older versions of 1 to 8 in « Obsolète », Bits badges and Clip Studio files in subfolders.
+// The streamer's folder as it is (« Badge de ma chaine », inspected on 15/11/2026): eleven numbered sub badges (the 11th is
+// also kept as a Bits badge — on purpose, confirmed by Antoni), older versions of 1 to 8 in « Obsolète », Bits badges and
+// Clip Studio files in subfolders.
 const ROOT = 'Badge de ma chaine';
 const f = (path: string, hash: string, size = 1000) => ({
   path: `${ROOT}/${path}`,
@@ -58,12 +59,16 @@ describe('the sub badges in their order (one every 10 levels)', () => {
     ]);
     expect(plan.ignored.every((i) => i.why === 'subfolder')).toBe(true);
     expect(plan.ignored).toHaveLength(7);
-    // The real ambiguity only: the 11th is the very same file as a Bits badge.
-    expect(
-      plan.badges.filter((b) => b.doubt).map((b) => [b.n, b.doubt]),
-    ).toEqual([
-      [11, `identique à ${ROOT}/Badges Bits/Badge Bits sans nom aussi.png`],
-    ]);
+    // The order of the 11 is validated (15/11): no doubt; the 11th's twin among the Bits badges is only a remark.
+    expect(plan.badges.filter((b) => b.doubt)).toEqual([]);
+    expect(plan.badges.filter((b) => b.note).map((b) => [b.n, b.note])).toEqual(
+      [
+        [
+          11,
+          `aussi présent dans ${ROOT}/Badges Bits/Badge Bits sans nom aussi.png`,
+        ],
+      ],
+    );
     expect(plan.issues).toEqual([]);
   });
 
@@ -74,12 +79,14 @@ describe('the sub badges in their order (one every 10 levels)', () => {
       f('2. B.png', 'b'),
       f('2. B grand.png', 'b-large'), // two different pictures: which one? not guessed
       f('4. D.png', 'd'),
+      f('5. E.png', 'd'), // the picture of the 4th again, as the 5th: which palier? a doubt on both
       f('notes.txt', 'n'),
       f('sans numero.png', 's'),
     ]);
-    expect(plan.badges.map((b) => [b.n, b.level])).toEqual([
-      [1, 10],
-      [4, 40],
+    expect(plan.badges.map((b) => [b.n, b.level, !!b.doubt])).toEqual([
+      [1, 10, false],
+      [4, 40, true],
+      [5, 50, true],
     ]);
     expect(plan.issues).toEqual([
       expect.stringContaining('Le numéro 2 est porté par 2 images différentes'),

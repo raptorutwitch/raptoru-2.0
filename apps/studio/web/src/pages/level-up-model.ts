@@ -16,8 +16,10 @@ export interface PlannedBadge {
   level: number;
   path: string;
   name: string;
-  /** A real ambiguity on this badge (a twin file elsewhere…): not imported unless Antoni ticks it. */
+  /** A real ambiguity: the same picture used by another palier at the root — not imported unless Antoni ticks it. */
   doubt: string | null;
+  /** Worth knowing, not a doubt: the same picture also lives in a subfolder (e.g. a Bits badge) — imported. */
+  note: string | null;
 }
 
 export interface BadgePlan {
@@ -34,8 +36,9 @@ const NUMBERED = /^(\d{1,3})\s*[.)_-]?\s*(.*?)\.(png|webp|jpe?g)$/i;
 /**
  * The sub badges in their order of progression: only the numbered pictures at the TOP of the chosen folder (the
  * subfolders hold older versions or other badges); badge n → level 10 × n. Never guessed: a number used by two different
- * files leaves its palier empty (said in `issues`), a missing number is said, a picture identical to another file is
- * flagged as a doubt.
+ * files leaves its palier empty (said in `issues`), a missing number is said, one picture used by two paliers is a doubt
+ * (`doubt`, waits for a tick). The same picture kept in a subfolder too (the « Badge HK » sub badge is also a Bits badge,
+ * confirmed by Antoni on 15/11) is only a remark (`note`).
  */
 export function planSubBadges(files: BadgeFile[]): BadgePlan {
   const split = files.map((f) => f.path.replace(/\\/g, '/').split('/'));
@@ -76,13 +79,20 @@ export function planSubBadges(files: BadgeFile[]): BadgePlan {
     const twins = files.filter(
       (o) => o !== f && o.hash === f.hash && !list.some((x) => x.f === o),
     );
+    const atRoot = (o: BadgeFile) =>
+      o.path.replace(/\\/g, '/').split('/').slice(root).length === 1;
+    const otherPalier = twins.filter(atRoot);
+    const elsewhere = twins.filter((o) => !atRoot(o));
     badges.push({
       n,
       level: 10 * n,
       path: f.path,
       name,
-      doubt: twins.length
-        ? `identique à ${twins.map((t) => t.path).join(', ')}`
+      doubt: otherPalier.length
+        ? `même image qu’un autre palier : ${otherPalier.map((t) => t.path).join(', ')}`
+        : null,
+      note: elsewhere.length
+        ? `aussi présent dans ${elsewhere.map((t) => t.path).join(', ')}`
         : null,
     });
   }
