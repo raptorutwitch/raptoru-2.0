@@ -135,10 +135,15 @@ export type StepOrigin =
   | `module:${string}`;
 
 /**
- * Winner announcements (Tombola, Roue du Sub): independent messages scheduled for later (the reveal, the end of the
- * animation + 8 s). Not yet due, they never hold the queue: the messages behind them pass first.
+ * Winner announcements (Tombola, Roue du Sub) and the Level Up announcements (a few seconds after their sound):
+ * independent messages scheduled for later (the reveal, the end of the animation + 8 s, the sound's lead). Not yet due,
+ * they never hold the queue: the messages behind them pass first.
  */
-export const SCHEDULED_ORIGINS: readonly StepOrigin[] = ['raffle', 'sub_wheel'];
+export const SCHEDULED_ORIGINS: readonly StepOrigin[] = [
+  'raffle',
+  'sub_wheel',
+  'module:level_up',
+];
 
 interface StepRow {
   step_id: string;

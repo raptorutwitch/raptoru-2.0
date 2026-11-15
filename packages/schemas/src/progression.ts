@@ -23,15 +23,21 @@ export const ProgressionRulesSchema = z.strictObject({
    */
   level_model: z.enum(['curve', 'fixed']),
   /**
-   * The Level Up SOUND on stream (Studio's invisible OBS source, never any visual): played only for a viewer who turned
-   * it on in the extension (absent: no sound, ever). OFF for the whole channel until Antoni turns it on.
+   * The Level Up SOUND on stream (Studio's invisible OBS source, never any visual): ONE sound per announcement, played
+   * just BEFORE it (level_up_sound_lead_s), only if one viewer named turned it on in the extension (absent: no sound,
+   * ever). OFF for the whole channel until Antoni turns it on.
    */
   level_up_sound: z.boolean(),
-  /** One level-up sound at most per this delay, whole channel (a level-up inside it plays nothing). */
+  /** One level-up sound at most per this delay, whole channel, between the announcements (one inside it is silent). */
   level_up_sound_cooldown_s: z.number().int().min(0).max(86_400),
   /**
-   * A sound not played within this delay is dropped; a chat announcement not sent within this delay AFTER its grouping
-   * window is dropped too (« trop ancien », recorded): never an old level-up much later.
+   * The sound leads the announcement by this many seconds (anticipation): the announcement leaves that long after the OBS
+   * source played it. No sound for the announcement: it leaves at once.
+   */
+  level_up_sound_lead_s: z.number().int().min(0).max(5),
+  /**
+   * A chat announcement not sent within this delay AFTER its grouping window is dropped (« trop ancien », recorded):
+   * never an old level-up much later.
    */
   level_up_max_age_s: z.number().int().min(10).max(3600),
   /**
@@ -104,6 +110,8 @@ export const DEFAULT_PROGRESSION_RULES: ProgressionRules = {
   level_model: 'curve',
   level_up_sound: false,
   level_up_sound_cooldown_s: 60,
+  // 3 s (Antoni, 15/11/2026): the sound, then the banner.
+  level_up_sound_lead_s: 3,
   level_up_max_age_s: 120,
   level_up_chat: false,
   level_up_chat_text: '🚀 LEVEL UP — {liste}',

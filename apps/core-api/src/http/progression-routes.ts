@@ -375,6 +375,13 @@ export function progressionRoutes(
       handle: () => svc.levelUps(ch),
     },
     {
+      // The latest announcements and their sound (played once Twitch confirmed them): the test's proof in Studio.
+      method: 'GET',
+      pattern: admin('/announcements'),
+      auth,
+      handle: () => svc.announcements(ch),
+    },
+    {
       // « Viewers avec son activé » : who turned the sound on themselves (read-only — the choice stays the viewer's).
       method: 'GET',
       pattern: admin('/prefs/sound'),

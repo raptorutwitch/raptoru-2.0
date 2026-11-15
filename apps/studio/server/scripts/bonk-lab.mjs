@@ -122,6 +122,7 @@ try {
     '20261124120000_cp_reward_admin_lab.sql',
     '20261125120000_caution_pool_lab.sql',
     '20261126120000_progression_level_up_lab.sql',
+    '20261127120000_level_up_announcements_lab.sql',
   ]) {
     if (
       (

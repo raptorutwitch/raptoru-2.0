@@ -314,93 +314,6 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       );
       expect((await events()).length).toBe(2);
     });
-
-    it('the sound: none when no choice is known; only for a viewer who turned it on (here or in the first extension)', async () => {
-      await fixedNow();
-      expect(await svc.viewerPrefs(CH, '1')).toEqual({
-        level_up_sound: false,
-        level_up_sfx_opt_in: false,
-        chosen: false,
-        source: null,
-      });
-      await svc.setViewerPrefs(CH, '2', { level_up_sound: false });
-      await svc.setViewerPrefs(CH, '3', { level_up_sfx_opt_in: true }); // the first extension's switch: same meaning
-      expect(await svc.viewerPrefs(CH, '3')).toMatchObject({
-        level_up_sound: true,
-        chosen: true,
-        source: 'extension',
-      });
-      await presence(['1', '2'], 1000 * 60);
-      await svc.adjust(
-        CH,
-        {
-          viewer: '3',
-          mode: 'set_xp',
-          value: 997,
-          reason: 'test',
-          request_id: 'adj-0000-cid1',
-        },
-        studio,
-      );
-      expect(await svc.onMessage(msg('3', 'bonsoir à tous'))).toBe('xp'); // 997 + 3 = 1 000
-      expect((await events()).map((e) => [e.twitch_user_id, e.status])).toEqual(
-        [
-          ['1', 'skipped'], // no choice known: no sound
-          ['2', 'skipped'],
-          ['3', 'pending'],
-        ],
-      );
-      const { notices } = await svc.claimLevelUps(CH, 'obs-1');
-      expect(notices.map((n) => [n.twitchUserId, n.level, n.sound])).toEqual([
-        ['3', 2, true],
-      ]);
-      // Played once: nothing more.
-      expect((await svc.claimLevelUps(CH, 'obs-1')).notices).toEqual([]);
-      expect(
-        (await svc.levelUps(CH)).find((e) => e.twitchUserId === '1')?.reason,
-      ).toBe('viewer_no_sound');
-    });
-
-    it('one sound per level-up; at most one per 60 s; one per viewer; never late; the viewer or the channel turning it off', async () => {
-      await fixedNow();
-      for (const id of ['1', '2', '3'])
-        await svc.setViewerPrefs(CH, id, { level_up_sound: true });
-      await presence(['1'], 1000 * 60);
-      expect((await svc.claimLevelUps(CH, 'obs')).notices).toMatchObject([
-        { twitchUserId: '1', sound: true },
-      ]);
-      clock.current = new Date(T0.getTime() + 30_000);
-      await presence(['2'], 1000 * 60);
-      expect((await svc.claimLevelUps(CH, 'obs')).notices).toEqual([]); // within 60 s: no sound at all
-      clock.current = new Date(T0.getTime() + 2 * 60_000);
-      // Two level-ups of one viewer waiting: one sound.
-      await presence(['3'], 1000 * 60);
-      await presence(['3'], 1000 * 60);
-      const n = (await svc.claimLevelUps(CH, 'obs')).notices;
-      expect(n.map((x) => [x.twitchUserId, x.level, x.sound])).toEqual([
-        ['3', 3, true],
-      ]);
-      // Too old (2 min by default): expired, never played late.
-      clock.current = new Date(T0.getTime() + 5 * 60_000);
-      await presence(['1'], 1000 * 60);
-      clock.current = new Date(clock.current.getTime() + 3 * 60_000);
-      expect((await svc.claimLevelUps(CH, 'obs')).notices).toEqual([]);
-      // The viewer turned it off between the level-up and the sound: nothing.
-      clock.current = new Date(clock.current.getTime() + 60_000);
-      await presence(['2'], 1000 * 60);
-      await svc.setViewerPrefs(CH, '2', { level_up_sound: false });
-      expect((await svc.claimLevelUps(CH, 'obs')).notices).toEqual([]);
-      // The channel's sound off: skipped at once.
-      await svc.updateSettings(CH, { rules: { level_up_sound: false } });
-      await presence(['3'], 1000 * 60);
-      const last = await svc.levelUps(CH);
-      expect(last[0]).toMatchObject({ status: 'skipped', reason: 'sound_off' });
-      const reasons = last.map((e) => e.reason);
-      expect(reasons).toContain('sound_cooldown');
-      expect(reasons).toContain('too_old');
-      expect(reasons).toContain('viewer_no_sound');
-      expect(last.filter((e) => e.status === 'merged').length).toBe(1);
-    });
   });
 
   describe('the first extension’s sound choices (Supabase ext_viewer_preferences)', () => {
@@ -465,16 +378,6 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
           .kept_extension_choice,
       ).toBe(2);
       expect((await svc.viewerPrefs(CH, '1')).level_up_sound).toBe(false);
-    });
-
-    it('an imported « on » plays the sound of the next real level-up', async () => {
-      await activate();
-      await svc.updateSettings(CH, { rules: { level_up_sound: true } });
-      await svc.importViewerPrefs(CH, { dry_run: false, rows });
-      await presence(['1', '2'], 1000 * 60);
-      expect(
-        (await svc.claimLevelUps(CH, 'obs')).notices.map((n) => n.twitchUserId),
-      ).toEqual(['1']);
     });
   });
 
@@ -793,6 +696,278 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         error: { code: 'forbidden', message: 'no', retryable: false },
       });
       expect((await steps()).length).toBe(2);
+    });
+  });
+
+  describe('the sound, just before its announcement (one per announcement, the banner level_up_sound_lead_s later)', () => {
+    const outbox = () => new CommandSteps(db, clock);
+    const chatOn = async (sound = true) => {
+      await activate();
+      await svc.updateSettings(CH, {
+        rules: { level_up_chat: true, level_up_sound: sound },
+      });
+      await db.query(
+        `insert into cmd_channels (channel_id, chat_output) values ($1, true)
+         on conflict (channel_id) do update set chat_output = true`,
+        [CH],
+      );
+    };
+    const at = (ms: number) => {
+      clock.current = new Date(T0.getTime() + ms);
+    };
+    const levelUp = async (id: string, xpNow: number, ms: number) => {
+      at(ms);
+      await svc.adjust(
+        CH,
+        {
+          viewer: id,
+          mode: 'set_xp',
+          value: xpNow,
+          reason: 'test',
+          request_id: `adj-0000-${id}-${ms}`,
+        },
+        studio,
+      );
+      expect(await svc.onMessage(msg(id, `bonsoir tout le monde ${ms}`))).toBe(
+        'xp',
+      );
+    };
+    /** LeCroupier_ asks for the next step: null while none is due. */
+    const take = async () => (await outbox().claim(CH, 'bot')).step;
+    /** LeCroupier_ sends `s` and reports `event` (Twitch's answer). */
+    const send = async (
+      s: NonNullable<Awaited<ReturnType<typeof take>>>,
+      event: 'succeeded' | 'failed' | 'unknown',
+      retryable = false,
+    ) => {
+      const o = outbox();
+      const base = { executor_id: 'bot', attempt_id: s.attempt_id! };
+      await o.ack(CH, s.step_id, { ...base, event: 'running' });
+      await o.ack(
+        CH,
+        s.step_id,
+        event === 'succeeded'
+          ? { ...base, event }
+          : {
+              ...base,
+              event,
+              error: { code: 'twitch_error', message: 'no', retryable },
+            },
+      );
+    };
+    const obs = async () => (await svc.claimLevelUps(CH, 'obs-1')).notices;
+    const sound = async (viewer: string) =>
+      (await svc.levelUps(CH))
+        .filter((e) => e.twitchUserId === viewer)
+        .map((e) => [e.status, e.reason]);
+    const last = async () => (await svc.announcements(CH))[0]!;
+
+    it('three viewers in one window, one with the sound on: nothing before the window ends; then ONE sound on OBS, the banner 3 s after it — never before; never twice', async () => {
+      await chatOn();
+      await svc.setViewerPrefs(CH, '2', { level_up_sound: false });
+      await svc.setViewerPrefs(CH, '3', { level_up_sound: true });
+      await levelUp('1', 999, 0); // no choice known
+      await levelUp('2', 999, 10_000); // turned off
+      await levelUp('3', 999, 20_000); // turned on
+      expect(await obs()).toEqual([]); // recorded, grouped: nothing yet
+      at(300_000);
+      await svc.tick();
+      expect(await take()).toBeNull(); // the announcement waits for its sound
+      at(301_000);
+      expect(await obs()).toMatchObject([
+        { sound: true, test: false, names: 3 },
+      ]);
+      expect(await obs()).toEqual([]); // once: a reconnected source gets nothing more
+      at(303_999);
+      expect(await take()).toBeNull(); // never before the 3 s
+      at(304_000);
+      const s = (await take())!;
+      expect(s.params).toMatchObject({ mode: 'announce' });
+      await send(s, 'succeeded');
+      expect(await obs()).toEqual([]);
+      await svc.tick();
+      expect(await last()).toMatchObject({
+        sound: { status: 'played' },
+        announce: { status: 'sent' },
+        names: 3,
+      });
+      const a = await last();
+      expect(Date.parse(a.announcedAt!) - Date.parse(a.playedAt!)).toBe(3000);
+      expect(await sound('1')).toEqual([['skipped', 'viewer_no_sound']]);
+      expect(await sound('2')).toEqual([['skipped', 'viewer_no_sound']]);
+      expect(await sound('3')).toEqual([['delivered', null]]);
+    });
+
+    it('nobody named turned the sound on: the banner at once, silent (no waiting)', async () => {
+      await chatOn();
+      await levelUp('1', 999, 0);
+      at(300_000);
+      await svc.tick();
+      await send((await take())!, 'succeeded');
+      expect(await obs()).toEqual([]);
+      await svc.tick();
+      expect(await last()).toMatchObject({
+        sound: { status: 'silent' },
+        announce: { status: 'sent' },
+      });
+    });
+
+    it('no OBS source before the banner leaves: no sound after it, ever (missed); a source that comes back plays nothing', async () => {
+      await chatOn();
+      await svc.setViewerPrefs(CH, '1', { level_up_sound: true });
+      await levelUp('1', 999, 0);
+      at(300_000);
+      await svc.tick();
+      at(306_000); // 3 s of lead + 3 s for the OBS source
+      const s = (await take())!;
+      expect(await obs()).toEqual([]); // LeCroupier_ took it: too late for the sound
+      await send(s, 'succeeded');
+      expect(await obs()).toEqual([]);
+      expect(await sound('1')).toEqual([['skipped', 'no_obs_source']]);
+      expect((await last()).sound).toMatchObject({
+        status: 'missed',
+        reason: 'no_obs_source',
+      });
+    });
+
+    it('Twitch busy then OK (a retry), or a replayed acknowledgement: the sound once, never replayed; the outcome recorded, a failure too', async () => {
+      await chatOn();
+      await svc.setViewerPrefs(CH, '1', { level_up_sound: true });
+      await svc.setViewerPrefs(CH, '2', { level_up_sound: true });
+      await levelUp('1', 999, 0);
+      at(300_000);
+      await svc.tick();
+      at(301_000);
+      expect(await obs()).toHaveLength(1);
+      at(304_000);
+      await send((await take())!, 'failed', true); // retryable: waits a few seconds
+      at(310_000);
+      const s = (await take())!;
+      await send(s, 'succeeded');
+      await outbox().ack(CH, s.step_id, {
+        executor_id: 'bot',
+        attempt_id: s.attempt_id!,
+        event: 'succeeded',
+      }); // the bot's journal reports it again: nothing more
+      expect(await obs()).toEqual([]);
+      await svc.tick();
+      expect((await last()).announce.status).toBe('sent');
+      // A banner Twitch refuses: recorded on the announcement and its level-ups (never silent).
+      await levelUp('2', 999, 400_000);
+      at(700_000);
+      await svc.tick();
+      at(701_000);
+      expect(await obs()).toHaveLength(1);
+      at(704_000);
+      await send((await take())!, 'failed');
+      await svc.tick();
+      expect((await last()).announce).toMatchObject({
+        status: 'failed',
+        reason: 'failed',
+      });
+      expect(
+        (await svc.levelUps(CH)).find((e) => e.twitchUserId === '2')?.chat,
+      ).toMatchObject({ status: 'skipped', reason: 'announcement_failed' });
+    });
+
+    it('the lead from Studio (0 to 5 s); the channel sound off or the viewer turning it off: the banner at once; one sound at most per 60 s between announcements', async () => {
+      await chatOn();
+      for (const id of ['1', '2', '3', '4', '5'])
+        await svc.setViewerPrefs(CH, id, { level_up_sound: true });
+      await expect(
+        svc.updateSettings(CH, { rules: { level_up_sound_lead_s: 6 } }),
+      ).rejects.toThrow();
+      await svc.updateSettings(CH, { rules: { level_up_sound_lead_s: 0 } });
+      await levelUp('1', 999, 0);
+      at(300_000);
+      await svc.tick();
+      at(301_000);
+      expect(await obs()).toHaveLength(1);
+      await send((await take())!, 'succeeded'); // lead 0: right away
+      await svc.updateSettings(CH, { rules: { level_up_sound_lead_s: 5 } });
+      await levelUp('2', 999, 400_000);
+      at(700_000);
+      await svc.tick();
+      at(700_500);
+      expect(await obs()).toHaveLength(1);
+      at(705_499);
+      expect(await take()).toBeNull();
+      at(705_500);
+      await send((await take())!, 'succeeded');
+      // The viewer turns it off before the window ends: silent, at once.
+      await levelUp('3', 999, 800_000);
+      await svc.setViewerPrefs(CH, '3', { level_up_sound: false });
+      at(1_100_000);
+      await svc.tick();
+      await send((await take())!, 'succeeded');
+      expect(await obs()).toEqual([]);
+      expect(await sound('3')).toEqual([['skipped', 'viewer_no_sound']]);
+      // The channel's sound off: the banner at once, silent.
+      await svc.updateSettings(CH, { rules: { level_up_sound: false } });
+      await levelUp('4', 999, 1_200_000);
+      at(1_500_000);
+      await svc.tick();
+      await send((await take())!, 'succeeded');
+      expect(await sound('4')).toEqual([['skipped', 'sound_off']]);
+      // The cooldown: measured between the announcements' own times (60 s apart at least: never dropped by a clock).
+      await svc.updateSettings(CH, {
+        rules: { level_up_sound: true, level_up_sound_cooldown_s: 120 },
+      });
+      await levelUp('5', 999, 1_520_000);
+      at(1_820_000);
+      await svc.tick();
+      expect((await last()).sound).toMatchObject({ status: 'waiting' });
+    });
+
+    it('the announcements off: no announcement, no sound (recorded); the first extension’s imported « on » plays before the next banner', async () => {
+      await chatOn();
+      await svc.updateSettings(CH, { rules: { level_up_chat: false } });
+      await svc.setViewerPrefs(CH, '1', { level_up_sound: true });
+      await levelUp('1', 999, 0);
+      expect(await sound('1')).toEqual([['skipped', 'no_announcement']]);
+      await svc.updateSettings(CH, { rules: { level_up_chat: true } });
+      await svc.importViewerPrefs(CH, {
+        dry_run: false,
+        rows: [
+          {
+            channel_id: CH,
+            twitch_user_id: '2',
+            twitch_login: 'bob',
+            level_up_sfx_opt_in: true,
+            updated_at: '2026-10-01T10:00:00Z',
+          },
+        ],
+      });
+      await levelUp('2', 999, 100_000);
+      at(400_000);
+      await svc.tick();
+      at(400_500);
+      expect(await obs()).toHaveLength(1);
+      expect(await sound('2')).toEqual([['delivered', null]]);
+    });
+
+    it('Studio’s test announcement: the same circuit — the sound first (whatever the channel switch), the banner 3 s after; no XP, no level-up event', async () => {
+      await chatOn(false);
+      const before = await events();
+      const t = await svc.testLevelUpChat(CH, 'Raptoru', 25);
+      expect(await take()).toBeNull(); // waits for its sound
+      at(1_000);
+      expect(await obs()).toMatchObject([
+        { id: t.announcement, sound: true, test: true },
+      ]);
+      at(3_999);
+      expect(await take()).toBeNull();
+      at(4_000);
+      await send((await take())!, 'succeeded');
+      expect(await obs()).toEqual([]);
+      await svc.tick();
+      expect(await last()).toMatchObject({
+        test: true,
+        sound: { status: 'played' },
+        announce: { status: 'sent' },
+      });
+      expect(await events()).toEqual(before);
+      expect(await xp('1')).toBe(0);
     });
   });
 

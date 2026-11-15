@@ -17,6 +17,7 @@ const FILE = '20261113130000_progression.sql';
 const PERIODS = '20261114130000_progression_periods.sql';
 const COSMETIC = '20261118130000_cosmetic_shop.sql';
 const LEVEL = '20261126130000_progression_level_up.sql';
+const ANNOUNCE = '20261127130000_level_up_announcements.sql';
 
 /** The rollback SQL as written in the migration's header (the « -- Rollback: » comment lines, marks removed). */
 function rollbackSql(file = FILE) {
@@ -113,6 +114,38 @@ describe.skipIf(!isLocal)(
       );
     });
 
+    it('level up announcements: applied, used, rolled back by its header SQL, then applied again', async () => {
+      await migrate(db, 'prod');
+      const all = await tables();
+      const cols = await columns();
+      expect(all).toContain('progression_announcements');
+      expect(cols).toContain('progression_level_events.announcement_id');
+      await db.query(
+        `insert into progression_announcements (channel_id, step_key, names, sound_status, created_at)
+         values ('1', 'levelup:1:1', 1, 'waiting', now())`,
+      );
+      await expect(
+        db.query(
+          `insert into progression_announcements (channel_id, step_key, names, sound_status, created_at)
+           values ('1', 'levelup:1:1', 1, 'waiting', now())`,
+        ),
+      ).rejects.toThrow(/unique|duplicate/);
+      await db.query(rollbackSql(ANNOUNCE));
+      expect(await tables()).toEqual(
+        all.filter((t) => t !== 'progression_announcements'),
+      );
+      expect(await columns()).toEqual(
+        cols.filter(
+          (c) =>
+            !c.startsWith('progression_announcements.') &&
+            c !== 'progression_level_events.announcement_id',
+        ),
+      );
+      await migrate(db, 'prod');
+      expect(await tables()).toEqual(all);
+      expect(await columns()).toEqual(cols);
+    });
+
     it('level up: applied, used, rolled back by its header SQL (ledger rows kept), then applied again', async () => {
       await migrate(db, 'prod');
       const all = await tables();
@@ -140,14 +173,19 @@ describe.skipIf(!isLocal)(
       expect(rollbackSql(LEVEL)).toMatch(
         /^drop table progression_viewer_prefs,/,
       );
+      // The later migration first (its own header), then this one.
+      await db.query(rollbackSql(ANNOUNCE));
       await db.query(rollbackSql(LEVEL));
       expect(await tables()).toEqual(
-        all.filter((t) => !LEVEL_TABLES.includes(t)),
+        all.filter(
+          (t) => !LEVEL_TABLES.includes(t) && t !== 'progression_announcements',
+        ),
       );
       expect(await columns()).toEqual(
         cols.filter(
           (c) =>
             !LEVEL_TABLES.some((t) => c.startsWith(`${t}.`)) &&
+            !c.startsWith('progression_announcements.') &&
             c !== 'progression_accounts.last_message_fp',
         ),
       );
@@ -237,6 +275,7 @@ describe.skipIf(!isLocal)(
         /^drop table progression_history, progression_equipped/,
       );
       // The later migrations first (their own headers, newest first), then this one.
+      await db.query(rollbackSql(ANNOUNCE));
       await db.query(rollbackSql(LEVEL));
       await db.query(rollbackSql(COSMETIC));
       await db.query(rollbackSql(PERIODS));

@@ -149,6 +149,11 @@ const ANNOUNCE_MAX_CHARS = 450;
 const ANNOUNCE_MAX_NAMES = 8;
 /** Two announcements are at least this far apart, even when a full one leaves level-ups for the next. */
 const ANNOUNCE_MIN_GAP_MS = 60_000;
+/** A sound waits this long for Studio's OBS source (it asks every 2 s); then its announcement leaves without it. */
+const SOUND_WAIT_MS = 3_000;
+/** The longest an announcement with a sound waits in the queue: the sound's lead plus the OBS source's wait. */
+const soundWaitMs = (rules: ProgressionRules) =>
+  rules.level_up_sound_lead_s * 1000 + SOUND_WAIT_MS;
 /** A WORD JOINER after the pseudo's first character: invisible, and the name no longer mentions (pings) the viewer. */
 export const unping = (name: string) => {
   const c = Array.from(name);
@@ -426,9 +431,11 @@ export class ProgressionService {
   }
 
   /**
-   * Records a level-up, its SOUND (Studio's invisible OBS source: only when the channel's sound is on AND the viewer turned
-   * it on — no choice known = no sound) and its CHAT announcement (every real level-up while the channel's announcements
-   * are on, whatever the viewer's sound choice). The chat line itself is written by flushLevelUpChat.
+   * Records a level-up, its CHAT announcement (every real level-up while the channel's announcements are on, whatever the
+   * viewer's sound choice; written by flushLevelUpChat) and its SOUND, which goes WITH that announcement: `pending` until
+   * the announcement naming the viewer is ready, then ONE sound for the whole announcement on Studio's invisible OBS
+   * source just BEFORE it (settleAnnouncements) — only when the channel's sound is on AND the viewer turned it on (no
+   * choice known = no sound). No announcement (the announcements off): no sound.
    */
   private async levelUpEvent(
     q: Queryable,
@@ -447,12 +454,14 @@ export class ProgressionService {
       )
     )[0];
     const name = who?.name ?? viewerId;
+    const chatReason = !rules.level_up_chat ? 'chat_off' : null;
     const reason = !rules.level_up_sound
       ? 'sound_off'
       : !sound
         ? 'viewer_no_sound'
-        : null;
-    const chatReason = !rules.level_up_chat ? 'chat_off' : null;
+        : chatReason
+          ? 'no_announcement'
+          : null;
     await q.query(
       `insert into progression_level_events (channel_id, twitch_user_id, display_name, login, from_level, to_level,
          source_key, notify_mode, status, reason, chat_status, chat_reason, created_at)
@@ -505,6 +514,15 @@ export class ProgressionService {
             [channelId, ids, status, reason, now],
           )
         : null;
+    // The sound waiting for its announcement follows it: no announcement, no sound.
+    const settleSound = (ids: string[], status: string, reason: string) =>
+      ids.length
+        ? q.query(
+            `update progression_level_events set status = $3, reason = $4
+             where channel_id = $1 and id = any($2::bigint[]) and status = 'pending'`,
+            [channelId, ids, status, reason],
+          )
+        : null;
     const rows = await q.query<{
       id: string;
       twitch_user_id: string;
@@ -523,6 +541,11 @@ export class ProgressionService {
         'skipped',
         'chat_off',
       );
+      await settleSound(
+        rows.map((r) => r.id),
+        'skipped',
+        'no_announcement',
+      );
       return { sent: 0, waiting: 0 };
     }
     // « Sortie chat réelle » off (Lab without Twitch, chat muted): nothing is queued, nothing piles up for later.
@@ -538,6 +561,11 @@ export class ProgressionService {
         'skipped',
         'chat_output_off',
       );
+      await settleSound(
+        rows.map((r) => r.id),
+        'skipped',
+        'no_announcement',
+      );
       return { sent: 0, waiting: 0 };
     }
     const age = (r: (typeof rows)[number]) =>
@@ -547,6 +575,11 @@ export class ProgressionService {
       (r) => age(r) > window + rules.level_up_max_age_s * 1000,
     );
     await settle(
+      tooOld.map((r) => r.id),
+      'expired',
+      'too_old',
+    );
+    await settleSound(
       tooOld.map((r) => r.id),
       'expired',
       'too_old',
@@ -602,16 +635,36 @@ export class ProgressionService {
     const merged = fresh
       .filter((r) => named.has(r.twitch_user_id) && !ids.includes(r.id))
       .map((r) => r.id);
+    const key = `levelup:${channelId}:${ids.join('-')}`.slice(0, 200);
+    // The sound of this announcement (ONE for all the viewers named): only if one of them still has the sound on (a viewer
+    // who turned it off since their level-up gets none), the channel's sound on, and the last sound far enough.
+    const listening = new Set(
+      (
+        await q.query<{ id: string }>(
+          `select twitch_user_id as id from progression_viewer_prefs
+           where channel_id = $1 and twitch_user_id = any($2::text[]) and level_up_notify = 'sound'`,
+          [channelId, [...named]],
+        )
+      ).map((r) => r.id),
+    );
+    const sound = await this.announcementSound(
+      q,
+      channelId,
+      rules,
+      included.some((r) => listening.has(r.twitch_user_id)),
+    );
     const written = await insertAnnouncement(q, {
       channelId,
       now,
       origin: 'module:level_up',
       drafts: [
         {
-          idempotencyKey: `levelup:${channelId}:${ids.join('-')}`.slice(0, 200),
+          idempotencyKey: key,
           mode: 'announce',
           color: rules.level_up_chat_color,
           text: line(parts).slice(0, ANNOUNCE_MAX_CHARS),
+          // With a sound: the announcement waits for it (the OBS source brings it forward to « played + lead »).
+          delayMs: sound.status === 'waiting' ? soundWaitMs(rules) : 0,
         },
       ],
     });
@@ -621,10 +674,69 @@ export class ProgressionService {
       written ? null : 'outbox_refused',
     );
     await settle(merged, 'merged', 'newer_level_up');
+    await settleSound(merged, 'merged', 'newer_level_up');
+    if (written) {
+      await settleSound(
+        included
+          .filter((r) => !listening.has(r.twitch_user_id))
+          .map((r) => r.id),
+        'skipped',
+        'viewer_no_sound',
+      );
+      if (sound.status !== 'waiting')
+        await settleSound(ids, 'skipped', sound.reason ?? 'viewer_no_sound');
+      const ann = (
+        await q.query<{ id: string }>(
+          `insert into progression_announcements (channel_id, step_key, test, names, sound_status, sound_reason,
+             created_at)
+           values ($1, $2, false, $3, $4, $5, $6) returning id`,
+          [channelId, key, ids.length, sound.status, sound.reason, now],
+        )
+      )[0]!.id;
+      await q.query(
+        `update progression_level_events set announcement_id = $3
+         where channel_id = $1 and id = any($2::bigint[])`,
+        [channelId, [...ids, ...merged], ann],
+      );
+    } else await settleSound(ids, 'skipped', 'no_announcement');
     return {
       sent: written ? ids.length : 0,
       waiting: wanted.length - included.length,
     };
+  }
+
+  /**
+   * The sound of an announcement about to be queued: `waiting` (for the OBS source, just before the announcement) when
+   * one viewer named listens, the channel's sound is on and the last sound is at least level_up_sound_cooldown_s older
+   * (measured between the announcements' own times: never a sound dropped by the clock of the bot or of OBS);
+   * otherwise none, and why.
+   */
+  private async announcementSound(
+    q: Queryable,
+    channelId: string,
+    rules: ProgressionRules,
+    listening: boolean,
+  ): Promise<{
+    status: 'waiting' | 'silent' | 'skipped';
+    reason: string | null;
+  }> {
+    if (!listening) return { status: 'silent', reason: null };
+    if (!rules.level_up_sound)
+      return { status: 'skipped', reason: 'sound_off' };
+    const last = (
+      await q.query<{ at: Date | null }>(
+        `select max(created_at) as at from progression_announcements
+         where channel_id = $1 and not test and sound_status in ('waiting', 'played')`,
+        [channelId],
+      )
+    )[0]?.at;
+    if (
+      last &&
+      this.now().getTime() - new Date(last).getTime() <
+        rules.level_up_sound_cooldown_s * 1000
+    )
+      return { status: 'skipped', reason: 'sound_cooldown' };
+    return { status: 'waiting', reason: null };
   }
 
   /**
@@ -649,14 +761,176 @@ export class ProgressionService {
     return new Map(rows.map((r) => [r.id, r.label.slice(0, 40)]));
   }
 
-  /** The Core's own tick (every 30 s): an announcement whose window ended goes out even when nobody chats. */
+  /**
+   * The Core's own tick (every 30 s): an announcement whose window ended goes out even when nobody chats, and what became
+   * of the announcements given to LeCroupier_ is recorded (sent, failed; a sound the OBS source did not take before its
+   * announcement left: missed) — never a sound from here.
+   */
   async tick() {
     const channelId = this.channelOf();
     if (!channelId) return;
     await this.db.tx(async (q) => {
       const s = await this.settings(channelId, q);
       if (s.enabled) await this.flushLevelUpChat(q, channelId, s.rules);
+      await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+        `levelups:${channelId}`,
+      ]);
+      await this.settleAnnouncements(q, channelId, s.rules, null);
     });
+  }
+
+  /**
+   * The announcements given to LeCroupier_ (under the `levelups:` lock), read against their outbox step:
+   * - the SOUND first: a waiting sound is played when `consumer` (Studio's OBS source, every 2 s) asks, ONCE, and only
+   *   while its announcement is still in the queue — the announcement is then moved to « now + level_up_sound_lead_s »
+   *   (both in this transaction: if LeCroupier_ already took it, no sound, never after the banner); no OBS source before
+   *   the announcement leaves (it waits soundWaitMs at most): missed;
+   * - then the ANNOUNCEMENT: sent (Twitch confirmed it) or failed (failed, unknown, expired, cancelled), with its
+   *   level-ups' chat state.
+   * Without a consumer (the Core's tick) nothing is played: only the outcomes are recorded.
+   */
+  private async settleAnnouncements(
+    q: Queryable,
+    channelId: string,
+    rules: ProgressionRules,
+    consumer: string | null,
+  ) {
+    const now = this.now();
+    const notices: {
+      id: number;
+      sound: true;
+      test: boolean;
+      names: number;
+    }[] = [];
+    const waiting = await q.query<{
+      id: string;
+      test: boolean;
+      names: number;
+      step_key: string;
+      step_status: string | null;
+    }>(
+      `select a.id, a.test, a.names, a.step_key, s.status as step_status
+       from progression_announcements a
+       left join cmd_steps s on s.channel_id = a.channel_id and s.idempotency_key = a.step_key
+       where a.channel_id = $1 and a.sound_status = 'waiting' order by a.id limit 50`,
+      [channelId],
+    );
+    for (const a of waiting) {
+      if (a.step_status === 'queued' && !consumer) continue; // waits for the OBS source
+      // The announcement leaves `lead` after this sound — only if LeCroupier_ has not taken it yet.
+      const moved =
+        consumer && a.step_status === 'queued'
+          ? (
+              await q.query(
+                `update cmd_steps set available_at = $3, updated_at = $4
+                 where channel_id = $1 and idempotency_key = $2 and status = 'queued' returning step_id`,
+                [
+                  channelId,
+                  a.step_key,
+                  new Date(now.getTime() + rules.level_up_sound_lead_s * 1000),
+                  now,
+                ],
+              )
+            ).length
+          : 0;
+      if (!moved) {
+        await q.query(
+          `update progression_announcements set sound_status = 'missed', sound_reason = 'no_obs_source'
+           where channel_id = $1 and id = $2`,
+          [channelId, a.id],
+        );
+        await q.query(
+          `update progression_level_events set status = 'skipped', reason = 'no_obs_source'
+           where channel_id = $1 and announcement_id = $2 and status = 'pending'`,
+          [channelId, a.id],
+        );
+        continue;
+      }
+      await q.query(
+        `update progression_announcements set sound_status = 'played', played_at = $3, consumer = $4
+         where channel_id = $1 and id = $2`,
+        [channelId, a.id, now, consumer],
+      );
+      await q.query(
+        `update progression_level_events set status = 'delivered', sound = true, consumer = $3, delivered_at = $4,
+           reason = null
+         where channel_id = $1 and announcement_id = $2 and status = 'pending'`,
+        [channelId, a.id, consumer, now],
+      );
+      notices.push({
+        id: Number(a.id),
+        sound: true,
+        test: a.test,
+        names: a.names,
+      });
+    }
+    // The announcements' outcome (Twitch's answer), once their step is final.
+    const done = await q.query<{
+      id: string;
+      step_status: string | null;
+      finished_at: Date | null;
+    }>(
+      `select a.id, s.status as step_status, s.finished_at
+       from progression_announcements a
+       left join cmd_steps s on s.channel_id = a.channel_id and s.idempotency_key = a.step_key
+       where a.channel_id = $1 and a.announce_status = 'queued' and a.sound_status <> 'waiting'
+         and (s.status is null or s.status not in ('queued', 'claimed', 'running'))
+       order by a.id limit 50`,
+      [channelId],
+    );
+    for (const a of done) {
+      const ok = a.step_status === 'succeeded';
+      await q.query(
+        `update progression_announcements set announce_status = $3, announce_reason = $4, announced_at = $5
+         where channel_id = $1 and id = $2`,
+        [
+          channelId,
+          a.id,
+          ok ? 'sent' : 'failed',
+          ok ? null : (a.step_status ?? 'step_missing'),
+          ok ? (a.finished_at ?? now) : null,
+        ],
+      );
+      if (!ok)
+        await q.query(
+          `update progression_level_events set chat_status = 'skipped', chat_reason = 'announcement_failed'
+           where channel_id = $1 and announcement_id = $2 and chat_status = 'sent'`,
+          [channelId, a.id],
+        );
+    }
+    return notices;
+  }
+
+  /** Studio: the latest announcements, their sound and Twitch's answer (the test's proof of the timing). */
+  async announcements(channelId: string, limit = 10) {
+    const rows = await this.db.query<{
+      id: string;
+      test: boolean;
+      names: number;
+      sound_status: string;
+      sound_reason: string | null;
+      announce_status: string;
+      announce_reason: string | null;
+      created_at: Date;
+      played_at: Date | null;
+      announced_at: Date | null;
+    }>(
+      `select id, test, names, sound_status, sound_reason, announce_status, announce_reason, created_at, played_at,
+         announced_at
+       from progression_announcements where channel_id = $1 order by id desc limit $2`,
+      [channelId, limit],
+    );
+    const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
+    return rows.map((r) => ({
+      id: Number(r.id),
+      test: r.test,
+      names: r.names,
+      sound: { status: r.sound_status, reason: r.sound_reason },
+      announce: { status: r.announce_status, reason: r.announce_reason },
+      queuedAt: iso(r.created_at)!,
+      playedAt: iso(r.played_at),
+      announcedAt: iso(r.announced_at),
+    }));
   }
 
   /** Viewers excluded by login (bots, from the rules) and the broadcaster. */
@@ -2090,95 +2364,25 @@ export class ProgressionService {
    * - at most one sound per level_up_sound_cooldown_s for the whole channel: a level-up inside it plays nothing;
    * - delivered at most once (a page that crashed never replays an old level-up).
    */
+  /**
+   * Studio's OBS level-up source (every 2 s while a source listens): the sounds of the announcements about to leave, ONE
+   * per announcement, each delivered once, the announcement then `lead` later (settleAnnouncements). Level-ups recorded
+   * before the sound went with the announcement (no announcement will come for them) are closed as too old.
+   */
   async claimLevelUps(channelId: string, consumer: string) {
     return this.db.tx(async (q) => {
       await q.query('select pg_advisory_xact_lock(hashtext($1))', [
         `levelups:${channelId}`,
       ]);
       const { rules } = await this.settings(channelId, q);
-      const now = this.now();
-      const rows = await q.query<{
-        id: string;
-        twitch_user_id: string;
-        display_name: string;
-        from_level: number;
-        to_level: number;
-        created_at: Date;
-      }>(
-        `select id, twitch_user_id, display_name, from_level, to_level, created_at
-         from progression_level_events where channel_id = $1 and status = 'pending' order by id limit 200`,
+      await q.query(
+        `update progression_level_events set status = 'expired', reason = 'too_old'
+         where channel_id = $1 and status = 'pending' and announcement_id is null and chat_status <> 'pending'`,
         [channelId],
       );
-      const settle = (ids: string[], status: string, reason: string) =>
-        ids.length
-          ? q.query(
-              `update progression_level_events set status = $3, reason = $4 where channel_id = $1 and id = any($2::bigint[])`,
-              [channelId, ids, status, reason],
-            )
-          : null;
-      if (!rules.level_up_sound) {
-        await settle(
-          rows.map((r) => r.id),
-          'skipped',
-          'sound_off',
-        );
-        return { notices: [] };
-      }
-      const maxAge = rules.level_up_max_age_s * 1000;
-      const fresh = rows.filter(
-        (r) => now.getTime() - new Date(r.created_at).getTime() <= maxAge,
-      );
-      await settle(
-        rows.filter((r) => !fresh.includes(r)).map((r) => r.id),
-        'expired',
-        'too_old',
-      );
-      const latest = new Map<string, (typeof fresh)[number]>();
-      for (const r of fresh) latest.set(r.twitch_user_id, r);
-      await settle(
-        fresh
-          .filter((r) => latest.get(r.twitch_user_id) !== r)
-          .map((r) => r.id),
-        'merged',
-        'newer_level_up',
-      );
-      const last = (
-        await q.query<{ at: Date | null }>(
-          `select max(delivered_at) as at from progression_level_events where channel_id = $1 and sound`,
-          [channelId],
-        )
-      )[0]?.at;
-      let lastSound = last ? new Date(last).getTime() : null;
-      const notices = [];
-      for (const r of [...latest.values()].slice(0, 5)) {
-        if (!(await this.soundOn(q, channelId, r.twitch_user_id))) {
-          await settle([r.id], 'skipped', 'viewer_no_sound');
-          continue;
-        }
-        if (
-          lastSound !== null &&
-          now.getTime() - lastSound < rules.level_up_sound_cooldown_s * 1000
-        ) {
-          await settle([r.id], 'skipped', 'sound_cooldown');
-          continue;
-        }
-        lastSound = now.getTime();
-        await q.query(
-          `update progression_level_events set status = 'delivered', sound = true, consumer = $3, delivered_at = $4,
-             reason = null
-           where channel_id = $1 and id = $2`,
-          [channelId, r.id, consumer, now],
-        );
-        notices.push({
-          id: Number(r.id),
-          twitchUserId: r.twitch_user_id,
-          displayName: r.display_name,
-          level: r.to_level,
-          fromLevel: r.from_level,
-          sound: true,
-        });
-      }
-      return { notices };
+      return {
+        notices: await this.settleAnnouncements(q, channelId, rules, consumer),
+      };
     });
   }
 
@@ -2575,10 +2779,11 @@ export class ProgressionService {
    * was counted on the new scale).
    */
   /**
-   * Studio's « Envoyer le test dans le chat » (Level Up V2, a typed confirmation): ONE real Twitch announcement
+   * Studio's « Envoyer une vraie annonce test » (Level Up V2, a typed confirmation): ONE real Twitch announcement
    * « [TEST] … » made with the channel's own text and colour, on the same outbox as a real one (LeCroupier_ sends it;
-   * « Sortie chat réelle » and the bot's rate limit apply). Nothing of the progression is written: no XP, no level, no
-   * level-up event, no reward, no sound. Refused when the chat output is off (nothing would be sent).
+   * « Sortie chat réelle » and the bot's rate limit apply), its sound on the OBS source FIRST and the announcement
+   * level_up_sound_lead_s later — the live timing, tested (the channel's sound switch and cooldown aside). Nothing of the progression is
+   * written: no XP, no level, no level-up event, no reward. Refused when the chat output is off (nothing would be sent).
    */
   async testLevelUpChat(
     channelId: string,
@@ -2611,21 +2816,31 @@ export class ProgressionService {
         '{liste}',
         announceEntry(pseudo, title, level),
       )}`.slice(0, ANNOUNCE_MAX_CHARS);
+      const key = `levelup-test:${channelId}:${now.getTime()}`;
       const written = await insertAnnouncement(q, {
         channelId,
         now,
         origin: 'module:level_up',
         drafts: [
           {
-            idempotencyKey: `levelup-test:${channelId}:${now.getTime()}`,
+            idempotencyKey: key,
             mode: 'announce',
             color: rules.level_up_chat_color,
             text,
+            delayMs: soundWaitMs(rules),
           },
         ],
       });
       if (!written) throw new ProgressionError(409, 'outbox_refused');
-      return { sent: true, text };
+      // The same circuit as a real announcement: the sound on the OBS source first, the announcement `lead` after.
+      const id = (
+        await q.query<{ id: string }>(
+          `insert into progression_announcements (channel_id, step_key, test, names, sound_status, created_at)
+           values ($1, $2, true, 1, 'waiting', $3) returning id`,
+          [channelId, key, now],
+        )
+      )[0]!.id;
+      return { sent: true, text, announcement: Number(id) };
     });
   }
 

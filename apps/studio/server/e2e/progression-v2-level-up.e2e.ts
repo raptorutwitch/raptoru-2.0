@@ -9,10 +9,10 @@ import { expect, test } from '@playwright/test';
 // 1 000 XP levels (typed confirmation), turns the chat announcements and the sound on, imports two numbered badge pictures
 // (Lab placeholders, never the streamer's art); the production Extension shows « Mon niveau » and its sound checkbox
 // (unchecked by default, kept by the Core); Kirito_TV (sound turned on) one message short of level 10 sends one chat
-// message → the INVISIBLE OBS source plays the sound at once and draws nothing; at the end of the grouping window (30 s
-// here), ONE real Twitch announcement on the commands outbox (mode announce, no @), the badge of level 10 in the
-// inventory; Studio lists it, and lists Kirito_TV among the viewers who turned the sound on. Isolated stack: no Twitch,
-// no real data.
+// message → nothing at once (the grouping window, 30 s here); at its end the INVISIBLE OBS source plays ONE sound (it
+// draws nothing) and ONE real Twitch announcement (mode announce, no @) is due exactly 3 s after it on the commands
+// outbox; the badge of level 10 in the inventory; Studio lists it, and lists Kirito_TV among the viewers who turned the
+// sound on; Studio's test announcement takes the same path. Isolated stack: no Twitch, no real data.
 
 const PORT = Number(process.env.E2E_PORT ?? 4399);
 const CHANNEL = '900100';
@@ -140,7 +140,9 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
     })
   ).json();
   const obs = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  const sound = obs.waitForRequest((r) => r.url().endsWith('/level-up/sound'));
+  const sound = obs.waitForRequest((r) => r.url().endsWith('/level-up/sound'), {
+    timeout: 90_000,
+  });
   await obs.goto(state.player_url.replace(/^http:\/\/[^/]+/, ''));
 
   // Kirito_TV turned the sound on; one message short of level 10 (3 XP a message). No Lab live is started (the stack is
@@ -171,7 +173,19 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
     source: 'simulator',
   });
 
-  // On stream: the sound is played, and nothing at all is drawn.
+  // Nothing at the level-up itself: it waits for the end of its window.
+  type Step = {
+    origin: string;
+    available_at: string;
+    params: { mode: string; text: string };
+  };
+  const steps = async () =>
+    (await labCore<{ steps: Step[] }>(`/v1/lab/commands/${CHANNEL}/steps`))
+      .steps;
+  expect((await steps()).filter((x) => x.origin === 'module:level_up')).toEqual(
+    [],
+  );
+  // On stream, at the end of the window: ONE sound, and nothing at all is drawn.
   await sound;
   expect((await obs.locator('body').innerText()).trim()).toBe('');
   expect(await obs.locator('body *:not(script)').count()).toBe(0);
@@ -179,11 +193,7 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
   // In chat: at the end of the window, ONE real announcement on the commands outbox (LeCroupier_ sends it with Send Chat
   // Announcement), the pseudo without @ and unable to mention (a word joiner after its first letter).
   const announced = async () =>
-    (
-      await labCore<{
-        steps: { origin: string; params: { mode: string; text: string } }[];
-      }>(`/v1/lab/commands/${CHANNEL}/steps`)
-    ).steps.filter(
+    (await steps()).filter(
       (x) => x.origin === 'module:level_up' && !x.params.text.startsWith('['),
     );
   await expect
@@ -197,6 +207,18 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
         text: '🚀 LEVEL UP — K⁠irito_TV (10)',
       }),
     ]);
+  // The banner leaves exactly 3 s (Studio's lead) after the sound was played.
+  type Ann = { test: boolean; sound: { status: string }; playedAt: string };
+  const lastAnn = async (test: boolean) =>
+    (await labCore<Ann[]>('/v1/lab/progression/announcements')).find(
+      (a) => a.test === test,
+    )!;
+  const real = await lastAnn(false);
+  expect(real.sound.status).toBe('played');
+  expect(
+    Date.parse((await announced())[0]!.available_at) -
+      Date.parse(real.playedAt),
+  ).toBe(3000);
 
   // The badge of level 10, given by the level-up, with its image.
   const kirito = await labCore<{
@@ -205,12 +227,31 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
   const badge = kirito.inventory.find((i) => i.id === 'niveau-10');
   expect(badge?.image).toMatch(/^\/v1\/cosmetics\/images\/[0-9a-f]{64}$/);
 
-  // Studio lists it: sent in chat, the sound played.
+  // The Core: the level-up's sound played with its announcement, its chat line given to LeCroupier_.
+  const ev = (
+    await labCore<
+      {
+        twitchUserId: string;
+        status: string;
+        sound: boolean;
+        chat: { status: string };
+      }[]
+    >('/v1/lab/progression/levelups')
+  ).find((e) => e.twitchUserId === KIRITO);
+  expect(ev).toMatchObject({
+    status: 'delivered',
+    sound: true,
+    chat: { status: 'sent' },
+  });
+  // Studio lists it (its tab back in front: a background tab's timers are slowed): sent in chat, the sound played.
+  await page.bringToFront();
   await expect(lu.locator('.pg-lu-t').last()).toContainText('Kirito_TV', {
-    timeout: 10_000,
+    timeout: 15_000,
   });
   await expect(lu.locator('.pg-lu-t').last()).toContainText('envoyé');
-  await expect(lu.locator('.pg-lu-t').last()).toContainText('joué 🔊');
+  await expect(lu.locator('.pg-lu-t').last()).toContainText('joué 🔊', {
+    timeout: 15_000,
+  });
   // « Viewers avec son activé »: Kirito_TV, who turned it on (read-only list).
   await expect(lu.locator('[data-lz="listeners"]')).toContainText('Kirito_TV');
   await expect(lu.locator('[data-lz="listeners"]')).toContainText(
@@ -244,6 +285,10 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
   expect(
     JSON.stringify(await labCore(`/v1/lab/commands/${CHANNEL}/steps`)),
   ).toBe(stepsBefore);
+  // The real test: the same path as the live — the sound in OBS first, the « [TEST] » banner 3 s after it.
+  const testSound = obs.waitForRequest((r) =>
+    r.url().endsWith('/level-up/sound'),
+  );
   await lu
     .getByRole('button', { name: 'Envoyer une vraie annonce test…' })
     .click();
@@ -251,14 +296,26 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
   await confirmTest.locator('[data-text]').fill('ENVOYER LE TEST');
   await confirmTest.getByRole('button', { name: 'Envoyer' }).click();
   await expect(toasts).toContainText('Annonce test confiée au bot');
-  const testStep = (
-    await labCore<{
-      steps: { origin: string; params: { mode: string; text: string } }[];
-    }>(`/v1/lab/commands/${CHANNEL}/steps`)
-  ).steps.find((x) => x.params.text.startsWith('[TEST]'));
+  await testSound;
+  const testStep = (await steps()).find((x) =>
+    x.params.text.startsWith('[TEST]'),
+  );
   expect(testStep?.params).toMatchObject({
     mode: 'announce',
     text: '[TEST] 🚀 LEVEL UP — R⁠aptoru (25)',
+  });
+  await expect
+    .poll(async () => (await lastAnn(true)).sound.status, { timeout: 10_000 })
+    .toBe('played');
+  const tst = await lastAnn(true);
+  expect(
+    Date.parse(
+      (await steps()).find((x) => x.params.text.startsWith('[TEST]'))!
+        .available_at,
+    ) - Date.parse(tst.playedAt),
+  ).toBe(3000);
+  await expect(lu.locator('[data-lu-last-test]')).toContainText('son joué à', {
+    timeout: 10_000,
   });
 
   await labCore('/v1/lab/progression/settings', {

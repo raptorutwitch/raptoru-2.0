@@ -73,6 +73,8 @@ export class ProgressionRelay {
         // « Viewers avec son activé » (read-only) and the last pseudo refresh from Twitch.
         'GET /api/progression/prefs/sound': '/prefs/sound',
         'GET /api/progression/names': '/names',
+        // The latest announcements and their synchronized sound (the test's proof).
+        'GET /api/progression/announcements': '/announcements',
       };
       if (reads[route])
         return (reply(200, await core(`${this.base}${reads[route]}`)), true);

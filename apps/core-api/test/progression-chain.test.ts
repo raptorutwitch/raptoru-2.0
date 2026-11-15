@@ -1,6 +1,7 @@
 import type { PresenceObservationRequest } from '@raptoru/schemas';
 import { describe, expect, it } from 'vitest';
 import { createCore } from '../src/app.js';
+import { CommandSteps } from '../src/commands/steps.js';
 import { DevFakeCreditProvider } from '../src/daily/credits.js';
 import { labEconomy } from '../src/economy/economy.js';
 import { SHADOW_MODES } from '../src/loyalty/engine.js';
@@ -118,11 +119,19 @@ describe('progression on the real presence chain', () => {
     expect(await k.xp('2001')).toBe(afterRestart);
   });
 
-  it('Level Up V2 on the real chain: the cycle that reaches 1 000 XP makes one level-up, shown once with its sound; a replayed cycle none', async () => {
+  it('Level Up V2 on the real chain: the cycle that reaches 1 000 XP makes one level-up; its ONE sound just before its announcement, once; a replayed cycle none', async () => {
     const k = await stack();
     const p = k.core.progression;
     await p.activateLevelV2(CH, { id: 'studio' });
-    await p.updateSettings(CH, { rules: { level_up_sound: true } });
+    await p.updateSettings(CH, {
+      rules: { level_up_sound: true, level_up_chat: true },
+    });
+    const outbox = new CommandSteps(k.db, k.clock);
+    await outbox.setOutput(
+      CH,
+      { id: 'studio', role: 'broadcaster', via: 'studio' },
+      true,
+    );
     await p.setViewerPrefs(CH, '2001', { level_up_sound: true });
     await k.cycle(0, { cycleId: 'l0' }); // the first sighting (no interval yet)
     await p.adjust(
@@ -141,11 +150,30 @@ describe('progression on the real presence chain', () => {
     expect([await k.xp('2001'), (await p.viewer(CH, '2001')).level]).toEqual([
       1000, 2,
     ]);
+    // No sound at the level-up: it waits for its announcement (the 5 min window); then the sound, the banner 3 s after.
+    expect((await p.claimLevelUps(CH, 'obs')).notices).toEqual([]);
+    k.clock.set(at(7));
+    await p.tick();
+    expect((await outbox.claim(CH, 'bot')).step).toBeNull(); // waits for its sound
     const { notices } = await p.claimLevelUps(CH, 'obs');
-    expect(notices).toMatchObject([
-      { twitchUserId: '2001', level: 2, sound: true },
+    expect(notices).toMatchObject([{ sound: true, test: false, names: 1 }]);
+    k.clock.set(new Date(at(7).getTime() + 3000));
+    const step = (await outbox.claim(CH, 'bot')).step!;
+    expect(step.params).toMatchObject({ mode: 'announce' });
+    await outbox.ack(CH, step.step_id, {
+      executor_id: 'bot',
+      attempt_id: step.attempt_id!,
+      event: 'running',
+    });
+    await outbox.ack(CH, step.step_id, {
+      executor_id: 'bot',
+      attempt_id: step.attempt_id!,
+      event: 'succeeded',
+    });
+    expect((await p.claimLevelUps(CH, 'obs')).notices).toEqual([]); // once
+    expect(await p.levelUps(CH)).toMatchObject([
+      { status: 'delivered', sound: true, chat: { status: 'sent' } },
     ]);
-    expect((await p.levelUps(CH)).length).toBe(1);
     // Jetons of the same cycles, untouched by the progression.
     expect(await k.jetonTicks('2001')).toBeGreaterThanOrEqual(0);
   });
