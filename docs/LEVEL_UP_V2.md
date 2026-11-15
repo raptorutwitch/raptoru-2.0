@@ -20,16 +20,16 @@ la Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu l
 
 ## 2. Décisions d'Antoni (14–15/11)
 
-| Sujet | Décision |
-| --- | --- |
-| Manifestations d'un Level Up | **Exactement deux** : une ligne de **LeCroupier_ dans le chat** (message normal, pas `/announce`) et un **son** sur le stream. **Aucune** bannière, aucun texte, aucun cadre à l'écran : la source OBS est invisible et ne joue que le son |
-| Annonce chat | Pour **chaque vrai Level Up**, indépendante du choix sonore du viewer ; texte réglable dans Studio ; groupée et protégée du flood (§ 5) |
-| Son | **Désactivé par défaut** ; joué seulement pour les viewers qui l'ont activé. Une absence de choix n'autorise jamais le son |
-| Réglage viewer | **Une case à cocher** dans les préférences (roue crantée), les deux interfaces : « Jouer un son lorsque je monte de niveau », décochée par défaut, enregistrée tout de suite |
-| Préférences historiques | Récupérées depuis la table Supabase de l'ancienne extension (§ 8) ; jamais écrasées par un import plus ancien |
-| Gains d'XP | **1 XP par minute** de présence, **3 XP par message** éligible, un message récompensé au plus toutes les **60 s**. Au plus 60 XP/h en silence et 240 XP/h en parlant : un rapport de 1 à 4 |
-| Anti-farm | Gardé : commandes, bots, délai, longueur, 3 lettres ou chiffres différents, même message sans XP pendant 10 min |
-| Badges | **Les vrais badges sub d'Antoni** (`Documents\Twitch\Badge de ma chaine`), un tous les 10 niveaux, dans l'ordre de leur numéro (§ 6) |
+| Sujet                        | Décision                                                                                                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifestations d'un Level Up | **Exactement deux** : une ligne de **LeCroupier\_ dans le chat** (message normal, pas `/announce`) et un **son** sur le stream. **Aucune** bannière, aucun texte, aucun cadre à l'écran : la source OBS est invisible et ne joue que le son |
+| Annonce chat                 | Pour **chaque vrai Level Up**, indépendante du choix sonore du viewer ; texte réglable dans Studio ; groupée et protégée du flood (§ 5)                                                                                                     |
+| Son                          | **Désactivé par défaut** ; joué seulement pour les viewers qui l'ont activé. Une absence de choix n'autorise jamais le son                                                                                                                  |
+| Réglage viewer               | **Une case à cocher** dans les préférences (roue crantée), les deux interfaces : « Jouer un son lorsque je monte de niveau », décochée par défaut, enregistrée tout de suite                                                                |
+| Préférences historiques      | Récupérées depuis la table Supabase de l'ancienne extension (§ 8) ; jamais écrasées par un import plus ancien                                                                                                                               |
+| Gains d'XP                   | **1 XP par minute** de présence, **3 XP par message** éligible, un message récompensé au plus toutes les **60 s**. Au plus 60 XP/h en silence et 240 XP/h en parlant : un rapport de 1 à 4                                                  |
+| Anti-farm                    | Gardé : commandes, bots, délai, longueur, 3 lettres ou chiffres différents, même message sans XP pendant 10 min                                                                                                                             |
+| Badges                       | **Les vrais badges sub d'Antoni** (`Documents\Twitch\Badge de ma chaine`), un tous les 10 niveaux, dans l'ordre de leur numéro (§ 6)                                                                                                        |
 
 ## 3. Données réelles et compression (relevé du 29/10/2026, PR #43)
 
@@ -83,12 +83,12 @@ la Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu l
 
 **Le dossier d'Antoni** (inspecté le 15/11, lecture seule) :
 
-| Palier | Fichier |
-| --- | --- |
-| 10 → 100 | `1. UglyTitan` … `10. FoundingTitan` : 10 dessins de 990 px, un par numéro |
-| 110 | `11. Badge HK` (1980 px) : badge sub, **confirmé par Antoni le 15/11** même s'il est aussi rangé, identique, dans `Badges Bits/` (`Badge Bits sans nom aussi.png`) |
-| — | `Obsolète/` : anciennes versions des badges 1 à 8, écartées |
-| — | `Badges Bits/` : badges de Bits, écartés |
+| Palier   | Fichier                                                                                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 10 → 100 | `1. UglyTitan` … `10. FoundingTitan` : 10 dessins de 990 px, un par numéro                                                                                         |
+| 110      | `11. Badge HK` (1980 px) : badge sub, **confirmé par Antoni le 15/11** même s'il est aussi rangé, identique, dans `Badges Bits/` (`Badge Bits sans nom aussi.png`) |
+| —        | `Obsolète/` : anciennes versions des badges 1 à 8, écartées                                                                                                        |
+| —        | `Badges Bits/` : badges de Bits, écartés                                                                                                                           |
 
 **L'import se fait dans Studio** (Level Up › « Importer mes badges sub… ») :
 
