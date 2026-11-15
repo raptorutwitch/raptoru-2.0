@@ -40,6 +40,8 @@ export interface ListResponse {
   commands: CommandItem[];
   reserved_words: { word: string; module: string }[];
   categories: Category[];
+  /** The channel's own id: « Tester » speaks as the streamer with it (the streamer is an identity, never a role). */
+  channel_id?: string;
 }
 
 // ------------------------------------------------------------------ vocabulary (validated prototype)
@@ -222,11 +224,15 @@ export const syntax = (c: Pick<CmdConfig, 'name' | 'args'>) =>
     })
     .join('')}`;
 const EXAMPLE = { mention: '@Aouh', number: '500', text: 'bonne chance !' };
-export const example = (c: Pick<CmdConfig, 'name' | 'args'>) =>
-  `!${c.name}${c.args
-    .filter((a) => a.required)
-    .map((a) => ` ${EXAMPLE[a.type]}`)
-    .join('')}`;
+export const example = (
+  c: Pick<CmdConfig, 'name' | 'args'> & Partial<Pick<CmdConfig, 'trigger'>>,
+) =>
+  c.trigger?.mode === 'keywords'
+    ? `Franchement ${c.trigger.keywords[0] ?? '…'} !`
+    : `!${c.name}${c.args
+        .filter((a) => a.required)
+        .map((a) => ` ${EXAMPLE[a.type]}`)
+        .join('')}`;
 
 /** A variable needs an argument of its type (Core refuses the configuration otherwise). */
 export const variableMissing = (
@@ -562,6 +568,8 @@ export const FIELD: Record<string, string> = {
   when: 'Disponibilité',
   refuse: 'Message de refus',
   team_lock: 'Verrou équipe',
+  trigger: 'Déclenchement',
+  editors: 'Modification déléguée',
 };
 export const CHECK: Record<string, string> = {
   found: 'Commande trouvée',
@@ -582,6 +590,8 @@ export const CHECK: Record<string, string> = {
   access_denied: 'Accès autorisé',
   follower_status_unknown: 'Accès autorisé',
   invalid_arguments: 'Arguments',
+  blocked: 'Pas bloqué par la modération',
+  no_keyword: 'Contient une expression',
 };
 export const REASON: Record<string, string> = {
   reserved: 'Mot réservé à un module',
@@ -596,6 +606,8 @@ export const REASON: Record<string, string> = {
   cooldown: 'Délai en cours',
   quota: 'Maximum atteint',
   duplicate_message: 'Message déjà traité',
+  blocked: 'Bloqué par la modération',
+  no_keyword: 'Aucune expression dans le message',
 };
 export const STEP: Record<string, [string, 'ok' | 'warn' | 'bad' | 'off']> = {
   queued: ['En attente', 'off'],

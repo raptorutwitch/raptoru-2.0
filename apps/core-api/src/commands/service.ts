@@ -1,18 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import {
   type CmdConfig,
+  type CmdDelegateRequest,
   CmdTeamRights,
   type CmdField,
   type CmdTeamRole,
   type LabRole,
 } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
+import type { z } from 'zod';
 import type { Db, Queryable } from '../db/db.js';
 import { access, type Actor } from '../lab-moderation/store.js';
+import { keywordRulesChanged } from './admission.js';
 import {
   assertTeamMayChange,
   checkConfig,
   CommandsError,
+  isKeywordTrigger,
   DEFAULT_TEAM_RIGHTS,
   defaultConfig,
   diffConfig,
@@ -71,7 +75,8 @@ export interface HistoryEntry {
   action: 'create' | 'update' | 'delete' | 'reset' | 'system_sync' | 'rights';
   actor_id: string;
   actor_login: string | null;
-  actor_role: LabRole | 'system';
+  /** « editor »: a viewer the streamer named in `config.editors` (delegated change from the extension). */
+  actor_role: LabRole | 'system' | 'editor';
   via: Actor['via'];
   changes: { field: string; before: unknown; after: unknown }[];
   created_at: string;
@@ -110,6 +115,27 @@ const view = (r: Row): CommandView => ({
 });
 
 const label = (a: Actor) => `${a.via}:${a.id}`;
+
+/**
+ * What a delegated editor sees of a command (extension « Mes commandes ») — never its sound, its audience, its delays,
+ * its other editors nor anything else.
+ */
+const delegateView = (r: Row) => ({
+  command_id: r.command_id,
+  version: r.version,
+  name: r.config.name,
+  enabled: r.config.enabled,
+  trigger: {
+    mode: r.config.trigger?.mode ?? 'command',
+    keywords: r.config.trigger?.keywords ?? [],
+    match: r.config.trigger?.match ?? 'word',
+  },
+  /** What this editor may change: on / off always, the expressions of a keyword command. */
+  editable: isKeywordTrigger(r.config) ? ['enabled', 'keywords'] : ['enabled'],
+  updated_at: new Date(r.updated_at).toISOString(),
+});
+const isEditor = (c: CmdConfig, viewerId: string) =>
+  (c.editors ?? []).some((e) => e.id === viewerId);
 
 export class CommandsService {
   private readonly systemDefs: SystemCommandDef[];
@@ -208,6 +234,8 @@ export class CommandsService {
         }),
         reserved_words: reserved,
         categories: await this.categoryRows(q, channelId),
+        /** The channel's own id: Studio's « Tester » speaks as the streamer with it (identity, never a role). */
+        channel_id: channelId,
       };
     });
   }
@@ -240,6 +268,19 @@ export class CommandsService {
         })),
       };
     });
+  }
+
+  /**
+   * The commands this viewer may edit from the extension (`config.editors`, by Twitch id), as a delegated editor sees
+   * them. Independent from the team: a viewer, a moderator… anyone the streamer named.
+   */
+  async delegated(channelId: string, viewerId: string) {
+    const rows = await this.db.query<Row>(
+      `select ${COLS} from cmd_commands where channel_id = $1 and deleted_at is null and config->'editors' @> $2::jsonb
+       order by name`,
+      [channelId, JSON.stringify([{ id: viewerId }])],
+    );
+    return { commands: rows.map(delegateView) };
   }
 
   /**
@@ -401,65 +442,68 @@ export class CommandsService {
   // --- mutations -----------------------------------------------------------------------------------
 
   async create(channelId: string, actor: Actor, partial: Partial<CmdConfig>) {
-    return this.db.tx(async (q) => {
-      await this.lockChannel(q, channelId);
-      const role = await this.teamRole(q, channelId, actor);
-      if (!partial.name)
-        throw new CommandsError(422, 'invalid_config', {
-          issues: ['name: required'],
-        });
-      const base = defaultConfig(partial.name);
-      const after = checkConfig({ ...base, ...partial });
-      if (after.actions.some((a) => a.type === 'module'))
-        throw new CommandsError(422, 'module_action_reserved', {
-          message: 'a module action belongs to a system command',
-        });
-      const changes = diffConfig(base, after);
-      if (role !== 'broadcaster') {
-        const rights = await this.rightsOf(q, channelId, role);
-        if (!rights.rights.create)
-          throw new CommandsError(403, 'not_delegated', {
-            right: 'create',
-            role,
+    return this.changed(
+      channelId,
+      this.db.tx(async (q) => {
+        await this.lockChannel(q, channelId);
+        const role = await this.teamRole(q, channelId, actor);
+        if (!partial.name)
+          throw new CommandsError(422, 'invalid_config', {
+            issues: ['name: required'],
           });
-        assertTeamMayChange(role, rights.rights, changes, after, true);
-      }
-      await this.assertWordsFree(q, channelId, null, after);
-      await this.assertCategory(q, channelId, after.category);
-      const id = randomUUID();
-      const now = this.clock.now();
-      await q.query(
-        `insert into cmd_commands (command_id, channel_id, kind, name, enabled, listed, config, version,
+        const base = defaultConfig(partial.name);
+        const after = checkConfig({ ...base, ...partial });
+        if (after.actions.some((a) => a.type === 'module'))
+          throw new CommandsError(422, 'module_action_reserved', {
+            message: 'a module action belongs to a system command',
+          });
+        const changes = diffConfig(base, after);
+        if (role !== 'broadcaster') {
+          const rights = await this.rightsOf(q, channelId, role);
+          if (!rights.rights.create)
+            throw new CommandsError(403, 'not_delegated', {
+              right: 'create',
+              role,
+            });
+          assertTeamMayChange(role, rights.rights, changes, after, true);
+        }
+        await this.assertWordsFree(q, channelId, null, after);
+        await this.assertCategory(q, channelId, after.category);
+        const id = randomUUID();
+        const now = this.clock.now();
+        await q.query(
+          `insert into cmd_commands (command_id, channel_id, kind, name, enabled, listed, config, version,
            created_at, created_by, updated_at, updated_by)
          values ($1, $2, 'custom', $3, $4, $5, $6, 1, $7, $8, $7, $8)`,
-        [
-          id,
+          [
+            id,
+            channelId,
+            after.name,
+            after.enabled,
+            after.listed,
+            JSON.stringify(after),
+            now,
+            label(actor),
+          ],
+        );
+        await this.writeTriggers(q, channelId, id, after);
+        await this.log(
+          q,
           channelId,
-          after.name,
-          after.enabled,
-          after.listed,
-          JSON.stringify(after),
-          now,
-          label(actor),
-        ],
-      );
-      await this.writeTriggers(q, channelId, id, after);
-      await this.log(
-        q,
-        channelId,
-        id,
-        1,
-        'create',
-        actor,
-        role,
-        [
-          { field: 'name', before: null, after: after.name },
-          ...changes.filter((c) => c.field !== 'name'),
-        ],
-        after,
-      );
-      return view(await this.row(q, channelId, id));
-    });
+          id,
+          1,
+          'create',
+          actor,
+          role,
+          [
+            { field: 'name', before: null, after: after.name },
+            ...changes.filter((c) => c.field !== 'name'),
+          ],
+          after,
+        );
+        return view(await this.row(q, channelId, id));
+      }),
+    );
   }
 
   async update(
@@ -469,28 +513,104 @@ export class CommandsService {
     expectedVersion: number,
     changes: Partial<CmdConfig>,
   ) {
-    return this.db.tx(async (q) => {
-      await this.lockChannel(q, channelId);
-      const role = await this.teamRole(q, channelId, actor);
-      const cur = await this.row(q, channelId, commandId);
-      this.assertVersion(cur, expectedVersion);
-      const after = checkConfig({ ...cur.config, ...changes });
-      const diff = diffConfig(cur.config, after);
-      if (!diff.length) return view(cur);
-      this.assertUnlocked(cur, diff);
-      this.assertActions(cur, after);
-      if (role !== 'broadcaster') {
-        if (cur.config.team_lock)
-          throw new CommandsError(403, 'command_locked', { role });
-        const rights = await this.rightsOf(q, channelId, role);
-        assertTeamMayChange(role, rights.rights, diff, after);
-      }
-      if (diff.some((c) => c.field === 'name' || c.field === 'aliases'))
-        await this.assertWordsFree(q, channelId, commandId, after);
-      if (diff.some((c) => c.field === 'category'))
-        await this.assertCategory(q, channelId, after.category);
-      return this.write(q, channelId, cur, after, actor, role, 'update', diff);
-    });
+    return this.changed(
+      channelId,
+      this.db.tx(async (q) => {
+        await this.lockChannel(q, channelId);
+        const role = await this.teamRole(q, channelId, actor);
+        const cur = await this.row(q, channelId, commandId);
+        this.assertVersion(cur, expectedVersion);
+        const after = checkConfig({ ...cur.config, ...changes });
+        const diff = diffConfig(cur.config, after);
+        if (!diff.length) return view(cur);
+        this.assertUnlocked(cur, diff);
+        this.assertActions(cur, after);
+        if (role !== 'broadcaster') {
+          if (cur.config.team_lock)
+            throw new CommandsError(403, 'command_locked', { role });
+          const rights = await this.rightsOf(q, channelId, role);
+          assertTeamMayChange(role, rights.rights, diff, after);
+        }
+        if (diff.some((c) => c.field === 'name' || c.field === 'aliases'))
+          await this.assertWordsFree(q, channelId, commandId, after);
+        if (diff.some((c) => c.field === 'category'))
+          await this.assertCategory(q, channelId, after.category);
+        return this.write(
+          q,
+          channelId,
+          cur,
+          after,
+          actor,
+          role,
+          'update',
+          diff,
+        );
+      }),
+    );
+  }
+
+  /**
+   * A delegated editor's change (extension « Mes commandes »): on / off and, for a keyword command, its expressions —
+   * nothing else, whatever the request holds (the request schema is strict; the resulting change is checked field by
+   * field). The editor is the verified Twitch identity, named in `config.editors`; a command they cannot edit is « not
+   * found » (nothing revealed). The version read is required (no lost update); a conflict answers the editor's view only.
+   */
+  async delegateUpdate(
+    channelId: string,
+    commandId: string,
+    req: z.infer<typeof CmdDelegateRequest>,
+  ) {
+    return this.changed(
+      channelId,
+      this.db.tx(async (q) => {
+        await this.lockChannel(q, channelId);
+        const cur = (
+          await q.query<Row>(
+            `select ${COLS} from cmd_commands where channel_id = $1 and command_id = $2 and deleted_at is null`,
+            [channelId, commandId],
+          )
+        )[0];
+        if (!cur || !isEditor(cur.config, req.actor.id))
+          throw new CommandsError(404, 'not_found');
+        if (cur.version !== req.expected_version)
+          throw new CommandsError(409, 'version_conflict', {
+            current_version: cur.version,
+            current: delegateView(cur),
+          });
+        if (req.keywords !== undefined && !isKeywordTrigger(cur.config))
+          throw new CommandsError(403, 'field_not_delegated', {
+            field: 'trigger',
+          });
+        const after = checkConfig({
+          ...cur.config,
+          ...(req.enabled === undefined ? {} : { enabled: req.enabled }),
+          ...(req.keywords === undefined
+            ? {}
+            : { trigger: { ...cur.config.trigger!, keywords: req.keywords } }),
+        });
+        const diff = diffConfig(cur.config, after);
+        if (!diff.length) return delegateView(cur);
+        const other = diff.find(
+          (c) => c.field !== 'enabled' && c.field !== 'trigger',
+        );
+        if (other)
+          throw new CommandsError(403, 'field_not_delegated', {
+            field: other.field,
+          });
+        this.assertUnlocked(cur, diff);
+        await this.write(
+          q,
+          channelId,
+          cur,
+          after,
+          req.actor,
+          'editor',
+          'update',
+          diff,
+        );
+        return delegateView(await this.row(q, channelId, commandId));
+      }),
+    );
   }
 
   /** Soft delete: history kept, words released. System commands cannot be deleted. */
@@ -500,47 +620,50 @@ export class CommandsService {
     actor: Actor,
     expectedVersion: number,
   ) {
-    return this.db.tx(async (q) => {
-      await this.lockChannel(q, channelId);
-      const role = await this.teamRole(q, channelId, actor);
-      const cur = await this.row(q, channelId, commandId);
-      this.assertVersion(cur, expectedVersion);
-      if (cur.kind === 'system')
-        throw new CommandsError(422, 'system_command', {
-          message: 'a module command cannot be deleted (disable it instead)',
-        });
-      if (role !== 'broadcaster') {
-        if (cur.config.team_lock)
-          throw new CommandsError(403, 'command_locked', { role });
-        const rights = await this.rightsOf(q, channelId, role);
-        if (!rights.rights.remove)
-          throw new CommandsError(403, 'not_delegated', {
-            right: 'remove',
-            role,
+    return this.changed(
+      channelId,
+      this.db.tx(async (q) => {
+        await this.lockChannel(q, channelId);
+        const role = await this.teamRole(q, channelId, actor);
+        const cur = await this.row(q, channelId, commandId);
+        this.assertVersion(cur, expectedVersion);
+        if (cur.kind === 'system')
+          throw new CommandsError(422, 'system_command', {
+            message: 'a module command cannot be deleted (disable it instead)',
           });
-      }
-      const now = this.clock.now();
-      await q.query(
-        `update cmd_commands set deleted_at = $3, deleted_by = $4, enabled = false, version = version + 1,
+        if (role !== 'broadcaster') {
+          if (cur.config.team_lock)
+            throw new CommandsError(403, 'command_locked', { role });
+          const rights = await this.rightsOf(q, channelId, role);
+          if (!rights.rights.remove)
+            throw new CommandsError(403, 'not_delegated', {
+              right: 'remove',
+              role,
+            });
+        }
+        const now = this.clock.now();
+        await q.query(
+          `update cmd_commands set deleted_at = $3, deleted_by = $4, enabled = false, version = version + 1,
            updated_at = $3, updated_by = $4 where command_id = $1 and channel_id = $2`,
-        [commandId, channelId, now, label(actor)],
-      );
-      await q.query('delete from cmd_triggers where command_id = $1', [
-        commandId,
-      ]);
-      await this.log(
-        q,
-        channelId,
-        commandId,
-        cur.version + 1,
-        'delete',
-        actor,
-        role,
-        [{ field: 'name', before: cur.config.name, after: null }],
-        null,
-      );
-      return { ok: true, command_id: commandId };
-    });
+          [commandId, channelId, now, label(actor)],
+        );
+        await q.query('delete from cmd_triggers where command_id = $1', [
+          commandId,
+        ]);
+        await this.log(
+          q,
+          channelId,
+          commandId,
+          cur.version + 1,
+          'delete',
+          actor,
+          role,
+          [{ field: 'name', before: cur.config.name, after: null }],
+          null,
+        );
+        return { ok: true, command_id: commandId };
+      }),
+    );
   }
 
   /** Back to the module defaults (system commands, streamer only). */
@@ -550,25 +673,28 @@ export class CommandsService {
     actor: Actor,
     expectedVersion: number,
   ) {
-    return this.db.tx(async (q) => {
-      await this.lockChannel(q, channelId);
-      const role = await this.teamRole(q, channelId, actor);
-      if (role !== 'broadcaster')
-        throw new CommandsError(403, 'streamer_only', {
-          action: 'reset',
-          role,
-        });
-      const cur = await this.row(q, channelId, commandId);
-      this.assertVersion(cur, expectedVersion);
-      if (cur.kind !== 'system' || !cur.defaults)
-        throw new CommandsError(422, 'not_a_system_command');
-      const after = checkConfig(cur.defaults);
-      const diff = diffConfig(cur.config, after);
-      if (!diff.length) return view(cur);
-      if (diff.some((c) => c.field === 'name' || c.field === 'aliases'))
-        await this.assertWordsFree(q, channelId, commandId, after);
-      return this.write(q, channelId, cur, after, actor, role, 'reset', diff);
-    });
+    return this.changed(
+      channelId,
+      this.db.tx(async (q) => {
+        await this.lockChannel(q, channelId);
+        const role = await this.teamRole(q, channelId, actor);
+        if (role !== 'broadcaster')
+          throw new CommandsError(403, 'streamer_only', {
+            action: 'reset',
+            role,
+          });
+        const cur = await this.row(q, channelId, commandId);
+        this.assertVersion(cur, expectedVersion);
+        if (cur.kind !== 'system' || !cur.defaults)
+          throw new CommandsError(422, 'not_a_system_command');
+        const after = checkConfig(cur.defaults);
+        const diff = diffConfig(cur.config, after);
+        if (!diff.length) return view(cur);
+        if (diff.some((c) => c.field === 'name' || c.field === 'aliases'))
+          await this.assertWordsFree(q, channelId, commandId, after);
+        return this.write(q, channelId, cur, after, actor, role, 'reset', diff);
+      }),
+    );
   }
 
   async setRights(
@@ -640,116 +766,124 @@ export class CommandsService {
    * locked fields follow them and the streamer's adaptations of the other fields are kept.
    */
   async syncSystem(channelId: string) {
-    return this.db.tx(async (q) => {
-      await this.lockChannel(q, channelId);
-      const system: Actor = {
-        id: 'commands',
-        role: 'broadcaster',
-        via: 'system',
-      };
-      const out: {
-        key: string;
-        outcome: 'created' | 'upgraded' | 'unchanged' | 'word_taken';
-      }[] = [];
-      for (const d of this.systemDefs) {
-        const cur = (
-          await q.query<Row>(
-            `select ${COLS} from cmd_commands where channel_id = $1 and system_key = $2`,
-            [channelId, d.key],
-          )
-        )[0];
-        if (!cur) {
-          try {
-            await this.assertWordsFree(q, channelId, null, d.defaults);
-          } catch (e) {
-            if (e instanceof CommandsError && e.status === 409) {
-              out.push({ key: d.key, outcome: 'word_taken' });
-              continue;
+    return this.changed(
+      channelId,
+      this.db.tx(async (q) => {
+        await this.lockChannel(q, channelId);
+        const system: Actor = {
+          id: 'commands',
+          role: 'broadcaster',
+          via: 'system',
+        };
+        const out: {
+          key: string;
+          outcome: 'created' | 'upgraded' | 'unchanged' | 'word_taken';
+        }[] = [];
+        for (const d of this.systemDefs) {
+          const cur = (
+            await q.query<Row>(
+              `select ${COLS} from cmd_commands where channel_id = $1 and system_key = $2`,
+              [channelId, d.key],
+            )
+          )[0];
+          if (!cur) {
+            try {
+              await this.assertWordsFree(q, channelId, null, d.defaults);
+            } catch (e) {
+              if (e instanceof CommandsError && e.status === 409) {
+                out.push({ key: d.key, outcome: 'word_taken' });
+                continue;
+              }
+              throw e;
             }
-            throw e;
-          }
-          const id = randomUUID();
-          const now = this.clock.now();
-          await q.query(
-            `insert into cmd_commands (command_id, channel_id, kind, owner_module, system_key, locked_fields,
+            const id = randomUUID();
+            const now = this.clock.now();
+            await q.query(
+              `insert into cmd_commands (command_id, channel_id, kind, owner_module, system_key, locked_fields,
                defaults, defaults_version, name, enabled, listed, config, version, created_at, created_by, updated_at, updated_by)
              values ($1, $2, 'system', $3, $4, $5, $6, $7, $8, $9, $10, $6, 1, $11, $12, $11, $12)`,
-            [
-              id,
+              [
+                id,
+                channelId,
+                d.module,
+                d.key,
+                d.locked_fields,
+                JSON.stringify(d.defaults),
+                d.defaults_version,
+                d.defaults.name,
+                d.defaults.enabled,
+                d.defaults.listed,
+                now,
+                `system:${d.module}`,
+              ],
+            );
+            await this.writeTriggers(q, channelId, id, d.defaults);
+            await this.log(
+              q,
               channelId,
-              d.module,
-              d.key,
-              d.locked_fields,
+              id,
+              1,
+              'system_sync',
+              system,
+              'system',
+              [],
+              d.defaults,
+            );
+            out.push({ key: d.key, outcome: 'created' });
+            continue;
+          }
+          if ((cur.defaults_version ?? 0) >= d.defaults_version) {
+            out.push({ key: d.key, outcome: 'unchanged' });
+            continue;
+          }
+          const after = { ...cur.config };
+          for (const f of d.locked_fields) {
+            if (f.startsWith('audience.')) {
+              const sub = f.slice('audience.'.length) as
+                'groups' | 'allow' | 'deny';
+              after.audience = {
+                ...after.audience,
+                [sub]: d.defaults.audience[sub],
+              };
+            } else
+              (after as Record<string, unknown>)[f] =
+                d.defaults[f as keyof CmdConfig];
+          }
+          const checked = checkConfig(after);
+          await q.query(
+            `update cmd_commands set defaults = $3, defaults_version = $4, locked_fields = $5 where command_id = $1 and channel_id = $2`,
+            [
+              cur.command_id,
+              channelId,
               JSON.stringify(d.defaults),
               d.defaults_version,
-              d.defaults.name,
-              d.defaults.enabled,
-              d.defaults.listed,
-              now,
-              `system:${d.module}`,
+              d.locked_fields,
             ],
           );
-          await this.writeTriggers(q, channelId, id, d.defaults);
-          await this.log(
+          const diff = diffConfig(cur.config, checked);
+          await this.write(
             q,
             channelId,
-            id,
-            1,
-            'system_sync',
+            { ...cur, locked_fields: d.locked_fields },
+            checked,
             system,
             'system',
-            [],
-            d.defaults,
+            'system_sync',
+            diff,
           );
-          out.push({ key: d.key, outcome: 'created' });
-          continue;
+          out.push({ key: d.key, outcome: 'upgraded' });
         }
-        if ((cur.defaults_version ?? 0) >= d.defaults_version) {
-          out.push({ key: d.key, outcome: 'unchanged' });
-          continue;
-        }
-        const after = { ...cur.config };
-        for (const f of d.locked_fields) {
-          if (f.startsWith('audience.')) {
-            const sub = f.slice('audience.'.length) as
-              'groups' | 'allow' | 'deny';
-            after.audience = {
-              ...after.audience,
-              [sub]: d.defaults.audience[sub],
-            };
-          } else
-            (after as Record<string, unknown>)[f] =
-              d.defaults[f as keyof CmdConfig];
-        }
-        const checked = checkConfig(after);
-        await q.query(
-          `update cmd_commands set defaults = $3, defaults_version = $4, locked_fields = $5 where command_id = $1 and channel_id = $2`,
-          [
-            cur.command_id,
-            channelId,
-            JSON.stringify(d.defaults),
-            d.defaults_version,
-            d.locked_fields,
-          ],
-        );
-        const diff = diffConfig(cur.config, checked);
-        await this.write(
-          q,
-          channelId,
-          { ...cur, locked_fields: d.locked_fields },
-          checked,
-          system,
-          'system',
-          'system_sync',
-          diff,
-        );
-        out.push({ key: d.key, outcome: 'upgraded' });
-      }
-      return { system: out };
-    });
+        return { system: out };
+      }),
+    );
   }
 
   // --- helpers -------------------------------------------------------------------------------------
+
+  /** After a configuration write (committed or not): the keyword rules of the channel are read again. */
+  private changed<T>(channelId: string, p: Promise<T>): Promise<T> {
+    return p.finally(() => keywordRulesChanged(channelId));
+  }
 
   private async lockChannel(q: Queryable, channelId: string) {
     await q.query(
@@ -953,7 +1087,7 @@ export class CommandsService {
     cur: Row,
     after: CmdConfig,
     actor: Actor,
-    role: LabRole | 'system',
+    role: LabRole | 'system' | 'editor',
     action: 'update' | 'reset' | 'system_sync',
     diff: FieldChange[],
   ) {
@@ -995,7 +1129,7 @@ export class CommandsService {
     version: number,
     action: 'create' | 'update' | 'delete' | 'reset' | 'system_sync',
     actor: Actor,
-    role: LabRole | 'system',
+    role: LabRole | 'system' | 'editor',
     changes: FieldChange[],
     snapshot: CmdConfig | null,
   ) {

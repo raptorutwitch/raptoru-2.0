@@ -6,7 +6,7 @@ import { checkConfig, CommandsError, VARIABLES } from './model.js';
 // diagnostic all call this function, so they can never disagree.
 //
 // Stable order of the checks: reserved word → command found → enabled → valid configuration →
-// availability (live / offline) → audience (denied person, then allowed person, then groups) →
+// availability (live / offline) → moderation block (« everywhere ») → audience (denied person, then allowed person, then groups) →
 // arguments → variables → cooldown → quota. The first failing check is the reason.
 // Audience (use, not configuration): deny > explicit allow > groups, with no implicit exemption for the
 // streamer or the team — the streamer uses a command through the « broadcaster » group like anyone.
@@ -18,13 +18,16 @@ export type Reason =
   | 'disabled'
   | 'invalid_config'
   | 'unavailable'
+  | 'blocked'
   | 'denied_user'
   | 'access_denied'
   | 'follower_status_unknown'
   | 'invalid_arguments'
   | 'cooldown'
   | 'quota'
-  | 'duplicate_message';
+  | 'duplicate_message'
+  /** « Tester » of a keyword command: the message contains none of its expressions. */
+  | 'no_keyword';
 
 export type ViewerRole = 'broadcaster' | 'supermod' | 'moderator' | 'viewer';
 
@@ -63,6 +66,8 @@ export interface DecideInput {
   usage: DecideUsage;
   /** Message id to reply to (Twitch reply mode). */
   messageId: string | null;
+  /** Blocked « everywhere » by the moderation (lab_viewer_blocks, module « all »): no command at all. */
+  blocked?: boolean;
 }
 
 export interface RenderedMessage {
@@ -228,6 +233,8 @@ export function decide(input: DecideInput): Decision {
   pass('available');
 
   const v = input.viewer;
+  if (input.blocked)
+    return reject('blocked', `${v.display_name} est bloqué par la modération.`);
   const login = v.login.toLowerCase();
   if (cfg.audience.deny.includes(login))
     return reject(

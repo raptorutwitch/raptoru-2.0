@@ -336,6 +336,12 @@ async function extensionLabRoute(
         frontier,
         labRoleOf(url.searchParams.get('role')),
         url.searchParams.get('identity') !== '0',
+        undefined,
+        // Another fictional Lab viewer (labViewer of the mock), never an id outside the Lab's own range.
+        labRoleOf(url.searchParams.get('role')) === 'viewer' &&
+          /^900[12]\d\d$/.test(url.searchParams.get('viewer') ?? '')
+          ? url.searchParams.get('viewer')!
+          : undefined,
       ),
     });
     return true;

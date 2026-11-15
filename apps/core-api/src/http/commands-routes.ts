@@ -4,6 +4,7 @@ import {
   CmdCategoryOrderRequest,
   CmdCategoryUpdateRequest,
   CmdCreateRequest,
+  CmdDelegateRequest,
   CmdOutputRequest,
   CmdStepAckRequest,
   CmdStepClaimRequest,
@@ -344,6 +345,33 @@ export function commandsRoutes(
             req.changes,
           );
         }),
+    },
+    // Delegated editors (config.editors): the extension's « Mes commandes » for the verified viewer (`as`), and their
+    // change — on / off and expressions only (strict request, checked again by the service).
+    {
+      method: 'GET',
+      pattern: new RegExp(`${BASE}/delegated$`),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() =>
+          commands.delegated(
+            channel(params),
+            parse(Digits, url.searchParams.get('as')),
+          ),
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/([0-9a-f-]{36})/delegated$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() =>
+          commands.delegateUpdate(
+            channel(params),
+            id(params),
+            parse(CmdDelegateRequest, body),
+          ),
+        ),
     },
     {
       method: 'POST',

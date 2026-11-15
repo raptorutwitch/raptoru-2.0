@@ -544,6 +544,10 @@ export function createClient({
       call('POST', '/modules/v3/moderation/refund', { body: { activity_id: activityId, reason } }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
+    /** « Mes commandes »: the commands the streamer let this viewer edit (identity from the token), and the change of one
+     *  — only `expected_version`, `enabled`, `keywords`; Core checks the editor, the version and every field. */
+    commandsMine: () => call('GET', '/commands/mine'),
+    commandsMineSave: (commandId, body) => call('POST', `/commands/mine/${encodeURIComponent(commandId)}`, { body }),
     /** Roue du Sub V2 (R8): the caller's own tours (identity from the token), and « Lancer mes tours ». */
     subWheelMe: () => call('GET', '/sub-wheel/me'),
     subWheelAccept: () => call('POST', '/sub-wheel/me/accept', { body: {} }),

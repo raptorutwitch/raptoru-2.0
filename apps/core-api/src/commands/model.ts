@@ -122,8 +122,23 @@ export function configIssues(c: CmdConfig): string[] {
     issues.push('duplicate action id');
   if (c.refuse.mode === 'custom' && !c.refuse.text.trim())
     issues.push('refuse: custom message is empty');
+  // A message that contains an expression has nothing « after the command »: no argument, no {args}.
+  if (isKeywordTrigger(c)) {
+    if (c.args.length)
+      issues.push('a keyword trigger takes no argument after the command');
+    const texts = [
+      c.reply.text,
+      ...c.actions.flatMap((a) => (a.type === 'chat' ? [a.text] : [])),
+    ];
+    if (texts.some((t) => t.includes('{args}')))
+      issues.push('{args} is not available with a keyword trigger');
+  }
   return issues;
 }
+
+/** Launched by a message that contains one of its expressions (not by « !name »). */
+export const isKeywordTrigger = (c: Pick<CmdConfig, 'trigger'>) =>
+  c.trigger?.mode === 'keywords';
 
 /** Parses and checks a whole configuration (422 with the issues). */
 export function checkConfig(value: unknown): CmdConfig {

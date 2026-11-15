@@ -17,6 +17,35 @@ Mis à jour le 2026-10-05. Vérifier `git status` / `git log` avant de se fier a
 | Permissions | Droit d'équipe `rename` (renommer = modifier `config.name`), réglable par rôle dans Studio → Droits de l'équipe                                                                                                     | ✅ validée | voir `git log`                                                           |
 | F           | « Commandes » public pour les viewers dans l'Extension (Video + Mobile, pas Panel), lecture seule : Hub → Commandes, projection publique Core `GET /v1/lab/commands/:c/public` via l'EBS Lab `GET /commands/public` | ✅ validée | voir `git log`                                                           |
 
+## V2.1 : rôles, déclencheurs par expressions, édition déléguée (15/11/2026)
+
+- **Rôles** : la décision était juste (le Streamer est reconnu par son identité, VIP par badge, modérateurs par badge,
+  supermodos par l'équipe de Studio ; plusieurs groupes = OU). Le « bug Streamer » observé en Production venait :
+  - du délai de la commande (5 min **par personne**) : les essais suivants étaient refusés en silence (journal :
+    « Délai en cours ») ; l'ajout du pseudo a coïncidé avec la fin du délai ;
+  - du « Tester » de Studio, dont le profil « Streamer » avait un ID fictif (900100), jamais reconnu en Production.
+    Il utilise maintenant l'ID de la chaîne (`channel_id` de la liste), donc la vraie identité.
+  - Un viewer bloqué « partout » par la modération ne lance plus aucune commande (`blocked`).
+- **Déclenchement** (`config.trigger`, absent = « !nom » comme avant) :
+  - `keywords` : un message qui **contient** une expression lance la commande, sans « ! », une seule fois par message ;
+  - expressions littérales, majuscules indifférentes, 1 à 20 de 40 caractères ; `match` = `word` (mot entier :
+    « ao » dans « franchement ao ! », jamais dans « chaos ») ou `anywhere` ;
+  - même audience, délai, quota, activation, sons, réponses et anti-doublon que les commandes ; un message = au plus
+    une invocation Commandes (la commande « !mot » d'abord, sinon la première commande à expressions qui l'accepte) ;
+  - jamais de réponse de refus dans le chat ; un viewer hors audience n'est même pas journalisé ;
+  - pas de requête pour un message sans expression : règles compilées en mémoire, relues après chaque modification
+    (même processus) et au plus toutes les 30 s ; une correspondance est décidée sur la configuration relue sous verrou ;
+  - pas d'argument ni de `{args}` ; `!nom` ne la lance pas ; jamais dans la liste publique de l'extension.
+- **Édition déléguée** (`config.editors`, par ID Twitch, streamer seulement) :
+  - indépendante de « Qui » ; aucune commande n'en a par défaut ;
+  - l'éditeur ne peut que l'activer / la couper et changer ses expressions (commande à expressions) ; requête stricte
+    `CmdDelegateRequest` (tout autre champ refusé), identité du JWT, version attendue (409 sinon, avec la seule vue de
+    l'éditeur), commande d'un autre = 404 ;
+  - historique : auteur `editor`, via `extension` (migration additive `20261129130000_cmd_delegated_editors.sql`) ;
+  - extension : Hub › Commandes › « Mes commandes modifiables » (Vidéo et Mobile), y compris en Production où la liste
+    publique reste fermée (`commands_editable` dans la session) ; routes `/v1/ext/commands/mine[/<id>]`.
+- Configurer : Studio › Commandes › une commande › Règles › **Déclenchement** puis **Modification déléguée**.
+
 ## Action « son » et viewers par ID Twitch (15/11/2026)
 
 - **Action « son »** : une commande peut jouer un son sur le stream, seul ou avec des messages.

@@ -8,6 +8,7 @@ import {
   previewVars,
   REASON,
 } from '../commands-model.js';
+import { keywordMatcher } from '@raptoru/schemas';
 import { esc, ic, pp, seg, sw } from '../ds/ds.js';
 
 // Le faux chat : ce qu'on écrit dans l'éditeur s'y lit aussitôt, avec le viewer choisi et ce qu'il a tapé. C'est un exemple pour
@@ -116,7 +117,11 @@ const line = (mode: string, html: string, viewer: string) => {
 export function previewItems(d: CmdConfig, t: Tester) {
   const typed = t.message.trim() || example(d);
   const first = typed.split(/\s+/)[0]!.replace(/^!/, '').toLowerCase();
-  const fires = first === d.name || d.aliases.includes(first) || !d.name;
+  // A keyword command fires on its expressions (the same matcher as Core's), « !nom » on its words.
+  const fires =
+    d.trigger?.mode === 'keywords'
+      ? keywordMatcher(d.trigger)(typed) !== null
+      : first === d.name || d.aliases.includes(first) || !d.name;
   const vars = { ...PREVIEW_EXAMPLE, ...previewVars(d, t, typed) };
   const shown = Object.fromEntries(
     Object.entries(vars).map(([k, v]) => [k, `\uE000${v}\uE001`]),
@@ -132,7 +137,7 @@ export function previewItems(d: CmdConfig, t: Tester) {
       ...items,
       {
         key: 'nofire',
-        html: `<p class="cdx-lnote d-in">Ce message ne lance pas !${esc(d.name)} : le bot ne réagit pas.</p>`,
+        html: `<p class="cdx-lnote d-in">${d.trigger?.mode === 'keywords' ? 'Ce message ne contient aucune de ses expressions' : `Ce message ne lance pas !${esc(d.name)}`} : le bot ne réagit pas.</p>`,
       },
     ];
   const lines = previewLines(d, shown).map((l) => ({

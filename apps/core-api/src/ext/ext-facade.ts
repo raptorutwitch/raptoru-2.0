@@ -1,7 +1,7 @@
 import { eventTitlesView, levelUpPrefBody } from '@raptoru/schemas';
 import { type MusicAudience, musicOpenTo } from './music-audience.js';
 import { moduleFacade } from '@raptoru/schemas';
-import { commandsPublic, commandsTeam } from './commands-ext.js';
+import { commandsMine, commandsPublic, commandsTeam } from './commands-ext.js';
 import { subWheelExt } from './sub-wheel-ext.js';
 import { musicExt } from './music-ext.js';
 import {
@@ -248,6 +248,19 @@ export class ExtFacade {
         ? ok(r.body)
         : fail(r.status, 'commands_unavailable');
     }
+    // « Mes commandes » (delegated editors, every environment): always the JWT's identity, Core decides.
+    if (path === '/commands/mine' || path.startsWith('/commands/mine/')) {
+      if (!who.viewer) return fail(403, 'identity_required');
+      const r = await commandsMine(
+        this.core,
+        this.C,
+        method,
+        path,
+        body as Json | undefined,
+        this.actor(who),
+      );
+      return { status: r.status, body: r.body };
+    }
     if (this.config.lab && path.startsWith('/commands/v2/')) {
       if (!who.viewer) return fail(403, 'identity_required');
       const r = await commandsTeam(
@@ -474,6 +487,7 @@ export class ExtFacade {
       music,
       bonkRecent,
       restrictions,
+      editable,
     ] = await Promise.all([
       this.core<Json>(`/v1/lab/moderation/${C}/overview`).catch(() => null),
       v
@@ -512,6 +526,14 @@ export class ExtFacade {
             .then((r) => r.restrictions.map(viewerSafeRestriction))
             .catch(() => [])
         : [],
+      // « Mes commandes »: whether the streamer named this viewer editor of a command (the Hub shows the entry then).
+      v
+        ? this.core<{ commands: Json[] }>(
+            `/v1/lab/commands/${C}/delegated?as=${v.id}`,
+          )
+            .then((r) => r.commands.length > 0)
+            .catch(() => false)
+        : false,
     ]);
 
     const moduleState = (id: 'tts' | 'soundboard' | 'bonk' | 'raffle') =>
@@ -642,6 +664,7 @@ export class ExtFacade {
       payment_mode: this.paymentMode,
       moderation_v2: true,
       commands_public: this.config.lab === true,
+      commands_editable: editable,
       // Roue du Sub V2 (R8): hidden while the production wheel is in mode v1 (the routes answer, the Hub shows nothing).
       sub_wheel: this.config.lab === true,
       role: who.caller.role === 'external' ? 'viewer' : who.caller.role,
@@ -714,6 +737,7 @@ export class ExtFacade {
         'modules',
         'event_shop',
         'music',
+        'commands_editable',
       ].map((k) => [k, s[k]]),
     );
   }

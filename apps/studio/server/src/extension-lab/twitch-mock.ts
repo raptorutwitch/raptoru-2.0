@@ -23,12 +23,14 @@ export const TWITCH_EXT_MOCK_JS = String.raw`(() => {
   const labToken = 'lab.' + btoa(JSON.stringify({ role, identity_shared: identityShared }))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   // The JWT of the main Core's Lab when Studio offers one (404 otherwise: the historical Lab EBS and its lab token).
-  const tokenReady = fetch('/ext-lab/token?role=' + asked + '&identity=' + (identityShared ? '1' : '0'), { cache: 'no-store' })
+  // labViewer (viewer only): another fictional Lab viewer (9001xx / 9002xx), e.g. a second account in a test.
+  const labViewer = asked === 'viewer' && /^900[12]\d\d$/.test(query.get('labViewer') || '') ? query.get('labViewer') : '';
+  const tokenReady = fetch('/ext-lab/token?role=' + asked + '&identity=' + (identityShared ? '1' : '0') + (labViewer ? '&viewer=' + labViewer : ''), { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => (j && typeof j.token === 'string' ? j.token : labToken))
     .catch(() => labToken);
   const token = labToken;
-  const opaqueUserId = 'U' + ({ viewer: '900101', moderator: '900102', supermod: '900103', broadcaster: '900100' })[asked];
+  const opaqueUserId = 'U' + (labViewer || ({ viewer: '900101', moderator: '900102', supermod: '900103', broadcaster: '900100' })[asked]);
   const auth = {
     channelId,
     clientId: 'raptoru-lab',

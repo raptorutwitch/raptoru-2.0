@@ -119,6 +119,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261127130000_level_up_announcements.sql',
   // Commands V2 « sound » action: the sounds queued for Studio's OBS sound source; Lab twin 20261128120000.
   '20261128130000_cmd_sounds.sql',
+  // Commands V2 delegated editors: the history accepts the author « editor »; Lab twin 20261129120000.
+  '20261129130000_cmd_delegated_editors.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -239,6 +241,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261127120000_level_up_announcements_lab.sql',
   // Commands V2 « sound » action: the Lab twin of 20261128130000_cmd_sounds.sql (same content).
   '20261128120000_cmd_sounds_lab.sql',
+  // Commands V2 delegated editors: the Lab twin of 20261129130000_cmd_delegated_editors.sql (same content).
+  '20261129120000_cmd_delegated_editors_lab.sql',
 ]);
 
 /**
