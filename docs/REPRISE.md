@@ -17,8 +17,10 @@ Règle de partage : le Core décide (données, Jetons, règles, files), le bot L
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (15/11 ~14:25 UTC) : Core et bot d2fd5bb7 (sains), Studio 0.1.35 publié (installation = Antoni), site
-inchangé. origin/main = d2fd5bb7 (+ cette documentation).
+Production (15/11 ~15:45 UTC) : Core 7def8f5d, bot d2fd5bb7 (sains), Studio 0.1.36 publié (installation = Antoni),
+site inchangé. origin/main = 7def8f5d (+ cette documentation).
+Commandes Chat : action « son » (un son importé dans Studio, joué par la source OBS sonore « Level Up ») et viewers
+précis par ID Twitch (Studio › Commandes › Ensuite › Ajouter un son ; Qui › Viewers précis). docs/COMMANDS_V2_STATUS.md.
 Level Up V2 : 1 000 XP/niveau, normalisation WizeBot appliquée (910 comptes, 441 niveaux changés), 11 badges sub
 (266 attributions), préférences historiques restaurées. Vraie annonce Twitch « 🚀 LEVEL UP — Pseudo [Titre] (niveau) »
 groupée sur 5 min (8 pseudos), sans @ ; un seul son par annonce, 3 s avant le bandeau (0–5 s), seulement si un viewer
@@ -28,8 +30,8 @@ Extension : mini-profil (avatar, Jetons/Crédits, niveau et rang, abonnement et 
 fusionné dans les deux shells, PAS ENCORE PUBLIC : inventaire release-inventory/INVENTAIRE-7355c44acce2.md à valider
 par Antoni, puis npm run package:production -- --shell v2, Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Gestes d'Antoni restants : installer Studio 0.1.35, essayer « Envoyer une vraie annonce test » ; valider l'inventaire
-de l'extension et la publier.
+Gestes d'Antoni restants : installer Studio 0.1.36, actualiser une fois la source OBS « Level Up », créer !groslot ;
+essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension et la publier.
 Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
