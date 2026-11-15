@@ -1631,8 +1631,7 @@ export function mountCommandsPage(root: HTMLElement) {
       const scope = t.closest('.d-pop') ?? z('head');
       S.kwErr = addKeyword(S.draft, t.value);
       edited();
-      const again =
-        scope.querySelector<HTMLInputElement>('[data-chipin="kw"]');
+      const again = scope.querySelector<HTMLInputElement>('[data-chipin="kw"]');
       if (again) {
         again.value = S.kwErr ? t.value : '';
         again.focus();
