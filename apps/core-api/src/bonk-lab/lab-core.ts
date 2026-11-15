@@ -12,7 +12,11 @@ import { MODULES } from '../modules/index.js';
 import { ModuleHost } from '../modules/host.js';
 import { moduleSettingsRoutes } from '../http/module-settings-routes.js';
 import { ModuleSettings } from '../module-settings/service.js';
-import { progressionRoutes } from '../http/progression-routes.js';
+
+import {
+  progressionRoutes,
+  progressionViewerPrefsRoutes,
+} from '../http/progression-routes.js';
 import { createServer, type Server } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { BonkLabService } from './bonk-lab-service.js';
@@ -338,6 +342,8 @@ export function createLabCore({
       production: false,
       site: true,
     }),
+    // Level Up V2: the viewer's notification mode, for the Extension Lab (Lab secret).
+    ...progressionViewerPrefsRoutes(progression, LAB_PROGRESSION_CHANNEL),
     // Caution: Studio (state) and the Lab chat adapter (Twitch executor); `!caution` in the Lab chat.
     ...cautionRoutes(caution),
     // Votekick V2: Studio (state, overlay, mute) and the Lab chat adapter (Twitch executor); `!votekick` in the Lab chat.

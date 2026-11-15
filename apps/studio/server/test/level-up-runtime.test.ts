@@ -1,0 +1,235 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { LevelUpRuntime, synthChime } from '../src/level-up/runtime.js';
+
+// Level Up V2 — Studio's own OBS source (docs/PROGRESSION.md): token-protected page and events, Core asked ONLY while a
+// source listens (an unseen level-up expires in Core, never shown late), each notice pushed once, a local test that never
+// reaches Core, the volume, the default chime or the streamer's own sound.
+
+const PLAYER_DIR = join(import.meta.dirname, '..', 'level-up-player');
+let server: Server | null = null;
+let runtime: LevelUpRuntime | null = null;
+let dir = '';
+afterEach(async () => {
+  runtime?.stop();
+  server?.closeAllConnections();
+  await new Promise((r) => (server ? server.close(r) : r(null)));
+  server = null;
+  if (dir) await rm(dir, { recursive: true, force: true });
+});
+
+async function start(notices: unknown[][]) {
+  dir = await mkdtemp(join(tmpdir(), 'level-up-'));
+  const calls: [string, unknown][] = [];
+  const core = (async (path: string, body?: unknown) => {
+    calls.push([path, body]);
+    return { notices: notices.shift() ?? [] };
+  }) as never;
+  server = createServer(async (req, res) => {
+    const url = new URL(req.url!, 'http://studio');
+    if (!(await runtime!.handle(req, res, url))) res.writeHead(404).end();
+  });
+  await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
+  const origin = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
+  runtime = await LevelUpRuntime.create({
+    core,
+    environment: 'production',
+    origin,
+    dir,
+    playerDir: PLAYER_DIR,
+    claimEveryMs: 20,
+  });
+  const token = runtime.playerUrl.split('#')[1]!;
+  const api = (path: string, body?: unknown) =>
+    fetch(origin + path, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'x-raptoru-studio': '1', 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }).then(async (r) => ({
+      status: r.status,
+      body: (await r.json()) as Record<string, unknown>,
+    }));
+  return { origin, token, calls, api };
+}
+
+/** Reads the SSE stream until `n` level-up events arrived. */
+async function read(origin: string, token: string, n: number) {
+  const ac = new AbortController();
+  const res = await fetch(`${origin}/level-up/events?t=${token}`, {
+    signal: ac.signal,
+  });
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  const out: Record<string, unknown>[] = [];
+  while (out.length < n) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    for (let i; (i = buf.indexOf('\n\n')) >= 0;) {
+      const block = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      const data = /^data: (.*)$/m.exec(block)?.[1];
+      if (/^event: levelup$/m.test(block) && data) out.push(JSON.parse(data));
+    }
+  }
+  ac.abort();
+  return out;
+}
+
+describe('Level Up OBS source', () => {
+  it('nothing asked from Core without a source; with one: the notices pushed once, with the volume; wrong token refused', async () => {
+    const { origin, token, calls, api } = await start([
+      [
+        {
+          id: 7,
+          twitchUserId: '1',
+          displayName: 'Ana',
+          level: 12,
+          fromLevel: 11,
+          sound: true,
+        },
+      ],
+    ]);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(calls).toEqual([]); // no source: never claimed
+    expect((await fetch(`${origin}/level-up/events?t=nope`)).status).toBe(403);
+    const got = await read(origin, token, 1);
+    // Only « play the sound »: no pseudo, no level — nothing to draw.
+    expect(got).toEqual([{ id: 7, sound: true, volume: 0.7 }]);
+    expect(calls[0]).toEqual([
+      '/v1/studio/progression/levelups/claim',
+      { consumer: expect.stringMatching(/^studio-lu-/) },
+    ]);
+    expect((await api('/api/level-up/volume', { volume: 101 })).status).toBe(
+      400,
+    );
+    expect((await api('/api/level-up/volume', { volume: 40 })).body).toEqual({
+      volume: 40,
+    });
+    expect((await api('/api/level-up/state')).body).toMatchObject({
+      volume: 40,
+      custom_sound: false,
+    });
+  });
+
+  it('the local test reaches the connected sources only (never Core); without a source: refused', async () => {
+    const { origin, token, calls, api } = await start([]);
+    expect((await api('/api/level-up/test', { sound: true })).status).toBe(409);
+    const reading = read(origin, token, 1);
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await api('/api/level-up/test', { sound: true })).body).toEqual({
+      sent: true,
+    });
+    expect(await reading).toEqual([{ id: 0, sound: true, volume: 0.7 }]);
+    expect(calls.every(([p]) => p.endsWith('/levelups/claim'))).toBe(true);
+    // The Studio header is required for the panel API.
+    expect((await fetch(`${origin}/api/level-up/state`)).status).toBe(403);
+  });
+
+  it('the OBS page draws nothing: no visible element, no text, no style that shows anything', async () => {
+    const { origin } = await start([]);
+    const html = await (await fetch(`${origin}/level-up/player.html`)).text();
+    const body = /<body>([\s\S]*)<\/body>/.exec(html)![1]!;
+    // Only the script (and a comment): no element that could appear on the stream.
+    expect(
+      body
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/<script[^>]*><\/script>/g, '')
+        .trim(),
+    ).toBe('');
+    const js = await (await fetch(`${origin}/level-up/player.js`)).text();
+    for (const drawing of [
+      'document',
+      'textContent',
+      'innerHTML',
+      'createElement',
+      'append',
+      'style',
+    ])
+      expect(js).not.toContain(drawing);
+    expect(js).toContain("new Audio('/level-up/sound')");
+  });
+
+  it('the page files, the default chime (a short WAV), the streamer’s own sound first', async () => {
+    const { origin } = await start([]);
+    expect((await fetch(`${origin}/level-up/player.html`)).status).toBe(200);
+    const wav = Buffer.from(
+      await (await fetch(`${origin}/level-up/sound`)).arrayBuffer(),
+    );
+    expect(wav.subarray(0, 4).toString()).toBe('RIFF');
+    const seconds = (wav.length - 44) / (22_050 * 2);
+    expect(seconds).toBeGreaterThan(2);
+    expect(seconds).toBeLessThan(4);
+    expect(wav.equals(synthChime())).toBe(true);
+    await writeFile(join(dir, 'sound.mp3'), Buffer.from('ID3fake'));
+    const own = await fetch(`${origin}/level-up/sound`);
+    expect([own.headers.get('content-type'), await own.text()]).toEqual([
+      'audio/mpeg',
+      'ID3fake',
+    ]);
+  });
+
+  it('the streamer’s own sound sent from Studio: checked by its first bytes, replaces the previous one, removable', async () => {
+    const { origin, api } = await start([]);
+    const send = (data: Buffer, headers: Record<string, string> = {}) =>
+      fetch(`${origin}/api/level-up/sound`, {
+        method: 'POST',
+        headers: {
+          'x-raptoru-studio': '1',
+          'content-type': 'application/octet-stream',
+          ...headers,
+        },
+        body: new Uint8Array(data),
+      });
+    // Not a sound (a renamed image, a page): refused, nothing written.
+    expect((await send(Buffer.from('<html>not a sound</html>'))).status).toBe(
+      415,
+    );
+    // Without the Studio header: refused.
+    expect(
+      (
+        await send(Buffer.from('OggS________________'), {
+          'x-raptoru-studio': '0',
+        })
+      ).status,
+    ).toBe(403);
+    const ogg = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(60, 1)]);
+    expect(await (await send(ogg)).json()).toEqual({
+      custom_sound: true,
+      format: 'ogg',
+      bytes: 64,
+    });
+    const played = await fetch(`${origin}/level-up/sound`);
+    expect(played.headers.get('content-type')).toBe('audio/ogg');
+    expect(Buffer.from(await played.arrayBuffer()).equals(ogg)).toBe(true);
+    // A new file replaces the previous one (never two custom sounds).
+    const mp3 = Buffer.concat([
+      Buffer.from([0xff, 0xfb, 0x90, 0x00]),
+      Buffer.alloc(60),
+    ]);
+    expect((await (await send(mp3)).json()).format).toBe('mp3');
+    expect((await api('/api/level-up/state')).body).toMatchObject({
+      custom_sound: true,
+      custom_sound_type: 'audio/mpeg',
+    });
+    // Too big: refused.
+    expect(
+      (await send(Buffer.concat([mp3, Buffer.alloc(2 * 1024 * 1024)]))).status,
+    ).toBe(413);
+    // Removed: the chime again.
+    const del = await fetch(`${origin}/api/level-up/sound`, {
+      method: 'DELETE',
+      headers: { 'x-raptoru-studio': '1' },
+    });
+    expect(await del.json()).toEqual({ custom_sound: false });
+    const back = Buffer.from(
+      await (await fetch(`${origin}/level-up/sound`)).arrayBuffer(),
+    );
+    expect(back.equals(synthChime())).toBe(true);
+  });
+});

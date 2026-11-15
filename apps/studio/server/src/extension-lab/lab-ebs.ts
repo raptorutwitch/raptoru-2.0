@@ -5,7 +5,7 @@ import {
   type SoundLabSound,
   type TtsLabViewerState,
 } from '@raptoru/schemas';
-import { moduleFacade } from '@raptoru/schemas';
+import { levelUpPrefBody, moduleFacade } from '@raptoru/schemas';
 import type { SoundWorker } from '../sound-lab/worker.js';
 import type { TtsWorker } from '../tts-lab/worker.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
@@ -1600,6 +1600,44 @@ export class LabEbs {
         );
       }
     }
+    // Level Up V2: « Mon niveau » — the Lab Core's level and XP of the viewer of the token (never another one).
+    if (
+      method === 'GET' &&
+      path.split('?')[0] === '/viewer/progression' &&
+      this.labCore
+    ) {
+      try {
+        return this.ok(
+          await this.labCore<Json>(
+            `/v1/lab/progression/me/${caller.identity.twitchUserId}`,
+          ),
+        );
+      } catch (e) {
+        return this.fail(
+          (e as { status?: number }).status ?? 503,
+          (e as Error).message,
+        );
+      }
+    }
+    // Level Up V2: the Lab Core keeps the viewer's mode (as the main Core does), for the viewer of the token.
+    if (path.split('?')[0] === '/viewer/preferences' && this.labCore) {
+      const prefBody = levelUpPrefBody(body);
+      if (method === 'POST' && !prefBody)
+        return this.fail(400, 'invalid_payload');
+      try {
+        return this.ok(
+          await this.labCore<Json>(
+            `/v1/lab/progression/prefs/${caller.identity.twitchUserId}`,
+            method !== 'POST' ? undefined : prefBody!,
+          ),
+        );
+      } catch (e) {
+        return this.fail(
+          (e as { status?: number }).status ?? 503,
+          (e as Error).message,
+        );
+      }
+    }
     const key = headers.idempotencyKey
       ? `${caller.identity.twitchUserId}:${headers.idempotencyKey}`
       : null;
@@ -1673,13 +1711,16 @@ export class LabEbs {
       );
     }
     if (path === '/viewer/preferences') {
+      const prefBody = levelUpPrefBody(body);
+      if (method === 'POST' && !prefBody)
+        return this.fail(400, 'invalid_payload');
+      // Without the Lab Core (unit tests): the façade's memory (off when nothing was chosen).
       const user = this.user(identity.twitchUserId);
-      if (method === 'POST') {
-        if (typeof body.level_up_sfx_opt_in !== 'boolean')
-          return this.fail(400, 'invalid_payload');
-        user.levelUpSfx = body.level_up_sfx_opt_in;
-      }
-      return this.ok({ level_up_sfx_opt_in: user.levelUpSfx });
+      if (method === 'POST') user.levelUpSfx = prefBody!.level_up_sound;
+      return this.ok({
+        level_up_sound: user.levelUpSfx,
+        level_up_sfx_opt_in: user.levelUpSfx,
+      });
     }
     if (path === '/emotes' || path === '/emotes/refresh')
       return this.ok({

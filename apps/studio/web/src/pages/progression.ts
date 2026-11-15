@@ -39,9 +39,11 @@ import {
   type Look,
   type Wearer,
 } from './player-card.js';
+import { mountLevelUpScene } from './progression-level-up.js';
 import {
   curveXp,
   dailyHtml,
+  editableRules,
   dailyLabel,
   fitCurve,
   hoursFor,
@@ -54,7 +56,7 @@ import {
 // Progression : la vraie carte d'un viewer, sa semaine et son mois, ce qu'on lui attribue ; la courbe se tire et montre son effet ;
 // les marches du Daily se tirent ; le catalogue des titres et badges. Studio relaie : le Core compte, décide et journalise.
 
-type Scene = 'viewers' | 'xp' | 'catalog';
+type Scene = 'viewers' | 'xp' | 'catalog' | 'levelup';
 interface Reward {
   reward_id: string;
   kind: string;
@@ -177,6 +179,7 @@ const SCENES = [
   ['viewers', 'Viewers'],
   ['xp', 'XP et Daily'],
   ['catalog', 'Titres et badges'],
+  ['levelup', 'Level Up'],
 ] as const;
 const PERIODS = [
   ['all', 'Général'],
@@ -315,9 +318,16 @@ export function mountProgressionPage(root: HTMLElement) {
       </section>
       <aside class="pg-rform" data-role="reward-form" data-z="rform"></aside>
     </div>
+
+    <div class="pg-l" data-scene-z="levelup" hidden></div>
   </div>`;
   const z = (k: string) =>
     p.body.querySelector<HTMLElement>(`[data-z="${k}"]`)!;
+  // Level Up V2 (docs/LEVEL_UP_V2.md): its own scene, in its own file; this page only shows it and reloads after it.
+  const levelUp = mountLevelUpScene(
+    p.body.querySelector<HTMLElement>('[data-scene-z="levelup"]')!,
+    { onChanged: () => reload() },
+  );
   const q = p.body.querySelector<HTMLInputElement>('[data-role="q"]')!;
   const adjValue = p.body.querySelector<HTMLInputElement>(
     '[data-role="adj-value"]',
@@ -664,7 +674,7 @@ export function mountProgressionPage(root: HTMLElement) {
       ${grid}
       ${rulesDirty() && saved ? `<path class="was" d="${path(saved)}"/>` : ''}
       <path class="area" d="${curve}L${px(span)} ${box.h - box.b}L${px(1)} ${box.h - box.b}Z"/><path class="now" d="${curve}"/>
-      ${pins}${me}${h}${grip('a', a)}${grip('b', b)}
+      ${pins}${me}${h}${d.level_model === 'fixed' ? '' : `${grip('a', a)}${grip('b', b)}`}
     </svg>${hover ? `<div class="pg-tip" style="left:${Math.min(box.w - 170, px(hover) + 10)}px">Niveau <b>${hover}</b> · ${fmt(curveXp(hover, d))} XP${hoursFor(curveXp(hover, d), d.xp_per_minute) === null ? '' : ` · ≈ ${fmt(Math.round(hoursFor(curveXp(hover, d), d.xp_per_minute)!))} h`}</div>` : ''}`;
     if (held) el.querySelector<SVGElement>(`[data-grip="${held}"]`)?.focus();
     const marks = [0.1, 0.25, 0.5, 0.75, 1].map((f) =>
@@ -700,7 +710,9 @@ export function mountProgressionPage(root: HTMLElement) {
       ${grp(
         'Courbe',
         'pulse',
-        `${numrow('Base', fld('data-rule="curve_base" min="1" max="100000"', d.curve_base))}
+        d.level_model === 'fixed'
+          ? `<p class="d-note">Level Up V2 : ${fmt(d.curve_base)} XP par niveau, fixe. La courbe ne se règle plus (un niveau atteint ne baisse jamais à cause d’un réglage).</p>`
+          : `${numrow('Base', fld('data-rule="curve_base" min="1" max="100000"', d.curve_base))}
         ${numrow('Exposant', fld('data-rule="curve_exponent" step="0.05" min="1" max="3"', d.curve_exponent))}`,
       )}
       <p class="d-note">${rulesDirty() ? 'Pas encore appliqué : le trait pâle est la courbe actuelle.' : 'L’XP déjà acquise ne change jamais.'}</p>`,
@@ -837,6 +849,7 @@ export function mountProgressionPage(root: HTMLElement) {
     paintHead();
     for (const el of p.body.querySelectorAll<HTMLElement>('[data-scene-z]'))
       el.hidden = el.dataset.sceneZ !== scene;
+    levelUp.visible(scene === 'levelup');
     if (error && !st) {
       patch(z('list'), `<div class="d-empty">${esc(error)}</div>`);
       return;
@@ -873,7 +886,7 @@ export function mountProgressionPage(root: HTMLElement) {
       return;
     const before = saved;
     const undoable = !curveChanged();
-    const rules = draft;
+    const rules = editableRules(draft);
     const ok = await run(btn, () =>
       postJson('/api/progression/settings', { rules }),
     );
@@ -883,7 +896,10 @@ export function mountProgressionPage(root: HTMLElement) {
         ? () =>
             void run(
               null,
-              () => postJson('/api/progression/settings', { rules: before }),
+              () =>
+                postJson('/api/progression/settings', {
+                  rules: editableRules(before),
+                }),
               'Règles précédentes rétablies',
             ).then(() => {
               draft = null;

@@ -107,3 +107,33 @@ describe('Extension API client — response budget and contract', () => {
     ]);
   });
 });
+
+describe('Level Up V2 — the viewer preference', () => {
+  it('sends the sound checkbox as a boolean (anything else is off) and returns the Core answer', async () => {
+    const bodies = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      bodies.push(init.body ? JSON.parse(init.body) : null);
+      return json({
+        ok: true,
+        level_up_sound: true,
+        level_up_sfx_opt_in: true,
+      });
+    });
+    const api = createClient({
+      getToken: () => 'tok',
+      apiBase: '/ext-lab/api', // an allowed base (shared/runtime-guard.js)
+      demoMode: false,
+      fetchImpl,
+    });
+    await expect(api.setViewerPreference(true)).resolves.toMatchObject({
+      level_up_sound: true,
+    });
+    await api.setViewerPreference(false);
+    await api.setViewerPreference('sound'); // never a string: off
+    expect(bodies).toEqual([
+      { level_up_sound: true },
+      { level_up_sound: false },
+      { level_up_sound: false },
+    ]);
+  });
+});

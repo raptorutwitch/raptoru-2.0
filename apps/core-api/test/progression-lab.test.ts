@@ -86,7 +86,7 @@ it('Lab: chat XP during the simulated live, reward created, viewer found, grante
   const v = await call<{ xp: number; messages: number; level: number }>(
     '/v1/progression/viewers/9801',
   );
-  expect([v.xp, v.messages]).toEqual([5, 1]);
+  expect([v.xp, v.messages]).toEqual([3, 1]); // 3 XP per message
 
   await call('/v1/lab/progression/rewards', {
     reward_id: 'citrouille-2026',

@@ -296,14 +296,18 @@ export function createClient({
     }
     if (path === '/session') return Promise.resolve(structuredClone(demo));
     if (path === '/state') return Promise.resolve(dynamicSessionState(demo));
+    if (path === '/viewer/progression' && method === 'GET') {
+      return Promise.resolve({ ok: true, enabled: true, level: 12, xp: 11_340, levelXp: 11_000, nextLevelXp: 12_000, rank: 42, badges: [{ id: 'niveau-10', label: 'Niveau 10', image: null }] });
+    }
     if (path === '/viewer/preferences') {
       if (method === 'GET') {
-        return Promise.resolve({ ok: true, level_up_sfx_opt_in: Boolean(demo.viewer_preferences?.level_up_sfx_opt_in) });
+        const on = demo.viewer_preferences?.level_up_sound === true;
+        return Promise.resolve({ ok: true, level_up_sound: on, level_up_sfx_opt_in: on });
       }
-      if (method === 'POST' && typeof body?.level_up_sfx_opt_in === 'boolean') {
+      if (method === 'POST' && typeof body?.level_up_sound === 'boolean') {
         demo.viewer_preferences ??= {};
-        demo.viewer_preferences.level_up_sfx_opt_in = body.level_up_sfx_opt_in;
-        return Promise.resolve({ ok: true, level_up_sfx_opt_in: body.level_up_sfx_opt_in });
+        demo.viewer_preferences.level_up_sound = body.level_up_sound;
+        return Promise.resolve({ ok: true, level_up_sound: body.level_up_sound, level_up_sfx_opt_in: body.level_up_sound });
       }
       return Promise.reject(Object.assign(new Error('invalid_payload'), { code: 'invalid_payload' }));
     }
@@ -479,8 +483,11 @@ export function createClient({
     session: () => call('GET', '/session'),
     state: () => call('GET', '/state'),
     getViewerPreference: () => call('GET', '/viewer/preferences'),
-    setViewerPreference: (levelUpSfxOptIn) => call('POST', '/viewer/preferences', {
-      body: { level_up_sfx_opt_in: Boolean(levelUpSfxOptIn) },
+    // Level Up V2: « Mon niveau » (level, XP, the next level's threshold, badges owned).
+    getViewerProgression: () => call('GET', '/viewer/progression'),
+    // Level Up V2: « Jouer un son lorsque je monte de niveau » (true / false).
+    setViewerPreference: (on) => call('POST', '/viewer/preferences', {
+      body: { level_up_sound: on === true },
     }),
     refresh: async () => {
       if (!lastSession) return call('GET', '/session');

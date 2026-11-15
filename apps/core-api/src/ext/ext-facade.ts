@@ -1,4 +1,4 @@
-import { eventTitlesView } from '@raptoru/schemas';
+import { eventTitlesView, levelUpPrefBody } from '@raptoru/schemas';
 import { type MusicAudience, musicOpenTo } from './music-audience.js';
 import { moduleFacade } from '@raptoru/schemas';
 import { commandsPublic, commandsTeam } from './commands-ext.js';
@@ -174,7 +174,6 @@ const refused = (e: unknown): ExtReply => {
 export class ExtFacade {
   /** Recent TTS / Soundboard admissions per viewer (Bonk is read back from Core). */
   private receipts = new Map<string, Json[]>();
-  private preferences = new Map<string, boolean>();
 
   constructor(
     private readonly core: LabCall,
@@ -211,6 +210,8 @@ export class ExtFacade {
     if (method === 'GET' && path === '/tts/state') return this.ttsState(who);
     if (path === '/viewer/preferences')
       return this.viewerPreferences(who, method, body);
+    if (method === 'GET' && path === '/viewer/progression')
+      return this.viewerProgression(who);
     // Bonk « Twitch » source: always the account of the JWT (never an id sent by the client).
     if (path === '/emotes' || path === '/emotes/refresh')
       return ok(await this.emotes(caller, path === '/emotes/refresh'));
@@ -752,20 +753,38 @@ export class ExtFacade {
     });
   }
 
-  private viewerPreferences(
+  /**
+   * Level Up V2: « Jouer un son lorsque je monte de niveau », kept by Core (it survives a restart; off when no choice is
+   * known) for the JWT's identity only. The first extension's boolean and the first V2's mode are still accepted.
+   */
+  private async viewerPreferences(
     who: Who,
     method: string,
     body: Json | undefined,
-  ): ExtReply {
+  ): Promise<ExtReply> {
     if (!who.viewer) return fail(403, 'identity_required');
-    if (method === 'POST') {
-      if (typeof body?.level_up_sfx_opt_in !== 'boolean')
-        return fail(400, 'invalid_payload');
-      this.preferences.set(who.viewer.id, body.level_up_sfx_opt_in);
+    const path = `/v1/lab/progression/prefs/${who.viewer.id}`;
+    const prefBody = levelUpPrefBody(body);
+    if (method === 'POST' && !prefBody) return fail(400, 'invalid_payload');
+    try {
+      return ok(
+        await this.core<Json>(path, method !== 'POST' ? undefined : prefBody!),
+      );
+    } catch (e) {
+      return refused(e);
     }
-    return ok({
-      level_up_sfx_opt_in: this.preferences.get(who.viewer.id) ?? false,
-    });
+  }
+
+  /** Level Up V2: « Mon niveau » in the extension — the JWT viewer's level, XP and the way to the next level. */
+  private async viewerProgression(who: Who): Promise<ExtReply> {
+    if (!who.viewer) return fail(403, 'identity_required');
+    try {
+      return ok(
+        await this.core<Json>(`/v1/lab/progression/me/${who.viewer.id}`),
+      );
+    } catch (e) {
+      return refused(e);
+    }
   }
 
   // --- Halloween shop (docs/HALLOWEEN.md) ---------------------------------------------------------

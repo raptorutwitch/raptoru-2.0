@@ -28,6 +28,7 @@ import { labCockpitRoutes } from '../lab/routes.js';
 import { ExtFacade } from './ext-facade.js';
 import { internalLabCall } from './lab-internal.js';
 import { TwitchNames } from './twitch-names.js';
+import { progressionViewerPrefsRoutes } from '../http/progression-routes.js';
 
 // Public Core assembly of the viewer frontier (/v1/ext/*) and the Studio cockpit (/v1/studio/cockpit/*):
 // the Lab services and routes (Moderation V2, Tombola, test wallet, Bonk / Soundboard / TTS admission)
@@ -154,6 +155,8 @@ export function createPublicFrontier(
     }),
     // The module host (architecture socle): catalog, status, admin, viewer, activity, refund — once for every module.
     ...modulesRoutes(core.modules),
+    // Level Up V2: the viewer's notification mode (the extension's preferences), in-process only.
+    ...progressionViewerPrefsRoutes(core.progression, channelId),
   ]);
   const app =
     o.userLookup ??

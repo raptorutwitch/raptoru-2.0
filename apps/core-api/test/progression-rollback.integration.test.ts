@@ -16,6 +16,7 @@ const isLocal =
 const FILE = '20261113130000_progression.sql';
 const PERIODS = '20261114130000_progression_periods.sql';
 const COSMETIC = '20261118130000_cosmetic_shop.sql';
+const LEVEL = '20261126130000_progression_level_up.sql';
 
 /** The rollback SQL as written in the migration's header (the « -- Rollback: » comment lines, marks removed). */
 function rollbackSql(file = FILE) {
@@ -112,6 +113,61 @@ describe.skipIf(!isLocal)(
       );
     });
 
+    it('level up: applied, used, rolled back by its header SQL (ledger rows kept), then applied again', async () => {
+      await migrate(db, 'prod');
+      const all = await tables();
+      const cols = await columns();
+      const LEVEL_TABLES = [
+        'progression_level_events',
+        'progression_normalizations',
+        'progression_viewer_prefs',
+      ];
+      for (const t of LEVEL_TABLES) expect(all).toContain(t);
+      await db.query(
+        `insert into progression_ledger (channel_id, twitch_user_id, kind, amount, key, actor, created_at)
+         values ('1', '9', 'normalization', -5, 'n1', 'test', now())`,
+      );
+      await db.query(
+        `insert into progression_viewer_prefs (channel_id, twitch_user_id, level_up_notify, updated_at)
+         values ('1', '9', 'sound', now())`,
+      );
+      await expect(
+        db.query(
+          `insert into progression_viewer_prefs (channel_id, twitch_user_id, level_up_notify, updated_at)
+           values ('1', '8', 'loud', now())`,
+        ),
+      ).rejects.toThrow(/check/);
+      expect(rollbackSql(LEVEL)).toMatch(
+        /^drop table progression_viewer_prefs,/,
+      );
+      await db.query(rollbackSql(LEVEL));
+      expect(await tables()).toEqual(
+        all.filter((t) => !LEVEL_TABLES.includes(t)),
+      );
+      expect(await columns()).toEqual(
+        cols.filter(
+          (c) =>
+            !LEVEL_TABLES.some((t) => c.startsWith(`${t}.`)) &&
+            c !== 'progression_accounts.last_message_fp',
+        ),
+      );
+      // The movement already written stays; a new one of that kind is refused again.
+      expect(
+        (await db.query("select 1 from progression_ledger where key = 'n1'"))
+          .length,
+      ).toBe(1);
+      await expect(
+        db.query(
+          `insert into progression_ledger (channel_id, twitch_user_id, kind, amount, key, actor, created_at)
+           values ('1', '9', 'normalization', 1, 'n2', 'test', now())`,
+        ),
+      ).rejects.toThrow(/check/);
+      await migrate(db, 'prod');
+      expect(await tables()).toEqual(all);
+      expect(await columns()).toEqual(cols);
+      await db.query('delete from progression_ledger');
+    });
+
     it('periods: applied, used, rolled back by its header SQL (history and ledger rows kept), then applied again', async () => {
       await migrate(db, 'prod');
       const all = await tables();
@@ -180,8 +236,8 @@ describe.skipIf(!isLocal)(
       expect(sql).toMatch(
         /^drop table progression_history, progression_equipped/,
       );
-      // The later migration first (its own header), then this one.
       // The later migrations first (their own headers, newest first), then this one.
+      await db.query(rollbackSql(LEVEL));
       await db.query(rollbackSql(COSMETIC));
       await db.query(rollbackSql(PERIODS));
       await db.query(sql);
