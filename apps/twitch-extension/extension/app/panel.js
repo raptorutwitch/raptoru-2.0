@@ -16,13 +16,13 @@ import {
 } from '../shared/notifications.js';
 import { createEmoteAccess } from '../shared/emote-access.js';
 import { walletPaymentMethods } from '../shared/wallet-payment.js';
-import { viewerLevelBlock } from '../shared/viewer-level.js';
 import {
   createWalletFace,
   createCurrencySwitch,
   formatWalletExactValue,
 } from '../shared/ui-primitives.js';
 import { createHubCarousel, hubIcon } from '../shared/hub-carousel.js';
+import { attachProfilePanel, isProfileOpen, profileAvatar } from '../shared/mini-profile.js';
 import { readTutorialDisabled, writeTutorialDisabled } from '../shared/tutorial-prefs.js';
 // v2 : Soundboard, Bonk, TTS (V2 puis V1) et Modération (D4 puis V1) ne sont plus importés ici : app/lazy-views.js les
 // charge à l'ouverture du module (ou en arrière-plan une fois le Hub affiché). Ils s'enregistrent comme avant.
@@ -228,7 +228,6 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let scopedError = null;
   let tutorialOpen = false;
   let notificationCenterOpen = false;
-  let viewerPreferencesOpen = false;
   let viewerPreferenceIdentity = null;
   let viewerPreferenceLoaded = false;
   let viewerPreferenceLoading = false;
@@ -347,7 +346,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   root.classList.add('jdm-shell');
   root.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (notificationCenterOpen || viewerPreferencesOpen || tutorialOpen) {
+    if (notificationCenterOpen || tutorialOpen) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -362,22 +361,13 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       queueMicrotask(() => root.querySelector('.jdm-notification-toggle')?.focus({ preventScroll: true }));
       return;
     }
-    if (viewerPreferencesOpen) {
-      viewerPreferencesOpen = false;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector('.jdm-viewer-preferences-toggle')?.focus({ preventScroll: true }));
-      return;
-    }
   });
   document.addEventListener('click', (event) => {
-    if (!notificationCenterOpen && !viewerPreferencesOpen) return;
+    if (!notificationCenterOpen) return;
     const target = event.target;
     if (target?.closest?.('.jdm-notification-center')
-      || target?.closest?.('.jdm-viewer-preferences')
-      || target?.closest?.('.jdm-notification-toggle')
-      || target?.closest?.('.jdm-viewer-preferences-toggle')) return;
+      || target?.closest?.('.jdm-notification-toggle')) return;
     notificationCenterOpen = false;
-    viewerPreferencesOpen = false;
     renderPreservingViewport();
   });
 
@@ -550,10 +540,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function navigateTo(moduleId) {
     hubAllOpen = false; // a module opened (or the Hub again): the list starts closed
     if (moduleId !== null && !moduleById(moduleId)) return;
-    if (moduleId !== null) {
-      notificationCenterOpen = false;
-      viewerPreferencesOpen = false;
-    }
+    if (moduleId !== null) notificationCenterOpen = false;
     if (moduleId !== openModule) emoteAccess.leaveVisit();
     if (moduleId !== hostViewId) {
       hostView?.destroy?.();
@@ -905,7 +892,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function loadViewerProgression() {
-    if (!viewerPreferencesOpen || state?.identity_shared !== true || viewerProgressionState !== 'idle') return;
+    if (state?.identity_shared !== true || viewerProgressionState !== 'idle') return;
     if (typeof client?.getViewerProgression !== 'function') {
       viewerProgressionState = 'error';
       return;
@@ -918,18 +905,18 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         if (identity !== viewerPreferenceIdentity) return;
         viewerProgression = response;
         viewerProgressionState = 'loaded';
-        if (viewerPreferencesOpen) renderPreservingViewport();
+        if (!openModule) renderPreservingViewport();
       })
       .catch(() => {
         if (identity !== viewerPreferenceIdentity) return;
         viewerProgressionState = 'error';
-        if (viewerPreferencesOpen) renderPreservingViewport();
+        if (isProfileOpen()) renderPreservingViewport();
       });
   }
 
   function loadViewerPreference() {
     syncViewerPreferenceIdentity();
-    if (!viewerPreferencesOpen
+    if (!isProfileOpen()
       || state?.identity_shared !== true
       || viewerPreferenceLoaded
       || viewerPreferenceLoading) return;
@@ -949,7 +936,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         viewerPreferenceLoaded = true;
         viewerPreferenceLoading = false;
         viewerPreferenceError = false;
-        if (viewerPreferencesOpen) renderPreservingViewport();
+        if (isProfileOpen()) renderPreservingViewport();
       })
       .catch(() => {
         if (requestId !== viewerPreferenceRequest) return;
@@ -959,7 +946,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         viewerPreferenceLoaded = true;
         viewerPreferenceLoading = false;
         viewerPreferenceError = true;
-        if (viewerPreferencesOpen) renderPreservingViewport();
+        if (isProfileOpen()) renderPreservingViewport();
       });
   }
 
@@ -979,7 +966,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         viewerPreferenceLoaded = true;
         viewerPreferenceSaving = false;
         viewerPreferenceError = false;
-        if (viewerPreferencesOpen) renderPreservingViewport();
+        if (isProfileOpen()) renderPreservingViewport();
       })
       .catch(() => {
         if (requestId !== viewerPreferenceRequest) return;
@@ -987,77 +974,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         viewerPreferenceLoaded = true;
         viewerPreferenceSaving = false;
         viewerPreferenceError = true;
-        if (viewerPreferencesOpen) renderPreservingViewport();
+        if (isProfileOpen()) renderPreservingViewport();
       });
-  }
-
-  function viewerPreferencesPanel() {
-    syncViewerPreferenceIdentity();
-    loadViewerPreference();
-    loadViewerProgression();
-    const panel = el('section', 'jdm-viewer-preferences');
-    panel.id = 'jdm-viewer-preferences';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-modal', 'false');
-    panel.setAttribute('aria-labelledby', 'jdm-viewer-preferences-title');
-
-    const heading = el('strong', 'jdm-viewer-preferences__title', 'Préférences');
-    heading.id = 'jdm-viewer-preferences-title';
-    const close = el('button', 'jdm-viewer-preferences__close', '×');
-    close.type = 'button';
-    close.setAttribute('aria-label', 'Fermer les préférences');
-    close.title = 'Fermer';
-    close.addEventListener('click', () => {
-      viewerPreferencesOpen = false;
-      renderPreservingViewport();
-      queueMicrotask(() => root.querySelector('.jdm-viewer-preferences-toggle')?.focus({ preventScroll: true }));
-    });
-    const header = el('header', 'jdm-viewer-preferences__head');
-    header.append(heading, close);
-
-    // Level Up V2 (docs/LEVEL_UP_V2.md § 8): one checkbox, saved at once and kept by the Core. The chat announcement is the
-    // bot's (for everyone); this choice is only the sound on the stream.
-    const option = el('div', 'jdm-viewer-preferences__option');
-    const label = el('label', 'jdm-viewer-preferences__label', 'Jouer un son lorsque je monte de niveau');
-    const input = el('input', 'jdm-viewer-preferences__control');
-    input.type = 'checkbox';
-    input.id = 'jdm-level-up-sfx-preference';
-    input.checked = viewerPreferenceValue === true;
-    label.htmlFor = input.id;
-    const canEdit = state?.identity_shared === true
-      && typeof client?.getViewerPreference === 'function'
-      && typeof client?.setViewerPreference === 'function';
-    input.disabled = !canEdit || viewerPreferenceLoading || viewerPreferenceSaving;
-    input.title = !canEdit && state?.identity_shared !== true
-      ? 'Partage ton identité Twitch pour modifier ce réglage.'
-      : viewerPreferenceLoading
-        ? 'Chargement…'
-        : viewerPreferenceError
-          ? 'Réglage indisponible. Réessaie en ouvrant les préférences.'
-          : 'Un court son sur le stream quand tu passes un niveau';
-    input.addEventListener('change', () => saveViewerPreference(input.checked));
-    option.append(label, input);
-    if (viewerPreferenceError && state?.identity_shared === true) {
-      const status = el('span', 'jdm-viewer-preferences__status', 'Indisponible');
-      status.setAttribute('role', 'status');
-      option.append(status);
-    }
-    const refreshAction = el('button', 'jdm-viewer-preferences__refresh', '↻ Actualiser');
-    refreshAction.type = 'button';
-    refreshAction.addEventListener('click', async () => {
-      refreshAction.disabled = true;
-      viewerProgressionState = 'idle'; // « Mon niveau » is read again
-      try { await onRefresh?.(); } catch { /* le polling reprendra */ }
-      refreshAction.disabled = false;
-    });
-    const level = state?.identity_shared === true
-      ? [viewerLevelBlock(el, viewerProgression, {
-        loading: viewerProgressionState === 'loading',
-        error: viewerProgressionState === 'error',
-      })]
-      : [];
-    panel.append(header, ...level, option, refreshAction);
-    return panel;
   }
 
   function notificationCenterDrawer() {
@@ -1426,31 +1344,58 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       if (unread) notificationToggle.append(el('span', 'jdm-notification-toggle__count', String(unread)));
       notificationToggle.addEventListener('click', () => {
         notificationCenterOpen = !notificationCenterOpen;
-        viewerPreferencesOpen = false;
         renderPreservingViewport();
         if (notificationCenterOpen) {
           queueMicrotask(() => root.querySelector('.jdm-notification-center__close')?.focus({ preventScroll: true }));
         }
       });
-      const preferencesToggle = el('button', 'jdm-viewer-preferences-toggle');
-      preferencesToggle.type = 'button';
-      preferencesToggle.setAttribute('aria-label', 'Ouvrir les préférences');
-      preferencesToggle.setAttribute('aria-haspopup', 'dialog');
-      preferencesToggle.setAttribute('aria-controls', 'jdm-viewer-preferences');
-      preferencesToggle.setAttribute('aria-expanded', String(viewerPreferencesOpen));
-      preferencesToggle.title = 'Préférences';
-      const preferencesIcon = el('span', 'jdm-viewer-preferences-toggle__icon', '⚙');
-      preferencesIcon.setAttribute('aria-hidden', 'true');
-      preferencesToggle.append(preferencesIcon);
-      preferencesToggle.addEventListener('click', () => {
-        viewerPreferencesOpen = !viewerPreferencesOpen;
-        notificationCenterOpen = false;
-        renderPreservingViewport();
-        if (viewerPreferencesOpen) {
-          queueMicrotask(() => root.querySelector('.jdm-viewer-preferences__close')?.focus({ preventScroll: true }));
-        }
+      // Mini-profil (docs/MINI_PROFIL.md) : l'avatar du viewer à droite du wallet. Préférences (l'ancien ⚙), Historique
+      // et Classement sont dans son panneau ; ses données sont celles de cette session (rien d'inventé, rien de plus).
+      loadViewerProgression(); // once per identity: the avatar's ring and the level (again at each opening)
+      const canEditSound = state?.identity_shared === true
+        && typeof client?.getViewerPreference === 'function'
+        && typeof client?.setViewerPreference === 'function';
+      const profile = profileAvatar(document, {
+        data: {
+          identity: state?.identity_shared === true,
+          name: state.viewer_login || 'Viewer',
+          avatar: state.viewer_avatar || null,
+          tokens: wallet.unavailable ? null : Number(wallet.available ?? 0),
+          credits: creditsKnown
+            ? [...hubCreditsByModule].map(([id, n]) => ({
+              label: visibleModuleLabel((state.modules ?? []).find((m) => m.id === id) ?? { label: id }),
+              n,
+            }))
+            : null,
+          level: viewerProgression,
+          levelState: viewerProgressionState,
+          loyalty: viewerProgression?.loyalty ?? null,
+          restrictions: state.restrictions ?? [],
+          notices: moduleNotices(ACTIONS_MODULE),
+          history: modules.some((mod) => mod.id === ACTIONS_MODULE.id),
+          rankingUrl: state.site_url || '',
+          sound: {
+            on: viewerPreferenceValue === true,
+            busy: viewerPreferenceLoading || viewerPreferenceSaving,
+            error: viewerPreferenceError,
+            editable: canEditSound,
+          },
+        },
+        openHistory: () => navigateTo(ACTIONS_MODULE.id),
+        refresh: () => onRefresh?.(),
+        closeDrawers: () => {
+          if (!notificationCenterOpen) return;
+          notificationCenterOpen = false;
+          renderPreservingViewport();
+        },
+        onOpen: () => {
+          viewerProgressionState = 'idle'; // the level and rank read again (one request per opening)
+          loadViewerProgression();
+        },
+        onPreferences: () => loadViewerPreference(),
+        setSound: (on) => saveViewerPreference(on),
       });
-      top.append(brand, notificationToggle, preferencesToggle, walletRow);
+      top.append(brand, notificationToggle, walletRow, profile);
 
       // Modules du carousel : les vrais modules (Historique reste un accès secondaire).
       const raffleOpen = raffleIsActive(state?.raffle ?? {});
@@ -1499,25 +1444,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const utilLeft = el('div', 'rh-util__side rh-util__side--left');
       const launcherHost = el('div', 'rh-util__center');
       const utilRight = el('div', 'rh-util__side rh-util__side--right');
-      if (modules.some((mod) => mod.id === ACTIONS_MODULE.id)) {
-        const history = el('button', 'rh-util-btn');
-        history.type = 'button';
-        history.append(hubIcon(document, 'clock'), el('span', '', 'Historique'));
-        const historyNotices = moduleNotices(ACTIONS_MODULE);
-        if (historyNotices) history.append(el('span', 'rh-util-btn__count', String(historyNotices)));
-        history.setAttribute('aria-label', historyNotices ? `Historique · ${historyNotices} non lue${historyNotices > 1 ? 's' : ''}` : 'Historique');
-        history.addEventListener('click', () => navigateTo(ACTIONS_MODULE.id));
-        utilLeft.append(history);
-      }
-      if (state.site_url) {
-        const ranking = el('a', 'rh-util-btn');
-        ranking.href = state.site_url;
-        ranking.target = '_blank';
-        ranking.rel = 'noopener noreferrer';
-        ranking.append(hubIcon(document, 'trophy'), el('span', '', 'Classement'));
-        ranking.setAttribute('aria-label', 'Classement (nouvel onglet)');
-        utilRight.append(ranking);
-      }
+      // Mini-profil : Historique et Classement ont quitté cette barre pour le panneau du profil (shared/mini-profile.js).
       const tutorial = el('button', 'rh-tuto');
       tutorial.type = 'button';
       tutorial.setAttribute('aria-label', 'Ouvrir le tutoriel');
@@ -1529,7 +1456,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       dock.append(rail, util);
       hub.append(top, stage, dock, allModules);
       if (notificationCenterOpen) hub.append(notificationCenterDrawer());
-      if (viewerPreferencesOpen) hub.append(viewerPreferencesPanel());
+      attachProfilePanel(document, hub);
       root.append(hub);
       if (hubModules.length) {
         if (!hubModules.some((mod) => mod.id === hubSelectedId)) hubSelectedId = hubModules[0].id;

@@ -7,7 +7,12 @@ import type { TwitchUserLookup } from '../raffle-lab/avatars.js';
 export interface TwitchName {
   login: string;
   display_name: string;
+  /** The Twitch profile picture (Helix, Twitch's own CDN only), for the extension's mini-profile; absent if unknown. */
+  avatar?: string;
 }
+
+/** Only a picture of Twitch's CDN reaches the extension (its CSP allows nothing else). */
+const AVATAR_URL = /^https:\/\/static-cdn\.jtvnw\.net\/[^\s"'<>]+$/;
 
 const OK_TTL_MS = 3600_000;
 const ERROR_TTL_MS = 300_000;
@@ -50,6 +55,9 @@ export class TwitchNames {
           ? {
               login: user.login.slice(0, 64),
               display_name: user.display_name.slice(0, 64),
+              ...(AVATAR_URL.test(user.profile_image_url ?? '')
+                ? { avatar: user.profile_image_url }
+                : {}),
             }
           : placeholderName(id);
       this.remember(id, name, user ? OK_TTL_MS : ERROR_TTL_MS);

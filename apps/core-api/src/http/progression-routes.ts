@@ -332,6 +332,24 @@ export function progressionRoutes(
       },
     },
     {
+      // Studio's « Tester un Level Up » › « Envoyer le test dans le chat » : a real « [TEST] » line, typed confirmation.
+      method: 'POST',
+      pattern: admin('/level-v2/test-chat'),
+      auth,
+      handle: ({ body }) => {
+        const r = parse(
+          z.strictObject({
+            confirm: z.literal('ENVOYER LE TEST'),
+            // A Twitch login's characters only: never a command, a link or a second sentence in the line.
+            pseudo: z.string().regex(/^[A-Za-z0-9_]{1,25}$/),
+            level: z.number().int().min(1).max(10_000),
+          }),
+          body,
+        );
+        return mapped(() => svc.testLevelUpChat(ch, r.pseudo, r.level));
+      },
+    },
+    {
       // The first extension's sound choices (its Supabase export): dry run by default, never a sound or an announcement.
       method: 'POST',
       pattern: admin('/prefs/import'),

@@ -2388,6 +2388,43 @@ export class ProgressionService {
    * from the ledger, the previous curve comes back. Refused once a history was attached after the activation (its XP
    * was counted on the new scale).
    */
+  /**
+   * Studio's « Envoyer le test dans le chat » (Level Up V2, a typed confirmation): ONE line « [TEST] … » made with the
+   * channel's own announcement text, on the same outbox as a real announcement (LeCroupier_ sends it; « Sortie chat
+   * réelle » and the bot's rate limit apply). Nothing of the progression is written: no XP, no level, no level-up event,
+   * no reward, no sound. Refused when the chat output is off (nothing would be sent).
+   */
+  async testLevelUpChat(channelId: string, pseudo: string, level: number) {
+    return this.db.tx(async (q) => {
+      const { rules } = await this.settings(channelId, q);
+      const output = (
+        await q.query<{ chat_output: boolean }>(
+          'select chat_output from cmd_channels where channel_id = $1',
+          [channelId],
+        )
+      )[0]?.chat_output;
+      if (!output) throw new ProgressionError(409, 'chat_output_off');
+      const now = this.now();
+      const text = `[TEST] ${rules.level_up_chat_text
+        .replaceAll('{pseudo}', pseudo)
+        .replaceAll('{niveau}', String(level))}`.slice(0, 450);
+      const written = await insertAnnouncement(q, {
+        channelId,
+        now,
+        origin: 'module:level_up',
+        drafts: [
+          {
+            idempotencyKey: `levelup-test:${channelId}:${now.getTime()}`,
+            mode: 'normal',
+            text,
+          },
+        ],
+      });
+      if (!written) throw new ProgressionError(409, 'outbox_refused');
+      return { sent: true, text };
+    });
+  }
+
   async revertLevelV2(channelId: string) {
     return this.db.tx(async (q) => {
       const s = await this.settings(channelId, q);

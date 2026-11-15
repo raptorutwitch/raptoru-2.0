@@ -503,6 +503,46 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         studio,
       );
 
+    it('Studio’s chat test: one « [TEST] » line on the same outbox — no XP, no level, no event, no reward; refused without the chat output', async () => {
+      await activate();
+      const count = async (table: string) =>
+        Number(
+          (
+            await db.query<{ n: string }>(
+              `select count(*) as n from ${table} where channel_id = $1`,
+              [CH],
+            )
+          )[0]!.n,
+        );
+      await chatOutput(false);
+      await expect(
+        svc.testLevelUpChat(CH, 'Raptoru_', 25),
+      ).rejects.toMatchObject({ status: 409, code: 'chat_output_off' });
+      expect(await steps()).toEqual([]);
+      await chatOutput(true);
+      const before = {
+        events: await count('progression_level_events'),
+        ledger: await count('progression_ledger'),
+        grants: await count('progression_grants'),
+      };
+      expect(await svc.testLevelUpChat(CH, 'Raptoru_', 25)).toEqual({
+        sent: true,
+        text: '[TEST] @Raptoru_ vient d’atteindre le niveau 25 !',
+      });
+      expect(await steps()).toEqual([
+        {
+          text: '[TEST] @Raptoru_ vient d’atteindre le niveau 25 !',
+          origin: 'module:level_up',
+        },
+      ]);
+      expect({
+        events: await count('progression_level_events'),
+        ledger: await count('progression_ledger'),
+        grants: await count('progression_grants'),
+      }).toEqual(before);
+      expect(await xp('1')).toBe(0);
+    });
+
     it('one level-up: one line with the text of the channel; a replay writes nothing; an adjustment never', async () => {
       await chatOn();
       await presence(['1'], 1000 * 60);

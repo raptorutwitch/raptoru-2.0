@@ -165,7 +165,10 @@ const REFUS = {
   unsupported_sound: 'Ce fichier n’est pas un son MP3, OGG ou WAV.',
   sound_too_large: 'Fichier trop lourd : 2 Mo au plus.',
   no_source:
-    'Aucune source OBS « Level Up » connectée : ajoute-la dans OBS d’abord.',
+    'Aucune source OBS « Level Up » connectée : ajoute-la dans OBS (ou rafraîchis-la) d’abord.',
+  chat_output_off:
+    'La « Sortie chat réelle » est coupée : rien ne peut partir dans le chat (Commandes › Sortie chat).',
+  outbox_refused: 'Le message n’a pas pu être mis dans la file du bot.',
   image_kind_mismatch: 'Image refusée : un badge fait 128 px et 40 Ko au plus.',
 };
 const BUCKET_ORDER = [
@@ -235,6 +238,7 @@ export function mountLevelUpScene(
 ) {
   host.innerHTML = `<div class="pg-lu">
     <div data-lz="model"></div>
+    <div data-lz="test"></div>
     <div data-lz="announce"></div>
     <div data-lz="sound"></div>
     <div data-lz="prefs"></div>
@@ -260,6 +264,16 @@ export function mountLevelUpScene(
   let plan:
     (BadgePlan & { files: Map<string, File>; take: Set<number> }) | null = null;
   let error = '';
+  // « Tester un Level Up » : a pseudo and a level for the test only (never a real viewer's progression).
+  let testPseudo = 'Raptoru';
+  let testLevel = 25;
+  const testLine = () =>
+    (
+      rules?.level_up_chat_text ??
+      '@{pseudo} vient d’atteindre le niveau {niveau} !'
+    )
+      .replaceAll('{pseudo}', testPseudo)
+      .replaceAll('{niveau}', String(testLevel));
 
   async function read() {
     try {
@@ -503,8 +517,47 @@ export function mountLevelUpScene(
     );
   }
 
+  /**
+   * The administrator's test of the whole chain, with no XP, level, badge, reward or progression history: the sound
+   * through the REAL OBS source (Studio's own circuit, the viewer's choice not involved), the LeCroupier_ line previewed
+   * here, and — separately, after a typed confirmation — a real « [TEST] » line in the chat through the bot's outbox.
+   */
+  function paintTest() {
+    const r = rules;
+    const s = source;
+    if (zz('test').contains(document.activeElement)) return;
+    const n = s?.sources ?? 0;
+    patch(
+      zz('test'),
+      grp(
+        'Tester un Level Up',
+        'play',
+        `<div class="pg-lu-try">
+          <label class="pg-fl"><span>Pseudo</span><span class="d-fld"><input type="text" data-lu-test-pseudo maxlength="25" value="${esc(testPseudo)}"></span></label>
+          <label class="pg-fl"><span>Niveau</span><span class="d-fld"><input type="number" data-lu-test-level min="1" max="10000" value="${testLevel}"></span></label>
+        </div>
+        <div class="pg-lu-chat" aria-label="Aperçu du message de LeCroupier_"><b>LeCroupier_</b><span data-lu-test-line>${esc(testLine())}</span></div>
+        ${row(
+          'Source OBS « Level Up »',
+          s
+            ? n
+              ? `<span class="d-tag on">connectée${n > 1 ? ` (${fmt(n)})` : ''}</span>`
+              : '<span class="d-tag off">absente : ajoute-la dans OBS</span>'
+            : '<span class="d-tag off">indisponible</span>',
+        )}
+        ${r && !r.level_up_sound ? '<p class="d-note">Les sons Level Up sont coupés : en live, aucun son ne serait joué. Le test, lui, le joue quand même.</p>' : ''}
+        <div class="pg-lu-acts">
+          <button type="button" class="d-btn pri" data-lu="test-levelup">Tester un Level Up</button>
+          <button type="button" class="d-btn" data-lu="test-chat">Envoyer le test dans le chat…</button>
+        </div>
+        <p class="d-note">« Tester un Level Up » joue ton son dans OBS par la vraie source (rien ne s’affiche sur le stream) et montre ci-dessus le message de LeCroupier_, sans l’envoyer. Aucune XP, aucun niveau, aucun badge, aucun historique. « Envoyer le test dans le chat » publie « [TEST] … » dans ton vrai chat, après confirmation.</p>`,
+      ),
+    );
+  }
+
   function paint() {
     paintModel();
+    paintTest();
     paintAnnounce();
     paintSound();
     paintPrefs();
@@ -648,6 +701,45 @@ export function mountLevelUpScene(
       );
       return;
     }
+    if (act === 'test-levelup') {
+      // The sound through the real OBS source; the line stays a preview here (never sent by this button).
+      void run(
+        b,
+        () => postJson('/api/level-up/test', { sound: true }),
+        `Son joué dans OBS. Message (aperçu, non envoyé) : « ${testLine()} »`,
+        REFUS,
+      ).then(() => void read());
+      return;
+    }
+    if (act === 'test-chat') {
+      if (!/^[A-Za-z0-9_]{1,25}$/.test(testPseudo)) {
+        toast('Pseudo de test : lettres, chiffres et _ seulement.', {
+          bad: true,
+        });
+        return;
+      }
+      const line = `[TEST] ${testLine()}`;
+      void typed(
+        'Envoyer le test dans ton chat ?',
+        `LeCroupier_ va publier dans ton vrai chat Twitch : « ${line} ». Aucune XP ni aucun niveau ne change.`,
+        'ENVOYER LE TEST',
+        'Envoyer',
+      ).then((ok) => {
+        if (!ok) return;
+        void run(
+          b,
+          () =>
+            postJson('/api/progression/level-v2/test-chat', {
+              confirm: 'ENVOYER LE TEST',
+              pseudo: testPseudo,
+              level: testLevel,
+            }),
+          'Message test confié au bot.',
+          REFUS,
+        );
+      });
+      return;
+    }
     if (act === 'test-sound') {
       void run(
         b,
@@ -711,6 +803,20 @@ export function mountLevelUpScene(
       return;
     }
     if (act === 'badges-import') void importBadges(b);
+  });
+
+  // The test's pseudo and level: the preview follows each key (no repaint, the field keeps its focus).
+  host.addEventListener('input', (e) => {
+    const t = e.target as HTMLInputElement;
+    if (t.matches('[data-lu-test-pseudo]')) testPseudo = t.value.trim();
+    else if (t.matches('[data-lu-test-level]'))
+      testLevel = Math.max(
+        1,
+        Math.min(10_000, Math.trunc(Number(t.value)) || 1),
+      );
+    else return;
+    const line = host.querySelector('[data-lu-test-line]');
+    if (line) line.textContent = testLine();
   });
 
   host.addEventListener('change', (e) => {

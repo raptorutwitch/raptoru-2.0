@@ -28,6 +28,7 @@ import { labCockpitRoutes } from '../lab/routes.js';
 import { ExtFacade } from './ext-facade.js';
 import { internalLabCall } from './lab-internal.js';
 import { TwitchNames } from './twitch-names.js';
+import { loyaltyViewerRoutes } from '../loyalty/viewer-status.js';
 import { progressionViewerPrefsRoutes } from '../http/progression-routes.js';
 
 // Public Core assembly of the viewer frontier (/v1/ext/*) and the Studio cockpit (/v1/studio/cockpit/*):
@@ -157,6 +158,8 @@ export function createPublicFrontier(
     ...modulesRoutes(core.modules),
     // Level Up V2: the viewer's notification mode (the extension's preferences), in-process only.
     ...progressionViewerPrefsRoutes(core.progression, channelId),
+    // Mini-profile: the JWT viewer's subscription and presence multiplier (Loyalty's own rules), in-process only.
+    ...loyaltyViewerRoutes(db, clock, core.loyalty.modes, channelId),
   ]);
   const app =
     o.userLookup ??
