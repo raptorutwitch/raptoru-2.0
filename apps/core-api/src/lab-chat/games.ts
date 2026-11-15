@@ -111,7 +111,8 @@ export function createChatGames(o: {
     o.miniGameLimits,
   );
   const chatModules: LabChatModule[] = [
-    { name: 'commands', chat: (m) => admission.chat(m) },
+    // Whole chat: a keyword command is launched by a message that contains one of its expressions (no « ! »).
+    { name: 'commands', plainText: true, chat: (m) => admission.chat(m) },
     { name: 'word_game', plainText: true, chat: (m) => wordGame.chat(m) },
     // Whole chat: the identities it learns are the Duel targets.
     { name: 'mini_games', plainText: true, chat: (m) => miniGames.chat(m) },

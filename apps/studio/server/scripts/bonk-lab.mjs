@@ -124,6 +124,7 @@ try {
     '20261126120000_progression_level_up_lab.sql',
     '20261127120000_level_up_announcements_lab.sql',
     '20261128120000_cmd_sounds_lab.sql',
+    '20261129120000_cmd_delegated_editors_lab.sql',
   ]) {
     if (
       (

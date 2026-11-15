@@ -64,6 +64,13 @@ import {
   whoDid,
 } from './commands-editor.js';
 import { openJournal } from './commands-journal.js';
+import {
+  addKeyword,
+  isKeywords,
+  removeKeyword,
+  setTrigger,
+  triggerShort,
+} from './commands-trigger.js';
 import { COLORS, lookIc } from './commands-look.js';
 import {
   catsGrp,
@@ -181,6 +188,7 @@ export function mountCommandsPage(root: HTMLElement) {
     savedAt: '',
     error: '',
     aliasErr: '',
+    kwErr: '',
     cdCustom: false,
     t: newTester(),
     rights: null as Rights | null,
@@ -226,6 +234,7 @@ export function mountCommandsPage(root: HTMLElement) {
     cdCustom: S.cdCustom,
     conflict: S.conflict,
     sounds: S.sounds,
+    kwErr: S.kwErr,
   });
   const listUi = (): ListUi => ({
     side: S.side,
@@ -346,17 +355,21 @@ export function mountCommandsPage(root: HTMLElement) {
       return;
     }
     const f = found;
-    d.audience = {
-      ...d.audience,
-      allow_ids: [
-        ...(d.audience.allow_ids ?? []).filter((x) => x.id !== f.id),
-        f,
-      ],
-    };
+    const kind = t.dataset.chipin === 'editor' ? 'editor' : 'allowid';
+    if (kind === 'editor')
+      d.editors = [...(d.editors ?? []).filter((x) => x.id !== f.id), f];
+    else
+      d.audience = {
+        ...d.audience,
+        allow_ids: [
+          ...(d.audience.allow_ids ?? []).filter((x) => x.id !== f.id),
+          f,
+        ],
+      };
     edited();
     const again = (
       t.closest('.d-pop') ?? document
-    ).querySelector<HTMLInputElement>('[data-chipin="allowid"]');
+    ).querySelector<HTMLInputElement>(`[data-chipin="${kind}"]`);
     if (again) {
       again.value = '';
       again.focus();
@@ -447,7 +460,7 @@ export function mountCommandsPage(root: HTMLElement) {
     const q = cfg.quota;
     return `<div class="cdx-li ${cfg.enabled ? '' : 'off'} ${sel ? 'on d-vf' : ''}" data-open="${c.command_id}" tabindex="0" role="button" aria-current="${sel}">
       <span class="cdx-tile" style="--c:${esc(cfg.appearance.color)}">${lookIc(cfg.appearance.icon)}</span>
-      <span class="cdx-li__t"><b>!${esc(cfg.name)}</b>${via ? `<em>via !${esc(via)}</em>` : ''}${st.key !== 'ok' && st.key !== 'off' ? `<span class="d-tag ${st.tone === 'bad' ? 'bad' : 'warn'}" title="${esc(st.why)}">${esc(st.label)}</span>` : ''}</span>
+      <span class="cdx-li__t"><b>${isKeywords(cfg) ? esc(cfg.name) : `!${esc(cfg.name)}`}</b>${isKeywords(cfg) ? `<em title="Se lance quand un message contient une de ces expressions">${esc(triggerShort(cfg))}</em>` : via ? `<em>via !${esc(via)}</em>` : ''}${st.key !== 'ok' && st.key !== 'off' ? `<span class="d-tag ${st.tone === 'bad' ? 'bad' : 'warn'}" title="${esc(st.why)}">${esc(st.label)}</span>` : ''}</span>
       <small class="cdx-li__m" title="${esc(`${whoShort(cfg.audience)} · ${cooldownShort(cfg.cooldown)}${q.enabled ? ` · max ${quotaShort(q)}` : ''}`)}">${esc(whoShort(cfg.audience))} · ${esc(cooldownShort(cfg.cooldown))}${c.uses_30d ? ` · ${fmt(c.uses_30d)} ×` : ''}</small>
       <span class="cdx-li__e">${c.kind === 'system' ? flag('layers', `Commande du module ${modName(c.owner_module ?? '')}`) : ''}${cfg.team_lock ? flag('lock', 'Verrouillée pour l’équipe') : ''}${cfg.listed ? '' : flag('eye', 'Cachée de la liste publique')}
         <button type="button" class="d-ib cdx-star ${fav.has(c.command_id) ? 'on' : ''}" data-fav="${c.command_id}" aria-label="${fav.has(c.command_id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}">${ic('star')}</button>
@@ -857,6 +870,7 @@ export function mountCommandsPage(root: HTMLElement) {
     try {
       t.res = await postJson<Decision>('/api/commands/test', {
         message,
+        command_id: S.base.command_id,
         viewer: {
           id: t.id,
           login: t.login.toLowerCase(),
@@ -1252,9 +1266,23 @@ export function mountCommandsPage(root: HTMLElement) {
       d.when = b.dataset.when as CmdConfig['when'];
       return edited();
     }
+    if ((b = at('[data-tmode]'))) {
+      setTrigger(d, { mode: b.dataset.tmode as 'command' | 'keywords' });
+      // A message that contains an expression has nothing « after the command ».
+      if (isKeywords(d)) d.args = [];
+      S.kwErr = '';
+      return edited();
+    }
+    if ((b = at('[data-tmatch]'))) {
+      setTrigger(d, { match: b.dataset.tmatch as 'word' | 'anywhere' });
+      return edited();
+    }
     if ((b = at('[data-chipdel]'))) {
       const [k, v] = b.dataset.chipdel!.split('|');
       if (k === 'alias') d.aliases = d.aliases.filter((a) => `!${a}` !== v);
+      else if (k === 'kw') removeKeyword(d, v!);
+      else if (k === 'editor')
+        d.editors = (d.editors ?? []).filter((x) => x.id !== v);
       else if (k === 'allowid')
         d.audience = {
           ...d.audience,
@@ -1445,11 +1473,11 @@ export function mountCommandsPage(root: HTMLElement) {
       return paintLib();
     }
     if (t.matches('[data-tpreset]')) {
-      Object.assign(S.t, {
-        preset: Number(t.value),
-        ...structuredClone(TEST_VIEWERS[Number(t.value)]!),
-        res: null,
-      });
+      const v = structuredClone(TEST_VIEWERS[Number(t.value)]!);
+      // « Streamer » is the channel's own identity (as in the chat), never a fictional id with the role.
+      if (v.role === 'broadcaster' && S.list?.channel_id)
+        v.id = S.list.channel_id;
+      Object.assign(S.t, { preset: Number(t.value), ...v, res: null });
       repaintPop();
       return paintChat();
     }
@@ -1588,9 +1616,27 @@ export function mountCommandsPage(root: HTMLElement) {
 
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLInputElement;
-    if (e.key === 'Enter' && t.matches('[data-chipin="allowid"]')) {
+    if (
+      e.key === 'Enter' &&
+      t.matches('[data-chipin="allowid"], [data-chipin="editor"]')
+    ) {
       e.preventDefault();
       void addAllowedId(t);
+      return;
+    }
+    if (e.key === 'Enter' && t.matches('[data-chipin="kw"]')) {
+      e.preventDefault();
+      if (!S.draft) return;
+      // Where it was typed (the rule's panel or the head), before the repaint replaces the field.
+      const scope = t.closest('.d-pop') ?? z('head');
+      S.kwErr = addKeyword(S.draft, t.value);
+      edited();
+      const again =
+        scope.querySelector<HTMLInputElement>('[data-chipin="kw"]');
+      if (again) {
+        again.value = S.kwErr ? t.value : '';
+        again.focus();
+      }
       return;
     }
     if (e.key === 'Enter' && t.matches('[data-chipin]')) {

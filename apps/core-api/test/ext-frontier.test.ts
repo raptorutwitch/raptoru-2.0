@@ -745,6 +745,69 @@ describe('public Core: viewer frontier /v1/ext', () => {
     });
   });
 
+  it('« Mes commandes » where the public list is closed (Production): the named editor, on / off and expressions only', async () => {
+    const { ext, studio } = await fixture();
+    const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
+    const created = await studio(`/v1/studio/cockpit/commands/${CHANNEL}`, {
+      actor: STUDIO_ACTOR,
+      config: {
+        name: 'ao',
+        reply: { mode: 'normal', text: 'ao !', to: 'none' },
+        audience: {
+          groups: [],
+          allow: [],
+          allow_ids: [{ id: '4242', name: 'Aouh' }],
+          deny: [],
+        },
+        trigger: { mode: 'keywords', keywords: ['ao'], match: 'word' },
+        editors: [{ id: '4242', name: 'Aouh' }],
+      },
+    });
+    expect(created.status).toBe(200);
+    const id = created.body.command_id as string;
+    const aouh = viewer('4242');
+    const session = await ext('/session', aouh);
+    expect(session.body).toMatchObject({
+      commands_public: false,
+      commands_editable: true,
+    });
+    expect((await ext('/session', viewer('5151'))).body.commands_editable).toBe(
+      false,
+    );
+    const mine = await ext('/commands/mine', aouh);
+    expect(mine.body.commands).toMatchObject([
+      {
+        command_id: id,
+        name: 'ao',
+        trigger: { keywords: ['ao'] },
+        editable: ['enabled', 'keywords'],
+      },
+    ]);
+    // The public list and the team's screens stay closed here.
+    expect((await ext('/commands/public', aouh)).status).not.toBe(200);
+    // Only expected_version, enabled and keywords reach Core: the reply, the audience… asked here change nothing.
+    const saved = await ext(`/commands/mine/${id}`, aouh, {
+      expected_version: created.body.version,
+      keywords: ['ouaf'],
+      reply: { mode: 'normal', text: 'pwned', to: 'none' },
+      audience: { groups: ['everyone'], allow: [], deny: [] },
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body.command).toMatchObject({
+      trigger: { keywords: ['ouaf'] },
+    });
+    const cur = await studio(`/v1/studio/cockpit/commands/${CHANNEL}/${id}`);
+    expect(cur.body.config.reply.text).toBe('ao !');
+    expect(cur.body.config.audience.groups).toEqual([]);
+    // Another viewer, or an unshared identity: refused.
+    const bob = await ext(`/commands/mine/${id}`, viewer('5151'), {
+      expected_version: saved.body.command.version,
+      enabled: false,
+    });
+    expect([bob.status, bob.body.error]).toEqual([404, 'not_found']);
+    expect((await ext('/commands/mine', token({}))).status).toBe(403);
+  });
+
   it('rate limits a viewer flooding the frontier', async () => {
     const { ext } = await fixture({ capacity: 5, refillPerS: 0.001 });
     const jwt = viewer('999');

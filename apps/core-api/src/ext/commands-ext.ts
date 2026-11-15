@@ -41,6 +41,58 @@ export async function commandsPublic(
   }
 }
 
+/**
+ * « Mes commandes » (every environment): the commands the JWT viewer may edit as a delegated editor (config.editors) and
+ * their change — only `expected_version`, `enabled` and `keywords` reach Core, with the verified identity as the actor.
+ * Core checks again that this viewer is an editor of that command and refuses any other field.
+ */
+export async function commandsMine(
+  core: LabCall,
+  channelId: string,
+  method: string,
+  rawPath: string,
+  body: Json | undefined,
+  actor: CommandsActor,
+): Promise<Reply> {
+  const base = `/v1/lab/commands/${channelId}`;
+  const path = rawPath.split('?')[0]!;
+  const id = path.slice('/commands/mine/'.length);
+  try {
+    if (method === 'GET' && path === '/commands/mine')
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          ...(await core<Json>(
+            `${base}/delegated?as=${encodeURIComponent(actor.id)}`,
+          )),
+        },
+      };
+    if (method === 'POST' && UUID.test(id))
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          command: await core<Json>(`${base}/${id}/delegated`, {
+            actor,
+            ...pick(body, ['expected_version', 'enabled', 'keywords']),
+          }),
+        },
+      };
+    return fail(404, 'not_found');
+  } catch (e) {
+    const err = e as { status?: number; body?: Json; message: string };
+    return {
+      status: err.status ?? 503,
+      body: {
+        ...(err.body ?? {}),
+        ok: false,
+        error: err.body?.error ?? err.message,
+      },
+    };
+  }
+}
+
 export async function commandsTeam(
   core: LabCall,
   channelId: string,

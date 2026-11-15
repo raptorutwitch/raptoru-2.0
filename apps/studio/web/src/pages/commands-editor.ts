@@ -22,6 +22,14 @@ import {
 } from '../commands-model.js';
 import { ago, esc, fld, ic, type IcName, seg, sw } from '../ds/ds.js';
 import { COLORS, ICONS, lookIc } from './commands-look.js';
+import {
+  editorsPop,
+  editorsShort,
+  isKeywords,
+  keywordChips,
+  triggerPop,
+  triggerShort,
+} from './commands-trigger.js';
 
 // L'éditeur d'une commande, en HTML pur. Le nom se tape comme dans le chat, la réponse s'écrit avec ses variables, les étapes
 // se lisent dans l'ordre d'envoi, et chaque règle (qui, délai, utilisations…) se règle sur place, depuis sa case. Rien n'est
@@ -38,6 +46,8 @@ export interface EditCtx {
   conflict: null | { by: string; version: number; both: string[] };
   /** The sounds imported in Studio for the « sound » action (Studio's OBS sound source plays them). */
   sounds: { id: string; label: string }[];
+  /** The last expression refused (empty, duplicate…), shown under the expressions. */
+  kwErr: string;
 }
 const WHEN = {
   always: 'Tout le temps',
@@ -76,7 +86,7 @@ export function headHtml(c: EditCtx) {
       : 'Créée dans Raptoru';
   return `<button type="button" class="cdx-tile lg" style="--c:${esc(d.appearance.color)}" data-look aria-label="Icône et couleur" ${isLocked(c, 'appearance') ? 'disabled' : ''}>${lookIc(d.appearance.icon)}</button>
     <div class="cdx-id">
-      <label class="cdx-name"><span aria-hidden="true">!</span><input type="text" data-name value="${esc(d.name)}" maxlength="25" placeholder="nom" aria-label="Nom de la commande" spellcheck="false" autocomplete="off" ${lockName ? 'readonly' : ''}></label>
+      <label class="cdx-name"><span aria-hidden="true">${isKeywords(d) ? '' : '!'}</span><input type="text" data-name value="${esc(d.name)}" maxlength="25" placeholder="nom" aria-label="Nom de la commande" spellcheck="false" autocomplete="off" ${lockName ? 'readonly' : ''}></label>
       <input type="text" class="cdx-desc" data-desc value="${esc(d.description)}" maxlength="120" placeholder="Ce que les viewers lisent dans la liste" aria-label="Description" ${isLocked(c, 'description') ? 'readonly' : ''}>
     </div>
     <div class="cdx-acts">
@@ -90,7 +100,10 @@ export function headHtml(c: EditCtx) {
       }
     </div>
     <div class="cdx-alias">
-      <span class="d-lb">Aussi</span>
+      ${
+        isKeywords(d)
+          ? `<span class="d-lb" title="Un message qui contient une de ces expressions lance la commande, sans « ! »">Dès</span>${isLocked(c, 'trigger') ? lockRo(c, triggerShort(d)) : keywordChips(d)}`
+          : `<span class="d-lb">Aussi</span>
       ${
         isLocked(c, 'aliases')
           ? lockRo(c, d.aliases.map((a) => `!${a}`).join(' ') || 'Aucun alias')
@@ -99,8 +112,9 @@ export function headHtml(c: EditCtx) {
               'alias',
               '+ alias',
             )
+      }`
       }
-    </div>`;
+    </div>${isKeywords(d) && c.kwErr ? `<p class="d-note bad">${esc(c.kwErr)}</p>` : ''}`;
 }
 
 export const lookHtml = (cur: { icon: string; color: string }, target = '') =>
@@ -266,15 +280,17 @@ export function rulesHtml(c: EditCtx) {
   const cd = d.cooldown;
   const q = d.quota;
   return `<div class="cdx-sech"><span class="d-lb">Règles</span></div><div class="cdx-rules">
+    ${rule('trigger', 'note', 'Déclenchement', isKeywords(d) ? 'Message contenant…' : 'Commande exacte')}
     ${rule('who', 'users', 'Qui', whoShort(d.audience))}
     ${rule('cooldown', 'clock', 'Délai', cd.enabled ? `${dur(cd.seconds)} ${cd.scope === 'viewer' ? 'par personne' : 'pour tout le chat'}` : 'Aucun')}
     ${rule('quota', 'repeat', 'Utilisations', q.enabled ? quotaText(q).replace('Utilisations : ', '') : 'Illimitées')}
     ${rule('when', 'live', 'Quand', WHEN[d.when])}
-    ${rule('listed', 'eye', 'Liste publique', d.listed ? 'Visible' : 'Cachée')}
+    ${isKeywords(d) ? '' : rule('listed', 'eye', 'Liste publique', d.listed ? 'Visible' : 'Cachée')}
     ${rule('category', 'layers', 'Catégorie', cat.name)}
-    ${rule('args', 'note', 'Après la commande', argsText(d))}
+    ${isKeywords(d) ? '' : rule('args', 'note', 'Après la commande', argsText(d))}
     ${rule('refuse', 'ban', 'Si refusée', REFUSE[d.refuse.mode])}
     ${rule('team', 'lock', base?.kind === 'system' ? 'Équipe et module' : 'Équipe', d.team_lock ? 'Verrouillée' : 'Modifiable')}
+    ${rule('editors', 'user', 'Modification déléguée', editorsShort(d))}
   </div>`;
 }
 
@@ -469,6 +485,8 @@ function teamPop(c: EditCtx) {
 }
 
 export const RULE_POPS: Record<string, (c: EditCtx) => string> = {
+  trigger: (c) => triggerPop(c.d, isLocked(c, 'trigger'), c.kwErr),
+  editors: (c) => editorsPop(c.d, isLocked(c, 'editors')),
   who: whoPop,
   cooldown: cooldownPop,
   quota: quotaPop,

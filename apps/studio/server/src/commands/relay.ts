@@ -85,7 +85,7 @@ export function commandsApi(core: LabCoreCall, channelId = LAB_CHANNEL_ID) {
     if (!get && p === '/test')
       return ok(`${base}/test`, {
         actor,
-        ...pick(body, ['message', 'viewer']),
+        ...pick(body, ['message', 'viewer', 'command_id']),
       });
     if (get && (m = new RegExp(`^/${UUID}$`).exec(p)))
       return ok(`${base}/${m[1]}`);

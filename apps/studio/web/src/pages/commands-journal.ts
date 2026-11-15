@@ -39,6 +39,8 @@ interface Change {
   action: string;
   actor_id: string;
   actor_login: string | null;
+  /** « editor »: a delegated editor (config.editors), from the extension. */
+  actor_role?: string;
   via: string;
   changes: { field: string; before: unknown; after: unknown }[];
   created_at: string;
@@ -104,7 +106,15 @@ function val(field: string, v: unknown): string {
     return v.map((a: { name: string }) => a.name).join(', ') || 'Rien';
   if (Array.isArray(v) && field === 'actions')
     return `${v.length} message${v.length > 1 ? 's' : ''}`;
+  if (Array.isArray(v) && field === 'editors')
+    return v.map((x: { name: string }) => x.name).join(', ') || 'Personne';
   if (Array.isArray(v)) return v.join(', ') || 'Aucun';
+  if (field === 'trigger') {
+    const t = v as NonNullable<CmdConfig['trigger']>;
+    return t.mode === 'keywords'
+      ? `Message contenant ${t.keywords.map((k) => `« ${k} »`).join(', ')}${t.match === 'anywhere' ? ' (n’importe où)' : ''}`
+      : 'Commande exacte';
+  }
   if (field === 'cooldown') return cooldownText(v as CmdConfig['cooldown']);
   if (field === 'quota') return quotaText(v as CmdConfig['quota']);
   if (field === 'reply') {
@@ -133,15 +143,19 @@ export function openJournal(
     only || !id
       ? ''
       : (commands.find((c) => c.command_id === id)?.config.name ?? '');
+  /** A keyword command's use keeps the expression found (no « !word » was typed). */
+  const keywords = (id: string) =>
+    commands.find((c) => c.command_id === id)?.config.trigger?.mode ===
+    'keywords';
   const invRow = (x: Invocation) => {
     const n = name(x.command_id);
-    return `<div class="cdx-j"><time>${hhmm(x.created_at)}</time><div><span class="d-tag ${x.decision === 'accepted' ? 'ok' : 'warn'}">${x.decision === 'accepted' ? 'Acceptée' : 'Refusée'}</span> ${n ? `<b>!${esc(n)}</b> · ` : ''}${esc(x.viewer_display_name)} <span class="d-faint">!${esc(x.trigger)} · ${x.source === 'twitch' ? 'Twitch' : 'simulateur'}</span>
+    return `<div class="cdx-j"><time>${hhmm(x.created_at)}</time><div><span class="d-tag ${x.decision === 'accepted' ? 'ok' : 'warn'}">${x.decision === 'accepted' ? 'Acceptée' : 'Refusée'}</span> ${n ? `<b>!${esc(n)}</b> · ` : ''}${esc(x.viewer_display_name)} <span class="d-faint">${keywords(x.command_id) ? `« ${esc(x.trigger)} »` : `!${esc(x.trigger)}`} · ${x.source === 'twitch' ? 'Twitch' : 'simulateur'}</span>
       ${x.reason ? `<small>${esc(REASON[x.reason] ?? x.reason)}${x.reason_detail?.message ? ` : ${esc(x.reason_detail.message)}` : ''}</small>` : ''}
       ${x.steps.length ? `<small class="cdx-jsteps">${x.steps.map((s) => stepTag(s.status, s.error ? ` · ${s.error}` : '')).join('')}</small>` : x.decision === 'accepted' ? '<small>Aucun message à envoyer</small>' : ''}</div></div>`;
   };
   const changeRow = (x: Change) => {
     const n = name(x.command_id);
-    return `<div class="cdx-j"><time>${hhmm(x.created_at)}</time><div><b>${esc(ACT[x.action] ?? x.action)}</b>${n ? ` · !${esc(n)}` : ''} <span class="d-faint">${x.via === 'studio' ? 'Studio' : `${esc(x.actor_login ?? x.actor_id)} · ${x.via === 'extension' ? 'Extension' : 'système'}`}</span>
+    return `<div class="cdx-j"><time>${hhmm(x.created_at)}</time><div><b>${esc(ACT[x.action] ?? x.action)}</b>${n ? ` · !${esc(n)}` : ''} <span class="d-faint">${x.via === 'studio' ? 'Studio' : `${esc(x.actor_login ?? x.actor_id)} · ${x.via === 'extension' ? (x.actor_role === 'editor' ? 'Extension (modification déléguée)' : 'Extension') : 'système'}`}</span>
       ${x.changes.map((ch) => `<small class="cdx-diff"><span>${esc(FIELD[ch.field] ?? ch.field)}</span>${ch.before !== null && ch.before !== undefined ? `<del>${esc(val(ch.field, ch.before))}</del>${ic('arrow')}` : ''}<ins>${esc(val(ch.field, ch.after))}</ins></small>`).join('')}</div></div>`;
   };
   const stepRow = (s: StepRow) =>

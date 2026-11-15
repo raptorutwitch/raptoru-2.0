@@ -70,6 +70,63 @@ export const CmdAudience = z
   });
 export type CmdAudience = z.infer<typeof CmdAudience>;
 
+/** One expression of a « message contenant » trigger: literal text (never a pattern), one line. */
+export const CmdKeyword = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .refine((k) => !/\p{Cc}/u.test(k), 'one line, no control character');
+/** Two expressions are the same one whatever their case and spacing. */
+export const keywordKey = (k: string) =>
+  k.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * How a command is launched. « command » (default, and what a command saved before 15/11/2026 without `trigger` does):
+ * « !name » or an alias. « keywords »: a chat message that contains one of the expressions, without « ! » — once per
+ * message, whatever the number of expressions in it; `match` = word (the expression stands as whole words: « ao » in
+ * « franchement ao », never in « chaos ») or anywhere (also inside a word). The keywords are kept when switched back.
+ */
+export const CmdTrigger = z
+  .strictObject({
+    mode: z.enum(['command', 'keywords']),
+    keywords: z.array(CmdKeyword).max(20),
+    match: z.enum(['word', 'anywhere']),
+  })
+  .refine((t) => t.mode !== 'keywords' || t.keywords.length > 0, {
+    message: 'at least one expression',
+    path: ['keywords'],
+  })
+  .refine((t) => unique(t.keywords.map(keywordKey)), {
+    message: 'duplicate expression',
+    path: ['keywords'],
+  });
+export type CmdTrigger = z.infer<typeof CmdTrigger>;
+
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The matcher of a « keywords » trigger: the first expression found in a message (as typed in the command, spaces
+ * normalised), or null. Literal and case-insensitive — an expression is never a pattern. « word »: an expression's edge
+ * that is a letter, a digit or « _ » must not touch another one (« ao » in « ao ! », not in « chaos » nor « aouh »).
+ * Built once per configuration (Core caches it; Studio's preview uses the same one).
+ */
+export function keywordMatcher(t: Pick<CmdTrigger, 'keywords' | 'match'>) {
+  const rules = t.keywords.map((k) => {
+    const norm = k.trim().replace(/\s+/g, ' ');
+    const chars = [...norm];
+    let src = norm.split(' ').map(escapeRe).join('\\s+');
+    if (t.match === 'word') {
+      if (WORD_CHAR.test(chars[0] ?? '')) src = `(?<![\\p{L}\\p{N}_])${src}`;
+      if (WORD_CHAR.test(chars.at(-1) ?? '')) src = `${src}(?![\\p{L}\\p{N}_])`;
+    }
+    return { k: norm, re: new RegExp(src, 'iu') };
+  });
+  return (text: string): string | null =>
+    rules.find((r) => r.re.test(text))?.k ?? null;
+}
+
 export const CmdScope = z.enum(['viewer', 'global']);
 
 /** Cooldown: a minimum time between two uses. Kept (values) when switched off. */
@@ -218,6 +275,17 @@ export const CmdConfig = z.strictObject({
   }),
   /** Locked by the streamer: the team can read it, not change it. */
   team_lock: z.boolean(),
+  /** How it is launched (absent = « !name », as before 15/11/2026). */
+  trigger: CmdTrigger.optional(),
+  /**
+   * Viewers who may change, from the extension, only whether it is on and its expressions (CmdDelegateRequest) — by their
+   * stable Twitch id. Independent from who may USE it; never a team right. Set by the streamer only. Absent = nobody.
+   */
+  editors: z
+    .array(CmdAllowedId)
+    .max(10)
+    .refine((l) => unique(l.map((x) => x.id)), 'duplicate Twitch id')
+    .optional(),
 });
 export type CmdConfig = z.infer<typeof CmdConfig>;
 
@@ -245,6 +313,8 @@ export const CmdField = z.enum([
   'when',
   'refuse',
   'team_lock',
+  'trigger',
+  'editors',
 ]);
 export type CmdField = z.infer<typeof CmdField>;
 
@@ -306,6 +376,17 @@ export const CmdRightsRequest = z.strictObject({
   rights: CmdTeamRights,
 });
 
+/**
+ * A delegated editor's change from the extension (`config.editors`): ONLY these fields, nothing else is accepted (a
+ * strict object: an extra field is refused). `keywords` replaces the expressions of a « keywords » command.
+ */
+export const CmdDelegateRequest = z.strictObject({
+  actor: LabActor,
+  expected_version: z.number().int().min(1),
+  enabled: z.boolean().optional(),
+  keywords: z.array(CmdKeyword).max(20).optional(),
+});
+
 /** The viewer a test / diagnostic is run for (as the chat would present them). */
 export const CmdTestViewer = z.strictObject({
   id: z.string().regex(/^\d{1,32}$/),
@@ -324,6 +405,8 @@ export type CmdTestViewer = z.infer<typeof CmdTestViewer>;
 /** « Tester la commande »: the same decision as a real message, nothing written, nothing sent. */
 export const CmdTestRequest = z.strictObject({
   actor: LabActor,
+  /** The command tested (its editor): a « keywords » command is tested on any message, against its expressions. */
+  command_id: z.uuid().optional(),
   /** The full chat message, e.g. « !hug @PixelMamie ». */
   message: z.string().min(1).max(500),
   viewer: CmdTestViewer,

@@ -264,6 +264,32 @@ describe('the real session modules register themselves', () => {
         document: doc(true),
       }),
     ).toBe(false);
+    // « Mes commandes »: a delegated editor sees « Commandes » even where the public list is off (Production), never the
+    // others; an older client without the route shows nothing.
+    const editor = { commands_public: false, commands_editable: true };
+    expect(
+      cmd.available({
+        state: editor,
+        client: { commandsMine() {} },
+        document: doc(false),
+      }),
+    ).toBe(true);
+    expect(
+      cmd.available({
+        state: { commands_public: false, commands_editable: false },
+        client: { commandsMine() {}, commandsPublic() {} },
+        document: doc(false),
+      }),
+    ).toBe(false);
+    expect(
+      cmd.available({ state: editor, client: {}, document: doc(false) }),
+    ).toBe(false);
+    expect(cmd.card(editor).description).toBe(
+      'Les commandes que le streamer te laisse modifier.',
+    );
+    expect(cmd.card({ commands_public: true }).description).toBe(
+      'Les commandes à taper dans le chat.',
+    );
     expect(
       sessionModule('sub_wheel').available({
         state: { sub_wheel: true },
