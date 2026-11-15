@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini-profil · maquette</title>
+  <!-- Exigé par le serveur du Lab sur toute page de l'extension (il le remplace par son propre helper). -->
+  <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+  <!-- Lab seulement (lab-modules n'est jamais empaqueté) : le Hub viewer réel du Lab, dans les formats Twitch, côte à côte. -->
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0b0814;
+      color: #e9e2f8;
+      font: 14px/1.45 Inter, Roobert, Helvetica, Arial, sans-serif;
+    }
+    h1 { margin: 0 0 4px; font-size: 20px; }
+    p { margin: 0 0 22px; color: #a99cc4; max-width: 70ch; }
+    kbd { padding: 1px 5px; border: 1px solid #4a3d6b; border-radius: 4px; font-size: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+    figure { margin: 0; }
+    figcaption { margin-bottom: 8px; color: #c9bce3; font-size: 12.5px; font-weight: 700; }
+    figcaption span { color: #7a6f93; font-weight: 400; }
+    iframe { display: block; border: 1px solid #2c2245; border-radius: 6px; background: #0e0a18; }
+    /* Zoom navigateur 125 % du panneau Twitch : la page voit 256 px de large, affichés sur 320. */
+    .zoom { width: 320px; height: 500px; overflow: hidden; border-radius: 6px; }
+    .zoom iframe { width: 256px; height: 400px; transform: scale(1.25); transform-origin: 0 0; }
+  </style>
+</head>
+<body>
+  <h1>Mini-profil viewer — maquette</h1>
+  <p>
+    Clique sur l’avatar en haut à droite du Hub. Données fictives ; en bas du panneau, « Maquette » change de cas
+    (Normal, Pseudo long, Restrictions). Fermeture : clic à côté, <kbd>Échap</kbd> ou l’avatar à nouveau.
+  </p>
+  <div class="row">
+    <figure>
+      <figcaption>Panneau Twitch <span>· 318 × 500</span></figcaption>
+      <iframe src="../panel.html?labRole=viewer" width="318" height="500" title="Panneau Twitch"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Panneau Twitch, zoom 125 % <span>· 256 × 400 affiché à 320 × 500</span></figcaption>
+      <div class="zoom"><iframe src="../panel.html?labRole=viewer" title="Panneau Twitch zoom 125 %"></iframe></div>
+    </figure>
+    <figure>
+      <figcaption>Mobile <span>· 360 × 640</span></figcaption>
+      <iframe src="../mobile.html?labRole=viewer" width="360" height="640" title="Mobile"></iframe>
+    </figure>
+    <figure>
+      <figcaption>Video Component <span>· 565 × 376</span></figcaption>
+      <iframe src="../video_component.html?labRole=viewer" width="565" height="376" title="Video Component"></iframe>
+    </figure>
+  </div>
+</body>
+</html>

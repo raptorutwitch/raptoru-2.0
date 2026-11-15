@@ -13,7 +13,7 @@ const asked = new URLSearchParams(window.location.search).get('shell');
 export const SHELL = asked === 'v2' || asked === 'legacy' ? asked : RUNTIME.shell === 'v2' ? 'v2' : 'legacy';
 
 // Exact order of the historical <link> tags of each page (legacy shell).
-const MODULE_SHEETS = ['picker.css', 'bonk-chargeur.css', 'soundboard.css', 'currency-switch.css', 'hub.css',
+const MODULE_SHEETS = ['picker.css', 'bonk-chargeur.css', 'soundboard.css', 'currency-switch.css', 'hub.css', 'mini-profile.css',
   'events-shop.css', 'tts-v2.css', 'moderation-v2.css'];
 const LEGACY = {
   video_component: ['base.css', 'overlay.css', ...MODULE_SHEETS, 'commands-v2.css', 'tombola-v2.css'],

@@ -21,6 +21,7 @@ import {
   formatWalletExactValue,
 } from './ui-primitives.js';
 import { createHubCarousel, hubIcon } from './hub-carousel.js';
+import { attachProfilePanel, profileAvatar } from './mini-profile.js'; // MAQUETTE mini-profil (données fictives)
 // The Soundboard screen registers itself as the variant of « soundboard » (soundboard-view.js).
 import './soundboard-view.js';
 // The Bonk screen registers itself as the variant of « bonk » (bonk-view.js).
@@ -1438,7 +1439,26 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
           queueMicrotask(() => root.querySelector('.jdm-viewer-preferences__close')?.focus({ preventScroll: true }));
         }
       });
-      top.append(brand, notificationToggle, preferencesToggle, walletRow);
+      // MAQUETTE mini-profil : l'avatar du viewer à droite du wallet ; Préférences (l'ancien ⚙, gardé ci-dessus pour
+      // revenir en arrière), Historique et Classement passent dans son panneau — mêmes comportements qu'avant.
+      void preferencesToggle;
+      const profile = profileAvatar(document, {
+        openHistory: () => navigateTo(ACTIONS_MODULE.id),
+        openPreferences: () => {
+          viewerPreferencesOpen = true;
+          notificationCenterOpen = false;
+          renderPreservingViewport();
+          queueMicrotask(() => root.querySelector('.jdm-viewer-preferences__close')?.focus({ preventScroll: true }));
+        },
+        rankingUrl: state.site_url || '',
+        closeDrawers: () => {
+          if (!notificationCenterOpen && !viewerPreferencesOpen) return;
+          notificationCenterOpen = false;
+          viewerPreferencesOpen = false;
+          renderPreservingViewport();
+        },
+      });
+      top.append(brand, notificationToggle, walletRow, profile);
 
       // Modules du carousel : les vrais modules (Historique reste un accès secondaire).
       const raffleOpen = raffleIsActive(state?.raffle ?? {});
@@ -1482,25 +1502,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const utilLeft = el('div', 'rh-util__side rh-util__side--left');
       const launcherHost = el('div', 'rh-util__center');
       const utilRight = el('div', 'rh-util__side rh-util__side--right');
-      if (modules.some((mod) => mod.id === ACTIONS_MODULE.id)) {
-        const history = el('button', 'rh-util-btn');
-        history.type = 'button';
-        history.append(hubIcon(document, 'clock'), el('span', '', 'Historique'));
-        const historyNotices = moduleNotices(ACTIONS_MODULE);
-        if (historyNotices) history.append(el('span', 'rh-util-btn__count', String(historyNotices)));
-        history.setAttribute('aria-label', historyNotices ? `Historique · ${historyNotices} non lue${historyNotices > 1 ? 's' : ''}` : 'Historique');
-        history.addEventListener('click', () => navigateTo(ACTIONS_MODULE.id));
-        utilLeft.append(history);
-      }
-      if (state.site_url) {
-        const ranking = el('a', 'rh-util-btn');
-        ranking.href = state.site_url;
-        ranking.target = '_blank';
-        ranking.rel = 'noopener noreferrer';
-        ranking.append(hubIcon(document, 'trophy'), el('span', '', 'Classement'));
-        ranking.setAttribute('aria-label', 'Classement (nouvel onglet)');
-        utilRight.append(ranking);
-      }
+      // MAQUETTE mini-profil : Historique et Classement ont quitté cette barre pour le panneau du profil (mini-profile.js).
       const tutorial = el('button', 'rh-tuto');
       tutorial.type = 'button';
       tutorial.setAttribute('aria-label', 'Ouvrir le tutoriel');
@@ -1513,6 +1515,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       hub.append(top, stage, dock, allModules);
       if (notificationCenterOpen) hub.append(notificationCenterDrawer());
       if (viewerPreferencesOpen) hub.append(viewerPreferencesPanel());
+      attachProfilePanel(document, hub);
       root.append(hub);
       if (hubModules.length) {
         if (!hubModules.some((mod) => mod.id === hubSelectedId)) hubSelectedId = hubModules[0].id;

@@ -1,0 +1,756 @@
+/* Mini-profil viewer — MAQUETTE (shared/mini-profile.js). Classes mp-*, chargées après hub.css (app/boot.js).
+   Avatar dans l'en-tête du Hub ; panneau flottant ancré sous l'avatar, dans les limites du Hub. */
+
+/* --- Avatar de l'en-tête -------------------------------------------------------------------- */
+.mp-avatar-btn {
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mp-avatar-btn:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 1px;
+}
+.mp-avatar-btn__dot {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border: 2px solid #150e25;
+  border-radius: 50%;
+  background: #f5b84a;
+}
+
+/* Avatar rond : un fin anneau de progression (XP du niveau en cours) autour de la photo. */
+.mp-ava {
+  --mp-ring: 2px;
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(#c98cff var(--mp-p, 0%), rgba(255, 255, 255, 0.14) 0);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.mp-ava__img {
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  border: 2px solid #170f29;
+  border-radius: 50%;
+}
+.mp-ava__img img {
+  width: 66%;
+  height: 66%;
+  user-select: none;
+}
+.mp-ava--sm {
+  width: 30px;
+  height: 30px;
+}
+.mp-ava--sm .mp-ava__img {
+  width: calc(30px - 2 * var(--mp-ring));
+  height: calc(30px - 2 * var(--mp-ring));
+  box-sizing: border-box;
+}
+.mp-ava--lg {
+  --mp-ring: 3px;
+  width: 52px;
+  height: 52px;
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
+}
+.mp-ava--lg .mp-ava__img {
+  width: calc(52px - 2 * var(--mp-ring));
+  height: calc(52px - 2 * var(--mp-ring));
+  box-sizing: border-box;
+  border-width: 3px;
+  border-color: #2a1f45;
+}
+.mp-avatar-btn:hover .mp-ava,
+.mp-avatar-btn.is-open .mp-ava {
+  box-shadow: 0 0 0 3px rgba(201, 140, 255, 0.22);
+}
+.mp-avatar-btn:active .mp-ava {
+  transform: scale(0.94);
+}
+
+/* En-tête du Hub très étroit (zoom 125–150 % du panneau Twitch) : la place va à la cloche, au wallet et à l'avatar. */
+@media (max-width: 299px) {
+  .rh-top .rh-brand__copy {
+    display: none;
+  }
+}
+@media (max-width: 239px) {
+  .rh-top .rh-brand {
+    display: none;
+  }
+  .rh-top {
+    justify-content: flex-end;
+  }
+}
+
+/* --- Panneau ---------------------------------------------------------------------------------- */
+.mp-panel {
+  --mp-line: rgba(214, 180, 255, 0.14);
+  --mp-muted: #b9add2;
+  --mp-faint: #8d81a8;
+  --mp-token: #f2c65f;
+  --mp-token-ink: #ffe3a1;
+  --mp-credit: #7cc4ff;
+  --mp-credit-ink: #cfe8ff;
+  --mp-amber: #f5b84a;
+  /* Les sections s'adaptent à la largeur du panneau lui-même (zoom, panneau étroit), pas à celle de la fenêtre. */
+  container: mp / inline-size;
+  position: absolute;
+  z-index: 60;
+  top: 48px;
+  right: 8px;
+  display: flex;
+  width: min(300px, calc(100% - 16px));
+  max-height: calc(100% - 56px);
+  box-sizing: border-box;
+  flex-direction: column;
+  border: 1px solid rgba(214, 180, 255, 0.24);
+  border-radius: 14px;
+  /* Surface relevée : nettement plus claire que le fond du Hub, jamais un voile sombre par-dessus. */
+  background: linear-gradient(180deg, #2c2049 0%, #221939 100%);
+  box-shadow:
+    0 18px 40px rgba(4, 1, 12, 0.55),
+    0 2px 8px rgba(4, 1, 12, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  color: #f6f1ff;
+  font-size: 12px;
+  line-height: 1.35;
+  outline: none;
+  text-align: left;
+  transform-origin: calc(100% - 17px) -6px;
+}
+/* Petite pointe vers l'avatar. */
+.mp-panel::before {
+  position: absolute;
+  top: -6px;
+  right: 13px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid rgba(214, 180, 255, 0.24);
+  border-left: 1px solid rgba(214, 180, 255, 0.24);
+  background: #2c2049;
+  content: '';
+  transform: rotate(45deg);
+}
+/* Encore du contenu plus bas : un léger fondu en bas du panneau (le panneau défile seul, jamais le Hub). */
+.mp-panel::after {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  left: 1px;
+  z-index: 2;
+  height: 26px;
+  border-radius: 0 0 13px 13px;
+  background: linear-gradient(180deg, transparent, #221939);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.mp-panel.has-more::after {
+  opacity: 1;
+}
+.mp-panel.is-entering {
+  animation: mp-open 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+@keyframes mp-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+.mp-scroll {
+  /* Au-dessus de la pointe : le contenu qui défile passe devant elle, jamais dessous. */
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(214, 180, 255, 0.3) transparent;
+  scrollbar-width: thin;
+}
+.mp-i {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* Identité */
+.mp-id {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--mp-line);
+}
+.mp-id__text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.mp-name {
+  /* Pseudo long : une ligne, un peu plus petit s'il le faut (mini-profile.js), puis « … » et le pseudo entier au survol. */
+  display: block;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mp-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.mp-tag--sub {
+  background: rgba(168, 85, 247, 0.22);
+  color: #e4ccff;
+}
+.mp-tag--vip {
+  background: rgba(236, 72, 153, 0.2);
+  color: #ffc7e3;
+}
+.mp-tag--plain {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--mp-muted);
+}
+
+/* Wallet : deux monnaies côte à côte, chacune dans sa couleur. */
+.mp-wallet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.mp-cur {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px 9px;
+  border: 1px solid;
+  border-radius: 11px;
+}
+.mp-cur--tokens {
+  border-color: rgba(242, 198, 95, 0.3);
+  background: linear-gradient(180deg, rgba(242, 198, 95, 0.13), rgba(242, 198, 95, 0.03));
+}
+.mp-cur--credits {
+  border-color: rgba(124, 196, 255, 0.3);
+  background: linear-gradient(180deg, rgba(124, 196, 255, 0.13), rgba(124, 196, 255, 0.03));
+}
+.mp-cur__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.mp-cur--tokens .mp-cur__head {
+  color: var(--mp-token-ink);
+}
+.mp-cur--credits .mp-cur__head {
+  color: var(--mp-credit-ink);
+}
+/* Pièces : les mêmes que le wallet de l'en-tête (currency-switch.css). */
+.mp-coin {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+}
+.mp-coin--tokens {
+  background: radial-gradient(circle at 35% 30%, #fff3cf, var(--mp-token) 58%, #a8781f);
+  color: #6a4a08;
+}
+.mp-coin--tokens::before {
+  content: '◆';
+}
+.mp-coin--credits {
+  background: radial-gradient(circle at 35% 30%, #eaf6ff, var(--mp-credit) 58%, #2f6fa8);
+  color: #0d3a61;
+}
+.mp-coin--credits::before {
+  content: '✦';
+}
+.mp-cur__box {
+  display: block;
+  min-width: 0;
+}
+.mp-cur__val {
+  display: inline-block;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.mp-cur__sub {
+  overflow: hidden;
+  color: var(--mp-faint);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Progression : niveau, barre, XP restante, estimation. */
+.mp-prog {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--mp-line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.mp-lvl {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #c98cff, #7c3aed);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  line-height: 1;
+}
+.mp-lvl small {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+.mp-lvl b {
+  font-size: 17px;
+  font-weight: 900;
+}
+.mp-prog__body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+}
+.mp-prog__top,
+.mp-prog__foot {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.mp-prog__title {
+  font-size: 13px;
+  font-weight: 800;
+}
+.mp-prog__xp {
+  color: var(--mp-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mp-prog__xp b {
+  color: #fff;
+}
+.mp-bar {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.mp-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8b5cf6, #d6a8ff);
+  box-shadow: 0 0 8px rgba(201, 140, 255, 0.55);
+}
+.mp-prog__foot {
+  flex-wrap: wrap;
+  color: var(--mp-muted);
+  font-size: 10.5px;
+}
+.mp-prog__foot b {
+  color: #f1e6ff;
+}
+.mp-eta {
+  color: var(--mp-faint);
+  cursor: help;
+  white-space: nowrap;
+}
+
+/* Restrictions : discrètes sans rien, visibles (ambre, jamais rouge) quand une restriction joue. */
+.mp-restr {
+  border-radius: 11px;
+}
+.mp-restr.is-none {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--mp-line);
+  color: var(--mp-muted);
+}
+.mp-restr__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.mp-restr.is-none .mp-restr__icon {
+  color: #8fd6b0;
+}
+.mp-i--over {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+}
+.mp-restr__title {
+  flex: 1;
+  font-weight: 700;
+}
+.mp-restr__state {
+  color: var(--mp-faint);
+  font-size: 11px;
+}
+.mp-restr.is-active {
+  border: 1px solid rgba(245, 184, 74, 0.38);
+  background: linear-gradient(180deg, rgba(245, 184, 74, 0.11), rgba(245, 184, 74, 0.04));
+}
+.mp-restr__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  color: #ffe1a6;
+}
+.mp-restr__head .mp-restr__title {
+  color: #fff3dc;
+}
+.mp-restr__count {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(245, 184, 74, 0.2);
+  color: #ffe1a6;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.mp-restr__list {
+  display: flex;
+  flex-direction: column;
+  padding: 0 4px 4px;
+}
+.mp-r summary {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.mp-r summary::-webkit-details-marker {
+  display: none;
+}
+.mp-r summary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.mp-r summary:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: -2px;
+}
+.mp-r--block summary > .mp-i:first-child {
+  color: var(--mp-amber);
+}
+.mp-r--cooldown summary > .mp-i:first-child {
+  color: #c8b6ff;
+}
+.mp-r__what {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 6px;
+}
+.mp-r__what b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-r__what span {
+  color: var(--mp-faint);
+  font-size: 11px;
+}
+.mp-r__left {
+  color: #fff3dc;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.mp-r__chev {
+  width: 13px;
+  height: 13px;
+  color: var(--mp-faint);
+  transition: transform 0.15s;
+}
+.mp-r[open] .mp-r__chev {
+  transform: rotate(90deg);
+}
+.mp-r__detail {
+  margin: 0 6px 6px 29px;
+  color: var(--mp-muted);
+  font-size: 11px;
+}
+.mp-r__detail span {
+  color: var(--mp-faint);
+}
+
+/* Raccourcis : Historique et Classement (déplacés du bas de l'accueil), mêmes icônes. */
+.mp-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.mp-link {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--mp-line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f6f1ff;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color 0.14s,
+    background 0.14s;
+}
+.mp-link:hover {
+  border-color: rgba(214, 180, 255, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+}
+.mp-link:focus-visible,
+.mp-row:focus-visible,
+.mp-lab__seg button:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 2px;
+}
+.mp-link__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: 9px;
+}
+.mp-link__icon .rh-icon {
+  width: 16px;
+  height: 16px;
+}
+.mp-link--history .mp-link__icon {
+  background: rgba(168, 85, 247, 0.2);
+  color: #dcc4ff;
+}
+.mp-link--ranking .mp-link__icon {
+  background: rgba(242, 198, 95, 0.16);
+  color: var(--mp-token-ink);
+}
+.mp-link__text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.mp-link__text b {
+  font-size: 12.5px;
+}
+.mp-link__text small {
+  overflow: hidden;
+  color: var(--mp-faint);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-link__count {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border: 2px solid #261c40;
+  border-radius: 999px;
+  background: #a855f7;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 13px;
+  text-align: center;
+}
+.mp-link__ext {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--mp-faint);
+}
+
+/* Préférences : une ligne de menu. */
+.mp-row {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--mp-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mp-row span {
+  flex: 1;
+  text-align: left;
+}
+.mp-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.mp-row__chev {
+  width: 13px;
+  height: 13px;
+}
+
+/* Lab seulement : la maquette se dit maquette ; cas de démonstration. */
+.mp-lab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 9px;
+  border-top: 1px dashed rgba(214, 180, 255, 0.22);
+}
+.mp-lab__tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--mp-faint);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mp-lab__tag .mp-i {
+  width: 12px;
+  height: 12px;
+}
+.mp-lab__seg {
+  display: flex;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.mp-lab__seg button {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 4px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--mp-faint);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mp-lab__seg button[aria-pressed='true'] {
+  background: rgba(168, 85, 247, 0.3);
+  color: #fff;
+}
+
+/* Panneau étroit (zoom 125–150 %) : les blocs passent l'un sous l'autre plutôt que d'être réduits ou coupés. */
+@container mp (max-width: 259px) {
+  .mp-wallet,
+  .mp-links {
+    grid-template-columns: 1fr;
+  }
+  .mp-prog__top {
+    flex-wrap: wrap;
+  }
+}
+@container mp (max-width: 219px) {
+  .mp-lvl {
+    display: none;
+  }
+  .mp-ava--lg {
+    --mp-ring: 2px;
+    width: 42px;
+    height: 42px;
+  }
+  .mp-ava--lg .mp-ava__img {
+    width: calc(42px - 4px);
+    height: calc(42px - 4px);
+    border-width: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mp-panel.is-entering {
+    animation: none;
+  }
+  .mp-ava,
+  .mp-r__chev {
+    transition: none;
+  }
+}
