@@ -19,11 +19,11 @@ export class ProgressionRelay {
       : '/v1/lab/progression';
   }
 
-  private async body(req: IncomingMessage) {
+  private async body(req: IncomingMessage, max = 64 * 1024) {
     let raw = '';
     for await (const c of req) {
       raw += c;
-      if (raw.length > 64 * 1024)
+      if (raw.length > max)
         throw Object.assign(new Error('body_too_large'), { status: 413 });
     }
     return raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
@@ -105,6 +105,18 @@ export class ProgressionRelay {
             await core(
               `${this.base}/viewers/${notify[1]}/notify`,
               await this.body(req),
+            ),
+          ),
+          true
+        );
+      // The first extension's sound choices (its export, a few thousand rows at most): a larger body for this route only.
+      if (route === 'POST /api/progression/prefs/import')
+        return (
+          reply(
+            200,
+            await core(
+              `${this.base}/prefs/import`,
+              await this.body(req, 4 * 1024 * 1024),
             ),
           ),
           true

@@ -232,14 +232,21 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         ['1', 'ana', 20],
         [null, 'max_pending', 135], // the max is frozen over EVERY history, attached or not
       ]);
+      await svc.updateSettings(CH, { rules: { message_xp: 5 } });
       const before = [await xp('1'), await level('1')];
       await activate();
       expect(await level('1')).toBe(13);
+      expect((await svc.settings(CH)).rules).toMatchObject({
+        xp_per_minute: 1,
+        message_xp: 3,
+        message_cooldown_s: 60,
+      });
       expect(await svc.revertLevelV2(CH)).toEqual({
         reverted: true,
         movements: 1,
       });
       expect([await xp('1'), await level('1')]).toEqual(before);
+      expect((await svc.settings(CH)).rules.message_xp).toBe(5); // the pace before
       expect(
         (await svc.history(CH, '1')).normalization?.revertedAt,
       ).not.toBeNull();
@@ -259,7 +266,7 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
   describe('level-ups and their notifications', () => {
     const fixedNow = async () => {
       await activate(); // no history: everybody on 1 000 XP per level
-      await svc.updateSettings(CH, { rules: { level_up_notifications: true } });
+      await svc.updateSettings(CH, { rules: { level_up_sound: true } });
     };
 
     it('999 → 1 000 XP is one level-up; the rest carried; several levels at once: one event with the final level; a replay none', async () => {
@@ -300,91 +307,166 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       expect((await events()).length).toBe(2);
     });
 
-    it('modes: absent = the channel default (sound since the reprise; off when Studio says so); written; with sound; chat XP crosses a level too', async () => {
+    it('the sound: none when no choice is known; only for a viewer who turned it on (here or in the first extension)', async () => {
       await fixedNow();
       expect(await svc.viewerPrefs(CH, '1')).toEqual({
-        level_up_notify: 'sound',
-        level_up_sfx_opt_in: true,
-        chosen: false,
-      });
-      await svc.updateSettings(CH, { rules: { level_up_default_mode: 'off' } });
-      expect(await svc.viewerPrefs(CH, '1')).toEqual({
-        level_up_notify: 'off',
+        level_up_sound: false,
         level_up_sfx_opt_in: false,
         chosen: false,
+        source: null,
       });
-      await svc.setViewerPrefs(CH, '2', { level_up_notify: 'text' });
-      await svc.setViewerPrefs(CH, '3', { level_up_sfx_opt_in: true }); // the first extension's switch = sound
-      expect((await svc.viewerPrefs(CH, '3')).level_up_notify).toBe('sound');
+      await svc.setViewerPrefs(CH, '2', { level_up_sound: false });
+      await svc.setViewerPrefs(CH, '3', { level_up_sfx_opt_in: true }); // the first extension's switch: same meaning
+      expect(await svc.viewerPrefs(CH, '3')).toMatchObject({
+        level_up_sound: true,
+        chosen: true,
+        source: 'extension',
+      });
       await presence(['1', '2'], 1000 * 60);
       await svc.adjust(
         CH,
         {
           viewer: '3',
           mode: 'set_xp',
-          value: 995,
+          value: 997,
           reason: 'test',
           request_id: 'adj-0000-cid1',
         },
         studio,
       );
-      expect(await svc.onMessage(msg('3', 'bonsoir à tous'))).toBe('xp'); // 995 + 5 = 1 000
+      expect(await svc.onMessage(msg('3', 'bonsoir à tous'))).toBe('xp'); // 997 + 3 = 1 000
       expect((await events()).map((e) => [e.twitch_user_id, e.status])).toEqual(
         [
-          ['1', 'skipped'],
-          ['2', 'pending'],
+          ['1', 'skipped'], // no choice known: no sound
+          ['2', 'skipped'],
           ['3', 'pending'],
         ],
       );
       const { notices } = await svc.claimLevelUps(CH, 'obs-1');
       expect(notices.map((n) => [n.twitchUserId, n.level, n.sound])).toEqual([
-        ['2', 2, false],
         ['3', 2, true],
       ]);
-      // Delivered once: nothing more.
+      // Played once: nothing more.
       expect((await svc.claimLevelUps(CH, 'obs-1')).notices).toEqual([]);
+      expect(
+        (await svc.levelUps(CH)).find((e) => e.twitchUserId === '1')?.reason,
+      ).toBe('viewer_no_sound');
     });
 
-    it('the sound cooldown (whole channel) never hides a notice; one notice per viewer; an old one expires; notifications off', async () => {
+    it('one sound per level-up; at most one per 60 s; one per viewer; never late; the viewer or the channel turning it off', async () => {
       await fixedNow();
       for (const id of ['1', '2', '3'])
-        await svc.setViewerPrefs(CH, id, { level_up_notify: 'sound' });
+        await svc.setViewerPrefs(CH, id, { level_up_sound: true });
       await presence(['1'], 1000 * 60);
-      expect((await svc.claimLevelUps(CH, 'obs')).notices[0]).toMatchObject({
-        twitchUserId: '1',
-        sound: true,
-      });
-      clock.current = new Date(T0.getTime() + 60_000);
+      expect((await svc.claimLevelUps(CH, 'obs')).notices).toMatchObject([
+        { twitchUserId: '1', sound: true },
+      ]);
+      clock.current = new Date(T0.getTime() + 30_000);
       await presence(['2'], 1000 * 60);
-      expect((await svc.claimLevelUps(CH, 'obs')).notices[0]).toMatchObject({
-        twitchUserId: '2',
-        sound: false,
-      }); // within 5 min
-      clock.current = new Date(T0.getTime() + 6 * 60_000);
-      // Two level-ups of one viewer waiting: one notice, the final level.
+      expect((await svc.claimLevelUps(CH, 'obs')).notices).toEqual([]); // within 60 s: no sound at all
+      clock.current = new Date(T0.getTime() + 2 * 60_000);
+      // Two level-ups of one viewer waiting: one sound.
       await presence(['3'], 1000 * 60);
       await presence(['3'], 1000 * 60);
       const n = (await svc.claimLevelUps(CH, 'obs')).notices;
       expect(n.map((x) => [x.twitchUserId, x.level, x.sound])).toEqual([
         ['3', 3, true],
       ]);
-      // Too old (2 min by default): expired, never shown late.
+      // Too old (2 min by default): expired, never played late.
+      clock.current = new Date(T0.getTime() + 5 * 60_000);
       await presence(['1'], 1000 * 60);
       clock.current = new Date(clock.current.getTime() + 3 * 60_000);
       expect((await svc.claimLevelUps(CH, 'obs')).notices).toEqual([]);
-      // The channel's notifications off: skipped.
-      await svc.updateSettings(CH, {
-        rules: { level_up_notifications: false },
-      });
+      // The viewer turned it off between the level-up and the sound: nothing.
+      clock.current = new Date(clock.current.getTime() + 60_000);
       await presence(['2'], 1000 * 60);
-      expect((await events()).at(-1)?.status).toBe('skipped');
+      await svc.setViewerPrefs(CH, '2', { level_up_sound: false });
+      expect((await svc.claimLevelUps(CH, 'obs')).notices).toEqual([]);
+      // The channel's sound off: skipped at once.
+      await svc.updateSettings(CH, { rules: { level_up_sound: false } });
+      await presence(['3'], 1000 * 60);
       const last = await svc.levelUps(CH);
-      expect(last[0]).toMatchObject({
-        status: 'skipped',
-        reason: 'notifications_off',
-      });
-      expect(last.find((e) => e.status === 'expired')?.reason).toBe('too_old');
+      expect(last[0]).toMatchObject({ status: 'skipped', reason: 'sound_off' });
+      const reasons = last.map((e) => e.reason);
+      expect(reasons).toContain('sound_cooldown');
+      expect(reasons).toContain('too_old');
+      expect(reasons).toContain('viewer_no_sound');
       expect(last.filter((e) => e.status === 'merged').length).toBe(1);
+    });
+  });
+
+  describe('the first extension’s sound choices (Supabase ext_viewer_preferences)', () => {
+    const row = (
+      id: string | null,
+      on: boolean,
+      at: string,
+      channel = CH,
+      login = 'x',
+    ) => ({
+      channel_id: channel,
+      twitch_user_id: id,
+      twitch_login: login,
+      level_up_sfx_opt_in: on,
+      updated_at: at,
+    });
+    const rows = [
+      row('1', true, '2026-10-01T10:00:00Z', CH, 'ana'),
+      row('2', false, '2026-10-02T10:00:00Z', CH, 'bob'),
+      row('3', true, '2026-10-01T10:00:00Z', CH, 'cid'),
+      row('3', false, '2026-10-05T10:00:00Z', CH, 'cid'), // the newest row of one viewer wins
+      row('4', true, '2026-10-03T10:00:00Z', CH, 'dan'),
+      row('5', true, '2026-10-03T10:00:00Z', '999', 'eve'), // another channel
+      row(null, true, '2026-10-03T10:00:00Z', CH, 'ghost'), // no Twitch id: never attached by pseudo
+    ];
+
+    it('dry run first (nothing written); then on / off kept, the newest row, a choice made since in the extension always wins', async () => {
+      await svc.setViewerPrefs(CH, '4', { level_up_sound: false }); // dan chose in Raptoru 2.0's extension
+      const dry = await svc.importViewerPrefs(CH, { dry_run: true, rows });
+      expect(dry).toEqual({
+        dry_run: true,
+        rows: 7,
+        sound_on: 1,
+        sound_off: 2,
+        unchanged: 0,
+        kept_extension_choice: 1,
+        other_channel: 1,
+        duplicates: 1,
+        no_identity: ['ghost'],
+      });
+      expect((await svc.viewerPrefs(CH, '1')).chosen).toBe(false); // nothing written
+      const real = await svc.importViewerPrefs(CH, { dry_run: false, rows });
+      expect({ ...real, dry_run: true }).toEqual(dry);
+      expect(await svc.viewerPrefs(CH, '1')).toMatchObject({
+        level_up_sound: true,
+        source: 'legacy',
+      });
+      expect((await svc.viewerPrefs(CH, '2')).level_up_sound).toBe(false);
+      expect((await svc.viewerPrefs(CH, '3')).level_up_sound).toBe(false);
+      expect(await svc.viewerPrefs(CH, '4')).toMatchObject({
+        level_up_sound: false,
+        source: 'extension',
+      });
+      // Imported again: nothing changes; never a sound, never an announcement.
+      const again = await svc.importViewerPrefs(CH, { dry_run: false, rows });
+      expect(again).toMatchObject({ sound_on: 0, sound_off: 0, unchanged: 3 });
+      expect(await events()).toEqual([]);
+      // Ana changes her mind in the extension: a later import never brings the old choice back.
+      await svc.setViewerPrefs(CH, '1', { level_up_sound: false });
+      expect(
+        (await svc.importViewerPrefs(CH, { dry_run: false, rows }))
+          .kept_extension_choice,
+      ).toBe(2);
+      expect((await svc.viewerPrefs(CH, '1')).level_up_sound).toBe(false);
+    });
+
+    it('an imported « on » plays the sound of the next real level-up', async () => {
+      await activate();
+      await svc.updateSettings(CH, { rules: { level_up_sound: true } });
+      await svc.importViewerPrefs(CH, { dry_run: false, rows });
+      await presence(['1', '2'], 1000 * 60);
+      expect(
+        (await svc.claimLevelUps(CH, 'obs')).notices.map((n) => n.twitchUserId),
+      ).toEqual(['1']);
     });
   });
 
@@ -466,8 +548,8 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
     it('the interval: a level-up within 30 s waits and goes out grouped with the next; an old one is dropped', async () => {
       await chatOn();
       await presence(['1'], 1000 * 60); // T0: sent
-      await toXp('2', 995, 'adj-0000-bob1');
-      await toXp('3', 995, 'adj-0000-cid1');
+      await toXp('2', 997, 'adj-0000-bob1');
+      await toXp('3', 997, 'adj-0000-cid1');
       at(10_000);
       expect(await svc.onMessage(msg('2', 'bonsoir tout le monde'))).toBe('xp');
       at(15_000);
@@ -489,9 +571,9 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       expect(fay?.chat).toMatchObject({ status: 'expired', reason: 'too_old' });
     });
 
-    it('switches: the viewer chose Désactivé, « Sortie chat réelle » off, the chat announcements off — nothing queued', async () => {
+    it('the chat line does not depend on the sound choice; « Sortie chat réelle » off or the announcements off: nothing queued', async () => {
       await chatOn();
-      await svc.setViewerPrefs(CH, '1', { level_up_notify: 'off' });
+      await svc.setViewerPrefs(CH, '1', { level_up_sound: false });
       await presence(['1'], 1000 * 60);
       await chatOutput(false);
       at(60_000);
@@ -500,14 +582,19 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       await svc.updateSettings(CH, { rules: { level_up_chat: false } });
       at(120_000);
       await presence(['3'], 1000 * 60);
-      expect(await steps()).toEqual([]);
+      expect((await steps()).map((x) => x.text)).toEqual([
+        '@ana vient d’atteindre le niveau 2 !', // sound off: announced all the same
+      ]);
       const why = Object.fromEntries(
-        (await svc.levelUps(CH)).map((e) => [e.twitchUserId, e.chat.reason]),
+        (await svc.levelUps(CH)).map((e) => [
+          e.twitchUserId,
+          [e.chat.status, e.chat.reason],
+        ]),
       );
       expect(why).toEqual({
-        '1': 'viewer_off',
-        '2': 'chat_output_off',
-        '3': 'chat_off',
+        '1': ['sent', null],
+        '2': ['skipped', 'chat_output_off'],
+        '3': ['skipped', 'chat_off'],
       });
     });
 
@@ -551,8 +638,19 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       // The repeat window (10 min) passed: the same text earns again.
       at(61_000 + 11 * 60_000);
       expect(await svc.onMessage(msg('1', 'salut tout le monde'))).toBe('xp');
-      expect(await xp('1')).toBe(15);
+      expect(await xp('1')).toBe(9); // 3 rewarded messages × 3 XP
       expect((await svc.viewer(CH, '1')).messages).toBe(9); // every message counted
+      // Presence: 1 XP per validated minute — 60 XP an hour present, 240 at most chatting (60 + 60 × 3).
+      await presence(['1'], 60 * 60);
+      expect(await xp('1')).toBe(69);
+      // New rates in Studio: only what comes next; what was earned stays.
+      await svc.updateSettings(CH, {
+        rules: { message_xp: 10, xp_per_minute: 2 },
+      });
+      expect(await xp('1')).toBe(69);
+      at(61_000 + 11 * 60_000 + 61_000);
+      expect(await svc.onMessage(msg('1', 'une nouvelle phrase'))).toBe('xp');
+      expect(await xp('1')).toBe(79);
       const bot = {
         ...msg('2', 'bienvenue sur le stream'),
         chatter: {
@@ -674,9 +772,13 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       await importRows([
         ['1', 'ana', 135],
         ['2', 'bob', 74],
+        [null, 'late', 40], // unresolved: listed, never given to a guessed viewer
       ]);
       await presence(['5'], 3000);
       await badge10();
+      await svc.updateSettings(CH, {
+        rules: { level_up_chat: true, level_up_sound: true },
+      });
       const xpBefore = [await xp('1'), await xp('2'), await xp('5')];
       const sim = await svc.simulateLevelV2(CH, studio);
       expect(sim).toMatchObject({
@@ -687,6 +789,31 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       });
       expect(sim.levelsAfter.max).toBe(50);
       expect(sim.levelRewardsGiven).toBe(2); // ana and bob reach 10 on the new scale
+      expect(sim.rates).toEqual({
+        xp_per_minute: 1,
+        message_xp: 3,
+        message_cooldown_s: 60,
+      });
+      expect(sim.variations[0]).toMatchObject({
+        name: 'ana',
+        wizebot: 135,
+        before: 135,
+        after: 50,
+      });
+      expect(sim.levelRewards).toEqual([
+        {
+          id: 'niveau-10',
+          kind: 'badge',
+          label: 'Niveau 10',
+          level: 10,
+          owners: 2,
+          ownersBefore: 0,
+        },
+      ]);
+      expect(sim.unresolved).toMatchObject({ pending: 1 });
+      expect(sim.unresolved.sample).toEqual([
+        { login: 'late', status: 'pending', level: 40, candidates: 0 },
+      ]);
       // Nothing written: XP, the model, the audit, the grants.
       expect([await xp('1'), await xp('2'), await xp('5')]).toEqual(xpBefore);
       expect((await svc.settings(CH)).rules.level_model).toBe('curve');
@@ -700,6 +827,12 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         levelRewardsGiven: sim.levelRewardsGiven,
       });
       expect(real.levelsAfter).toEqual(sim.levelsAfter);
+      // The migration's level-ups are not real ones: no sound, no chat line.
+      expect(await events()).toEqual([]);
+      expect(
+        (await db.query('select 1 from cmd_steps where channel_id = $1', [CH]))
+          .length,
+      ).toBe(0);
     });
     const badge10 = () =>
       svc.upsertReward(CH, {
@@ -718,7 +851,7 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
   describe('concurrency', () => {
     it('the same presence cycle delivered twice at once: one movement, one level-up event', async () => {
       await activate();
-      await svc.updateSettings(CH, { rules: { level_up_notifications: true } });
+      await svc.updateSettings(CH, { rules: { level_up_sound: true } });
       await presence(['1'], 999 * 60);
       const at = new Date(T0.getTime() + 999_999);
       const cycle = () =>

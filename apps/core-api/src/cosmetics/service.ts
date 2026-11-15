@@ -251,7 +251,13 @@ export class CosmeticShopService {
           now,
         ],
       );
-      if (input.unlock_level !== null && input.status !== 'draft') {
+      // A level reward (the badges every 10 levels): given now to whoever has the level — or at the Level Up V2
+      // activation while WizeBot levels wait for their normalization (never a badge of the old scale).
+      if (
+        input.unlock_level !== null &&
+        input.status !== 'draft' &&
+        (await this.progression.levelRewardsReady(q, channelId))
+      ) {
         const ids = await q.query<{ id: string }>(
           'select twitch_user_id as id from progression_accounts where channel_id = $1 and level >= $2',
           [channelId, input.unlock_level],

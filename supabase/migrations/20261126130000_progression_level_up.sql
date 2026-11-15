@@ -9,7 +9,9 @@
 -- - progression_level_events: a real level-up (presence / chat), once per ledger movement; its stream notification
 --   (the viewer's mode, delivered / skipped / expired / merged, with or without sound) and its chat announcement
 --   (chat_status: pending / sent / skipped / expired / merged, independent of the stream notification).
--- - progression_viewer_prefs: the viewer's level-up mode, chosen in the extension (absent: the channel's default).
+-- - progression_viewer_prefs: the viewer's level-up sound ('sound' = on; absent or anything else = no sound), chosen in
+--   the extension (source 'extension') or imported from the first extension's choices (source 'legacy': raptoru.fr's
+--   Supabase table ext_viewer_preferences, its date kept); a choice made in the extension always wins.
 -- - progression_accounts.last_message_fp: the fingerprint of the viewer's last REWARDED message (repeated text earns
 --   nothing within the repeat window).
 -- Written to be applied on a Lab database that already ran the first version of this file (20261115*): every
@@ -77,5 +79,8 @@ create table if not exists progression_viewer_prefs (
   updated_at timestamptz not null,
   primary key (channel_id, twitch_user_id)
 );
+alter table progression_viewer_prefs add column if not exists source text not null default 'extension'
+  check (source in ('extension', 'legacy'));
+alter table progression_viewer_prefs add column if not exists legacy_updated_at timestamptz;
 
 alter table progression_accounts add column if not exists last_message_fp text;

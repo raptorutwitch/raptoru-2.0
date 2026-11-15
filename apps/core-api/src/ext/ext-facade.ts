@@ -1,4 +1,4 @@
-import { eventTitlesView } from '@raptoru/schemas';
+import { eventTitlesView, levelUpPrefBody } from '@raptoru/schemas';
 import { type MusicAudience, musicOpenTo } from './music-audience.js';
 import { moduleFacade } from '@raptoru/schemas';
 import { commandsPublic, commandsTeam } from './commands-ext.js';
@@ -754,8 +754,8 @@ export class ExtFacade {
   }
 
   /**
-   * Level Up V2: the viewer's level-up notification mode (off / written / with sound), kept by Core (it survives a
-   * restart; off by default) for the JWT's identity only. The first extension's boolean is still accepted and returned.
+   * Level Up V2: « Jouer un son lorsque je monte de niveau », kept by Core (it survives a restart; off when no choice is
+   * known) for the JWT's identity only. The first extension's boolean and the first V2's mode are still accepted.
    */
   private async viewerPreferences(
     who: Who,
@@ -764,24 +764,11 @@ export class ExtFacade {
   ): Promise<ExtReply> {
     if (!who.viewer) return fail(403, 'identity_required');
     const path = `/v1/lab/progression/prefs/${who.viewer.id}`;
-    const mode = body?.level_up_notify;
-    const valid = mode === 'off' || mode === 'text' || mode === 'sound';
-    if (
-      method === 'POST' &&
-      !valid &&
-      typeof body?.level_up_sfx_opt_in !== 'boolean'
-    )
-      return fail(400, 'invalid_payload');
+    const prefBody = levelUpPrefBody(body);
+    if (method === 'POST' && !prefBody) return fail(400, 'invalid_payload');
     try {
       return ok(
-        await this.core<Json>(
-          path,
-          method !== 'POST'
-            ? undefined
-            : valid
-              ? { level_up_notify: mode }
-              : { level_up_sfx_opt_in: body!.level_up_sfx_opt_in },
-        ),
+        await this.core<Json>(path, method !== 'POST' ? undefined : prefBody!),
       );
     } catch (e) {
       return refused(e);

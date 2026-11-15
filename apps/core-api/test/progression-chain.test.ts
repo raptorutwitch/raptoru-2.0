@@ -122,8 +122,8 @@ describe('progression on the real presence chain', () => {
     const k = await stack();
     const p = k.core.progression;
     await p.activateLevelV2(CH, { id: 'studio' });
-    await p.updateSettings(CH, { rules: { level_up_notifications: true } });
-    await p.setViewerPrefs(CH, '2001', { level_up_notify: 'sound' });
+    await p.updateSettings(CH, { rules: { level_up_sound: true } });
+    await p.setViewerPrefs(CH, '2001', { level_up_sound: true });
     await k.cycle(0, { cycleId: 'l0' }); // the first sighting (no interval yet)
     await p.adjust(
       CH,

@@ -9,6 +9,7 @@ import {
   ProgressionImportRequest,
   ProgressionResolveRequest,
   ProgressionWizebotImportRequest,
+  ViewerPrefsImportRequest,
   ViewerPrefsRequest,
   ProgressionRevokeRequest,
   ProgressionRewardInput,
@@ -329,6 +330,17 @@ export function progressionRoutes(
         );
         return mapped(() => svc.revertLevelV2(ch));
       },
+    },
+    {
+      // The first extension's sound choices (its Supabase export): dry run by default, never a sound or an announcement.
+      method: 'POST',
+      pattern: admin('/prefs/import'),
+      auth,
+      maxBody: 4 * 1024 * 1024,
+      handle: ({ body }) =>
+        mapped(() =>
+          svc.importViewerPrefs(ch, parse(ViewerPrefsImportRequest, body)),
+        ),
     },
     {
       method: 'GET',

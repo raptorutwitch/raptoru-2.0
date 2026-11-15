@@ -1,181 +1,222 @@
-# Level Up V2 — 1 000 XP par niveau, normalisation WizeBot, annonces chat et stream, badges de niveau
+# Level Up V2 — 1 000 XP par niveau, normalisation WizeBot, annonce chat, son au choix, badges de niveau
 
 **État (15/11/2026)** : développé et testé en Lab, de bout en bout dans de vrais navigateurs, PGlite et PostgreSQL réel.
-Branche `feat/level-up-v2-final` (reprise de la PR #43, `02b4ebb`, 30/10). **Rien n'est actif en Production** : la
-Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu le GO d'Antoni.
+Branche `feat/level-up-v2-final`, PR #70 (reprise de la PR #43, `02b4ebb`, 30/10). **Rien n'est actif en Production** :
+la Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu le GO d'Antoni.
 
 ## 1. Décisions retrouvées dans la PR #43 (30/10) et gardées
 
 - **Niveau = 1 + floor(XP / 1 000)** : le niveau 1 vaut 0 XP (convention du projet), le reste est reporté, aucun plafond.
   Plusieurs niveaux d'un coup donnent un seul événement, au niveau final.
-- **Gains** : présence validée **1 XP par minute**, message éligible **5 XP**, au plus un toutes les **60 s**. Tout message
-  compte dans les statistiques, même sans XP (commandes comprises).
 - **Normalisation WizeBot, une seule fois**, exposant 0,7 (§ 3) :
   - XP d'un historique rattaché = 1 000 × (N − 1) + XP native, gagnée ou ajustée depuis, jamais perdue ;
   - les paramètres sont figés pour les historiques rattachés plus tard ;
   - audit par compte ;
   - jamais annoncée, jamais dans Semaine / Mois ;
   - annulable tant qu'aucun historique n'a été rattaché depuis.
-- **La courbe est verrouillée** une fois Level Up V2 actif : un niveau atteint ne baisse jamais à cause d'un réglage.
-- **Événement de Level Up seulement pour un vrai gain** (présence, chat), une fois par mouvement du registre. Import,
-  normalisation, rattachement et ajustement Studio n'en créent jamais.
-- **Mode par viewer** (Désactivé / Écrit / Sonore), gardé par le Core, choisi dans l'extension.
-- **Source OBS à part** (`/level-up/player.html#<jeton>`), servie par Studio, sans toucher aux alertes ni aux autres
-  overlays. Délai entre deux sons de 5 min. Une annonce non affichée en 2 min est abandonnée.
+- **La courbe est verrouillée** une fois Level Up V2 actif.
+- **Événement de Level Up seulement pour un vrai gain** (présence, chat). Import, normalisation, rattachement et
+  ajustement Studio n'en créent jamais.
 
-## 2. Ce qui change à la reprise (14–15/11, demande d'Antoni)
+## 2. Décisions d'Antoni (14–15/11)
 
-| Sujet | PR #43 | Maintenant |
-| --- | --- | --- |
-| Annonce dans le **chat Twitch** | aucune (source OBS seule) | **LeCroupier_** via la file des commandes (`cmd_steps`, origine `module:level_up`) ; « Sortie chat réelle » et la limite du bot s'appliquent ; **groupées** (§ 5) |
-| Mode d'un viewer qui n'a rien choisi | Désactivé | **Sonore** (réglage « Viewer qui n'a rien choisi » dans Studio) ; le choix du viewer gagne toujours |
-| Anti-farm du chat | longueur, délai, commandes, bots | en plus : **3 lettres ou chiffres différents** au moins ; le **même texte** que le dernier message récompensé ne rapporte rien pendant **10 min** (empreinte seulement, jamais le texte) |
-| Badges | catalogue existant | **un badge tous les 10 niveaux** (catalogue `kind: badge`, `unlock_level`), donnés **selon le niveau recalculé** (§ 6) |
-| Son | carillon ou fichier copié à la main | **ton fichier envoyé depuis Studio** (MP3 / OGG / WAV vérifiés à leurs premiers octets, 2 Mo au plus) ; carillon de test sinon |
-| Migration | activation directe | **Simuler** d'abord : les chiffres exacts de l'activation, rien d'écrit |
-| Extension | choix à trois modes (masqué depuis le 05/11) | choix visible dans **les deux interfaces**, plus **« Mon niveau »** (niveau, XP vers le niveau suivant, badges) |
+| Sujet | Décision |
+| --- | --- |
+| Manifestations d'un Level Up | **Exactement deux** : une ligne de **LeCroupier_ dans le chat** (message normal, pas `/announce`) et un **son** sur le stream. **Aucune** bannière, aucun texte, aucun cadre à l'écran : la source OBS est invisible et ne joue que le son |
+| Annonce chat | Pour **chaque vrai Level Up**, indépendante du choix sonore du viewer ; texte réglable dans Studio ; groupée et protégée du flood (§ 5) |
+| Son | **Désactivé par défaut** ; joué seulement pour les viewers qui l'ont activé. Une absence de choix n'autorise jamais le son |
+| Réglage viewer | **Une case à cocher** dans les préférences (roue crantée), les deux interfaces : « Jouer un son lorsque je monte de niveau », décochée par défaut, enregistrée tout de suite |
+| Préférences historiques | Récupérées depuis la table Supabase de l'ancienne extension (§ 8) ; jamais écrasées par un import plus ancien |
+| Gains d'XP | **1 XP par minute** de présence, **3 XP par message** éligible, un message récompensé au plus toutes les **60 s**. Au plus 60 XP/h en silence et 240 XP/h en parlant : un rapport de 1 à 4 |
+| Anti-farm | Gardé : commandes, bots, délai, longueur, 3 lettres ou chiffres différents, même message sans XP pendant 10 min |
+| Badges | **Les vrais badges sub d'Antoni** (`Documents\Twitch\Badge de ma chaine`), un tous les 10 niveaux, dans l'ordre de leur numéro (§ 6) |
 
 ## 3. Données réelles et compression (relevé du 29/10/2026, PR #43)
 
-7 852 historiques WizeBot (1 622 rattachés, 6 228 en attente, 2 conflits), **niveau max 135**, 75 niveaux distincts.
+7 852 historiques WizeBot (1 622 rattachés, 6 228 en attente, 2 conflits), **niveau max 135**.
 
-`nouveau = max(1, floor(1 + 49 × ((L − 1) / (max − 1))^0,7))`, `max` figé à l'activation (le niveau WizeBot le plus haut
-connu ce jour-là).
+`nouveau = max(1, floor(1 + 49 × ((L − 1) / (max − 1))^0,7))`, `max` figé à l'activation.
 
 - Exemples : 2→2, 3→3, 5→5, 10→8, 20→13, 50→25, 74→33, 100→40, 121→46, 135→50.
-- 0,7 garde les niveaux 1 à 5 identiques.
-- Aucun viewer de niveau > 1 n'est ramené à 1 (la proportionnelle en écrasait 716).
-- 43 niveaux distincts, monotone.
+- Les niveaux 1 à 5 sont inchangés.
+- Aucun viewer de niveau > 1 n'est ramené à 1.
 
-**Chiffres à relire sur les données du jour avant l'activation** (Studio › Level Up › Simuler) : de l'XP native s'est
-accumulée depuis le 29/10.
+**Chiffres à relire sur les données du jour** (Studio › Level Up › Simuler) avant l'activation.
 
-## 4. Rythme attendu (taux de la PR #43, inchangés)
+## 4. Rythme
 
-- Un viewer présent sans parler gagne environ **60 XP/h**, soit un niveau toutes les 17 h de présence. Avec des lives de
-  4 h, 4 fois par semaine : environ un niveau par semaine, un badge en 10 semaines.
-- Un viewer qui parle normalement (un message utile par minute) gagne environ **360 XP/h**, soit un niveau toutes les
-  2 h 45 : un badge en environ deux semaines.
-- Tous les taux se règlent dans Studio › Progression › XP et Daily (« Ce qui rapporte ») ; l'anti-farm dans
-  Studio › Progression › Level Up.
+- Un viewer présent sans parler monte d'un niveau toutes les **16 h 40** de présence. Avec des lives de 4 h, 4 fois par
+  semaine : environ un niveau par semaine, un badge en 10 semaines.
+- Un viewer qui parle normalement (au moins un message utile par minute) monte d'un niveau toutes les **4 h 10** : un
+  badge en un peu plus de deux semaines.
+- **L'activation fixe ces gains** (1 / 3 / 60 s). Ils restent réglables ensuite dans Studio › XP et Daily.
+- Un changement de taux ne concerne que les gains suivants : l'XP déjà gagnée n'est jamais recalculée. L'annulation de
+  la normalisation remet les gains d'avant.
 
-## 5. Annonces
+## 5. Annonces et son
 
-**Chat** (réglage « Annonces dans le chat », coupé par défaut) :
+**Chat** (« Annoncer les Level Up », coupé par défaut) :
 
 - Une ligne au plus toutes les **30 s** pour toute la chaîne.
-- Les Level Up arrivés entre deux lignes partent ensemble : « Montées de niveau : @a (niveau 5), @b (niveau 12) ! »,
-  jusqu'à 10 pseudos et 450 caractères ; les autres attendent la ligne suivante.
+- Les Level Up arrivés entre deux lignes partent ensemble : « Montées de niveau : @a (niveau 5), @b (niveau 12) ! ».
 - Un viewer seul : le texte de Studio, par défaut « @{pseudo} vient d'atteindre le niveau {niveau} ! ».
-- Un cycle de présence donne au plus une ligne pour tous ceux qui ont monté pendant ce cycle.
-- Jamais d'annonce de plus de 2 min (après une pause, pas de rafale en retard).
-- Rien n'est mis en file si :
-  - « Sortie chat réelle » est coupée ;
-  - le viewer a choisi « Désactivé » ;
-  - les annonces chat sont coupées.
+- Un cycle de présence donne au plus une ligne.
+- Jamais plus de 2 min de retard.
+- Rien n'est mis en file si « Sortie chat réelle » est coupée ou si les annonces sont coupées.
 
-  La raison reste visible dans Studio.
-- Pseudo : le nom affiché quand il ne diffère du login que par la casse, sinon le login (pour que la mention marche).
+**Son** (« Sons Level Up », coupé par défaut) :
 
-**Stream** (réglage « Annonces à l'écran », coupé par défaut) :
+- La source OBS « Level Up » est une source navigateur **invisible**. Elle demande au Core les sons à jouer, seulement
+  tant qu'elle est connectée.
+- Un son est joué seulement si :
+  - le viewer a coché la case ;
+  - les sons de la chaîne sont allumés ;
+  - le dernier son date d'au moins **60 s** (réglable).
+- Hors de ces conditions, rien n'est joué.
+- Plusieurs niveaux en attente pour un viewer donnent un seul son.
+- Chaque son est joué une fois, jamais en retard, jamais deux à la fois.
+- Un viewer qui décoche la case entre le Level Up et le son n'a pas de son.
 
-- La source OBS « Level Up » demande au Core les annonces à afficher, seulement tant qu'une source est connectée.
-- Écrit : la ligne seule ; Sonore : la ligne et le son.
-- Un son au plus toutes les 5 min pour la chaîne : une annonce dans ce délai s'affiche sans son.
-- Plusieurs niveaux en attente pour un viewer : une seule annonce.
-- Chaque annonce est livrée une fois.
-
-**Jamais** d'annonce pour une migration, un import, un rattachement ou un ajustement Studio.
+**Jamais** d'annonce ni de son pour une migration, un import, un rattachement ou un ajustement Studio.
 
 ## 6. Badges de niveau
 
-- Un badge = une entrée du catalogue de progression (`kind: badge`, `unlock_level` = 10, 20, 30…). Studio › Level Up ›
-  « Créer le badge » crée `niveau-10`, `niveau-20`… sans image.
-- **L'image** (PNG ou WebP, 128 px, 40 Ko au plus) s'ajoute dans Studio › Boutique, avec les illustrations d'Antoni. Sans
-  image, raptoru.fr montre le nom du badge. **Aucun faux badge définitif** n'est livré.
-- **Rétroactif et idempotent** : un badge créé est donné à tous ceux qui ont déjà le niveau, puis à chaque passage ; un
-  badge déjà donné ne l'est jamais deux fois ; un badge débloqué ne disparaît pas (seul un badge rendu inactif dans
-  Studio disparaît du profil).
-- **Pas de badge selon l'ancienne échelle** : tant que des historiques WizeBot attendent la normalisation (modèle
-  « courbe »), les récompenses de niveau attendent l'activation ; l'activation les donne selon les niveaux recalculés (un
-  ancien niveau 135 reçoit les badges 10 à 50, pas 130). Sans historique WizeBot, rien ne change : donnés tout de suite.
-- **Sur raptoru.fr (déjà en Production)** : Profil › Apparence › « Badges affichés (3 au plus) ». Le viewer choisit parmi
-  ses badges, y compris un ancien qu'il préfère. Ils s'affichent à côté de son pseudo dans les classements, la carte de
-  joueur et le profil. Aucune modification du site n'est nécessaire.
+**Le dossier d'Antoni** (inspecté le 15/11, lecture seule) :
 
-## 7. Studio › Progression › Level Up
+| Palier | Fichier |
+| --- | --- |
+| 10 → 100 | `1. UglyTitan` … `10. FoundingTitan` : 10 dessins de 990 px, un par numéro |
+| 110 | `11. Badge HK` (1980 px) : **identique octet pour octet** à `Badges Bits/Badge Bits sans nom aussi.png`. Badge sub ou badge Bits ? **À confirmer par Antoni** ; non importé par défaut |
+| — | `Obsolète/` : anciennes versions des badges 1 à 8, écartées |
+| — | `Badges Bits/` : badges de Bits, écartés |
 
-- **Passage à Level Up V2** :
-  - modèle actuel, comptes, niveau WizeBot le plus haut ;
-  - niveaux aujourd'hui ;
-  - **Simuler** (niveaux après, comptes modifiés, récompenses de niveau données, rien d'écrit) ;
-  - **Activer Level Up V2…** (phrase « NORMALISER LES NIVEAUX ») ;
-  - **Annuler la normalisation…** (phrase « ANNULER LA NORMALISATION »).
-- **Annonces** : chat, texte, intervalle ; écran, délai entre sons, fraîcheur ; mode par défaut ; anti-farm.
-- **Source OBS** : adresse à copier (source navigateur 1920 × 1080), sources connectées, volume, « Choisir un son… »,
-  « Revenir au carillon », tests écrit / sonore.
-- **Badges de niveau** : chaque palier, son image, son nombre de viewers, « Créer le badge ».
-- **Derniers Level Up** : heure, viewer, niveaux, mode, sort de l'annonce chat et de l'annonce à l'écran (avec la
-  raison au survol).
-- XP et Daily : la courbe affichée comme verrouillée une fois Level Up V2 actif.
+**L'import se fait dans Studio** (Level Up › « Importer mes badges sub… ») :
 
-## 8. Extension
+- On choisit le dossier.
+- Studio ne retient que les images numérotées **à la racine** : badge n → niveau 10 × n.
+- **Il ne devine jamais** :
+  - deux images différentes sous un même numéro laissent le palier vide ;
+  - un numéro manquant est signalé ;
+  - une image identique à un autre fichier est « à confirmer » et ne s'importe que cochée.
+- Chaque image est réduite à **128 px** (règle des badges du Core, 40 Ko au plus) ; le dessin ne change pas.
+- Le badge s'appelle « Niveau X ». Nom et image se retouchent dans Boutique.
 
-- Préférences (les deux interfaces) : **« Mon niveau »**, puis « Mes Level Up sur le stream : Désactivé / Écrit / Sonore ».
-  « Mon niveau » montre le niveau, une barre « 340 / 1 000 XP vers le niveau 13 » et le nombre de badges débloqués.
-- Lu pour le viewer du jeton seulement (`GET /viewer/progression`, `GET|POST /viewer/preferences`) ; le choix est gardé
-  par le Core.
+**Attribution** :
+
+- Rétroactive et idempotente ; jamais en double ; un badge débloqué ne disparaît pas.
+- **Selon le niveau recalculé** : tant que des historiques WizeBot attendent la normalisation, les récompenses de niveau
+  attendent l'activation, qu'on les crée dans Level Up ou dans Boutique. Un ancien niveau 135 reçoit les badges 10 à 50,
+  pas 130.
+
+**Sur raptoru.fr (déjà en Production)** : Profil › Apparence › « Badges affichés (3 au plus) ». Le viewer choisit parmi
+ses badges, y compris un ancien qu'il préfère. Ils s'affichent à côté de son pseudo. Aucune modification du site n'est
+nécessaire.
+
+## 7. Simulation et migration
+
+**« Simuler »** fait l'activation dans un savepoint annulé et n'écrit rien. Elle montre :
+
+- le nombre de comptes, dont ceux qui ont un historique WizeBot ;
+- les comptes dont le niveau change ;
+- la distribution des niveaux aujourd'hui et après ;
+- les **25 plus grandes variations** (nom, niveau WizeBot, avant, après) ;
+- les badges et titres de niveau (nombre de viewers avant et après) ;
+- les gains après l'activation ;
+- les **historiques WizeBot non résolus** (inconnus, ambigus, en conflit, avec une liste). Ils ne sont jamais donnés à
+  une mauvaise personne, et reçoivent le même niveau figé le jour où ils sont rattachés.
+
+**« Activer Level Up V2… »** :
+
+- Phrase tapée : « NORMALISER LES NIVEAUX ».
+- Une seule fois. Une seconde activation est refusée, donc aucune double récompense.
+- Une ligne d'audit par compte (niveau et XP avant).
+- Jamais d'annonce ni de son.
+
+**« Annuler la normalisation… »** : phrase « ANNULER LA NORMALISATION ».
+
+## 8. Préférences historiques du son
+
+**Où elles étaient.** Jusqu'à la bascule du 20/10, l'extension parlait à l'EBS de raptoru.fr. Celui-ci gardait la case
+« son des Level Up » dans la table Supabase **`ext_viewer_preferences`**, sur `supabase.raptoru.fr`. Colonnes :
+`channel_id`, `twitch_user_id`, `twitch_login`, `level_up_sfx_opt_in`, `updated_at`. Les sons WizeBot n'étaient joués
+que pour ces viewers (commit du site `9e19ca8`).
+
+Depuis la bascule, le Core ne gardait le choix **qu'en mémoire**, perdu à chaque redémarrage, et le réglage était masqué
+depuis le 05/11. Il n'existe donc rien de durable après le 20/10.
+
+**Récupération** (Studio › Level Up › « Choix du son de l'ancienne extension ») :
+
+1. Antoni exporte la table depuis le tableau de bord Supabase (CSV ou JSON).
+   - Aucun accès à cette base n'est configuré sur le PC de développement.
+   - Rien n'a été lu ni copié de la Production.
+2. Studio montre **d'abord la simulation**, rien n'est écrit.
+3. Il importe sur confirmation.
+
+**Priorité** :
+
+1. Un choix fait dans l'extension actuelle passe toujours en premier.
+2. Ensuite, le choix historique ; pour un même viewer, la ligne la plus récente gagne.
+3. Sans aucune des deux : pas de son.
+
+**Identité** : l'identifiant Twitch. Une ligne d'une autre chaîne, ou sans identifiant, est signalée et jamais rattachée
+par pseudo.
+
+L'import est idempotent, ne déclenche ni son ni annonce, et n'efface jamais rien (la provenance `legacy` et la date
+d'origine sont gardées).
 
 ## 9. Activation en Production (sur GO d'Antoni, étape par étape)
 
 1. Sauvegarde Coolify et restauration vérifiée.
 2. Fusion de la PR, CI verte, déploiement du Core.
-   - La migration `20261126130000_progression_level_up.sql` est **additive** : 3 tables, 1 colonne facultative, une
-     contrainte élargie `NOT VALID`, sans parcours de table ni verrou long.
+   - La migration `20261126130000_progression_level_up.sql` est **additive** : 3 tables, des colonnes facultatives, une
+     contrainte élargie `NOT VALID`.
    - Rien ne change pour les viewers.
 3. Release Studio (onglet Level Up et source OBS), installation par Antoni.
-4. Extension : publier la nouvelle version (« Mon niveau » et le choix à trois modes), téléversement par Antoni.
-5. Studio › Level Up › **Simuler** sur les données du jour, puis **Activer Level Up V2…**.
-6. Badges : « Créer le badge » pour chaque palier, puis l'image de chaque badge dans Boutique.
-7. OBS : ajouter la source navigateur « Level Up », choisir le son, « Tester (sonore) ».
-8. Couper ou allumer les annonces chat et écran quand Antoni le décide.
+4. Extension : publier la version avec la case à cocher et « Mon niveau », téléversement par Antoni.
+5. Préférences historiques : export Supabase, puis Studio › Level Up : simulation, puis import.
+6. Badges : Studio › Level Up › « Importer mes badges sub… » (le palier 110 seulement si Antoni le confirme).
+7. Studio › Level Up › **Simuler** sur les données du jour, puis **Activer Level Up V2…**.
+8. OBS : ajouter la source navigateur « Level Up » (invisible), choisir le son, « Tester le son ».
+9. Allumer « Annoncer les Level Up » et « Sons Level Up » quand Antoni le décide.
 
 **Retour arrière** :
 
-- couper les annonces (immédiat) ;
+- couper les annonces ou les sons (immédiat) ;
 - « Annuler la normalisation » (tant qu'aucun historique n'a été rattaché depuis ; les badges donnés restent) ;
 - Core précédent (la migration reste, additive) ;
-- SQL en tête de la migration (démontré sur PostgreSQL réel).
+- SQL en tête de la migration.
 
 ## 10. Tests
 
 - **Core, PGlite et PostgreSQL réel** (`progression-level-v2.suite.ts`) :
-  - 999 → 1 000 XP, report, plusieurs niveaux, rejeu ;
-  - normalisation une fois, XP native gardée, audit, annulation ;
-  - classement stable ;
-  - modes et mode par défaut ;
-  - annonces écran (son, délai, fusion, expiration) ;
-  - **annonces chat** (une ligne, groupée, intervalle, expiration, interrupteurs, rejeux concurrents) ;
-  - **anti-farm** (répétition, lettres, commande, bot, fenêtre) ;
-  - **badges** (rétroactifs selon le niveau recalculé, jamais deux fois, absent sans erreur, ancien badge affichable,
-    badge inactif retiré) ;
-  - **simulation = activation**, rien d'écrit.
-- Retour arrière des migrations de la progression : PostgreSQL réel.
+  - son désactivé sans choix connu ; son seulement pour un viewer qui l'a activé ; viewer qui le coupe entre-temps ;
+  - un son par Level Up, délai, fusion, expiration, sons coupés ;
+  - **préférences historiques** : simulation sans écriture, ligne la plus récente, choix récent jamais écrasé, autre
+    chaîne et identifiant manquant signalés, import répété sans effet ;
+  - **chat indépendant du son**, groupé, différé, expiré, interrupteurs, rejeux concurrents ;
+  - 1 XP/min et 3 XP/message, anti-farm, taux changés sans recalcul ;
+  - activation qui fixe les gains, annulation qui les remet ;
+  - **badges** rétroactifs selon le niveau recalculé, jamais en double ;
+  - **simulation = activation** (variations, badges, non résolus), rien d'écrit ;
+  - **aucune annonce ni son pendant la migration**.
+- Retour arrière des migrations : PostgreSQL réel.
 - **Studio** :
-  - source OBS (jeton, rien demandé sans source, annonce livrée une fois, test local, volume) ;
-  - **son envoyé** (format vérifié, remplacement, taille, retour au carillon) ;
-  - relais.
-- **Extension** : mode envoyé, « Mon niveau » (texte, barre, appel).
-- **E2E navigateur** (`progression-v2-level-up.e2e.ts`, pile Core Lab) :
-  - activation tapée dans Studio, annonces allumées, badge du niveau 10 créé ;
-  - « Mon niveau » et le mode gardé dans l'extension ;
-  - un message fait passer Kirito_TV au niveau 10, ce qui donne une ligne dans la file du chat, le badge, la source OBS
-    avec le son ;
-  - Studio liste ce Level Up.
+  - la source OBS **ne dessine rien** (vérifié sur la page et le script) et ne reçoit que « joue le son » ;
+  - son envoyé, remplacé, supprimé ; volume ; test ;
+  - **ordre des badges sub** sur le dossier réel (10 badges dans l'ordre, le 11ᵉ « à confirmer », `Obsolète` et
+    `Badges Bits` écartés, deux images sous un numéro jamais devinées) ;
+  - lecture de l'export Supabase (CSV et JSON).
+- **Extension** : la case envoie un booléen ; « Mon niveau ».
+- **E2E navigateur** (`progression-v2-level-up.e2e.ts`) :
+  - simulation, puis activation tapée, puis annonces et son allumés ;
+  - import de deux images numérotées (de simples aplats générés par le test, jamais les badges d'Antoni) ;
+  - case décochée par défaut, gardée après rechargement ;
+  - un message fait passer un viewer au niveau 10 : **une ligne de chat**, le badge avec son image, **le son joué et rien
+    d'affiché**.
 
 ## 11. Ce qui attend Antoni
 
-- **Les images des badges** (ses badges d'abonnement redessinés en badges communautaires), au format du catalogue.
-- **Le fichier son** (le son de Level Up qu'il a choisi) : à envoyer depuis Studio. **Le droit de diffuser ce son en
-  public reste à clarifier avant la Production.**
+- **Le fichier son** : à envoyer depuis Studio. Le droit de le diffuser en public reste à clarifier avant la Production.
+- **L'export de `ext_viewer_preferences`** depuis Supabase, pour récupérer les choix historiques.
+- **Le badge n° 11** : badge sub ou badge Bits ?
 - Le GO de chaque étape du § 9.

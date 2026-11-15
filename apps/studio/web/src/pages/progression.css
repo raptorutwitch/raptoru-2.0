@@ -816,3 +816,10 @@
 .pg-lu-t {
   width: 100%;
 }
+
+.pg-lu-img {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  margin-right: 6px;
+}

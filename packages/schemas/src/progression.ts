@@ -22,18 +22,19 @@ export const ProgressionRulesSchema = z.strictObject({
    * switched only by the guarded normalization — never by a rules patch.
    */
   level_model: z.enum(['curve', 'fixed']),
-  /** Level Up notifications on stream (the viewers' own choice still applies); OFF until Antoni turns them on. */
-  level_up_notifications: z.boolean(),
-  /** One level-up SOUND at most per this delay, whole channel (written notices are never held back by it). */
+  /**
+   * The Level Up SOUND on stream (Studio's invisible OBS source, never any visual): played only for a viewer who turned
+   * it on in the extension (absent: no sound, ever). OFF for the whole channel until Antoni turns it on.
+   */
+  level_up_sound: z.boolean(),
+  /** One level-up sound at most per this delay, whole channel (a level-up inside it plays nothing). */
   level_up_sound_cooldown_s: z.number().int().min(0).max(86_400),
-  /** A notification not shown within this delay is dropped (never an old level-up much later). */
+  /** A sound or a chat line not played / sent within this delay is dropped (never an old level-up much later). */
   level_up_max_age_s: z.number().int().min(10).max(3600),
   /**
-   * The mode of a viewer who never chose one in the extension (docs/LEVEL_UP_V2.md § 5): « sound » since the reprise of
-   * 14/11/2026 (announced in chat and on stream with the sound); a viewer's own choice always wins.
+   * Level Up announcements in the Twitch chat (LeCroupier_, the commands' outbox), for every real level-up — independent
+   * of the viewer's sound choice; OFF until Antoni turns them on.
    */
-  level_up_default_mode: z.enum(['off', 'text', 'sound']),
-  /** Level Up announcements in the Twitch chat (LeCroupier_, the commands' outbox); OFF until Antoni turns them on. */
   level_up_chat: z.boolean(),
   /** The chat text for ONE viewer: {pseudo} and {niveau} are replaced (several viewers: one grouped line). */
   level_up_chat_text: z
@@ -66,6 +67,14 @@ export const ProgressionRulesSchema = z.strictObject({
         curve_base: z.number(),
         curve_exponent: z.number(),
       }),
+      /** The pace before the activation (its undo); absent for an activation made before 15/11/2026. */
+      previous_rates: z
+        .strictObject({
+          xp_per_minute: z.number(),
+          message_xp: z.number(),
+          message_cooldown_s: z.number(),
+        })
+        .optional(),
     })
     .nullable(),
 });
@@ -73,17 +82,17 @@ export type ProgressionRules = z.infer<typeof ProgressionRulesSchema>;
 
 export const DEFAULT_PROGRESSION_RULES: ProgressionRules = {
   xp_per_minute: 1,
-  message_xp: 5,
+  // 3 XP per message (decision of 15/11/2026): at most 4 × the passive pace (60 XP/h present, 240 XP/h chatting).
+  message_xp: 3,
   message_cooldown_s: 60,
   message_min_chars: 4,
   live_only: true,
   curve_base: 60,
   curve_exponent: 1.6,
   level_model: 'curve',
-  level_up_notifications: false,
-  level_up_sound_cooldown_s: 300,
+  level_up_sound: false,
+  level_up_sound_cooldown_s: 60,
   level_up_max_age_s: 120,
-  level_up_default_mode: 'sound',
   level_up_chat: false,
   level_up_chat_text: '@{pseudo} vient d’atteindre le niveau {niveau} !',
   level_up_chat_interval_s: 30,
@@ -117,23 +126,77 @@ export const LEVEL_V2 = {
   xpPerLevel: 1000,
   exponent: 0.7,
   targetMax: 50,
+  /** The pace set by the activation (decision of 15/11/2026); Studio can change it afterwards. */
+  rates: { xp_per_minute: 1, message_xp: 3, message_cooldown_s: 60 },
 } as const;
 
-/** A viewer's level-up notification: none (default), written, or written with a short sound. */
+/** Stored per viewer: 'sound' = the sound is on; anything else (or no row) = no sound. 'text' is the first V2 value. */
 export const LevelUpNotifyMode = z.enum(['off', 'text', 'sound']);
 export type LevelUpNotifyMode = z.infer<typeof LevelUpNotifyMode>;
 
-/** The extension's preferences: the 3-way mode; the first extension's boolean is still read (true = sound). */
+/**
+ * The extension's preference: « Jouer un son lorsque je monte de niveau » (`level_up_sound`). The first extension's
+ * boolean (`level_up_sfx_opt_in`, same meaning) and the three-way mode of the first V2 are still read.
+ */
 export const ViewerPrefsRequest = z
   .strictObject({
-    level_up_notify: LevelUpNotifyMode.optional(),
+    level_up_sound: z.boolean().optional(),
     level_up_sfx_opt_in: z.boolean().optional(),
+    level_up_notify: LevelUpNotifyMode.optional(),
   })
   .refine(
     (b) =>
-      b.level_up_notify !== undefined || b.level_up_sfx_opt_in !== undefined,
+      b.level_up_sound !== undefined ||
+      b.level_up_sfx_opt_in !== undefined ||
+      b.level_up_notify !== undefined,
     { message: 'empty' },
   );
+
+/**
+ * Studio: the historical choices of the first extension (raptoru.fr's EBS, Supabase table `ext_viewer_preferences`,
+ * written until the cutover of 20/10/2026), sent as rows of its export. The Twitch id is the identity; a choice made
+ * since in Raptoru 2.0's extension always wins (docs/LEVEL_UP_V2.md § 8).
+ */
+export const ViewerPrefsImportRequest = z.strictObject({
+  dry_run: z.boolean().default(true),
+  rows: z
+    .array(
+      z.strictObject({
+        channel_id: z.string().regex(/^\d{1,32}$/),
+        twitch_user_id: z
+          .string()
+          .regex(/^\d{1,32}$/)
+          .nullable(),
+        twitch_login: z.string().max(64).nullable().default(null),
+        level_up_sfx_opt_in: z.boolean(),
+        updated_at: z
+          .string()
+          .datetime({ offset: true })
+          .nullable()
+          .default(null),
+      }),
+    )
+    .max(50_000),
+});
+
+/**
+ * The level-up preference an extension sends (the Core's façade and the Lab EBS): `level_up_sound` (today's checkbox),
+ * the first extension's `level_up_sfx_opt_in` (same meaning) or the first V2's mode (`sound` = on). Anything else:
+ * null (refused).
+ */
+export function levelUpPrefBody(
+  body: unknown,
+): { level_up_sound: boolean } | null {
+  const b = (body ?? {}) as Record<string, unknown>;
+  if (typeof b.level_up_sound === 'boolean')
+    return { level_up_sound: b.level_up_sound };
+  if (typeof b.level_up_sfx_opt_in === 'boolean')
+    return { level_up_sound: b.level_up_sfx_opt_in };
+  const mode = b.level_up_notify;
+  if (mode === 'off' || mode === 'text' || mode === 'sound')
+    return { level_up_sound: mode === 'sound' };
+  return null;
+}
 
 /** Studio: switch every level to Level Up V2 — once, with a typed confirmation. */
 export const LevelV2ActivateRequest = z.strictObject({

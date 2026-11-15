@@ -4,12 +4,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
 
-// Level Up V2 in Studio (docs/PROGRESSION.md) — its own OBS browser source, apart from every other overlay (the Twitch
-// alerts, the effects player and the Halloween overlay are untouched). Core decides everything: which level-ups are
-// shown (the viewer's mode), which one gets the sound (the channel's cooldown), what is too old. Studio only asks Core
-// for the next notices WHILE an OBS source listens (nothing is claimed without one: an unseen level-up expires in Core,
-// never played late), pushes them to the source and remembers nothing. The sound: a short chime made here, or the
-// streamer's own file (runtimeDir/level-up/sound.mp3 | .ogg | .wav), at Studio's volume.
+// Level Up V2 in Studio (docs/LEVEL_UP_V2.md) — its own INVISIBLE OBS browser source, SOUND ONLY (never a banner, a
+// text or a frame on the stream), apart from every other overlay (the Twitch alerts, the effects player and the Halloween
+// overlay are untouched). Core decides everything: which level-up plays (the viewer turned the sound on, the channel's
+// sound is on, its cooldown), what is too old. Studio only asks Core for the next sounds WHILE an OBS source listens
+// (nothing is claimed without one: an unheard level-up expires in Core, never played late), pushes them to the source and
+// remembers nothing. The sound: a short chime made here (a test sound), or the streamer's own file sent from Studio
+// (runtimeDir/level-up/sound.mp3 | .ogg | .wav), at Studio's volume.
 
 export const CLAIM_EVERY_MS = 2000;
 export const DEFAULT_VOLUME = 70;
@@ -174,11 +175,11 @@ export class LevelUpRuntime {
   }
 
   private push(n: LevelUpNotice) {
+    // Nothing to draw: the page receives only « play the sound, at this volume » (no pseudo, no level).
+    if (!n.sound) return;
     const out = `event: levelup\ndata: ${JSON.stringify({
       id: n.id,
-      name: n.displayName,
-      level: n.level,
-      sound: n.sound,
+      sound: true,
       volume: this.volume / 100,
     })}\n\n`;
     for (const c of this.clients) c.write(out);
@@ -276,16 +277,16 @@ export class LevelUpRuntime {
       this.volume = v as number;
       return reply(200, { volume: this.volume });
     }
-    // To place the source in OBS: a sample notice shown on the connected sources only (no viewer, no Core).
+    // « Tester le son »: the sound on the connected sources only, at the volume set (no viewer, no Core).
     if (req.method === 'POST' && p === '/test') {
       if (!this.clients.size) return reply(409, { error: 'no_source' });
       this.push({
         id: 0,
         twitchUserId: '0',
-        displayName: 'Test Raptoru',
-        level: 42,
-        fromLevel: 41,
-        sound: body.sound === true,
+        displayName: 'Test',
+        level: 0,
+        fromLevel: 0,
+        sound: true,
       });
       return reply(200, { sent: true });
     }

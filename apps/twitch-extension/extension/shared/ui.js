@@ -232,13 +232,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   let viewerPreferenceLoaded = false;
   let viewerPreferenceLoading = false;
   let viewerPreferenceSaving = false;
-  // Level Up V2: the viewer's level-up notification mode — 'off' (default), 'text' (written) or 'sound' (written + sound).
-  let viewerPreferenceValue = 'off';
-  const LEVEL_UP_MODES = ['off', 'text', 'sound'];
-  // The Core answers the mode; an older façade only its boolean (true = with sound).
-  const levelUpMode = (response) => (LEVEL_UP_MODES.includes(response?.level_up_notify)
-    ? response.level_up_notify
-    : response?.level_up_sfx_opt_in === true ? 'sound' : 'off');
+  // Level Up V2: « Jouer un son lorsque je monte de niveau » — off unless the viewer turned it on (never assumed).
+  let viewerPreferenceValue = false;
+  // The Core answers `level_up_sound`; an older façade only the first extension's boolean (same meaning).
+  const levelUpSound = (response) => (typeof response?.level_up_sound === 'boolean'
+    ? response.level_up_sound
+    : response?.level_up_sfx_opt_in === true);
   let viewerPreferenceError = false;
   let viewerPreferenceRequest = 0;
   // Level Up V2: « Mon niveau » (GET /viewer/progression), read when the preferences open.
@@ -890,7 +889,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     viewerPreferenceLoaded = false;
     viewerPreferenceLoading = false;
     viewerPreferenceSaving = false;
-    viewerPreferenceValue = 'off';
+    viewerPreferenceValue = false;
     viewerPreferenceError = false;
     viewerPreferenceRequest += 1;
     viewerProgression = null;
@@ -938,7 +937,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       .then(() => client.getViewerPreference())
       .then((response) => {
         if (requestId !== viewerPreferenceRequest) return;
-        viewerPreferenceValue = levelUpMode(response);
+        viewerPreferenceValue = levelUpSound(response);
         viewerPreferenceLoaded = true;
         viewerPreferenceLoading = false;
         viewerPreferenceError = false;
@@ -948,7 +947,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         if (requestId !== viewerPreferenceRequest) return;
         // Lecture en échec = OFF. Le panneau reste utilisable et n'affiche
         // qu'un signal discret, sans jamais activer le son par défaut.
-        viewerPreferenceValue = 'off';
+        viewerPreferenceValue = false;
         viewerPreferenceLoaded = true;
         viewerPreferenceLoading = false;
         viewerPreferenceError = true;
@@ -959,7 +958,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function saveViewerPreference(nextValue) {
     if (viewerPreferenceSaving || typeof client?.setViewerPreference !== 'function') return;
     const previousValue = viewerPreferenceValue;
-    viewerPreferenceValue = LEVEL_UP_MODES.includes(nextValue) ? nextValue : 'off';
+    viewerPreferenceValue = nextValue === true;
     viewerPreferenceSaving = true;
     viewerPreferenceError = false;
     const requestId = ++viewerPreferenceRequest;
@@ -968,7 +967,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       .then(() => client.setViewerPreference(viewerPreferenceValue))
       .then((response) => {
         if (requestId !== viewerPreferenceRequest) return;
-        viewerPreferenceValue = levelUpMode(response);
+        viewerPreferenceValue = levelUpSound(response);
         viewerPreferenceLoaded = true;
         viewerPreferenceSaving = false;
         viewerPreferenceError = false;
@@ -1008,43 +1007,28 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const header = el('header', 'jdm-viewer-preferences__head');
     header.append(heading, close);
 
-    // Level Up V2 (docs/LEVEL_UP_V2.md): one choice among three (radio group) — the Core keeps it and applies it to the chat
-    // announcement and the stream's sound; never two controls for one setting.
+    // Level Up V2 (docs/LEVEL_UP_V2.md § 8): one checkbox, saved at once and kept by the Core. The chat announcement is the
+    // bot's (for everyone); this choice is only the sound on the stream.
     const option = el('div', 'jdm-viewer-preferences__option');
-    option.setAttribute('role', 'radiogroup');
-    option.setAttribute('aria-label', 'Mes Level Up sur le stream');
-    option.append(el('span', 'jdm-viewer-preferences__label', 'Mes Level Up sur le stream :'));
+    const label = el('label', 'jdm-viewer-preferences__label', 'Jouer un son lorsque je monte de niveau');
+    const input = el('input', 'jdm-viewer-preferences__control');
+    input.type = 'checkbox';
+    input.id = 'jdm-level-up-sfx-preference';
+    input.checked = viewerPreferenceValue === true;
+    label.htmlFor = input.id;
     const canEdit = state?.identity_shared === true
       && typeof client?.getViewerPreference === 'function'
       && typeof client?.setViewerPreference === 'function';
-    const hint = !canEdit && state?.identity_shared !== true
+    input.disabled = !canEdit || viewerPreferenceLoading || viewerPreferenceSaving;
+    input.title = !canEdit && state?.identity_shared !== true
       ? 'Partage ton identité Twitch pour modifier ce réglage.'
       : viewerPreferenceLoading
         ? 'Chargement…'
         : viewerPreferenceError
           ? 'Réglage indisponible. Réessaie en ouvrant les préférences.'
-          : '';
-    const choices = [
-      ['off', 'Désactivé', 'Aucune annonce de mes montées de niveau'],
-      ['text', 'Écrit', 'Une annonce dans le chat et à l’écran, sans son'],
-      ['sound', 'Sonore', 'Une annonce dans le chat et à l’écran, avec le son Level Up'],
-    ].map(([mode, text, help]) => {
-      const row = el('div', 'jdm-viewer-preferences__option');
-      const label = el('label', 'jdm-viewer-preferences__label', text);
-      const input = el('input', 'jdm-viewer-preferences__control');
-      input.type = 'radio';
-      input.name = 'jdm-level-up-notify';
-      input.value = mode;
-      input.id = `jdm-level-up-notify-${mode}`;
-      input.checked = viewerPreferenceValue === mode;
-      input.disabled = !canEdit || viewerPreferenceLoading || viewerPreferenceSaving;
-      input.title = hint || help;
-      label.title = hint || help;
-      label.htmlFor = input.id;
-      input.addEventListener('change', () => { if (input.checked) saveViewerPreference(mode); });
-      row.append(label, input);
-      return row;
-    });
+          : 'Un court son sur le stream quand tu passes un niveau';
+    input.addEventListener('change', () => saveViewerPreference(input.checked));
+    option.append(label, input);
     if (viewerPreferenceError && state?.identity_shared === true) {
       const status = el('span', 'jdm-viewer-preferences__status', 'Indisponible');
       status.setAttribute('role', 'status');
@@ -1064,7 +1048,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         error: viewerProgressionState === 'error',
       })]
       : [];
-    panel.append(header, ...level, option, ...choices, refreshAction);
+    panel.append(header, ...level, option, refreshAction);
     return panel;
   }
 

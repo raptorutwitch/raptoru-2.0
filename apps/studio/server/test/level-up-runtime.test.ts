@@ -99,9 +99,8 @@ describe('Level Up OBS source', () => {
     expect(calls).toEqual([]); // no source: never claimed
     expect((await fetch(`${origin}/level-up/events?t=nope`)).status).toBe(403);
     const got = await read(origin, token, 1);
-    expect(got).toEqual([
-      { id: 7, name: 'Ana', level: 12, sound: true, volume: 0.7 },
-    ]);
+    // Only « play the sound »: no pseudo, no level — nothing to draw.
+    expect(got).toEqual([{ id: 7, sound: true, volume: 0.7 }]);
     expect(calls[0]).toEqual([
       '/v1/studio/progression/levelups/claim',
       { consumer: expect.stringMatching(/^studio-lu-/) },
@@ -126,12 +125,34 @@ describe('Level Up OBS source', () => {
     expect((await api('/api/level-up/test', { sound: true })).body).toEqual({
       sent: true,
     });
-    expect(await reading).toMatchObject([
-      { id: 0, name: 'Test Raptoru', level: 42, sound: true },
-    ]);
+    expect(await reading).toEqual([{ id: 0, sound: true, volume: 0.7 }]);
     expect(calls.every(([p]) => p.endsWith('/levelups/claim'))).toBe(true);
     // The Studio header is required for the panel API.
     expect((await fetch(`${origin}/api/level-up/state`)).status).toBe(403);
+  });
+
+  it('the OBS page draws nothing: no visible element, no text, no style that shows anything', async () => {
+    const { origin } = await start([]);
+    const html = await (await fetch(`${origin}/level-up/player.html`)).text();
+    const body = /<body>([\s\S]*)<\/body>/.exec(html)![1]!;
+    // Only the script (and a comment): no element that could appear on the stream.
+    expect(
+      body
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/<script[^>]*><\/script>/g, '')
+        .trim(),
+    ).toBe('');
+    const js = await (await fetch(`${origin}/level-up/player.js`)).text();
+    for (const drawing of [
+      'document',
+      'textContent',
+      'innerHTML',
+      'createElement',
+      'append',
+      'style',
+    ])
+      expect(js).not.toContain(drawing);
+    expect(js).toContain("new Audio('/level-up/sound')");
   });
 
   it('the page files, the default chime (a short WAV), the streamer’s own sound first', async () => {

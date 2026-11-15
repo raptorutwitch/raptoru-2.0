@@ -5,7 +5,7 @@ import {
   type SoundLabSound,
   type TtsLabViewerState,
 } from '@raptoru/schemas';
-import { moduleFacade } from '@raptoru/schemas';
+import { levelUpPrefBody, moduleFacade } from '@raptoru/schemas';
 import type { SoundWorker } from '../sound-lab/worker.js';
 import type { TtsWorker } from '../tts-lab/worker.js';
 import type { LabCoreCall } from '../lab-moderation/proxy.js';
@@ -1621,23 +1621,14 @@ export class LabEbs {
     }
     // Level Up V2: the Lab Core keeps the viewer's mode (as the main Core does), for the viewer of the token.
     if (path.split('?')[0] === '/viewer/preferences' && this.labCore) {
-      const mode = body?.level_up_notify;
-      const valid = mode === 'off' || mode === 'text' || mode === 'sound';
-      if (
-        method === 'POST' &&
-        !valid &&
-        typeof body?.level_up_sfx_opt_in !== 'boolean'
-      )
+      const prefBody = levelUpPrefBody(body);
+      if (method === 'POST' && !prefBody)
         return this.fail(400, 'invalid_payload');
       try {
         return this.ok(
           await this.labCore<Json>(
             `/v1/lab/progression/prefs/${caller.identity.twitchUserId}`,
-            method !== 'POST'
-              ? undefined
-              : valid
-                ? { level_up_notify: mode }
-                : { level_up_sfx_opt_in: body!.level_up_sfx_opt_in },
+            method !== 'POST' ? undefined : prefBody!,
           ),
         );
       } catch (e) {
@@ -1720,22 +1711,14 @@ export class LabEbs {
       );
     }
     if (path === '/viewer/preferences') {
-      const mode = body?.level_up_notify;
-      const valid = mode === 'off' || mode === 'text' || mode === 'sound';
-      if (
-        method === 'POST' &&
-        !valid &&
-        typeof body?.level_up_sfx_opt_in !== 'boolean'
-      )
+      const prefBody = levelUpPrefBody(body);
+      if (method === 'POST' && !prefBody)
         return this.fail(400, 'invalid_payload');
-      // Without the Lab Core (unit tests): the façade's memory.
+      // Without the Lab Core (unit tests): the façade's memory (off when nothing was chosen).
       const user = this.user(identity.twitchUserId);
-      if (method === 'POST')
-        user.levelUpSfx = valid
-          ? mode === 'sound'
-          : body.level_up_sfx_opt_in === true;
+      if (method === 'POST') user.levelUpSfx = prefBody!.level_up_sound;
       return this.ok({
-        level_up_notify: user.levelUpSfx ? 'sound' : 'off',
+        level_up_sound: user.levelUpSfx,
         level_up_sfx_opt_in: user.levelUpSfx,
       });
     }

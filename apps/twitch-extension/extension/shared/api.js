@@ -301,13 +301,13 @@ export function createClient({
     }
     if (path === '/viewer/preferences') {
       if (method === 'GET') {
-        const mode = demo.viewer_preferences?.level_up_notify ?? 'off';
-        return Promise.resolve({ ok: true, level_up_notify: mode, level_up_sfx_opt_in: mode === 'sound' });
+        const on = demo.viewer_preferences?.level_up_sound === true;
+        return Promise.resolve({ ok: true, level_up_sound: on, level_up_sfx_opt_in: on });
       }
-      if (method === 'POST' && ['off', 'text', 'sound'].includes(body?.level_up_notify)) {
+      if (method === 'POST' && typeof body?.level_up_sound === 'boolean') {
         demo.viewer_preferences ??= {};
-        demo.viewer_preferences.level_up_notify = body.level_up_notify;
-        return Promise.resolve({ ok: true, level_up_notify: body.level_up_notify, level_up_sfx_opt_in: body.level_up_notify === 'sound' });
+        demo.viewer_preferences.level_up_sound = body.level_up_sound;
+        return Promise.resolve({ ok: true, level_up_sound: body.level_up_sound, level_up_sfx_opt_in: body.level_up_sound });
       }
       return Promise.reject(Object.assign(new Error('invalid_payload'), { code: 'invalid_payload' }));
     }
@@ -485,9 +485,9 @@ export function createClient({
     getViewerPreference: () => call('GET', '/viewer/preferences'),
     // Level Up V2: « Mon niveau » (level, XP, the next level's threshold, badges owned).
     getViewerProgression: () => call('GET', '/viewer/progression'),
-    // Level Up V2: 'off' | 'text' | 'sound'.
-    setViewerPreference: (mode) => call('POST', '/viewer/preferences', {
-      body: { level_up_notify: ['off', 'text', 'sound'].includes(mode) ? mode : 'off' },
+    // Level Up V2: « Jouer un son lorsque je monte de niveau » (true / false).
+    setViewerPreference: (on) => call('POST', '/viewer/preferences', {
+      body: { level_up_sound: on === true },
     }),
     refresh: async () => {
       if (!lastSession) return call('GET', '/session');

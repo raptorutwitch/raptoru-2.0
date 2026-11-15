@@ -147,11 +147,11 @@ describe('XP sources', () => {
         msg(CH, 'le streamer parle', { role: 'broadcaster' }),
       ),
     ).toBe('excluded');
-    expect(await xp('1')).toBe(10);
+    expect(await xp('1')).toBe(6); // 2 rewarded messages × 3 XP
     // Every message the bot received is COUNTED once (the command too); XP only for 2 of them (cooldown, length).
     const v = await svc.viewer(CH, '1');
     expect(v.messages).toBe(5);
-    expect(v.periods.week).toEqual({ xp: 10, watchMinutes: 0, messages: 5 });
+    expect(v.periods.week).toEqual({ xp: 6, watchMinutes: 0, messages: 5 });
   });
 
   it('a progression failure never undoes the presence cycle (the Jetons of that interval): its own savepoint', async () => {
@@ -558,7 +558,7 @@ describe('WizeBot history: identity rules, automatic and manual attachment', () 
         msg('12', 'coucou tout le monde', { login: 'bavard' }),
       ),
     ).toBe('xp');
-    expect(await xp('12')).toBe(xpForLevel(4, rules) + 5);
+    expect(await xp('12')).toBe(xpForLevel(4, rules) + 3);
     // Sign-in on raptoru.fr: the site's verified pair joins the directory; attached once.
     expect(
       await svc.identify(CH, {
