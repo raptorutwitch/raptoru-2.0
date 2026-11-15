@@ -36,6 +36,8 @@ export interface EditCtx {
   aliasErr: string;
   cdCustom: boolean;
   conflict: null | { by: string; version: number; both: string[] };
+  /** The sounds imported in Studio for the « sound » action (Studio's OBS sound source plays them). */
+  sounds: { id: string; label: string }[];
 }
 const WHEN = {
   always: 'Tout le temps',
@@ -178,24 +180,55 @@ export function replyHtml(c: EditCtx) {
 
 // --- Étapes -------------------------------------------------------------------------------------------------------------
 
-const asChat = (a: CmdAction): a is Extract<CmdAction, { type: 'chat' }> =>
-  a.type === 'chat';
+type ChatAction = Extract<CmdAction, { type: 'chat' }>;
+type SoundAction = Extract<CmdAction, { type: 'sound' }>;
+const isStep = (a: CmdAction): a is ChatAction | SoundAction =>
+  a.type === 'chat' || a.type === 'sound';
+
+/** The step's move / remove buttons (a message or a sound). */
+const stepTools = (id: string, what: string) =>
+  `<span class="cdx-step__x"><button type="button" class="d-ib" data-amove="${id}:-1" aria-label="Monter">${ic('down', 'cdx-up')}</button><button type="button" class="d-ib" data-amove="${id}:1" aria-label="Descendre">${ic('down')}</button><button type="button" class="d-ib" data-adel="${id}" aria-label="Retirer ${what}">${ic('trash')}</button></span>`;
 
 export function stepsHtml(c: EditCtx) {
   const { d } = c;
   const lk = isLocked(c, 'actions');
   const mod = d.actions.filter((a) => a.type === 'module');
-  const chat = d.actions.filter(asChat);
+  const chat = d.actions.filter(isStep);
   const modes = MODES.filter((m) => m[0] !== 'silent');
-  const stepRow = (a: (typeof chat)[number], n: number) =>
-    `<li class="cdx-step"><i>${n}</i>${
+  // A sound: one of the sounds imported in Studio, played by its OBS sound source (the « Level Up » source).
+  const soundRow = (a: SoundAction, n: number) => {
+    const known = c.sounds.some((x) => x.id === a.sound);
+    const opts = [
+      ...c.sounds.map(
+        (x) =>
+          `<option value="${esc(x.id)}" ${x.id === a.sound ? 'selected' : ''}>${esc(x.label)}</option>`,
+      ),
+      ...(known
+        ? []
+        : [
+            `<option value="${esc(a.sound)}" selected>${esc(a.label)} (fichier absent de ce PC)</option>`,
+          ]),
+      '<option value="__import">Importer un son…</option>',
+    ].join('');
+    return `<li class="cdx-step"><i>${n}</i>${
       lk
-        ? `<span>${esc(a.text)}</span>`
-        : `<div class="cdx-step__b"><label class="d-fld"><input type="text" data-atext="${a.id}" value="${esc(a.text)}" maxlength="500" placeholder="Texte du message" aria-label="Texte du message"></label>
+        ? `<span>${ic('sound')} ${esc(a.label)}</span>`
+        : `<div class="cdx-step__b"><label class="d-fld"><select data-asound="${a.id}" aria-label="Son joué sur le stream">${opts}</select></label>
+        <span class="cdx-step__m"><button type="button" class="d-btn ghost sm" data-asoundtry="${esc(a.sound)}">${ic('sound')}Écouter dans OBS</button><span class="d-faint">Joué sur le stream par la source OBS sonore (« Level Up »), rien ne s’affiche.</span></span></div>
+        ${stepTools(a.id, 'ce son')}`
+    }</li>`;
+  };
+  const stepRow = (a: (typeof chat)[number], n: number) =>
+    a.type === 'sound'
+      ? soundRow(a, n)
+      : `<li class="cdx-step"><i>${n}</i>${
+          lk
+            ? `<span>${esc(a.text)}</span>`
+            : `<div class="cdx-step__b"><label class="d-fld"><input type="text" data-atext="${a.id}" value="${esc(a.text)}" maxlength="500" placeholder="Texte du message" aria-label="Texte du message"></label>
         <span class="cdx-step__m"><label class="d-fld"><select data-amode="${a.id}" aria-label="Façon d’envoyer">${modes.map(([k, l, , , ok]) => `<option value="${k}" ${a.mode === k ? 'selected' : ''} ${ok || a.mode === k ? '' : 'disabled'}>${esc(l)}${ok ? '' : ' (non supporté)'}</option>`).join('')}</select></label>
         <label class="d-fld"><select data-aerr="${a.id}" aria-label="Si cet envoi échoue"><option value="continue" ${a.on_error === 'continue' ? 'selected' : ''}>Si échec : continuer</option><option value="stop" ${a.on_error === 'stop' ? 'selected' : ''}>Si échec : arrêter</option></select></label></span></div>
-        <span class="cdx-step__x"><button type="button" class="d-ib" data-amove="${a.id}:-1" aria-label="Monter">${ic('down', 'cdx-up')}</button><button type="button" class="d-ib" data-amove="${a.id}:1" aria-label="Descendre">${ic('down')}</button><button type="button" class="d-ib" data-adel="${a.id}" aria-label="Retirer ce message">${ic('trash')}</button></span>`
-    }</li>`;
+        ${stepTools(a.id, 'ce message')}`
+        }</li>`;
   const replyRow = (n: number) =>
     `<li class="cdx-step is-reply"><i>${n}</i><span>La réponse ci-dessus</span></li>`;
   const list = chat.length
@@ -205,10 +238,10 @@ export function stepsHtml(c: EditCtx) {
     : [];
   return `<div class="cdx-sech"><span class="d-lb">Ensuite</span>
       ${chat.length ? `<label class="cdx-inl">Répondre d’abord ${sw(d.reply_first, 'data-replyfirst', 'Envoyer la réponse avant les autres messages', { disabled: isLocked(c, 'reply_first') })}</label>` : ''}
-      <span class="d-sp"></span>${lk ? '' : `<button type="button" class="d-btn ghost sm" data-addchat>${ic('plus')}Ajouter un message</button>`}</div>
+      <span class="d-sp"></span>${lk ? '' : `<button type="button" class="d-btn ghost sm" data-addchat>${ic('plus')}Ajouter un message</button><button type="button" class="d-btn ghost sm" data-addsound>${ic('sound')}Ajouter un son</button><input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" data-soundfile hidden>`}</div>
     ${mod.map((a) => `<p class="cdx-ro">${ic('lock')}<span>Action du module ${esc(a.type === 'module' ? `${modName(a.module)} · ${a.operation}` : '')} : fournie et protégée par le module, qui l’exécute lui-même.</span></p>`).join('')}
     ${list.length ? `<ol class="cdx-steps">${list.join('')}</ol>` : ''}
-    ${chat.length || lk ? '' : '<p class="d-note">Aujourd’hui, des messages dans le chat. Sons, OBS et Jetons viendront plus tard.</p>'}`;
+    ${chat.length || lk ? '' : '<p class="d-note">Des messages dans le chat et des sons sur le stream, seuls ou ensemble. Pour une commande qui joue seulement un son, choisis « Ne rien répondre » dans la réponse.</p>'}`;
 }
 
 // --- Règles : une case par règle, le réglage s'ouvre sur place -------------------------------------------------------------
@@ -257,6 +290,15 @@ function whoPop(c: EditCtx) {
     }
     <div class="d-lb">Autoriser aussi</div>
     ${isLocked(c, 'audience.allow') ? lockRo(c, a.allow.join(', ') || 'Personne') : chips(a.allow, 'allow', '+ pseudo')}
+    <div class="d-lb">Viewers précis (ID Twitch : garde le droit même s’il change de pseudo)</div>
+    ${
+      isLocked(c, 'audience.allow')
+        ? lockRo(
+            c,
+            (a.allow_ids ?? []).map((x) => x.name).join(', ') || 'Personne',
+          )
+        : `<div class="cdx-chips">${(a.allow_ids ?? []).map((x) => `<button type="button" class="d-tag" data-chipdel="allowid|${esc(x.id)}" aria-label="Retirer ${esc(x.name)}">${esc(x.name)} <small>${esc(x.id)}</small>${ic('x')}</button>`).join('')}<input type="text" data-chipin="allowid" placeholder="+ pseudo ou ID Twitch" aria-label="Ajouter un viewer par son pseudo ou son ID Twitch" autocomplete="off" spellcheck="false"></div>`
+    }
     <div class="d-lb">Exclure</div>
     ${isLocked(c, 'audience.deny') ? lockRo(c, a.deny.join(', ') || 'Personne') : chips(a.deny, 'deny', '+ pseudo')}
     ${sentence(whoSentence(a))}`;

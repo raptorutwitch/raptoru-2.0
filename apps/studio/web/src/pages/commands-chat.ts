@@ -23,7 +23,7 @@ export interface Decision {
   args: Record<string, string | number>;
   rendered: {
     reply: { mode: string; text: string; reply_to: string | null } | null;
-    actions: { type: string; mode?: string; text?: string }[];
+    actions: { type: string; mode?: string; text?: string; label?: string }[];
     reply_first: boolean;
   } | null;
   viewer: { groups: string[]; role: string; follower: boolean | null };
@@ -223,10 +223,12 @@ export function verdictHtml(t: Tester) {
       ]
     : [];
   const ok = d.decision === 'accepted';
+  const sounds = r ? r.actions.filter((a) => a.type === 'sound') : [];
   return `<section class="cdx-verdict ${ok ? 'ok' : 'no'} d-in">
     <header>${ic(ok ? 'check' : 'warn')}<b>${ok ? `Acceptée pour ${esc(t.ranBy)}` : `Refusée : ${esc(REASON[d.reason ?? ''] ?? d.reason)}`}</b></header>
     <p>${esc(d.message)}</p>
     ${lines.length ? `<div class="cdx-real"><span class="d-lb">Serait envoyé</span>${lines.map((l) => line(l.mode ?? 'normal', esc(l.text), t.ranBy)).join('')}</div>` : ok ? '<p class="d-faint">Aucun message (le bot n’écrit rien).</p>' : ''}
+    ${sounds.length ? `<p class="d-note">${ic('sound')} Son joué sur le stream (source OBS sonore) : ${sounds.map((x) => esc(x.label ?? '')).join(', ')}.</p>` : ''}
     <details class="d-acc"><summary>Contrôles du serveur</summary>
       <ol class="cdx-checks">${d.checks.map((x) => `<li class="${x.ok ? '' : 'no'}">${ic(x.ok ? 'check' : 'x')}<span>${esc(CHECK[x.check] ?? x.check)}${!x.ok && extra.length ? `<small>${extra.map(esc).join(' · ')}</small>` : ''}</span></li>`).join('')}</ol>
       <dl class="d-kv"><dt>Message testé</dt><dd>${esc(t.ran)}</dd><dt>Groupes vus</dt><dd>${esc(d.viewer.groups.join(', ') || 'aucun')}</dd><dt>Stream</dt><dd>${d.live ? 'en live' : 'hors live'}</dd>${Object.entries(

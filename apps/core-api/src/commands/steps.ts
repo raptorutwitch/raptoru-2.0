@@ -89,24 +89,32 @@ export function draftSteps(r: Rendered): StepDraft[] {
         },
       ]
     : [];
-  const actions: StepDraft[] = r.actions.map((a) =>
-    a.type === 'module'
-      ? {
-          kind: 'action',
-          type: 'module',
-          params: { action_id: a.id, module: a.module, operation: a.operation },
-          on_error: a.on_error,
-          skip: {
-            code: 'module_not_executed',
-            message: 'module actions are not executed by Commands V2 (phase C)',
+  // A sound is not a chat step: it goes to Studio's OBS sound source (cmd_sounds, queued by the admission).
+  const actions: StepDraft[] = r.actions.flatMap((a) =>
+    a.type === 'sound'
+      ? []
+      : a.type === 'module'
+        ? {
+            kind: 'action',
+            type: 'module',
+            params: {
+              action_id: a.id,
+              module: a.module,
+              operation: a.operation,
+            },
+            on_error: a.on_error,
+            skip: {
+              code: 'module_not_executed',
+              message:
+                'module actions are not executed by Commands V2 (phase C)',
+            },
+          }
+        : {
+            kind: 'action',
+            type: 'chat',
+            params: { action_id: a.id, ...chatParams(a) },
+            on_error: a.on_error,
           },
-        }
-      : {
-          kind: 'action',
-          type: 'chat',
-          params: { action_id: a.id, ...chatParams(a) },
-          on_error: a.on_error,
-        },
   );
   return (r.reply_first ? [...reply, ...actions] : [...actions, ...reply]).map(
     (d) =>
@@ -311,6 +319,36 @@ export async function insertWordGameSteps(
     written += rows.length;
   }
   return written;
+}
+
+/**
+ * The sounds of an accepted command use (its « sound » actions), queued for Studio's invisible OBS sound source in the
+ * admission's transaction: once per invocation and action (a replayed message writes nothing), expiring with the chat
+ * steps (never played late). Independent of « Sortie chat réelle » (not a chat message).
+ */
+export async function insertSounds(
+  q: Queryable,
+  s: {
+    invocationId: string;
+    channelId: string;
+    now: Date;
+    ttlMs: number;
+    sounds: { action_id: string; sound: string }[];
+  },
+) {
+  for (const x of s.sounds)
+    await q.query(
+      `insert into cmd_sounds (channel_id, invocation_id, action_id, sound, status, created_at, expires_at)
+       values ($1, $2, $3, $4, 'queued', $5, $6) on conflict (invocation_id, action_id) do nothing`,
+      [
+        s.channelId,
+        s.invocationId,
+        x.action_id,
+        x.sound,
+        s.now,
+        new Date(s.now.getTime() + s.ttlMs),
+      ],
+    );
 }
 
 /**
@@ -618,6 +656,32 @@ export class CommandSteps {
           ],
         });
       return { step: stepView(row), replayed: false };
+    });
+  }
+
+  /**
+   * Studio's OBS sound source (every 2 s while a source listens): the command sounds to play now, each handed out ONCE
+   * (played, with the consumer); one older than its minute of life is expired, never played late.
+   */
+  async claimSounds(channelId: string, consumer: string) {
+    return this.db.tx(async (q) => {
+      const now = this.clock.now();
+      await q.query(
+        `update cmd_sounds set status = 'expired' where channel_id = $1 and status = 'queued' and expires_at <= $2`,
+        [channelId, now],
+      );
+      const rows = await q.query<{ id: string; sound: string }>(
+        `update cmd_sounds set status = 'played', played_at = $2, consumer = $3
+         where id in (select id from cmd_sounds where channel_id = $1 and status = 'queued' order by id limit 5
+           for update skip locked)
+         returning id, sound`,
+        [channelId, now, consumer],
+      );
+      return {
+        sounds: rows
+          .sort((a, b) => Number(a.id) - Number(b.id))
+          .map((r) => ({ id: Number(r.id), sound: r.sound })),
+      };
     });
   }
 

@@ -32,11 +32,20 @@ export type CmdGroup = z.infer<typeof CmdGroup>;
 
 const unique = <T>(list: T[]) => new Set(list).size === list.length;
 
+/** A viewer allowed by their STABLE Twitch id (a rename keeps the right); `name` is only the label shown. */
+export const CmdAllowedId = z.strictObject({
+  id: z.string().regex(/^[0-9]{1,32}$/),
+  name: z.string().trim().min(1).max(40),
+});
+export type CmdAllowedId = z.infer<typeof CmdAllowedId>;
+
 export const CmdAudience = z
   .strictObject({
     groups: z.array(CmdGroup).max(7),
     /** People allowed on top of the groups (or alone when no group is on). */
     allow: z.array(CmdLogin).max(50),
+    /** People allowed by their Twitch id (same role as `allow`, rename-proof). Absent before 15/11/2026: none. */
+    allow_ids: z.array(CmdAllowedId).max(50).optional(),
     /** People who can never use it — wins over the groups and over `allow`. */
     deny: z.array(CmdLogin).max(50),
   })
@@ -54,6 +63,10 @@ export const CmdAudience = z
   .refine((a) => !a.allow.some((l) => a.deny.includes(l)), {
     message: 'a login cannot be both allowed and excluded',
     path: ['deny'],
+  })
+  .refine((a) => unique((a.allow_ids ?? []).map((x) => x.id)), {
+    message: 'duplicate Twitch id',
+    path: ['allow_ids'],
   });
 export type CmdAudience = z.infer<typeof CmdAudience>;
 
@@ -130,10 +143,13 @@ export const CmdArg = z.strictObject({
 });
 export type CmdArg = z.infer<typeof CmdArg>;
 
+/** A sound imported in Studio (its id there): Studio's invisible OBS sound source plays it. */
+export const CmdSoundId = z.string().regex(/^[a-f0-9]{16}$/);
+
 /**
  * Ordered actions after (or before) the reply. Versioned (`v`) and typed; new types are added as new
- * members of this union in later phases (sound, wait, condition, OBS, wallet…). Phase A persists only
- * these two: an extra chat message, and the protected action of a module (system commands only).
+ * members of this union (wait, condition, OBS, wallet… later). Today: an extra chat message, a sound on stream, and
+ * the protected action of a module (system commands only).
  */
 const ActionBase = {
   /** Stable id of the action (UI ordering, history). */
@@ -146,6 +162,15 @@ export const CmdAction = z.discriminatedUnion('type', [
     v: z.literal(1),
     ...ActionBase,
     ...messageShape,
+  }),
+  z.strictObject({
+    /** A sound played on stream (Studio's invisible OBS sound source), once per accepted use. */
+    type: z.literal('sound'),
+    v: z.literal(1),
+    ...ActionBase,
+    sound: CmdSoundId,
+    /** The sound's name in Studio, shown in the command (display only). */
+    label: z.string().trim().min(1).max(60),
   }),
   z.strictObject({
     type: z.literal('module'),

@@ -160,17 +160,34 @@ export function canonical(v: unknown): string {
 }
 export const same = (a: unknown, b: unknown) => canonical(a) === canonical(b);
 
+/**
+ * The value of an audience part as the rights and the history see it: the people allowed by name AND by Twitch id are
+ * one field (`audience.allow`, the same team right), shown « Name (ID 123) ».
+ */
+const audiencePart = (
+  a: CmdConfig['audience'],
+  sub: 'groups' | 'allow' | 'deny',
+) =>
+  sub === 'allow'
+    ? [...a.allow, ...(a.allow_ids ?? []).map((x) => `${x.name} (ID ${x.id})`)]
+    : a[sub];
+
 /** Field-level diff (`audience` split into groups / allow / deny), in a stable order. */
 export function diffConfig(before: CmdConfig, after: CmdConfig): FieldChange[] {
   const out: FieldChange[] = [];
   for (const key of Object.keys(after) as (keyof CmdConfig)[]) {
     if (key === 'audience') {
       for (const sub of ['groups', 'allow', 'deny'] as const)
-        if (!same(before.audience[sub], after.audience[sub]))
+        if (
+          !same(
+            audiencePart(before.audience, sub),
+            audiencePart(after.audience, sub),
+          )
+        )
           out.push({
             field: `audience.${sub}`,
-            before: before.audience[sub],
-            after: after.audience[sub],
+            before: audiencePart(before.audience, sub),
+            after: audiencePart(after.audience, sub),
           });
     } else if (!same(before[key], after[key]))
       out.push({ field: key, before: before[key], after: after[key] });

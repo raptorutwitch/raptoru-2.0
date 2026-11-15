@@ -1578,6 +1578,10 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               'server',
               'level-up-player',
             ),
+            // Commands « sound » actions (« !groslot »): the same invisible source, the commands' channel (cockpit).
+            ...(labCore
+              ? { commandSounds: { core: labCore, channelId: cockpitChannel } }
+              : {}),
           })
         : null),
     labPanel:
