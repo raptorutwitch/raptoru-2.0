@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 15/11/2026** (Level Up V2 clôturé : finitions déployées). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+**Mis à jour le 15/11/2026** (Commandes Chat V2.1 livré : rôles, expressions, édition déléguée). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
@@ -17,20 +17,25 @@ Règle de partage : le Core décide (données, Jetons, règles, files), le bot L
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (15/11 ~15:45 UTC) : Core 7def8f5d, bot d2fd5bb7 (sains), Studio 0.1.36 publié (installation = Antoni),
-site inchangé. origin/main = 7def8f5d (+ cette documentation).
-Commandes Chat : action « son » (un son importé dans Studio, joué par la source OBS sonore « Level Up ») et viewers
-précis par ID Twitch (Studio › Commandes › Ensuite › Ajouter un son ; Qui › Viewers précis). docs/COMMANDS_V2_STATUS.md.
+Production (15/11 ~19:20 UTC) : Core f9146944, bot d2fd5bb7 (sains), Studio 0.1.37 publié (installation = Antoni),
+site inchangé. origin/main = f9146944 (+ cette documentation).
+Commandes Chat (docs/COMMANDS_V2_STATUS.md) : action « son » (joué par la source OBS sonore « Level Up »), viewers
+précis par ID Twitch ; V2.1 : déclencheur « message contenant une expression » (sans « ! », une fois par message, mot
+entier ou n'importe où) et édition déléguée (Studio › Règles › Modification déléguée : le viewer active / coupe la
+commande et change ses expressions depuis l'extension, Commandes › « Mes commandes modifiables », Production comprise).
+Le « bug Streamer » était le délai de 5 min par personne (refus silencieux) + le « Tester » de Studio avec un ID fictif
+(corrigé : il parle avec l'ID de la chaîne).
 Level Up V2 : 1 000 XP/niveau, normalisation WizeBot appliquée (910 comptes, 441 niveaux changés), 11 badges sub
 (266 attributions), préférences historiques restaurées. Vraie annonce Twitch « 🚀 LEVEL UP — Pseudo [Titre] (niveau) »
 groupée sur 5 min (8 pseudos), sans @ ; un seul son par annonce, 3 s avant le bandeau (0–5 s), seulement si un viewer
 nommé l'a activé. Pseudos du classement repris de Twitch par l'identifiant (0 numérique). Studio › Level Up : réglages,
 « Viewers avec son activé », « Pseudos du classement », vraie annonce [TEST] sur confirmation.
 Extension : mini-profil (avatar, Jetons/Crédits, niveau et rang, abonnement et multiplicateur, restrictions, Préférences)
-fusionné dans les deux shells, PAS ENCORE PUBLIC : inventaire release-inventory/INVENTAIRE-7355c44acce2.md à valider
-par Antoni, puis npm run package:production -- --shell v2, Hosted Test, revue Twitch. Publique : présumée 0bf7907.
+et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE PUBLIC : inventaire
+release-inventory/INVENTAIRE-a971386f8c8d.md (95 commits, remplace 7355c44acce2) à valider par Antoni, puis
+npm run package:production -- --shell v2 (--check déjà vert), Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Gestes d'Antoni restants : installer Studio 0.1.36, actualiser une fois la source OBS « Level Up », créer !groslot ;
+Gestes d'Antoni restants : installer Studio 0.1.37 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) ;
 essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension et la publier.
 Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
 
@@ -168,8 +173,9 @@ Activation du matin (GO d'Antoni) :
 
 - installer Studio 0.1.35 ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
-- la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-7355c44acce2.md`, 94 commits), puis la publication.
-  Elle remplace les inventaires non validés `4799eb697eee` et `bb8700814939`.
+- la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
+  plus de Level Up V2 et du mini-profil), puis la publication. Il remplace les inventaires non validés
+  `7355c44acce2`, `4799eb697eee` et `bb8700814939`.
 
 **En Production** : tous les modules de [ROADMAP.md](ROADMAP.md) § 1 marqués « Livré ». Music Hub y est **seulement
 pour les testeurs**. Le public garde l'extension présumée `0bf7907` (shell legacy) : ni le mini-profil, ni
