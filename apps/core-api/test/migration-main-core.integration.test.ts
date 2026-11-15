@@ -101,6 +101,6 @@ describe.skipIf(!isLocal)('main Core migrations, real Postgres', () => {
     );
     // A failing file never stays half applied: one transaction per file.
     const recorded = await n('schema_migrations');
-    expect(recorded).toBe(74);
+    expect(recorded).toBe(75);
   });
 });

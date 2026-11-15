@@ -125,4 +125,78 @@ describe.skipIf(!isLocal)('Commands V2 admission on a real Postgres', () => {
     }
     expect(order).toEqual([...order].sort((x, y) => x - y));
   });
+  it('delegated editor (V2.1): concurrent saves over two connections → one wins, the other 409; a keyword message in parallel is admitted once', async () => {
+    const clock = new FakeClock(new Date('2026-11-15T20:00:00Z'));
+    const studio = {
+      id: 'antoni',
+      role: 'broadcaster' as const,
+      via: 'studio' as const,
+    };
+    const c = await new CommandsService(a, clock).create('900100', studio, {
+      name: 'ao',
+      reply: { mode: 'normal', text: 'ao !', to: 'none' },
+      audience: {
+        groups: [],
+        allow: [],
+        allow_ids: [{ id: '501', name: 'Aouh' }],
+        deny: [],
+      },
+      trigger: { mode: 'keywords', keywords: ['ao'], match: 'word' },
+      editors: [{ id: '501', name: 'Aouh' }],
+      cooldown: { enabled: false, seconds: 30, unit: 's', scope: 'viewer' },
+    });
+    const aouh = {
+      id: '501',
+      role: 'viewer' as const,
+      via: 'extension' as const,
+    };
+    const saves = await Promise.allSettled(
+      [a, b, a, b].map((db, i) =>
+        new CommandsService(db, clock).delegateUpdate('900100', c.command_id, {
+          actor: aouh,
+          expected_version: c.version,
+          keywords: [`mot${i}`],
+        }),
+      ),
+    );
+    expect(saves.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(
+      saves
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .map((r) => (r.reason as { status: number }).status),
+    ).toEqual([409, 409, 409]);
+    const won = (
+      await a.query<{
+        version: number;
+        config: { trigger: { keywords: string[] } };
+      }>('select version, config from cmd_commands where command_id = $1', [
+        c.command_id,
+      ])
+    )[0]!;
+    expect(won.version).toBe(c.version + 1);
+    const word = won.config.trigger.keywords[0]!;
+    // The same Twitch message delivered to both Cores at once: one invocation.
+    const out = await Promise.all(
+      [a, b].map((db) =>
+        new CommandsAdmission(db, clock).chat({
+          channel_id: '900100',
+          message_id: 'kw-1',
+          text: `franchement ${word} !`,
+          chatter: {
+            id: '501',
+            login: 'aouh',
+            display_name: 'Aouh',
+            role: 'viewer',
+          },
+          source: 'twitch',
+        }),
+      ),
+    );
+    expect(out.map((o) => o.outcome).sort()).toEqual(['accepted', 'rejected']);
+    expect(
+      await a.query(
+        "select 1 from cmd_invocations where source_message_id = 'kw-1'",
+      ),
+    ).toHaveLength(1);
+  });
 });
