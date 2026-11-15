@@ -171,6 +171,22 @@ const refused = (e: unknown): ExtReply => {
   };
 };
 
+/**
+ * A restriction as the viewer sees it: what, until when, why — never WHO among the moderators decided it (Studio and the
+ * automatic ones keep their names, a moderator becomes « Modération »).
+ */
+function viewerSafeRestriction(r: Json): Json {
+  const actor = String(r.actor ?? '');
+  return {
+    ...r,
+    actor: /^studio(:|$)/.test(actor)
+      ? 'studio'
+      : actor === 'system'
+        ? 'system'
+        : 'Modération',
+  };
+}
+
 export class ExtFacade {
   /** Recent TTS / Soundboard admissions per viewer (Bonk is read back from Core). */
   private receipts = new Map<string, Json[]>();
@@ -457,6 +473,7 @@ export class ExtFacade {
       eventShop,
       music,
       bonkRecent,
+      restrictions,
     ] = await Promise.all([
       this.core<Json>(`/v1/lab/moderation/${C}/overview`).catch(() => null),
       v
@@ -486,6 +503,15 @@ export class ExtFacade {
             `/v1/lab/bonk/channels/${C}/interactions?limit=10&viewer_id=${v.id}`,
           ).catch(() => null)
         : null,
+      // The JWT viewer's own Raptoru restrictions (never a Twitch sanction, never someone else's): the Hub's pills and
+      // the mini-profile — as the Lab EBS always sent them, minus the moderator's identity. Never fails the session.
+      v
+        ? this.core<{ restrictions: Json[] }>(
+            `/v1/lab/moderation/${C}/viewers/${v.id}/restrictions`,
+          )
+            .then((r) => r.restrictions.map(viewerSafeRestriction))
+            .catch(() => [])
+        : [],
     ]);
 
     const moduleState = (id: 'tts' | 'soundboard' | 'bonk' | 'raffle') =>
@@ -625,6 +651,8 @@ export class ExtFacade {
       twitch_user_id: v?.id ?? null,
       viewer_login: v?.display_name ?? null,
       user_login: v?.login ?? null,
+      // Mini-profile: the viewer's Twitch picture (Helix, Twitch's CDN), null when unknown.
+      viewer_avatar: v?.avatar ?? null,
       modules,
       module_states: moduleStates,
       wallet:
@@ -636,6 +664,7 @@ export class ExtFacade {
         soundboard: (v && wallet?.credits_soundboard) ?? null,
       },
       pending_actions: v && wallet ? creditActions(wallet) : [],
+      restrictions,
       action_receipts: receipts,
       notifications: [],
       interactions: { available: true, reason: null },
@@ -678,6 +707,7 @@ export class ExtFacade {
         'moderation',
         'raffle',
         'action_receipts',
+        'restrictions',
         'recent_activity',
         'notifications',
         // The extension only re-reads /state after its first load: live catalog and prices follow.
@@ -775,13 +805,21 @@ export class ExtFacade {
     }
   }
 
-  /** Level Up V2: « Mon niveau » in the extension — the JWT viewer's level, XP and the way to the next level. */
+  /**
+   * Level Up V2: « Mon niveau » in the extension — the JWT viewer's level, XP, the way to the next level and the rank;
+   * with the mini-profile's Loyalty status (subscription, presence-gain multiplier: Core's own rules). Read when the
+   * mini-profile opens, never polled. The Loyalty part never fails the level (null: shown as unknown).
+   */
   private async viewerProgression(who: Who): Promise<ExtReply> {
     if (!who.viewer) return fail(403, 'identity_required');
     try {
-      return ok(
-        await this.core<Json>(`/v1/lab/progression/me/${who.viewer.id}`),
-      );
+      const [level, loyalty] = await Promise.all([
+        this.core<Json>(`/v1/lab/progression/me/${who.viewer.id}`),
+        this.core<Json>(`/v1/lab/loyalty/me/${who.viewer.id}`).catch(
+          () => null,
+        ),
+      ]);
+      return ok({ ...level, loyalty });
     } catch (e) {
       return refused(e);
     }

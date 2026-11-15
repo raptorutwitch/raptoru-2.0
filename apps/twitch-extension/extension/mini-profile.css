@@ -1,6 +1,6 @@
-/* Mini-profil viewer — MAQUETTE V2 (shared/mini-profile.js). Classes mp-*, chargées après hub.css (app/boot.js).
+/* Mini-profil viewer (shared/mini-profile.js, docs/MINI_PROFIL.md). Classes mp-*, chargées après hub.css (app/boot.js).
    Avatar dans l'en-tête du Hub ; panneau flottant ancré sous l'avatar, dans les limites du Hub, sans défilement :
-   en-tête commun, navigation (onglets + accès directs), vues empilées dans une même case (hauteur stable). */
+   en-tête commun, navigation en icônes, vues empilées dans une même case (hauteur stable). */
 
 /* --- Avatar de l'en-tête -------------------------------------------------------------------- */
 .mp-avatar-btn {
@@ -34,7 +34,7 @@
   background: #f5b84a;
 }
 
-/* Avatar rond : un fin anneau de progression (XP du niveau en cours) autour de la photo. */
+/* Avatar rond : un fin anneau de progression (XP du niveau en cours) autour de la photo Twitch. */
 .mp-ava {
   --mp-ring: 2px;
   --mp-size: 30px;
@@ -59,11 +59,24 @@
   place-items: center;
   border: 2px solid #170f29;
   border-radius: 50%;
+  background: linear-gradient(135deg, #3b2a63, #6d3fc4);
 }
 .mp-ava__img img {
-  width: 66%;
-  height: 66%;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   user-select: none;
+}
+.mp-ava__initial {
+  color: #fff;
+  font-size: calc(var(--mp-size) * 0.42);
+  font-weight: 800;
+  line-height: 1;
+}
+.mp-ava__anon {
+  width: 60%;
+  height: 60%;
+  color: #dcc4ff;
 }
 .mp-ava--lg {
   --mp-ring: 2.5px;
@@ -111,6 +124,7 @@
   --mp-credit: #7cc4ff;
   --mp-credit-ink: #cfe8ff;
   --mp-amber: #f5b84a;
+  --mp-twitch: #a970ff;
   --mp-pad: 12px;
   /* Les sections s'adaptent à la largeur du panneau lui-même (zoom, panneau étroit), pas à celle de la fenêtre. */
   container: mp / inline-size;
@@ -173,7 +187,7 @@
   flex: none;
 }
 
-/* En-tête commun : avatar, pseudo, statut ; ⚙ Préférences à droite. */
+/* En-tête commun : avatar, pseudo, abonnement et multiplicateur ; ⚙ Préférences à droite. */
 .mp-head {
   display: flex;
   min-width: 0;
@@ -185,7 +199,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 .mp-name {
   /* Pseudo long : une ligne, un peu plus petit s'il le faut (mini-profile.js), puis « … » et le pseudo entier au survol. */
@@ -198,44 +212,71 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mp-tags {
+.mp-status {
   display: flex;
   min-width: 0;
-  max-height: 19px;
+  min-height: 18px;
+  max-height: 20px;
   flex-wrap: wrap;
-  gap: 4px;
+  align-items: center;
+  gap: 5px;
   overflow: hidden;
 }
-.mp-tag {
-  padding: 1px 7px;
+.mp-chip {
+  display: inline-flex;
+  height: 18px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
   border-radius: 999px;
   font-size: 10.5px;
-  font-weight: 700;
-  line-height: 1.5;
+  font-weight: 800;
+  line-height: 1;
   white-space: nowrap;
+  cursor: help;
 }
-.mp-tag--sub {
-  background: rgba(168, 85, 247, 0.22);
-  color: #e4ccff;
+.mp-chip:focus-visible {
+  outline: 2px solid #dcc4ff;
+  outline-offset: 1px;
 }
-.mp-tag--vip {
-  background: rgba(236, 72, 153, 0.2);
-  color: #ffc7e3;
+.mp-chip--sub {
+  padding-left: 5px;
+  background: rgba(169, 112, 255, 0.2);
+  color: #e2d0ff;
 }
-.mp-tag--plain {
+.mp-sub__star {
+  width: 11px;
+  height: 11px;
+  color: var(--mp-twitch);
+}
+/* Le multiplicateur des gains de Jetons de présence : la couleur des Jetons. */
+.mp-chip--mult {
+  border: 1px solid rgba(242, 198, 95, 0.28);
+  background: rgba(242, 198, 95, 0.08);
+  color: var(--mp-token-ink);
+  font-variant-numeric: tabular-nums;
+}
+.mp-chip--mult.is-up {
+  border-color: rgba(242, 198, 95, 0.55);
+  background: rgba(242, 198, 95, 0.16);
+}
+.mp-chip--plain,
+.mp-chip--wait {
   background: rgba(255, 255, 255, 0.07);
   color: var(--mp-muted);
+  cursor: default;
 }
 .mp-gear {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   flex: none;
   align-self: flex-start;
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 9px;
   background: none;
   color: var(--mp-faint);
   cursor: pointer;
@@ -247,7 +288,7 @@
 .mp-gear .mp-i {
   width: 17px;
   height: 17px;
-  transition: transform 0.3s ease;
+  transition: transform 0.35s ease;
 }
 .mp-gear:hover {
   background: rgba(255, 255, 255, 0.07);
@@ -255,84 +296,55 @@
 }
 .mp-gear[aria-pressed='true'] {
   border-color: rgba(214, 180, 255, 0.35);
-  background: rgba(168, 85, 247, 0.22);
+  background: rgba(168, 85, 247, 0.2);
   color: #fff;
 }
 .mp-gear[aria-pressed='true'] .mp-i {
-  transform: rotate(60deg);
+  transform: rotate(45deg);
 }
 
-/* Navigation : deux onglets dans un rail (Accueil, Restrictions) ; deux accès directs à côté (Historique, Classement),
-   marqués d'une flèche : ils ouvrent l'écran existant ou raptoru.fr, jamais une fausse page dans le panneau. */
+/* Navigation : quatre petites icônes équilibrées. Accueil et Restrictions changent la vue ; Historique et Classement
+   ouvrent leur destination habituelle (l'écran Historique, raptoru.fr). L'onglet actif : icône blanche, léger fond et
+   un trait d'accent — jamais un gros aplat. */
 .mp-nav {
   display: grid;
-  grid-template-columns: minmax(0, 2.25fr) minmax(0, 0.875fr) minmax(0, 0.875fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 2fr) auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
   gap: 3px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(8, 4, 18, 0.3);
 }
 .mp-tabs {
-  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  padding: 3px;
-  border-radius: 12px;
-  background: rgba(8, 4, 18, 0.38);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  gap: 3px;
 }
-.mp-tabs__pill {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc(50% - 3px);
-  border-radius: 9px;
-  background: linear-gradient(180deg, rgba(168, 85, 247, 0.42), rgba(124, 58, 237, 0.32));
-  box-shadow:
-    0 2px 8px rgba(124, 58, 237, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  transition:
-    transform 0.24s cubic-bezier(0.3, 1.25, 0.5, 1),
-    opacity 0.15s;
-}
-.mp-panel[data-view='restr'] .mp-tabs__pill {
-  transform: translateX(100%);
-}
-.mp-panel[data-view='prefs'] .mp-tabs__pill {
-  opacity: 0;
+.mp-nav__sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: rgba(214, 180, 255, 0.18);
 }
 .mp-tab,
 .mp-short {
   position: relative;
-  z-index: 1;
-  display: flex;
+  display: grid;
+  height: 30px;
   min-width: 0;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 6px 1px 5px;
+  place-items: center;
+  padding: 0;
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   background: none;
   color: var(--mp-faint);
   font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: 1.1;
   text-decoration: none;
   cursor: pointer;
   transition:
-    color 0.15s,
-    background 0.15s;
+    color 0.14s,
+    background 0.14s;
   -webkit-tap-highlight-color: transparent;
-}
-.mp-tab > span,
-.mp-short > span:not(.mp-short__icon) {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .mp-tab .mp-i,
 .mp-short .rh-icon {
@@ -340,12 +352,36 @@
   height: 17px;
 }
 .mp-tab:hover,
-.mp-short:hover,
-.mp-tab[aria-selected='true'] {
-  color: #fff;
-}
 .mp-short:hover {
   background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.mp-tab[aria-selected='true'] {
+  background: rgba(168, 85, 247, 0.14);
+  color: #fff;
+}
+.mp-tab[aria-selected='true']::after {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: #c98cff;
+  content: '';
+  transform: translateX(-50%);
+}
+.mp-short:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.mp-short:disabled:hover {
+  background: none;
+  color: var(--mp-faint);
+}
+.mp-short__icon {
+  display: grid;
+  place-items: center;
 }
 .mp-tab:focus-visible,
 .mp-short:focus-visible,
@@ -356,55 +392,27 @@
   outline: 2px solid #dcc4ff;
   outline-offset: 1px;
 }
-.mp-short {
-  padding-right: 0;
-  padding-left: 0;
-}
-.mp-short__icon {
-  display: grid;
-  place-items: center;
-}
-.mp-short--history .mp-short__icon {
-  color: #dcc4ff;
-}
-.mp-short--ranking .mp-short__icon {
-  color: var(--mp-token-ink);
-}
-.mp-short__go {
+.mp-badge {
   position: absolute;
-  top: 4px;
-  right: 5px;
-  width: 9px;
-  height: 9px;
-  opacity: 0.7;
-}
-.mp-tab__count,
-.mp-short__count {
-  position: absolute;
-  top: 2px;
-  left: calc(50% + 5px);
+  top: 1px;
+  left: calc(50% + 4px);
   min-width: 15px;
   height: 15px;
   box-sizing: border-box;
   padding: 0 4px;
   border: 2px solid #261c40;
   border-radius: 999px;
+  background: #a855f7;
+  color: #fff;
   font-size: 9px;
   font-style: normal;
   font-weight: 800;
   line-height: 11px;
   text-align: center;
 }
-.mp-tab__count {
+.mp-badge--amber {
   background: var(--mp-amber);
   color: #3a2504;
-}
-.mp-short__count {
-  background: #a855f7;
-  color: #fff;
-}
-.mp-short.is-unset span:not(.mp-short__icon) {
-  text-decoration: line-through dotted;
 }
 
 /* Vues empilées dans la même case : le panneau garde la hauteur de la plus haute. */
@@ -542,6 +550,9 @@ button.mp-cur--credits:hover {
   line-height: 1.15;
   white-space: nowrap;
 }
+.mp-cur__val.is-na {
+  color: var(--mp-faint);
+}
 .mp-cur__split {
   display: -webkit-box;
   overflow: hidden;
@@ -560,7 +571,7 @@ button.mp-cur--credits:hover {
   visibility: visible;
 }
 
-/* Accueil — progression : le niveau, la barre, l'XP restante. */
+/* Accueil — progression : le niveau (carré violet), le rang au classement, la barre, l'XP restante. */
 .mp-prog {
   display: flex;
   align-items: center;
@@ -584,6 +595,9 @@ button.mp-cur--credits:hover {
     0 4px 12px rgba(124, 58, 237, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
   line-height: 1;
+}
+.mp-lvl.is-wait {
+  opacity: 0.55;
 }
 .mp-lvl small {
   font-size: 8.5px;
@@ -611,15 +625,36 @@ button.mp-cur--credits:hover {
   justify-content: space-between;
   gap: 6px;
 }
-.mp-prog__title {
+/* Le rang du viewer au classement des niveaux (XP totale) : « #18 au classement ». */
+.mp-rank {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 4px;
   overflow: hidden;
-  color: var(--mp-muted);
+  color: var(--mp-faint);
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.06em;
-  text-overflow: ellipsis;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+.mp-rank b {
+  color: var(--mp-token-ink);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.mp-rank__i {
+  width: 12px;
+  height: 12px;
+  align-self: center;
+  color: var(--mp-token-ink);
+}
+.mp-rank.is-wait {
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .mp-prog__xp {
   color: var(--mp-muted);
@@ -644,19 +679,15 @@ button.mp-cur--credits:hover {
   box-shadow: 0 0 8px rgba(201, 140, 255, 0.55);
 }
 .mp-prog__foot {
+  min-height: 15px;
   color: var(--mp-muted);
   font-size: 11px;
 }
 .mp-prog__foot b {
   color: #f1e6ff;
 }
-.mp-eta {
-  color: var(--mp-faint);
-  cursor: help;
-  white-space: nowrap;
-}
 
-/* Restrictions : un état vide calme, ou une carte par restriction (ambre bloqué, lavande délai). */
+/* États vides calmes (aucune restriction, identité non partagée). */
 .mp-empty {
   display: flex;
   flex: 1;
@@ -664,6 +695,7 @@ button.mp-cur--credits:hover {
   align-items: center;
   justify-content: center;
   gap: 3px;
+  padding: 0 8px;
   color: var(--mp-faint);
   font-size: 11.5px;
   text-align: center;
@@ -678,6 +710,10 @@ button.mp-cur--credits:hover {
   background: rgba(143, 214, 176, 0.12);
   color: #8fd6b0;
 }
+.mp-empty__icon--plain {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--mp-muted);
+}
 .mp-empty__icon .mp-i {
   width: 22px;
   height: 22px;
@@ -686,6 +722,8 @@ button.mp-cur--credits:hover {
   color: #f1e6ff;
   font-size: 13px;
 }
+
+/* Restrictions : une carte par restriction (ambre bloqué, lavande délai). */
 .mp-rlist {
   display: flex;
   max-height: 168px;
@@ -767,7 +805,7 @@ button.mp-cur--credits:hover {
   color: #e2d8ff;
 }
 
-/* Préférences (⚙) : les réglages du compte — aujourd'hui « Actualiser » ; le son de Level Up arrive avec Level Up V2. */
+/* Préférences (⚙) : les réglages du compte — le son de Level Up et « Actualiser ». */
 .mp-prefs {
   display: flex;
   flex-direction: column;
@@ -825,6 +863,13 @@ button.mp-cur--credits:hover {
 .mp-switch[aria-checked='true'] i {
   transform: translateX(15px);
 }
+.mp-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.mp-switch.is-busy {
+  cursor: progress;
+}
 .mp-pref__note {
   display: flex;
   align-items: flex-start;
@@ -832,6 +877,9 @@ button.mp-cur--credits:hover {
   margin: 0 2px;
   color: var(--mp-faint);
   font-size: 10.5px;
+}
+.mp-pref__note.is-bad {
+  color: #ffd08a;
 }
 .mp-pref__note .mp-i {
   width: 12px;
@@ -861,27 +909,10 @@ button.mp-cur--credits:hover {
   opacity: 0.6;
 }
 
-/* Panneau étroit (zoom 125–150 % ; largeur intérieure du panneau) : la navigation garde ses icônes, les intitulés
-   passent en infobulle. */
+/* Panneau étroit (zoom 125–150 % ; largeur intérieure du panneau). */
 @container mp (max-width: 229px) {
-  .mp-tab > span,
-  .mp-short > span:not(.mp-short__icon) {
+  .mp-rank span {
     display: none;
-  }
-  .mp-tab,
-  .mp-short {
-    padding: 8px 2px;
-  }
-  .mp-tab__count,
-  .mp-short__count {
-    top: 0;
-  }
-  /* Le médaillon dit déjà « Niv. » : le titre laisse la place à l'XP. */
-  .mp-prog__title {
-    display: none;
-  }
-  .mp-prog__top {
-    justify-content: flex-end;
   }
 }
 @container mp (max-width: 169px) {
@@ -917,7 +948,6 @@ button.mp-cur--credits:hover {
     animation: none;
   }
   .mp-ava,
-  .mp-tabs__pill,
   .mp-switch i,
   .mp-gear .mp-i {
     transition: none;

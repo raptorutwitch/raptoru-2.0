@@ -804,6 +804,25 @@
 .pg-lu > [data-lz='recent'] {
   grid-column: 1 / -1;
 }
+/* « Tester un Level Up » : pseudo et niveau du test, et l'aperçu de la ligne de LeCroupier_. */
+.pg-lu-try {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 10px;
+}
+.pg-lu-chat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+}
+.pg-lu-chat b {
+  color: #b48cff;
+}
 .pg-lu-acts {
   display: flex;
   flex-wrap: wrap;

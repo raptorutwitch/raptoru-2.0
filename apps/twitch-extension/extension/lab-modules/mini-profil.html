@@ -19,12 +19,6 @@
     h1 { margin: 0 0 4px; font-size: 20px; }
     p { margin: 0 0 14px; color: #a99cc4; max-width: 78ch; }
     kbd { padding: 1px 5px; border: 1px solid #4a3d6b; border-radius: 4px; font-size: 12px; }
-    .cases { display: inline-flex; gap: 2px; margin: 0 0 22px; padding: 3px; border-radius: 10px; background: #1a1329; }
-    .cases button {
-      padding: 6px 12px; border: 0; border-radius: 8px; background: none; color: #a99cc4;
-      font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
-    }
-    .cases button[aria-pressed='true'] { background: #4c2d86; color: #fff; }
     .row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
     figure { margin: 0; }
     figcaption { margin-bottom: 8px; color: #c9bce3; font-size: 12.5px; font-weight: 700; }
@@ -36,35 +30,29 @@
   </style>
 </head>
 <body>
-  <h1>Mini-profil viewer — maquette V2</h1>
+  <h1>Mini-profil viewer</h1>
   <p>
-    Clique sur l’avatar en haut à droite du Hub. Onglets Accueil et Restrictions ; Historique et Classement ouvrent leur
-    destination habituelle ; ⚙ ouvre les Préférences. Touche « Crédits » pour le détail par module. Fermeture : clic à
-    côté, <kbd>Échap</kbd> ou l’avatar à nouveau. Données fictives.
+    Clique sur l’avatar en haut à droite du Hub. Icônes : Accueil, Restrictions ; Historique et Classement ouvrent leur
+    destination habituelle ; ⚙ ouvre les Préférences (son de Level Up). Touche « Crédits » pour le détail par module.
+    Fermeture : clic à côté, <kbd>Échap</kbd> ou l’avatar à nouveau. Données du Lab (viewer fictif du Lab).
   </p>
-  <div class="cases" role="group" aria-label="Cas de démonstration">
-    <button type="button" data-case="standard">Normal</button>
-    <button type="button" data-case="long">Pseudo long, gros solde</button>
-    <button type="button" data-case="restrictions">Plusieurs restrictions</button>
-  </div>
   <div class="row">
     <figure>
       <figcaption>Panneau Twitch <span>· 318 × 500</span></figcaption>
-      <iframe data-src="../panel.html?labRole=viewer" width="318" height="500" title="Panneau Twitch"></iframe>
+      <iframe src="../panel.html?labRole=viewer" width="318" height="500" title="Panneau Twitch"></iframe>
     </figure>
     <figure>
       <figcaption>Panneau Twitch, zoom 125 % <span>· 256 × 400 affiché à 320 × 500</span></figcaption>
-      <div class="zoom"><iframe data-src="../panel.html?labRole=viewer" title="Panneau Twitch zoom 125 %"></iframe></div>
+      <div class="zoom"><iframe src="../panel.html?labRole=viewer" title="Panneau Twitch zoom 125 %"></iframe></div>
     </figure>
     <figure>
       <figcaption>Mobile <span>· 360 × 640</span></figcaption>
-      <iframe data-src="../mobile.html?labRole=viewer" width="360" height="640" title="Mobile"></iframe>
+      <iframe src="../mobile.html?labRole=viewer" width="360" height="640" title="Mobile"></iframe>
     </figure>
     <figure>
       <figcaption>Video Component <span>· 565 × 376</span></figcaption>
-      <iframe data-src="../video_component.html?labRole=viewer" width="565" height="376" title="Video Component"></iframe>
+      <iframe src="../video_component.html?labRole=viewer" width="565" height="376" title="Video Component"></iframe>
     </figure>
   </div>
-  <script type="module" src="mini-profil.js"></script>
 </body>
 </html>

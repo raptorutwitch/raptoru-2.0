@@ -106,23 +106,28 @@ test('Level Up V2: activated in Studio, the chat line for everyone, the sound on
   await expect(toasts).toContainText('2 badges importés.');
   await expect(lu).toContainText('Niveau 20');
 
-  // The extension: « Mon niveau » and the sound checkbox, unchecked by default, kept by the Core.
+  // The extension's mini-profile (docs/MINI_PROFIL.md): its level, and the sound switch in its Préférences (⚙) — off by
+  // default, kept by the Core.
   const ext = await browser.newPage({ viewport: { width: 400, height: 800 } });
   await ext.goto('/ext/mobile.html?labRole=viewer');
-  await ext.locator('.jdm-viewer-preferences-toggle').first().click();
-  await expect(ext.locator('.jdm-viewer-level')).toContainText('Niveau 1');
-  const sfx = ext.getByRole('checkbox', {
+  await ext.locator('.mp-avatar-btn').click();
+  await expect(ext.locator('.mp-lvl')).toContainText('1');
+  await ext.locator('.mp-gear').click();
+  const sfx = ext.getByRole('switch', {
     name: 'Jouer un son lorsque je monte de niveau',
   });
-  await expect(sfx).not.toBeChecked();
-  await sfx.check();
+  await expect(sfx).toHaveAttribute('aria-checked', 'false');
+  await expect(sfx).toBeEnabled();
+  await sfx.click();
+  await expect(sfx).toHaveAttribute('aria-checked', 'true');
   await ext.reload();
-  await ext.locator('.jdm-viewer-preferences-toggle').first().click();
+  await ext.locator('.mp-avatar-btn').click();
+  await ext.locator('.mp-gear').click();
   await expect(
-    ext.getByRole('checkbox', {
+    ext.getByRole('switch', {
       name: 'Jouer un son lorsque je monte de niveau',
     }),
-  ).toBeChecked(); // kept by the Core
+  ).toHaveAttribute('aria-checked', 'true'); // kept by the Core
 
   // The invisible OBS « Level Up » source (its URL from Studio's panel).
   const state = await (
@@ -186,6 +191,44 @@ test('Level Up V2: activated in Studio, the chat line for everyone, the sound on
   });
   await expect(lu.locator('.pg-lu-t').last()).toContainText('envoyé');
   await expect(lu.locator('.pg-lu-t').last()).toContainText('joué 🔊');
+
+  // « Tester un Level Up » (Studio): the sound through the same OBS source, the line previewed only — no XP, no level,
+  // no event, nothing in the chat; then the real « [TEST] » line, only after its typed confirmation.
+  const kiritoBefore = await labCore<{ xp: number; level: number }>(
+    `/v1/lab/progression/viewers/${KIRITO}`,
+  );
+  const stepsBefore = JSON.stringify(
+    await labCore(`/v1/lab/commands/${CHANNEL}/steps`),
+  );
+  const tested = obs.waitForRequest((r) => r.url().endsWith('/level-up/sound'));
+  await expect(lu.locator('[data-lz="test"]')).toContainText('connectée');
+  await expect(lu.locator('[data-lu-test-line]')).toHaveText(
+    '@Raptoru vient d’atteindre le niveau 25 !',
+  );
+  await lu.getByRole('button', { name: 'Tester un Level Up' }).click();
+  await tested;
+  await expect(toasts).toContainText('Son joué dans OBS');
+  expect(await obs.locator('body *:not(script)').count()).toBe(0);
+  const kiritoAfter = await labCore<{ xp: number; level: number }>(
+    `/v1/lab/progression/viewers/${KIRITO}`,
+  );
+  expect([kiritoAfter.xp, kiritoAfter.level]).toEqual([
+    kiritoBefore.xp,
+    kiritoBefore.level,
+  ]);
+  expect(
+    JSON.stringify(await labCore(`/v1/lab/commands/${CHANNEL}/steps`)),
+  ).toBe(stepsBefore);
+  await lu
+    .getByRole('button', { name: 'Envoyer le test dans le chat…' })
+    .click();
+  const confirmTest = page.locator('dialog[open]');
+  await confirmTest.locator('[data-text]').fill('ENVOYER LE TEST');
+  await confirmTest.getByRole('button', { name: 'Envoyer' }).click();
+  await expect(toasts).toContainText('Message test confié au bot.');
+  expect(
+    JSON.stringify(await labCore(`/v1/lab/commands/${CHANNEL}/steps`)),
+  ).toContain('[TEST] @Raptoru vient d’atteindre le niveau 25 !');
 
   await labCore('/v1/lab/progression/settings', { rules: { live_only: true } });
   await labCore(`/v1/lab/commands/${CHANNEL}/output`, {

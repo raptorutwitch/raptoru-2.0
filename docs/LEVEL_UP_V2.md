@@ -25,7 +25,7 @@ la Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu l
 | Manifestations d'un Level Up | **Exactement deux** : une ligne de **LeCroupier\_ dans le chat** (message normal, pas `/announce`) et un **son** sur le stream. **Aucune** bannière, aucun texte, aucun cadre à l'écran : la source OBS est invisible et ne joue que le son |
 | Annonce chat                 | Pour **chaque vrai Level Up**, indépendante du choix sonore du viewer ; texte réglable dans Studio ; groupée et protégée du flood (§ 5)                                                                                                     |
 | Son                          | **Désactivé par défaut** ; joué seulement pour les viewers qui l'ont activé. Une absence de choix n'autorise jamais le son                                                                                                                  |
-| Réglage viewer               | **Une case à cocher** dans les préférences (roue crantée), les deux interfaces : « Jouer un son lorsque je monte de niveau », décochée par défaut, enregistrée tout de suite                                                                |
+| Réglage viewer               | **Un interrupteur** dans les Préférences (⚙) du **mini-profil** ([MINI_PROFIL.md](MINI_PROFIL.md)) : « Jouer un son lorsque je monte de niveau », désactivé par défaut, enregistré tout de suite par le Core (le shell v2 garde sa case)    |
 | Préférences historiques      | Récupérées depuis la table Supabase de l'ancienne extension (§ 8) ; jamais écrasées par un import plus ancien                                                                                                                               |
 | Gains d'XP                   | **1 XP par minute** de présence, **3 XP par message** éligible, un message récompensé au plus toutes les **60 s**. Au plus 60 XP/h en silence et 240 XP/h en parlant : un rapport de 1 à 4                                                  |
 | Anti-farm                    | Gardé : commandes, bots, délai, longueur, 3 lettres ou chiffres différents, même message sans XP pendant 10 min                                                                                                                             |
@@ -187,7 +187,7 @@ d'origine sont gardées).
 5. Préférences historiques : export Supabase, puis Studio › Level Up : simulation, puis import.
 6. Badges : Studio › Level Up › « Importer mes badges sub… » (les 11 badges, niveaux 10 à 110, cochés d’office).
 7. Studio › Level Up › **Simuler** sur les données du jour, puis **Activer Level Up V2…**.
-8. OBS : ajouter la source navigateur « Level Up » (invisible), choisir le son, « Tester le son ».
+8. OBS : ajouter la source navigateur « Level Up » (invisible), choisir le son, puis Studio › Level Up › **Tester un Level Up**.
 9. Allumer « Annoncer les Level Up » et « Sons Level Up » quand Antoni le décide.
 
 **Retour arrière** :
@@ -196,6 +196,26 @@ d'origine sont gardées).
 - « Annuler la normalisation » (tant qu'aucun historique n'a été rattaché depuis ; les badges donnés restent) ;
 - Core précédent (la migration reste, additive) ;
 - SQL en tête de la migration.
+
+## 9 bis. Tester un Level Up depuis Studio (15/11)
+
+Studio › Progression › Level Up › **Tester un Level Up** : un test administrateur de la chaîne audio et de l'annonce.
+
+- **Rien n'est écrit** : aucune XP, aucun niveau, aucun badge, aucune récompense, aucun événement de progression.
+  Le test ne dépend pas du choix sonore d'un viewer.
+- Saisies : le pseudo (par défaut « Raptoru ») et le niveau (par défaut 25). L'aperçu montre la ligne de LeCroupier\_
+  avec le texte réglé dans Studio, par exemple « @Raptoru vient d'atteindre le niveau 25 ! ».
+- Le bouton **Tester un Level Up** joue le son par la **vraie source OBS** (le même circuit qu'en live : Studio pousse
+  « joue le son » à la source navigateur, au volume réglé).
+  - Rien ne s'affiche sur le stream.
+  - Sans source connectée, Studio le dit (« Aucune source OBS « Level Up » connectée »).
+  - L'état de la source (connectée / absente) est affiché dans le bloc.
+- Le bouton **Envoyer le test dans le chat…** publie « [TEST] … » dans le vrai chat :
+  - seulement après une confirmation tapée (`ENVOYER LE TEST`) ;
+  - par la file d'annonces des commandes (LeCroupier\_, « Sortie chat réelle » et la limite du bot s'appliquent) ;
+  - jamais automatiquement (ni au déploiement, ni à une migration, ni au lancement de Studio) ;
+  - refusé si la « Sortie chat réelle » est coupée.
+  - Route Core : `POST /v1/studio/progression/level-v2/test-chat`.
 
 ## 10. Tests
 
@@ -217,13 +237,15 @@ d'origine sont gardées).
   - **ordre des badges sub** sur le dossier réel (11 badges dans l'ordre, le 11ᵉ importé avec une simple remarque, `Obsolète` et
     `Badges Bits` écartés, deux images sous un numéro jamais devinées) ;
   - lecture de l'export Supabase (CSV et JSON).
-- **Extension** : la case envoie un booléen ; « Mon niveau ».
+- **Extension** : l'interrupteur du mini-profil envoie un booléen ; le niveau et le rang (« Mon niveau »).
 - **E2E navigateur** (`progression-v2-level-up.e2e.ts`) :
   - simulation, puis activation tapée, puis annonces et son allumés ;
   - import de deux images numérotées (de simples aplats générés par le test, jamais les badges d'Antoni) ;
-  - case décochée par défaut, gardée après rechargement ;
+  - interrupteur du mini-profil désactivé par défaut, gardé après rechargement ;
   - un message fait passer un viewer au niveau 10 : **une ligne de chat**, le badge avec son image, **le son joué et rien
-    d'affiché**.
+    d'affiché** ;
+  - « Tester un Level Up » : le son par la même source, XP et chat inchangés ; puis la ligne « [TEST] » après la
+    confirmation tapée.
 
 ## 11. Ce qui attend Antoni
 

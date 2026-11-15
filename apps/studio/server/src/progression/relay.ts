@@ -94,6 +94,8 @@ export class ProgressionRelay {
         'POST /api/progression/level-v2/simulate': '/level-v2/simulate',
         'POST /api/progression/level-v2/activate': '/level-v2/activate',
         'POST /api/progression/level-v2/revert': '/level-v2/revert',
+        // « Tester un Level Up » › a real « [TEST] » line in the chat (typed confirmation, checked by Core).
+        'POST /api/progression/level-v2/test-chat': '/level-v2/test-chat',
       };
       const notify = /^\/api\/progression\/viewers\/(\d{1,32})\/notify$/.exec(
         p,

@@ -99,16 +99,23 @@ afterEach(async () => {
 async function fixture(
   viewerLimit?: { capacity: number; refillPerS: number },
   extra: Partial<CoreConfig> = {},
+  o: Parameters<typeof createPublicFrontier>[4] = {},
 ) {
   const core = await setup();
   core.clock.set(new Date());
-  const frontier = createPublicFrontier(core, core.db, core.clock, {
-    TWITCH_CHANNEL_ID: CHANNEL,
-    TWITCH_CHANNEL_LOGIN: 'raptoru_',
-    TWITCH_EXTENSION_SECRET: SECRET.toString('base64'),
-    CORE_ENVIRONMENT: 'staging',
-    ...extra,
-  } as CoreConfig)!;
+  const frontier = createPublicFrontier(
+    core,
+    core.db,
+    core.clock,
+    {
+      TWITCH_CHANNEL_ID: CHANNEL,
+      TWITCH_CHANNEL_LOGIN: 'raptoru_',
+      TWITCH_EXTENSION_SECRET: SECRET.toString('base64'),
+      CORE_ENVIRONMENT: 'staging',
+      ...extra,
+    } as CoreConfig,
+    o,
+  )!;
   const server = createApp({
     ...core,
     botSecret: 'bot-test-secret',
@@ -271,6 +278,67 @@ describe('public Core: viewer frontier /v1/ext', () => {
       r.body.modules.find((m: { id: string }) => m.id === 'soundboard').sounds
         .length,
     ).toBeGreaterThan(0);
+  });
+
+  it('mini-profile: the JWT viewer’s Twitch picture (Twitch CDN only), its own restrictions (no moderator named), its level with its Loyalty status', async () => {
+    const picture =
+      'https://static-cdn.jtvnw.net/jtv_user_pictures/x-profile_image-300x300.png';
+    const { core, ext } = await fixture(
+      undefined,
+      {},
+      {
+        userLookup: async (ids) =>
+          ids.map((id) => ({
+            id,
+            login: `v${id}`,
+            display_name: `V${id}`,
+            profile_image_url:
+              id === '4242' ? picture : 'https://evil.example/x.png',
+          })),
+      },
+    );
+    const at = new Date(core.clock.now().getTime() + 600_000);
+    for (const [who, actor] of [
+      ['4242', '777'],
+      ['77', 'studio:inst'],
+    ])
+      await core.db.query(
+        `insert into lab_viewer_blocks (channel_id, viewer_id, module_id, until, reason, actor, created_at)
+         values ($1, $2, 'tts', $3, 'spam', $4, $5)`,
+        [CHANNEL, who, at, actor, core.clock.now()],
+      );
+    const s = await ext('/session', viewer());
+    expect(s.body).toMatchObject({
+      viewer_login: 'V4242',
+      viewer_avatar: picture,
+    });
+    expect(s.body.restrictions).toEqual([
+      expect.objectContaining({
+        kind: 'block',
+        module: 'tts',
+        reason: 'spam',
+        actor: 'Modération',
+      }),
+    ]);
+    expect((await ext('/state', viewer())).body.restrictions).toHaveLength(1);
+    // Another viewer: its own block only, and never a picture outside Twitch's CDN.
+    const other = await ext('/session', viewer('77'));
+    expect(other.body.viewer_avatar).toBeNull();
+    expect(other.body.restrictions).toEqual([
+      expect.objectContaining({ actor: 'studio' }),
+    ]);
+    const p = await ext('/viewer/progression', viewer());
+    expect(p.status).toBe(200);
+    expect(p.body).toMatchObject({
+      level: 1,
+      rank: null,
+      loyalty: {
+        subscription: { tier: 'unknown', subscribed: false },
+        presence: { multiplier: 1, source: 'unknown' },
+      },
+    });
+    expect((await ext('/viewer/progression', token({}))).status).toBe(403);
+    expect((await ext('/session', token({}))).body.restrictions).toEqual([]);
   });
 
   it('an unshared identity reads but never spends', async () => {
