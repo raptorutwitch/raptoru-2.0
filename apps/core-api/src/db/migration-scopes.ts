@@ -117,6 +117,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261126130000_progression_level_up.sql',
   // Level Up: one row per announcement, its sound played once Twitch confirmed it; Lab twin 20261127120000.
   '20261127130000_level_up_announcements.sql',
+  // Commands V2 « sound » action: the sounds queued for Studio's OBS sound source; Lab twin 20261128120000.
+  '20261128130000_cmd_sounds.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -235,6 +237,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261126120000_progression_level_up_lab.sql',
   // Level Up announcements and their synchronized sound: the Lab twin of 20261127130000 (same content).
   '20261127120000_level_up_announcements_lab.sql',
+  // Commands V2 « sound » action: the Lab twin of 20261128130000_cmd_sounds.sql (same content).
+  '20261128120000_cmd_sounds_lab.sql',
 ]);
 
 /**

@@ -21,6 +21,7 @@ import {
 } from './decide.js';
 import {
   draftSteps,
+  insertSounds,
   insertSteps,
   STEP_RULES,
   type StepDraft,
@@ -249,6 +250,16 @@ export class CommandsAdmission {
         ttlMs: this.deps.stepTtlMs ?? STEP_RULES.ttlMs,
         drafts,
       });
+      // The « sound » actions: Studio's OBS sound source plays them (not chat steps).
+      await insertSounds(q, {
+        invocationId: id,
+        channelId: msg.channel_id,
+        now: ev.now,
+        ttlMs: this.deps.stepTtlMs ?? STEP_RULES.ttlMs,
+        sounds: (d.rendered?.actions ?? []).flatMap((a) =>
+          a.type === 'sound' ? [{ action_id: a.id, sound: a.sound }] : [],
+        ),
+      });
       return {
         outcome: d.decision,
         reason: d.reason,
@@ -365,7 +376,8 @@ export class CommandsAdmission {
       /** Who: the groups, and whether some people are allowed on top (never who). */
       audience: {
         groups: c.audience.groups,
-        named_people: c.audience.allow.length > 0,
+        named_people:
+          c.audience.allow.length + (c.audience.allow_ids?.length ?? 0) > 0,
       },
       cooldown: c.cooldown.enabled
         ? { seconds: c.cooldown.seconds, scope: c.cooldown.scope }

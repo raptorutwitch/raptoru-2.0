@@ -123,6 +123,7 @@ try {
     '20261125120000_caution_pool_lab.sql',
     '20261126120000_progression_level_up_lab.sql',
     '20261127120000_level_up_announcements_lab.sql',
+    '20261128120000_cmd_sounds_lab.sql',
   ]) {
     if (
       (

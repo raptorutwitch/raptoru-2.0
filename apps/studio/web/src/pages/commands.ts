@@ -186,6 +186,10 @@ export function mountCommandsPage(root: HTMLElement) {
     rights: null as Rights | null,
     rightsDraft: null as RightsDraft | null,
     rightsMsg: '',
+    /** The sounds imported in Studio for the « sound » action (Studio's OBS sound source). */
+    sounds: [] as { id: string; label: string }[],
+    /** The action waiting for a sound being imported (« new »: a new sound action). */
+    soundFor: null as string | null,
   };
   let visibleNow = false;
   let fav = new Set<string>();
@@ -221,6 +225,7 @@ export function mountCommandsPage(root: HTMLElement) {
     aliasErr: S.aliasErr,
     cdCustom: S.cdCustom,
     conflict: S.conflict,
+    sounds: S.sounds,
   });
   const listUi = (): ListUi => ({
     side: S.side,
@@ -243,6 +248,121 @@ export function mountCommandsPage(root: HTMLElement) {
   };
 
   // --- Lectures ---------------------------------------------------------------------------------------------------------
+  /** The imported sounds (Studio's own storage; none without a Core profile). */
+  async function loadSounds() {
+    try {
+      S.sounds = (
+        await getJson<{ sounds: { id: string; label: string }[] }>(
+          '/api/level-up/command-sounds',
+        )
+      ).sounds;
+    } catch {
+      S.sounds = [];
+    }
+  }
+
+  /** A file chosen in the editor: imported in Studio, then used by the action waiting for it. */
+  async function importSound(file: File) {
+    const d = S.draft;
+    if (!d) return;
+    const res = await fetch(
+      `/api/level-up/command-sounds?name=${encodeURIComponent(file.name)}`,
+      {
+        method: 'POST',
+        headers: {
+          'x-raptoru-studio': '1',
+          'content-type': 'application/octet-stream',
+        },
+        body: file,
+      },
+    );
+    const body = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      label?: string;
+      error?: string;
+    };
+    if (!res.ok || !body.id) {
+      toast(
+        body.error === 'unsupported_sound'
+          ? 'Ce fichier n’est pas un son MP3, OGG ou WAV.'
+          : body.error === 'sound_too_large'
+            ? 'Fichier trop lourd : 2 Mo au plus.'
+            : 'Import impossible (Studio a-t-il un profil Core ?).',
+        { bad: true },
+      );
+      return;
+    }
+    await loadSounds();
+    const sound = { sound: body.id, label: body.label ?? 'Son' };
+    d.actions =
+      S.soundFor === 'new'
+        ? [
+            ...d.actions,
+            {
+              id: crypto.randomUUID(),
+              type: 'sound',
+              v: 1,
+              on_error: 'continue',
+              ...sound,
+            },
+          ]
+        : d.actions.map((a) =>
+            a.id === S.soundFor && a.type === 'sound' ? { ...a, ...sound } : a,
+          );
+    S.soundFor = null;
+    toast(`Son « ${sound.label} » importé.`);
+    edited();
+  }
+
+  /**
+   * « + pseudo ou ID Twitch »: the Core's directory gives the stable id of a pseudo (a rename keeps the right); an id is
+   * taken as it is. Never a guess: an unknown pseudo stays in the field.
+   */
+  async function addAllowedId(t: HTMLInputElement) {
+    const d = S.draft;
+    const v = t.value.trim().replace(/^@/, '');
+    if (!d || !v) return;
+    let found: { id: string; name: string } | null = null;
+    try {
+      const rows = await getJson<
+        { twitch_user_id: string; login: string; display_name: string | null }[]
+      >(`/api/progression/viewers?q=${encodeURIComponent(v)}`);
+      const hit = rows.find((r) =>
+        /^\d+$/.test(v) ? r.twitch_user_id === v : r.login === v.toLowerCase(),
+      );
+      if (hit)
+        found = {
+          id: hit.twitch_user_id,
+          name: (hit.display_name || hit.login).slice(0, 40),
+        };
+    } catch {
+      /* directory unreachable: an id is still taken as it is */
+    }
+    if (!found && /^\d{1,32}$/.test(v)) found = { id: v, name: v };
+    if (!found) {
+      toast(`« ${v} » inconnu de Raptoru : écris son ID Twitch.`, {
+        bad: true,
+      });
+      return;
+    }
+    const f = found;
+    d.audience = {
+      ...d.audience,
+      allow_ids: [
+        ...(d.audience.allow_ids ?? []).filter((x) => x.id !== f.id),
+        f,
+      ],
+    };
+    edited();
+    const again = (
+      t.closest('.d-pop') ?? document
+    ).querySelector<HTMLInputElement>('[data-chipin="allowid"]');
+    if (again) {
+      again.value = '';
+      again.focus();
+    }
+  }
+
   async function loadList() {
     try {
       S.list = await getJson<ListResponse>('/api/commands');
@@ -287,7 +407,7 @@ export function mountCommandsPage(root: HTMLElement) {
     paintPanel();
   }
   const tick = poller(async () => {
-    await Promise.all([loadList(), loadRuntime()]);
+    await Promise.all([loadList(), loadRuntime(), loadSounds()]);
     paintHead();
     paintLib();
     paintPanel();
@@ -1135,6 +1255,11 @@ export function mountCommandsPage(root: HTMLElement) {
     if ((b = at('[data-chipdel]'))) {
       const [k, v] = b.dataset.chipdel!.split('|');
       if (k === 'alias') d.aliases = d.aliases.filter((a) => `!${a}` !== v);
+      else if (k === 'allowid')
+        d.audience = {
+          ...d.audience,
+          allow_ids: (d.audience.allow_ids ?? []).filter((x) => x.id !== v),
+        };
       else
         d.audience = {
           ...d.audience,
@@ -1187,6 +1312,49 @@ export function mountCommandsPage(root: HTMLElement) {
           `[data-atext="${d.actions.at(-1)!.id}"]`,
         )
         ?.focus();
+      return;
+    }
+    if (at('[data-addsound]')) {
+      const first = S.sounds[0];
+      if (!first) {
+        // No sound imported yet: the file picker, then the new action.
+        S.soundFor = 'new';
+        z('steps').querySelector<HTMLInputElement>('[data-soundfile]')?.click();
+        return;
+      }
+      d.actions = [
+        ...d.actions,
+        {
+          id: crypto.randomUUID(),
+          type: 'sound',
+          v: 1,
+          on_error: 'continue',
+          sound: first.id,
+          label: first.label,
+        },
+      ];
+      return edited();
+    }
+    if ((b = at('[data-asoundtry]'))) {
+      const id = b.dataset.asoundtry!;
+      void fetch(
+        `/api/level-up/command-sounds/${encodeURIComponent(id)}/test`,
+        {
+          method: 'POST',
+          headers: { 'x-raptoru-studio': '1' },
+        },
+      ).then(
+        (r) =>
+          toast(
+            r.ok
+              ? 'Son joué dans OBS (source sonore).'
+              : r.status === 409
+                ? 'Aucune source OBS sonore connectée : ajoute la source « Level Up » (Progression › Level Up).'
+                : 'Son introuvable sur ce PC.',
+            r.ok ? {} : { bad: true },
+          ),
+        () => toast('Studio injoignable.', { bad: true }),
+      );
       return;
     }
     if ((b = at('[data-adel]'))) {
@@ -1385,6 +1553,31 @@ export function mountCommandsPage(root: HTMLElement) {
       );
       return edited();
     }
+    if (t.matches('[data-asound]')) {
+      const a = d.actions.find((x) => x.id === t.dataset.asound);
+      if (t.value === '__import') {
+        // The current sound stays chosen until the new file is in.
+        if (a?.type === 'sound') t.value = a.sound;
+        S.soundFor = t.dataset.asound!;
+        z('steps').querySelector<HTMLInputElement>('[data-soundfile]')?.click();
+        return;
+      }
+      const x = S.sounds.find((y) => y.id === t.value);
+      if (!x) return;
+      d.actions = d.actions.map((y) =>
+        y.id === t.dataset.asound && y.type === 'sound'
+          ? { ...y, sound: x.id, label: x.label }
+          : y,
+      );
+      return edited();
+    }
+    if (t.matches('[data-soundfile]')) {
+      const f = t.files?.[0];
+      t.value = '';
+      if (f) void importSound(f);
+      else S.soundFor = null;
+      return;
+    }
     if (t.matches('[data-aerr]')) {
       d.actions = d.actions.map((a) =>
         a.id === t.dataset.aerr ? { ...a, on_error: t.value as 'stop' } : a,
@@ -1395,6 +1588,11 @@ export function mountCommandsPage(root: HTMLElement) {
 
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLInputElement;
+    if (e.key === 'Enter' && t.matches('[data-chipin="allowid"]')) {
+      e.preventDefault();
+      void addAllowedId(t);
+      return;
+    }
     if (e.key === 'Enter' && t.matches('[data-chipin]')) {
       e.preventDefault();
       return addChip(t);

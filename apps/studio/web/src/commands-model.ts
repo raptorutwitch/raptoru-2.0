@@ -166,12 +166,17 @@ export const dur = (s: number) => {
 };
 
 /** « VIP + Abonnés », « Uniquement Aouh », « Tout le monde · sauf TrollMan », « Personne ». */
+/** The people allowed by name and by Twitch id (their label). */
+const named = (a: Audience) => [
+  ...a.allow,
+  ...(a.allow_ids ?? []).map((x) => x.name),
+];
 export function whoShort(a: Audience) {
   let s: string;
   if (a.groups.includes('everyone')) s = 'Tout le monde';
   else if (a.groups.length)
-    s = [...a.groups.map((g) => SHORT[g]), ...a.allow].join(' + ');
-  else if (a.allow.length) s = `Uniquement ${a.allow.join(', ')}`;
+    s = [...a.groups.map((g) => SHORT[g]), ...named(a)].join(' + ');
+  else if (named(a).length) s = `Uniquement ${named(a).join(', ')}`;
   else s = 'Personne';
   return a.deny.length ? `${s} · sauf ${a.deny.join(', ')}` : s;
 }
@@ -181,7 +186,7 @@ export function whoSentence(a: Audience) {
     return a.deny.length
       ? 'Tout le monde, streamer compris, sauf les personnes exclues.'
       : 'Tout le monde, streamer compris.';
-  if (!a.groups.length && !a.allow.length)
+  if (!a.groups.length && !named(a).length)
     return 'Personne ne peut l’utiliser.';
   return a.groups.includes('broadcaster')
     ? 'Seulement ces personnes. Une personne exclue ne peut jamais l’utiliser.'

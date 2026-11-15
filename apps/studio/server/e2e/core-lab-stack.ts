@@ -51,6 +51,7 @@ const { ProgressionRelay } = await import('../src/progression/relay.js');
 const { CosmeticsRelay } = await import('../src/cosmetics/relay.js');
 const { ChallengesRelay } = await import('../src/challenges/relay.js');
 const { LevelUpRuntime } = await import('../src/level-up/runtime.js');
+const { commandsRelay } = await import('../src/commands/relay.js');
 const { loadOrCreateInstallation } =
   await import('../src/prod-transport/installation.js');
 const { prodCoreClient } = await import('../src/prod-transport/core-client.js');
@@ -368,7 +369,11 @@ const studio = createStudioServer({
     dir: join(dir, 'level-up'),
     playerDir: join(import.meta.dirname, '..', 'level-up-player'),
     claimEveryMs: 500,
+    // Commands « sound » actions: the same OBS sound source (docs/COMMANDS_V2_STATUS.md).
+    commandSounds: { core: labCore, channelId: CHANNEL },
   }),
+  // Commands V2 in Studio (configuration, the sound action), through the same cockpit.
+  commands: commandsRelay(labCore, CHANNEL),
 });
 
 // The specs' own door to the Lab Core (a simulated live, fixtures): a test-only shim speaking their /v1/lab/* vocabulary,

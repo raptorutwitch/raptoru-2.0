@@ -17,6 +17,23 @@ Mis à jour le 2026-10-05. Vérifier `git status` / `git log` avant de se fier a
 | Permissions | Droit d'équipe `rename` (renommer = modifier `config.name`), réglable par rôle dans Studio → Droits de l'équipe                                                                                                     | ✅ validée | voir `git log`                                                           |
 | F           | « Commandes » public pour les viewers dans l'Extension (Video + Mobile, pas Panel), lecture seule : Hub → Commandes, projection publique Core `GET /v1/lab/commands/:c/public` via l'EBS Lab `GET /commands/public` | ✅ validée | voir `git log`                                                           |
 
+## Action « son » et viewers par ID Twitch (15/11/2026)
+
+- **Action « son »** : une commande peut jouer un son sur le stream, seul ou avec des messages.
+  - Le son est importé dans Studio (MP3, OGG ou WAV, 2 Mo au plus), dans le dossier de Studio, jamais dans Git.
+  - Il est joué par la **source OBS sonore invisible** déjà utilisée par Level Up (aucune nouvelle source à ajouter ;
+    l'actualiser une fois dans OBS après la mise à jour de Studio).
+  - Le Core le met en file à l'admission (`cmd_sounds`, migration additive `20261128130000_cmd_sounds.sql`) : une fois
+    par utilisation acceptée, expiré après la minute de vie des étapes (jamais en retard), sans lien avec « Sortie chat
+    réelle » ni avec l'économie.
+  - Studio le prend toutes les 2 s tant qu'une source écoute (`/v1/lab/commands/<chaîne>/sounds/claim`, par le cockpit
+    en Production), chaque son une seule fois.
+- **Viewers précis par ID Twitch** (`audience.allow_ids`) : ils gardent le droit s'ils changent de pseudo.
+  - Studio convertit un pseudo saisi en ID grâce à l'annuaire du Core ; un pseudo inconnu est refusé, jamais deviné.
+  - Même droit d'équipe et même historique que « Autoriser aussi » (`audience.allow`).
+- Configurer : Studio › Commandes › une commande › « Ensuite » › **Ajouter un son**, puis « Qui » › **Viewers
+  précis**. Pour un son seul : la réponse sur « Ne rien répondre ».
+
 Commands V2 A0 → F est terminé et validé (Lab). Les passes de consolidation de l'audit sont suivies dans
 [`docs/ASTRA_GLOBAL_AUDIT_2026-10.md`](ASTRA_GLOBAL_AUDIT_2026-10.md). Commands reste Lab jusqu'à un cutover explicite.
 

@@ -11,6 +11,9 @@ import type { LabCoreCall } from '../lab-moderation/proxy.js';
 // (nothing is claimed without one: an unheard level-up expires in Core, never played late), pushes them to the source and
 // remembers nothing. The sound: a short chime made here (a test sound), or the streamer's own file sent from Studio
 // (runtimeDir/level-up/sound.mp3 | .ogg | .wav), at Studio's volume.
+// The same invisible source plays the Commands « sound » actions (e.g. « !groslot »): the sounds imported in Studio
+// (runtimeDir/level-up/command-sounds/<id>.<format>), each queued by the Core for an accepted use and handed out once
+// (`event: sound`, a distinct event: a page of an older Studio ignores it — never the wrong sound).
 
 export const CLAIM_EVERY_MS = 2000;
 export const DEFAULT_VOLUME = 70;
@@ -94,6 +97,21 @@ export function synthChime(): Buffer {
   return Buffer.concat([h, data]);
 }
 
+/** A sound imported for the Commands « sound » action. */
+export interface CommandSound {
+  id: string;
+  label: string;
+  format: 'mp3' | 'ogg' | 'wav';
+  bytes: number;
+  added_at: string;
+}
+const SOUND_TYPES = {
+  mp3: 'audio/mpeg',
+  ogg: 'audio/ogg',
+  wav: 'audio/wav',
+} as const;
+const SOUND_ID = /^[a-f0-9]{16}$/;
+
 export interface LevelUpRuntimeDeps {
   core: LabCoreCall;
   environment: 'lab' | 'production';
@@ -104,6 +122,11 @@ export interface LevelUpRuntimeDeps {
   /** The OBS source files (apps/studio/server/level-up-player). */
   playerDir: string;
   claimEveryMs?: number;
+  /**
+   * Commands « sound » actions: the channel's command sounds queue (`/v1/lab/commands/<channel>/sounds/claim`, the
+   * production cockpit in Production). Absent: none claimed.
+   */
+  commandSounds?: { core: LabCoreCall; channelId: string };
 }
 
 export class LevelUpRuntime {
@@ -112,6 +135,7 @@ export class LevelUpRuntime {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private chime: Buffer | null = null;
   lastError: string | null = null;
+  lastSoundError: string | null = null;
   shown = 0;
 
   private constructor(
@@ -172,6 +196,7 @@ export class LevelUpRuntime {
       } catch (e) {
         this.lastError = (e as Error).message;
       }
+      await this.claimCommandSounds();
       this.schedule();
     }, this.d.claimEveryMs ?? CLAIM_EVERY_MS);
   }
@@ -186,6 +211,62 @@ export class LevelUpRuntime {
     })}\n\n`;
     for (const c of this.clients) c.write(out);
     this.shown++;
+  }
+
+  /** The command sounds queued by the Core (each handed out once), pushed to the sources while one listens. */
+  private async claimCommandSounds() {
+    const cs = this.d.commandSounds;
+    if (!cs) return;
+    try {
+      const out = await cs.core<{ sounds: { id: number; sound: string }[] }>(
+        `/v1/lab/commands/${cs.channelId}/sounds/claim`,
+        { consumer: this.consumer },
+      );
+      this.lastSoundError = null;
+      const known = new Set((await this.commandSounds()).map((x) => x.id));
+      for (const x of out.sounds ?? [])
+        if (SOUND_ID.test(x.sound) && known.has(x.sound))
+          this.pushSound(`cmd-${x.id}`, x.sound);
+    } catch (e) {
+      this.lastSoundError = (e as Error).message;
+    }
+  }
+
+  /** One command sound on every connected source (nothing drawn): the page plays the file Studio serves. */
+  private pushSound(id: string, sound: string) {
+    const out = `event: sound\ndata: ${JSON.stringify({
+      id,
+      src: `/level-up/cmd/${sound}`,
+      volume: this.volume / 100,
+    })}\n\n`;
+    for (const c of this.clients) c.write(out);
+    this.shown++;
+  }
+
+  private get soundsDir() {
+    return join(this.d.dir, 'command-sounds');
+  }
+
+  /** The imported command sounds (their index; a missing file is left out). */
+  async commandSounds(): Promise<CommandSound[]> {
+    try {
+      const list = JSON.parse(
+        await readFile(join(this.soundsDir, 'index.json'), 'utf8'),
+      ) as CommandSound[];
+      return Array.isArray(list)
+        ? list.filter((x) => SOUND_ID.test(x.id) && x.format in SOUND_TYPES)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async saveSounds(list: CommandSound[]) {
+    await mkdir(this.soundsDir, { recursive: true });
+    await writeFile(
+      join(this.soundsDir, 'index.json'),
+      JSON.stringify(list, null, 1),
+    );
   }
 
   stop() {
@@ -239,6 +320,7 @@ export class LevelUpRuntime {
         sources: this.clients.size,
         shown: this.shown,
         last_error: this.lastError,
+        last_sound_error: this.lastSoundError,
         custom_sound: (await this.customSound()) !== null,
         custom_sound_type: (await this.customSound())?.type ?? null,
       });
@@ -264,6 +346,60 @@ export class LevelUpRuntime {
       for (const [file] of CUSTOM_SOUNDS)
         await rm(join(this.d.dir, file), { force: true });
       return reply(200, { custom_sound: false });
+    }
+    // Commands « sound » actions: the imported sounds (list, import a file as the raw body, remove, try in OBS).
+    if (req.method === 'GET' && p === '/command-sounds')
+      return reply(200, { sounds: await this.commandSounds() });
+    if (req.method === 'POST' && p === '/command-sounds') {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += (chunk as Buffer).length;
+        if (size > MAX_SOUND_BYTES)
+          return reply(413, { error: 'sound_too_large' });
+        chunks.push(chunk as Buffer);
+      }
+      const data = Buffer.concat(chunks);
+      const format = soundFormat(data);
+      if (!format) return reply(415, { error: 'unsupported_sound' });
+      // The file's name without its extension, control characters or angle brackets (a label, never markup).
+      const label =
+        Array.from(
+          (url.searchParams.get('name') ?? '').replace(/\.[a-z0-9]{2,4}$/i, ''),
+        )
+          .filter((ch) => ch >= ' ' && ch !== '<' && ch !== '>')
+          .join('')
+          .trim()
+          .slice(0, 60) || 'Son';
+      const sound: CommandSound = {
+        id: randomBytes(8).toString('hex'),
+        label,
+        format,
+        bytes: data.length,
+        added_at: new Date().toISOString(),
+      };
+      await mkdir(this.soundsDir, { recursive: true });
+      await writeFile(join(this.soundsDir, `${sound.id}.${format}`), data);
+      await this.saveSounds([...(await this.commandSounds()), sound]);
+      return reply(200, sound);
+    }
+    const one = /^\/command-sounds\/([a-f0-9]{16})(\/test)?$/.exec(p);
+    if (one && req.method === 'DELETE' && !one[2]) {
+      const list = await this.commandSounds();
+      const gone = list.find((x) => x.id === one[1]);
+      if (gone)
+        await rm(join(this.soundsDir, `${gone.id}.${gone.format}`), {
+          force: true,
+        });
+      await this.saveSounds(list.filter((x) => x.id !== one[1]));
+      return reply(200, { removed: Boolean(gone) });
+    }
+    if (one && req.method === 'POST' && one[2]) {
+      if (!(await this.commandSounds()).some((x) => x.id === one[1]))
+        return reply(404, { error: 'not_found' });
+      if (!this.clients.size) return reply(409, { error: 'no_source' });
+      this.pushSound(`try-${Date.now()}`, one[1]!);
+      return reply(200, { sent: true });
     }
     let raw = '';
     for await (const chunk of req) {
@@ -324,10 +460,20 @@ export class LevelUpRuntime {
     }
     let data: Buffer;
     let type: string;
+    const cmd = /^cmd\/([a-f0-9]{16})$/.exec(name);
     if (name === 'sound') {
       const custom = await this.customSound();
       data = custom?.data ?? (this.chime ??= synthChime());
       type = custom?.type ?? 'audio/wav';
+    } else if (cmd) {
+      const x = (await this.commandSounds()).find((y) => y.id === cmd[1]);
+      if (!x) return reply(404, { error: 'not_found' });
+      try {
+        data = await readFile(join(this.soundsDir, `${x.id}.${x.format}`));
+      } catch {
+        return reply(404, { error: 'not_found' });
+      }
+      type = SOUND_TYPES[x.format];
     } else if (name in PLAYER_FILES) {
       try {
         data = await readFile(join(this.d.playerDir, name));

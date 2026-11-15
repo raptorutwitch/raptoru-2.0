@@ -76,6 +76,8 @@ export interface Rendered {
   actions: ((
     | ({ id: string; type: 'chat' } & RenderedMessage)
     | { id: string; type: 'module'; module: string; operation: string }
+    /** A sound on stream (Studio's OBS sound source), queued apart from the chat steps. */
+    | { id: string; type: 'sound'; sound: string; label: string }
   ) & { on_error: 'stop' | 'continue' })[];
   reply_first: boolean;
 }
@@ -233,7 +235,11 @@ export function decide(input: DecideInput): Decision {
       `${v.display_name} est exclu de cette commande.`,
       { login },
     );
-  if (!cfg.audience.allow.includes(login)) {
+  // Allowed by name, or by the stable Twitch id (a renamed viewer keeps the right).
+  if (
+    !cfg.audience.allow.includes(login) &&
+    !(cfg.audience.allow_ids ?? []).some((x) => x.id === v.id)
+  ) {
     const hit = cfg.audience.groups.find((g) => v.groups.includes(g));
     if (!hit) {
       const detail = { groups: cfg.audience.groups, viewer_groups: v.groups };
@@ -315,6 +321,16 @@ export function decide(input: DecideInput): Decision {
         type: 'module',
         module: a.module,
         operation: a.operation,
+        on_error: a.on_error,
+      });
+      continue;
+    }
+    if (a.type === 'sound') {
+      actions.push({
+        id: a.id,
+        type: 'sound',
+        sound: a.sound,
+        label: a.label,
         on_error: a.on_error,
       });
       continue;

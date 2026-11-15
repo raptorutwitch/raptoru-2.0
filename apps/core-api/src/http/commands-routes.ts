@@ -164,6 +164,25 @@ export function commandsRoutes(
         }),
     },
     {
+      // Studio's invisible OBS sound source: the command sounds to play now, each handed out once (Production: through
+      // the Studio cockpit).
+      method: 'POST',
+      pattern: new RegExp(`${BASE}/sounds/claim$`),
+      auth: 'studio',
+      handle: ({ params, body }) =>
+        mapped(() =>
+          steps.claimSounds(
+            channel(params),
+            parse(
+              z.strictObject({
+                consumer: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+              }),
+              body,
+            ).consumer,
+          ),
+        ),
+    },
+    {
       method: 'GET',
       pattern: new RegExp(`${BASE}/steps$`),
       auth: 'studio',

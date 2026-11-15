@@ -146,7 +146,11 @@ describe('Level Up OBS source', () => {
       'style',
     ])
       expect(js).not.toContain(drawing);
-    expect(js).toContain("new Audio('/level-up/sound')");
+    // The level-up sound by default; a command's sound only from Studio's own /level-up/cmd/<id> address.
+    expect(js).toContain("new Audio(n.src ?? '/level-up/sound')");
+    expect(js).toContain(
+      String.raw`/^\/level-up\/cmd\/[a-f0-9]{16}$/.test(n.src)`,
+    );
   });
 
   it('the page files, the default chime (a short WAV), the streamer’s own sound first', async () => {
