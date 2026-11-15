@@ -1,32 +1,33 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 11/11/2026** (passe post-live). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+**Mis à jour le 15/11/2026** (livraison Level Up V2 et mini-profil). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
 ## 0. Résumé compact, à copier dans une nouvelle conversation
 
 ```text
-Raptoru 2.0 — reprise au 11/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
-Passe post-live du 11/11 LIVRÉE : Core 052ab2ec, Studio 0.1.30 publié (installation = Antoni), ZIP extension en
-attente de la validation d'Antoni — voir docs/REPRISE_SESSION_POST_LIVE_2026-11-11.md.
+Raptoru 2.0 — reprise au 15/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
+Livraison du 15/11 FAITE (GO d'Antoni) : Level Up V2 ACTIF en Production et mini-profil viewer fusionné.
+Journal : docs/archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md ; modules : docs/LEVEL_UP_V2.md, docs/MINI_PROFIL.md.
 
 Projet : plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
 Règle de partage : le Core décide (données, Jetons, règles, files), le bot LeCroupier_ parle à Twitch (EventSub, chat),
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (relevée le 10/11) : Core bbce104 et bot 900637f sur Coolify (sains), Studio 0.1.29 installé (bbce104),
-site 74f7542. origin/main = afe98cf.
-Music Hub : livré, ouvert aux seuls testeurs (MUSIC_HUB_EXTENSION=testers) ; extension shell v2 en Hosted Test avec
-le ZIP raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.zip (SHA-256 80bdab00…f9f5b,
-worktree music-finish). Extension publique : présumée 0bf7907 (legacy), jamais prouvée.
-Music Hub : passe de finition et parcours viewer réels NON validés.
-OBS 33.0.1 réparé (shaderfilter 2.6.1, Composite Blur et Advanced Masks 1.6.1, Image Reaction 1.4, DSK 0.4.1,
-Move 3.2.1), SE.Live désactivé. URL des sources navigateur nettoyées des paramètres SE.Live (10/11, 17:06).
+Production (15/11) : Core f04b41a2 (sain), bot 13969a8c, Studio 0.1.34 publié (installation = Antoni), site inchangé.
+origin/main = f04b41a2 (+ cette documentation).
+Level Up V2 : 1 000 XP/niveau, normalisation WizeBot appliquée (910 comptes, 441 niveaux changés), 11 badges sub
+(266 attributions), préférences historiques restaurées, annonces LeCroupier_ et sons allumés. Studio › Level Up :
+« Tester un Level Up » (son par la vraie source OBS, aperçu du message, test public [TEST] sur confirmation).
+Extension : mini-profil (avatar, Jetons/Crédits, niveau et rang, abonnement et multiplicateur, restrictions, Préférences)
+fusionné dans les deux shells, PAS ENCORE PUBLIC : inventaire release-inventory/INVENTAIRE-7355c44acce2.md à valider
+par Antoni, puis npm run package:production -- --shell v2, Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Prochain chantier : Chaos V2, en CONCEPTION (rien de construit) — docs/chaos/. Lot 0 = mesures PresentMon + couper les
-fenêtres Halloween permanentes + choisir 59/165 Hz ; lot 1 = lecteur natif (WGC sans curseur), flip seul.
+Gestes d'Antoni restants : installer Studio 0.1.34, envoyer son son, ajouter la source OBS « Level Up », tester ;
+valider l'inventaire de l'extension et la publier.
+Prochain chantier possible : Chaos V2 lot 0 (docs/chaos/), ou au choix d'Antoni.
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
@@ -145,48 +146,38 @@ Un écart veut dire que quelqu'un a agi depuis : le comprendre avant d'agir.
 La version **publique** de l'extension ne se lit pas hors live. Antoni peut la prouver par la console Twitch, ou en
 live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.3).
 
-## 5. Situation au 10/11
+## 5. Situation au 15/11
 
-**Passe post-live du 11/11 : LIVRÉE le 11/11** — Core **`052ab2ec`** déployé (PR #64 fusionnée), Studio **0.1.30**
-publié (à installer par Antoni), extension : ZIP pas encore construit (ligne de validation d'Antoni). Détail et gestes
-restants : [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md) § C–C2 ; rapport :
-[RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md).
+**Livraison Level Up V2 et mini-profil : FAITE le 15/11** (GO d'Antoni).
 
-**Ce qui vient d'être terminé**
+- **Fusions** : PR #70 puis #71, `main` = `f04b41a2`.
+- **Core** : `f04b41a2` déployé, migration `20261126130000_progression_level_up.sql` appliquée.
+- **Level Up V2** : actif. Chiffres et retour arrière :
+  [archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md](archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md).
+- **Studio** : 0.1.34 publié.
 
-- Livraison du 10/11 :
-  - PR #59 à #62 ;
-  - Core `bbce104`, bot `900637f` ;
-  - Studio 0.1.28 puis **0.1.29**, installé ;
-  - Music Hub ouvert aux testeurs ;
-  - ZIP v2 en Hosted Test (Antoni).
+**En attente d'Antoni** :
 
-  Détail : [RELEASE_2026-11-10.md](RELEASE_2026-11-10.md), [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md).
-
-- Réparation d'**OBS 33.0.1** et désactivation de SE.Live : [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md).
-- **Recherche Chaos V2** : [chaos/](chaos/ARCHITECTURE_CHAOS_V2.md), § 0 pour le verdict.
-- Cette consolidation.
+- installer Studio 0.1.34 ;
+- son fichier son ;
+- la source OBS « Level Up » et « Tester un Level Up » ;
+- la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-7355c44acce2.md`, 94 commits), puis la publication.
+  Elle remplace les inventaires non validés `4799eb697eee` et `bb8700814939`.
 
 **En Production** : tous les modules de [ROADMAP.md](ROADMAP.md) § 1 marqués « Livré ». Music Hub y est **seulement
-pour les testeurs**.
+pour les testeurs**. Le public garde l'extension présumée `0bf7907` (shell legacy) : ni le mini-profil, ni
+l'interrupteur du son, tant que la nouvelle version n'est pas publiée.
 
-**Seulement en Hosted Test** : le module Musique de l'extension et tout le shell v2 (ZIP `bbce104`). Le public garde
-le shell legacy présumé `0bf7907`.
+**Période précédente** (livraisons du 10 au 14/11, OBS, Chaos V2) :
 
-**Ce qui reste à vérifier** (Antoni) :
+- [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md) ;
+- [PROJECT_STATUS.md](PROJECT_STATUS.md), photographie du 10/11 ;
+- [ROADMAP.md](ROADMAP.md).
 
-- Music Hub après la passe de finition, puis les parcours viewer réels
-  ([extension/TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 6) ;
-- la source OBS `Navigateur web 2` (ancienne clé TTS) ;
-- les effets OBS ;
-- la recette d'usage de Studio.
+**Ce qui reste à vérifier** (Antoni) : Music Hub et ses parcours viewer réels, la recette d'usage de Studio, les effets
+OBS ([PROJECT_STATUS.md](PROJECT_STATUS.md) § 12).
 
-Liste : [PROJECT_STATUS.md](PROJECT_STATUS.md) § 12.
-
-**Prochain chantier** : **Chaos V2, lot 0** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md)).
-
-- Lot 0 : couper les fenêtres Halloween permanentes, choisir la fréquence de l'écran, mesurer avec PresentMon.
-- Lot 1 : lecteur natif limité au flip, sur GO.
+**Prochain chantier possible** : **Chaos V2, lot 0** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md)).
 
 ## 6. Quels fichiers lire avant de coder
 

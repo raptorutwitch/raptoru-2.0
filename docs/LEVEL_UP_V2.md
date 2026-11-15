@@ -1,8 +1,9 @@
 # Level Up V2 — 1 000 XP par niveau, normalisation WizeBot, annonce chat, son au choix, badges de niveau
 
-**État (15/11/2026)** : développé et testé en Lab, de bout en bout dans de vrais navigateurs, PGlite et PostgreSQL réel.
-Branche `feat/level-up-v2-final`, PR #70 (reprise de la PR #43, `02b4ebb`, 30/10). **Rien n'est actif en Production** :
-la Production reste sur la courbe tant que la procédure du § 9 n'a pas reçu le GO d'Antoni.
+**État (15/11/2026)** : **ACTIF EN PRODUCTION** depuis le 15/11 ~03:55 UTC (GO d'Antoni) — Core `f04b41a2` (PR #70
+puis #71), normalisation appliquée, 11 badges importés, 266 attributions rétroactives, préférences historiques restaurées,
+annonces et sons allumés. Chiffres, contrôles et retour arrière : § 12 et
+[archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md](archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md).
 
 ## 1. Décisions retrouvées dans la PR #43 (30/10) et gardées
 
@@ -249,6 +250,30 @@ Studio › Progression › Level Up › **Tester un Level Up** : un test adminis
 
 ## 11. Ce qui attend Antoni
 
-- **Le fichier son** : à envoyer depuis Studio. Le droit de le diffuser en public reste à clarifier avant la Production.
-- **L'import des choix historiques** (export lu le 15/11 : 5 son activé, 1 coupé), après le déploiement du Core.
-- Le GO de chaque étape du § 9.
+- **Installer Studio 0.1.34** (« Rechercher une mise à jour »).
+- **Le fichier son** :
+  - à envoyer depuis Studio › Level Up › « Choisir un son… » ;
+  - sans lui, le carillon de test de Studio joue ;
+  - le droit de diffuser ce son en public reste le sien.
+- **OBS** : ajouter la source navigateur « Level Up » (adresse copiée depuis Studio), puis « Tester un Level Up ».
+- **Extension** : la ligne de validation de l'inventaire, puis la publication Twitch. Sans elle, les viewers n'ont pas
+  encore l'interrupteur du son ni le mini-profil.
+
+## 12. Exécution en Production (15/11/2026)
+
+- Core **`f04b41a2`** déployé ; migration `20261126130000_progression_level_up.sql` appliquée.
+  - Sauvegarde Coolify de 03:34 UTC : 9 565 742 octets, `success`.
+- Simulation sur les données du jour, puis activation, **identiques** :
+  - 1 840 comptes, dont 1 636 avec un historique WizeBot rattaché ;
+  - **910 XP normalisées, 441 niveaux changés**, niveau max 135 → 57.
+- **XP native conservée** : 25/25 identiques sur les plus grandes variations, recalculées indépendamment.
+  - Aucun historique au-delà du niveau 1 n'est ramené au niveau 1.
+  - +69 comptes au niveau 1 : sans historique WizeBot et sous 1 000 XP, XP inchangée.
+- **266 badges** attribués rétroactivement : 159 au niveau 10, 64 au 20, 28 au 30, 11 au 40, 4 au 50.
+  - Images servies publiquement (le site les lit).
+- **0 Level Up** créé par la migration et l'activation : aucune annonce, aucun son.
+- 6 214 historiques WizeBot en attente et 2 conflits : jamais rattachés au hasard.
+- Préférences historiques : 5 sons activés, 1 coupé, relus un par un ; viewer sans choix = son coupé.
+- Règles en vigueur :
+  - 1 000 XP par niveau ; 1 XP/min, 3 XP/message, 60 s ; anti-farm 3 caractères distincts, 10 min ;
+  - annonces au plus toutes les 30 s, abandonnées après 120 s ; un son au plus toutes les 60 s.
