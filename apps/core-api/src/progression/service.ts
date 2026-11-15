@@ -12,6 +12,7 @@ import { insertAnnouncement } from '../commands/steps.js';
 import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import type { LabChatModule } from '../lab-chat/router.js';
+import type { TwitchUserLookup } from '../raffle-lab/avatars.js';
 import type {
   PresenceListener,
   ValidatedPresence,
@@ -143,9 +144,38 @@ export function messageFingerprint(text: string) {
   return createHash('sha256').update(norm).digest('hex').slice(0, 32);
 }
 
+/** Twitch: an announcement is 500 characters at most; a few names keep it readable. */
+const ANNOUNCE_MAX_CHARS = 450;
+const ANNOUNCE_MAX_NAMES = 8;
+/** Two announcements are at least this far apart, even when a full one leaves level-ups for the next. */
+const ANNOUNCE_MIN_GAP_MS = 60_000;
+/** A WORD JOINER after the pseudo's first character: invisible, and the name no longer mentions (pings) the viewer. */
+export const unping = (name: string) => {
+  const c = Array.from(name);
+  return c.length > 1 ? `${c[0]}\u2060${c.slice(1).join('')}` : name;
+};
+/** « Pseudo [Titre] (niveau) »: the equipped title only when there is one (never an empty slot). */
+export const announceEntry = (
+  name: string,
+  title: string | null,
+  level: number,
+) => `${unping(name)}${title ? ` [${title}]` : ''} (${level})`;
+
 /** raptoru.fr's WizeBot export (public, read-only); WIZEBOT_EXPORT_URL points elsewhere (staging, tests). */
 const WIZEBOT_EXPORT_URL =
   process.env.WIZEBOT_EXPORT_URL ?? 'https://raptoru.fr/api/wizebot?export=1';
+
+export interface NamesRefresh {
+  at: string;
+  /** Progression accounts checked against Twitch, by their id. */
+  checked: number;
+  /** Pseudos written for the first time (the account had none in the directory). */
+  added: number;
+  /** Pseudos changed (a rename, a display name). */
+  updated: number;
+  /** Ids Twitch does not know (deleted or suspended account): left as they are. */
+  unresolved: number;
+}
 
 export class ProgressionService {
   constructor(
@@ -163,6 +193,11 @@ export class ProgressionService {
       wizebotExport?: () => Promise<unknown>;
     } = {},
   ) {}
+
+  /** Helix Get Users by id (the Core's Twitch app, wired by the frontier); absent without Twitch (the Lab). */
+  userLookup: TwitchUserLookup | null = null;
+  /** The last pseudo refresh (refreshNames), for Studio; in memory — the next run (start, then daily) refills it. */
+  private lastNames: NamesRefresh | null = null;
 
   private async readWizebot() {
     const read =
@@ -222,10 +257,11 @@ export class ProgressionService {
         [channelId],
       )
     )[0];
-    return {
-      enabled: r?.enabled ?? false,
-      rules: { ...DEFAULT_PROGRESSION_RULES, ...(r?.rules ?? {}) },
-    };
+    const rules = { ...DEFAULT_PROGRESSION_RULES, ...(r?.rules ?? {}) };
+    // The first V2's text ({pseudo}, {niveau}: one line per viewer, with a mention) reads as today's announcement.
+    if (!rules.level_up_chat_text.includes('{liste}'))
+      rules.level_up_chat_text = DEFAULT_PROGRESSION_RULES.level_up_chat_text;
+    return { enabled: r?.enabled ?? false, rules };
   }
 
   async updateSettings(
@@ -440,11 +476,17 @@ export class ProgressionService {
   }
 
   /**
-   * The chat announcements of the level-ups waiting (in the caller's transaction, after the XP it moved): ONE line on
-   * the commands' outbox (LeCroupier_ sends it; « Sortie chat réelle » and the bot's rate limit apply), at most one per
-   * level_up_chat_interval_s — the level-ups in between wait and are grouped in the next line; a viewer who climbed
-   * several levels is announced once, at the final level; an announcement older than level_up_max_age_s is dropped
-   * (never a late flood after a pause). An outbox refusal is logged and skipped, never its caller.
+   * The chat announcements of the level-ups waiting (in the caller's transaction, after the XP it moved, or the Core's
+   * 30 s tick): a REAL Twitch announcement (the commands' outbox, mode `announce`: LeCroupier_ sends it with Send Chat
+   * Announcement; « Sortie chat réelle » and the bot's rate limit apply).
+   * - Grouping: the oldest level-up waiting opens a window of level_up_chat_interval_s; at its end, ONE announcement
+   *   names everyone of the window (at most ANNOUNCE_MAX_NAMES and ANNOUNCE_MAX_CHARS; the others go in the next one,
+   *   ANNOUNCE_MIN_GAP_MS later at least).
+   * - A viewer who climbed several levels is named once, at the highest (the others « merged »); a level-up is in one
+   *   announcement only (sent once, under the channel's lock).
+   * - Every level-up ends with a recorded state (sent, merged, expired, skipped and why): never a silent loss. Not sent
+   *   within level_up_max_age_s after its window: « too old », never a late flood after a pause.
+   * An outbox refusal is logged and skipped, never its caller.
    */
   async flushLevelUpChat(
     q: Queryable,
@@ -467,11 +509,10 @@ export class ProgressionService {
       id: string;
       twitch_user_id: string;
       display_name: string;
-      login: string | null;
       to_level: number;
       created_at: Date;
     }>(
-      `select id, twitch_user_id, display_name, login, to_level, created_at from progression_level_events
+      `select id, twitch_user_id, display_name, to_level, created_at from progression_level_events
        where channel_id = $1 and chat_status = 'pending' order by id limit 500`,
       [channelId],
     );
@@ -499,62 +540,68 @@ export class ProgressionService {
       );
       return { sent: 0, waiting: 0 };
     }
-    const maxAge = rules.level_up_max_age_s * 1000;
-    const fresh = rows.filter(
-      (r) => now.getTime() - new Date(r.created_at).getTime() <= maxAge,
+    const age = (r: (typeof rows)[number]) =>
+      now.getTime() - new Date(r.created_at).getTime();
+    const window = rules.level_up_chat_interval_s * 1000;
+    const tooOld = rows.filter(
+      (r) => age(r) > window + rules.level_up_max_age_s * 1000,
     );
     await settle(
-      rows.filter((r) => !fresh.includes(r)).map((r) => r.id),
+      tooOld.map((r) => r.id),
       'expired',
       'too_old',
     );
-    const latest = new Map<string, (typeof fresh)[number]>();
-    for (const r of fresh) latest.set(r.twitch_user_id, r);
-    await settle(
-      fresh.filter((r) => latest.get(r.twitch_user_id) !== r).map((r) => r.id),
-      'merged',
-      'newer_level_up',
-    );
-    if (!latest.size) return { sent: 0, waiting: 0 };
+    const fresh = rows.filter((r) => !tooOld.includes(r));
+    if (!fresh.length) return { sent: 0, waiting: 0 };
+    // One entry per viewer, at their highest level, named in the order they FIRST levelled up (rows: oldest first).
+    const best = new Map<string, (typeof fresh)[number]>();
+    for (const r of fresh) {
+      const cur = best.get(r.twitch_user_id);
+      // Map keeps the first insertion's place: a higher level replaces the entry, not its position.
+      if (!cur || r.to_level >= cur.to_level) best.set(r.twitch_user_id, r);
+    }
+    const wanted = [...best.values()];
+    // The window: opened by the oldest level-up waiting (a merged one included: the viewer waited since then).
+    if (Math.max(...fresh.map(age)) < window)
+      return { sent: 0, waiting: wanted.length };
     const last = (
       await q.query<{ at: Date | null }>(
         `select max(chat_at) as at from progression_level_events where channel_id = $1 and chat_status = 'sent'`,
         [channelId],
       )
     )[0]?.at;
-    if (
-      last &&
-      now.getTime() - new Date(last).getTime() <
-        rules.level_up_chat_interval_s * 1000
-    )
-      return { sent: 0, waiting: latest.size };
-    // A Twitch mention needs the login; the display name when it is the same name (only the case differs).
-    const pseudo = (r: (typeof fresh)[number]) =>
-      !r.login || r.display_name.toLowerCase() === r.login
-        ? r.display_name
-        : r.login;
-    const wanted = [...latest.values()];
+    if (last && now.getTime() - new Date(last).getTime() < ANNOUNCE_MIN_GAP_MS)
+      return { sent: 0, waiting: wanted.length };
+    const titles = await this.equippedTitles(
+      q,
+      channelId,
+      wanted.map((r) => r.twitch_user_id),
+    );
+    const line = (parts: string[]) =>
+      rules.level_up_chat_text.replace('{liste}', parts.join(' · '));
+    const parts: string[] = [];
     const included: typeof wanted = [];
-    let text: string;
-    if (wanted.length === 1) {
-      const r = wanted[0]!;
+    for (const r of wanted) {
+      const part = announceEntry(
+        r.display_name,
+        titles.get(r.twitch_user_id) ?? null,
+        r.to_level,
+      );
+      if (
+        parts.length >= ANNOUNCE_MAX_NAMES ||
+        (parts.length && line([...parts, part]).length > ANNOUNCE_MAX_CHARS)
+      )
+        break;
+      parts.push(part);
       included.push(r);
-      text = rules.level_up_chat_text
-        .replaceAll('{pseudo}', pseudo(r))
-        .replaceAll('{niveau}', String(r.to_level));
-    } else {
-      // Several viewers: one grouped line, as many as fit (the others wait for the next line).
-      const parts: string[] = [];
-      for (const r of wanted) {
-        const part = `@${pseudo(r)} (niveau ${r.to_level})`;
-        const next = `Montées de niveau : ${[...parts, part].join(', ')} !`;
-        if (parts.length >= 10 || next.length > 450) break;
-        parts.push(part);
-        included.push(r);
-      }
-      text = `Montées de niveau : ${parts.join(', ')} !`;
     }
     const ids = included.map((r) => r.id);
+    // The lower level-ups of the viewers named: merged into this announcement (settled with it, not before — the
+    // window and the order stay those of their first level-up).
+    const named = new Set(included.map((r) => r.twitch_user_id));
+    const merged = fresh
+      .filter((r) => named.has(r.twitch_user_id) && !ids.includes(r.id))
+      .map((r) => r.id);
     const written = await insertAnnouncement(q, {
       channelId,
       now,
@@ -562,8 +609,9 @@ export class ProgressionService {
       drafts: [
         {
           idempotencyKey: `levelup:${channelId}:${ids.join('-')}`.slice(0, 200),
-          mode: 'normal',
-          text: text.slice(0, 450),
+          mode: 'announce',
+          color: rules.level_up_chat_color,
+          text: line(parts).slice(0, ANNOUNCE_MAX_CHARS),
         },
       ],
     });
@@ -572,10 +620,43 @@ export class ProgressionService {
       written ? 'sent' : 'skipped',
       written ? null : 'outbox_refused',
     );
+    await settle(merged, 'merged', 'newer_level_up');
     return {
       sent: written ? ids.length : 0,
-      waiting: latest.size - included.length,
+      waiting: wanted.length - included.length,
     };
+  }
+
+  /**
+   * The title each viewer has EQUIPPED now (their choice on raptoru.fr), shown only while they own it (not revoked) and
+   * it is active and published — the rankings' own rule. No title: absent from the map.
+   */
+  private async equippedTitles(
+    q: Queryable,
+    channelId: string,
+    viewerIds: string[],
+  ) {
+    if (!viewerIds.length) return new Map<string, string>();
+    const rows = await q.query<{ id: string; label: string }>(
+      `select e.twitch_user_id as id, r.label from progression_equipped e
+       join progression_grants g on g.channel_id = e.channel_id and g.twitch_user_id = e.twitch_user_id
+         and g.reward_id = e.title_id and g.revoked_at is null
+       join progression_rewards r on r.channel_id = e.channel_id and r.reward_id = e.title_id and r.kind = 'title'
+         and r.active and r.status <> 'draft'
+       where e.channel_id = $1 and e.twitch_user_id = any($2::text[])`,
+      [channelId, viewerIds],
+    );
+    return new Map(rows.map((r) => [r.id, r.label.slice(0, 40)]));
+  }
+
+  /** The Core's own tick (every 30 s): an announcement whose window ended goes out even when nobody chats. */
+  async tick() {
+    const channelId = this.channelOf();
+    if (!channelId) return;
+    await this.db.tx(async (q) => {
+      const s = await this.settings(channelId, q);
+      if (s.enabled) await this.flushLevelUpChat(q, channelId, s.rules);
+    });
   }
 
   /** Viewers excluded by login (bots, from the rules) and the broadcaster. */
@@ -685,7 +766,11 @@ export class ProgressionService {
         );
       else
         await q.query(
-          `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3) on conflict do nothing`,
+          // A renamed viewer: today's pseudo (by the stable id), never the old one kept.
+          `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3)
+           on conflict (twitch_user_id) do update set login = excluded.login, display_name = excluded.display_name,
+             updated_at = now()
+           where viewers.login is distinct from excluded.login or viewers.display_name is distinct from excluded.display_name`,
           [
             msg.chatter.id,
             msg.chatter.login.toLowerCase(),
@@ -1313,7 +1398,11 @@ export class ProgressionService {
     return this.db.tx(async (q) => {
       if (!this.o.lab)
         await q.query(
-          `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3) on conflict do nothing`,
+          // A renamed viewer: today's pseudo (by the stable id), never the old one kept.
+          `insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $3)
+           on conflict (twitch_user_id) do update set login = excluded.login, display_name = excluded.display_name,
+             updated_at = now()
+           where viewers.login is distinct from excluded.login or viewers.display_name is distinct from excluded.display_name`,
           [req.viewer, req.login, req.display_name ?? req.login],
         );
       const before = (await this.importStatus(channelId, 'wizebot', q))
@@ -1852,6 +1941,103 @@ export class ProgressionService {
   }
 
   /** Studio: the latest level-ups and what became of their notification. */
+  /**
+   * The directory's pseudos from Twitch, by the STABLE id (Helix Get Users, 100 ids per call): every progression account
+   * checked, the current login and display name written when missing or changed (a rename). Never an attachment, never
+   * an XP, level, badge or history change; an id Twitch does not know (deleted, suspended) is left as it is and counted.
+   */
+  async refreshNames(channelId: string): Promise<NamesRefresh> {
+    // The Lab's viewers are fictional (lab_viewers): nothing to ask Twitch.
+    if (this.o.lab || !this.userLookup)
+      throw new ProgressionError(503, 'twitch_unavailable');
+    const ids = (
+      await this.db.query<{ id: string }>(
+        'select twitch_user_id as id from progression_accounts where channel_id = $1 order by twitch_user_id',
+        [channelId],
+      )
+    ).map((r) => r.id);
+    let added = 0;
+    let updated = 0;
+    let unresolved = 0;
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      const found = new Map(
+        (await this.userLookup(chunk))
+          .filter(
+            (u) =>
+              /^[a-z0-9_]{1,25}$/.test(u.login ?? '') &&
+              (u.display_name ?? '').trim(),
+          )
+          .map((u) => [u.id, u]),
+      );
+      unresolved += chunk.filter((id) => !found.has(id)).length;
+      if (!found.size) continue;
+      const users = [...found.values()];
+      const rows = await this.db.query<{ inserted: boolean }>(
+        `insert into viewers (twitch_user_id, login, display_name)
+         select * from unnest($1::text[], $2::text[], $3::text[])
+         on conflict (twitch_user_id) do update set login = excluded.login, display_name = excluded.display_name,
+           updated_at = now()
+         where viewers.login is distinct from excluded.login or viewers.display_name is distinct from excluded.display_name
+         returning (xmax = 0) as inserted`,
+        [
+          users.map((u) => u.id),
+          users.map((u) => u.login!),
+          users.map((u) => u.display_name!.trim().slice(0, 64)),
+        ],
+      );
+      const fresh = rows.filter((r) => r.inserted).length;
+      added += fresh;
+      updated += rows.length - fresh;
+    }
+    this.lastNames = {
+      at: this.now().toISOString(),
+      checked: ids.length,
+      added,
+      updated,
+      unresolved,
+    };
+    return this.lastNames;
+  }
+
+  /** The last pseudo refresh (null before the first one since this Core started). */
+  namesStatus() {
+    return this.lastNames;
+  }
+
+  /**
+   * Studio › « Viewers avec son activé »: the viewers who TURNED ON the Level Up sound themselves (the extension now,
+   * or the first extension's imported choice) — never someone who made no choice. Read-only: the choice stays theirs.
+   */
+  async soundViewers(channelId: string) {
+    const rows = await this.db.query<{
+      twitch_user_id: string;
+      name: string | null;
+      login: string | null;
+      source: 'extension' | 'legacy';
+      changed_at: Date;
+    }>(
+      `select p.twitch_user_id, coalesce(d.display_name, d.login) as name, d.login, p.source,
+         case when p.source = 'legacy' then coalesce(p.legacy_updated_at, p.updated_at) else p.updated_at end
+           as changed_at
+       from progression_viewer_prefs p
+       left join ${this.dir(channelId)} d on d.twitch_user_id = p.twitch_user_id
+       where p.channel_id = $1 and p.level_up_notify = 'sound'
+       order by changed_at desc, p.twitch_user_id`,
+      [channelId],
+    );
+    return {
+      count: rows.length,
+      viewers: rows.map((r) => ({
+        twitchUserId: r.twitch_user_id,
+        displayName: r.name ?? r.twitch_user_id,
+        login: r.login,
+        source: r.source,
+        changedAt: new Date(r.changed_at).toISOString(),
+      })),
+    };
+  }
+
   async levelUps(channelId: string, limit = 50) {
     const rows = await this.db.query<{
       id: string;
@@ -2389,14 +2575,30 @@ export class ProgressionService {
    * was counted on the new scale).
    */
   /**
-   * Studio's « Envoyer le test dans le chat » (Level Up V2, a typed confirmation): ONE line « [TEST] … » made with the
-   * channel's own announcement text, on the same outbox as a real announcement (LeCroupier_ sends it; « Sortie chat
-   * réelle » and the bot's rate limit apply). Nothing of the progression is written: no XP, no level, no level-up event,
-   * no reward, no sound. Refused when the chat output is off (nothing would be sent).
+   * Studio's « Envoyer le test dans le chat » (Level Up V2, a typed confirmation): ONE real Twitch announcement
+   * « [TEST] … » made with the channel's own text and colour, on the same outbox as a real one (LeCroupier_ sends it;
+   * « Sortie chat réelle » and the bot's rate limit apply). Nothing of the progression is written: no XP, no level, no
+   * level-up event, no reward, no sound. Refused when the chat output is off (nothing would be sent).
    */
-  async testLevelUpChat(channelId: string, pseudo: string, level: number) {
+  async testLevelUpChat(
+    channelId: string,
+    pseudo: string,
+    level: number,
+    /** A title of the catalogue (active, published), to see it in the line; never free text. */
+    titleId: string | null = null,
+  ) {
     return this.db.tx(async (q) => {
       const { rules } = await this.settings(channelId, q);
+      const title = titleId
+        ? ((
+            await q.query<{ label: string }>(
+              `select label from progression_rewards where channel_id = $1 and reward_id = $2 and kind = 'title'
+                 and active and status <> 'draft'`,
+              [channelId, titleId],
+            )
+          )[0]?.label.slice(0, 40) ?? null)
+        : null;
+      if (titleId && !title) throw new ProgressionError(404, 'title_not_found');
       const output = (
         await q.query<{ chat_output: boolean }>(
           'select chat_output from cmd_channels where channel_id = $1',
@@ -2405,9 +2607,10 @@ export class ProgressionService {
       )[0]?.chat_output;
       if (!output) throw new ProgressionError(409, 'chat_output_off');
       const now = this.now();
-      const text = `[TEST] ${rules.level_up_chat_text
-        .replaceAll('{pseudo}', pseudo)
-        .replaceAll('{niveau}', String(level))}`.slice(0, 450);
+      const text = `[TEST] ${rules.level_up_chat_text.replace(
+        '{liste}',
+        announceEntry(pseudo, title, level),
+      )}`.slice(0, ANNOUNCE_MAX_CHARS);
       const written = await insertAnnouncement(q, {
         channelId,
         now,
@@ -2415,7 +2618,8 @@ export class ProgressionService {
         drafts: [
           {
             idempotencyKey: `levelup-test:${channelId}:${now.getTime()}`,
-            mode: 'normal',
+            mode: 'announce',
+            color: rules.level_up_chat_color,
             text,
           },
         ],
@@ -2491,10 +2695,17 @@ export class ProgressionService {
          and g.reward_id = e.title_id and g.revoked_at is null
        left join progression_rewards r on r.channel_id = a.channel_id and r.reward_id = g.reward_id and r.active
          and r.status <> 'draft'`;
+    // No pseudo in the directory (an id Twitch no longer knows): the WizeBot pseudo of the history attached to that
+    // EXACT id (WizeBot's own user id), never a pseudo matched by resemblance; none: the id, as it is.
+    const historyJoin = (
+      id: string,
+    ) => `left join progression_history h on h.channel_id = $1 and h.source = 'wizebot'
+         and h.status = 'imported' and h.resolved_by = 'id' and h.resolved_id = ${id} and v.twitch_user_id is null`;
     type Row = {
       twitch_user_id: string;
       login: string | null;
       display_name: string | null;
+      history_login: string | null;
       xp: string | number;
       level: number;
       watch_seconds: string | number;
@@ -2513,11 +2724,12 @@ export class ProgressionService {
         messages: '(a.messages + a.imported_messages)',
       }[by];
       rows = await this.db.query<Row>(
-        `select a.twitch_user_id, v.login, v.display_name, a.xp, a.level,
+        `select a.twitch_user_id, v.login, v.display_name, h.login as history_login, a.xp, a.level,
            a.watch_seconds + a.imported_watch_seconds as watch_seconds, a.messages + a.imported_messages as messages,
            r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity, r.style as title_style
          from progression_accounts a
          left join ${this.dir(channelId)} v using (twitch_user_id)
+         ${historyJoin('a.twitch_user_id')}
          ${titleJoins}
          where a.channel_id = $1 and ${total} > 0
          order by ${total} desc, a.imported_level desc nulls last, a.twitch_user_id limit $2`,
@@ -2542,12 +2754,14 @@ export class ProgressionService {
         messages: 'p.messages',
       }[by];
       rows = await this.db.query<Row>(
-        `select p.twitch_user_id, v.login, v.display_name, p.xp, coalesce(a.level, 1) as level, p.watch_seconds,
+        `select p.twitch_user_id, v.login, v.display_name, h.login as history_login, p.xp, coalesce(a.level, 1) as level,
+           p.watch_seconds,
            p.messages, r.reward_id as title_id, r.label as title_label, r.rarity as title_rarity,
            r.style as title_style
          from progression_period_stats p
          left join progression_accounts a on a.channel_id = p.channel_id and a.twitch_user_id = p.twitch_user_id
          left join ${this.dir(channelId)} v on v.twitch_user_id = p.twitch_user_id
+         ${historyJoin('p.twitch_user_id')}
          ${titleJoins}
          where p.channel_id = $1 and p.period = $3 and p.period_start = $4::date and ${metric} > 0
          order by ${metric} desc, p.twitch_user_id limit $2`,
@@ -2645,7 +2859,8 @@ export class ProgressionService {
         rank: i + 1,
         twitchUserId: r.twitch_user_id,
         login: r.login,
-        displayName: r.display_name ?? r.login ?? r.twitch_user_id,
+        displayName:
+          r.display_name ?? r.login ?? r.history_login ?? r.twitch_user_id,
         level: r.level,
         // period: XP earned in it; all: the total XP.
         xp: Number(r.xp),

@@ -137,8 +137,8 @@ function executor(
     send: {
       chat: (text, replyTo) =>
         twitch.helix.sendChat('83603689', '1239040922', text, replyTo),
-      announce: (text) =>
-        twitch.helix.sendAnnouncement('83603689', '1239040922', text),
+      announce: (text, color) =>
+        twitch.helix.sendAnnouncement('83603689', '1239040922', text, color),
     },
     journal: o.journal ?? memoryJournal(),
     limiter: createRateLimiter({
@@ -216,6 +216,23 @@ describe('Lab chat output — sends', () => {
       url: 'https://api.twitch.tv/helix/chat/announcements?broadcaster_id=83603689&moderator_id=1239040922',
       body: { message: 'Grosse annonce' },
     });
+    expect(core.steps.map((s) => s.status)).toEqual(['succeeded', 'succeeded']);
+  });
+
+  it('announce with a colour (Level Up): Twitch receives it; a colour Twitch does not know is left out', async () => {
+    const core = fakeCore();
+    core.add('announce', '🚀 LEVEL UP — A⁠ouh (57)');
+    core.add('announce', 'autre');
+    (core.steps[0]!.params as Record<string, unknown>).color = 'purple';
+    (core.steps[1]!.params as Record<string, unknown>).color = 'red';
+    const twitch = fakeTwitch(() => new Response(null, { status: 204 }));
+    const out = executor(core, twitch);
+    await out.tick();
+    await out.tick();
+    expect(twitch.requests.map((r) => r.body)).toEqual([
+      { message: '🚀 LEVEL UP — A⁠ouh (57)', color: 'purple' },
+      { message: 'autre' },
+    ]);
     expect(core.steps.map((s) => s.status)).toEqual(['succeeded', 'succeeded']);
   });
 

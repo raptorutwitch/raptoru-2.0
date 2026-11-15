@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { LabChatMessage } from '@raptoru/schemas';
+import { CommandSteps } from '../src/commands/steps.js';
 import type { Db } from '../src/db/db.js';
 import {
   normalizeWizebotLevel,
@@ -16,6 +17,14 @@ import { FakeClock } from './helpers.js';
 const CH = '83603689';
 const T0 = new Date('2026-11-02T20:00:00Z');
 const studio = { id: 'inst-1', name: 'Studio' };
+const LOGINS: Record<string, string> = {
+  '1': 'ana',
+  '2': 'bob',
+  '3': 'cid',
+  '4': 'dan',
+  '5': 'eve',
+  '6': 'fay',
+};
 
 export function levelV2Suite(freshDb: () => Promise<Db>) {
   let db: Db;
@@ -26,14 +35,7 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
     db = await freshDb();
     clock = new FakeClock(T0);
     svc = new ProgressionService(db, clock, () => CH);
-    for (const [id, login] of [
-      ['1', 'ana'],
-      ['2', 'bob'],
-      ['3', 'cid'],
-      ['4', 'dan'],
-      ['5', 'eve'],
-      ['6', 'fay'],
-    ])
+    for (const [id, login] of Object.entries(LOGINS))
       await db.query(
         'insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $2)',
         [id, login],
@@ -75,7 +77,13 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       channel_id: CH,
       message_id: randomUUID(),
       text,
-      chatter: { id, login: 'x', display_name: 'X', role: 'viewer' },
+      // The chatter's real pseudo (the directory follows the chat: a rename is today's name).
+      chatter: {
+        id,
+        login: LOGINS[id] ?? 'x',
+        display_name: LOGINS[id] ?? 'X',
+        role: 'viewer',
+      },
       source: 'twitch',
     }) as LabChatMessage;
   const importRows = (rows: [string | null, string, number][]) =>
@@ -470,18 +478,26 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
     });
   });
 
-  describe('chat announcements (LeCroupier_, the commands outbox)', () => {
+  describe('chat announcements (LeCroupier_, real Twitch announcements, the commands outbox)', () => {
     const steps = async () =>
       (
         await db.query<{ params: unknown; origin: string; key: string }>(
-          `select params, origin, idempotency_key as key from cmd_steps where channel_id = $1 order by created_at, seq`,
+          `select params, origin, idempotency_key as key from cmd_steps where channel_id = $1 order by seq_global`,
           [CH],
         )
-      ).map((r) => ({
-        text: (typeof r.params === 'string' ? JSON.parse(r.params) : r.params)
-          .text as string,
-        origin: r.origin,
-      }));
+      ).map((r) => {
+        const p = (
+          typeof r.params === 'string' ? JSON.parse(r.params) : r.params
+        ) as { text: string; mode: string; color?: string };
+        // The word joiner that keeps a pseudo from mentioning its viewer is shown as « ⁀ » here.
+        return {
+          text: p.text.replaceAll('⁠', '⁀'),
+          mode: p.mode,
+          color: p.color ?? null,
+          origin: r.origin,
+        };
+      });
+    const texts = async () => (await steps()).map((s) => s.text);
     const chatOutput = (on: boolean) =>
       db.query(
         `insert into cmd_channels (channel_id, chat_output) values ($1, $2)
@@ -502,8 +518,63 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         { viewer, mode: 'set_xp', value, reason: 'test', request_id: id },
         studio,
       );
+    /** Viewer `id` one XP short of the next level, then one real chat message: a real level-up now. */
+    const levelUp = async (id: string, xpNow: number, ms: number) => {
+      at(ms);
+      await toXp(id, xpNow, `adj-0000-${id}-${ms}`);
+      expect(await svc.onMessage(msg(id, `bonsoir tout le monde ${ms}`))).toBe(
+        'xp',
+      );
+    };
+    const title = async (viewer: string, id: string, label: string) => {
+      await svc.upsertReward(CH, {
+        reward_id: id,
+        kind: 'title',
+        label,
+        description: '',
+        rarity: 'common',
+        category: 'general',
+        unlock_level: null,
+        active: true,
+        sort: 0,
+      });
+      await svc.grant(
+        CH,
+        { reward_id: id, viewers: [viewer], source: 'manual', reference: null },
+        { id: 'studio' },
+      );
+      await svc.equip(CH, { viewer, title_id: id, badge_ids: [] });
+    };
 
-    it('Studio’s chat test: one « [TEST] » line on the same outbox — no XP, no level, no event, no reward; refused without the chat output', async () => {
+    it('the defaults: a real announcement « 🚀 LEVEL UP — {liste} », 5 min of grouping, the channel colour; the first V2 text reads as it', async () => {
+      // The first V2 stored its own text (one line per viewer, with a mention): it reads as the announcement.
+      await db.query(
+        `update progression_settings set rules = rules || '{"level_up_chat_text": "@{pseudo} vient d’atteindre le niveau {niveau} !", "level_up_chat_interval_s": 30}'::jsonb
+         where channel_id = $1`,
+        [CH],
+      );
+      const { rules } = await svc.settings(CH);
+      expect([
+        rules.level_up_chat_text,
+        rules.level_up_chat_interval_s,
+        rules.level_up_chat_color,
+      ]).toEqual(['🚀 LEVEL UP — {liste}', 30, 'primary']);
+      // A text without {liste} is refused; the colour is one of Twitch's five.
+      await expect(
+        svc.updateSettings(CH, { rules: { level_up_chat_text: 'GG !' } }),
+      ).rejects.toThrow();
+      await expect(
+        svc.updateSettings(CH, {
+          rules: { level_up_chat_color: 'red' as never },
+        }),
+      ).rejects.toThrow();
+      // A window under 30 s is refused (Twitch's limits: never a flood).
+      await expect(
+        svc.updateSettings(CH, { rules: { level_up_chat_interval_s: 5 } }),
+      ).rejects.toThrow();
+    });
+
+    it('Studio’s test: ONE real « [TEST] » announcement (the channel text and colour, an optional title of the catalogue) — no XP, no level, no event, no reward; refused without the chat output', async () => {
       await activate();
       const count = async (table: string) =>
         Number(
@@ -520,18 +591,37 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       ).rejects.toMatchObject({ status: 409, code: 'chat_output_off' });
       expect(await steps()).toEqual([]);
       await chatOutput(true);
+      await title('1', 'loup-garou', 'Loup-Garou');
+      await svc.updateSettings(CH, {
+        rules: { level_up_chat_color: 'purple' },
+      });
       const before = {
         events: await count('progression_level_events'),
         ledger: await count('progression_ledger'),
         grants: await count('progression_grants'),
       };
-      expect(await svc.testLevelUpChat(CH, 'Raptoru_', 25)).toEqual({
-        sent: true,
-        text: '[TEST] @Raptoru_ vient d’atteindre le niveau 25 !',
-      });
+      expect(
+        (await svc.testLevelUpChat(CH, 'Raptoru_', 25)).text.replaceAll(
+          '⁠',
+          '⁀',
+        ),
+      ).toBe('[TEST] 🚀 LEVEL UP — R⁀aptoru_ (25)');
+      at(1000); // a second click (the same millisecond is the same test: written once)
+      await svc.testLevelUpChat(CH, 'Raptoru_', 57, 'loup-garou');
+      await expect(
+        svc.testLevelUpChat(CH, 'Raptoru_', 57, 'inconnu'),
+      ).rejects.toMatchObject({ status: 404, code: 'title_not_found' });
       expect(await steps()).toEqual([
         {
-          text: '[TEST] @Raptoru_ vient d’atteindre le niveau 25 !',
+          text: '[TEST] 🚀 LEVEL UP — R⁀aptoru_ (25)',
+          mode: 'announce',
+          color: 'purple',
+          origin: 'module:level_up',
+        },
+        {
+          text: '[TEST] 🚀 LEVEL UP — R⁀aptoru_ [Loup-Garou] (57)',
+          mode: 'announce',
+          color: 'purple',
           origin: 'module:level_up',
         },
       ]);
@@ -543,88 +633,103 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       expect(await xp('1')).toBe(0);
     });
 
-    it('one level-up: one line with the text of the channel; a replay writes nothing; an adjustment never', async () => {
+    it('one window of 5 min: ONE announcement for everyone of the window, at its end — a viewer climbing twice once, at the highest; titles only when equipped; a replay or an adjustment never', async () => {
       await chatOn();
-      await presence(['1'], 1000 * 60);
+      await title('2', 'loup-garou', 'Loup-Garou');
+      await levelUp('1', 999, 0); // ana → 2, opens the window
+      await levelUp('4', 1999, 30_000); // dan → 3
+      await levelUp('2', 999, 60_000); // bob → 2 (equipped title)
+      await levelUp('4', 2999, 200_000); // dan again → 4
+      at(299_000);
+      await svc.tick();
+      expect(await steps()).toEqual([]); // the window is still open
+      await toXp('3', 9000, 'adj-0000-cid9'); // an adjustment: never announced
+      at(300_000);
+      await svc.tick();
       expect(await steps()).toEqual([
         {
-          text: '@ana vient d’atteindre le niveau 2 !',
+          text: '🚀 LEVEL UP — a⁀na (2) · d⁀an (4) · b⁀ob [Loup-Garou] (2)',
+          mode: 'announce',
+          color: 'primary',
           origin: 'module:level_up',
         },
       ]);
-      await db.tx((q) =>
-        svc.presenceListener.validated(q, {
-          streamId: 's1',
-          seconds: 1000 * 60,
-          viewerIds: ['1'],
-          at: new Date(T0.getTime() + cycleSeq),
-        }),
+      const chat = Object.fromEntries(
+        (await svc.levelUps(CH))
+          .filter((e) => e.twitchUserId === '4')
+          .map((e) => [e.toLevel, e.chat.status]),
       );
-      at(60_000);
-      await toXp('1', 9000, 'adj-0000-ana9');
+      expect(chat).toEqual({ 3: 'merged', 4: 'sent' });
+      // Nothing more, whatever runs again.
+      at(400_000);
+      await svc.tick();
+      await svc.tick();
       expect((await steps()).length).toBe(1);
-      // The text is the channel's (Studio): {pseudo} and {niveau} replaced.
-      await svc.updateSettings(CH, {
-        rules: { level_up_chat_text: 'GG {pseudo}, niveau {niveau} !' },
-      });
-      await presence(['2'], 1000 * 60);
-      expect((await steps()).at(-1)?.text).toBe('GG bob, niveau 2 !');
-      await expect(
-        svc.updateSettings(CH, {
-          rules: { level_up_chat_text: 'GG {pseudo}' },
-        }),
-      ).rejects.toThrow();
     });
 
-    it('several viewers in one presence cycle: ONE grouped line; one viewer climbing two levels: once, at the final level', async () => {
+    it('the limits: 8 pseudos and 450 characters at most; the rest in the next one, a minute later at least; never twice', async () => {
       await chatOn();
-      await toXp('4', 1500, 'adj-0000-dan1');
-      await presence(['1', '2', '3', '4'], 1000 * 60);
-      expect((await steps()).map((x) => x.text)).toEqual([
-        'Montées de niveau : @ana (niveau 2), @bob (niveau 2), @cid (niveau 2), @dan (niveau 3) !',
+      for (let i = 7; i <= 16; i++)
+        await db.query(
+          'insert into viewers (twitch_user_id, login, display_name) values ($1, $2, $2)',
+          [String(i), `viewer${i}`],
+        );
+      const ids = Array.from({ length: 10 }, (_, k) => String(k + 7));
+      at(0);
+      await presence(ids, 1000 * 60);
+      at(300_000);
+      await svc.tick();
+      expect(await texts()).toEqual([
+        `🚀 LEVEL UP — ${ids
+          .slice(0, 8)
+          .map((i) => `v⁀iewer${i} (2)`)
+          .join(' · ')}`,
       ]);
+      at(330_000);
+      await svc.tick();
+      expect((await steps()).length).toBe(1); // within a minute of the last: waits
+      at(360_000);
+      await svc.tick();
+      expect((await texts()).at(-1)).toBe(
+        '🚀 LEVEL UP — v⁀iewer15 (2) · v⁀iewer16 (2)',
+      );
+      // Long titles: the line stays under 450 characters, the others wait (never cut in the middle of a name).
+      for (const i of ids)
+        await title(
+          i,
+          `long-${i}`,
+          `Un très long titre numéro ${i} !!!`.padEnd(40, '.'),
+        );
+      at(400_000);
+      await presence(ids, 1000 * 60);
+      at(700_000);
+      await svc.tick();
+      const line = (await texts()).at(-1)!;
+      expect(line.length).toBeLessThanOrEqual(450);
+      expect(line.split(' · ').length).toBeLessThan(8);
+      const sent = (await svc.levelUps(CH)).filter(
+        (e) => e.chat.status === 'sent',
+      );
+      expect(new Set(sent.map((e) => e.id)).size).toBe(sent.length);
     });
 
-    it('the interval: a level-up within 30 s waits and goes out grouped with the next; an old one is dropped', async () => {
-      await chatOn();
-      await presence(['1'], 1000 * 60); // T0: sent
-      await toXp('2', 997, 'adj-0000-bob1');
-      await toXp('3', 997, 'adj-0000-cid1');
-      at(10_000);
-      expect(await svc.onMessage(msg('2', 'bonsoir tout le monde'))).toBe('xp');
-      at(15_000);
-      expect(await svc.onMessage(msg('3', 'salut la team'))).toBe('xp');
-      expect((await steps()).length).toBe(1); // both wait
-      at(40_000);
-      await presence(['5'], 60); // the next activity flushes
-      expect((await steps()).map((x) => x.text)).toEqual([
-        '@ana vient d’atteindre le niveau 2 !',
-        'Montées de niveau : @bob (niveau 2), @cid (niveau 2) !',
-      ]);
-      // A level-up waiting longer than level_up_max_age_s (2 min): dropped, never sent late.
-      at(50_000);
-      await presence(['6'], 1000 * 60);
-      at(50_000 + 3 * 60_000);
-      await presence(['5'], 60);
-      expect((await steps()).length).toBe(2);
-      const fay = (await svc.levelUps(CH)).find((e) => e.twitchUserId === '6');
-      expect(fay?.chat).toMatchObject({ status: 'expired', reason: 'too_old' });
-    });
-
-    it('the chat line does not depend on the sound choice; « Sortie chat réelle » off or the announcements off: nothing queued', async () => {
+    it('never a silent loss: the output or the announcements off, or too late after the window — a state and a reason for each', async () => {
       await chatOn();
       await svc.setViewerPrefs(CH, '1', { level_up_sound: false });
-      await presence(['1'], 1000 * 60);
+      await levelUp('1', 999, 0);
+      at(300_000);
+      await svc.tick(); // sound off: announced all the same
       await chatOutput(false);
-      at(60_000);
-      await presence(['2'], 1000 * 60);
+      await levelUp('2', 999, 400_000);
       await chatOutput(true);
       await svc.updateSettings(CH, { rules: { level_up_chat: false } });
-      at(120_000);
-      await presence(['3'], 1000 * 60);
-      expect((await steps()).map((x) => x.text)).toEqual([
-        '@ana vient d’atteindre le niveau 2 !', // sound off: announced all the same
-      ]);
+      await levelUp('3', 999, 500_000);
+      await svc.updateSettings(CH, { rules: { level_up_chat: true } });
+      // A level-up whose announcement could not go out within 2 min after its window (no tick, no activity).
+      await levelUp('5', 999, 600_000);
+      at(600_000 + 300_000 + 121_000);
+      await svc.tick();
+      expect(await texts()).toEqual(['🚀 LEVEL UP — a⁀na (2)']);
       const why = Object.fromEntries(
         (await svc.levelUps(CH)).map((e) => [
           e.twitchUserId,
@@ -635,10 +740,11 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         '1': ['sent', null],
         '2': ['skipped', 'chat_output_off'],
         '3': ['skipped', 'chat_off'],
+        '5': ['expired', 'too_old'],
       });
     });
 
-    it('the same level-up delivered three times at once: one event, one chat line', async () => {
+    it('the same level-up delivered three times at once: one event, one announcement; the tick and a message at once: one', async () => {
       await chatOn();
       await presence(['1'], 999 * 60);
       const when = new Date(T0.getTime() + 999_999);
@@ -653,7 +759,176 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         );
       await Promise.allSettled([cycle(), cycle(), cycle()]);
       expect((await events()).length).toBe(1);
+      at(300_000);
+      await Promise.allSettled([
+        svc.tick(),
+        svc.tick(),
+        svc.onMessage(msg('2', 'salut la team ça va')),
+      ]);
       expect((await steps()).length).toBe(1);
+    });
+
+    it('LeCroupier_ cannot announce (missing scope): the same text once as a plain message, never a loop', async () => {
+      await chatOn();
+      await levelUp('1', 999, 0);
+      at(300_000);
+      await svc.tick();
+      const outbox = new CommandSteps(db, clock);
+      const s = (await outbox.claim(CH, 'bot')).step!;
+      await outbox.ack(CH, s.step_id, {
+        executor_id: 'bot',
+        attempt_id: s.attempt_id!,
+        event: 'failed',
+        error: { code: 'missing_scope', message: 'no scope', retryable: false },
+      });
+      expect((await steps()).map((x) => [x.mode, x.text])).toEqual([
+        ['announce', '🚀 LEVEL UP — a⁀na (2)'],
+        ['normal', '🚀 LEVEL UP — a⁀na (2)'],
+      ]);
+      const p = (await outbox.claim(CH, 'bot')).step!;
+      await outbox.ack(CH, p.step_id, {
+        executor_id: 'bot',
+        attempt_id: p.attempt_id!,
+        event: 'failed',
+        error: { code: 'forbidden', message: 'no', retryable: false },
+      });
+      expect((await steps()).length).toBe(2);
+    });
+  });
+
+  describe('Studio tools: the sound list, the pseudos from Twitch', () => {
+    it('« Viewers avec son activé »: only who turned it on (the extension or the imported choice), with the source and the date; never who made no choice or turned it off', async () => {
+      clock.current = new Date('2026-11-15T10:00:00Z');
+      await svc.setViewerPrefs(CH, '1', { level_up_sound: true });
+      await svc.setViewerPrefs(CH, '2', { level_up_sound: false });
+      await svc.importViewerPrefs(CH, {
+        dry_run: false,
+        rows: [
+          {
+            channel_id: CH,
+            twitch_user_id: '3',
+            twitch_login: 'cid',
+            level_up_sfx_opt_in: true,
+            updated_at: '2026-10-05T10:00:00Z',
+          },
+          {
+            channel_id: CH,
+            twitch_user_id: '4',
+            twitch_login: 'dan',
+            level_up_sfx_opt_in: false,
+            updated_at: '2026-10-05T10:00:00Z',
+          },
+        ],
+      });
+      expect(await svc.soundViewers(CH)).toEqual({
+        count: 2,
+        viewers: [
+          {
+            twitchUserId: '1',
+            displayName: 'ana',
+            login: 'ana',
+            source: 'extension',
+            changedAt: '2026-11-15T10:00:00.000Z',
+          },
+          {
+            twitchUserId: '3',
+            displayName: 'cid',
+            login: 'cid',
+            source: 'legacy',
+            changedAt: '2026-10-05T10:00:00.000Z',
+          },
+        ],
+      });
+      // Turned off in the extension: out of the list at once.
+      await svc.setViewerPrefs(CH, '3', { level_up_sound: false });
+      expect((await svc.soundViewers(CH)).count).toBe(1);
+    });
+
+    it('the pseudos from Twitch by the stable id: added when missing, renamed, an unknown id left as it is; never an XP, level or attachment change', async () => {
+      // A WizeBot history attached by its exact id, an account the directory never saw (the digits of the rankings).
+      await importRows([
+        ['77', 'ancien_pseudo', 12],
+        ['88', 'compte_supprime', 8],
+      ]);
+      await presence(['1'], 60);
+      const rank = async () =>
+        Object.fromEntries(
+          (await svc.leaderboard(CH)).entries.map((e) => [
+            e.twitchUserId,
+            [e.displayName, e.login],
+          ]),
+        );
+      // No directory row: the exact id's WizeBot pseudo (never a pseudo that only looks alike), no login.
+      expect(await rank()).toMatchObject({
+        '77': ['ancien_pseudo', null],
+        '88': ['compte_supprime', null],
+      });
+      await expect(svc.refreshNames(CH)).rejects.toMatchObject({
+        code: 'twitch_unavailable',
+      });
+      const before = await db.query(
+        'select twitch_user_id, xp, level from progression_accounts order by twitch_user_id',
+      );
+      const asked: string[][] = [];
+      svc.userLookup = async (ids) => {
+        asked.push(ids);
+        return [
+          {
+            id: '77',
+            login: 'nouveau_pseudo',
+            display_name: 'Nouveau_Pseudo',
+            profile_image_url: '',
+          },
+          {
+            id: '1',
+            login: 'ana_2',
+            display_name: 'Ana_2',
+            profile_image_url: '',
+          },
+        ].filter((u) => ids.includes(u.id));
+      };
+      expect(await svc.refreshNames(CH)).toMatchObject({
+        checked: 3,
+        added: 1,
+        updated: 1,
+        unresolved: 1,
+      });
+      expect(asked).toEqual([['1', '77', '88']]);
+      expect(await rank()).toMatchObject({
+        '1': ['Ana_2', 'ana_2'],
+        '77': ['Nouveau_Pseudo', 'nouveau_pseudo'],
+        '88': ['compte_supprime', null],
+      });
+      expect(svc.namesStatus()).toMatchObject({ unresolved: 1 });
+      expect(
+        await db.query(
+          'select twitch_user_id, xp, level from progression_accounts order by twitch_user_id',
+        ),
+      ).toEqual(before);
+      // Run again: nothing to change.
+      expect(await svc.refreshNames(CH)).toMatchObject({
+        added: 0,
+        updated: 0,
+      });
+    });
+
+    it('a renamed viewer chatting: today’s pseudo, by the stable id', async () => {
+      await svc.onMessage({
+        ...msg('2', 'salut tout le monde'),
+        chatter: {
+          id: '2',
+          login: 'bobby',
+          display_name: 'Bobby',
+          role: 'viewer',
+        },
+      } as LabChatMessage);
+      expect(
+        (
+          await db.query<{ login: string }>(
+            `select login from viewers where twitch_user_id = '2'`,
+          )
+        )[0]!.login,
+      ).toBe('bobby');
     });
   });
 

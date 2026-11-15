@@ -332,7 +332,8 @@ export function progressionRoutes(
       },
     },
     {
-      // Studio's « Tester un Level Up » › « Envoyer le test dans le chat » : a real « [TEST] » line, typed confirmation.
+      // Studio's « Tester un Level Up » › « Envoyer le test dans le chat » : a real « [TEST] » Twitch announcement,
+      // typed confirmation; an optional title of the catalogue (its id, never free text).
       method: 'POST',
       pattern: admin('/level-v2/test-chat'),
       auth,
@@ -343,10 +344,17 @@ export function progressionRoutes(
             // A Twitch login's characters only: never a command, a link or a second sentence in the line.
             pseudo: z.string().regex(/^[A-Za-z0-9_]{1,25}$/),
             level: z.number().int().min(1).max(10_000),
+            title_id: z
+              .string()
+              .regex(/^[a-z0-9-]{1,64}$/)
+              .nullable()
+              .default(null),
           }),
           body,
         );
-        return mapped(() => svc.testLevelUpChat(ch, r.pseudo, r.level));
+        return mapped(() =>
+          svc.testLevelUpChat(ch, r.pseudo, r.level, r.title_id),
+        );
       },
     },
     {
@@ -365,6 +373,26 @@ export function progressionRoutes(
       pattern: admin('/levelups'),
       auth,
       handle: () => svc.levelUps(ch),
+    },
+    {
+      // « Viewers avec son activé » : who turned the sound on themselves (read-only — the choice stays the viewer's).
+      method: 'GET',
+      pattern: admin('/prefs/sound'),
+      auth,
+      handle: () => svc.soundViewers(ch),
+    },
+    {
+      // The pseudos of the rankings from Twitch, by the stable id (also run at the Core's start and every day).
+      method: 'GET',
+      pattern: admin('/names'),
+      auth,
+      handle: async () => ({ last: svc.namesStatus() }),
+    },
+    {
+      method: 'POST',
+      pattern: admin('/names/refresh'),
+      auth,
+      handle: () => mapped(() => svc.refreshNames(ch)),
     },
     {
       // Studio's OBS level-up source: the next notices (delivered once).

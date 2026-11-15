@@ -339,8 +339,13 @@ if (status.scopes.includes('user:write:chat')) {
           text,
           replyTo,
         ),
-      announce: (text) =>
-        helix.sendAnnouncement(app.TWITCH_BROADCASTER_ID, status.userId!, text),
+      announce: (text, color) =>
+        helix.sendAnnouncement(
+          app.TWITCH_BROADCASTER_ID,
+          status.userId!,
+          text,
+          color,
+        ),
     },
     journal: fileJournal(app.LAB_CHAT_JOURNAL_FILE),
     limiter: createRateLimiter({

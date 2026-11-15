@@ -283,11 +283,12 @@ const bridge =
                       text,
                       replyTo,
                     ),
-                  announce: (text: string) =>
+                  announce: (text: string, color: string | null) =>
                     coreHelix.sendAnnouncement(
                       config.TWITCH_BROADCASTER_ID,
                       status.userId!,
                       text,
+                      color,
                     ),
                 },
                 journal: fileJournal(config.CHAT_GAMES_JOURNAL_FILE),

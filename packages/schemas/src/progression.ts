@@ -29,22 +29,34 @@ export const ProgressionRulesSchema = z.strictObject({
   level_up_sound: z.boolean(),
   /** One level-up sound at most per this delay, whole channel (a level-up inside it plays nothing). */
   level_up_sound_cooldown_s: z.number().int().min(0).max(86_400),
-  /** A sound or a chat line not played / sent within this delay is dropped (never an old level-up much later). */
+  /**
+   * A sound not played within this delay is dropped; a chat announcement not sent within this delay AFTER its grouping
+   * window is dropped too (« trop ancien », recorded): never an old level-up much later.
+   */
   level_up_max_age_s: z.number().int().min(10).max(3600),
   /**
    * Level Up announcements in the Twitch chat (LeCroupier_, the commands' outbox), for every real level-up — independent
    * of the viewer's sound choice; OFF until Antoni turns them on.
    */
   level_up_chat: z.boolean(),
-  /** The chat text for ONE viewer: {pseudo} and {niveau} are replaced (several viewers: one grouped line). */
+  /**
+   * The announcement (a real Twitch announcement, Send Chat Announcement): {liste} becomes « Pseudo [Titre] (niveau) »
+   * for each viewer, separated by « · » — the pseudo without @ (never a mention), the equipped title only when there is
+   * one. A text of the first V2 (with {pseudo}, without {liste}) reads as the default.
+   */
   level_up_chat_text: z
     .string()
     .trim()
-    .min(5)
-    .max(200)
-    .refine((t) => t.includes('{niveau}'), { message: 'missing_level' }),
-  /** At most one announcement per this delay, whole channel: the level-ups in between are grouped in the next one. */
-  level_up_chat_interval_s: z.number().int().min(5).max(3600),
+    .min(7)
+    .max(120)
+    .refine((t) => t.includes('{liste}'), { message: 'missing_list' }),
+  /**
+   * The grouping window: the first level-up waiting opens it, every level-up until its end goes in the SAME
+   * announcement (one per window at most, whole channel).
+   */
+  level_up_chat_interval_s: z.number().int().min(30).max(3600),
+  /** The announcement's colour (Twitch's own five; `primary` = the channel's accent colour). */
+  level_up_chat_color: z.enum(['primary', 'blue', 'green', 'orange', 'purple']),
   /**
    * Chat anti-farming: a message needs this many DIFFERENT letters or digits (« aaaa », « ????? », « 1111 » earn
    * nothing), and the same text as the viewer's last rewarded message within `message_repeat_window_s` earns nothing.
@@ -94,8 +106,10 @@ export const DEFAULT_PROGRESSION_RULES: ProgressionRules = {
   level_up_sound_cooldown_s: 60,
   level_up_max_age_s: 120,
   level_up_chat: false,
-  level_up_chat_text: '@{pseudo} vient d’atteindre le niveau {niveau} !',
-  level_up_chat_interval_s: 30,
+  level_up_chat_text: '🚀 LEVEL UP — {liste}',
+  // Five minutes (Antoni, 15/11/2026): the level-ups of a window share one announcement.
+  level_up_chat_interval_s: 300,
+  level_up_chat_color: 'primary',
   message_min_distinct: 3,
   message_repeat_window_s: 600,
   wizebot_normalization: null,

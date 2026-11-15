@@ -24,9 +24,10 @@ import {
 } from './level-up-model.js';
 
 // Level Up V2 (docs/LEVEL_UP_V2.md): the « Level Up » scene of the Progression page — the passage to 1 000 XP per level
-// (simulate, activate once, undo), the chat announcements, the SOUND (never any visual on stream), the first extension's
-// sound choices, the sub badges every 10 levels, the latest level-ups. Studio shows and relays: the Core decides, counts
-// and journals.
+// (simulate, activate once, undo), the chat announcements (real Twitch announcements, grouped per window), the SOUND
+// (never any visual on stream), who turned the sound on, the first extension's sound choices, the sub badges every 10
+// levels, the latest level-ups, the rankings' pseudos from Twitch. Studio shows and relays: the Core decides, counts and
+// journals.
 
 type Buckets = Record<string, number>;
 interface LevelBadge {
@@ -95,8 +96,32 @@ interface LuRules {
   level_up_chat: boolean;
   level_up_chat_text: string;
   level_up_chat_interval_s: number;
+  level_up_chat_color: AnnounceColor;
   message_min_distinct: number;
   message_repeat_window_s: number;
+}
+type AnnounceColor = 'primary' | 'blue' | 'green' | 'orange' | 'purple';
+/** Twitch's five announcement colours (Send Chat Announcement). */
+const COLORS: readonly (readonly [AnnounceColor, string])[] = [
+  ['primary', 'Couleur de la chaîne'],
+  ['purple', 'Violet'],
+  ['blue', 'Bleu'],
+  ['green', 'Vert'],
+  ['orange', 'Orange'],
+];
+interface SoundViewer {
+  twitchUserId: string;
+  displayName: string;
+  login: string | null;
+  source: 'extension' | 'legacy';
+  changedAt: string;
+}
+interface NamesRefresh {
+  at: string;
+  checked: number;
+  added: number;
+  updated: number;
+  unresolved: number;
 }
 interface Source {
   player_url: string;
@@ -169,6 +194,9 @@ const REFUS = {
   chat_output_off:
     'La « Sortie chat réelle » est coupée : rien ne peut partir dans le chat (Commandes › Sortie chat).',
   outbox_refused: 'Le message n’a pas pu être mis dans la file du bot.',
+  title_not_found: 'Ce titre n’existe plus dans le catalogue.',
+  twitch_unavailable:
+    'Twitch injoignable depuis le Core (application Twitch absente) : rien n’a changé.',
   image_kind_mismatch: 'Image refusée : un badge fait 128 px et 40 Ko au plus.',
 };
 const BUCKET_ORDER = [
@@ -241,9 +269,11 @@ export function mountLevelUpScene(
     <div data-lz="test"></div>
     <div data-lz="announce"></div>
     <div data-lz="sound"></div>
+    <div data-lz="listeners"></div>
     <div data-lz="prefs"></div>
     <div data-lz="badges"></div>
     <div data-lz="recent"></div>
+    <div data-lz="names"></div>
     <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" data-lu-file hidden>
     <input type="file" accept=".csv,.json,text/csv,application/json" data-lu-prefs hidden>
     <input type="file" webkitdirectory multiple data-lu-badges hidden>
@@ -257,6 +287,10 @@ export function mountLevelUpScene(
   let rules: LuRules | null = null;
   let source: Source | null = null;
   let recent: LevelUp[] = [];
+  let listeners: { count: number; viewers: SoundViewer[] } | null = null;
+  let listenersAt = '';
+  let names: NamesRefresh | null = null;
+  let titles: { id: string; label: string }[] = [];
   let sim: Simulation | null = null;
   let prefRows: LegacyPrefRow[] | null = null;
   let prefRead = { invalid: 0, name: '' };
@@ -264,27 +298,49 @@ export function mountLevelUpScene(
   let plan:
     (BadgePlan & { files: Map<string, File>; take: Set<number> }) | null = null;
   let error = '';
-  // « Tester un Level Up » : a pseudo and a level for the test only (never a real viewer's progression).
+  // « Tester un Level Up » : a pseudo, a level and an optional title of the catalogue, for the test only (never a real
+  // viewer's progression).
   let testPseudo = 'Raptoru';
   let testLevel = 25;
-  const testLine = () =>
-    (
-      rules?.level_up_chat_text ??
-      '@{pseudo} vient d’atteindre le niveau {niveau} !'
-    )
-      .replaceAll('{pseudo}', testPseudo)
-      .replaceAll('{niveau}', String(testLevel));
+  let testTitle = '';
+  /** The announcement as the Core writes it: « Pseudo [Titre] (niveau) » in the channel's text (no @, no ping). */
+  const testLine = () => {
+    const t = titles.find((x) => x.id === testTitle)?.label;
+    return (rules?.level_up_chat_text ?? '🚀 LEVEL UP — {liste}').replace(
+      '{liste}',
+      `${testPseudo}${t ? ` [${t}]` : ''} (${testLevel})`,
+    );
+  };
 
   async function read() {
     try {
-      const [s, st, r] = await Promise.all([
+      const [s, st, r, l, n] = await Promise.all([
         getJson<Status>('/api/progression/level-v2'),
-        getJson<{ rules: LuRules }>('/api/progression/state'),
+        getJson<{
+          rules: LuRules;
+          catalog?: {
+            reward_id: string;
+            kind: string;
+            label: string;
+            active: boolean;
+            status: string;
+          }[];
+        }>('/api/progression/state'),
         getJson<LevelUp[]>('/api/progression/levelups'),
+        getJson<{ count: number; viewers: SoundViewer[] }>(
+          '/api/progression/prefs/sound',
+        ),
+        getJson<{ last: NamesRefresh | null }>('/api/progression/names'),
       ]);
       status = s;
       rules = st.rules;
+      titles = (st.catalog ?? [])
+        .filter((c) => c.kind === 'title' && c.active && c.status !== 'draft')
+        .map((c) => ({ id: c.reward_id, label: c.label }));
       recent = r;
+      listeners = l;
+      listenersAt = new Date().toISOString();
+      names = n.last ?? names;
       error = '';
     } catch (e) {
       error = errText(e);
@@ -388,14 +444,61 @@ export function mountLevelUpScene(
         'Annonces dans le chat',
         'chat',
         `${row('Annoncer les Level Up (LeCroupier_)', sw(r.level_up_chat, 'data-lu-rule="level_up_chat"', 'Annoncer les Level Up'))}
-        <label class="pg-fl"><span>Texte : {pseudo} et {niveau}</span><span class="d-fld"><input type="text" data-lu-text maxlength="200" value="${esc(r.level_up_chat_text)}"></span></label>
-        ${numrow('Une annonce au plus toutes les', fld('data-lu-num="level_up_chat_interval_s" min="5" max="3600"', r.level_up_chat_interval_s, 's'))}
-        ${numrow('Annonce abandonnée après', fld('data-lu-num="level_up_max_age_s" min="10" max="3600"', r.level_up_max_age_s, 's'))}
+        <label class="pg-fl"><span>Texte de l’annonce : {liste} = les pseudos, leur titre et leur niveau</span><span class="d-fld"><input type="text" data-lu-text maxlength="120" value="${esc(r.level_up_chat_text)}"></span></label>
+        ${numrow('Regrouper les Level Up pendant', fld('data-lu-num="level_up_chat_interval_s" min="30" max="3600"', r.level_up_chat_interval_s, 's'))}
+        ${row('Couleur du bandeau', `<select class="d-in" data-lu-color aria-label="Couleur du bandeau">${COLORS.map(([k, l]) => `<option value="${k}" ${k === r.level_up_chat_color ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`, 'couleur annonce')}
+        ${numrow('Abandonnée si pas envoyée après le regroupement en', fld('data-lu-num="level_up_max_age_s" min="10" max="3600"', r.level_up_max_age_s, 's'))}
         <h4 class="pg-h">Anti-farm du chat</h4>
         ${numrow('Lettres ou chiffres différents', fld('data-lu-num="message_min_distinct" min="1" max="20"', r.message_min_distinct))}
         ${numrow('Même message sans XP pendant', fld('data-lu-num="message_repeat_window_s" min="0" max="86400"', r.message_repeat_window_s, 's'))}
-        <p class="d-note">Chaque vrai Level Up est annoncé, que le viewer ait activé le son ou non. Plusieurs Level Up rapprochés partent en une seule ligne, et plusieurs niveaux d’un coup sont annoncés une fois. La « Sortie chat réelle » et la limite du bot s’appliquent. Les gains d’XP se règlent dans XP et Daily.</p>
+        <p class="d-note">Une vraie annonce Twitch (bandeau coloré). Le premier Level Up ouvre la fenêtre de regroupement : à sa fin, une seule annonce nomme tout le monde (8 pseudos au plus, le reste une minute après). Un viewer monté plusieurs fois n’apparaît qu’une fois, à son plus haut niveau. Les pseudos sont écrits sans @ : personne n’est notifié. Le titre équipé sur raptoru.fr s’affiche entre crochets, rien sans titre. Le son reste à part (immédiat, selon le choix du viewer). La « Sortie chat réelle » et la limite du bot s’appliquent.</p>
         <button type="button" class="d-btn" data-lu="save-text">Enregistrer le texte et les délais</button>`,
+      ),
+    );
+  }
+
+  /** Who turned the Level Up sound on themselves (read-only: the choice is the viewer's, never forced from here). */
+  function paintListeners() {
+    const l = listeners;
+    patch(
+      zz('listeners'),
+      grp(
+        'Viewers avec son activé',
+        'sound',
+        l
+          ? `${row('Son activé par', `<b>${fmt(l.count)} viewer${l.count > 1 ? 's' : ''}</b>`)}
+          ${
+            l.viewers.length
+              ? `<table class="d-tbl pg-lu-t"><thead><tr><th>Pseudo Twitch</th><th>Son</th><th>Choix fait dans</th><th>Dernier changement</th></tr></thead><tbody>${l.viewers
+                  .map(
+                    (v) =>
+                      `<tr><td>${esc(v.displayName)}</td><td>activé</td><td>${v.source === 'legacy' ? 'l’ancienne extension (importé)' : 'l’extension actuelle'}</td><td>${esc(new Date(v.changedAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }))}</td></tr>`,
+                  )
+                  .join('')}</tbody></table>`
+              : '<div class="d-empty">Personne n’a encore activé le son.</div>'
+          }
+          <div class="pg-lu-acts"><button type="button" class="d-btn" data-lu="listeners-refresh">Actualiser</button><span class="d-faint">Lu à ${esc(hhmm(listenersAt))}, actualisé seul toutes les 6 s.</span></div>
+          <p class="d-note">Seuls les viewers qui ont activé « Jouer un son lorsque je monte de niveau » eux-mêmes : jamais ceux qui n’ont fait aucun choix. Le choix reste le leur : il ne se change que dans leur extension.</p>`
+          : `<div class="d-empty">${esc(error || 'Lecture…')}</div>`,
+      ),
+    );
+  }
+
+  /** The rankings' pseudos: Twitch's current name by the stable id (the Core runs it at its start and every day). */
+  function paintNames() {
+    const n = names;
+    patch(
+      zz('names'),
+      grp(
+        'Pseudos du classement',
+        'user',
+        `${
+          n
+            ? `<dl class="d-kv"><dt>Dernière vérification</dt><dd>${esc(new Date(n.at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }))} · ${fmt(n.checked)} comptes</dd><dt>Pseudos ajoutés / mis à jour</dt><dd>${fmt(n.added)} / ${fmt(n.updated)}</dd><dt>Inconnus de Twitch</dt><dd>${fmt(n.unresolved)} (compte supprimé ou suspendu : leur ancien pseudo WizeBot, ou leur numéro, reste affiché)</dd></dl>`
+            : '<p class="d-note">Pas encore vérifié depuis le dernier démarrage du Core (il le fait 2 min après, puis chaque jour).</p>'
+        }
+        <div class="pg-lu-acts"><button type="button" class="d-btn" data-lu="names-refresh">Actualiser les pseudos depuis Twitch</button></div>
+        <p class="d-note">Le Core demande à Twitch le pseudo actuel de chaque compte par son identifiant : un viewer renommé retrouve son nom. Aucun compte n’est rattaché, aucune XP ni aucun niveau ne change.</p>`,
       ),
     );
   }
@@ -535,6 +638,7 @@ export function mountLevelUpScene(
         `<div class="pg-lu-try">
           <label class="pg-fl"><span>Pseudo</span><span class="d-fld"><input type="text" data-lu-test-pseudo maxlength="25" value="${esc(testPseudo)}"></span></label>
           <label class="pg-fl"><span>Niveau</span><span class="d-fld"><input type="number" data-lu-test-level min="1" max="10000" value="${testLevel}"></span></label>
+          <label class="pg-fl"><span>Titre (facultatif)</span><select class="d-in" data-lu-test-title aria-label="Titre du test"><option value="">Aucun</option>${titles.map((t) => `<option value="${esc(t.id)}" ${t.id === testTitle ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label>
         </div>
         <div class="pg-lu-chat" aria-label="Aperçu du message de LeCroupier_"><b>LeCroupier_</b><span data-lu-test-line>${esc(testLine())}</span></div>
         ${row(
@@ -548,9 +652,9 @@ export function mountLevelUpScene(
         ${r && !r.level_up_sound ? '<p class="d-note">Les sons Level Up sont coupés : en live, aucun son ne serait joué. Le test, lui, le joue quand même.</p>' : ''}
         <div class="pg-lu-acts">
           <button type="button" class="d-btn pri" data-lu="test-levelup">Tester un Level Up</button>
-          <button type="button" class="d-btn" data-lu="test-chat">Envoyer le test dans le chat…</button>
+          <button type="button" class="d-btn" data-lu="test-chat">Envoyer une vraie annonce test…</button>
         </div>
-        <p class="d-note">« Tester un Level Up » joue ton son dans OBS par la vraie source (rien ne s’affiche sur le stream) et montre ci-dessus le message de LeCroupier_, sans l’envoyer. Aucune XP, aucun niveau, aucun badge, aucun historique. « Envoyer le test dans le chat » publie « [TEST] … » dans ton vrai chat, après confirmation.</p>`,
+        <p class="d-note">« Tester un Level Up » joue ton son dans OBS par la vraie source (rien ne s’affiche sur le stream) et montre ci-dessus le message de LeCroupier_, sans l’envoyer. Aucune XP, aucun niveau, aucun badge, aucun historique. « Envoyer une vraie annonce test » publie l’annonce Twitch « [TEST] … » (bandeau coloré) dans ton vrai chat, après confirmation.</p>`,
       ),
     );
   }
@@ -560,9 +664,11 @@ export function mountLevelUpScene(
     paintTest();
     paintAnnounce();
     paintSound();
+    paintListeners();
     paintPrefs();
     paintBadges();
     paintRecent();
+    paintNames();
   }
 
   const typed = (title: string, body: string, phrase: string, yes: string) =>
@@ -690,7 +796,13 @@ export function mountLevelUpScene(
         b,
         'Texte et délais enregistrés.',
       ).then((ok) => {
-        if (!ok) toast('Le texte doit contenir {niveau}.', { bad: true });
+        if (!ok)
+          toast(
+            'Le texte doit contenir {liste} ; regroupement : 30 s au moins.',
+            {
+              bad: true,
+            },
+          );
       });
       return;
     }
@@ -720,8 +832,8 @@ export function mountLevelUpScene(
       }
       const line = `[TEST] ${testLine()}`;
       void typed(
-        'Envoyer le test dans ton chat ?',
-        `LeCroupier_ va publier dans ton vrai chat Twitch : « ${line} ». Aucune XP ni aucun niveau ne change.`,
+        'Envoyer une vraie annonce test ?',
+        `LeCroupier_ va publier une vraie annonce Twitch (bandeau coloré) dans ton chat : « ${line} ». Aucune XP ni aucun niveau ne change.`,
         'ENVOYER LE TEST',
         'Envoyer',
       ).then((ok) => {
@@ -733,11 +845,31 @@ export function mountLevelUpScene(
               confirm: 'ENVOYER LE TEST',
               pseudo: testPseudo,
               level: testLevel,
+              title_id: testTitle || null,
             }),
-          'Message test confié au bot.',
+          'Annonce test confiée au bot : regarde ton chat.',
           REFUS,
         );
       });
+      return;
+    }
+    if (act === 'listeners-refresh') {
+      void run(b, read);
+      return;
+    }
+    if (act === 'names-refresh') {
+      void run(
+        b,
+        async () => {
+          names = await postJson<NamesRefresh>(
+            '/api/progression/names/refresh',
+            {},
+          );
+          paintNames();
+        },
+        'Pseudos vérifiés auprès de Twitch.',
+        REFUS,
+      );
       return;
     }
     if (act === 'test-sound') {
@@ -821,6 +953,20 @@ export function mountLevelUpScene(
 
   host.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;
+    if (t.matches('[data-lu-test-title]')) {
+      testTitle = t.value;
+      const line = host.querySelector('[data-lu-test-line]');
+      if (line) line.textContent = testLine();
+      return;
+    }
+    if (t.matches('[data-lu-color]')) {
+      void save(
+        { level_up_chat_color: t.value as AnnounceColor },
+        null,
+        'Couleur enregistrée.',
+      );
+      return;
+    }
     if (t.dataset.luRule) {
       void save(
         { [t.dataset.luRule]: t.checked } as Partial<LuRules>,

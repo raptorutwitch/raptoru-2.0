@@ -9,8 +9,10 @@ import { expect, test } from '@playwright/test';
 // 1 000 XP levels (typed confirmation), turns the chat announcements and the sound on, imports two numbered badge pictures
 // (Lab placeholders, never the streamer's art); the production Extension shows « Mon niveau » and its sound checkbox
 // (unchecked by default, kept by the Core); Kirito_TV (sound turned on) one message short of level 10 sends one chat
-// message → ONE chat line on the commands outbox, the badge of level 10 in the inventory, the INVISIBLE OBS source plays
-// the sound and draws nothing; Studio lists it. Isolated stack: no Twitch, no real data.
+// message → the INVISIBLE OBS source plays the sound at once and draws nothing; at the end of the grouping window (30 s
+// here), ONE real Twitch announcement on the commands outbox (mode announce, no @), the badge of level 10 in the
+// inventory; Studio lists it, and lists Kirito_TV among the viewers who turned the sound on. Isolated stack: no Twitch,
+// no real data.
 
 const PORT = Number(process.env.E2E_PORT ?? 4399);
 const CHANNEL = '900100';
@@ -59,10 +61,12 @@ const labCore = async <T = Record<string, unknown>>(
   return r.json() as Promise<T>;
 };
 
-test('Level Up V2: activated in Studio, the chat line for everyone, the sound only when turned on (nothing drawn), the badge of level 10', async ({
+test('Level Up V2: activated in Studio, the grouped announcement for everyone, the sound only when turned on (nothing drawn), the badge of level 10', async ({
   page,
   browser,
 }) => {
+  // The grouping window (30 s, its minimum) and the Core's 30 s tick.
+  test.setTimeout(240_000);
   await page.goto('/?tab=progression');
   const tab = page.locator('#tab-progression');
   const toasts = page.locator('.d-toasts');
@@ -142,7 +146,7 @@ test('Level Up V2: activated in Studio, the chat line for everyone, the sound on
   // Kirito_TV turned the sound on; one message short of level 10 (3 XP a message). No Lab live is started (the stack is
   // shared): chat XP outside a live, for this test only.
   await labCore('/v1/lab/progression/settings', {
-    rules: { live_only: false },
+    rules: { live_only: false, level_up_chat_interval_s: 30 },
   });
   await labCore(`/v1/lab/progression/viewers/${KIRITO}/notify`, {
     level_up_notify: 'sound',
@@ -172,11 +176,27 @@ test('Level Up V2: activated in Studio, the chat line for everyone, the sound on
   expect((await obs.locator('body').innerText()).trim()).toBe('');
   expect(await obs.locator('body *:not(script)').count()).toBe(0);
 
-  // In chat: one line on the commands outbox (LeCroupier_ sends it).
-  const steps = await labCore(`/v1/lab/commands/${CHANNEL}/steps`);
-  expect(JSON.stringify(steps)).toContain(
-    'Kirito_TV vient d’atteindre le niveau 10 !',
-  );
+  // In chat: at the end of the window, ONE real announcement on the commands outbox (LeCroupier_ sends it with Send Chat
+  // Announcement), the pseudo without @ and unable to mention (a word joiner after its first letter).
+  const announced = async () =>
+    (
+      await labCore<{
+        steps: { origin: string; params: { mode: string; text: string } }[];
+      }>(`/v1/lab/commands/${CHANNEL}/steps`)
+    ).steps.filter(
+      (x) => x.origin === 'module:level_up' && !x.params.text.startsWith('['),
+    );
+  await expect
+    .poll(async () => (await announced()).map((x) => x.params), {
+      timeout: 90_000,
+      intervals: [2_000],
+    })
+    .toEqual([
+      expect.objectContaining({
+        mode: 'announce',
+        text: '🚀 LEVEL UP — K⁠irito_TV (10)',
+      }),
+    ]);
 
   // The badge of level 10, given by the level-up, with its image.
   const kirito = await labCore<{
@@ -191,6 +211,11 @@ test('Level Up V2: activated in Studio, the chat line for everyone, the sound on
   });
   await expect(lu.locator('.pg-lu-t').last()).toContainText('envoyé');
   await expect(lu.locator('.pg-lu-t').last()).toContainText('joué 🔊');
+  // « Viewers avec son activé »: Kirito_TV, who turned it on (read-only list).
+  await expect(lu.locator('[data-lz="listeners"]')).toContainText('Kirito_TV');
+  await expect(lu.locator('[data-lz="listeners"]')).toContainText(
+    'l’extension actuelle',
+  );
 
   // « Tester un Level Up » (Studio): the sound through the same OBS source, the line previewed only — no XP, no level,
   // no event, nothing in the chat; then the real « [TEST] » line, only after its typed confirmation.
@@ -203,7 +228,7 @@ test('Level Up V2: activated in Studio, the chat line for everyone, the sound on
   const tested = obs.waitForRequest((r) => r.url().endsWith('/level-up/sound'));
   await expect(lu.locator('[data-lz="test"]')).toContainText('connectée');
   await expect(lu.locator('[data-lu-test-line]')).toHaveText(
-    '@Raptoru vient d’atteindre le niveau 25 !',
+    '🚀 LEVEL UP — Raptoru (25)',
   );
   await lu.getByRole('button', { name: 'Tester un Level Up' }).click();
   await tested;
@@ -220,17 +245,25 @@ test('Level Up V2: activated in Studio, the chat line for everyone, the sound on
     JSON.stringify(await labCore(`/v1/lab/commands/${CHANNEL}/steps`)),
   ).toBe(stepsBefore);
   await lu
-    .getByRole('button', { name: 'Envoyer le test dans le chat…' })
+    .getByRole('button', { name: 'Envoyer une vraie annonce test…' })
     .click();
   const confirmTest = page.locator('dialog[open]');
   await confirmTest.locator('[data-text]').fill('ENVOYER LE TEST');
   await confirmTest.getByRole('button', { name: 'Envoyer' }).click();
-  await expect(toasts).toContainText('Message test confié au bot.');
-  expect(
-    JSON.stringify(await labCore(`/v1/lab/commands/${CHANNEL}/steps`)),
-  ).toContain('[TEST] @Raptoru vient d’atteindre le niveau 25 !');
+  await expect(toasts).toContainText('Annonce test confiée au bot');
+  const testStep = (
+    await labCore<{
+      steps: { origin: string; params: { mode: string; text: string } }[];
+    }>(`/v1/lab/commands/${CHANNEL}/steps`)
+  ).steps.find((x) => x.params.text.startsWith('[TEST]'));
+  expect(testStep?.params).toMatchObject({
+    mode: 'announce',
+    text: '[TEST] 🚀 LEVEL UP — R⁠aptoru (25)',
+  });
 
-  await labCore('/v1/lab/progression/settings', { rules: { live_only: true } });
+  await labCore('/v1/lab/progression/settings', {
+    rules: { live_only: true, level_up_chat_interval_s: 300 },
+  });
   await labCore(`/v1/lab/commands/${CHANNEL}/output`, {
     actor: { id: 'e2e' },
     enabled: false,
