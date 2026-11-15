@@ -368,7 +368,7 @@ const studio = createStudioServer({
     origin,
     dir: join(dir, 'level-up'),
     playerDir: join(import.meta.dirname, '..', 'level-up-player'),
-    claimEveryMs: 500,
+    claimEveryMs: Number(process.env.E2E_CLAIM_MS ?? 500),
     // Commands « sound » actions: the same OBS sound source (docs/COMMANDS_V2_STATUS.md).
     commandSounds: { core: labCore, channelId: CHANNEL },
   }),

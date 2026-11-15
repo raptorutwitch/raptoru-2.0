@@ -16,6 +16,11 @@ import type { LabCoreCall } from '../lab-moderation/proxy.js';
 // (`event: sound`, a distinct event: a page of an older Studio ignores it — never the wrong sound).
 
 export const CLAIM_EVERY_MS = 2000;
+/**
+ * Commands sounds: the claim waits on the Core (long-poll) up to this long for a sound, and the Core answers as soon as
+ * an admission queued one — the sound leaves at once, no polling interval (the Level Up claim keeps its 2 s).
+ */
+export const SOUND_WAIT_MS = 20_000;
 export const DEFAULT_VOLUME = 70;
 const MAX_BODY = 1024;
 const PLAYER_FILES: Record<string, string> = {
@@ -136,6 +141,8 @@ export class LevelUpRuntime {
   private chime: Buffer | null = null;
   lastError: string | null = null;
   lastSoundError: string | null = null;
+  private soundsListening = false;
+  private stopped = false;
   shown = 0;
 
   private constructor(
@@ -196,9 +203,29 @@ export class LevelUpRuntime {
       } catch (e) {
         this.lastError = (e as Error).message;
       }
-      await this.claimCommandSounds();
       this.schedule();
     }, this.d.claimEveryMs ?? CLAIM_EVERY_MS);
+  }
+
+  /**
+   * The command sounds while a source listens: one waiting claim at a time, the next one right after the answer. A
+   * Core that answers at once without a sound (an older Core, an error) is asked again only after the usual interval.
+   */
+  private listenSounds() {
+    if (this.soundsListening || !this.d.commandSounds || !this.clients.size)
+      return;
+    this.soundsListening = true;
+    void (async () => {
+      while (this.clients.size && !this.stopped) {
+        const started = Date.now();
+        const got = await this.claimCommandSounds();
+        if (!got && Date.now() - started < 1000)
+          await new Promise((r) =>
+            setTimeout(r, this.d.claimEveryMs ?? CLAIM_EVERY_MS),
+          );
+      }
+      this.soundsListening = false;
+    })();
   }
 
   private push(n: LevelUpNotice) {
@@ -213,22 +240,25 @@ export class LevelUpRuntime {
     this.shown++;
   }
 
-  /** The command sounds queued by the Core (each handed out once), pushed to the sources while one listens. */
-  private async claimCommandSounds() {
+  /** The command sounds queued by the Core (each handed out once), pushed to the sources; whether some came. */
+  private async claimCommandSounds(): Promise<boolean> {
     const cs = this.d.commandSounds;
-    if (!cs) return;
+    if (!cs) return false;
     try {
       const out = await cs.core<{ sounds: { id: number; sound: string }[] }>(
         `/v1/lab/commands/${cs.channelId}/sounds/claim`,
-        { consumer: this.consumer },
+        { consumer: this.consumer, wait_ms: SOUND_WAIT_MS },
+        { timeoutMs: SOUND_WAIT_MS + 10_000 },
       );
       this.lastSoundError = null;
       const known = new Set((await this.commandSounds()).map((x) => x.id));
       for (const x of out.sounds ?? [])
         if (SOUND_ID.test(x.sound) && known.has(x.sound))
           this.pushSound(`cmd-${x.id}`, x.sound);
+      return (out.sounds ?? []).length > 0;
     } catch (e) {
       this.lastSoundError = (e as Error).message;
+      return false;
     }
   }
 
@@ -270,6 +300,7 @@ export class LevelUpRuntime {
   }
 
   stop() {
+    this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     for (const c of this.clients) c.end();
@@ -456,6 +487,7 @@ export class LevelUpRuntime {
       this.clients.add(res);
       res.on('close', () => this.clients.delete(res));
       this.schedule();
+      this.listenSounds();
       return;
     }
     let data: Buffer;

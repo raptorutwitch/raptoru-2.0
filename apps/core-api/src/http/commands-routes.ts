@@ -18,7 +18,11 @@ import { z } from 'zod';
 import type { CommandsAdmission } from '../commands/admission.js';
 import { CommandsError } from '../commands/model.js';
 import type { CommandsService } from '../commands/service.js';
-import type { CommandSteps, StepStatus } from '../commands/steps.js';
+import {
+  type CommandSteps,
+  SOUND_MAX_WAIT_MS,
+  type StepStatus,
+} from '../commands/steps.js';
 import type { Actor } from '../lab-moderation/store.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
 
@@ -171,17 +175,22 @@ export function commandsRoutes(
       pattern: new RegExp(`${BASE}/sounds/claim$`),
       auth: 'studio',
       handle: ({ params, body }) =>
-        mapped(() =>
-          steps.claimSounds(
-            channel(params),
-            parse(
-              z.strictObject({
-                consumer: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
-              }),
-              body,
-            ).consumer,
-          ),
-        ),
+        mapped(() => {
+          const req = parse(
+            z.strictObject({
+              consumer: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+              /** Long-poll: wait up to this long for a sound (Studio ≥ 0.1.38); absent = answer at once. */
+              wait_ms: z
+                .number()
+                .int()
+                .min(0)
+                .max(SOUND_MAX_WAIT_MS)
+                .optional(),
+            }),
+            body,
+          );
+          return steps.claimSounds(channel(params), req.consumer, req.wait_ms);
+        }),
     },
     {
       method: 'GET',

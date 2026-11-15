@@ -178,4 +178,40 @@ describe('Commands V2 — the sound action and the people allowed by Twitch id',
       }),
     ).rejects.toMatchObject({ status: 422 });
   });
+  it('long-poll: a waiting claim takes the sound as soon as the message is admitted (exact or keyword), never twice', async () => {
+    await groslot({
+      cooldown: { enabled: false, seconds: 30, unit: 's', scope: 'global' },
+    });
+    await svc.create(CH, STUDIO, {
+      name: 'ao',
+      reply: { mode: 'silent', text: '', to: 'none' },
+      audience: { groups: ['everyone'], allow: [], deny: [] },
+      actions: [soundAction()],
+      cooldown: { enabled: false, seconds: 30, unit: 's', scope: 'global' },
+      trigger: { mode: 'keywords', keywords: ['ao'], match: 'word' },
+    });
+    for (const text of ['!groslot', 'franchement ao']) {
+      const started = Date.now();
+      // Two Studios wait at once: the sound goes to one of them only.
+      const claims = [
+        steps.claimSounds(CH, 'obs-1', 20_000),
+        steps.claimSounds(CH, 'obs-2', 300),
+      ];
+      await new Promise((r) => setTimeout(r, 30));
+      expect((await adm.chat(msg(text, AOUH))).outcome).toBe('accepted');
+      const got = (await Promise.all(claims)).flatMap((c) => c.sounds);
+      expect(got).toHaveLength(1);
+      // Woken by the admission, not by the end of the 20 s wait.
+      expect(Date.now() - started).toBeLessThan(2_000);
+    }
+    // Nothing queued: the claim answers [] at the end of its wait.
+    const t = Date.now();
+    expect(await steps.claimSounds(CH, 'obs-1', 80)).toEqual({ sounds: [] });
+    expect(Date.now() - t).toBeGreaterThanOrEqual(70);
+    // A sound already queued: answered at once.
+    await adm.chat(msg('!groslot', AOUH));
+    expect((await steps.claimSounds(CH, 'obs-1', 20_000)).sounds).toHaveLength(
+      1,
+    );
+  });
 });

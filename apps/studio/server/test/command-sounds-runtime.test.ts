@@ -152,9 +152,10 @@ describe('Commands sounds on the OBS sound source', () => {
     expect(got).toEqual([
       { id: 'cmd-8', src: `/level-up/cmd/${sound.id}`, volume: 0.7 },
     ]);
+    // A waiting claim (long-poll): the Core answers as soon as a sound is queued.
     expect(claims[0]).toEqual([
       '/v1/lab/commands/83603689/sounds/claim',
-      { consumer: expect.stringMatching(/^studio-lu-/) },
+      { consumer: expect.stringMatching(/^studio-lu-/), wait_ms: 20_000 },
     ]);
     // « Écouter dans OBS »: the same push, no Core.
     const tries = read(origin, token, 'sound', 1);
