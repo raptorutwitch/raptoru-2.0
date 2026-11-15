@@ -144,13 +144,22 @@ que pour ces viewers (commit du site `9e19ca8`).
 Depuis la bascule, le Core ne gardait le choix **qu'en mémoire**, perdu à chaque redémarrage, et le réglage était masqué
 depuis le 05/11. Il n'existe donc rien de durable après le 20/10.
 
-**Récupération** (Studio › Level Up › « Choix du son de l'ancienne extension ») :
+**Export du 15/11/2026 (lecture seule, autorisée par Antoni)** :
 
-1. Antoni exporte la table depuis le tableau de bord Supabase (CSV ou JSON).
-   - Aucun accès à cette base n'est configuré sur le PC de développement.
-   - Rien n'a été lu ni copié de la Production.
-2. Studio montre **d'abord la simulation**, rien n'est écrit.
-3. Il importe sur confirmation.
+- Lu par l'API REST du projet `supabase.raptoru.fr`, **GET uniquement**, avec la clé de lecture déjà rangée hors dépôt
+  (`Documents\Raptoru\_migration-exports\legacy-supabase.env`, celle de la lecture du 19/10).
+- La clé n'a été ni affichée ni copiée, et aucune donnée n'a été modifiée.
+- Le fichier est privé, hors de tout dépôt : `Documents\Raptoru\_migration-exports\level-up-prefs-2026-11-15\ext_viewer_preferences.json`.
+- Contenu : **6 préférences**, toutes de la chaîne 83603689, datées du 14 au 21/09/2026 ; **5 son activé, 1 coupé**.
+- Simulation d'import (le code du Core appelé par Studio, base jetable de la chaîne) :
+  - **5 viewers retrouvent le son, 1 le garde coupé** ;
+  - 0 doublon, 0 autre chaîne, 0 ligne sans identifiant ;
+  - rien d'écrit.
+
+**Import** (Studio › Level Up › « Choix du son de l'ancienne extension », après le déploiement du Core, sur GO) :
+
+1. Choisir ce fichier ; Studio montre **d'abord la simulation**, rien n'est écrit.
+2. « Importer ces choix » sur confirmation.
 
 **Priorité** :
 
@@ -217,6 +226,6 @@ d'origine sont gardées).
 ## 11. Ce qui attend Antoni
 
 - **Le fichier son** : à envoyer depuis Studio. Le droit de le diffuser en public reste à clarifier avant la Production.
-- **L'export de `ext_viewer_preferences`** depuis Supabase, pour récupérer les choix historiques.
+- **L'import des choix historiques** (export lu le 15/11 : 5 son activé, 1 coupé), après le déploiement du Core.
 - **Le badge n° 11** : badge sub ou badge Bits ?
 - Le GO de chaque étape du § 9.
