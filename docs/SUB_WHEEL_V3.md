@@ -1,9 +1,11 @@
 # Roue du Sub V3 : barème et rendu
 
-**Statut (16/11/2026) : proposition, itération 2.** Rien n'est développé ni déployé ; aucun gain réel n'a changé.
+**Statut (16/11/2026) : itération 3.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
+rendu et le barème restent des propositions ; aucun gain réel n'a changé.
 Maquettes non branchées et **locales** (`prototypes/` est exclu de Git par `.git/info/exclude`), dans
 `Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\` :
 
+- `roue.html` : **itération 3, la roue retenue** (§ 9) ;
 - `arcade.html` : itération 2, les trois mécanismes Arcade (§ 6) ;
 - `index.html` : itération 1, quatre directions (§ 4).
 
@@ -239,13 +241,37 @@ Le Core applique déjà cette règle :
 - les avis `sub_gift` et `community_sub_gift` deviennent des alertes `gift_*` ignorées par la roue ;
 - les doublons restent protégés par l'identifiant d'événement et les droits V2.
 
-**Trou constaté (non corrigé, système d'événements gelé).**
+**Trou constaté, puis corrigé le 16/11 (itération 3, commit local `f8f39218`).** Le bot ignorait `resub.is_gift` des
+avis `channel.chat.notification`. Le resub partagé par le bénéficiaire d'un abonnement offert faisait donc tourner la
+roue. Le correctif :
 
-- Le bot ne lit pas `resub.is_gift` des avis `channel.chat.notification`
-  (`apps/twitch-bot/src/alert-events.ts`, cas `resub`).
-- Un resub partagé par le bénéficiaire d'un abonnement offert sur plusieurs mois peut donc faire tourner la roue.
-- Correctif prévu à l'intégration : ne pas créer d'alerte « roue » quand `is_gift` est vrai, avec son test.
-- Le même examen vaut pour `channel.subscription.message` côté Loyalty.
+- **Bot** (`alert-events.ts`) : l'avis `resub` porte `is_gift: true` ; l'alerte reste affichée.
+- **Schéma** (`AlertEventInput.is_gift`) : champ optionnel.
+- **Core** (`SubWheelService.fromAlert`, `giftedRenewal`) : un avis offert garde son renouvellement en ligne
+  « ignorée », raison `gift`, avec son mois et ses preuves. Il n'est jamais tiré ni crédité.
+- **Le message de resub du même renouvellement** (côté Loyalty, Twitch n'y met aucun drapeau « offert ») s'y rattache,
+  au lieu de créer un droit tirable. Si ce message est arrivé le premier, son droit non tiré est annulé de la même
+  façon. En mode v1, rien n'est enregistré.
+- **File automatique** (`draws.ts`) : un droit acquis par la seule preuve Loyalty (sans alerte) attend 20 s avant
+  d'être tiré. C'est le délai que s'accorde déjà un droit lié à une alerte. Il laisse à l'avis de chat le temps
+  d'arriver : son alerte passe d'abord, et un partage offert annule le droit.
+- **Studio** : l'historique affiche « Abonnement offert : pas de roue ».
+- **Règle** : un cadeau ne donne pas de roue ; payer soi-même le mois suivant, si (nouveau renouvellement, roue
+  normale).
+
+**Tests :**
+
+- `sub-wheel-gifts.test.ts` : chaque mode, les deux ordres d'arrivée, rejouage, conversion en abonnement payé,
+  attente de 20 s, subscribe offert ;
+- course entre deux Core sur vrai PostgreSQL, 20 viewers, 3 tours (`sub-wheel-r2.integration.test.ts`) ;
+- bot : `alert-events.test.ts` ;
+- le test R3 « resub par le seul message EventSub » vérifie désormais l'attente de 20 s.
+
+**Déploiement :** le Core avant le bot, car le schéma du Core est strict et un ancien Core refuserait `is_gift`.
+
+**Limite restante :** si l'avis de chat d'un partage offert n'arrive jamais (bot coupé), la seule preuve Loyalty ne
+dit pas que c'est un cadeau, et le droit est tiré après 20 s. Twitch ne donne pas l'information dans
+`channel.subscription.message`.
 
 **Écart avec le § 5 :**
 
@@ -254,3 +280,69 @@ Le Core applique déjà cette règle :
 - La colonne `grid` reste nécessaire, pour qu'une ancienne roue rejouée garde son ancienne grille.
 - Il faut un nouveau rendu `wheel-v3.js` (le mécanisme choisi) et l'**avatar Twitch** dans la charge de la roue : le
   Core ne l'envoie pas aujourd'hui.
+
+## 9. Itération 3 : la roue retenue (16/11)
+
+Antoni garde la **roue**. Maquette : `roue.html`.
+
+**Ce qui change visuellement :**
+
+- **Palette chaude :**
+  - pour les valeurs : prune, framboise, corail, abricot, et or (avec reflet) pour le jackpot ;
+  - pour le reste : fond aubergine, filets crème, 12 lampes blanc chaud (le même nombre qu'avant) et une lueur qui
+    tourne en sens inverse ;
+  - plus de gris ni de bleu.
+- **Carte latérale**, à gauche de la roue et sur son axe, plus jamais posée sur la roue :
+  - pendant le tirage : l'avatar à gauche, le pseudo (réduit automatiquement s'il est long), « 45 mois », plus
+    « Vétéran » dès 20 mois ;
+  - à l'arrêt : l'identité se replie en une légende (mini-avatar, pseudo, mois), et **le même cadre** affiche le lot,
+    puis le ×tier, puis le compteur, puis le gain dans la couleur du lot (or au jackpot).
+- **Languette à 9 h**, entre la carte et la roue. Les montants sont écrits dans le sens du rayon, lus du bord vers le
+  centre : la part gagnante s'arrête contre la carte, avec son montant **à l'horizontale**.
+- **Moyeu : le tier seul** (T1 bronze, T2 rubis, T3 or, PRIME), en jeton de casino. Le multiplicateur n'apparaît
+  qu'au moment où il s'applique, dans la carte (« 25 000 ×3 »). Pour Prime / T1, aucun ×1 inutile : le compteur
+  monte directement de 0 au lot.
+- **Encombrement** : environ 645 × 330 px en 1080p, contre 345 × 560 à l'itération 2. C'est bien moins haut.
+- **Durée** : environ 6,2 s en Prime / T1 et 7,5 s pour un jackpot en T3.
+  - Étapes : entrée 0,45 s, tirage 2,4 s, bascule de la carte 0,35 s, ×tier et compteur 0,8 à 1,5 s, gain 1,3 s
+    (1,9 s au jackpot), sortie 0,4 s.
+  - Sons d'origine : ticks, arrêt, `Incrémentation`, `Fin casino`, jingle.
+
+**Barème : itération 2 plus un palier « vétéran ».**
+
+- Les 12 parts restent de même chance, de 500 à 6 000 à 1 mois, ×1,55 à chaque doublement des mois.
+- **Nouveau : ×1,25 dès 20 mois** (le palier de l'ancienne roue), puis le tier ×1 / ×2 / ×3.
+- **Plus aucun creux.** Le minimum, la moyenne et le jackpot ne passent jamais sous l'ancienne grille, de 1 à
+  120 mois. À 20 mois, la moyenne et le jackpot égalent l'ancienne roue, avec un minimum 4 fois plus haut.
+- Ton exemple se vérifie : à 45 mois, la roue contient la part 25 000, soit 75 000 en T3.
+
+| Mois | Ancien T1 (min / moy. / max) | Nouveau T1          | Nouveau T3           |
+| ---- | ---------------------------- | ------------------- | -------------------- |
+| 1    | 200 / 1 400 / 5 000          | 500 / 2 100 / 6 000 | 1 500 / 6 200 / 18k  |
+| 6    | 200 / 1 700 / 5 000          | 1 600 / 6 500 / 19k | 4 800 / 19k / 57k    |
+| 12   | 500 / 5 000 / 15k            | 2 400 / 9 900 / 29k | 7 200 / 30k / 87k    |
+| 19   | 500 / 5 000 / 15k            | 3 200 / 13k / 39k   | 9 600 / 40k / 117k   |
+| 20   | 1 000 / 17k / 50k            | 4 200 / 17k / 50k   | 12 600 / 52k / 150k  |
+| 24   | 1 000 / 17k / 50k            | 4 700 / 19k / 56k   | 14 100 / 58k / 168k  |
+| 36   | 1 000 / 17k / 50k            | 6 000 / 25k / 72k   | 18k / 75k / 216k     |
+| 45   | 1 000 / 17k / 50k            | 6 900 / 29k / 83k   | 20 700 / 87k / 249k  |
+| 60   | 1 000 / 17k / 50k            | 8 300 / 35k / 100k  | 24 900 / 104k / 300k |
+
+- **Coût estimé :** ×1,95 sur le mélange supposé, soit 9 900 Jetons en moyenne par sub éligible au lieu de 5 100. Le
+  palier vétéran ajoute environ ×0,18 par rapport à l'itération 2, et ne concerne qu'environ 15 % des subs.
+- **À mesurer avant l'activation :** le vrai mélange, dans `sw_spins` (lecture seule, GO d'Antoni).
+- **Réglages :** les montants à 1 mois, le facteur 1,55, le palier (20 mois, ×1,25).
+
+**Choix faits par l'agent :**
+
+- T3 au moyeu plutôt que ×3, pour éviter un « ×1 » sans intérêt pour la majorité des subs.
+- La carte placée à gauche et la languette à 9 h, pour que le lot tombé soit lisible et touche la carte.
+- Le palier vétéran, pour supprimer le creux de 20 à 33 mois.
+- Le compteur dès 0 en Prime / T1, pour que tout le monde entende l'incrémentation.
+
+**Intégration** (inchangée, § 5 et § 8) :
+
+- le nouveau rendu `effects-player/wheel-v3.js` d'après `roue.html` ;
+- la grille 2 et le palier vétéran dans `subWheelLayout(months, grid)` ;
+- la colonne `grid` ;
+- l'avatar Twitch dans la charge de la roue.
