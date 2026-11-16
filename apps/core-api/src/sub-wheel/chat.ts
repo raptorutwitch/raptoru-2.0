@@ -175,6 +175,21 @@ export class SubWheelChat {
   ) {}
 
   async chat(msg: LabChatMessage): Promise<{ outcome: string }> {
+    // V3 seniority (§ 13.3): a real chat message's subscriber badge confirms the viewer's uncertain month. Never in the
+    // way of the chat: a failure only leaves the right waiting for another confirmation.
+    if (msg.source === 'twitch' && msg.chatter.sub_months)
+      await this.wheel
+        .confirmFromBadge(
+          msg.channel_id,
+          {
+            id: msg.chatter.id,
+            login: msg.chatter.login,
+            name: msg.chatter.display_name,
+          },
+          msg.chatter.sub_months,
+          msg.message_id,
+        )
+        .catch(() => null);
     const text = msg.text.trim();
     const cmd = /^!roue(?:\s+(oui|non))?\s*$/i.exec(text);
     if (text.startsWith('!') && !cmd) return { outcome: 'ignored' };

@@ -225,21 +225,35 @@ describe('Roue du Sub V2 — R1', () => {
     expect((await f.wheel.state(CH)).rights).toEqual({ auto: 1, manual: 1 });
   });
 
-  it('v2_acquire, wheel ON: a new notice is drawn at once like V1, through draw() (same gain, same key)', async () => {
+  it('v2_acquire, wheel ON: a new notice is drawn at once like V1, through draw() (same gain, same key); a « sub » of unknown seniority waits (V3)', async () => {
     const f = await fixture();
     await f.wheel.setEnabled(CH, true);
     await f.wheel.setMode(CH, 'v2_acquire', 'studio');
-    const spin = (await f.receive(notice({ type: 'sub', months: undefined })))!;
+    const spin = (await f.receive(notice()))!;
     expect(spin).toMatchObject({
       status: 'queued',
-      months: 1, // the V1 layout of a sub
+      months: 7,
       segment: SEGMENT,
-      amount: subWheelAmount(1, 1, SEGMENT),
+      amount: subWheelAmount(7, 1, SEGMENT),
       award: { status: 'awarded' },
-      right: { sub_month: 1, month_source: 'estimated_no_history' },
+      right: { sub_month: 7, month_source: 'twitch' },
     });
     expect(spin.right.drawn_at).not.toBeNull();
-    expect(await f.tokens()).toBe(subWheelAmount(1, 1, SEGMENT));
+    expect(await f.tokens()).toBe(subWheelAmount(7, 1, SEGMENT));
+    // V3 (docs/SUB_WHEEL_V3.md § 13.3): no history, no cumulative months — never drawn as « 1 month », kept owed.
+    const unknown = (await f.receive(
+      notice({
+        type: 'sub',
+        months: undefined,
+        actor: { id: '9302', login: 'other', display_name: 'Other' },
+      }),
+    ))!;
+    expect(unknown).toMatchObject({
+      status: 'owed',
+      segment: null,
+      right: { month_source: 'estimated_no_history', month_status: 'unknown' },
+    });
+    expect(f.draws()).toBe(1);
   });
 
   it('P2 — v2_acquire: subscribe + notice of the same renewal, both orders → one right, one draw, one credit', async () => {
@@ -593,18 +607,25 @@ describe('Roue du Sub V2 — R1', () => {
 
   it('confirmation of a DRAWN estimated right corrects its month only, never its gain', async () => {
     const f = await fixture();
+    // History (a certain month 10, 40 days before): the subscribe is ESTIMATED (11), drawable by hand. Without any
+    // history its month would be unknown — never drawn (V3, docs/SUB_WHEEL_V3.md § 13.3).
+    await f.receive(notice({ occurred_at: at(-40 * 86_400_000), months: 10 }));
     await f.wheel.setMode(CH, 'v2_acquire', 'studio');
     const kept = (await f.wheel.acquire(subscribe()))!;
+    expect(kept.right).toMatchObject({
+      sub_month: 11,
+      month_source: 'estimated',
+    });
     const drawn = await f.wheel.drawRight(kept.spin_id);
     await f.receive(
       notice({ occurred_at: at(4_000), months: 12, tier: '1000' }),
     );
-    const r = (await f.rows())[0]!;
+    const r = (await f.rows()).find((x) => x.spin_id === kept.spin_id)!;
     expect(r).toMatchObject({
       spin_id: kept.spin_id,
       sub_month: 12,
       month_source: 'twitch',
-      months: 1,
+      months: 11,
       segment: drawn.segment,
     });
     expect(Number(r.amount)).toBe(drawn.amount);

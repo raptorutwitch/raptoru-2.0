@@ -108,6 +108,11 @@ const PLAYER_FILES: Record<string, string> = {
   'wheel.js': 'text/javascript; charset=utf-8',
   // Random Ban « Le Viseur »: the reel (module imported by player.js; part of the page version).
   'reel.js': 'text/javascript; charset=utf-8',
+  // Roue du Sub V3 (docs/SUB_WHEEL_V3.md § 13): its wheel and its two fonts (OFL, fonts/LICENSE.md), served locally:
+  // the OBS source never waits for the network during a live.
+  'wheel-v3.js': 'text/javascript; charset=utf-8',
+  'fonts/lilita-one-latin.woff2': 'font/woff2',
+  'fonts/rubik-latin.woff2': 'font/woff2',
 };
 const MEDIA_TYPES: Record<string, string> = {
   '.ogg': 'audio/ogg',
@@ -158,8 +163,9 @@ const CATALOGUE: {
 ];
 const CAPTURE = /^capture\/([0-9a-f-]{36})$/;
 const VERSION_MARK = '%PLAYER_VERSION%';
+// img-src: the Roue du Sub V3 shows the viewer's Twitch picture (Twitch's own CDN only, as the extension does).
 const CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; frame-ancestors 'self'";
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self'; img-src 'self' https://static-cdn.jtvnw.net; font-src 'self'; frame-ancestors 'self'";
 
 export interface EffectsPlayerDeps {
   /** Studio storage of the module (the OBS source token). */
@@ -385,6 +391,14 @@ export class EffectsPlayer {
             layout: { val: number; mult: number }[];
             segment: number;
             amount: number;
+            /** V3 (docs/SUB_WHEEL_V3.md § 13): the barème, the viewer, the part before the tier, and what the wheel shows. */
+            grid?: 1 | 3;
+            viewer_id?: string | null;
+            prime?: boolean;
+            lot?: number | null;
+            coef?: number;
+            avatar?: string | null;
+            title?: { label: string; style: Record<string, unknown> } | null;
           };
         }
       | {

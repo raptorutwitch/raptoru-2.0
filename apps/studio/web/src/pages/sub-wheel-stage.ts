@@ -1,4 +1,12 @@
-import { SUB_WHEEL, subWheelAmount, subWheelLayout } from '@raptoru/schemas';
+import {
+  SUB_WHEEL,
+  SUB_WHEEL_V3,
+  type SwGrid,
+  subWheelAmount,
+  subWheelGrid,
+  subWheelLayout,
+  subWheelV3Tier,
+} from '@raptoru/schemas';
 import { esc, fmt } from '../ds/ds.js';
 
 // La roue au repos : reproduction fidèle de buildWheelSVG (apps/studio/server/effects-player/wheel.js), mêmes dimensions, couleurs et
@@ -27,8 +35,31 @@ const multColor = (mult: number) =>
 
 const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 
-/** La roue, segments et gains de base, comme l'overlay l'affiche. */
-export function wheelSvg(months: number) {
+/** La roue V3 au repos (palette chaude, montants dans le sens du rayon), comme effects-player/wheel-v3.js la dessine. */
+function wheelSvgV3(months: number) {
+  const layout = subWheelGrid(months, 3);
+  const colors = ['#6b2c5c', '#d8604e', '#e8904a', '#f4c55a'];
+  const a = 360 / layout.length;
+  const pt = (r: number, deg: number) => {
+    const t = ((deg - 90) * Math.PI) / 180;
+    return [196 + r * Math.cos(t), 196 + r * Math.sin(t)].map((v) =>
+      v.toFixed(1),
+    );
+  };
+  const parts = layout.map((p, i) => {
+    const level = SUB_WHEEL_V3.pattern[i]!;
+    const [x1, y1] = pt(186, i * a - a / 2);
+    const [x2, y2] = pt(186, i * a + a / 2);
+    const [x, y] = pt(120, i * a);
+    const text = fmt(p.val * p.mult);
+    return `<g data-part="${i}"><path d="M196 196L${x1} ${y1}A186 186 0 0 1 ${x2} ${y2}Z" fill="${colors[level]}" stroke="#24101f" stroke-width="3"/><text x="${x}" y="${y}" transform="rotate(${i * a - 90} ${x} ${y})" text-anchor="middle" dominant-baseline="central" font-family="${FONT}" font-size="${text.length >= 7 ? 22 : 26}" font-weight="900" fill="${level === 3 ? '#3a2104' : '#fff'}"${level === 3 ? '' : ' stroke="#24101f" stroke-width="5" paint-order="stroke"'}>${esc(text)}</text></g>`;
+  });
+  return `<svg class="whl-svg" viewBox="0 0 392 392" aria-hidden="true"><g data-spin><circle cx="196" cy="196" r="192" fill="#24101f" stroke="#fff3df" stroke-width="3"/>${parts.join('')}</g></svg>`;
+}
+
+/** La roue, segments et gains de base, comme l'overlay l'affiche (V3 : la roue V3). */
+export function wheelSvg(months: number, grid: SwGrid = 1) {
+  if (grid === 3) return wheelSvgV3(months);
   const layout = subWheelLayout(months);
   const cx = 196;
   const cy = 196;
@@ -64,13 +95,31 @@ export function wheelSvg(months: number) {
 }
 
 /** L'angle qui amène une part sous le repère, comme le fait l'overlay en fin de tirage. */
-export const partAngle = (months: number, part: number) => {
-  const a = 360 / subWheelLayout(months).length;
-  return 360 - (part * a + a / 2);
+export const partAngle = (months: number, part: number, grid: SwGrid = 1) => {
+  const a = 360 / subWheelGrid(months, grid).length;
+  // V3 : chaque part est centrée sur son angle ; l'ancienne roue commence ses parts au repère.
+  return grid === 3 ? 360 - part * a : 360 - (part * a + a / 2);
 };
 
 /** Ce que la roue peut donner, du plus gros gain au plus petit. Le montant vient de la même formule que le Core. */
-export function gainsView(months: number, tier: Tier) {
+export function gainsView(months: number, tier: Tier, grid: SwGrid = 1) {
+  if (grid === 3) {
+    const layout = subWheelGrid(months, 3);
+    const p = subWheelV3Tier(months);
+    const kinds = ['petit gain', 'gain moyen', 'bon gain', 'jackpot'];
+    const counts = [5, 3, 3, 1];
+    const values = [0, 1, 2, 3].map(
+      (l) => layout[SUB_WHEEL_V3.pattern.indexOf(l as 0 | 1 | 2 | 3)]!.val,
+    );
+    return `<div class="whl-gh"><span class="d-lb">Ce qu’elle peut donner (palier ${p}, ${3 * p - 2} à ${3 * p} mois)</span></div>
+      <div class="whl-gl">${values
+        .map(
+          (v, l) =>
+            `<button type="button" class="whl-g ${l === 3 ? 'top' : ''}" data-part-btn="${SUB_WHEEL_V3.pattern.indexOf(l as 0 | 1 | 2 | 3)}" aria-label="${esc(kinds[l]!)}"><i></i><b>${fmt(v * SUB_WHEEL.tierCoef[tier])}</b><small>${counts[l]}/12 · ${esc(kinds[l]!)}</small></button>`,
+        )
+        .join('')}</div>
+      <p class="d-note">12 parts de même chance. Le serveur tire une seule fois, avant l’animation.${tier > 1 ? ` Tier ${tier} : gains × ${SUB_WHEEL.tierCoef[tier]}.` : ''}</p>`;
+  }
   const layout = subWheelLayout(months);
   const rows = layout
     .map((seg, i) => ({
@@ -107,7 +156,39 @@ let realCss: string | null = null;
 export async function playReal(
   host: HTMLElement,
   spin: { months: number; tier: Tier; name: string; part: number },
+  grid: SwGrid = 1,
 ) {
+  if (grid === 3) {
+    // Le vrai overlay V3 (effects-player/wheel-v3.js), en place dans la page : rien n'est tiré, rien n'est crédité.
+    const v3 = '/effects/wheel-v3.js';
+    const { playWheel } = (await import(/* @vite-ignore */ v3)) as {
+      playWheel(
+        stage: HTMLElement,
+        s: Record<string, unknown>,
+        sounds: { incr: string; fin: string },
+        place?: { inline?: boolean },
+      ): Promise<void>;
+    };
+    const layout = subWheelGrid(spin.months, 3);
+    const part = spin.part % layout.length;
+    await playWheel(
+      host,
+      {
+        name: spin.name,
+        viewer_id: spin.name,
+        tier: spin.tier,
+        months: spin.months,
+        layout,
+        segment: part,
+        lot: layout[part]!.val * layout[part]!.mult,
+        coef: SUB_WHEEL.tierCoef[spin.tier],
+        amount: subWheelAmount(spin.months, spin.tier, part, 3),
+      },
+      { incr: '/effects/media/sw-incr', fin: '/effects/media/sw-fin' },
+      { inline: true },
+    );
+    return;
+  }
   if (realCss === null) {
     const html = await (await fetch('/effects/player.html')).text();
     const from = html.indexOf('/* === ROUE === */');

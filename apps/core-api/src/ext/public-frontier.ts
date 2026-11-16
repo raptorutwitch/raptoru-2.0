@@ -224,6 +224,7 @@ export function createPublicFrontier(
       core.votekick.attachAvatars(avatars);
       core.randomBan.attachAvatars(avatars);
       core.dock.attachAvatars(avatars);
+      core.subWheel.attachAvatars(avatars);
       const avatarTick = setInterval(() => {
         avatars
           .refresh()

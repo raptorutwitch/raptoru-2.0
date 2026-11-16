@@ -1350,6 +1350,14 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
   // take it over. Rule: sub / resub in live + wheel on = present, the wheel goes normally.
   const sub = (viewer: string, ms: number) =>
     notice(viewer, ms, { type: 'sub', months: undefined });
+  /** V3 (docs/SUB_WHEEL_V3.md § 13.3): a « sub » carries no seniority; a new subscriber's chat badge says 1 month. */
+  const newSubChats = (f: { wheel: SubWheelService }, viewer: string) =>
+    f.wheel.confirmFromBadge(
+      CH,
+      { id: viewer, login: `v${viewer}`, name: `V${viewer}` },
+      1,
+      `chat-${viewer}`,
+    );
 
   it('sub, resub, Prime resub: drawn at the next wheel with NO chatters reading at all (presence unknown)', async () => {
     const f = await fixture();
@@ -1357,6 +1365,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     await f.live('s1', 0);
     f.at0(MIN);
     const a = (await f.receive(sub('9501', MIN)))!;
+    await newSubChats(f, '9501');
     const b = (await f.receive(notice('9502', MIN)))!;
     const c = (await f.receive(
       notice('9503', MIN, { tier: 'prime', months: 4 }),
@@ -1424,6 +1433,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     await f.live('s1', 0);
     f.at0(MIN);
     const r = (await f.receive(sub('9501', MIN)))!;
+    await newSubChats(f, '9501');
     f.at0(2 * MIN);
     await f.wheel.setInvitations(CH, false, 'test');
     await f.wheel.setAnnounceDelay(CH, 5, 'test');
@@ -1434,6 +1444,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     // Counter-proof: an OFF → ON switch IS the boundary — a sub received before it waits for its presence.
     await f.done(r.spin_id);
     const before = (await f.receive(sub('9502', 3 * MIN)))!;
+    await newSubChats(f, '9502');
     f.at0(4 * MIN);
     await f.wheel.setEnabled(CH, false);
     await f.wheel.setEnabled(CH, true);

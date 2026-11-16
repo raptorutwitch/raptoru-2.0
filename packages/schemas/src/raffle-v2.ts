@@ -319,6 +319,11 @@ export const LabChatMessage = z.strictObject({
       .array(z.string().regex(/^[a-z0-9_-]{1,32}$/))
       .max(20)
       .optional(),
+    /**
+     * The cumulative months of the subscriber / founder badge (Twitch badge `info`), when the chatter shows one: the
+     * Roue du Sub confirms the seniority of a right with it (docs/SUB_WHEEL_V3.md § 13.3). Optional: older adapters.
+     */
+    sub_months: z.number().int().min(1).max(1000).optional(),
   }),
   source: z.enum(['twitch', 'simulator']),
 });

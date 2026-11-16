@@ -5,6 +5,7 @@
 // - the layout comes with it (the same legacy buildWheelLayout, in @raptoru/schemas), the shown amount is checked
 //   against the recorded one (a mismatch fails: the screen never shows another gain);
 // - the two mp3 are Studio's copies; no SAMMI (no setVariable, no wait on SAMMI): the effects player reports the end.
+// Its sounds are exported as they are: the Roue du Sub V3 (wheel-v3.js) plays the same ones.
 
 const WHEEL_TIER_COEFS = { 1: 1, 2: 2, 3: 3 };
 const WHEEL_RARE_THRESHOLD = 3000;
@@ -46,7 +47,7 @@ function wheelAudio() {
   return wheelAudioCtx;
 }
 
-function wheelTickSound(step) {
+export function wheelTickSound(step) {
   const ctx = wheelAudio();
   const baseFreq = 600;
   const freq = baseFreq * Math.pow(2, (step || 0) / 12);
@@ -71,7 +72,7 @@ function wheelTickSound(step) {
   osc2.stop(ctx.currentTime + 0.07);
 }
 
-function wheelSegmentStopSound() {
+export function wheelSegmentStopSound() {
   const ctx = wheelAudio();
   const t = ctx.currentTime;
   // Chorus 1 : grave (340 Hz, désaccord 4 Hz)
@@ -102,7 +103,7 @@ function wheelSegmentStopSound() {
   });
 }
 
-function wheelSpinTickSound() {
+export function wheelSpinTickSound() {
   const ctx = wheelAudio();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -115,7 +116,7 @@ function wheelSpinTickSound() {
   osc.stop(ctx.currentTime + 0.04);
 }
 
-function wheelWinSound(isJackpot) {
+export function wheelWinSound(isJackpot) {
   const ctx = wheelAudio();
   if (isJackpot) {
     const melody = [523, 659, 784, 1047, 1319, 1568];

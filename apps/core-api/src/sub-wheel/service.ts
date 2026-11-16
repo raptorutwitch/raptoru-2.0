@@ -4,10 +4,11 @@ import {
   type LoyaltyEvent,
   SUB_WHEEL,
   subWheelAmount,
-  subWheelLayout,
+  subWheelGrid,
   type SwAnimationReport,
   type SwAwardStatus,
   type SwGrantInput,
+  type SwGrid,
   type SwMode,
   type SwRedrawInput,
   type SwReviewDecision,
@@ -54,6 +55,8 @@ import {
   LabForbiddenError,
   LabWalletError,
 } from '../lab-moderation/store.js';
+import { equippedTitleLooks } from '../progression/service.js';
+import { avatarUrls } from '../raffle-lab/avatars.js';
 import { CurrencyCreditError } from '../raffle-lab/currencies.js';
 
 // Roue du Sub (docs/SUB_WHEEL.md) — the ONE implementation (Lab Core, production Core). Core decides: one wheel per
@@ -124,6 +127,12 @@ interface Row {
   /** Automatic re-shows done (bounded by SUB_WHEEL.retryMax). */
   retry_count?: number | null;
   retry_at?: Date | null;
+  /** V3: the barème of the draw (1 legacy, 3 V3; 1 on every row from before). */
+  grid?: number | null;
+  /** V3: who confirmed the month by hand (month_source 'manual'). */
+  confirmed_by?: string | null;
+  /** V3: a Prime sub (paid as T1, « PRIME » at the hub). */
+  prime?: boolean | null;
 }
 
 type Recovery = 'retry' | 'manual' | 'check';
@@ -176,10 +185,23 @@ export const spinView = (r: Row) => ({
     queue: r.queue ?? null,
     sub_month: r.sub_month ?? null,
     month_source: r.month_source ?? null,
+    /** V3 (§ 13.3): confirmed (Twitch, badge, Studio, history) · estimated (drawn after the wait) · unknown (waits). */
+    month_status: monthStatus(r),
+    confirmed_by: r.confirmed_by ?? null,
     acquired_at: iso(r.acquired_at ?? null),
     drawn_at: iso(r.drawn_at ?? null),
   },
+  /** V3: the barème of the draw (1 = legacy SAMMI wheel, 3 = V3). */
+  grid: r.grid === 3 ? 3 : 1,
 });
+
+/** How sure the month of a right is (V3 seniority, docs/SUB_WHEEL_V3.md § 13.3). */
+function monthStatus(r: Row): 'confirmed' | 'estimated' | 'unknown' | null {
+  if (!r.month_source) return null;
+  if (r.month_source === 'estimated_no_history') return 'unknown';
+  if (r.month_source === 'estimated') return 'estimated';
+  return 'confirmed';
+}
 
 /** Twitch tier → wheel tier (legacy: Prime and unknown are T1). */
 const tierOf = (t: AlertEventInput['tier']): 1 | 2 | 3 =>
@@ -377,9 +399,11 @@ export class SubWheelService {
         recovery_enabled: boolean;
         invitations_enabled: boolean;
         announce_delay_s: number;
+        grid: number;
+        grid_since: Date | null;
       }>(
-        `select enabled, updated_at, mode, recovery_enabled, invitations_enabled, announce_delay_s from sw_settings
-         where channel_id = $1`,
+        `select enabled, updated_at, mode, recovery_enabled, invitations_enabled, announce_delay_s, grid, grid_since
+         from sw_settings where channel_id = $1`,
         [channelId],
       )
     )[0];
@@ -392,9 +416,72 @@ export class SubWheelService {
       announce_delay_s: r
         ? Number(r.announce_delay_s)
         : SW_ANNOUNCE_DELAY_MS / 1000,
+      /** V3: the barème of the draws from now on, and since when (a right acquired before keeps the legacy one). */
+      grid: (r?.grid === 3 ? 3 : 1) as SwGrid,
+      grid_since: iso(r?.grid_since ?? null),
       // Lab Core: the Lab's simulators exist (presence, events), and the gains pay the Lab test wallet.
       lab: (await this.presenceMode()) === 'lab_sim',
     };
+  }
+
+  /**
+   * V3 (§ 13.2): the barème of the draws from now on — the broadcaster only (Studio), journaled. A right acquired before
+   * the switch keeps the barème of its time: never turned silently into a V3 reward (gridFor). grid_since moves only
+   * when the barème really changes.
+   */
+  async setGrid(channelId: string, grid: SwGrid, actor: string) {
+    if (grid !== 1 && grid !== 3) throw new SwError(400, 'invalid_grid');
+    await this.db.tx(async (q) => {
+      const now = this.now();
+      const before = (
+        await q.query<{ grid: number }>(
+          'select grid from sw_settings where channel_id = $1 for update',
+          [channelId],
+        )
+      )[0];
+      const was = before?.grid === 3 ? 3 : 1;
+      await q.query(
+        `insert into sw_settings (channel_id, enabled, updated_at, grid, grid_since) values ($1, false, $2, $3, $2)
+         on conflict (channel_id) do update set grid = $3, updated_at = $2,
+           grid_since = case when sw_settings.grid = $3 then sw_settings.grid_since else $2 end`,
+        [channelId, now, grid],
+      );
+      if (was !== grid)
+        await this.audit(q, {
+          channelId,
+          actor,
+          role: 'broadcaster',
+          action: 'sw_grid',
+          before: { grid: was },
+          after: { grid },
+        });
+    });
+    return this.settings(channelId);
+  }
+
+  /**
+   * The barème of a draw (§ 13.2): the channel's, except for a right acquired BEFORE that barème was switched on — it
+   * keeps the legacy wheel of its time. Read in the draw's transaction.
+   */
+  private async gridFor(
+    q: Queryable,
+    channelId: string,
+    acquiredAt: Date | null,
+  ): Promise<SwGrid> {
+    const s = (
+      await q.query<{ grid: number; grid_since: Date | null }>(
+        'select grid, grid_since from sw_settings where channel_id = $1',
+        [channelId],
+      )
+    )[0];
+    if (s?.grid !== 3) return 1;
+    if (
+      acquiredAt &&
+      s.grid_since &&
+      new Date(acquiredAt) < new Date(s.grid_since)
+    )
+      return 1;
+    return 3;
   }
 
   /** Natural invitations (R9): the broadcaster only, OFF by default, journaled. */
@@ -571,16 +658,18 @@ export class SubWheelService {
       enabled: boolean;
       /** Twitch time of the event (cutover boundary). */
       occurred_at?: string;
+      prime?: boolean;
     },
   ) {
     const now = this.now();
+    const grid = await this.gridFor(q, s.channel_id, now);
     const segment = s.enabled
-      ? this.draw(subWheelLayout(s.months).length)
+      ? this.draw(subWheelGrid(s.months, grid).length)
       : null;
     const created = await q.query(
       `insert into sw_spins (spin_id, channel_id, source, event_key, alert_id, type, viewer_id, viewer_login,
-         viewer_name, tier, months, status, reason, segment, amount, award_status, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)
+         viewer_name, tier, months, status, reason, segment, amount, award_status, created_at, updated_at, grid, prime)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17, $18, $19)
        on conflict (channel_id, event_key) do nothing returning spin_id`,
       [
         randomUUID(),
@@ -597,9 +686,13 @@ export class SubWheelService {
         s.enabled ? 'queued' : 'ignored',
         s.enabled ? null : 'disabled',
         segment,
-        segment === null ? null : subWheelAmount(s.months, s.tier, segment),
+        segment === null
+          ? null
+          : subWheelAmount(s.months, s.tier, segment, grid),
         !s.enabled ? 'none' : s.source === 'twitch' ? 'pending' : 'test',
         now,
+        grid,
+        s.prime === true,
       ],
     );
     const row = (
@@ -681,6 +774,7 @@ export class SubWheelService {
           months:
             type === 'resub' && e.months && e.months >= 1 ? e.months : null,
           isGift: gift,
+          prime: e.tier === 'prime',
           alertId,
         }
       : null;
@@ -726,6 +820,7 @@ export class SubWheelService {
         months: v1Months,
         enabled,
         occurred_at: e.occurred_at,
+        prime: e.tier === 'prime',
       });
       const r = ev ? await this.identifyV1(q, row, created, ev) : row;
       if (ev) await adoptOrphans(q, ev, r);
@@ -843,8 +938,8 @@ export class SubWheelService {
       await q.query<Row>(
         `insert into sw_spins (spin_id, channel_id, source, event_key, alert_id, type, viewer_id, viewer_login,
            viewer_name, tier, months, status, award_status, created_at, updated_at, queue, sub_month, month_source,
-           acquired_at)
-         values ($1, $2, 'twitch', $3, $4, $5, $6, $7, $8, $9, $10, 'owed', 'none', $11, $11, $12, $13, $14, $11)
+           acquired_at, prime)
+         values ($1, $2, 'twitch', $3, $4, $5, $6, $7, $8, $9, $10, 'owed', 'none', $11, $11, $12, $13, $14, $11, $15)
          returning *`,
         [
           randomUUID(),
@@ -862,13 +957,15 @@ export class SubWheelService {
           live ? 'auto' : 'manual',
           month.sub_month,
           month.month_source,
+          ev.prime === true,
         ],
       )
     )[0]!;
     await recordProof(q, row.spin_id, ev, now);
     if (notice) await adoptOrphans(q, ev, row);
     let out = row;
-    if (notice && o.drawNow) {
+    // V3: an unknown month is never drawn at once (it waits for its confirmation, § 13.3).
+    if (notice && o.drawNow && row.month_source !== 'estimated_no_history') {
       out = await this.drawLocked(q, row.spin_id, ev.occurredAt);
       if (o.stale) out = await this.tooLate(q, out);
     }
@@ -974,9 +1071,21 @@ export class SubWheelService {
           [r.spin_id, ev.alertId],
         )
       )[0]!;
+    if (ev.prime && !r.prime)
+      r = (
+        await q.query<Row>(
+          'update sw_spins set prime = true where spin_id = $1 returning *',
+          [r.spin_id],
+        )
+      )[0]!;
     await recordProof(q, r.spin_id, ev, now);
     if (ev.source === 'chat_notification') await adoptOrphans(q, ev, r);
-    if (!o.drawNow || ev.source !== 'chat_notification' || r.status !== 'owed')
+    if (
+      !o.drawNow ||
+      ev.source !== 'chat_notification' ||
+      r.status !== 'owed' ||
+      r.month_source === 'estimated_no_history'
+    )
       return r;
     // « À vérifier »: the notice is kept as a proof, the right stays blocked (no path bypasses a review).
     if (await underReview(q, r.spin_id)) return r;
@@ -1008,19 +1117,28 @@ export class SubWheelService {
     if (r.status !== 'owed' && r.status !== 'requested')
       throw new SwError(409, 'not_owed');
     if (await underReview(q, spinId)) throw new SwError(409, 'needs_review');
-    const segment = this.draw(subWheelLayout(r.months).length);
+    // V3 (§ 13.3): never a draw on an unknown seniority (it would be paid as a first month).
+    if (r.month_source === 'estimated_no_history')
+      throw new SwError(409, 'month_unconfirmed');
+    const grid = await this.gridFor(
+      q,
+      r.channel_id,
+      r.acquired_at ?? r.created_at,
+    );
+    const segment = this.draw(subWheelGrid(r.months, grid).length);
     const now = this.now();
     const row = (
       await q.query<Row>(
         `update sw_spins set status = 'queued', reason = null, segment = $2, amount = $3, award_status = $4,
-           drawn_at = $5, updated_at = $5
+           drawn_at = $5, updated_at = $5, grid = $6
          where spin_id = $1 returning *`,
         [
           spinId,
           segment,
-          subWheelAmount(r.months, r.tier, segment),
+          subWheelAmount(r.months, r.tier, segment, grid),
           r.source === 'test' || r.source === 'simulation' ? 'test' : 'pending',
           now,
+          grid,
         ],
       )
     )[0]!;
@@ -1065,6 +1183,132 @@ export class SubWheelService {
       await recordProof(q, null, ev, this.now());
       return null;
     });
+  }
+
+  /**
+   * V3 seniority (§ 13.3): the subscriber badge of a chat message (its cumulative months) confirms the month of the
+   * viewer's latest right whose month is only estimated or unknown — never a right already drawn, never below a month
+   * already certain for this viewer (a lower badge is not trusted). Idempotent: the chat message is the proof's key.
+   * Cheap when there is nothing to confirm (one indexed read, no lock).
+   */
+  async confirmFromBadge(
+    channelId: string,
+    viewer: { id: string; login: string | null; name: string },
+    months: number,
+    messageId: string,
+  ) {
+    if (!Number.isInteger(months) || months < 1 || months > 1000) return null;
+    const open = await this.db.query(
+      `select 1 from sw_spins where channel_id = $1 and viewer_id = $2 and status in ('owed', 'requested')
+         and month_source in ('estimated', 'estimated_no_history') limit 1`,
+      [channelId, viewer.id],
+    );
+    if (!open.length) return null;
+    const row = await this.db.tx(async (q) => {
+      await readMode(q, channelId);
+      await lockViewer(q, channelId, viewer.id);
+      const r = (
+        await q.query<Row>(
+          `select * from sw_spins where channel_id = $1 and viewer_id = $2 and status in ('owed', 'requested')
+             and month_source in ('estimated', 'estimated_no_history')
+           order by coalesce(acquired_at, created_at) desc, seq desc limit 1 for update`,
+          [channelId, viewer.id],
+        )
+      )[0];
+      if (!r) return null;
+      const last = await lastCertainMonth(q, channelId, viewer.id);
+      if (last !== null && months < last) return null;
+      return this.confirmMonth(q, r, months, 'badge', null, {
+        channelId,
+        source: 'badge',
+        sourceEventId: messageId,
+        occurredAt: null,
+        viewer,
+        type: r.type,
+        tier: r.tier,
+        months,
+        isGift: false,
+      });
+    });
+    return row && spinView(row);
+  }
+
+  /**
+   * V3 « Confirmer l'ancienneté » (Studio, the broadcaster; journaled): the real cumulative months of a right not drawn
+   * yet whose month is not certain. A month Twitch gave (certain) is never overwritten.
+   */
+  async confirmMonthByHand(
+    spinId: string,
+    months: number,
+    actor: string,
+    note?: string,
+  ) {
+    if (!Number.isInteger(months) || months < 1 || months > 1000)
+      throw new SwError(400, 'invalid_months');
+    const row = await this.db.tx(async (q) => {
+      const r = (
+        await q.query<Row>('select * from sw_spins where spin_id = $1', [
+          spinId,
+        ])
+      )[0];
+      if (!r) throw new SwError(404, 'spin_not_found');
+      await readMode(q, r.channel_id);
+      if (r.viewer_id) await lockViewer(q, r.channel_id, r.viewer_id);
+      const fresh = (
+        await q.query<Row>(
+          'select * from sw_spins where spin_id = $1 for update',
+          [spinId],
+        )
+      )[0]!;
+      if (fresh.status !== 'owed' && fresh.status !== 'requested')
+        throw new SwError(409, 'not_owed');
+      if (fresh.month_source === 'twitch')
+        throw new SwError(409, 'month_certain');
+      const out = await this.confirmMonth(q, fresh, months, 'manual', actor);
+      await this.audit(q, {
+        channelId: fresh.channel_id,
+        actor,
+        role: 'broadcaster',
+        action: 'sw_month_confirm',
+        viewerId: fresh.viewer_id,
+        spinId,
+        reason: note ?? null,
+        before: {
+          sub_month: fresh.sub_month,
+          month_source: fresh.month_source,
+        },
+        after: { sub_month: months, month_source: 'manual' },
+      });
+      return out;
+    });
+    return spinView(row);
+  }
+
+  /**
+   * One month confirmed on a right not drawn yet (badge or Studio): its month and the wheel it will be drawn on, who
+   * confirmed it, its proof; then the same-month check of every confirmation (a month already held by another right
+   * blocks the less certain one: never two draws for one month).
+   */
+  private async confirmMonth(
+    q: Queryable,
+    r: Row,
+    months: number,
+    source: 'badge' | 'manual',
+    by: string | null,
+    proof?: SwEvidence,
+  ): Promise<Row> {
+    const now = this.now();
+    const row = (
+      await q.query<Row>(
+        `update sw_spins set sub_month = $2, months = $2, month_source = $3, confirmed_at = $4, confirmed_by = $5,
+           updated_at = $4
+         where spin_id = $1 returning *`,
+        [r.spin_id, months, source, now, by],
+      )
+    )[0]!;
+    if (proof) await recordProof(q, row.spin_id, proof, now);
+    await flagSameMonth(q, row, now);
+    return row;
   }
 
   /**
@@ -1166,6 +1410,57 @@ export class SubWheelService {
    * alerts source being absent / slow). The result travels with it: Studio never draws.
    */
   async claimAnimation(channelId: string, consumerId: string) {
+    const out = await this.claimDraw(channelId, consumerId);
+    if (out.spin?.viewer_id)
+      Object.assign(
+        out.spin,
+        await this.presentation(channelId, out.spin.viewer_id),
+      );
+    return out;
+  }
+
+  /** V3 (§ 13.4): the shared avatar cache (Votekick, Random Ban, Dock) — the wheel shows the viewer's Twitch picture. */
+  attachAvatars(cache: { ensure(ids: string[]): Promise<unknown> }) {
+    this.avatars = cache;
+  }
+  private avatars: { ensure(ids: string[]): Promise<unknown> } | null = null;
+
+  /**
+   * V3 (§ 13.4): what the wheel shows of its viewer — its Twitch picture (fetched once, cached) and the title it has
+   * equipped on raptoru.fr with its look. Read after the draw's transaction, best effort: a picture or a title missing
+   * never stops a wheel (the player falls back to the initial, and to no title).
+   */
+  private async presentation(channelId: string, viewerId: string) {
+    const look: {
+      avatar: string | null;
+      title: { label: string; style: Record<string, unknown> } | null;
+    } = { avatar: null, title: null };
+    try {
+      look.avatar =
+        (await avatarUrls(this.db, [viewerId])).get(viewerId) ?? null;
+      if (!look.avatar && this.avatars)
+        await Promise.race([
+          this.avatars.ensure([viewerId]).then(async () => {
+            look.avatar =
+              (await avatarUrls(this.db, [viewerId])).get(viewerId) ?? null;
+          }),
+          new Promise((r) => setTimeout(r, 1500)),
+        ]);
+    } catch {
+      look.avatar = null;
+    }
+    try {
+      look.title =
+        (await equippedTitleLooks(this.db, channelId, [viewerId])).get(
+          viewerId,
+        ) ?? null;
+    } catch {
+      look.title = null;
+    }
+    return look;
+  }
+
+  private async claimDraw(channelId: string, consumerId: string) {
     return this.db.tx(async (q) => {
       await q.query('select pg_advisory_xact_lock(hashtext($1))', [
         `sub_wheel:${channelId}`,
@@ -1213,15 +1508,26 @@ export class SubWheelService {
           retry,
         ],
       );
+      // The draw as decided (its own barème): the player never computes a gain, it checks the one recorded.
+      const grid: SwGrid = r.grid === 3 ? 3 : 1;
+      const layout = subWheelGrid(r.months, grid);
+      const part = layout[r.segment!];
       return {
         spin: {
           spin_id: r.spin_id,
           name: r.viewer_name,
+          viewer_id: r.viewer_id,
           type: r.type,
           tier: r.tier,
+          prime: r.prime === true,
           months: r.months,
-          layout: subWheelLayout(r.months),
+          month_source: r.month_source ?? null,
+          grid,
+          layout,
           segment: r.segment!,
+          /** The part's amount before the Twitch tier, and that tier's multiplier (×1 / ×2 / ×3). */
+          lot: part ? part.val * part.mult : null,
+          coef: SUB_WHEEL.tierCoef[r.tier],
           amount: Number(r.amount),
         },
       };
@@ -1312,7 +1618,9 @@ export class SubWheelService {
         } catch (e) {
           if (
             e instanceof SwError &&
-            (e.code === 'not_owed' || e.code === 'needs_review')
+            (e.code === 'not_owed' ||
+              e.code === 'needs_review' ||
+              e.code === 'month_unconfirmed')
           )
             continue;
           throw e;

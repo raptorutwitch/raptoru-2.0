@@ -64,6 +64,36 @@ export function subWheelLayout(months: number) {
   ];
 }
 
+/** Barème versions: 1 = the legacy SAMMI wheel (every draw made before V3, kept as it is), 3 = Roue du Sub V3. */
+export const SW_GRIDS = [1, 3] as const;
+export type SwGrid = (typeof SW_GRIDS)[number];
+
+/**
+ * Roue du Sub V3 (16/11/2026, docs/SUB_WHEEL_V3.md § 13): 12 parts of equal chance, FOUR amounts — 5 small, 3 medium,
+ * 3 good, 1 jackpot — placed so that two equal amounts never touch. One tier every 3 months of CONFIRMED seniority
+ * (1–3 months: tier 1, 4–6: tier 2…): the amounts of tier p are `base` × (p + 1) up to 60 months (tier 20), then a
+ * quarter of that step per tier, rounded to the hundred. The Twitch tier multiplies the part afterwards (×1 / ×2 / ×3).
+ */
+export const SUB_WHEEL_V3 = {
+  base: [1500, 2000, 2500, 3000] as const,
+  /** The level of each part around the wheel: 0 small, 1 medium, 2 good, 3 jackpot (5 / 3 / 3 / 1). */
+  pattern: [3, 0, 1, 0, 2, 0, 1, 0, 2, 1, 0, 2] as const,
+  /** Up to this tier (60 months) a full step per tier; beyond, a quarter of it. */
+  fullStepTiers: 20,
+} as const;
+
+/** The V3 tier of a seniority: 1–3 months → 1, 4–6 → 2… */
+export const subWheelV3Tier = (months: number) =>
+  Math.max(1, Math.ceil(Math.max(1, Math.trunc(months) || 1) / 3));
+
+/** The four V3 amounts (small, medium, good, jackpot) of a seniority, before the Twitch tier. */
+export function subWheelV3Amounts(months: number): number[] {
+  const p = subWheelV3Tier(months);
+  const full = SUB_WHEEL_V3.fullStepTiers;
+  const factor = p <= full ? p + 1 : full + 1 + (p - full) / 4;
+  return SUB_WHEEL_V3.base.map((b) => Math.round((b * factor) / 100) * 100);
+}
+
 export const SUB_WHEEL = {
   /** Legacy WHEEL_TIER_COEFS. */
   tierCoef: { 1: 1, 2: 2, 3: 3 } as Record<1 | 2 | 3, number>,
@@ -77,17 +107,31 @@ export const SUB_WHEEL = {
    * credited again — at most this many times, the n-th not before retryBaseMs × 2^(n−1) (capped at retryMaxDelayMs).
    */
   retryMax: 5,
+  /**
+   * V3 seniority (§ 13.3): a right whose month is only ESTIMATED waits this long for a certain month (the resub share,
+   * the chat badge) before an automatic draw; a right whose month is UNKNOWN (no history) is never drawn before it is
+   * confirmed (chat badge, a later share, or Studio).
+   */
+  monthConfirmMs: 10 * 60_000,
   retryBaseMs: 15_000,
   retryMaxDelayMs: 5 * 60_000,
 } as const;
 
-/** The gain of a segment (legacy: baseAmt = val × mult; amount = baseAmt × tier coefficient). */
+/** The wheel of a barème: the legacy layout (grid 1) or the V3 parts (grid 3, each part's multiplier is 1). */
+export function subWheelGrid(months: number, grid: SwGrid = 1) {
+  if (grid !== 3) return subWheelLayout(months);
+  const a = subWheelV3Amounts(months);
+  return SUB_WHEEL_V3.pattern.map((level) => ({ val: a[level]!, mult: 1 }));
+}
+
+/** The gain of a segment (legacy: baseAmt = val × mult; amount = baseAmt × tier coefficient — the same in V3). */
 export function subWheelAmount(
   months: number,
   tier: 1 | 2 | 3,
   segment: number,
+  grid: SwGrid = 1,
 ) {
-  const seg = subWheelLayout(months)[segment];
+  const seg = subWheelGrid(months, grid)[segment];
   if (!seg) throw new Error('segment_out_of_range');
   return seg.val * seg.mult * SUB_WHEEL.tierCoef[tier];
 }
@@ -144,6 +188,17 @@ export const SwAwardStatus = z.enum([
 export type SwAwardStatus = z.infer<typeof SwAwardStatus>;
 
 export const SwSettingsInput = z.strictObject({ enabled: z.boolean() });
+
+/** The barème of the draws from now on (the broadcaster, journaled): a right acquired before keeps the barème it had. */
+export const SwGridInput = z.strictObject({
+  grid: z.union([z.literal(1), z.literal(3)]),
+});
+
+/** Studio « Confirmer l'ancienneté »: the real cumulative months of a right whose month is not certain. */
+export const SwMonthsConfirm = z.strictObject({
+  months: z.number().int().min(1).max(1000),
+  note: z.string().trim().min(1).max(200).optional(),
+});
 
 /** « Accorder un tour » (R3, subWheelGrant): a manual right. `key`: the same grant retried is the same right. */
 export const SwGrantInput = z.strictObject({

@@ -26,6 +26,14 @@ type Spin = {
   layout: { val: number; mult: number }[];
   segment: number;
   amount: number;
+  /** V3 (docs/SUB_WHEEL_V3.md § 13): the barème, the viewer, the part before the tier, and what the wheel shows. */
+  grid?: 1 | 3;
+  viewer_id?: string | null;
+  prime?: boolean;
+  lot?: number | null;
+  coef?: number;
+  avatar?: string | null;
+  title?: { label: string; style: Record<string, unknown> } | null;
 };
 
 export class SubWheelRuntime {
@@ -152,6 +160,18 @@ export class SubWheelRuntime {
           layout: spin.layout,
           segment: spin.segment,
           amount: spin.amount,
+          // V3: passed as Core decided them (an older Core sends none of them: the legacy wheel plays).
+          ...(spin.grid === 3
+            ? {
+                grid: 3 as const,
+                viewer_id: spin.viewer_id ?? null,
+                prime: spin.prime === true,
+                lot: spin.lot ?? null,
+                coef: spin.coef,
+                avatar: spin.avatar ?? null,
+                title: spin.title ?? null,
+              }
+            : {}),
         },
       });
       started = true;
@@ -227,6 +247,15 @@ export class SubWheelRuntime {
     // V2 (R3 / R4): the Core checks the permissions (Studio = the broadcaster) and journals every decision.
     if (method === 'POST' && path === '/mode')
       return this.d.core(`${ch}/mode`, await body());
+    // V3 (docs/SUB_WHEEL_V3.md § 13): the barème of the draws from now on; a month confirmed by hand.
+    if (method === 'POST' && path === '/grid')
+      return this.d.core(`${ch}/grid`, await body());
+    const months = /^\/spins\/([0-9a-f-]{36})\/months$/.exec(path);
+    if (method === 'POST' && months)
+      return this.d.core(
+        `${this.base}/spins/${months[1]}/months`,
+        await body(),
+      );
     if (method === 'POST' && path === '/grant')
       return this.d.core(`${ch}/grant`, await body());
     if (method === 'POST' && path === '/invitations')

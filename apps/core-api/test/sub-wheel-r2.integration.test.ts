@@ -4,7 +4,11 @@
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
 import { randomUUID } from 'node:crypto';
-import type { AlertEventInput, LoyaltyEvent } from '@raptoru/schemas';
+import {
+  type AlertEventInput,
+  type LoyaltyEvent,
+  subWheelAmount,
+} from '@raptoru/schemas';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
@@ -125,6 +129,59 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R2, real Postgres', () => {
     for (const v of vs)
       await wheel(a).fromAlert(notice(v, -40 * DAY, { months: 5 }), null);
   };
+
+  for (const round of ROUNDS)
+    it(`V3 seniority: an unknown month confirmed by a badge (Core A) while drawn by hand (Core B), the badge redelivered (Core B), 20 viewers — never drawn on an unknown month, one proof, at most one credit each (round ${round})`, async () => {
+      await a.query('drop schema public cascade; create schema public;');
+      await migrate(a, 'all');
+      draws = 0;
+      await configure('v2', true);
+      await wheel(a).setGrid(CH, 3, 'test');
+      const vs = viewers(20);
+      const spins: { spin_id: string }[] = [];
+      for (const v of vs)
+        spins.push(
+          (await wheel(a).fromAlert(
+            notice(v, 0, { type: 'sub', months: undefined }),
+            null,
+          ))!,
+        );
+      const [A, B] = [wheel(a), wheel(b)];
+      const who2 = (v: string) => ({ id: v, login: `v${v}`, name: `V${v}` });
+      const results = await Promise.all(
+        vs.map((v, i) =>
+          Promise.allSettled([
+            A.confirmFromBadge(CH, who2(v), 30, `chat-${v}`),
+            B.drawRight(spins[i]!.spin_id),
+            B.confirmFromBadge(CH, who2(v), 30, `chat-${v}`),
+          ]),
+        ),
+      );
+      let drawn = 0;
+      for (const [i, r] of results.entries()) {
+        const row = (
+          await a.query<Record<string, unknown>>(
+            'select * from sw_spins where spin_id = $1',
+            [spins[i]!.spin_id],
+          )
+        )[0]!;
+        expect(row).toMatchObject({ month_source: 'badge', sub_month: 30 });
+        const draw = r[1];
+        if (draw.status === 'fulfilled') {
+          drawn++;
+          expect(row).toMatchObject({ months: 30, grid: 3 });
+          expect(Number(row.amount)).toBe(subWheelAmount(30, 1, 2, 3));
+        } else
+          expect((draw.reason as { code?: string }).code).toBe(
+            'month_unconfirmed',
+          );
+      }
+      expect(await n("sw_spin_sources where source = 'badge'")).toBe(20);
+      expect(await n("wallet_transactions where source = 'sub_wheel'")).toBe(
+        drawn,
+      );
+      expect(draws).toBe(drawn);
+    });
 
   for (const round of ROUNDS)
     it(`gifts never spin (16/11/2026): the resub message (Core B) and the GIFTED share (Core A) of one renewal at once, v2_acquire and v2, 20 viewers: one row each, never drawn, nothing credited (round ${round})`, async () => {

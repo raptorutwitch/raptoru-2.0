@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
-import { subWheelAmount, subWheelLayout } from '@raptoru/schemas';
+import { subWheelAmount, subWheelGrid, subWheelLayout } from '@raptoru/schemas';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLabCore } from '../../../core-api/src/bonk-lab/lab-core.js';
 import { systemClock } from '../../../core-api/src/clock.js';
@@ -150,6 +150,38 @@ describe('Roue du Sub — Lab chain (real Lab Core, Studio runtime, simulated pl
     });
     // The Lab Core credits the Lab test wallet (test data): nothing left to attribute.
     expect(s.pending_awards).toEqual({ count: 0, total: 0 });
+  });
+
+  it('Roue V3 switched on from Studio: the player gets the V3 draw as Core decided it (barème, part, tier multiplier, viewer)', async () => {
+    const l = await lab();
+    await l.core(`/v1/lab/sub-wheel/${CH}/settings`, { enabled: true });
+    expect(
+      await l.rt.subWheel.api('POST', '/grid', async () => ({ grid: 3 })),
+    ).toMatchObject({ grid: 3 });
+    await l.sub({ months: 30, tier: '3000' });
+    expect(await l.playAlert()).toBe(true);
+    expect(await l.rt.subWheel.once()).toBe(true);
+    const spin = l.shown[0]!.spin as {
+      segment: number;
+      amount: number;
+      lot: number;
+      layout: unknown;
+    };
+    expect(spin).toMatchObject({
+      grid: 3,
+      viewer_id: '9001',
+      tier: 3,
+      coef: 3,
+      months: 30,
+      prime: false,
+    });
+    expect(spin.layout).toEqual(subWheelGrid(30, 3));
+    expect(spin.amount).toBe(subWheelAmount(30, 3, spin.segment, 3));
+    expect(spin.lot * 3).toBe(spin.amount);
+    expect((await l.state()).recent[0]).toMatchObject({
+      grid: 3,
+      amount: spin.amount,
+    });
   });
 
   it('switch OFF (default): a real sub is only noted; the Studio test (animation, full) shows a wheel without any gain', async () => {

@@ -59,6 +59,7 @@ const LEVEL_UP = '20261126130000_progression_level_up.sql';
 const ANNOUNCEMENTS = '20261127130000_level_up_announcements.sql';
 const CMD_SOUNDS = '20261128130000_cmd_sounds.sql';
 const CMD_EDITORS = '20261129130000_cmd_delegated_editors.sql';
+const SW_V3 = '20261130130000_sub_wheel_v3.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -663,7 +664,8 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== LEVEL_UP &&
           f !== ANNOUNCEMENTS &&
           f !== CMD_SOUNDS &&
-          f !== CMD_EDITORS,
+          f !== CMD_EDITORS &&
+          f !== SW_V3,
       ),
       lab: [
         ...MIGRATION_SCOPES.lab,
@@ -694,6 +696,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         ANNOUNCEMENTS,
         CMD_SOUNDS,
         CMD_EDITORS,
+        SW_V3,
       ],
       // Refonte H8: a main Core file production did not hold on 25/10.
       mainCore: MIGRATION_SCOPES.mainCore!.filter(
@@ -761,6 +764,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       ANNOUNCEMENTS,
       CMD_SOUNDS,
       CMD_EDITORS,
+      SW_V3,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(

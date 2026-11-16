@@ -517,6 +517,42 @@ export const confirmBox = (o: {
     d.querySelector<HTMLElement>('[data-no]')!.onclick = () => end(false);
   });
 
+/** Un nombre à saisir (Electron n'a pas de window.prompt) : la valeur entière choisie, ou null. */
+export const numberBox = (o: {
+  title: string;
+  body: string;
+  label: string;
+  value?: number | null;
+  min: number;
+  max: number;
+  yes: string;
+}) =>
+  new Promise<number | null>((res) => {
+    const d = dlg(
+      'd-dlg',
+      `<div class="d-dlg__b"><h2>${esc(o.title)}</h2><p>${esc(o.body)}</p><label class="d-dlg__r"><span>${esc(o.label)}</span><input class="d-in" type="number" data-n min="${o.min}" max="${o.max}" step="1" value="${o.value ?? ''}"></label></div><div class="d-dlg__a"><button type="button" class="d-btn ghost" data-no>Annuler</button><button type="button" class="d-btn pri" data-yes>${esc(o.yes)}</button></div>`,
+    );
+    const end = (v: number | null) => {
+      closeDlg(d);
+      res(v);
+    };
+    const input = d.querySelector<HTMLInputElement>('[data-n]')!;
+    d.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      end(null);
+    });
+    d.querySelector<HTMLElement>('[data-yes]')!.onclick = () => {
+      const n = Number(input.value);
+      if (!Number.isInteger(n) || n < o.min || n > o.max) {
+        input.focus();
+        return;
+      }
+      end(n);
+    };
+    d.querySelector<HTMLElement>('[data-no]')!.onclick = () => end(null);
+    input.focus();
+  });
+
 /** Un test joué sur le stream : confirmé selon la préférence de ce Studio (sinon lancé directement). */
 export const streamTestConfirm = (o: {
   title: string;

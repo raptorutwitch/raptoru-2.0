@@ -23,6 +23,15 @@ const NOT_UNDER_REVIEW = `not exists (select 1 from sw_spin_reviews v
   where v.spin_id = s.spin_id and v.status in ('open', 'unresolved'))`;
 const FIRST_AT =
   '(select min(p.occurred_at) from sw_spin_sources p where p.spin_id = s.spin_id) as first_at';
+/**
+ * V3 seniority (docs/SUB_WHEEL_V3.md § 13.3): a right is drawn only on a month worth paying. Certain (Twitch), confirmed
+ * (chat badge, Studio) or historical rows: ready. Estimated from the viewer's last certain month: ready once
+ * SUB_WHEEL.monthConfirmMs passed without a confirmation (`$N`, a bound parameter). Unknown (no history): never here —
+ * it waits for a confirmation, still owed (never lost), outside both queues (never blocks them).
+ */
+const monthReady = (bound: string) => `(s.month_source is null
+  or s.month_source not in ('estimated', 'estimated_no_history')
+  or (s.month_source = 'estimated' and coalesce(s.acquired_at, s.created_at) <= ${bound}))`;
 /** The requests of the viewer itself (command, chat answer, extension) wait for its presence: it sees its wheel. */
 const VIEWER_REQUEST = `s.requested_via in ('command', 'chat_accept', 'extension')`;
 
@@ -86,11 +95,15 @@ export async function requestedRights(
 ) {
   return q.query<Candidate>(
     `select s.spin_id, ${FIRST_AT} from sw_spins s
-     where s.channel_id = $1 and s.status = 'requested' and ${NOT_UNDER_REVIEW}
+     where s.channel_id = $1 and s.status = 'requested' and ${NOT_UNDER_REVIEW} and ${monthReady('$3')}
        and (s.requested_via is null or not (${VIEWER_REQUEST}) or ${seenSql(mode)})
      order by s.requested_at, s.seq limit 20
      for update of s skip locked`,
-    [channelId, new Date(now.getTime() - PRESENCE_FRESH_MS)],
+    [
+      channelId,
+      new Date(now.getTime() - PRESENCE_FRESH_MS),
+      new Date(now.getTime() - SUB_WHEEL.monthConfirmMs),
+    ],
   );
 }
 
@@ -110,7 +123,7 @@ export async function autoRights(
   return q.query<Candidate>(
     `select s.spin_id, ${FIRST_AT} from sw_spins s
      where s.channel_id = $1 and s.status = 'owed' and s.queue = 'auto' and ${NOT_UNDER_REVIEW}
-       and ${seenSql(mode)}
+       and ${seenSql(mode)} and ${monthReady('$4')}
        and (exists (select 1 from alert_items a where a.alert_id = s.alert_id
            and a.status in ('completed', 'failed', 'expired'))
          or s.created_at <= $3)
@@ -120,6 +133,7 @@ export async function autoRights(
       channelId,
       new Date(now.getTime() - PRESENCE_FRESH_MS),
       new Date(now.getTime() - SUB_WHEEL.afterAlertMaxMs),
+      new Date(now.getTime() - SUB_WHEEL.monthConfirmMs),
     ],
   );
 }

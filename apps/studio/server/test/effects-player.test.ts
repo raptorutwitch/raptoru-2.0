@@ -235,6 +235,22 @@ describe('Effects player', () => {
     expect(html.headers.get('content-security-policy')).toContain(
       "media-src 'self'",
     );
+    // Roue du Sub V3: its module and its two fonts are served locally; the viewer's picture comes from Twitch's CDN only.
+    expect(html.headers.get('content-security-policy')).toContain(
+      "img-src 'self' https://static-cdn.jtvnw.net",
+    );
+    const v3 = await fetch(`${origin}/effects/wheel-v3.js`);
+    expect(v3.status).toBe(200);
+    expect(v3.headers.get('content-type')).toContain('text/javascript');
+    expect(await v3.text()).toContain('export async function playWheel');
+    for (const f of ['lilita-one-latin', 'rubik-latin']) {
+      const font = await fetch(`${origin}/effects/fonts/${f}.woff2`);
+      expect(font.status).toBe(200);
+      expect(font.headers.get('content-type')).toBe('font/woff2');
+    }
+    expect((await fetch(`${origin}/effects/fonts/LICENSE.md`)).status).toBe(
+      404,
+    );
     // An effect handed over, then Studio restarts: the new instance has the same OBS URL and nothing to hand out.
     const pg = page(origin, token);
     await pg.heartbeat();

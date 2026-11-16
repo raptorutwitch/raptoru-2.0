@@ -182,6 +182,38 @@ export interface NamesRefresh {
   unresolved: number;
 }
 
+/**
+ * The title each viewer has EQUIPPED now (their choice on raptoru.fr), with its look (CosmeticStyle, drawn by the Core's
+ * stylesheet), shown only while they own it (not revoked) and it is active and published — the rankings' own rule. No
+ * title: absent from the map. Shared by the Level Up announcement and the Roue du Sub V3 (docs/SUB_WHEEL_V3.md § 13.4).
+ */
+export async function equippedTitleLooks(
+  q: Queryable,
+  channelId: string,
+  viewerIds: string[],
+): Promise<Map<string, { label: string; style: Record<string, unknown> }>> {
+  if (!viewerIds.length) return new Map();
+  const rows = await q.query<{
+    id: string;
+    label: string;
+    style: Record<string, unknown> | null;
+  }>(
+    `select e.twitch_user_id as id, r.label, r.style from progression_equipped e
+     join progression_grants g on g.channel_id = e.channel_id and g.twitch_user_id = e.twitch_user_id
+       and g.reward_id = e.title_id and g.revoked_at is null
+     join progression_rewards r on r.channel_id = e.channel_id and r.reward_id = e.title_id and r.kind = 'title'
+       and r.active and r.status <> 'draft'
+     where e.channel_id = $1 and e.twitch_user_id = any($2::text[])`,
+    [channelId, viewerIds],
+  );
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      { label: r.label.slice(0, 40), style: r.style ?? {} },
+    ]),
+  );
+}
+
 export class ProgressionService {
   constructor(
     private readonly db: Db,
@@ -748,17 +780,8 @@ export class ProgressionService {
     channelId: string,
     viewerIds: string[],
   ) {
-    if (!viewerIds.length) return new Map<string, string>();
-    const rows = await q.query<{ id: string; label: string }>(
-      `select e.twitch_user_id as id, r.label from progression_equipped e
-       join progression_grants g on g.channel_id = e.channel_id and g.twitch_user_id = e.twitch_user_id
-         and g.reward_id = e.title_id and g.revoked_at is null
-       join progression_rewards r on r.channel_id = e.channel_id and r.reward_id = e.title_id and r.kind = 'title'
-         and r.active and r.status <> 'draft'
-       where e.channel_id = $1 and e.twitch_user_id = any($2::text[])`,
-      [channelId, viewerIds],
-    );
-    return new Map(rows.map((r) => [r.id, r.label.slice(0, 40)]));
+    const looks = await equippedTitleLooks(q, channelId, viewerIds);
+    return new Map([...looks].map(([id, t]) => [id, t.label]));
   }
 
   /**

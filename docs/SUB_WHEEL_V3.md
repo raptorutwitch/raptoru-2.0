@@ -1,16 +1,15 @@
 # Roue du Sub V3 : barème et rendu
 
-**Statut (16/11/2026) : itération 6 (équilibrage), en attente de validation avant l'intégration.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
-rendu et le barème restent des propositions ; aucun gain réel n'a changé.
-Maquettes non branchées et **locales** (`prototypes/` est exclu de Git par `.git/info/exclude`), dans
-`Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\` :
+**Statut (16/11/2026) : livré — voir § 13 (système en place) ; les § 1 à 12 sont l'historique de la conception.**
+
+Maquettes (locales : `prototypes/` est exclu de Git), dans `Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\` :
 
 - `roue.html` : **itération 6** (rendu du § 11, barème du § 12) ;
 - `arcade.html` : itération 2, les trois mécanismes Arcade (§ 6) ;
 - `index.html` : itération 1, quatre directions (§ 4).
 
-Le moteur commun (sons, scène) est dans `shared/`. La Production garde la roue actuelle
-([SUB_WHEEL.md](SUB_WHEEL.md), droits V2 : [SUB_WHEEL_V2_PLAN.md](SUB_WHEEL_V2_PLAN.md)).
+Le moteur commun (sons, scène) est dans `shared/`. La roue précédente : [SUB_WHEEL.md](SUB_WHEEL.md) ; les droits
+V2 : [SUB_WHEEL_V2_PLAN.md](SUB_WHEEL_V2_PLAN.md).
 
 **Itération 2 (décision d'Antoni du 16/11) :**
 
@@ -645,3 +644,153 @@ Estimation sur les 20 vrais tirages, au même volume d'environ 25 roues par mois
 
 **Au-delà de 60 mois** : chaque palier ajoute un quart du pas habituel (petit +375, moyen +500, bon +625, jackpot +800,
 arrondis à la centaine). La croissance continue sans jamais s'arrêter, environ quatre fois plus lentement.
+
+## 13. Système livré (16/11/2026)
+
+Les décisions d'Antoni du 16/11 : barème L1, avec le haut de la distribution ajusté ; roue Arcade de l'itération 5 ;
+abonnements offerts exclus ; ancienneté jamais prise pour « 1 mois » par défaut.
+
+### 13.1 Barème définitif
+
+12 parts de même chance : **5 petits gains, 3 moyens, 3 bons, 1 jackpot** (41,7 %, 25 %, 25 %, 8,3 %). Les montants
+identiques ne sont jamais voisins (ordre : jackpot, petit, moyen, petit, bon, petit, moyen, petit, bon, moyen, petit,
+bon).
+
+- **Palier** : un tous les 3 mois d'ancienneté **confirmée** (1–3 mois : palier 1, 4–6 : palier 2…).
+- **Montants du palier p** : (1 500 · 2 000 · 2 500 · 3 000) × (p + 1) jusqu'au palier 20 (58–60 mois). Au-delà, un
+  quart de pas par palier, arrondi à la centaine.
+- **Tier** : Prime / T1 ×1, T2 ×2, T3 ×3, appliqué au lot tombé.
+- **Ajustement du haut demandé** : le jackpot de référence passe de 3 200 (L1) à 3 000.
+  - Aucun gain à six chiffres en T3 avant 31 mois (jackpot T3 de 99 000 à 28–30 mois).
+  - Les « bons » gains T3 dépassent 100 000 dès 37 mois, les gains moyens dès 46 mois.
+  - Jackpot T3 : 189 000 à 60 mois, puis +2 250 par trimestre environ.
+  - Minimums et gains moyens inchangés par rapport à L1.
+- **Code** : `SUB_WHEEL_V3`, `subWheelV3Amounts`, `subWheelGrid(months, 3)` dans `packages/schemas/src/sub-wheel.ts`.
+  La formule du Core reste `val × mult × tier`, avec mult = 1 en V3.
+
+| Palier | Mois    | Petit (5/12) | Moyen (3/12) | Bon (3/12) | Jackpot (1/12) | Moyenne T1 | Jackpot T3 |
+| ------ | ------- | ------------ | ------------ | ---------- | -------------- | ---------- | ---------- |
+| 1      | 1–3     | 3 000        | 4 000        | 5 000      | 6 000          | 4 000      | 18 000     |
+| 2      | 4–6     | 4 500        | 6 000        | 7 500      | 9 000          | 6 000      | 27 000     |
+| 3      | 7–9     | 6 000        | 8 000        | 10 000     | 12 000         | 8 000      | 36 000     |
+| 4      | 10–12   | 7 500        | 10 000       | 12 500     | 15 000         | 10 000     | 45 000     |
+| 5      | 13–15   | 9 000        | 12 000       | 15 000     | 18 000         | 12 000     | 54 000     |
+| 6      | 16–18   | 10 500       | 14 000       | 17 500     | 21 000         | 14 000     | 63 000     |
+| 7      | 19–21   | 12 000       | 16 000       | 20 000     | 24 000         | 16 000     | 72 000     |
+| 8      | 22–24   | 13 500       | 18 000       | 22 500     | 27 000         | 18 000     | 81 000     |
+| 9      | 25–27   | 15 000       | 20 000       | 25 000     | 30 000         | 20 000     | 90 000     |
+| 10     | 28–30   | 16 500       | 22 000       | 27 500     | 33 000         | 22 000     | 99 000     |
+| 11     | 31–33   | 18 000       | 24 000       | 30 000     | 36 000         | 24 000     | 108 000    |
+| 12     | 34–36   | 19 500       | 26 000       | 32 500     | 39 000         | 26 000     | 117 000    |
+| 13     | 37–39   | 21 000       | 28 000       | 35 000     | 42 000         | 28 000     | 126 000    |
+| 14     | 40–42   | 22 500       | 30 000       | 37 500     | 45 000         | 30 000     | 135 000    |
+| 15     | 43–45   | 24 000       | 32 000       | 40 000     | 48 000         | 32 000     | 144 000    |
+| 16     | 46–48   | 25 500       | 34 000       | 42 500     | 51 000         | 34 000     | 153 000    |
+| 17     | 49–51   | 27 000       | 36 000       | 45 000     | 54 000         | 36 000     | 162 000    |
+| 18     | 52–54   | 28 500       | 38 000       | 47 500     | 57 000         | 38 000     | 171 000    |
+| 19     | 55–57   | 30 000       | 40 000       | 50 000     | 60 000         | 40 000     | 180 000    |
+| 20     | 58–60   | 31 500       | 42 000       | 52 500     | 63 000         | 42 000     | 189 000    |
+| 24     | 70–72   | 33 000       | 44 000       | 55 000     | 66 000         | 44 000     | 198 000    |
+| 30     | 88–90   | 35 300       | 47 000       | 58 800     | 70 500         | 47 033     | 211 500    |
+| 40     | 118–120 | 39 000       | 52 000       | 65 000     | 78 000         | 52 000     | 234 000    |
+
+**Comparaison avec la Production :**
+
+- **Ancienne grille appliquée aux 20 derniers vrais tirages** : 421 075 Jetons d'espérance. **V3** : 794 000, soit
+  **×1,89**, environ 990 000 par mois pour 25 roues au lieu d'environ 526 000. Ce coût est calculé sur l'ancienneté
+  réelle.
+- **Seul profil moins bien récompensé en moyenne** : 20–21 mois (−7 %). Leur minimum passe de 1 000 à 12 000 ; ils
+  perdent les gros lots rares de l'ancienne grille. À 24 mois : +5 % ; à 30 mois : +28 %.
+
+### 13.2 Barème de chaque tirage
+
+- **Réglage** : `sw_settings.grid` (1 = ancienne roue, 3 = V3) et `grid_since`.
+  - Le Diffuseur choisit dans Studio › Roue du Sub › Barème (journalisé `sw_grid`).
+- **Au tirage** (`gridFor`), le Core prend le barème courant, **sauf pour un droit acquis avant son activation** : ce
+  droit garde l'ancienne roue. Aucune transformation silencieuse d'un tour en attente.
+- **Chaque tirage enregistre son barème** (`sw_spins.grid`) : un tirage rejoué ou relancé garde le sien. Les lignes
+  existantes valent 1 : rien n'est recalculé et aucun solde ne change.
+
+### 13.3 Ancienneté
+
+**Le défaut corrigé** : un « sub » sans mois cumulés et sans historique (une reprise Prime d'un abonné de longue date,
+par exemple) était estimé à 1 mois et tiré tout de suite sur la grille d'un premier mois. 2 des 20 derniers tirages de
+Production étaient dans ce cas.
+
+**Désormais :**
+
+| Ancienneté du droit                                     | Tirage automatique                                               |
+| ------------------------------------------------------- | ---------------------------------------------------------------- |
+| Certaine (mois cumulés de Twitch)                       | normal                                                           |
+| Confirmée par le badge du chat (`badge`)                | normal                                                           |
+| Confirmée dans Studio (`manual`, `confirmed_by`)        | normal                                                           |
+| Estimée d'après l'historique (dernier mois certain + 1) | après `monthConfirmMs` (10 min) sans confirmation                |
+| **Inconnue** (aucun historique)                         | **jamais** : le droit reste dû, hors des files, sans les bloquer |
+
+- **Les confirmations :**
+  - le partage du resub (mois cumulés), qui confirmait déjà un droit estimé dans la fenêtre de 10 min ;
+  - **le badge abonné du premier message de chat** (`badges[].info`, le nombre de mois). Le bot le transmet
+    (`chatter.sub_months`), et le module chat de la roue confirme le dernier droit incertain du viewer. Un badge
+    inférieur à un mois déjà certain est ignoré, et le message de chat sert de clé, donc un rejouage ne change rien ;
+  - **Studio** : le bouton « Confirmer l'ancienneté » de la liste des tours (journalisé `sw_month_confirm`). Un mois
+    certain n'est jamais écrasé (`month_certain`).
+- **Les gardes :**
+  - `drawLocked` refuse un mois inconnu (`month_unconfirmed`) : ni tirage automatique, ni « Tirer », ni tirage
+    immédiat du mode v2_acquire ;
+  - les deux files (`draws.ts`) excluent les droits non prêts sans s'y arrêter ;
+  - tout vient de la base : un redémarrage ne perd rien et ne retire rien ;
+  - le Lab simule la confirmation par le badge (`/lab/simulate` avec `months` sur un sub).
+- **Limite** : un nouvel abonné qui n'écrit jamais dans le chat attend qu'on confirme dans Studio. Son tour n'est
+  jamais perdu.
+
+### 13.4 Rendu (Studio, lecteur d'effets)
+
+- **Fichiers** : `apps/studio/server/effects-player/wheel-v3.js`, la maquette de l'itération 5 rendue réelle.
+  - Il réutilise les sons d'origine exportés par `wheel.js` (ticks, arrêt, jingle) et les deux mp3.
+  - Polices locales (`effects-player/fonts/`, OFL) : aucune dépendance réseau pendant le live.
+- **Choix du rendu** : `player.js` joue `wheel-v3.js` pour un tirage de barème 3, sinon l'ancienne roue (anciens tirages,
+  Core plus ancien).
+- **Contenu reçu du Core avec chaque tirage** : `viewer_id`, `prime`, `months`, `month_source`, `grid`, `layout`,
+  `segment`, `lot`, `coef`, `amount`, plus l'avatar Twitch et le titre équipé avec son style.
+  - L'avatar vient du cache partagé `AvatarCache` / `lab_viewer_avatars`, celui de Votekick, Random Ban et du Dock.
+  - Le titre suit la règle de Progression (`equippedTitleLooks`, partagée avec l'annonce Level Up) et la feuille du Core
+    relayée par Studio (`/cosmetics/style.css`).
+  - Le lecteur refuse un tirage dont le montant ne correspond pas à sa part (`amount_mismatch`).
+- **Habillage** : palette déterministe (FNV-1a de l'identifiant Twitch), flèche à 3 h et montant gagnant horizontal,
+  bandeau unique (identité, puis gain). Position et taille : en bas à droite, comme l'ancienne roue.
+- **Studio** : choix du barème, confirmation de l'ancienneté, aperçu V3 (gains du palier, vrai rendu dans « Essayer »).
+- **Politique de sécurité du lecteur** : `img-src` autorise le seul CDN Twitch, `font-src 'self'`.
+
+### 13.5 Migration, déploiement, retour arrière
+
+- **Migration** `20261130130000_sub_wheel_v3.sql` (jumelle Lab `…120000`), additive et idempotente :
+  - `sw_settings.grid` / `grid_since` ;
+  - `sw_spins.grid` / `confirmed_by` / `prime` ;
+  - `month_source` accepte `manual`.
+  - Les valeurs par défaut gardent le comportement de l'ancien Core.
+- **Ordre de déploiement** : sauvegarde de la base, puis **Core** (migration), puis **bot** (`is_gift`,
+  `sub_months` : le schéma strict d'un ancien Core les refuserait), puis release Studio. Le barème V3 s'active ensuite
+  dans Studio.
+  - Avant l'installation du nouveau Studio, un tirage V3 est rendu par l'ancien `wheel.js`, avec les bons montants et
+    l'ancien habillage.
+- **Retour arrière** :
+  - remettre le barème sur l'ancienne roue (Studio), ou redéployer le Core précédent : il ignore les nouvelles
+    colonnes et tire sur l'ancienne roue ;
+  - un tirage V3 rejoué par un ancien Core échouerait à l'animation (`amount_mismatch`), sans aucun nouveau crédit ;
+  - le bot précédent se redéploie seul ;
+  - la migration n'a pas besoin d'être annulée.
+
+### 13.6 Tests
+
+- **Core**, sur PGlite :
+  - `sub-wheel-v3.test.ts` : barème (paliers, frontières, tiers, probabilités, croissance jusqu'à 180 mois, ancien
+    barème intact), barème de chaque tirage, contenu de l'animation, ancienneté (inconnue, badge, partage dans les deux
+    ordres, estimée, confirmation manuelle, redémarrage) ;
+  - `sub-wheel-gifts.test.ts` ;
+  - les suites V2, R2, R3, Lab et migrations, adaptées à la règle d'ancienneté.
+- **Vrai PostgreSQL** : la course badge (Core A) / « Tirer » (Core B) / badge rejoué, 20 viewers, 3 tours ; les suites
+  d'intégration de la roue.
+- **Bot** : `alert-events` (`is_gift`), `lab-chat-ingest` (`sub_months`).
+- **Studio** : lecteur (fichiers servis, politique de sécurité), chaîne Lab V3.
+- **Banc visuel Chromium 1080p** du vrai `wheel-v3.js`, sur fonds sombre et clair : montant gagnant horizontal en face
+  de la flèche, PRIME au centre, polices locales, `amount_mismatch` refusé.

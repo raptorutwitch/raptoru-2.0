@@ -16,7 +16,13 @@ export type SwStatus =
   | 'merged';
 export type SwMode = 'v1' | 'v2_acquire' | 'v2';
 export type MonthSource =
-  'twitch' | 'estimated' | 'estimated_no_history' | 'badge' | 'legacy' | null;
+  | 'twitch'
+  | 'estimated'
+  | 'estimated_no_history'
+  | 'badge'
+  | 'legacy'
+  | 'manual'
+  | null;
 
 export interface SwSpinView {
   spin_id: string;
@@ -114,6 +120,9 @@ export interface SwState {
     announce_delay_s?: number;
     /** Core du Lab : les simulateurs existent, les gains vont au portefeuille de test. */
     lab?: boolean;
+    /** V3 : le barème des tirages à venir (1 = ancienne roue SAMMI, 3 = V3) et depuis quand (absent : Core ancien). */
+    grid?: 1 | 3;
+    grid_since?: string | null;
   };
   lab_sim?: SwLabSim | null;
   /** Le Core connecté n'a pas encore la V2 : seule la V1 fonctionne. */
@@ -248,8 +257,13 @@ export function monthLabel(
     return months ? `roue ${months} mois` : '—';
   if (r.month_source === 'twitch')
     return `Mois ${r.sub_month} <span class="whl-ok">confirmé</span>`;
+  if (r.month_source === 'badge')
+    return `Mois ${r.sub_month} <span class="whl-ok">confirmé (badge du chat)</span>`;
+  if (r.month_source === 'manual')
+    return `Mois ${r.sub_month} <span class="whl-ok">confirmé dans Studio</span>`;
+  // V3 : une ancienneté inconnue n'est jamais « 1 mois » ; la roue attend qu'elle soit confirmée.
   if (r.month_source === 'estimated_no_history')
-    return `Mois ~${r.sub_month} <span class="whl-est">estimé, sans historique</span>`;
+    return `<span class="whl-est">Ancienneté à confirmer</span>`;
   return `Mois ~${r.sub_month} <span class="whl-est">estimé</span>`;
 }
 
@@ -379,9 +393,16 @@ function rightRow(r: SwRightView, canDraw: boolean) {
       : canDraw
         ? `<button type="button" class="d-btn sm" data-act="sw-draw" data-spin="${esc(r.spin_id)}" data-name="${esc(r.viewer.name)}">Tirer</button>`
         : '';
+  // V3 : une ancienneté estimée ou inconnue se confirme ici (le badge du chat ou un partage le font tout seuls).
+  const uncertain =
+    r.right?.month_source === 'estimated' ||
+    r.right?.month_source === 'estimated_no_history';
+  const confirm = uncertain
+    ? `<button type="button" class="d-btn sm ghost" data-act="sw-months" data-spin="${esc(r.spin_id)}" data-name="${esc(r.viewer.name)}" data-month="${r.right?.month_source === 'estimated' ? String(r.right?.sub_month ?? '') : ''}">Confirmer l’ancienneté</button>`
+    : '';
   return `<div class="whl-r ${r.blocked ? 'watch' : ''}">
     ${who(r.viewer, `T${r.tier} · ${monthLabel(r.right, r.months)}`)}
-    <span class="whl-r__a">${action}</span>
+    <span class="whl-r__a">${confirm}${action}</span>
     <div class="whl-r__m d-tags">${tag(pc, pl)}${sourcesOf(r.sources ?? [])}<small>${esc(time(r.right?.acquired_at ?? r.created_at))}</small></div>
   </div>`;
 }
@@ -678,6 +699,35 @@ export function settingsPanel(s: SwState) {
       ),
     ),
   );
+  if (s.settings.grid !== undefined) {
+    const g = s.settings.grid;
+    parts.push(
+      grp(
+        'Barème',
+        'sliders',
+        say(
+          'barème v3 sammi ancienne roue paliers trois mois',
+          `<p class="whl-line">${
+            g === 3
+              ? `Roue V3 : 4 montants (5 petits, 3 moyens, 3 bons, 1 jackpot), un palier tous les 3 mois d’ancienneté${s.settings.grid_since ? ` · depuis le ${esc(time(s.settings.grid_since))}` : ''}. Les tours acquis avant gardent l’ancienne roue.`
+              : 'Ancienne roue (SAMMI). La roue V3 s’applique aux tours acquis après son activation.'
+          }</p>
+          <div class="whl-modes">${(
+            [
+              [1, 'Ancienne roue', 'Barème SAMMI (4 grilles, 8 à 12 montants)'],
+              [3, 'Roue V3', '4 montants par palier de 3 mois, ×1 / ×2 / ×3'],
+            ] as const
+          )
+            .map(
+              ([v, t, d]) =>
+                `<button type="button" class="whl-mode${v === g ? ' on' : ''}" data-act="sw-grid" data-grid="${v}" aria-pressed="${v === g}"><b>${esc(t)}</b><span>${esc(d)}</span></button>`,
+            )
+            .join('')}</div>`,
+        ),
+        'grid',
+      ),
+    );
+  }
   if (!s.v2_unavailable)
     parts.push(
       grp(
