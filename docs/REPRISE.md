@@ -10,7 +10,8 @@ précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-1
 ```text
 Raptoru 2.0 — reprise au 16/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
 Roue du Sub V3 DÉPLOYÉE (16/11, mandat d'Antoni) : Core et bot 2c04a5db, migration 20261130130000_sub_wheel_v3 appliquée,
-Studio 0.1.39 publié. Barème V3 PAS ENCORE ACTIF (grid 1) : Antoni installe Studio 0.1.39, puis Roue du Sub › Barème › « Roue V3 ».
+Studio 0.1.39 installé, barème V3 ACTIF (grid 3, choisi par Antoni le 16/11 à 10:22 UTC). Studio 0.1.40 publié (11:26 UTC) :
+« Tester dans OBS » de la Roue joue la roue affichée dans OBS (PR #87).
 Abonnements offerts exclus et ancienneté jamais prise pour « 1 mois » : actifs dès maintenant (Core + bot).
 Journal : docs/archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md ; module : docs/SUB_WHEEL_V3.md § 13.
 
@@ -19,8 +20,8 @@ Règle de partage : le Core décide (données, Jetons, règles, files), le bot L
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (relevé du 16/11, 04:47 UTC) : Core 2c04a5db, bot 2c04a5db (sains, un seul bot actif), Studio 0.1.39
-publié, 0.1.38 installé sur le PC, site inchangé. Dernier code sur main : 2c04a5db (PR #84 V3, PR #85 test d'outillage).
+Production (relevé du 16/11, 11:30 UTC) : Core 2c04a5db, bot 2c04a5db (sains, un seul bot actif), Studio 0.1.40
+publié (Latest), 0.1.39 installé sur le PC, site inchangé. Dernier code sur main : 3e27f454 (PR #87, Studio seul).
 Sons de commandes immédiats : la demande de Studio attend sur le Core (wait_ms) au lieu d'interroger toutes les 2 s ;
 mesuré dans le Lab : 30–120 ms du message reçu par le Core au son joué (avant : + 0 à 2 s d'attente). Pas mesuré
 dans le vrai OBS ni avec le vrai chat Twitch.
@@ -40,8 +41,8 @@ et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE P
 release-inventory/INVENTAIRE-a971386f8c8d.md (95 commits, remplace 7355c44acce2) à valider par Antoni, puis
 npm run package:production -- --shell v2 (--check déjà vert), Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Gestes d'Antoni restants : installer Studio 0.1.39 (« Rechercher une mise à jour »), choisir Roue du Sub › Barème ›
-« Roue V3 », regarder le premier vrai tirage V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et essayer en vrai les
+Gestes d'Antoni restants : installer Studio 0.1.40 (« Rechercher une mise à jour »), regarder le premier vrai tirage
+V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et essayer en vrai les
 expressions et la latence ; essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension (sa ligne),
 puis ZIP, Hosted Test, revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md § 15.
 Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
@@ -198,9 +199,9 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
   - ordre : sauvegarde, Core (migration `20261130130000_sub_wheel_v3`), bot, release Studio, puis barème V3 ;
   - **déployé le 16/11** : Core et bot `2c04a5db` (PR #84, #85), migration appliquée après sauvegarde (04:41 UTC),
     Studio 0.1.39 publié ; barème toujours sur l'ancienne roue (`grid` 1) ;
-  - à faire par Antoni : installer Studio 0.1.39, puis Roue du Sub › Barème › « Roue V3 », regarder le premier vrai tirage V3 ;
-  - correctif Studio sur `main`, **non publié** (à regrouper avec la prochaine release, 0.1.40) : « Tester dans OBS » joue
-    la roue affichée dans OBS (avant : il ouvrait seulement le panneau « Tests ») ;
+  - Studio 0.1.39 installé, barème V3 choisi par Antoni (16/11, 10:22 UTC) ; reste à regarder le premier vrai tirage V3 ;
+  - Studio 0.1.40 publié le 16/11 (11:26 UTC, depuis `3e27f454`, PR #87) : « Tester dans OBS » joue la roue affichée dans
+    OBS (avant : il ouvrait seulement le panneau « Tests ») ; à installer par Antoni ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
