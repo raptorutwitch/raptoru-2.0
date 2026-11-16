@@ -199,6 +199,8 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
   - **déployé le 16/11** : Core et bot `2c04a5db` (PR #84, #85), migration appliquée après sauvegarde (04:41 UTC),
     Studio 0.1.39 publié ; barème toujours sur l'ancienne roue (`grid` 1) ;
   - à faire par Antoni : installer Studio 0.1.39, puis Roue du Sub › Barème › « Roue V3 », regarder le premier vrai tirage V3 ;
+  - correctif Studio sur `main`, **non publié** (à regrouper avec la prochaine release, 0.1.40) : « Tester dans OBS » joue
+    la roue affichée dans OBS (avant : il ouvrait seulement le panneau « Tests ») ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
