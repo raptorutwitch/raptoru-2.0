@@ -1,9 +1,21 @@
 # Roue du Sub V3 : barème et rendu
 
-**Statut (16/11/2026) : proposition.** Maquettes non branchées, **locales** (le dossier `prototypes/` est exclu de
-Git par `.git/info/exclude`) : `Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\index.html`. Rien n'est développé ni déployé, et
-aucune direction n'est encore choisie par Antoni. La Production garde la roue actuelle
+**Statut (16/11/2026) : proposition, itération 2.** Rien n'est développé ni déployé ; aucun gain réel n'a changé.
+Maquettes non branchées et **locales** (`prototypes/` est exclu de Git par `.git/info/exclude`), dans
+`Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\` :
+
+- `arcade.html` : itération 2, les trois mécanismes Arcade (§ 6) ;
+- `index.html` : itération 1, quatre directions (§ 4).
+
+Le moteur commun (sons, scène) est dans `shared/`. La Production garde la roue actuelle
 ([SUB_WHEEL.md](SUB_WHEEL.md), droits V2 : [SUB_WHEEL_V2_PLAN.md](SUB_WHEEL_V2_PLAN.md)).
+
+**Itération 2 (décision d'Antoni du 16/11) :**
+
+- direction **Arcade** ;
+- montants écrits sur les parts, puis le tier en multiplicateur fixe (×1 / ×2 / ×3) ;
+- le barème « Base × multiplicateur » des § 2 à 5 est **écarté** ;
+- les § 6 et 7 remplacent le § 2 ; le § 5 reste valable pour l'intégration (voir § 8).
 
 ## 1. Ce qui ne va pas
 
@@ -137,3 +149,108 @@ unité de tier, `mult` = multiplicateur de la part, et des coefficients 1 / 2 / 
   mois.
 - Les subs offerts ne font pas tourner la roue (règle SAMMI conservée le 18/10). Ne rien changer sans décision
   d'Antoni.
+
+## 6. Itération 2 : trois mécanismes Arcade
+
+`arcade.html`, touches 1 à 4 : Roue, Rouleau, Carrousel, puis **les trois côte à côte** sur le même tirage. Espace
+pour lancer. L'outil permet aussi de choisir le résultat (minimum, moyen, jackpot) et le fond, de tester un pseudo
+long, et d'ouvrir la version pour OBS (`?obs=1&d=reel`) ou un contrôle en 1080p (`?full=1&d=all&bg=light`).
+
+**Habillage commun.** Les trois mécanismes partagent la même finition, pour que le choix porte sur le mécanisme seul :
+
+- plaque du viewer avec l'avatar centré au-dessus (symétrique, pseudo long réduit automatiquement) ;
+- tier et multiplicateur au **centre** du dispositif ;
+- zone du bas **vide pendant le tirage** ;
+- 12 lampes blanc chaud au lieu de 24, plus une lueur qui tourne ou défile en sens inverse ;
+- une couleur par valeur : gris, bleu, vert, violet, or pour le jackpot.
+
+**Séquence** : environ 5,8 s en Prime / T1, 7,4 s pour un jackpot en T3.
+
+| Temps       | Ce qui se passe                                                                                        | Sons                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| 0,5 s       | entrée                                                                                                 | —                                     |
+| 2,3 s       | tirage avec ralenti progressif, petit retour à l'arrêt                                                 | ticks d'origine                       |
+| 0,25 s      | arrêt : le lot s'allume, les autres s'éteignent                                                        | son d'arrêt                           |
+| 0,8 à 1,9 s | T2 / T3 : le lot apparaît en bas, puis le ×tier, puis le compteur ; Prime / T1 : le compteur part de 0 | blips, `Incrémentation`, `Fin casino` |
+| 1,3 / 1,9 s | gain final dans la couleur du lot (or et confettis au jackpot)                                         | jingle d'origine                      |
+| 0,4 s       | sortie                                                                                                 | —                                     |
+
+| Mécanisme       | Pour                                                                                                           | Contre                                                                                   | Encombrement 1080p |
+| --------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------ |
+| A · Roue        | objet iconique ; on voit les 12 lots d'un coup                                                                 | montants dans le sens du rayon : lisibles à l'arrêt, couchés ou à l'envers sur les côtés | ≈ 345 × 560 px     |
+| **B · Rouleau** | montants toujours droits et les plus gros ; la ligne se lit comme la formule « T3 · 25 000 · ×3 » ; symétrique | 3 à 4 lots visibles à la fois ; « machine à sous » assumée                               | ≈ 365 × 515 px     |
+| C · Carrousel   | très lisible, familier (ouverture de caisse) ; 4 à 5 lots visibles                                             | le plus large, il avance vers le centre de l'écran ; plus « loot box » que casino        | ≈ 565 × 405 px     |
+
+**Recommandation : B · Rouleau.**
+
+- C'est la meilleure lisibilité en stream : des chiffres horizontaux de 38 px, lisibles même sur mobile.
+- Le résultat se comprend sans explication : le tier et son multiplicateur encadrent le lot sur la ligne de gain.
+- Il garde l'esprit arcade / casino et les mêmes sons, dans une colonne étroite et symétrique.
+- **Repli : C · Carrousel** si l'on préfère voir plus de lots à la fois et un dispositif moins haut.
+
+## 7. Barème proposé (itération 2)
+
+**Une part, un montant écrit, puis le tier.**
+
+- 12 parts de même chance (tirage uniforme, comme aujourd'hui).
+- À 1 mois, les montants vont de 500 à 6 000 :
+  500 · 600 · 800 · 1 000 · 1 200 · 1 500 · 1 800 · 2 000 · 2 500 · 3 000 · 4 000 · 6 000.
+- **Tous les montants sont multipliés par 1,55 à chaque doublement de l'ancienneté** (mois^0,632, arrondis à deux
+  chiffres).
+- **Sans plafond** : la croissance ralentit d'elle-même. Elle est de 2,4× à 4 mois, 5,8× à 16 mois, 8,9× à 32 mois,
+  13,9× à 64 mois.
+- Le tier multiplie ensuite le lot tombé : Prime / T1 ×1, T2 ×2, T3 ×3 (règle historique).
+- Exemple à 45 mois, les 12 lots : 5 500 · 6 700 · 8 900 · 11 000 · 13 000 · 17 000 · 20 000 · 22 000 · 28 000 ·
+  33 000 · 44 000 · 67 000. Un T3 qui tombe sur 22 000 reçoit 66 000.
+
+Minimum, moyenne et jackpot (T2 = T1 × 2 dans les deux grilles ; l'ancien T3 = l'ancien T1 × 3) :
+
+| Mois | Ancien T1       | **Nouveau T1**    | **Nouveau T3**    |
+| ---- | --------------- | ----------------- | ----------------- |
+| 1    | 200 / 1,4k / 5k | 500 / 2,1k / 6k   | 1,5k / 6,2k / 18k |
+| 6    | 200 / 1,7k / 5k | 1,6k / 6,5k / 19k | 4,8k / 19k / 57k  |
+| 12   | 500 / 5k / 15k  | 2,4k / 9,9k / 29k | 7,2k / 30k / 87k  |
+| 24   | 1k / 17k / 50k  | 3,7k / 15k / 45k  | 11k / 46k / 135k  |
+| 36   | 1k / 17k / 50k  | 4,8k / 20k / 58k  | 14k / 60k / 174k  |
+| 45   | 1k / 17k / 50k  | 5,5k / 23k / 67k  | 17k / 69k / 201k  |
+| 60   | 1k / 17k / 50k  | 6,7k / 28k / 80k  | 20k / 83k / 240k  |
+
+- **Partout :** le minimum est 2,5 à 8 fois plus haut, et minimum, moyenne et jackpot montent avec chaque mois.
+- **Avant 20 mois :** la moyenne est nettement meilleure ; l'ancienne grille était plate jusqu'à 11 mois.
+- **De 20 à 33 mois :** recul de 10 à 25 % sur la moyenne et le jackpot. C'est le saut de l'ancienne grille à
+  20 mois, qu'une courbe régulière ne peut pas reproduire sans gonfler les jeunes abonnés. La parité revient vers
+  33 mois, puis la nouvelle grille passe devant.
+- **Coût estimé :** environ ×1,8, soit 8 900 Jetons en moyenne par sub éligible au lieu de 5 100. C'est calculé sur
+  un **mélange supposé** : 55 % de subs de moins de 6 mois, 90 % de Prime / T1. Pour 60 subs par mois, cela fait
+  environ 230 000 Jetons de plus par mois.
+- **À confirmer avant l'activation :** le mélange réel, à lire dans `sw_spins` par une requête en lecture seule
+  avec le GO d'Antoni.
+- **Réglages :** les montants à 1 mois et le facteur 1,55. À 1,50, le coût baisse vers ×1,6.
+
+## 8. Règles d'éligibilité et écart avec l'intégration du § 5
+
+**Règle confirmée par Antoni.** Seuls comptent le premier abonnement personnel, le resub et le Prime. **Aucun
+abonnement offert** ne donne de roue, ni au donneur, ni au bénéficiaire.
+
+Le Core applique déjà cette règle :
+
+- `fromAlert` n'accepte que `sub` / `resub` venant de Twitch ;
+- `fromLoyalty` refuse un `sub` offert ;
+- les avis `sub_gift` et `community_sub_gift` deviennent des alertes `gift_*` ignorées par la roue ;
+- les doublons restent protégés par l'identifiant d'événement et les droits V2.
+
+**Trou constaté (non corrigé, système d'événements gelé).**
+
+- Le bot ne lit pas `resub.is_gift` des avis `channel.chat.notification`
+  (`apps/twitch-bot/src/alert-events.ts`, cas `resub`).
+- Un resub partagé par le bénéficiaire d'un abonnement offert sur plusieurs mois peut donc faire tourner la roue.
+- Correctif prévu à l'intégration : ne pas créer d'alerte « roue » quand `is_gift` est vrai, avec son test.
+- Le même examen vaut pour `channel.subscription.message` côté Loyalty.
+
+**Écart avec le § 5 :**
+
+- `subWheelLayout(months, grid)` renvoie les 12 montants de la grille 2, avec des multiplicateurs de part à 1.
+- Les coefficients du tier restent 1 / 2 / 3, donc la formule `val × mult × tier` du Core ne change pas.
+- La colonne `grid` reste nécessaire, pour qu'une ancienne roue rejouée garde son ancienne grille.
+- Il faut un nouveau rendu `wheel-v3.js` (le mécanisme choisi) et l'**avatar Twitch** dans la charge de la roue : le
+  Core ne l'envoie pas aujourd'hui.

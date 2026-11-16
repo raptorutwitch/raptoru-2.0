@@ -184,9 +184,10 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
 
 **En attente d'Antoni** :
 
-- **Roue du Sub V3** (16/11) : barème « Base × multiplicateur » et 4 maquettes sur la branche locale
-  `design/sub-wheel-v3` ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md), maquettes locales `prototypes/sub-wheel-v3/` du worktree `agent`) ; choix de la direction
-  attendu (recommandation : A · Écrin), puis intégration § 5 ;
+- **Roue du Sub V3** (16/11, itération 2) : trois mécanismes Arcade (roue, rouleau, carrousel) et un barème
+  « montants écrits × tier » sur la branche locale `design/sub-wheel-v3` ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 6–8 ;
+  maquettes locales `prototypes/sub-wheel-v3/arcade.html` du worktree `agent`) ; choix du mécanisme et validation
+  des montants attendus (recommandation : Rouleau) ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
