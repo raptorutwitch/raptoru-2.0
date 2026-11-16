@@ -1,11 +1,11 @@
 # Roue du Sub V3 : barème et rendu
 
-**Statut (16/11/2026) : itération 3.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
+**Statut (16/11/2026) : itération 4, en attente de validation finale.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
 rendu et le barème restent des propositions ; aucun gain réel n'a changé.
 Maquettes non branchées et **locales** (`prototypes/` est exclu de Git par `.git/info/exclude`), dans
 `Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\` :
 
-- `roue.html` : **itération 3, la roue retenue** (§ 9) ;
+- `roue.html` : **itération 4, la roue retenue avec son bandeau unique** (§ 10 ; l'itération 3 du § 9 est remplacée) ;
 - `arcade.html` : itération 2, les trois mécanismes Arcade (§ 6) ;
 - `index.html` : itération 1, quatre directions (§ 4).
 
@@ -346,3 +346,75 @@ Antoni garde la **roue**. Maquette : `roue.html`.
 - la grille 2 et le palier vétéran dans `subWheelLayout(months, grid)` ;
 - la colonne `grid` ;
 - l'avatar Twitch dans la charge de la roue.
+
+## 10. Itération 4 : bandeau unique, titres, palettes (16/11)
+
+Maquette : `roue.html`. Les fichiers de l'itération 3 ont été modifiés directement.
+
+**Disposition.** La roue est en haut, avec sa languette à 6 h posée sur un **bandeau unique centré dessous**. La carte
+latérale et le badge « Vétéran » sont retirés. Encombrement : environ 360 × 430 px en 1080p.
+
+**Le bandeau a deux états, jamais affichés ensemble :**
+
+- **État A, pendant le tirage :**
+  - l'avatar à gauche, avec les mois en pastille (« 45 mois ») ;
+  - le pseudo en haut, réduit automatiquement s'il est long ;
+  - le **titre équipé** dessous, s'il existe. Sans titre, rien ne s'affiche et le pseudo se centre.
+- **Transition :** l'identité sort (0,16 s), puis le gain entre.
+- **État B :** seulement le montant, grand et centré.
+  - T2 / T3 : le lot, puis la pastille ×tier pendant le calcul, puis le compteur.
+  - Prime / T1 : le compteur part de 0.
+  - Ensuite « +N JETONS » en or sur fond sombre, avec un cadre or et des confettis au jackpot.
+  - Puis la roue et le bandeau sortent.
+
+**Titres équipés : les vraies sources, à réutiliser à l'intégration.**
+
+- **Données** (`apps/core-api/src/progression/service.ts`) :
+  - la règle `equippedTitles` : le titre choisi sur raptoru.fr, seulement s'il est encore possédé, actif et non
+    brouillon ;
+  - les classements renvoient déjà `title: { id, label, rarity, style }`.
+- **Style** : `CosmeticStyle` (couleur, dégradé, effet `none | glow | shine | pulse | rainbow | sparkle`, graisse).
+  - Il est rendu par la feuille du Core `COSMETICS_CSS` (`apps/core-api/src/cosmetics/look.ts`, servie en
+    `GET /v1/cosmetics/style.css`), avec les classes `rc-title`, `rc-grad`, `rc-fx-*` et les variables `--rc-*`.
+  - C'est la même méthode que Studio (`player-card.ts`) et raptoru.fr.
+- **Maquette** :
+  - une copie de cette feuille (`shared/cosmetics.css`) ;
+  - « Loup-garou » est la vraie ligne de production du 31/10 (dégradé rouge #f02d2d → #ad0505 et glow) ;
+  - « Habitué du casino » (sparkle) et « Légende » (shine) sont simulés, avec des effets qui existent ;
+  - seul ajout : un fond neutre sombre derrière le titre, pour le détacher du bandeau.
+- **À ajouter à l'intégration** : le titre (libellé et style) et l'avatar Twitch dans la charge de la roue. Aucune
+  nouvelle API ; c'est une jointure dans la requête existante.
+
+**Palettes.** Chacune a quatre couleurs distinctes par valeur ; l'or du jackpot, les lampes, les filets crème et le
+jeton du tier sont communs. Chaque palette a sa base sombre (anneau et bandeau).
+
+- **Chaude** : prune, framboise, corail, ambre.
+- **Verte** : vert profond, turquoise, sauge, émeraude.
+- **Bleutée** : indigo, bleu pétrole, ardoise colorée, cyan doux.
+
+Dans la maquette, le sélecteur propose aussi « Auto » et « Les trois côte à côte ». À l'intégration : `paletteOf`
+(FNV-1a de l'identifiant Twitch, modulo 3), donc la même palette pour le même viewer à chaque affichage.
+
+**Barème : deux versions à comparer** (aucun gain réel ne change ; T1 min / moyenne / max, T3 = ×3)
+
+| Mois | Ancien (SAMMI)  | Actuel (palier à 20 mois) | Tranches de 3 mois |
+| ---- | --------------- | ------------------------- | ------------------ |
+| 3    | 200 / 1,4k / 5k | 1k / 4,2k / 12k           | 1,1k / 4,6k / 13k  |
+| 6    | 200 / 1,7k / 5k | 1,6k / 6,5k / 19k         | 1,8k / 7,6k / 22k  |
+| 12   | 500 / 5k / 15k  | 2,4k / 9,9k / 29k         | 3k / 12k / 36k     |
+| 20   | 1k / 17k / 50k  | 4,2k / 17k / 50k          | 4k / 17k / 48k     |
+| 36   | 1k / 17k / 50k  | 6k / 25k / 72k            | 6,7k / 28k / 80k   |
+| 45   | 1k / 17k / 50k  | 6,9k / 29k / 83k          | 7,8k / 33k / 94k   |
+| 60   | 1k / 17k / 50k  | 8,3k / 35k / 100k         | 9,6k / 40k / 120k  |
+
+- **Actuel** (× 1,55 à chaque doublement, × 1,25 d'un coup à 20 mois) :
+  - les montants changent presque chaque mois ;
+  - la seule marche brutale est +37 % à 20 mois ;
+  - coût ×1,95.
+- **Tranches de 3 mois** (× 1,65 à chaque doublement, sans palier) :
+  - les montants montent tous les 3 mois, de moins en moins : +33 %, +23 %, +18 %, +14 %, +12 %, +11 %… ;
+  - jamais sous l'ancienne grille, sauf le 20e mois tout juste (−3 %) ;
+  - coût ×2,15.
+- **Recommandation : les tranches de 3 mois**, qui correspondent à la progression régulière demandée pour environ
+  10 % de coût en plus. Pour garder le coût ×1,95, il suffit de baisser les montants de référence d'environ 10 %. Le
+  barème définitif reste à valider séparément.

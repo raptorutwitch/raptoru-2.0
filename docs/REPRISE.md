@@ -184,13 +184,12 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
 
 **En attente d'Antoni** :
 
-- **Roue du Sub V3** (16/11, itération 3, branche locale `design/sub-wheel-v3`) :
-  - faille « resub d'un abonnement offert » **corrigée** (bot `is_gift`, Core, tests ; commit `f8f39218`, non
-    déployé ; ordre de déploiement : Core puis bot) ;
-  - roue retenue, palette chaude, carte latérale identité → gain, barème avec palier vétéran
-    ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 8–9 ; maquette locale `prototypes/sub-wheel-v3/roue.html` du worktree
-    `agent`) ;
-  - en attente : la validation du rendu et des montants par Antoni, puis l'intégration (§ 5) ;
+- **Roue du Sub V3** (16/11, itération 4, branche locale `design/sub-wheel-v3`) :
+  - faille « resub d'un abonnement offert » **corrigée** (commit `f8f39218`, non déployé ; Core puis bot) ;
+  - roue avec un bandeau unique dessous (identité OU gain), titre équipé au style du Core, trois palettes
+    déterministes, deux barèmes à comparer ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 10 ; maquette locale
+    `prototypes/sub-wheel-v3/roue.html`) ;
+  - en attente : la validation finale d'Antoni, puis l'intégration (§ 5, § 8, § 10) ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
