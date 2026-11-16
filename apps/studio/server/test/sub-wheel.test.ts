@@ -155,6 +155,9 @@ describe('Roue du Sub — Lab chain (real Lab Core, Studio runtime, simulated pl
   it('Roue V3 switched on from Studio: the player gets the V3 draw as Core decided it (barème, part, tier multiplier, viewer)', async () => {
     const l = await lab();
     await l.core(`/v1/lab/sub-wheel/${CH}/settings`, { enabled: true });
+    // V3 needs the V2 rights (confirmed seniority): v2_acquire draws a certain month at its notice (mode v1 keeps the
+    // legacy barème).
+    await l.core(`/v1/lab/sub-wheel/${CH}/mode`, { mode: 'v2_acquire' });
     expect(
       await l.rt.subWheel.api('POST', '/grid', async () => ({ grid: 3 })),
     ).toMatchObject({ grid: 3 });
