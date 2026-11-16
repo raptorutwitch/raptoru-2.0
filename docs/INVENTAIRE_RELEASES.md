@@ -50,17 +50,25 @@ live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJE
 
 ## 3. Extension Twitch « Raptoru Live »
 
-### 3.0 Prochaine archive (passe post-live du 11/11) : préparée, **pas construite** (vérifiée depuis `main` `052ab2ec`)
+### 3.0 Nouvelle archive du 16/11 : **construite, à téléverser en Hosted Test par Antoni**
 
-| Champ        | Valeur                                                                                                                                                         |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nom attendu  | `raptoru-live-PRODUCTION-<commit>-depuis-0bf7907-78-commits-shell-v2.zip` (le `<commit>` est celui du dépôt au moment de l'emballage)                          |
-| Source       | branche `feat/post-live-moderation` (PR #64) ; dernier commit de l'extension `bb870081` ; shell **v2** ; `https://core.raptoru.fr/v1/ext`                      |
-| Inventaire   | `apps/twitch-extension/release-inventory/INVENTAIRE-bb8700814939.md` : 78 commits listés, **ligne « Validé par Antoni : oui » absente** (l'emballage refuse)   |
-| Vérification | `node scripts/package.mjs --target production --shell v2 --check` : tout OK sauf la ligne de validation (11/11)                                                |
-| SHA-256      | calculé à l'emballage (le `--check` en affiche un provisoire, sans inventaire embarqué : ce n'est pas l'empreinte finale)                                      |
-| Prérequis    | Core avec la PR #64 déployé (Musique dans la modération, recherche canonique) ; avec `bbce104` l'extension fonctionne sans ces deux ajouts                     |
-| Procédure    | après la recette d'Antoni : ajouter la ligne de validation, `npm run package:production -- --shell v2` dans `apps/twitch-extension`, téléverser en Hosted Test |
+**`raptoru-live-PRODUCTION-be1744e75f63-depuis-0bf7907-95-commits-shell-v2.zip`**
+
+| Champ        | Valeur                                                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Emplacement  | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\agent\apps\twitch-extension\release\` (avec son `.sha256`) ; les ZIP ne vont jamais dans Git                                            |
+| SHA-256      | `1e60fa0b9b4e6d9a51faf65f0b921b1bc8c3ce1f53d13df070e9538336b72375` (recalculé après l'emballage, identique au `.sha256`)                                                                   |
+| Taille       | 12 984 643 octets, 2 160 fichiers, construite le 16/11                                                                                                                                     |
+| Source       | `be1744e7` (branche `release/extension-a971386f`, fusionnée dans `main`) ; dernier commit de l'extension `a971386f` ; `buildId` `production-be1744e75f63-2026-11-16` ; shell **v2**        |
+| Serveur      | `https://core.raptoru.fr/v1/ext` (seule URL du `runtime-config.js` ; aucun module `lab-modules` dans l'archive)                                                                            |
+| Inventaire   | `INVENTAIRE-a971386f8c8d.md` : 95 commits depuis `PUBLISHED` = `0bf7907` (présumé) ; **« Validé par Antoni : oui » écrite par Antoni le 16/11** ; embarquée en `build-inventory.txt`       |
+| Contenu      | mini-profil viewer, Level Up V2 (« Mon niveau »), Commandes V2.1 (« Mes commandes modifiables »), Mini-jeux V5 (Random Ban), passe post-live du 11/11, Music Hub et tout le socle shell v2 |
+| Hors archive | le casino (machine à sous, roulette) : prototype local hors du dépôt, à la demande d'Antoni (« sans les nouveaux modules »)                                                                |
+| Prérequis    | Core avec Commandes V2.1 et le mini-profil : vérifié le 16/11 (Core `2c04a5db` ; `/v1/ext/commands/mine` répond 401 sans session, la route existe)                                         |
+| Reste        | Antoni : téléverser en Hosted Test (jamais activé pendant un live), essayer sur un compte testeur, puis soumettre à la revue Twitch ; après approbation, corriger `PUBLISHED`              |
+
+Procédure de remplacement des fichiers Hosted Test : [extension/TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 7.
+Inventaires non validés remplacés par celui-ci : `7355c44acce2`, `4799eb697eee`, `bb8700814939`.
 
 ### 3.1 Référence actuelle
 
