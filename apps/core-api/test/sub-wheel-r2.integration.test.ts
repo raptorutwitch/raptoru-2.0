@@ -111,7 +111,10 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R2, real Postgres', () => {
     Number(
       (await a.query<{ n: string }>(`select count(*) as n from ${sql}`))[0]!.n,
     );
-  const configure = async (mode: 'v1' | 'v2_acquire', enabled: boolean) => {
+  const configure = async (
+    mode: 'v1' | 'v2_acquire' | 'v2',
+    enabled: boolean,
+  ) => {
     await wheel(a).setEnabled(CH, enabled);
     await wheel(a).setMode(CH, mode, 'test');
   };
@@ -122,6 +125,39 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R2, real Postgres', () => {
     for (const v of vs)
       await wheel(a).fromAlert(notice(v, -40 * DAY, { months: 5 }), null);
   };
+
+  for (const round of ROUNDS)
+    it(`gifts never spin (16/11/2026): the resub message (Core B) and the GIFTED share (Core A) of one renewal at once, v2_acquire and v2, 20 viewers: one row each, never drawn, nothing credited (round ${round})`, async () => {
+      for (const mode of ['v2_acquire', 'v2'] as const) {
+        await a.query('drop schema public cascade; create schema public;');
+        await migrate(a, 'all');
+        draws = 0;
+        await configure(mode, true);
+        const [A, B] = [await core(a), await core(b)];
+        await Promise.all(
+          viewers(20).flatMap((v) => [
+            B.post(resub(v, 1_000, 3)),
+            A.wheel.fromAlert(
+              notice(v, 1_500, { months: 3, is_gift: true }),
+              null,
+            ),
+          ]),
+        );
+        expect(await n('sw_spins'), mode).toBe(20);
+        expect(
+          await n("sw_spins where status = 'ignored' and reason = 'gift'"),
+          mode,
+        ).toBe(20);
+        expect(await n('sw_spin_sources where spin_id is not null'), mode).toBe(
+          40,
+        );
+        expect(draws, mode).toBe(0);
+        expect(
+          await n("wallet_transactions where source = 'sub_wheel'"),
+          mode,
+        ).toBe(0);
+      }
+    });
 
   for (const round of ROUNDS) {
     it(`subscribe (Core A), message (Core B) and notice (Core A) of one renewal at once, both modes, 20 viewers: one right, one wheel credit, one loyalty payment each (round ${round})`, async () => {

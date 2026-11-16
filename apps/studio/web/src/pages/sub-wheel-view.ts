@@ -553,7 +553,7 @@ function historyRow(r: SwSpinView) {
   return `<div class="whl-r hist">
     <span class="whl-who__t"><b>${origin}${esc(r.viewer.name)}</b><small>${r.type === 'sub' ? 'sub' : 'resub'} · T${r.tier} · ${r.right?.month_source ? monthLabel(r.right) : `${r.months} mois`}</small></span>
     <span class="whl-r__a"><b class="whl-amt">${result}</b><small>${esc(time(r.created_at))}</small></span>
-    <div class="whl-r__m d-tags">${tag(tone, STATUS[r.status] ?? r.status)}${award ? `<small>${esc(award)}${r.award.note ? ` : ${esc(r.award.note)}` : ''}</small>` : ''}</div>
+    <div class="whl-r__m d-tags">${tag(tone, r.status === 'ignored' && r.reason === 'gift' ? 'Abonnement offert : pas de roue' : (STATUS[r.status] ?? r.status))}${award ? `<small>${esc(award)}${r.award.note ? ` : ${esc(r.award.note)}` : ''}</small>` : ''}</div>
     ${rec ? `<p class="whl-rec">${esc(rec)}</p>` : ''}
     ${r.reason && r.status !== 'ignored' ? `<small>${esc(r.reason)}</small>` : ''}
     ${acts ? `<div class="whl-acts">${acts}</div>` : ''}

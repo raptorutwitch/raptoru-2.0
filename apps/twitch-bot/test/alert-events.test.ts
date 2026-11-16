@@ -47,6 +47,30 @@ describe('channel.chat.notification', () => {
     ).toMatchObject({ type: 'resub', tier: 'prime', months: 14 });
   });
 
+  it('resub of a gifted sub: still a resub alert, flagged is_gift (never a Roue du Sub); a paid resub carries no flag', () => {
+    expect(
+      notif('resub', {
+        cumulative_months: 3,
+        duration_months: 1,
+        sub_tier: '1000',
+        is_prime: false,
+        is_gift: true,
+        gifter_is_anonymous: false,
+        gifter_user_id: '222',
+        gifter_user_login: 'bob',
+        gifter_user_name: 'Bob',
+      }),
+    ).toMatchObject({ type: 'resub', months: 3, is_gift: true });
+    expect(
+      notif('resub', {
+        cumulative_months: 4,
+        sub_tier: '1000',
+        is_prime: false,
+        is_gift: false,
+      }),
+    ).not.toHaveProperty('is_gift');
+  });
+
   it('sub_gift without community id: targeted gift (gifter, recipient)', () => {
     expect(
       notif('sub_gift', {

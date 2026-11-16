@@ -1393,7 +1393,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     expect((await f.claim()).spin?.spin_id).toBe(r.spin_id);
   });
 
-  it('a resub that only reached us through its EventSub message (no chat notice): one right, drawn once; the notice later is the same right', async () => {
+  it('a resub that only reached us through its EventSub message (no chat notice): one right, drawn once 20 s after (time for its notice: alert first, gift check), the notice later is the same right', async () => {
     const f = await fixture();
     await f.v2();
     await f.live('s1', 0);
@@ -1406,6 +1406,9 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
       tier: 't1',
       cumulativeMonths: 9,
     } as LoyaltyEvent);
+    // 16/11/2026: a right without its chat notice waits 20 s for it (a gifted share would void it).
+    expect((await f.claim()).spin).toBeNull();
+    f.at0(MIN + SUB_WHEEL.afterAlertMaxMs + 1);
     const { spin } = await f.claim();
     expect(spin).toMatchObject({ name: 'V9501' });
     await f.done(spin!.spin_id);

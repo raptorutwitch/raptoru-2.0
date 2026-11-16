@@ -641,7 +641,7 @@ export class SubWheelService {
 
   /**
    * A Twitch alert event (after the alerts queue took it). Only a sub or a resub (Prime included) from Twitch; gifts
-   * never spin (historical rule). Idempotent: a redelivered event is the same spin (also repairs a spin missed when
+   * never spin (historical rule), nor the share of a gifted sub (`is_gift`, decision of 16/11/2026). Idempotent: a redelivered event is the same spin (also repairs a spin missed when
    * the first reception failed after the alert was committed).
    * V2 (R1): the mode is read under a share lock in the same transaction as the decision; the event is a proof
    * (chat_notification) of a right. v1: today's V1 spin, plus its proof and its month. v2_acquire: the right is kept
@@ -658,6 +658,10 @@ export class SubWheelService {
     if (!e.actor) return null;
     const type = e.type;
     const actor = e.actor;
+    // The share of a GIFTED sub: not paid by the viewer this month, never a wheel. Without a Twitch ID it is not even a
+    // proof (nothing to keep); with one, V2 keeps its renewal as « ignored » (gift) so no other proof makes it a right.
+    const gift = e.is_gift === true;
+    if (gift && !actor.id) return null;
     // A new sub is the viewer's first month; a resub carries its cumulative months (the V1 layout rule).
     const v1Months = type === 'sub' ? 1 : Math.max(1, e.months ?? 1);
     const ev: SwEvidence | null = actor.id
@@ -676,59 +680,58 @@ export class SubWheelService {
           // Only a resub's cumulative months are certain (a Prime re-up can arrive as a « sub »).
           months:
             type === 'resub' && e.months && e.months >= 1 ? e.months : null,
-          isGift: false,
+          isGift: gift,
           alertId,
         }
       : null;
-    return spinView(
-      await this.db.tx(async (q) => {
-        const { mode, enabled } = await readMode(q, e.channel_id);
-        if (ev) {
-          await lockViewer(q, ev.channelId, ev.viewer.id);
-          if (mode !== 'v1')
-            // A chat notice always gets its right (never an orphan proof).
-            return (await this.acquireInTx(q, ev, {
-              drawNow: mode === 'v2_acquire' && enabled,
-              v1Months,
-              stale,
-            }))!;
-          const proof = await findProof(q, ev);
-          // A right kept in v2_acquire (mode switched back since): this notice draws it (never a second right).
-          const kept = proof
-            ? null
-            : await findRenewal<Row>(q, ev).then((r) =>
-                r && (r.status === 'owed' || r.status === 'requested')
-                  ? r
-                  : null,
-              );
-          if (kept)
-            return this.attach(q, kept, ev, {
-              drawNow: enabled,
-              v1Months,
-              stale,
-            });
-        }
-        const { row, created } = await this.admit(q, {
-          channel_id: e.channel_id,
-          source: 'twitch',
-          event_key: `alert:${e.source}:${e.source_event_id}`,
-          alert_id: alertId,
-          type,
-          viewer: {
-            id: actor.id ?? null,
-            login: actor.login ?? null,
-            name: actor.display_name,
-          },
-          tier: tierOf(e.tier),
-          months: v1Months,
-          enabled,
-          occurred_at: e.occurred_at,
-        });
-        const r = ev ? await this.identifyV1(q, row, created, ev) : row;
-        if (ev) await adoptOrphans(q, ev, r);
-        return stale ? this.tooLate(q, r) : r;
-      }),
-    );
+    const out = await this.db.tx(async (q) => {
+      const { mode, enabled } = await readMode(q, e.channel_id);
+      if (ev) {
+        await lockViewer(q, ev.channelId, ev.viewer.id);
+        if (mode !== 'v1')
+          // A chat notice always gets its right (never an orphan proof); a gifted one, a right never drawn.
+          return (await this.acquireInTx(q, ev, {
+            drawNow: mode === 'v2_acquire' && enabled,
+            v1Months,
+            stale,
+          }))!;
+        // v1 never spins a gift (nothing recorded, like the gifts themselves).
+        if (gift) return null;
+        const proof = await findProof(q, ev);
+        // A right kept in v2_acquire (mode switched back since): this notice draws it (never a second right).
+        const kept = proof
+          ? null
+          : await findRenewal<Row>(q, ev).then((r) =>
+              r && (r.status === 'owed' || r.status === 'requested') ? r : null,
+            );
+        if (kept)
+          return this.attach(q, kept, ev, {
+            drawNow: enabled,
+            v1Months,
+            stale,
+          });
+      }
+      const { row, created } = await this.admit(q, {
+        channel_id: e.channel_id,
+        source: 'twitch',
+        event_key: `alert:${e.source}:${e.source_event_id}`,
+        alert_id: alertId,
+        type,
+        viewer: {
+          id: actor.id ?? null,
+          login: actor.login ?? null,
+          name: actor.display_name,
+        },
+        tier: tierOf(e.tier),
+        months: v1Months,
+        enabled,
+        occurred_at: e.occurred_at,
+      });
+      const r = ev ? await this.identifyV1(q, row, created, ev) : row;
+      if (ev) await adoptOrphans(q, ev, r);
+      return stale ? this.tooLate(q, r) : r;
+    });
+    return out && spinView(out);
   }
 
   /** Lot 9: a wheel too old to animate: skipped, its gain kept. */
@@ -827,6 +830,7 @@ export class SubWheelService {
             )
           )[0]
         : undefined) ?? (await findRenewal<Row>(q, ev));
+    if (ev.isGift) return this.giftedRenewal(q, ev, found ?? null, eventKey);
     if (found) return this.attach(q, found, ev, o);
     const now = this.now();
     const month =
@@ -872,6 +876,66 @@ export class SubWheelService {
     // the V1-like draw, so that the notice is drawn as V1 would (the other right is the one blocked).
     await flagSameMonth(q, out, now);
     return out;
+  }
+
+  /**
+   * Gifts never spin (decision of 16/11/2026): the chat notice sharing a GIFTED renewal (Twitch `resub.is_gift`) keeps
+   * that renewal as a row that is never drawn — « ignored », reason `gift` — holding its month and its proofs, so the
+   * resub message of the same renewal (loyalty: Twitch gives it no gift flag) joins it instead of making a drawable
+   * right. A right that message already acquired, not drawn yet, is voided the same way (draws.ts makes such a right
+   * wait for its notice). Paying a later month is another renewal: a normal right.
+   */
+  private async giftedRenewal(
+    q: Queryable,
+    ev: SwEvidence,
+    found: Row | null,
+    eventKey: string,
+  ): Promise<Row> {
+    const now = this.now();
+    if (found) {
+      const r = await this.attach(q, found, ev, {
+        drawNow: false,
+        v1Months: 1,
+        stale: false,
+      });
+      if (r.status !== 'owed' && r.status !== 'requested') return r;
+      return (
+        await q.query<Row>(
+          `update sw_spins set status = 'ignored', reason = 'gift', updated_at = $2 where spin_id = $1 returning *`,
+          [r.spin_id, now],
+        )
+      )[0]!;
+    }
+    const month =
+      ev.months !== null
+        ? { sub_month: ev.months, month_source: 'twitch' as const }
+        : await this.estimate(q, ev);
+    const row = (
+      await q.query<Row>(
+        `insert into sw_spins (spin_id, channel_id, source, event_key, alert_id, type, viewer_id, viewer_login,
+           viewer_name, tier, months, status, reason, award_status, created_at, updated_at, sub_month, month_source,
+           acquired_at)
+         values ($1, $2, 'twitch', $3, $4, $5, $6, $7, $8, $9, $10, 'ignored', 'gift', 'none', $11, $11, $10, $12, $11)
+         returning *`,
+        [
+          randomUUID(),
+          ev.channelId,
+          eventKey.slice(0, 200),
+          ev.alertId ?? null,
+          ev.type,
+          ev.viewer.id,
+          ev.viewer.login,
+          ev.viewer.name.slice(0, 64),
+          ev.tier,
+          month.sub_month,
+          now,
+          month.month_source,
+        ],
+      )
+    )[0]!;
+    await recordProof(q, row.spin_id, ev, now);
+    await adoptOrphans(q, ev, row);
+    return row;
   }
 
   /**

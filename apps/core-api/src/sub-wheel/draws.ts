@@ -94,7 +94,12 @@ export async function requestedRights(
   );
 }
 
-/** The automatic queue: auto owed rights of viewers present in the current live, in acquisition order (R-3, R-4). */
+/**
+ * The automatic queue: auto owed rights of viewers present in the current live, in acquisition order (R-3, R-4). A
+ * right waits for its alert to end (or 20 s); a right acquired by a loyalty proof alone (no alert yet) waits 20 s too:
+ * the chat notice of its renewal normally follows within seconds — its alert plays first, and a gifted share
+ * (`is_gift`) voids the right before any draw (decision of 16/11/2026).
+ */
 export async function autoRights(
   q: Queryable,
   channelId: string,
@@ -106,8 +111,7 @@ export async function autoRights(
     `select s.spin_id, ${FIRST_AT} from sw_spins s
      where s.channel_id = $1 and s.status = 'owed' and s.queue = 'auto' and ${NOT_UNDER_REVIEW}
        and ${seenSql(mode)}
-       and (s.alert_id is null
-         or exists (select 1 from alert_items a where a.alert_id = s.alert_id
+       and (exists (select 1 from alert_items a where a.alert_id = s.alert_id
            and a.status in ('completed', 'failed', 'expired'))
          or s.created_at <= $3)
      order by s.acquired_at, s.seq limit 20
