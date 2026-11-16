@@ -1,11 +1,11 @@
 # Roue du Sub V3 : barème et rendu
 
-**Statut (16/11/2026) : itération 5, en attente de validation du barème et du rendu.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
+**Statut (16/11/2026) : itération 6 (équilibrage), en attente de validation avant l'intégration.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
 rendu et le barème restent des propositions ; aucun gain réel n'a changé.
 Maquettes non branchées et **locales** (`prototypes/` est exclu de Git par `.git/info/exclude`), dans
 `Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\` :
 
-- `roue.html` : **itération 5** (§ 11 ; remplace les itérations 3 et 4 des § 9 et 10) ;
+- `roue.html` : **itération 6** (rendu du § 11, barème du § 12) ;
 - `arcade.html` : itération 2, les trois mécanismes Arcade (§ 6) ;
 - `index.html` : itération 1, quatre directions (§ 4).
 
@@ -500,3 +500,148 @@ Dans la maquette, le sélecteur propose aussi « Auto » et « Les trois côte �
 - `subWheelLayout(months, grid)` renvoie la grille du palier.
 - La formule `val × mult × tier` du Core est inchangée (mult = 1, tier ×1 / ×2 / ×3).
 - Le reste est inchangé : § 5, § 8 et § 10 (colonne `grid`, `wheel-v3.js`, titre et avatar dans la charge).
+
+## 12. Itération 6 : quatre montants, comparés à la vraie Production (16/11)
+
+Le rendu de l'itération 5 est inchangé. La maquette affiche seulement les quatre montants répétés, et un sélecteur
+« Barème » (L1 / L) remplace les grilles précédentes.
+
+### 12.1 Le barème réellement en Production
+
+- **Code** : Core `c1da930a` (relevé du 15/11, identique sur `origin/main`), `subWheelLayout(months)` et
+  `subWheelAmount`.
+- **4 grilles** (montant = valeur × multiplicateur de la part) :
+  - 1–3 mois : 8 parts, de 200 à 5 000 ;
+  - 4–11 mois : 10 parts, de 200 à 5 000 ;
+  - 12–19 mois : 12 parts, de 500 à 15 000 ;
+  - 20 mois et plus : 12 parts, de 1 000 à 50 000.
+- **Tirage** : uniforme (`randomInt`).
+- **Tier** : ×1 / ×2 / ×3, Prime = T1.
+- **Mois de la grille** : le mois du droit au moment du tirage (certain, ou estimé faute de preuve).
+- Aucune autre majoration.
+
+**Vraies données, lues en lecture seule** via Studio (`/api/sub-wheel/state`, les 20 derniers tirages, du 20/10 au
+13/11 ; seuls des agrégats sont repris ici) :
+
+- **Mélange** : T1 14, T2 2, T3 4. 15 tirages sur 20 concernent une ancienneté de 20 mois ou plus, 3 seulement moins
+  de 6 mois. La communauté est surtout ancienne : les hypothèses des § 7 à 11 sous-estimaient le coût.
+- **Versé** : 256 300 Jetons, pour une espérance de 421 075 avec les grilles appliquées. Les tirages ont été
+  défavorables.
+- **Défaut de Production constaté** : 2 tirages sur 20 étaient des « sub » de vétérans (40 et 15 mois) payés sur la
+  **grille 1–3 mois**. Le mois était estimé à 1 faute d'historique, puis confirmé après le tirage. En V3, l'écart
+  serait plus grand (palier 1 au lieu du palier 14).
+  - **Correctif proposé à l'intégration** (Core, classe D) : un droit dont le mois est estimé sans historique attend
+    sa confirmation, dans la fenêtre de 10 min déjà prévue, avant d'être tiré.
+
+### 12.2 Le barème proposé
+
+- **12 parts de même chance, quatre montants** : 5 petits, 3 moyens, 3 bons et 1 jackpot, soit **41,7 %, 25 %, 25 %
+  et 8,3 %**, pour tous les profils.
+- **Disposition** : jackpot, petit, moyen, petit, bon, petit, moyen, petit, bon, moyen, petit, bon. Jamais deux
+  montants identiques côte à côte.
+- **Palier** : un palier par tranche de 3 mois d'ancienneté réelle (1–3 mois : palier 1…).
+- **L1 (recommandé)** : palier p → **(1 500 · 2 000 · 2 500 · 3 200) × (p + 1)**, jusqu'à 60 mois. C'est l'exemple
+  d'Antoni (15 000 / 20 000 / 25 000 / 32 000) décalé d'un palier : il tombe à 25–27 mois au lieu de 28–30.
+  - Après 60 mois, **un quart de pas par palier** : environ +1,2 % par trimestre.
+  - Jackpot T3 : **201 600 à 60 mois**, 225 600 à 90 mois, 249 600 à 120 mois.
+- **L** : la même chose sans le décalage, soit l'exemple exact à 30 mois. Jackpot T3 : 192 000 à 60 mois, 216 000 à
+  90 mois.
+- **Tier** : il multiplie le lot (×1 / ×2 / ×3).
+
+### 12.3 Comparaison : 10 profils, Production contre L1
+
+En Prime / T1. Le T3 vaut T1 × 3 dans les deux systèmes : les écarts en % sont identiques et la dernière colonne donne
+la moyenne T3.
+
+| Mois | Palier | SAMMI T1 min / moy. / max | V3 T1 : petit · moyen · bon · jackpot | V3 T1 min / moy. / max   | Moy.   | V3 T3 moy. (SAMMI T3) |
+| ---- | ------ | ------------------------- | ------------------------------------- | ------------------------ | ------ | --------------------- |
+| 1    | 1      | 200 / 1 406 / 5 000       | 3 000 · 4 000 · 5 000 · 6 400         | 3 000 / 4 033 / 6 400    | +187 % | 12 100 (4 219)        |
+| 3    | 1      | 200 / 1 406 / 5 000       | 3 000 · 4 000 · 5 000 · 6 400         | 3 000 / 4 033 / 6 400    | +187 % | 12 100 (4 219)        |
+| 6    | 2      | 200 / 1 725 / 5 000       | 4 500 · 6 000 · 7 500 · 9 600         | 4 500 / 6 050 / 9 600    | +251 % | 18 150 (5 175)        |
+| 9    | 3      | 200 / 1 725 / 5 000       | 6 000 · 8 000 · 10 000 · 12 800       | 6 000 / 8 067 / 12 800   | +368 % | 24 200 (5 175)        |
+| 12   | 4      | 500 / 4 979 / 15 000      | 7 500 · 10 000 · 12 500 · 16 000      | 7 500 / 10 083 / 16 000  | +103 % | 30 250 (14 938)       |
+| 18   | 6      | 500 / 4 979 / 15 000      | 10 500 · 14 000 · 17 500 · 22 400     | 10 500 / 14 117 / 22 400 | +184 % | 42 350 (14 938)       |
+| 24   | 8      | 1 000 / 17 167 / 50 000   | 13 500 · 18 000 · 22 500 · 28 800     | 13 500 / 18 150 / 28 800 | +6 %   | 54 450 (51 500)       |
+| 30   | 10     | 1 000 / 17 167 / 50 000   | 16 500 · 22 000 · 27 500 · 35 200     | 16 500 / 22 183 / 35 200 | +29 %  | 66 550 (51 500)       |
+| 40   | 14     | 1 000 / 17 167 / 50 000   | 22 500 · 30 000 · 37 500 · 48 000     | 22 500 / 30 250 / 48 000 | +76 %  | 90 750 (51 500)       |
+| 50   | 17     | 1 000 / 17 167 / 50 000   | 27 000 · 36 000 · 45 000 · 57 600     | 27 000 / 36 300 / 57 600 | +111 % | 108 900 (51 500)      |
+
+- **Probabilités V3, pour tous les profils** :
+  - petit : 5/12 = 41,7 % ;
+  - moyen : 3/12 = 25 % ;
+  - bon : 3/12 = 25 % ;
+  - jackpot : 1/12 = 8,3 %.
+- **Production, pour comparer** : chaque part a 1/8, 1/10 ou 1/12 de chance selon la grille. À 20 mois et plus, il y
+  a 1 chance sur 4 de gagner 3 000 ou moins (×3 en T3).
+
+**Profils moins bien récompensés en moyenne :**
+
+- **L1** : seulement **20 et 21 mois** (−6 %). Leur minimum passe de 1 000 à 12 000, leur médiane de 12 500 à 16 000.
+  Ils perdent uniquement les gros lots rares de l'ancienne grille (50 000 et 30 000).
+- **L** : 20–21 mois (−18 %) et 22–24 mois (−6 %).
+- **Ajustement retenu** : c'est justement le décalage d'un palier qui distingue L1 de L. Supprimer aussi les −6 % de
+  20–21 mois demanderait environ +0,5 palier partout (jackpot T3 d'environ 206 000 à 60 mois) ; ce n'est pas
+  recommandé.
+
+### 12.4 Simulation de 10 viewers (L1)
+
+- Un tirage `u` uniforme entre 0 et 1 par viewer (graine fixe, reproductible).
+- Ce même `u` est appliqué aux deux roues, **au même rang** : les montants sont triés et `u` désigne la même place
+  dans chaque distribution. Aucune des deux roues n'est avantagée.
+- Ces tirages illustrent les écarts. **Seules les moyennes mathématiques du § 12.3 mesurent l'équilibrage.**
+
+| Viewer | Mois | Tier  | u    | SAMMI  | V3      | Différence |
+| ------ | ---- | ----- | ---- | ------ | ------- | ---------- |
+| V1     | 1    | T1    | 0.25 | 300    | 3 000   | +2 700     |
+| V2     | 3    | T1    | 0.10 | 200    | 3 000   | +2 800     |
+| V3     | 6    | Prime | 0.49 | 1 000  | 6 000   | +5 000     |
+| V4     | 9    | T1    | 0.38 | 750    | 6 000   | +5 250     |
+| V5     | 12   | T2    | 0.52 | 10 000 | 20 000  | +10 000    |
+| V6     | 18   | T1    | 0.86 | 10 000 | 17 500  | +7 500     |
+| V7     | 24   | T3    | 0.10 | 6 000  | 40 500  | +34 500    |
+| V8     | 30   | T1    | 0.53 | 15 000 | 22 000  | +7 000     |
+| V9     | 40   | T3    | 0.88 | 90 000 | 112 500 | +22 500    |
+| V10    | 50   | T1    | 0.97 | 50 000 | 57 600  | +7 600     |
+
+### 12.5 Coût
+
+Estimation sur les 20 vrais tirages, au même volume d'environ 25 roues par mois :
+
+| Barème                                    | Espérance sur les 20 tirages | Rapport à la Production | Par mois (25 roues) |
+| ----------------------------------------- | ---------------------------- | ----------------------- | ------------------- |
+| Production (grilles telles qu'appliquées) | 421 075                      | ×1                      | ≈ 526 000           |
+| V3 L                                      | 740 117                      | ×1,76                   | ≈ 925 000           |
+| **V3 L1**                                 | **800 617**                  | **×1,90**               | **≈ 1 000 000**     |
+
+- **Base des mois** : celle des droits, c'est-à-dire l'ancienneté réelle confirmée.
+- **Hypothèses** : 20 tirages seulement, et un volume extrapolé. À confirmer sur un mois complet.
+- **Pourquoi c'est plus cher que les estimations précédentes** : la communauté est surtout ancienne, et c'est
+  là que la V3 est la plus généreuse.
+
+### 12.6 Grille définitive proposée (L1, jusqu'à 60 mois)
+
+| Palier | Mois  | Petit (×5) | Moyen (×3) | Bon (×3) | Jackpot (×1) | Moyenne T1 |
+| ------ | ----- | ---------- | ---------- | -------- | ------------ | ---------- |
+| 1      | 1–3   | 3 000      | 4 000      | 5 000    | 6 400        | 4 033      |
+| 2      | 4–6   | 4 500      | 6 000      | 7 500    | 9 600        | 6 050      |
+| 3      | 7–9   | 6 000      | 8 000      | 10 000   | 12 800       | 8 067      |
+| 4      | 10–12 | 7 500      | 10 000     | 12 500   | 16 000       | 10 083     |
+| 5      | 13–15 | 9 000      | 12 000     | 15 000   | 19 200       | 12 100     |
+| 6      | 16–18 | 10 500     | 14 000     | 17 500   | 22 400       | 14 117     |
+| 7      | 19–21 | 12 000     | 16 000     | 20 000   | 25 600       | 16 133     |
+| 8      | 22–24 | 13 500     | 18 000     | 22 500   | 28 800       | 18 150     |
+| 9      | 25–27 | 15 000     | 20 000     | 25 000   | 32 000       | 20 167     |
+| 10     | 28–30 | 16 500     | 22 000     | 27 500   | 35 200       | 22 183     |
+| 11     | 31–33 | 18 000     | 24 000     | 30 000   | 38 400       | 24 200     |
+| 12     | 34–36 | 19 500     | 26 000     | 32 500   | 41 600       | 26 217     |
+| 13     | 37–39 | 21 000     | 28 000     | 35 000   | 44 800       | 28 233     |
+| 14     | 40–42 | 22 500     | 30 000     | 37 500   | 48 000       | 30 250     |
+| 15     | 43–45 | 24 000     | 32 000     | 40 000   | 51 200       | 32 267     |
+| 16     | 46–48 | 25 500     | 34 000     | 42 500   | 54 400       | 34 283     |
+| 17     | 49–51 | 27 000     | 36 000     | 45 000   | 57 600       | 36 300     |
+| 18     | 52–54 | 28 500     | 38 000     | 47 500   | 60 800       | 38 317     |
+| 19     | 55–57 | 30 000     | 40 000     | 50 000   | 64 000       | 40 333     |
+| 20     | 58–60 | 31 500     | 42 000     | 52 500   | 67 200       | 42 350     |
+
+**Au-delà de 60 mois** : chaque palier ajoute un quart du pas habituel (petit +375, moyen +500, bon +625, jackpot +800,
+arrondis à la centaine). La croissance continue sans jamais s'arrêter, environ quatre fois plus lentement.

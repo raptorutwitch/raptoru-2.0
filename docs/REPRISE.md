@@ -184,12 +184,13 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
 
 **En attente d'Antoni** :
 
-- **Roue du Sub V3** (16/11, itération 5, branche locale `design/sub-wheel-v3`) :
+- **Roue du Sub V3** (16/11, itération 6, branche locale `design/sub-wheel-v3`) :
   - faille « resub d'un abonnement offert » **corrigée** (commit `f8f39218`, non déployé ; Core puis bot) ;
-  - roue, languette à 3 h (montant gagnant horizontal), bandeau unique dessous, titres réels, trois palettes ;
-    barème « un palier tous les 3 mois », jackpot T3 de 198 000 à 60 mois, coût ×1,47
-    ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 11 ; maquette locale `prototypes/sub-wheel-v3/roue.html`) ;
-  - en attente : la validation du barème et du rendu par Antoni, puis l'intégration ;
+  - rendu validé (itération 5) ; barème à quatre montants (5/3/3/1) par palier de 3 mois, L1 recommandé :
+    jackpot T3 de 201 600 à 60 mois, coût ≈ ×1,9 sur 20 vrais tirages ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 12) ;
+  - défaut de Production : un « sub » au mois estimé est tiré sur la grille 1–3 mois (2 tirages sur 20) ;
+    correctif à prévoir à l'intégration ;
+  - en attente : la validation d'Antoni avant l'intégration ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
