@@ -777,7 +777,8 @@ Production étaient dans ce cas.
   - remettre le barème sur l'ancienne roue (Studio), ou redéployer le Core précédent : il ignore les nouvelles
     colonnes et tire sur l'ancienne roue ;
   - un tirage V3 rejoué par un ancien Core échouerait à l'animation (`amount_mismatch`), sans aucun nouveau crédit ;
-  - le bot précédent se redéploie seul ;
+  - pour revenir au Core précédent, redéployer **d'abord** le bot précédent (l'ancien Core refuserait `is_gift` et
+    `sub_months`) ;
   - la migration n'a pas besoin d'être annulée.
 
 ### 13.6 Tests

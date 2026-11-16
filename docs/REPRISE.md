@@ -1,25 +1,26 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 15/11/2026** (clôture : Commandes Chat V2.1, sons de commandes immédiats, méthode de travail
-[AGENT_WORKFLOW.md](AGENT_WORKFLOW.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
+**Mis à jour le 16/11/2026** (livraison de la Roue du Sub V3, journal
+[archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md](archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
 
 ## 0. Résumé compact, à copier dans une nouvelle conversation
 
 ```text
-Raptoru 2.0 — reprise au 15/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
-Level Up V2 CLÔTURÉ (15/11, GO d'Antoni) : actif en Production, finitions déployées ; mini-profil fusionné.
-Journaux : docs/archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md, docs/archive/LIVRAISON_2026-11-15_LEVEL_UP_FINITIONS.md ;
-modules : docs/LEVEL_UP_V2.md, docs/MINI_PROFIL.md.
+Raptoru 2.0 — reprise au 16/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
+Roue du Sub V3 DÉPLOYÉE (16/11, mandat d'Antoni) : Core et bot 2c04a5db, migration 20261130130000_sub_wheel_v3 appliquée,
+Studio 0.1.39 publié. Barème V3 PAS ENCORE ACTIF (grid 1) : Antoni installe Studio 0.1.39, puis Roue du Sub › Barème › « Roue V3 ».
+Abonnements offerts exclus et ancienneté jamais prise pour « 1 mois » : actifs dès maintenant (Core + bot).
+Journal : docs/archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md ; module : docs/SUB_WHEEL_V3.md § 13.
 
 Projet : plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
 Règle de partage : le Core décide (données, Jetons, règles, files), le bot LeCroupier_ parle à Twitch (EventSub, chat),
 Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
 aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
 
-Production (relevé du 15/11, clôture) : Core c1da930a, bot d2fd5bb7 (sains), Studio 0.1.38 publié ET installé sur le
-PC (build-info), site inchangé. Dernier code sur main : c1da930a ; ensuite documentation seule (PR #81, #82, clôture).
+Production (relevé du 16/11, 04:47 UTC) : Core 2c04a5db, bot 2c04a5db (sains, un seul bot actif), Studio 0.1.39
+publié, 0.1.38 installé sur le PC, site inchangé. Dernier code sur main : 2c04a5db (PR #84 V3, PR #85 test d'outillage).
 Sons de commandes immédiats : la demande de Studio attend sur le Core (wait_ms) au lieu d'interroger toutes les 2 s ;
 mesuré dans le Lab : 30–120 ms du message reçu par le Core au son joué (avant : + 0 à 2 s d'attente). Pas mesuré
 dans le vrai OBS ni avec le vrai chat Twitch.
@@ -39,7 +40,8 @@ et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE P
 release-inventory/INVENTAIRE-a971386f8c8d.md (95 commits, remplace 7355c44acce2) à valider par Antoni, puis
 npm run package:production -- --shell v2 (--check déjà vert), Hosted Test, revue Twitch. Publique : présumée 0bf7907.
 
-Gestes d'Antoni restants : régler la commande d'Aouh (Déclenchement, Modification déléguée) et essayer en vrai les
+Gestes d'Antoni restants : installer Studio 0.1.39 (« Rechercher une mise à jour »), choisir Roue du Sub › Barème ›
+« Roue V3 », regarder le premier vrai tirage V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et essayer en vrai les
 expressions et la latence ; essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension (sa ligne),
 puis ZIP, Hosted Test, revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md § 15.
 Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
@@ -194,7 +196,9 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
   - nouvelle roue Arcade dans le lecteur d'effets (`wheel-v3.js`) ; Studio installé avant la release : les tirages V3
     s'affichent avec l'ancienne roue (bons montants) ;
   - ordre : sauvegarde, Core (migration `20261130130000_sub_wheel_v3`), bot, release Studio, puis barème V3 ;
-  - à faire par Antoni : installer le nouveau Studio, regarder le premier vrai tirage V3 ;
+  - **déployé le 16/11** : Core et bot `2c04a5db` (PR #84, #85), migration appliquée après sauvegarde (04:41 UTC),
+    Studio 0.1.39 publié ; barème toujours sur l'ancienne roue (`grid` 1) ;
+  - à faire par Antoni : installer Studio 0.1.39, puis Roue du Sub › Barème › « Roue V3 », regarder le premier vrai tirage V3 ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
