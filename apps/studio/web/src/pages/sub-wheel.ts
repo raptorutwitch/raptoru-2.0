@@ -188,7 +188,7 @@ export function mountSubWheelPage(root: HTMLElement) {
       )}</div>
       <div class="whl-acts">
         <button type="button" class="d-btn pri" data-try ${playing ? 'disabled' : ''}>${ic('play')}Essayer ici</button>
-        <button type="button" class="d-btn" data-open="tests">Tester dans OBS</button>
+        <button type="button" class="d-btn" data-act="sw-test-obs" title="Joue cette roue (palier et tier affichés) dans OBS, aucun gain">Tester dans OBS</button>
         ${pick && next ? '<button type="button" class="d-btn ghost" data-follow>Revoir le prochain tour</button>' : ''}
       </div>
       <p class="d-note">L’essai joue la vraie animation et son son sur ce PC : rien n’est tiré, rien n’est crédité.</p>`,
@@ -553,6 +553,25 @@ export function mountSubWheelPage(root: HTMLElement) {
         testBody(),
         'Roue envoyée au lecteur d’effets (aucun gain)',
       ),
+    // Le bouton de la scène : la roue affichée (palier, tier) jouée par le lecteur d'effets, donc par OBS. Il ouvrait
+    // seulement le panneau (« Tests ») : rien ne partait vers OBS.
+    'sw-test-obs': async (el) => {
+      const { months, tier } = shown();
+      if (
+        await streamTestConfirm({
+          title: 'Jouer la roue dans OBS ?',
+          body: `Une roue de test (T${tier}, ${months} mois) passe par le lecteur d’effets : la source OBS la joue sur le stream. Personne n’est tiré, aucun Jeton.`,
+          yes: 'Jouer dans OBS',
+          no: 'Annuler',
+        })
+      )
+        void post(
+          el,
+          '/test',
+          { ...testBody(), tier, months: Math.min(200, months) },
+          'Roue envoyée au lecteur d’effets (aucun gain)',
+        );
+    },
     'sw-full': (el) =>
       post(
         el,
