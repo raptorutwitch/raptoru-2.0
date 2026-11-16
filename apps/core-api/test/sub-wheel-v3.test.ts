@@ -263,6 +263,21 @@ describe('Roue du Sub V3 — the barème of each draw', () => {
     ).toBe(2);
   });
 
+  it('the fallback mode v1 (no confirmed seniority: « sub » = month 1) keeps the legacy barème even with V3 on', async () => {
+    const f = await fixture({ grid: 3, segment: 3 });
+    await f.wheel.setMode(CH, 'v1', 'studio');
+    const r = (await f.receive(subNotice('9703', MIN, { tier: '3000' })))!;
+    expect(await f.row(r.spin_id)).toMatchObject({
+      grid: 1,
+      amount: subWheelAmount(1, 3, 3),
+    });
+    expect((await f.claim()).spin).toMatchObject({
+      spin_id: r.spin_id,
+      grid: 1,
+      amount: subWheelAmount(1, 3, 3),
+    });
+  });
+
   it('the animation receives the viewer (id, Prime, picture, equipped title with its look) — never a gain to compute', async () => {
     const f = await fixture({
       grid: 3,
@@ -451,7 +466,7 @@ describe('Roue du Sub V3 — seniority (never « 1 month » by default)', () => 
     });
   });
 
-  it('a badge below a month already certain is not trusted; Studio confirms by hand (journaled), never a certain month', async () => {
+  it('a badge at or below a month already certain is not trusted; Studio confirms by hand (journaled), never a certain month', async () => {
     const f = await fixture({ grid: 3 });
     const old = (await f.receive(
       notice('9716', -40 * 24 * 60 * MIN, { months: 20 }),
@@ -466,6 +481,15 @@ describe('Roue du Sub V3 — seniority (never « 1 month » by default)', () => 
         { id: '9716', login: 'v9716', name: 'V9716' },
         3,
         'chat-low',
+      ),
+    ).toBeNull();
+    // Equal to the month already certain: a stale badge (it lags behind the renewal), not trusted either.
+    expect(
+      await f.wheel.confirmFromBadge(
+        CH,
+        { id: '9716', login: 'v9716', name: 'V9716' },
+        20,
+        'chat-stale',
       ),
     ).toBeNull();
     expect(await f.row(r.spin_id)).toMatchObject({

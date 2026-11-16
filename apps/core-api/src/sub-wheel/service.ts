@@ -659,10 +659,12 @@ export class SubWheelService {
       /** Twitch time of the event (cutover boundary). */
       occurred_at?: string;
       prime?: boolean;
+      /** The V1 path (mode v1, or no Twitch ID): « sub » = month 1, no confirmed seniority — always the legacy barème. */
+      legacyGrid?: boolean;
     },
   ) {
     const now = this.now();
-    const grid = await this.gridFor(q, s.channel_id, now);
+    const grid = s.legacyGrid ? 1 : await this.gridFor(q, s.channel_id, now);
     const segment = s.enabled
       ? this.draw(subWheelGrid(s.months, grid).length)
       : null;
@@ -821,6 +823,7 @@ export class SubWheelService {
         enabled,
         occurred_at: e.occurred_at,
         prime: e.tier === 'prime',
+        legacyGrid: true,
       });
       const r = ev ? await this.identifyV1(q, row, created, ev) : row;
       if (ev) await adoptOrphans(q, ev, r);
@@ -1188,7 +1191,7 @@ export class SubWheelService {
   /**
    * V3 seniority (§ 13.3): the subscriber badge of a chat message (its cumulative months) confirms the month of the
    * viewer's latest right whose month is only estimated or unknown — never a right already drawn, never below a month
-   * already certain for this viewer (a lower badge is not trusted). Idempotent: the chat message is the proof's key.
+   * already certain for this viewer (a badge at or below it is not trusted). Idempotent: the chat message is the proof's key.
    * Cheap when there is nothing to confirm (one indexed read, no lock).
    */
   async confirmFromBadge(
@@ -1216,8 +1219,10 @@ export class SubWheelService {
         )
       )[0];
       if (!r) return null;
+      // A new right is a later month than every certain one: a badge at or below it is stale (Twitch's chat badge can
+      // lag behind a renewal), never a confirmation — the right keeps waiting (estimated: drawn after the wait).
       const last = await lastCertainMonth(q, channelId, viewer.id);
-      if (last !== null && months < last) return null;
+      if (last !== null && months <= last) return null;
       return this.confirmMonth(q, r, months, 'badge', null, {
         channelId,
         source: 'badge',

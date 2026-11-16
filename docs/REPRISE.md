@@ -184,13 +184,17 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
 
 **En attente d'Antoni** :
 
-- **Roue du Sub V3** (16/11, itération 6, branche locale `design/sub-wheel-v3`) :
-  - faille « resub d'un abonnement offert » **corrigée** (commit `f8f39218`, non déployé ; Core puis bot) ;
-  - rendu validé (itération 5) ; barème à quatre montants (5/3/3/1) par palier de 3 mois, L1 recommandé :
-    jackpot T3 de 201 600 à 60 mois, coût ≈ ×1,9 sur 20 vrais tirages ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 12) ;
-  - défaut de Production : un « sub » au mois estimé est tiré sur la grille 1–3 mois (2 tirages sur 20) ;
-    correctif à prévoir à l'intégration ;
-  - en attente : la validation d'Antoni avant l'intégration ;
+- **Roue du Sub V3** (16/11, mandat de livraison d'Antoni ; [SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 13) :
+  - barème : 12 parts (5 petits, 3 moyens, 3 bons, 1 jackpot), un palier par 3 mois d'ancienneté confirmée,
+    (1 500 · 2 000 · 2 500 · 3 000) × (palier + 1) jusqu'à 60 mois ; Prime / T1 ×1, T2 ×2, T3 ×3 ; jackpot T3 de
+    189 000 à 60 mois ; coût ≈ ×1,9 sur les 20 derniers vrais tirages ;
+  - abonnement offert : jamais de roue (commit `f8f39218`) ; ancienneté inconnue : jamais tirée « à 1 mois », confirmée
+    par le partage, le badge du chat ou Studio ;
+  - barème choisi dans Studio › Roue du Sub › Barème (`sw_settings.grid`) ; un droit acquis avant garde l'ancienne roue ;
+  - nouvelle roue Arcade dans le lecteur d'effets (`wheel-v3.js`) ; Studio installé avant la release : les tirages V3
+    s'affichent avec l'ancienne roue (bons montants) ;
+  - ordre : sauvegarde, Core (migration `20261130130000_sub_wheel_v3`), bot, release Studio, puis barème V3 ;
+  - à faire par Antoni : installer le nouveau Studio, regarder le premier vrai tirage V3 ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
 - la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en

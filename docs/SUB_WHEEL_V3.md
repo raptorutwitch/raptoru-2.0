@@ -710,6 +710,7 @@ bon).
   droit garde l'ancienne roue. Aucune transformation silencieuse d'un tour en attente.
 - **Chaque tirage enregistre son barème** (`sw_spins.grid`) : un tirage rejoué ou relancé garde le sien. Les lignes
   existantes valent 1 : rien n'est recalculé et aucun solde ne change.
+- **Le mode de repli `v1`** (pas d'ancienneté confirmée : un « sub » y vaut 1 mois) tire toujours sur l'ancienne roue.
 
 ### 13.3 Ancienneté
 
@@ -730,8 +731,7 @@ Production étaient dans ce cas.
 - **Les confirmations :**
   - le partage du resub (mois cumulés), qui confirmait déjà un droit estimé dans la fenêtre de 10 min ;
   - **le badge abonné du premier message de chat** (`badges[].info`, le nombre de mois). Le bot le transmet
-    (`chatter.sub_months`), et le module chat de la roue confirme le dernier droit incertain du viewer. Un badge
-    inférieur à un mois déjà certain est ignoré, et le message de chat sert de clé, donc un rejouage ne change rien ;
+    (`chatter.sub_months`), et le module chat de la roue confirme le dernier droit incertain du viewer. Un badge égal ou inférieur au dernier mois certain est ignoré (badge en retard sur le renouvellement), et le message de chat sert de clé, donc un rejouage ne change rien ;
   - **Studio** : le bouton « Confirmer l'ancienneté » de la liste des tours (journalisé `sw_month_confirm`). Un mois
     certain n'est jamais écrasé (`month_certain`).
 - **Les gardes :**
