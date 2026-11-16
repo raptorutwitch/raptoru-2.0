@@ -96,7 +96,7 @@ première section. Prérequis côté Core : la version de Commandes V2.1 déploy
 - e9446708 2026-11-05 feat(extension): H15 hide « Annoncer mes Level Up » while nothing reads it
 - 9e1e3fa2 2026-11-05 fix(economy): P0-2 one Wallet write per intent — Moderation « Créditer / Débiter » and Boutique « Donner »
 - ab0560f3 2026-10-31 fix(extension): « Titres » — a title's full name wraps instead of « … » (panel 318 px)
-- 423623cd 2026-10-30 fix(extension): no raptoru.fr in the extension package (production build guard)
+- 423623cd 2026-10-30 fix(extension): no raptoru[.]fr in the extension package (production build guard)
 - c0e3b284 2026-10-30 feat(halloween): « Titres » in the Événements module — the cosmetic shop's titles bought with Bonbons
 - b13d46f0 2026-10-30 feat(halloween): Bonbons economy (presence, Prime/resub, Bits, donations) and alert variants per family
 - 2f322bf6 2026-10-30 feat(halloween): Halloween alert profile (Miss Minute, Ballon, Jerry) and screamer catalogue cleanup
