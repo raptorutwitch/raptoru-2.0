@@ -110,3 +110,5 @@ première section. Prérequis côté Core : la version de Commandes V2.1 déploy
 - 473ad0b4 2026-10-28 feat(halloween): Studio overlay engine — transparent click-through window, screamer videos, drawn effects, STOP ALL
 - 05e19a44 2026-10-26 feat(sub-wheel): autonomous recovery of wheels never shown, « À vérifier » for wheels perhaps seen, pseudo everywhere
 - 4848b5f5 2026-10-25 feat(sub-wheel): Roue du Sub V2 (R1–R9) integrated on origin/main — production kept, chat origins safe
+
+Validé par Antoni : oui
