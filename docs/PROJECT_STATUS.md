@@ -39,7 +39,8 @@ SAMMI est abandonné depuis le 20/10. Le dépôt est **public** depuis le 28/10 
 
 **Où on en est (16/11)** :
 
-- Production : Core **`2c04a5db`**, bot **`2c04a5db`** (sains), Studio **0.1.39** publié, **0.1.38** installé.
+- Production : Core **`2c04a5db`**, bot **`2c04a5db`** (sains), Studio **0.1.40** publié, **0.1.39** installé ; barème V3
+  actif depuis le 16/11 10:22 UTC.
 - Livré le 16/11 : **Roue du Sub V3** (barème à 4 montants par palier de 3 mois, abonnements offerts exclus, ancienneté
   confirmée, roue Arcade) — barème V3 activé par Antoni dans Studio 0.1.39 ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 13).
 - Livré le 15/11 :
@@ -88,7 +89,7 @@ SAMMI est abandonné depuis le 20/10. Le dépôt est **public** depuis le 28/10 
 | Bot `raptoru-bot` (Coolify, VPS)   | **`2c04a5db`** (Roue du Sub V3 : `is_gift`, `sub_months`, 16/11) ; bail actif vu par le Core                                                                               | `status bot` le 16/11                                    | `d2fd5bb7`                                          |
 | Variable Core                      | `MUSIC_HUB_EXTENSION=testers:1239040922` (LeCroupier_ ; le diffuseur est toujours inclus)                                                                                  | livraison du 10/11                                       | `off`, puis redémarrage du Core                     |
 | Base PostgreSQL 17                 | sauvegarde Coolify quotidienne ; sauvegarde manuelle le 16/11 à 04:41 UTC (9 744 425 octets), avant la migration de la Roue V3                                             | API Coolify le 16/11                                     | [BACKUPS.md](BACKUPS.md)                            |
-| Studio installé (PC)               | **0.1.38** (`c1da930a`) ; **0.1.39** publiée le 16/11 04:55 UTC depuis `2c04a5db`, à installer par Antoni                                                                  | `build-info.json` lu le 16/11                            | réinstaller 0.1.38 (release publique)               |
+| Studio installé (PC)               | **0.1.39** (`2c04a5db`) ; **0.1.40** publiée le 16/11 11:26 UTC depuis `3e27f454` (« Tester dans OBS » de la Roue), à installer par Antoni                                 | `build-info.json` lu le 16/11                            | réinstaller 0.1.39 (release publique)               |
 | Site raptoru.fr                    | `74f7542`                                                                                                                                                                  | `https://raptoru.fr/api/status` le 10/11                 | redéployer `542b1f2`                                |
 | Extension **publique**             | **non prouvée**, présumée `0bf7907` (shell legacy, 22/10) ; ZIP de `0bf7907` introuvable sur le disque                                                                     | `apps/twitch-extension/PUBLISHED`                        | console Twitch                                      |
 | Extension **Hosted Test**          | dernier connu : ZIP `bbce1048a078` shell v2 (10/11, Antoni) ; la version suivante (inventaire `a971386f8c8d`, 95 commits) n'a ni ligne de validation ni ZIP au 15/11       | [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3     | ancien ZIP `5ee8623` conservé                       |

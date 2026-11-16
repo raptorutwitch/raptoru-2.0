@@ -759,7 +759,7 @@ Production étaient dans ce cas.
 - **Habillage** : palette déterministe (FNV-1a de l'identifiant Twitch), flèche à 3 h et montant gagnant horizontal,
   bandeau unique (identité, puis gain). Position et taille : en bas à droite, comme l'ancienne roue.
 - **Studio** : choix du barème, confirmation de l'ancienneté, aperçu V3 (gains du palier, vrai rendu dans « Essayer »).
-  - « Tester dans OBS » (16/11, après 0.1.39, pas encore publié) envoie la roue affichée (palier, tier) au lecteur
+  - « Tester dans OBS » (Studio 0.1.40, 16/11) envoie la roue affichée (palier, tier) au lecteur
     d'effets par la route de test, aucun gain ; jusqu'à 0.1.39, il ouvrait seulement le panneau « Tests ».
 - **Politique de sécurité du lecteur** : `img-src` autorise le seul CDN Twitch, `font-src 'self'`.
 
