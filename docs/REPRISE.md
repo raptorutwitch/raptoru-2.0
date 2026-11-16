@@ -37,14 +37,16 @@ groupée sur 5 min (8 pseudos), sans @ ; un seul son par annonce, 3 s avant le b
 nommé l'a activé. Pseudos du classement repris de Twitch par l'identifiant (0 numérique). Studio › Level Up : réglages,
 « Viewers avec son activé », « Pseudos du classement », vraie annonce [TEST] sur confirmation.
 Extension : mini-profil (avatar, Jetons/Crédits, niveau et rang, abonnement et multiplicateur, restrictions, Préférences)
-et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE PUBLIC : inventaire
-release-inventory/INVENTAIRE-a971386f8c8d.md (95 commits, remplace 7355c44acce2) à valider par Antoni, puis
-npm run package:production -- --shell v2 (--check déjà vert), Hosted Test, revue Twitch. Publique : présumée 0bf7907.
+et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE PUBLIC : inventaire a971386f8c8d
+(95 commits) validé par Antoni le 16/11 ; ZIP construit le 16/11 :
+raptoru-live-PRODUCTION-be1744e75f63-depuis-0bf7907-95-commits-shell-v2.zip (SHA-256 1e60fa0b…72375, dans
+Worktrees\agent\apps\twitch-extension\release\) ; reste Hosted Test (Antoni), revue Twitch. Publique : présumée 0bf7907.
 
 Gestes d'Antoni restants : installer Studio 0.1.40 (« Rechercher une mise à jour »), regarder le premier vrai tirage
 V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et essayer en vrai les
-expressions et la latence ; essayer « Envoyer une vraie annonce test » ; valider l'inventaire de l'extension (sa ligne),
-puis ZIP, Hosted Test, revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md § 15.
+expressions et la latence ; essayer « Envoyer une vraie annonce test » ; téléverser le ZIP be1744e75f63 en Hosted Test
+(jamais pendant un live), l'essayer, puis la revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md
+§ 15 ; choisir les directions du casino (prototypes/casino-directions, hors dépôt).
 Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
@@ -204,9 +206,9 @@ immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS
     OBS (avant : il ouvrait seulement le panneau « Tests ») ; à installer par Antoni ;
 - « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
 - régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
-- la ligne de validation de l'inventaire de l'extension (`INVENTAIRE-a971386f8c8d.md`, 95 commits : Commandes V2.1 en
-  plus de Level Up V2 et du mini-profil), puis la publication. Il remplace les inventaires non validés
-  `7355c44acce2`, `4799eb697eee` et `bb8700814939`.
+- l'extension : inventaire `INVENTAIRE-a971386f8c8d.md` (95 commits : Commandes V2.1 en plus de Level Up V2 et du
+  mini-profil) **validé par Antoni le 16/11**, ZIP `be1744e75f63` construit
+  ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.0) ; reste le Hosted Test (Antoni, hors live), puis la revue.
 
 **En Production** : tous les modules de [ROADMAP.md](ROADMAP.md) § 1 marqués « Livré ». Music Hub y est **seulement
 pour les testeurs**. Le public garde l'extension présumée `0bf7907` (shell legacy) : ni le mini-profil, ni
