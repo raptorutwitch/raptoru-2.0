@@ -77,6 +77,21 @@ export function badgeSets(badges: unknown): string[] {
     .slice(0, 20);
 }
 
+/**
+ * The cumulative months a chatter's subscriber (or founder) badge shows — Twitch's badge `info` (« the number of months
+ * the user has been a subscriber »). The Roue du Sub V3 confirms an uncertain seniority with it; absent otherwise.
+ */
+export function subMonths(badges: unknown): number | undefined {
+  if (!Array.isArray(badges)) return undefined;
+  for (const set of ['subscriber', 'founder'])
+    for (const b of badges as { set_id?: unknown; info?: unknown }[]) {
+      if (b?.set_id !== set) continue;
+      const n = Number(String(b.info ?? '').trim());
+      if (Number.isInteger(n) && n >= 1 && n <= 1000) return n;
+    }
+  return undefined;
+}
+
 /** Twitch badges → the role Core will check (Core decides the effective role). */
 export function chatRole(
   badges: unknown,
@@ -204,6 +219,9 @@ export function createLabChatIngest(d: LabChatIngestDeps) {
               ),
               role: chatRole(event.badges),
               badges: badgeSets(event.badges),
+              ...(subMonths(event.badges) !== undefined
+                ? { sub_months: subMonths(event.badges) }
+                : {}),
             },
             source: 'twitch',
           });

@@ -9,7 +9,9 @@ import {
   SwAnimationReport,
   SwAwardUpdate,
   SwGrantInput,
+  SwGridInput,
   SwModeInput,
+  SwMonthsConfirm,
   SwRedrawInput,
   SwReviewResolve,
   SwSettingsInput,
@@ -109,6 +111,38 @@ export function subWheelRoutes(
             installation ? `installation:${installation}` : 'studio',
           ),
         ),
+    },
+    {
+      // V3 barème (1 = legacy SAMMI wheel, 3 = V3): the broadcaster's Studio only, journaled. A right acquired before
+      // the switch keeps the barème of its time (docs/SUB_WHEEL_V3.md § 13.2).
+      method: 'POST',
+      pattern: at('/(\\d{1,32})/grid'),
+      auth,
+      handle: ({ params, body, installation }) =>
+        mapped(() =>
+          wheel.setGrid(
+            channel(params[0]!),
+            parse(SwGridInput, body).grid,
+            installation ? `installation:${installation}` : 'studio',
+          ),
+        ),
+    },
+    {
+      // V3 « Confirmer l'ancienneté » (Studio, the broadcaster; journaled): a right whose month is not certain (§ 13.3).
+      method: 'POST',
+      pattern: at(`/spins/${uuid}/months`),
+      auth,
+      handle: ({ params, body, installation }) => {
+        const b = parse(SwMonthsConfirm, body);
+        return mapped(() =>
+          wheel.confirmMonthByHand(
+            params[0]!,
+            b.months,
+            installation ? `installation:${installation}` : 'studio',
+            b.note,
+          ),
+        );
+      },
     },
     {
       // R3: the rights not drawn yet (queues, presence, reviews).
@@ -281,6 +315,19 @@ export function subWheelRoutes(
                 out.subscribe = await wheel.acquire(evidence('subscribe', 500));
               if (e.kind === 'resub' || e.kind === 'message')
                 out.message = await wheel.acquire(evidence('message', 1_000));
+              // V3 seniority (docs/SUB_WHEEL_V3.md § 13.3): a « sub » carries no cumulative months; `months` on a sub /
+              // Prime / subscribe simulates the viewer then chatting with its subscriber badge (which confirms them).
+              if (e.kind !== 'resub' && e.kind !== 'message' && e.months)
+                out.badge = await wheel.confirmFromBadge(
+                  ch,
+                  {
+                    id: viewer.id,
+                    login: viewer.login,
+                    name: viewer.display_name,
+                  },
+                  e.months,
+                  `lab-badge-${randomUUID()}`,
+                );
               return out;
             },
           },

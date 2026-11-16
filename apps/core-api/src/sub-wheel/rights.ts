@@ -13,10 +13,18 @@ export type SwSource =
   | 'chat_notification'
   | 'subscribe'
   | 'message'
+  /** V3: the subscriber badge of a chat message (its cumulative months). */
+  | 'badge'
   /** R7: a Helix subscribers snapshot (never a certain month). */
   | 'reconcile';
 export type MonthSource =
-  'twitch' | 'estimated' | 'estimated_no_history' | 'badge' | 'legacy';
+  | 'twitch'
+  | 'estimated'
+  | 'estimated_no_history'
+  | 'badge'
+  | 'legacy'
+  /** V3: confirmed by hand in Studio (« Confirmer l'ancienneté »), `confirmed_by` says who. */
+  | 'manual';
 
 /** One Twitch event announcing a subscription month. */
 export interface SwEvidence {
@@ -32,6 +40,8 @@ export interface SwEvidence {
   /** Twitch's cumulative months when the event carries them (certain), else null. */
   months: number | null;
   isGift: boolean;
+  /** V3: a Prime sub (Twitch's chat notice says so): paid as T1, shown « PRIME ». */
+  prime?: boolean;
   alertId?: string | null;
 }
 

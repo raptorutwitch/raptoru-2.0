@@ -155,6 +155,8 @@ export function normalizeAlertEvent(
             ...(num(sub.cumulative_months) !== undefined
               ? { months: num(sub.cumulative_months) }
               : {}),
+            // The share of a gifted sub: still an alert, never a Roue du Sub (the Core reads this flag).
+            ...(sub.is_gift === true ? { is_gift: true } : {}),
           }
         : null;
     }

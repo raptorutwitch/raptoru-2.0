@@ -121,6 +121,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261128130000_cmd_sounds.sql',
   // Commands V2 delegated editors: the history accepts the author « editor »; Lab twin 20261129120000.
   '20261129130000_cmd_delegated_editors.sql',
+  // Roue du Sub V3: the barème of each draw (grid), seniority confirmed by hand; Lab twin 20261130120000.
+  '20261130130000_sub_wheel_v3.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -243,6 +245,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261128120000_cmd_sounds_lab.sql',
   // Commands V2 delegated editors: the Lab twin of 20261129130000_cmd_delegated_editors.sql (same content).
   '20261129120000_cmd_delegated_editors_lab.sql',
+  // Roue du Sub V3: the Lab twin of 20261130130000_sub_wheel_v3.sql (same content).
+  '20261130120000_sub_wheel_v3_lab.sql',
 ]);
 
 /**

@@ -5,7 +5,11 @@
 // Opt-in: TEST_DATABASE_URL=postgres://…@127.0.0.1:…/…test… npm run test:integration
 // The database is wiped: only local URLs to a database whose name contains "test" are accepted.
 import { randomUUID } from 'node:crypto';
-import type { AlertEventInput, LoyaltyEvent } from '@raptoru/schemas';
+import {
+  type AlertEventInput,
+  type LoyaltyEvent,
+  SUB_WHEEL,
+} from '@raptoru/schemas';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPgDb, type Db } from '../src/db/db.js';
 import { migrate } from '../src/db/migrate.js';
@@ -240,8 +244,10 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R3, real Postgres', () => {
       });
     }
     await a.query("update sw_spins set queue = 'auto' where status = 'owed'");
-    await reading(vs, 60_000);
-    clock.set(at(90_000));
+    // V3 (docs/SUB_WHEEL_V3.md § 13.3): an estimated month is drawn once its confirmation wait is over.
+    const wait = SUB_WHEEL.monthConfirmMs;
+    await reading(vs, wait + 60_000);
+    clock.set(at(wait + 90_000));
     const slowA = wheel(
       tampered(a, { delayOn: [/insert into wallet_operations/, 400] }),
     );

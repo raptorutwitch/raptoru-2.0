@@ -1,6 +1,7 @@
 import {
   choiceBox,
   confirmBox,
+  numberBox,
   copy,
   errText,
   ic,
@@ -157,14 +158,17 @@ export function mountSubWheelPage(root: HTMLElement) {
         tier,
       ),
     );
+    const grid = state?.settings.grid ?? 1;
     const wheel = z('wheel');
-    if (wheel.dataset.band !== bandOf(months)) {
-      wheel.dataset.band = bandOf(months);
+    const key = `${grid}:${grid === 3 ? months : bandOf(months)}`;
+    if (wheel.dataset.band !== key) {
+      wheel.dataset.band = key;
       part = null;
-      patch(wheel, wheelSvg(months));
+      patch(wheel, wheelSvg(months, grid));
     }
-    patch(z('hub'), tier > 1 ? `×${tier}` : '');
-    patch(z('gains'), gainsView(months, tier));
+    // V3 : le moyeu ne montre que le tier ; l'ancienne roue, le multiplicateur.
+    patch(z('hub'), grid === 3 ? `T${tier}` : tier > 1 ? `×${tier}` : '');
+    patch(z('gains'), gainsView(months, tier, grid));
     paintPart();
     patch(
       z('ctl'),
@@ -343,15 +347,20 @@ export function mountSubWheelPage(root: HTMLElement) {
     const box = z('box');
     playing = true;
     btn.toggleAttribute('disabled', true);
-    z('real').style.zoom = String(box.clientWidth / 392);
+    const grid = state?.settings.grid ?? 1;
+    z('real').style.zoom = String(box.clientWidth / (grid === 3 ? 420 : 392));
     box.classList.add('whl-playing');
     try {
-      await playReal(z('real'), {
-        months,
-        tier,
-        name: !pick && next ? next.viewer.name : 'Aperçu',
-        part: part ?? Math.floor(Math.random() * count),
-      });
+      await playReal(
+        z('real'),
+        {
+          months,
+          tier,
+          name: !pick && next ? next.viewer.name : 'Aperçu',
+          part: part ?? Math.floor(Math.random() * count),
+        },
+        grid,
+      );
     } catch (e) {
       toast(`Essai impossible : ${(e as Error).message}`, { bad: true });
     }
@@ -481,6 +490,47 @@ export function mountSubWheelPage(root: HTMLElement) {
         { seconds },
         `Délai d’annonce du gain : ${seconds} s`,
       );
+    },
+    'sw-grid': async (el) => {
+      const grid = Number(el.dataset.grid) === 3 ? 3 : 1;
+      if (!state || grid === (state.settings.grid ?? 1)) return;
+      if (
+        await confirmBox({
+          title:
+            grid === 3 ? 'Activer la roue V3 ?' : 'Revenir à l’ancienne roue ?',
+          body:
+            grid === 3
+              ? 'Les tours acquis à partir de maintenant seront tirés sur la roue V3 (4 montants par palier de 3 mois). Les tours déjà acquis gardent l’ancienne roue ; les gains déjà versés ne changent pas.'
+              : 'Les tours acquis à partir de maintenant seront tirés sur l’ancienne roue SAMMI. Les tirages déjà faits gardent leur barème.',
+          yes: grid === 3 ? 'Activer la V3' : 'Revenir à l’ancienne roue',
+          no: 'Annuler',
+          danger: false,
+        })
+      )
+        void post(
+          el,
+          '/grid',
+          { grid },
+          grid === 3 ? 'Roue V3 activée' : 'Ancienne roue rétablie',
+        );
+    },
+    'sw-months': async (el) => {
+      const months = await numberBox({
+        title: `Ancienneté de ${el.dataset.name ?? 'ce viewer'}`,
+        body: 'Le nombre réel de mois d’abonnement cumulés (visible sur le badge Twitch du viewer). La roue sera tirée sur ce palier ; c’est journalisé.',
+        label: 'Mois cumulés',
+        value: el.dataset.month ? Number(el.dataset.month) : null,
+        min: 1,
+        max: 1000,
+        yes: 'Confirmer',
+      });
+      if (months !== null)
+        void post(
+          el,
+          `/spins/${el.dataset.spin}/months`,
+          { months },
+          `Ancienneté confirmée : ${months} mois`,
+        );
     },
     'sw-mode': async (el) => {
       const mode = el.dataset.mode as SwMode;

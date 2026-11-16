@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   chatRole,
   createLabChatIngest,
+  subMonths,
   coreRefusal,
   transient,
 } from '../src/lab-chat-ingest.js';
@@ -223,6 +224,48 @@ describe('Lab chat ingestion (Twitch → Lab Core, every module)', () => {
       ingest.handlers.notification('channel.chat.message', chat(), 'e-1', 't'),
     ).resolves.toBeUndefined();
     ingest.close(); // its background retry (ASTRA-P1-002) is not part of this test
+  });
+
+  it('Roue du Sub V3: the subscriber / founder badge info gives the cumulative months, forwarded to Core; none otherwise', async () => {
+    expect(subMonths([{ set_id: 'subscriber', id: '36', info: '40' }])).toBe(
+      40,
+    );
+    expect(
+      subMonths([
+        { set_id: 'vip', id: '1' },
+        { set_id: 'founder', id: '0', info: '7' },
+      ]),
+    ).toBe(7);
+    expect(
+      subMonths([{ set_id: 'subscriber', id: '0', info: '' }]),
+    ).toBeUndefined();
+    expect(
+      subMonths([{ set_id: 'subscriber', id: '0', info: 'abc' }]),
+    ).toBeUndefined();
+    expect(subMonths([{ set_id: 'premium', info: '12' }])).toBeUndefined();
+    expect(subMonths(undefined)).toBeUndefined();
+    const { ingest, calls } = setup();
+    await ingest.handlers.notification(
+      'channel.chat.message',
+      chat({
+        message_id: 'm-9',
+        badges: [{ set_id: 'subscriber', id: '36', info: '40' }],
+      }),
+      'e-9',
+      't',
+    );
+    await ingest.handlers.notification(
+      'channel.chat.message',
+      chat({ message_id: 'm-10' }),
+      'e-10',
+      't',
+    );
+    const bodies = calls
+      .filter((c) => c.path === '/v1/lab/chat')
+      .map((c) => c.body.chatter as Record<string, unknown>);
+    expect(bodies[0]).toMatchObject({ badges: ['subscriber'], sub_months: 40 });
+    expect(bodies[1]).not.toHaveProperty('sub_months');
+    ingest.close();
   });
 
   it('badges → role', () => {

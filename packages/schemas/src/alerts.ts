@@ -82,6 +82,11 @@ export const AlertEventInput = z.strictObject({
   community_gift_id: z.string().min(1).max(128).optional(),
   tier: z.enum(['1000', '2000', '3000', 'prime']).optional(),
   months: z.number().int().min(0).max(1000).optional(),
+  /**
+   * A resub shared by the recipient of a GIFTED sub (Twitch `resub.is_gift`): nobody paid this month themselves, so it
+   * never spins the Roue du Sub (decision of 16/11/2026). Absent: a paid renewal (or not a resub).
+   */
+  is_gift: z.boolean().optional(),
   bits: z.number().int().min(1).max(10_000_000).optional(),
   viewers: z.number().int().min(0).max(10_000_000).optional(),
   /** Donation amount in minor units (value / 10^decimal_place). */

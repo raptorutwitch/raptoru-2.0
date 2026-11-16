@@ -15,7 +15,8 @@
 //   variants), the phrase with both names shown at show_at / hidden at hide_at (slide 0.3 s); ends at the video's end or
 //   duration + 800 ms (the legacy watchdog), whichever first;
 // - flop (Random Ban V2): the trumpet and « X a flop cheh ! » (the legacy OBS text source: fade in, 2 s, fade out);
-// - wheel (Roue du Sub): the legacy wheel (wheel.js), showing the spin Core recorded; done once it slid out;
+// - wheel (Roue du Sub): the V3 wheel (wheel-v3.js) for a V3 draw, else the legacy one (wheel.js), showing the spin
+//   Core recorded; done once it left the screen;
 // - music (Music Hub V2): a brief card (« Nouvelle demande » / « À l'écoute », title, artist, requester) in a corner,
 //   slid in and out, with an optional short alert sound — never the music itself; done when the card left.
 //
@@ -401,8 +402,9 @@ function wheelElement(effect) {
   el.load = () => {};
   el.play = () => {
     el.dispatchEvent(new Event('playing'));
-    // Loaded only for a wheel: the other effects never depend on it.
-    import('./wheel.js')
+    // Loaded only for a wheel: the other effects never depend on it. A V3 draw (grid 3) plays the V3 wheel; every other
+    // one — a draw of the legacy barème, an older Core — the legacy wheel.
+    import(effect.wheel.spin?.grid === 3 ? './wheel-v3.js' : './wheel.js')
       .then(({ playWheel }) =>
         playWheel(stage, effect.wheel.spin, effect.wheel.sounds),
       )

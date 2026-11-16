@@ -1350,6 +1350,14 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
   // take it over. Rule: sub / resub in live + wheel on = present, the wheel goes normally.
   const sub = (viewer: string, ms: number) =>
     notice(viewer, ms, { type: 'sub', months: undefined });
+  /** V3 (docs/SUB_WHEEL_V3.md § 13.3): a « sub » carries no seniority; a new subscriber's chat badge says 1 month. */
+  const newSubChats = (f: { wheel: SubWheelService }, viewer: string) =>
+    f.wheel.confirmFromBadge(
+      CH,
+      { id: viewer, login: `v${viewer}`, name: `V${viewer}` },
+      1,
+      `chat-${viewer}`,
+    );
 
   it('sub, resub, Prime resub: drawn at the next wheel with NO chatters reading at all (presence unknown)', async () => {
     const f = await fixture();
@@ -1357,6 +1365,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     await f.live('s1', 0);
     f.at0(MIN);
     const a = (await f.receive(sub('9501', MIN)))!;
+    await newSubChats(f, '9501');
     const b = (await f.receive(notice('9502', MIN)))!;
     const c = (await f.receive(
       notice('9503', MIN, { tier: 'prime', months: 4 }),
@@ -1393,7 +1402,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     expect((await f.claim()).spin?.spin_id).toBe(r.spin_id);
   });
 
-  it('a resub that only reached us through its EventSub message (no chat notice): one right, drawn once; the notice later is the same right', async () => {
+  it('a resub that only reached us through its EventSub message (no chat notice): one right, drawn once 20 s after (time for its notice: alert first, gift check), the notice later is the same right', async () => {
     const f = await fixture();
     await f.v2();
     await f.live('s1', 0);
@@ -1406,6 +1415,9 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
       tier: 't1',
       cumulativeMonths: 9,
     } as LoyaltyEvent);
+    // 16/11/2026: a right without its chat notice waits 20 s for it (a gifted share would void it).
+    expect((await f.claim()).spin).toBeNull();
+    f.at0(MIN + SUB_WHEEL.afterAlertMaxMs + 1);
     const { spin } = await f.claim();
     expect(spin).toMatchObject({ name: 'V9501' });
     await f.done(spin!.spin_id);
@@ -1421,6 +1433,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     await f.live('s1', 0);
     f.at0(MIN);
     const r = (await f.receive(sub('9501', MIN)))!;
+    await newSubChats(f, '9501');
     f.at0(2 * MIN);
     await f.wheel.setInvitations(CH, false, 'test');
     await f.wheel.setAnnounceDelay(CH, 5, 'test');
@@ -1431,6 +1444,7 @@ describe('Roue du Sub V2 — live feedback 29/10: a sub received in live with th
     // Counter-proof: an OFF → ON switch IS the boundary — a sub received before it waits for its presence.
     await f.done(r.spin_id);
     const before = (await f.receive(sub('9502', 3 * MIN)))!;
+    await newSubChats(f, '9502');
     f.at0(4 * MIN);
     await f.wheel.setEnabled(CH, false);
     await f.wheel.setEnabled(CH, true);

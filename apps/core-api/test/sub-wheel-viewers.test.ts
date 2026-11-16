@@ -240,18 +240,24 @@ describe('Roue du Sub V2 — Lab end to end (simulators, player, Lab wallet)', (
     expect(
       (await l.call<{ settings: { lab: boolean } }>(`${l.sw}/state`)).settings,
     ).toMatchObject({ lab: true });
-    // A new sub, as Twitch sends it: the chat notice and channel.subscribe — one tour, two proofs, auto (in live).
-    await l.call(`${l.sw}/lab/simulate`, { kind: 'sub', viewer: ana, tier: 2 });
+    // A new sub, as Twitch sends it: the chat notice and channel.subscribe — one tour, two proofs, auto (in live); then
+    // she chats with her new subscriber badge (1 month: V3 never takes an unknown seniority for 1 month by default).
+    await l.call(`${l.sw}/lab/simulate`, {
+      kind: 'sub',
+      viewer: ana,
+      tier: 2,
+      months: 1,
+    });
     await l.playAlerts();
     let rights = await l.call<Record<string, unknown>[]>(`${l.sw}/rights`);
     expect(rights).toHaveLength(1);
     expect(rights[0]).toMatchObject({
       status: 'owed',
       presence: 'unknown',
-      sources: ['chat_notification', 'subscribe'],
+      sources: ['chat_notification', 'subscribe', 'badge'],
       right: {
         queue: 'auto',
-        month_source: 'estimated_no_history',
+        month_source: 'badge',
         sub_month: 1,
       },
     });
@@ -287,7 +293,12 @@ describe('Roue du Sub V2 — Lab end to end (simulators, player, Lab wallet)', (
     rights = await l.call(`${l.sw}/rights`);
     expect(rights).toEqual([]);
     // Live feedback 29/10: Bob subscribes in live, wheel on — drawn although the readings say he is absent.
-    await l.call(`${l.sw}/lab/simulate`, { kind: 'sub', viewer: bob, tier: 1 });
+    await l.call(`${l.sw}/lab/simulate`, {
+      kind: 'sub',
+      viewer: bob,
+      tier: 1,
+      months: 1,
+    });
     await l.playAlerts();
     expect(
       (await l.call<Record<string, unknown>[]>(`${l.sw}/rights`))[0],
