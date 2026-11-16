@@ -56,8 +56,14 @@ const V2 = readdirSync(allDir)
     (f) => /^20261109\d+_sub_wheel_v2.*\.sql$/.test(f) && !/_lab\.sql$/.test(f),
   )
   .sort();
+// Production as of 26/10: the files that build on V2 (Roue du Sub V3, 16/11: it widens V2's month_source check) did
+// not exist yet — the scenario's own tree stops before them (else the « before V2 » database could not even migrate).
+const AFTER_V2 = readdirSync(allDir).filter((f) => /_sub_wheel_v3/.test(f));
+const v2Dir = join(tmp, 'v2');
+cpSync(allDir, v2Dir, { recursive: true });
+for (const f of AFTER_V2) rmSync(join(v2Dir, f));
 const beforeV2Dir = join(tmp, 'before-v2');
-cpSync(allDir, beforeV2Dir, { recursive: true });
+cpSync(v2Dir, beforeV2Dir, { recursive: true });
 for (const f of V2) rmSync(join(beforeV2Dir, f));
 const sql = (f) => readFileSync(join(allDir, f), 'utf8');
 let n = 0;
@@ -81,10 +87,10 @@ async function database(dir = beforeDir) {
     exec: (q) => c.query(q),
     rows: async (q) => (await c.query(q)).rows,
     close: () => c.end(),
-    verify(expected) {
+    verify(expected, filesDir = allDir) {
       const r = spawnSync('sh', ['-c', verifierCommand(expected, 'prod')], {
         cwd: ROOT,
-        env: { ...env, MIGRATIONS_DIR: allDir },
+        env: { ...env, MIGRATIONS_DIR: filesDir },
         encoding: 'utf8',
       });
       const line = r.stdout
@@ -280,7 +286,7 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
       await partial.exec(
         `begin; ${V2.slice(0, -1).map(sql).join('\n')} commit;`,
       );
-      const refused = partial.verify(V2);
+      const refused = partial.verify(V2, v2Dir);
       assert.equal(refused.ok, false);
       assert.match(refused.problems.join(), /modifierait public\.sw_spins/);
       assert.deepEqual(refused.applied, []);
@@ -288,11 +294,11 @@ describe('pre-applied migrations, verified on a real PostgreSQL 17', () => {
       await partial.close();
       const db = await database(beforeV2Dir);
       await db.exec(`begin; ${V2.map(sql).join('\n')} commit;`);
-      const r = db.verify(V2);
+      const r = db.verify(V2, v2Dir);
       assert.equal(r.ok, true, JSON.stringify(r.problems));
       assert.deepEqual(r.conforming, V2);
       assert.deepEqual(r.applied, V2);
-      assert.deepEqual(db.verify(V2).recorded, V2);
+      assert.deepEqual(db.verify(V2, v2Dir).recorded, V2);
       await db.close();
     },
   );
