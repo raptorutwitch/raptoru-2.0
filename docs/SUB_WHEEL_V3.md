@@ -1,11 +1,11 @@
 # Roue du Sub V3 : barème et rendu
 
-**Statut (16/11/2026) : itération 4, en attente de validation finale.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
+**Statut (16/11/2026) : itération 5, en attente de validation du barème et du rendu.** Correctif « abonnements offerts » commité en local (§ 8, non déployé). Le
 rendu et le barème restent des propositions ; aucun gain réel n'a changé.
 Maquettes non branchées et **locales** (`prototypes/` est exclu de Git par `.git/info/exclude`), dans
 `Documents\Raptoru 2.0 - Worktrees\agent\prototypes\sub-wheel-v3\` :
 
-- `roue.html` : **itération 4, la roue retenue avec son bandeau unique** (§ 10 ; l'itération 3 du § 9 est remplacée) ;
+- `roue.html` : **itération 5** (§ 11 ; remplace les itérations 3 et 4 des § 9 et 10) ;
 - `arcade.html` : itération 2, les trois mécanismes Arcade (§ 6) ;
 - `index.html` : itération 1, quatre directions (§ 4).
 
@@ -418,3 +418,85 @@ Dans la maquette, le sélecteur propose aussi « Auto » et « Les trois côte �
 - **Recommandation : les tranches de 3 mois**, qui correspondent à la progression régulière demandée pour environ
   10 % de coût en plus. Pour garder le coût ×1,95, il suffit de baisser les montants de référence d'environ 10 %. Le
   barème définitif reste à valider séparément.
+
+## 11. Itération 5 : languette à 3 h, paliers de 3 mois (16/11)
+
+**Ce qui change dans la maquette `roue.html`.** Le bandeau est inchangé : sous la roue, avec deux états exclusifs
+(identité, puis gain). Les palettes et les 12 lampes sont inchangées.
+
+- **Languette à 3 h**, à droite de la roue et pointée vers l'intérieur.
+- **Point d'arrêt** : le tirage s'arrête sur l'angle écran 90° exact, sans décalage aléatoire.
+- **Montants des parts** : ils sont écrits dans le sens du rayon (rotation i·30° − 90°). À l'arrêt, le montant
+  gagnant est donc **horizontal**, lu de gauche à droite, en face de la languette.
+- **Contrôle chiffré en 1080p** : le centre du montant et celui de la languette sont à la même hauteur au pixel près,
+  la boîte du texte est plus large que haute, et le montant ne touche pas la languette.
+- **Retiré** : le sélecteur de barème.
+
+**Barème proposé : un palier tous les 3 mois.**
+
+- **Palier** : les mois réels arrondis au trimestre supérieur (1–3 mois : palier 1, 4–6 : palier 2…).
+- **Grille** : 12 parts de même chance, fixes dans un palier. Grille du palier p = référence (600 · 800 · 1 000 ·
+  1 200 · 1 500 · 1 800 · 2 000 · 2 400 · 2 800 · 3 300 · 4 000 · 5 500) × p^0,83.
+- **Arrondi** : à la centaine sous 20 000, au demi-millier au-dessus.
+- **Tier** : il multiplie le lot (Prime / T1 ×1, T2 ×2, T3 ×3).
+- **Cible tenue** : jackpot de 66 000 en T1 à 60 mois, soit **198 000 en T3**.
+- **Progression** : chaque palier relève le minimum, la moyenne et le jackpot (vérifié jusqu'à 180 mois). La hausse
+  est de plus en plus douce : jackpot +78 % au palier 2, +43 %, +27 %… +7 % au palier 12, +5 % au palier 20, +3 %
+  vers 10 ans. Au-delà de 60 mois, la croissance continue à ce rythme (environ 270 000 en T3 à 90 mois, 330 000 à
+  120 mois) ; on peut la ralentir encore si besoin.
+- La grille de référence est plus resserrée que celle de l'itération 4 : un minimum plus haut, un jackpot moins
+  extrême par rapport à la moyenne. Ce sont des gains réguliers plutôt que spectaculaires.
+
+| Mois | Palier | T1 min / moy. / max     | T3 min / moy. / max       | SAMMI moy. T1 / T3 | Écart moy. |
+| ---- | ------ | ----------------------- | ------------------------- | ------------------ | ---------- |
+| 3    | 1      | 600 / 2 200 / 5 500     | 1 800 / 6 700 / 16 500    | 1 400 / 4 200      | +59 %      |
+| 6    | 2      | 1 100 / 4 000 / 9 800   | 3 300 / 12 000 / 29 400   | 1 700 / 5 200      | +132 %     |
+| 12   | 4      | 1 900 / 7 100 / 17 400  | 5 700 / 21 200 / 52 200   | 5 000 / 14 900     | +42 %      |
+| 24   | 8      | 3 400 / 12 600 / 31 000 | 10 200 / 37 800 / 93 000  | 17 200 / 51 500    | -27 %      |
+| 36   | 12     | 4 700 / 17 600 / 43 000 | 14 100 / 52 800 / 129 000 | 17 200 / 51 500    | +3 %       |
+| 45   | 15     | 5 700 / 21 200 / 52 000 | 17 100 / 63 600 / 156 000 | 17 200 / 51 500    | +23 %      |
+| 60   | 20     | 7 200 / 26 900 / 66 000 | 21 600 / 80 700 / 198 000 | 17 200 / 51 500    | +57 %      |
+
+| Palier | Mois  | 12 parts (Prime / T1, avant le tier)                                                                    |
+| ------ | ----- | ------------------------------------------------------------------------------------------------------- |
+| 1      | 1–3   | 600 · 800 · 1 000 · 1 200 · 1 500 · 1 800 · 2 000 · 2 400 · 2 800 · 3 300 · 4 000 · 5 500               |
+| 2      | 4–6   | 1 100 · 1 400 · 1 800 · 2 100 · 2 700 · 3 200 · 3 600 · 4 300 · 5 000 · 5 900 · 7 100 · 9 800           |
+| 3      | 7–9   | 1 500 · 2 000 · 2 500 · 3 000 · 3 700 · 4 500 · 5 000 · 6 000 · 7 000 · 8 200 · 10 000 · 13 700         |
+| 4      | 10–12 | 1 900 · 2 500 · 3 200 · 3 800 · 4 700 · 5 700 · 6 300 · 7 600 · 8 800 · 10 400 · 12 600 · 17 400        |
+| 5      | 13–15 | 2 300 · 3 000 · 3 800 · 4 600 · 5 700 · 6 800 · 7 600 · 9 100 · 10 600 · 12 500 · 15 200 · 21 000       |
+| 6      | 16–18 | 2 700 · 3 500 · 4 400 · 5 300 · 6 600 · 8 000 · 8 800 · 10 600 · 12 400 · 14 600 · 17 700 · 24 500      |
+| 7      | 19–21 | 3 000 · 4 000 · 5 000 · 6 000 · 7 500 · 9 000 · 10 000 · 12 100 · 14 100 · 16 600 · 20 000 · 27 500     |
+| 8      | 22–24 | 3 400 · 4 500 · 5 600 · 6 700 · 8 400 · 10 100 · 11 200 · 13 500 · 15 700 · 18 500 · 22 500 · 31 000    |
+| 9      | 25–27 | 3 700 · 5 000 · 6 200 · 7 400 · 9 300 · 11 100 · 12 400 · 14 900 · 17 300 · 20 500 · 25 000 · 34 000    |
+| 10     | 28–30 | 4 100 · 5 400 · 6 800 · 8 100 · 10 100 · 12 200 · 13 500 · 16 200 · 18 900 · 22 500 · 27 000 · 37 000   |
+| 11     | 31–33 | 4 400 · 5 800 · 7 300 · 8 800 · 11 000 · 13 200 · 14 600 · 17 500 · 20 500 · 24 000 · 29 000 · 40 000   |
+| 12     | 34–36 | 4 700 · 6 300 · 7 900 · 9 400 · 11 800 · 14 100 · 15 700 · 18 900 · 22 000 · 26 000 · 31 500 · 43 000   |
+| 13     | 37–39 | 5 000 · 6 700 · 8 400 · 10 100 · 12 600 · 15 100 · 16 800 · 20 000 · 23 500 · 27 500 · 33 500 · 46 000  |
+| 14     | 40–42 | 5 400 · 7 100 · 8 900 · 10 700 · 13 400 · 16 100 · 17 900 · 21 500 · 25 000 · 29 500 · 35 500 · 49 000  |
+| 15     | 43–45 | 5 700 · 7 600 · 9 500 · 11 300 · 14 200 · 17 000 · 18 900 · 22 500 · 26 500 · 31 000 · 38 000 · 52 000  |
+| 16     | 46–48 | 6 000 · 8 000 · 10 000 · 12 000 · 15 000 · 18 000 · 19 900 · 24 000 · 28 000 · 33 000 · 40 000 · 55 000 |
+| 17     | 49–51 | 6 300 · 8 400 · 10 500 · 12 600 · 15 700 · 18 900 · 21 000 · 25 000 · 29 500 · 34 500 · 42 000 · 57 500 |
+| 18     | 52–54 | 6 600 · 8 800 · 11 000 · 13 200 · 16 500 · 19 800 · 22 000 · 26 500 · 31 000 · 36 500 · 44 000 · 60 500 |
+| 19     | 55–57 | 6 900 · 9 200 · 11 500 · 13 800 · 17 300 · 20 500 · 23 000 · 27 500 · 32 000 · 38 000 · 46 000 · 63 500 |
+| 20     | 58–60 | 7 200 · 9 600 · 12 000 · 14 400 · 18 000 · 21 500 · 24 000 · 29 000 · 33 500 · 39 500 · 48 000 · 66 000 |
+
+**Avis économique :**
+
+- **Coût** : environ ×1,47 par rapport à SAMMI, sur le mélange supposé (×1,95 pour la proposition de l'itération 4).
+  C'est maîtrisé. Le surcoût vient surtout des jeunes abonnés, que SAMMI payait presque pareil de 1 à 11 mois. Le
+  plafond demandé à 60 mois est tenu.
+- **Un seul point faible : 20 à 33 mois.** Le gain moyen y est 25 à 35 % sous SAMMI, à cause du saut de l'ancienne
+  roue à 20 mois et de ses gros lots rares (50 000 en T1).
+  - Le minimum reste 3 à 5 fois plus haut.
+  - La médiane est équivalente : à 24 mois en T1, 10 500 contre 12 500.
+  - La moyenne rejoint SAMMI vers 33–36 mois et la dépasse ensuite.
+- **Leviers si ce creux gêne :**
+  - monter la grille de référence d'environ 10 % : coût environ ×1,6, creux d'environ −25 % ;
+  - ou accepter un jackpot T3 d'environ 230 000 à 60 mois.
+- **Avant l'activation** : mesurer le vrai mélange sur `sw_spins` (lecture seule, GO d'Antoni).
+
+**Intégration :**
+
+- `subWheelLayout(months, grid)` renvoie la grille du palier.
+- La formule `val × mult × tier` du Core est inchangée (mult = 1, tier ×1 / ×2 / ×3).
+- Le reste est inchangé : § 5, § 8 et § 10 (colonne `grid`, `wheel-v3.js`, titre et avatar dans la charge).
