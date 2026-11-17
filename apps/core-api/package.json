@@ -8,6 +8,8 @@
     "module:new": "node scripts/new-module.mjs",
     "mini-jeux:demo": "tsx scripts/mini-jeux-demo.ts",
     "mini-jeux:check": "node scripts/mini-jeux-check.mjs",
+    "casino:demo": "tsx scripts/casino-demo.ts",
+    "casino:check": "node scripts/casino-check.mjs",
     "test": "vitest run --maxWorkers=4",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "lab": "tsx --env-file=.env.lab src/index.ts",

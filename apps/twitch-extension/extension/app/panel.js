@@ -524,8 +524,25 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       && hostDef.onState(hostView, next, previous, variantContext(hostDef, (next?.modules ?? []).find((m) => m.id === openModule) ?? hostDef.card?.(next)))) {
       return;
     }
+    // A module-host view in the middle of an animation (casino): its redraw waits for its `jdm:host-idle`.
+    if (render && !unchanged && hostView && hostViewId === openModule && !hostDef && hostView.busy?.()) {
+      deferredRender = true;
+      return;
+    }
     if (render && !unchanged) renderPreservingViewport();
   }
+  let deferredRender = false;
+  // A module-host view changed what the header shows (its title, its ‹): drawn again now.
+  root.addEventListener?.('jdm:host-redraw', () => {
+    if (hostView) renderPreservingViewport();
+  });
+  // A module-host view changed the viewer's balance (a casino round): the session is read again now.
+  root.addEventListener?.('jdm:host-refresh', () => onRefresh?.());
+  root.addEventListener?.('jdm:host-idle', () => {
+    if (!deferredRender) return;
+    deferredRender = false;
+    renderPreservingViewport();
+  });
 
   /**
    * Tombola V2: the screen reads Core itself, the host only shows « Ouverte » on the Hub card. The
@@ -1537,7 +1554,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       back.title = 'Retour au Hub';
       // Chevron seul, carré compact (même forme que la Tombola V2) : module-back.css.
       back.append(hubIcon(document, 'chevL', 'jdm-back__icon'));
-      back.addEventListener('click', () => navigateTo(null));
+      // A module-host view may take the ‹ first (a casino game goes back to the Mini-jeux catalogue).
+      back.addEventListener('click', () => {
+        if (hostedView && !registered && hostView?.back?.()) return renderPreservingViewport();
+        navigateTo(null);
+      });
       headLeft.append(back);
       if (isRaffle) {
         const raffleHeader = state?.raffle ?? {};
@@ -1553,12 +1574,18 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const heading = el('div', 'jdm-module__screen-title');
       // The title's icon: the module's, or a control the view puts there (Soundboard: its volume popover).
       let screenIcon = hostedView && registered?.headIcon ? registered.headIcon(hostView, variantContext(registered, mod)) : null;
+      const hostIcon = hostedView && !registered ? hostView?.headIcon?.() : null;
+      if (!screenIcon && hostIcon) {
+        screenIcon = el('span', 'jdm-module__screen-icon');
+        screenIcon.innerHTML = hostIcon; // the view's own inline SVG (no user text)
+        screenIcon.setAttribute('aria-hidden', 'true');
+      }
       if (!screenIcon) {
         screenIcon = el('span', 'jdm-module__screen-icon', mod.icon);
         screenIcon.setAttribute('aria-hidden', 'true');
       }
       if (!isModeration) heading.append(screenIcon);
-      heading.append(el('strong', 'jdm-module__screen-name', registered?.headLabel ?? visibleModuleLabel(mod)));
+      heading.append(el('strong', 'jdm-module__screen-name', registered?.headLabel ?? (hostedView && !registered ? hostView?.headLabel?.() : null) ?? visibleModuleLabel(mod)));
       // A control the view puts after the title (Bonk: its tour's « ? »).
       const headAfter = hostedView && registered?.headAfter ? registered.headAfter(hostView, variantContext(registered, mod)) : null;
       if (headAfter) heading.append(headAfter);
@@ -1578,7 +1605,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      if (!isModeration && registered?.intro !== false) {
+      if (!isModeration && registered?.intro !== false && !(hostedView && !registered && hostView?.intro === false)) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),

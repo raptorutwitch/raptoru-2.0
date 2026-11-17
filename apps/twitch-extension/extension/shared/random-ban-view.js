@@ -9,7 +9,8 @@
 // stream's ban alerts are Studio's own, untouched and never synchronised with this screen.
 
 import { errorLabel } from './api.js';
-import { createMiniGames } from './mini-games.js';
+import { createMiniGames } from './mini-games.js';
+import { casinoGames } from './casino/casino.js';
 import { createMachine, face } from './random-ban-machine.js';
 import { createChargesGauge } from './random-ban-gauge.js';
 import { registerViewerModule } from './module-registry.js';
@@ -723,7 +724,7 @@ export function createRandomBanGame({ document, client, module, back = null }) {
   };
 }
 
-/** The Hub's « Mini-jeux »: its catalog, Random Ban the first game. */
+/** The Hub's « Mini-jeux »: its catalog, Random Ban the first game, then the casino (docs/CASINO.md). */
 export function createRandomBanView({ document, client, module }) {
   ensureSheet(document);
   return createMiniGames({
@@ -743,6 +744,7 @@ export function createRandomBanView({ document, client, module }) {
           return `${c}${last?.target ? ` · dernier : ${last.target.name}` : ''}`;
         },
       },
+      ...casinoGames({ document, client }),
     ],
   });
 }

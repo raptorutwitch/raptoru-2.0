@@ -542,6 +542,17 @@ export function createClient({
     moduleModerationActivity: (id) => call('GET', `/modules/v3/moderation/${encodeURIComponent(id)}/activity`),
     moduleModerationRefund: (activityId, reason) =>
       call('POST', '/modules/v3/moderation/refund', { body: { activity_id: activityId, reason } }),
+    /** Casino (docs/CASINO.md): state (availability, limits, the tables, the rounds in progress), one round (spectators,
+     *  Replay), the viewer's history; a spin with the intent's key (a resent spin replays the round: the Core decides). */
+    casinoState: () => call('GET', '/casino/state'),
+    casinoRound: (roundId) => call('GET', `/casino/rounds/${encodeURIComponent(roundId)}`),
+    casinoHistory: (game, limit = 50) =>
+      call('GET', `/casino/history?limit=${limit}${game ? `&game=${encodeURIComponent(game)}` : ''}`),
+    casinoSpin: (game, payload, idempotencyKey) =>
+      call('POST', `/casino/${game === 'roulette' ? 'roulette' : 'slot'}/spin`, { body: payload, idempotencyKey }),
+    casinoProgress: (roundId, step, done = false) =>
+      call('POST', '/casino/progress', { body: { round_id: roundId, step, done } }),
+    casinoShare: (roundId) => call('POST', '/casino/share', { body: { round_id: roundId } }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
     /** « Mes commandes »: the commands the streamer let this viewer edit (identity from the token), and the change of one

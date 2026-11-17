@@ -1,7 +1,9 @@
 // Mini-jeux — the container (V3, 14/11): a small catalog of game tiles, a game screen, a « Jeux » button back to the
 // catalog. A game is `{ id, label, tagline, icon (svg), create({ back }) → { node, start(), destroy() },
 // peek?() → Promise<string | null> }` (a one-line live summary on its tile). Adding a game = one more entry. The catalog
-// lists real games only. The last screen of the session is reopened (no extra click for a returning player).
+// lists real games only (a game may say it is not offered here: `available() → Promise<boolean>`, its tile is hidden).
+// The last screen of the session is reopened (no extra click for a returning player). A game whose view says
+// `ownsHeader` (the casino) takes the extension's header: its title, and its ‹ goes back to this catalogue.
 
 const esc = (t) =>
   String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -30,7 +32,13 @@ export function createMiniGames({ document, games }) {
     }
   };
 
+  /** The header follows the screen (a game that owns it, or the catalogue): the panel draws it again. */
+  const headerChanged = (was) => {
+    if (was !== !!view?.ownsHeader) node.dispatchEvent(new win.CustomEvent('jdm:host-redraw', { bubbles: true }));
+  };
+
   function catalog() {
+    const was = !!view?.ownsHeader;
     view?.destroy?.();
     view = null;
     remember('catalog');
@@ -42,12 +50,24 @@ export function createMiniGames({ document, games }) {
             (g) => `<button type="button" class="mg__tile" role="listitem" data-game="${esc(g.id)}">
               <span class="mg__ticon" aria-hidden="true">${g.icon}</span>
               <span class="mg__tbody"><b>${esc(g.label)}</b><small>${esc(g.tagline ?? '')}</small><em data-peek="${esc(g.id)}"></em></span>
-              <span class="mg__play">Jouer</span>
+              <span class="mg__play">${esc(g.cta ?? 'Jouer')}</span>
             </button>`,
           )
           .join('')}</div>
       </div>`;
     if (started) void peek();
+    void offered();
+    headerChanged(was);
+  }
+
+  /** Hides the tiles of the games the server does not offer to this viewer (the casino closed in Production). */
+  async function offered() {
+    for (const g of games) {
+      if (!g.available) continue;
+      const ok = await g.available().catch(() => false);
+      const tile = node.querySelector(`[data-game="${g.id}"]`);
+      if (tile) tile.hidden = !ok;
+    }
   }
 
   async function peek() {
@@ -62,12 +82,14 @@ export function createMiniGames({ document, games }) {
   }
 
   function open(game) {
+    const was = !!view?.ownsHeader;
     view?.destroy?.();
     remember(game.id);
     node.dataset.screen = game.id;
     view = game.create({ back: games.length ? catalog : null });
     node.replaceChildren(view.node);
     if (started) view.start?.();
+    headerChanged(was);
   }
 
   const onClick = (e) => {
@@ -83,6 +105,20 @@ export function createMiniGames({ document, games }) {
 
   return {
     node,
+    /** The open game's animation must not be interrupted by a redraw (panel: `busy`). */
+    busy: () => !!view?.busy?.(),
+    /** The header's ‹: a game that owns the header goes back to the catalogue. */
+    back() {
+      if (!view?.ownsHeader) return false;
+      if (view.back?.()) return true; // the game went back inside itself (a spectator: to the rounds in progress)
+      catalog();
+      return true;
+    },
+    headLabel: () => (view?.ownsHeader ? (view.headLabel?.() ?? null) : null),
+    headIcon: () => (view?.ownsHeader ? (view.headIcon?.() ?? null) : null),
+    get intro() {
+      return view?.ownsHeader ? false : undefined;
+    },
     start() {
       started = true;
       if (view) view.start?.();

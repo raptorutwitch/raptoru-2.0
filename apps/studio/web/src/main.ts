@@ -12,6 +12,7 @@ import './pages/sub-wheel.css';
 import './pages/commands.css';
 import './pages/word-game.css';
 import './pages/mini-games.css';
+import './pages/casino.css';
 import './pages/regie.css';
 import './pages/centre.css';
 import './pages/hubs.css';
@@ -44,6 +45,7 @@ import { mountTombolaPage } from './pages/tombola.js';
 import { mountCommandsPage } from './pages/commands.js';
 import { mountWordGamePage } from './pages/word-game.js';
 import { mountMiniGamesPage } from './pages/mini-games.js';
+import { mountCasinoPage } from './pages/casino.js';
 import { mountSimulation } from './simulation.js';
 import { mountSimulationPage } from './pages/simulation.js';
 import { mountAlerts } from './pages/alerts.js';
@@ -89,6 +91,7 @@ if (app) {
     commands: mountCommandsPage(el('commands')),
     'word-game': mountWordGamePage(el('word-game')),
     'mini-games': mountMiniGamesPage(el('mini-games')),
+    casino: mountCasinoPage(el('casino')),
     alerts: mountAlerts(el('alerts')),
     'channel-points': mountRewardsPage(el('channel-points')),
     effects: mountEffectsPage(el('effects')),

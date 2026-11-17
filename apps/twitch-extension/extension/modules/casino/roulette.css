@@ -1,0 +1,257 @@
+/* Casino — the roulette screen (shared/casino/roulette.js), inside the casino's shadow root under #body.cz.roulette-body.
+   Ported from the validated prototype prototypes/casino-v9-coffre/shared/roulette.css (V6/V7 layout, 565 × 376 window).
+   Changes from the prototype: the body is the extension's (≈ 549 × 323 under its 35 px header) and the wheel overlay,
+   the Replay badge and the closed veil live INSIDE it (the header is the extension's own); the 50 / 250 chips are
+   40 / 200 (each bet a multiple of 20); a closed veil over the mat (new). The base (variables, buttons, drawer, history
+   rows, card, toast, number pills, Replay badge, anchored bubble, .is-spect [data-play], @keyframes fade) is casino.css,
+   which the host loads AFTER this sheet: a rule here that must beat a base rule needs a stronger selector.
+
+   Disposition du concept 03 : le tapis complet sur toute la largeur, dans un plateau en relief (languette
+   « Paiements » sur son bord gauche), puis UNE barre basse d'environ un quart de la hauteur : derniers numéros au-dessus
+   des jetons (à gauche), les quatre actions secondaires groupées dans un bac (Annuler · Effacer / Reposer · Doubler),
+   et le gros LANCER avec son interrupteur Rapide (éclair) dans le coin. Feutre prune sombre : le vert est réservé au
+   zéro ; rouge et noir réglementaires. Au tirage, la roue prend toute la zone de jeu. */
+
+.roulette-body { --toast-y: 94px; }
+.rt { position: relative; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 86px; row-gap: 7px; padding: 7px 7px 7px 8px; }
+
+/* --- Le plateau : rebord en relief, tapis feutre prune à filets d'or ------------------------------------------------ */
+.plateau { position: relative; min-height: 0; margin-left: 6px; padding: 6px; border-radius: 16px; background: radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, 0.1), transparent 50%), linear-gradient(180deg, #3b2a55, #261a3b 60%, #1d1430); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -2px 0 rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.55), 0 10px 18px rgba(0, 0, 0, 0.55); }
+.plateau::before { content: ''; position: absolute; inset: 3px; border-radius: 13px; box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.22); pointer-events: none; }
+.mat {
+  --line: rgba(242, 198, 95, 0.26);
+  --felt: radial-gradient(140% 100% at 50% 0%, #33224a, #221733 75%);
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 34px repeat(12, minmax(0, 1fr)) 36px;
+  grid-template-rows: repeat(3, minmax(0, 1fr)) 25px 27px;
+  gap: 1px;
+  padding: 1px;
+  border-radius: 10px;
+  background: var(--line);
+  box-shadow: 0 0 0 1.5px rgba(242, 198, 95, 0.5), 0 0 0 3px #120a1f, inset 0 0 12px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.mat > * { grid-row: var(--r) / span var(--rs, 1); grid-column: var(--c) / span var(--cs, 1); }
+.felt { background: var(--felt); }
+.felt.bl { border-radius: 0 0 0 9px; }
+.felt.br { border-radius: 0 0 9px 0; }
+.spot { position: relative; min-width: 0; min-height: 0; display: grid; place-items: center; font: 900 14.5px/1 var(--font); color: #fff; cursor: pointer; transition: filter 0.12s, box-shadow 0.12s; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45); }
+.spot.red { background: linear-gradient(180deg, #cf3550, #9d1b36); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16); }
+.spot.black { background: linear-gradient(180deg, #2b2338, #15101d); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.spot.zero { background: linear-gradient(90deg, #1cae70, #0d774c); border-radius: 9px 0 0 9px; font-size: 17px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+.spot.side, .spot.col { background: var(--felt); color: #f3dfa8; font-size: 12px; font-weight: 800; letter-spacing: 0.02em; }
+.spot.side .lab { white-space: nowrap; }
+.spot.col { color: rgba(243, 223, 168, 0.85); }
+.spot.col.tr { border-radius: 0 9px 0 0; }
+.spot .dia { width: 14px; height: 14px; transform: rotate(45deg); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 224, 138, 0.6); }
+.spot .dia.red { background: #d9334c; }
+.spot .dia.black { background: #120d1d; }
+.spot:hover { filter: brightness(1.28); }
+/* Surlignage : les numéros couverts par la case survolée (ou appuyée) */
+.spot.cov { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.9); filter: brightness(1.28); z-index: 1; }
+.mat.done .spot:not(.hit):not(.won) { filter: brightness(0.6) saturate(0.75); }
+.spot.hit { z-index: 2; box-shadow: inset 0 0 0 2px var(--gold), 0 0 14px rgba(255, 201, 77, 0.75); animation: hitc 0.6s ease-in-out infinite alternate; }
+@keyframes hitc { to { filter: brightness(1.55); } }
+.spot.won { z-index: 3; box-shadow: inset 0 0 0 1.5px rgba(255, 201, 77, 0.8); }
+.spot .gtag { position: absolute; left: 50%; top: -7px; z-index: 4; transform: translateX(-50%); padding: 0 5px; border-radius: 7px; font: 900 10.5px/16px var(--font); color: #2a1600; background: linear-gradient(180deg, #ffe69a, var(--gold)); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55); white-space: nowrap; pointer-events: none; animation: gtag 0.35s var(--pop) both; text-shadow: none; }
+@keyframes gtag { from { opacity: 0; scale: 0.4; } }
+
+/* La languette des paiements, sur le bord gauche du plateau (zone de clic 24 px, jamais sur une case) */
+.notch { position: absolute; left: -15px; top: 50%; z-index: 7; width: 24px; height: 92px; margin-top: -46px; padding-left: 7px; display: grid; place-items: center; color: #3a2200; transition: transform 0.18s var(--pop), filter 0.18s; }
+.notch::before { content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 17px; border-radius: 8px 3px 3px 8px; background: linear-gradient(90deg, #8a5d14, #f2cf72 40%, #c8922a 70%, #7a5210); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.45), inset -2px 0 2px rgba(0, 0, 0, 0.25); }
+.notch span { position: relative; writing-mode: vertical-rl; transform: rotate(180deg); font: 900 10px/1 var(--font); letter-spacing: 0.1em; text-transform: uppercase; }
+.notch:hover, .notch:focus-visible { transform: translateX(-1px); filter: brightness(1.12) drop-shadow(0 0 6px rgba(255, 201, 77, 0.55)); }
+
+/* Fermé (hors live, fermé dans Studio) — absent du prototype : un voile sur le tapis ; la languette et l'historique
+   restent accessibles. */
+.plateau > .closed { position: absolute; inset: 6px; z-index: 6; display: grid; place-content: center; justify-items: center; gap: 5px; padding: 12px; border-radius: 10px; text-align: center; background: rgba(8, 4, 16, 0.84); backdrop-filter: blur(2px); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.3); }
+.plateau > .closed b { font: 900 14px/1.25 var(--font); color: var(--gold-2); }
+.plateau > .closed small { font: 700 11px/1.3 var(--font); color: var(--dim); }
+
+/* --- Jetons : posés (piles) et à choisir. Une couleur par valeur, bord rayé, tranche épaisse ---------------------- */
+[data-v] { --cc: #9aa3bd; --ci: #1b1f2e; }
+[data-v='40'] { --cc: #f08a34; --ci: #fff; }
+[data-v='100'] { --cc: #e5466a; --ci: #fff; }
+[data-v='200'] { --cc: #e46fb0; --ci: #fff; }
+[data-v='500'] { --cc: #3a97e3; --ci: #fff; }
+[data-v='1000'] { --cc: #2aa866; --ci: #fff; }
+[data-v='2500'] { --cc: #1ea8a8; --ci: #fff; }
+[data-v='5000'] { --cc: #8a5ee6; --ci: #fff; }
+[data-v='10000'] { --cc: #b56f36; --ci: #fff; }
+[data-v='25000'] { --cc: #f2bf3e; --ci: #432800; }
+[data-v='50000'] { --cc: #2a2236; --ci: #ffd46a; }
+.stack { position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 27px; height: 27px; padding: 0 3px; display: grid; place-items: center; border-radius: 14px; font: 900 10px/1 var(--font); letter-spacing: -0.03em; color: var(--ci); text-shadow: none; background: radial-gradient(circle, var(--cc) 0 55%, transparent 56%), repeating-conic-gradient(var(--cc) 0 26deg, #fff 26deg 45deg); box-shadow: 0 2px 0 color-mix(in srgb, var(--cc) 55%, #000), 0 3px 4px rgba(0, 0, 0, 0.6); pointer-events: none; animation: drop 0.22s var(--pop); white-space: nowrap; }
+@keyframes drop { from { transform: translate(-50%, -95%) scale(1.3); opacity: 0; } }
+.spot.won .stack { animation: wonstack 0.7s ease-in-out infinite alternate; }
+@keyframes wonstack { to { box-shadow: 0 0 0 3px rgba(255, 201, 77, 0.55), 0 0 14px rgba(255, 201, 77, 0.85); } }
+.spot.lost .stack { opacity: 0.38; filter: grayscale(1); }
+
+/* --- La barre basse ------------------------------------------------------------------------------------------------- */
+.bar { display: grid; grid-template-columns: minmax(0, 1fr) 104px 122px; column-gap: 8px; min-width: 0; }
+.left { position: relative; min-width: 0; display: grid; grid-template-rows: 24px minmax(0, 1fr); row-gap: 5px; }
+
+/* Derniers numéros (concept 03) : toucher = l'historique complet ; à côté, le son */
+.histrow { display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 5px; min-width: 0; }
+.board { min-width: 0; height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 2px 0 9px; border-radius: 12px; text-align: left; background: rgba(8, 4, 16, 0.75); box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(214, 170, 255, 0.14); transition: box-shadow 0.15s; }
+.board:hover { box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 201, 77, 0.55); }
+.board .lbl { flex: none; margin-right: 3px; font: 900 10px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255, 210, 120, 0.62); }
+.board .nums { flex: 1; min-width: 0; display: flex; gap: 3px; overflow: hidden; }
+.board .np { min-width: 19px; height: 19px; font-size: 10px; }
+.board .nums .np:first-child { box-shadow: 0 0 0 1.5px var(--gold), 0 0 7px rgba(255, 201, 77, 0.5); }
+.board .none { font: 700 11px/1 var(--font); color: var(--faint); white-space: nowrap; }
+.board .more { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: rgba(255, 210, 120, 0.8); background: rgba(255, 255, 255, 0.08); }
+.board .more svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.board:hover .more { color: var(--gold); }
+.snd { width: 26px; height: 24px; display: grid; place-items: center; border-radius: 12px; color: var(--dim); background: rgba(8, 4, 16, 0.75); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.14); }
+.snd svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.snd:hover { color: #fff; }
+.snd .off, .snd[aria-pressed='true'] .on-hide { display: none; }
+.snd[aria-pressed='true'] .off { display: block; }
+.snd[aria-pressed='true'] { color: #e2d6ff; box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.45); }
+
+/* Les jetons du palier de richesse + le jeton libre + ALL-IN (V7 : 33 px au lieu de 36, pour loger ALL-IN) */
+.chips { position: relative; min-width: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 4px; border-radius: 14px; background: var(--well); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(214, 170, 255, 0.12); }
+.chip { position: relative; width: 33px; height: 33px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--ci); font: 900 10px/1 var(--font); letter-spacing: -0.03em; background: radial-gradient(circle, var(--cc) 0 52%, transparent 53%), repeating-conic-gradient(var(--cc) 0 22deg, #fff 22deg 45deg); box-shadow: 0 3px 0 color-mix(in srgb, var(--cc) 50%, #000), 0 4px 5px rgba(0, 0, 0, 0.55); transform: translateY(-1px); transition: transform 0.14s var(--pop), box-shadow 0.14s, filter 0.14s; }
+.chip::after { content: ''; position: absolute; inset: 5.5px; border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--ci) 35%, transparent); pointer-events: none; }
+.chip:hover:not(:disabled) { transform: translateY(-3px); }
+.chip.on { transform: translateY(-5px) scale(1.08); box-shadow: 0 3px 0 color-mix(in srgb, var(--cc) 50%, #000), 0 0 0 2px #fff, 0 0 12px 2px rgba(255, 255, 255, 0.45), 0 7px 8px rgba(0, 0, 0, 0.6); z-index: 1; }
+.chip:disabled { filter: grayscale(0.85) brightness(0.55); transform: none; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+/* Le jeton libre : nacré à liseré irisé, un crayon pour le régler */
+.chip.custom { --ci: #2b2140; background: radial-gradient(circle, #f4efff 0 52%, transparent 53%), conic-gradient(#ff8fb8, #ffd36b, #8ef0b4, #7cc8ff, #c8a0ff, #ff8fb8); }
+.chip.custom::after { border-color: rgba(43, 33, 64, 0.3); }
+.chip.custom.unset { font-size: 15px; font-weight: 800; }
+.chip.custom .pen { position: absolute; right: -3px; top: -3px; width: 15px; height: 15px; display: grid; place-items: center; border-radius: 50%; color: #2b2140; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(43, 33, 64, 0.3); }
+.chip.custom .pen svg { width: 9px; height: 9px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+/* ALL-IN : jeton noir à liseré de feu, « ALL / IN » en or ; choisi, il rougeoie ; un éclat quand on le prend */
+.chip.allin { gap: 1px; place-items: initial; place-content: center; justify-items: center; font: 900 10px/0.9 var(--font); letter-spacing: 0.03em; color: #ffd46a; text-shadow: 0 1px 0 #000; background: radial-gradient(circle, #2a1530 0 57%, transparent 58%), repeating-conic-gradient(#ff4d5e 0 20deg, #ffb340 20deg 45deg); box-shadow: 0 3px 0 #5a1424, 0 4px 5px rgba(0, 0, 0, 0.55); }
+.chip.allin::after { inset: 4px; border: 1px solid rgba(255, 212, 106, 0.4); }
+.chip.allin.on { box-shadow: 0 3px 0 #5a1424, 0 0 0 2px #ffd46a, 0 0 14px 3px rgba(255, 120, 60, 0.6), 0 7px 8px rgba(0, 0, 0, 0.6); animation: allinglow 1.1s ease-in-out infinite alternate; }
+@keyframes allinglow { to { box-shadow: 0 3px 0 #5a1424, 0 0 0 2px #ffd46a, 0 0 20px 6px rgba(255, 140, 60, 0.8), 0 7px 8px rgba(0, 0, 0, 0.6); } }
+.chip.allin.spent { filter: saturate(0.35) brightness(0.7); animation: none; }
+.chip.allin.flash { animation: allinflash 0.6s var(--pop); }
+@keyframes allinflash { 0% { transform: translateY(-5px) scale(1.4); filter: brightness(2) saturate(1.3); } }
+.chips.flash::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(45% 140% at 96% 50%, rgba(255, 190, 80, 0.55), transparent 70%); pointer-events: none; animation: fade 0.7s ease-out reverse forwards; }
+.spot .burst { position: absolute; left: 50%; top: 50%; z-index: 5; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 2px rgba(255, 212, 106, 0.95), 0 0 16px 4px rgba(255, 140, 60, 0.7); animation: burst 0.85s ease-out forwards; }
+@keyframes burst { from { transform: scale(0.4); opacity: 1; } to { transform: scale(2.6); opacity: 0; } }
+/* Le montant d'un ALL-IN, posé un instant sur la ligne des derniers numéros */
+.aitag { position: absolute; top: 0; right: 0; z-index: 3; height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 11px; border-radius: 12px; white-space: nowrap; font: 900 10.5px/1 var(--font); letter-spacing: 0.06em; color: #ffd46a; background: linear-gradient(180deg, #3d1522, #22091a); box-shadow: inset 0 0 0 1px rgba(255, 212, 106, 0.75), 0 0 12px rgba(255, 120, 60, 0.45); }
+.aitag b { font-size: 13px; letter-spacing: 0; color: #fff3d6; font-variant-numeric: tabular-nums; }
+.aitag small { font: 700 10.5px/1 var(--font); letter-spacing: 0; color: rgba(255, 226, 168, 0.78); }
+.aitag.in { animation: aitag 0.35s var(--pop); }
+@keyframes aitag { from { transform: translateY(6px) scale(0.85); opacity: 0; } }
+.chipedit { width: 196px; }
+.chipedit b { display: block; font-size: 12.5px; font-weight: 900; }
+.chipedit form { display: flex; gap: 5px; margin-top: 7px; }
+.chipedit input { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 0; border-radius: 9px; outline: none; background: #08050f; box-shadow: inset 0 0 0 1px rgba(255, 201, 77, 0.45); font: 900 15px/1 var(--font); color: #ffd56a; font-variant-numeric: tabular-nums; }
+.chipedit input:focus { box-shadow: inset 0 0 0 1.5px rgba(255, 201, 77, 0.95); }
+.chipedit .btn { height: 32px; padding: 0 12px; }
+.chipedit p { margin: 6px 0 0; font-size: 10.5px; line-height: 1.3; color: var(--faint); }
+
+/* Le bac des actions secondaires : Annuler · Effacer (corriger) / Reposer · Doubler (répéter, multiplier) */
+.tray { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; row-gap: 1px; padding: 4px 2px 3px; border-radius: 14px; background: rgba(8, 4, 16, 0.55); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.1); }
+.act { display: grid; justify-items: center; align-content: center; gap: 3px; min-width: 0; border-radius: 10px; }
+.act__cap { position: relative; width: 26px; height: 26px; display: grid; place-items: center; color: #fff; isolation: isolate; }
+.act__cap::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: radial-gradient(120% 90% at 50% 8%, var(--hi) 0%, var(--c) 46%, var(--lo) 100%); box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 2px rgba(0, 0, 0, 0.2), 0 3px 0 var(--edge), 0 4px 5px rgba(5, 0, 18, 0.5); transform: translateY(-1.5px); transition: transform 0.07s, box-shadow 0.07s; }
+.act__cap svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; transform: translateY(-1.5px); filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--edge) 75%, transparent)); transition: transform 0.07s; }
+.act__cap b { font: 900 12px/1 var(--font); transform: translateY(-1.5px); text-shadow: 0 1px 0 var(--edge); transition: transform 0.07s; }
+.act__lbl { font: 800 10px/1 var(--font); color: var(--dim); white-space: nowrap; }
+.act:hover:not(:disabled) .act__cap::before { filter: brightness(1.1); }
+.act:active:not(:disabled) .act__cap::before { transform: translateY(1.5px); box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.35), 0 0 0 var(--edge), 0 1px 2px rgba(5, 0, 18, 0.5); }
+.act:active:not(:disabled) .act__cap svg, .act:active:not(:disabled) .act__cap b { transform: translateY(1.5px); }
+.act[data-act='undo'] .act__cap { border-radius: 50%; }
+.act[data-act='clear'] .act__cap { border-radius: 8px; }
+.act[data-act='rebet'] .act__cap { border-radius: 50%; width: 27px; height: 27px; }
+.act[data-act='double'] .act__cap::before { border-radius: 0; clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.45); }
+.act[data-act='double'] .act__cap { width: 30px; filter: drop-shadow(0 3px 0 var(--edge)) drop-shadow(0 2px 3px rgba(5, 0, 18, 0.5)); }
+.act[data-act='double']:active:not(:disabled) .act__cap { filter: drop-shadow(0 0 0 var(--edge)); }
+/* Désactivé : à plat, sans couleur, mais lisible (on comprend ce qui manque) */
+.act:disabled { cursor: default; }
+.act:disabled .act__cap { color: rgba(240, 228, 255, 0.4); filter: none; }
+.act:disabled .act__cap::before { background: #2a2140; box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.14); transform: none; }
+.act:disabled .act__cap svg, .act:disabled .act__cap b { transform: none; filter: none; text-shadow: none; }
+.act:disabled .act__lbl { color: var(--faint); }
+
+/* LANCER : bloc d'arcade vert, la mise totale dedans ; l'interrupteur Rapide est un bouton à part, dans le coin */
+.go { position: relative; min-width: 0; }
+.launch { --hi: #b6f5b4; --c: #36c45e; --lo: #1d8c44; --edge: #0d5427; position: absolute; left: 0; top: 0; right: 9px; bottom: 9px; display: grid; place-content: center; justify-items: center; gap: 4px; border-radius: 18px; color: #fff; background: radial-gradient(120% 90% at 50% 8%, var(--hi) 0%, var(--c) 46%, var(--lo) 100%); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 5px rgba(0, 0, 0, 0.22), 0 5px 0 var(--edge), 0 8px 9px rgba(5, 0, 18, 0.55), 0 0 0 2px rgba(255, 220, 120, 0.55); transform: translateY(-3px); transition: transform 0.07s, box-shadow 0.07s, filter 0.15s; }
+.launch .t { display: flex; align-items: center; gap: 6px; font: 900 16px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; text-shadow: 0 2px 0 var(--edge); }
+.launch .t svg { width: 15px; height: 15px; fill: currentColor; filter: drop-shadow(0 1.5px 0 var(--edge)); }
+.launch .t svg.line { fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+.launch small { display: flex; align-items: center; gap: 4px; padding: 3px 8px 3px 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.26); font: 900 12px/1 var(--font); font-variant-numeric: tabular-nums; }
+.launch small i { width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, var(--gold) 55%, var(--gold-deep)); }
+.launch:hover:not(:disabled) { filter: brightness(1.06); }
+.launch:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -3px 5px rgba(0, 0, 0, 0.22), 0 0 0 var(--edge), 0 2px 3px rgba(5, 0, 18, 0.5), 0 0 0 2px rgba(255, 220, 120, 0.55); }
+.launch.is-busy { --hi: #d6ccef; --c: #7c6ca8; --lo: #574a84; --edge: #2a2046; transform: translateY(-1px); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 2px 0 var(--edge), 0 3px 5px rgba(5, 0, 18, 0.5), 0 0 0 2px rgba(214, 200, 255, 0.35); }
+.launch:disabled { transform: none; color: var(--dim); background: #261d3a; box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.35); }
+.launch:disabled .t { font-size: 12px; letter-spacing: 0.02em; text-transform: none; text-shadow: none; }
+.launch:disabled small { display: none; }
+/* Rapide : petit bouton rond posé sur le coin, cerclé de sombre pour bien le séparer de LANCER */
+.fastsw { --hi: #ffeaa0; --c: #f4bb2c; --lo: #cc8a0c; --edge: #6e4300; position: absolute; right: 0; bottom: 0; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: rgba(255, 236, 190, 0.75); background: #1b1329; box-shadow: 0 0 0 3px #150e24, inset 0 0 0 1.5px rgba(244, 187, 44, 0.45), 0 3px 6px rgba(0, 0, 0, 0.6); transition: box-shadow 0.15s, color 0.15s, background 0.15s, transform 0.07s; }
+.fastsw svg { width: 15px; height: 15px; }
+.fastsw:hover { color: #ffe9a0; }
+.fastsw:active { transform: translateY(1px); }
+.fastsw[aria-pressed='true'] { color: #4a2c00; background: radial-gradient(120% 90% at 50% 8%, var(--hi) 0%, var(--c) 50%, var(--lo) 100%); box-shadow: 0 0 0 3px #150e24, 0 0 0 4.5px #fff, 0 0 14px 4px rgba(255, 200, 60, 0.7); }
+.fastsw .st { position: absolute; right: 0; top: -14px; padding: 1px 4px; border-radius: 5px; font: 900 10px/1.2 var(--font); letter-spacing: 0.02em; color: #fff; background: #150e24; white-space: nowrap; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+.fastsw[aria-pressed='true'] .st { opacity: 1; color: #ffd46a; }
+.launch.fast .t::after { content: ''; width: 9px; height: 13px; margin-left: -1px; background: currentColor; clip-path: polygon(60% 0, 0 58%, 42% 58%, 30% 100%, 100% 38%, 58% 38%); opacity: 0.85; }
+
+/* --- Le tirage : la roue prend TOUTE la zone de jeu (bandeau assombri derrière) ; le résultat à côté --------------- */
+.wover { position: absolute; inset: 0; z-index: 50; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 6px 12px 6px 8px; border-radius: 12px; container-type: size; cursor: pointer; background: radial-gradient(60% 75% at 33% 50%, rgba(70, 30, 110, 0.6), transparent 70%), rgba(6, 3, 12, 0.94); backdrop-filter: blur(4px); animation: fade 0.25s ease-out; }
+.wover .wheel { width: min(calc(100cqh - 4px), calc(100cqw - 172px)); animation: wheelin 0.45s var(--pop); }
+@keyframes wheelin { from { transform: scale(0.55); opacity: 0; } }
+.wover.out { transition: opacity 0.3s 0.08s; opacity: 0; }
+.wover.out .wheel { transition: transform 0.35s cubic-bezier(0.5, 0, 0.8, 0.4); transform: scale(0.6); }
+.wside { min-width: 0; display: grid; justify-items: center; gap: 12px; text-align: center; }
+.wkick { font: 900 11px/1.3 var(--font); letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+.wkick b { display: block; margin-top: 3px; font-size: 14px; letter-spacing: 0.02em; color: var(--dim); text-transform: none; font-variant-numeric: tabular-nums; }
+.wover .banner { width: 100%; max-width: 172px; display: none; justify-items: center; gap: 6px; padding: 14px 10px 12px; border-radius: 16px; }
+.wover .banner.show { display: grid; background: linear-gradient(180deg, rgba(60, 36, 4, 0.92), rgba(26, 15, 2, 0.95)); box-shadow: inset 0 0 0 1px rgba(255, 201, 77, 0.75), 0 0 22px rgba(255, 176, 40, 0.35); animation: boardin 0.35s var(--pop); }
+.wover .banner.show.lose { background: rgba(20, 10, 18, 0.95); box-shadow: inset 0 0 0 1px rgba(255, 122, 138, 0.45); }
+@keyframes boardin { from { transform: scale(0.94); opacity: 0.4; } }
+.wover .banner .np { min-width: 58px; height: 58px; border-radius: 50%; font-size: 28px; box-shadow: 0 0 0 2px var(--gold), 0 0 14px rgba(255, 201, 77, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.25); }
+.wover .banner .bl { font: 900 12px/1 var(--font); letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+.wover .banner b { font: 900 24px/1 var(--font); color: var(--gold); font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(255, 201, 77, 0.55); }
+.wover .banner.lose b { color: #ffa3b0; text-shadow: none; font-size: 17px; }
+.wover .skip { height: 30px; padding: 0 16px; border-radius: 999px; font: 800 12px/1 var(--font); color: var(--dim); background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.22); display: inline-flex; align-items: center; gap: 6px; }
+.wover .skip svg { width: 12px; height: 12px; }
+.wover .skip:hover { color: #fff; }
+.wheel { position: relative; aspect-ratio: 1; }
+.wheel > svg { width: 100%; height: 100%; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.7)); }
+.wheel .seps line { stroke: rgba(242, 198, 95, 0.7); stroke-width: 0.9; }
+.wheel .pegs circle { fill: #f6e6bd; stroke: #6a4a12; stroke-width: 0.6; }
+.wheel .labels text { font: 800 7.6px var(--font); fill: #fff; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+.wheel .spokes line { stroke: rgba(242, 198, 95, 0.45); stroke-width: 2; }
+.wheel .hub-t { font: 900 17px var(--font); fill: #5a3600; text-anchor: middle; }
+.wheel .bulb { fill: rgba(196, 164, 255, 0.22); }
+.wheel.spinning .bulb { animation: bulb 0.7s steps(1) infinite; animation-delay: var(--d); }
+.wheel.won .bulb { animation: bulb 0.3s steps(1) infinite; animation-delay: var(--d); }
+@keyframes bulb { 0% { fill: #ffe9b5; } 50% { fill: rgba(196, 164, 255, 0.22); } }
+.wheel .sec.hit { animation: hit 0.7s ease-in-out infinite alternate; stroke: #fff6dc; stroke-width: 2; }
+@keyframes hit { to { filter: brightness(1.6); } }
+.wheel .diamonds path { fill: url(#rwDia); stroke: #5a3a08; stroke-width: 0.5; }
+.wheel .trackline { fill: none; stroke: rgba(214, 170, 255, 0.16); stroke-width: 0.8; }
+.wheel .trail { fill: none; stroke: #f4efff; stroke-width: 6; stroke-linecap: round; }
+.wheel .bsh { fill: #000; }
+.wres { position: absolute; left: 50%; top: 50%; z-index: 3; width: 32%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; display: grid; place-items: center; pointer-events: none; background: radial-gradient(circle at 50% 35%, #2a1844, #0c0716 72%); box-shadow: 0 0 0 2px rgba(242, 198, 95, 0.75), 0 0 24px rgba(0, 0, 0, 0.7); animation: popc 0.4s var(--pop); }
+.wres .n { width: 72%; aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; font: 900 clamp(20px, 11cqmin, 40px)/1 var(--font); color: #fff; box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(255, 201, 77, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.25); }
+@keyframes popc { from { transform: translate(-50%, -50%) scale(0.4); opacity: 0; } }
+
+/* --- Lecture seule : le badge Replay / « En direct » (casino.css) passe AU-DESSUS de la roue (le prototype le posait
+   en style en ligne, z-index 60). Sélecteur plus fort : casino.css est chargé après cette feuille. ------------------ */
+.roulette-body > .spect { z-index: 60; }
+
+/* --- Bulle des paiements ---------------------------------------------------------------------------------------------- */
+.pop.right { width: min(228px, calc(100cqw - 30px)); }
+.pop__t { display: block; font-size: 12.5px; font-weight: 900; }
+.pop__t small { font-size: 11px; color: var(--faint); font-weight: 700; margin-left: 4px; }
+.pays { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 10px; margin: 7px 0 6px; }
+.pays dt { font-size: 11.5px; color: var(--dim); font-weight: 600; }
+.pays dt i { font-style: normal; color: var(--faint); }
+.pays dt small { display: block; font-size: 10.5px; color: var(--faint); }
+.pays dd { margin: 0; font: 900 13px/1 var(--font); color: var(--gold); text-align: right; }
+.pop__n { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 11px; color: var(--faint); line-height: 1.3; }
+.pop__n .np { min-width: 18px; height: 18px; font-size: 10px; }

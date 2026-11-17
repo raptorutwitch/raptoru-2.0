@@ -42,6 +42,7 @@ process.env.PORT = String(port);
 const { chainRelays, createStudioServer } = await import('../src/index.js');
 const { createTestLab } = await import('../src/test-lab/test-lab.js');
 const { miniGamesRelay } = await import('../src/mini-games/relay.js');
+const { casinoRelay } = await import('../src/casino/relay.js');
 const { moduleSettingsRelay } = await import('../src/module-settings/relay.js');
 const { modulesRelay } = await import('../src/modules/relay.js');
 const { labProxy } = await import('../src/lab-moderation/proxy.js');
@@ -354,6 +355,7 @@ const studio = createStudioServer({
   alerts,
   relays: chainRelays(
     miniGamesRelay(labCore, CHANNEL),
+    casinoRelay(labCore, CHANNEL),
     moduleSettingsRelay(labCore, CHANNEL),
     modulesRelay(labCore, CHANNEL, { labPlayer: true }),
   ),
