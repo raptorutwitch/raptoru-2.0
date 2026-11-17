@@ -19,6 +19,7 @@ import { labModerationRoutes } from '../http/lab-moderation-routes.js';
 import type { AppDeps } from '../http/server.js';
 import { soundLabRoutes } from '../http/sound-lab-routes.js';
 import { subWheelRoutes } from '../http/sub-wheel-routes.js';
+import { casinoRoutes } from '../http/casino-routes.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
@@ -138,6 +139,8 @@ export function createPublicFrontier(
     ...miniGamesRoutes(core.chat.miniGames),
     // Roue du Sub V2 (R8): the viewer frontier's own tours / team actions, in-process only (never on HTTP).
     ...subWheelRoutes(core.subWheel, core.alerts),
+    // Casino (docs/CASINO.md): the extension's spins, rounds, history, progress, shares; Studio's admin reads.
+    ...casinoRoutes(core.casino),
     // Music Hub (docs/music/MUSIC_HUB_STATE.md): the extension's song requests on Spotify V2, in-process only.
     ...musicExtRoutes(core.spotify),
     // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
@@ -172,6 +175,9 @@ export function createPublicFrontier(
   const secret = config.TWITCH_EXTENSION_SECRET
     ? Buffer.from(config.TWITCH_EXTENSION_SECRET, 'base64')
     : null;
+  // Casino (docs/CASINO.md): Production plays only once CASINO_EXTENSION allows it (the façade's door AND the service).
+  const casinoAudience = parseMusicAudience(config.CASINO_EXTENSION);
+  core.casino.productionApproved = casinoAudience.mode !== 'off';
   const facade = new ExtFacade(
     call,
     new TwitchNames(app),
@@ -182,6 +188,7 @@ export function createPublicFrontier(
       wallet: core.economy.mode === 'canonical',
       lab,
       music: parseMusicAudience(config.MUSIC_HUB_EXTENSION),
+      casino: casinoAudience,
     },
     core.twitchViewers,
   );

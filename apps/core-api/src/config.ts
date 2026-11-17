@@ -61,6 +61,21 @@ const Env = z
           return false;
         }
       }, 'off | on | testers:<id>,<id>'),
+    // Casino (docs/CASINO.md): the extension's slot machine and roulette in Production — off (default) |
+    // testers:<twitch id>,<twitch id> (the broadcaster + these) | on. The Lab is always open. Studio's « Casino ouvert »
+    // stays the immediate switch; this variable is the hard one (a Core restart).
+    CASINO_EXTENSION: z
+      .string()
+      .max(4000)
+      .default('off')
+      .refine((v) => {
+        try {
+          parseMusicAudience(v);
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'off | on | testers:<id>,<id>'),
     // Défis (docs/CHALLENGES.md): the recount timer. OFF by default; even ON it does nothing without the tables or a
     // live challenge. Studio's « Recompter » and an activation count anyway.
     CHALLENGES_ENGINE: z.enum(['true', 'false']).default('false'),

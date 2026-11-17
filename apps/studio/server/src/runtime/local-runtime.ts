@@ -107,6 +107,7 @@ export const LAB_MIGRATIONS = [
   '20261128120000_cmd_sounds_lab.sql',
   '20261129120000_cmd_delegated_editors_lab.sql',
   '20261130120000_sub_wheel_v3_lab.sql',
+  '20261201120000_casino_lab.sql',
 ];
 
 export type ServiceState =

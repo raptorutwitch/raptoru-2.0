@@ -123,6 +123,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261129130000_cmd_delegated_editors.sql',
   // Roue du Sub V3: the barème of each draw (grid), seniority confirmed by hand; Lab twin 20261130120000.
   '20261130130000_sub_wheel_v3.sql',
+  // Casino (docs/CASINO.md): one row per round of the extension's slot machine and roulette; Lab twin 20261201120000.
+  '20261201130000_casino.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -247,6 +249,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261129120000_cmd_delegated_editors_lab.sql',
   // Roue du Sub V3: the Lab twin of 20261130130000_sub_wheel_v3.sql (same content).
   '20261130120000_sub_wheel_v3_lab.sql',
+  // Casino: the Lab twin of 20261201130000_casino.sql (same content).
+  '20261201120000_casino_lab.sql',
 ]);
 
 /**
