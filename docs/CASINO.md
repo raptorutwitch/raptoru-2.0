@@ -1,6 +1,6 @@
 # Casino : machine à sous (avec le Coffre) et roulette de l'extension
 
-État au 18/11/2026 : **intégré et jouable en Lab**, branche locale `feat/casino`. Rien n'est poussé, fusionné ni
+État au 17/11/2026 : **intégré et jouable en Lab**, branche locale `feat/casino`. Rien n'est poussé, fusionné ni
 déployé. En Production, le Casino reste fermé tant qu'Antoni n'a pas validé :
 
 - la variable `CASINO_EXTENSION` du Core, à `off` par défaut ;
