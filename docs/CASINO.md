@@ -128,6 +128,8 @@ Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à 
     des gains.
   - Rythme : une fois par tour, une fois par viewer toutes les `casino.share_cooldown_s` (300 s par défaut), une fois
     toutes les 30 s sur la chaîne.
+  - Seulement quand le Casino joue : ouvert, pendant le live, hors pause globale, viewer non bloqué, tour de moins de
+    24 h. Sinon, refus sans aucun message dans le chat.
 - **Annonces automatiques :** seulement le GRAND et les gains d'au moins `casino.announce_min_x` × la mise (500 par
   défaut). Au plus une toutes les 2 minutes, par la file existante du bot.
 

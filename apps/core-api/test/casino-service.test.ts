@@ -10,7 +10,7 @@ import {
 import { evaluate, STRIPS, windowAt } from '../src/casino/slot.js';
 import { coreWalletEconomy } from '../src/economy/economy.js';
 import { studioCockpitRoutes } from '../src/http/studio-cockpit-routes.js';
-import { editWallet } from '../src/lab-moderation/store.js';
+import { editWallet, setBlock } from '../src/lab-moderation/store.js';
 import { CasinoService as Service } from '../src/casino/service.js';
 import { openCanonicalLive } from './live.js';
 import { setup, type TestCore } from './helpers.js';
@@ -388,6 +388,45 @@ describe('casino — shares, history, spectators, rights', () => {
       `select params->>'text' as text from cmd_steps where origin = 'module:casino' order by created_at`,
     );
     expect(shares).toHaveLength(2);
+  });
+
+  it('a share only while the casino plays: closed, offline, blocked, too old, malformed ids — nothing posted', async () => {
+    const core = await lab();
+    await liveOn(core);
+    const c = core.casino;
+    c.rng = scripted([3, 7, 11, 19, 25]);
+    const r = await c.spinSlot(CH, ALICE, { key: 'gate-1-xxx', bet: 100 });
+    const id = r.round.round_id;
+    expect(
+      await code(c.share(CH, ALICE, 'zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz')),
+    ).toBe('invalid_round');
+    expect(
+      await code(c.share(CH, ALICE, '------------------------------------')),
+    ).toBe('invalid_round');
+    await core.moduleSettings.set(CH, 'casino.open', 0, 'test');
+    expect(await code(c.share(CH, ALICE, id))).toBe('casino_closed');
+    await core.moduleSettings.set(CH, 'casino.open', 1, 'test');
+    await liveOff(core);
+    expect(await code(c.share(CH, ALICE, id))).toBe('stream_offline');
+    await liveOn(core);
+    await setBlock(core.db, core.clock.now(), {
+      channelId: CH,
+      viewerId: ALICE.id,
+      module: 'all',
+      until: null,
+      reason: 'test',
+      actor: 'test',
+    });
+    expect(await code(c.share(CH, ALICE, id))).toBe('viewer_blocked');
+    await core.db.query('delete from lab_viewer_blocks where viewer_id = $1', [
+      ALICE.id,
+    ]);
+    core.clock.set(new Date(core.clock.now().getTime() + 86_400_001));
+    expect(await code(c.share(CH, ALICE, id))).toBe('share_too_old');
+    const posted = await core.db.query(
+      `select 1 from cmd_steps where origin = 'module:casino'`,
+    );
+    expect(posted).toHaveLength(0);
   });
 
   it('history (own), a round (public), the rounds in progress (no result before its animation)', async () => {

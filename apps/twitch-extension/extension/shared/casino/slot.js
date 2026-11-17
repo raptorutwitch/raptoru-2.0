@@ -397,7 +397,7 @@ export function mountSlot(D, ctx) {
       if (from !== 'settled') await new Promise((ok) => W.setTimeout(ok, fast ? 350 : 1100));
       Audio.bonus();
       await CoffreView.play(
-        { script: coffre, bet: round.bet, credit: coffre.win, step: round.mine && !replay ? (round.progress_step ?? -1) : spectator ? Math.max(-1, round.progress_step ?? -1) : -1 },
+        { script: coffre, bet: round.bet, credit: coffre.win, paid: round.capped ? Math.max(0, round.payout - (round.outcome.line_win ?? 0)) : coffre.win, step: round.mine && !replay ? (round.progress_step ?? -1) : spectator ? Math.max(-1, round.progress_step ?? -1) : -1 },
         {
           replay,
           spectator,

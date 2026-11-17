@@ -1018,6 +1018,7 @@ describe('module host through the real Production doors (architecture socle)', (
       'random_ban_ext', // Mini-jeux: the extension's purchase (OFF by default)
       'word_game',
       'event_shop',
+      'casino', // docs/CASINO.md (closed by default)
     ]);
     const refund = await studio(
       `/v1/studio/cockpit/modules/${CHANNEL}/refund`,

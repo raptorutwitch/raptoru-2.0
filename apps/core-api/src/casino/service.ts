@@ -45,6 +45,9 @@ import {
 // - A per-round win cap (casino.max_win), shown in the rules and on a capped round — never a silent change.
 
 export const CASINO_MODULE = 'casino';
+/** A round id: a UUID, strictly (a malformed one never reaches PostgreSQL). */
+export const ROUND_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The module's bounded settings (Studio › Casino; module-settings), stored as `casino.<key>`. */
 export const CASINO_SETTINGS = {
@@ -127,6 +130,22 @@ type SettingKey = keyof typeof CASINO_SETTINGS;
 
 /** Channel-wide pace of LeCroupier_'s casino messages. */
 const SHARE_CHANNEL_GAP_MS = 30_000;
+/** A share is for a recent round only. */
+const SHARE_MAX_AGE_MS = 86_400_000;
+/** The refusals Studio shows (« transactions bloquées »): availability, money, the Core's own failures. */
+const NOTED_REFUSALS = new Set([
+  'insufficient_tokens',
+  'stream_offline',
+  'casino_closed',
+  'game_closed',
+  'not_approved',
+  'viewer_blocked',
+  'global_pause',
+  'above_max_win',
+  'balance_cap',
+  'economy_unavailable',
+  'casino_unavailable',
+]);
 const ANNOUNCE_GAP_MS = 120_000;
 /** How long a round stays « en cours » for spectators (its animation), unless the Coffre is still being watched. */
 const ACTIVE_MS = { slot: 9_000, roulette: 13_000 } as const;
@@ -207,6 +226,12 @@ const COLOR_FR: Record<string, string> = {
 export class CasinoService {
   /** Production's hard switch (CASINO_EXTENSION ≠ off): without it the canonical economy never plays. */
   productionApproved = false;
+  /**
+   * The Core's environment, set by the real servers (public-frontier: CORE_ENVIRONMENT === 'lab'): only the Lab plays
+   * without CASINO_EXTENSION and follows the simulated live — whatever the economy. Unset (tests, the demo): the economy
+   * decides (the Lab test wallet never moves a real Jeton).
+   */
+  labEnvironment: boolean | null = null;
   /** The game's draws (crypto); a test may replace them. */
   rng: IntRng = cryptoIntRng;
 
@@ -218,7 +243,7 @@ export class CasinoService {
   ) {}
 
   private get lab() {
-    return this.economy.mode !== 'canonical';
+    return this.labEnvironment ?? this.economy.mode !== 'canonical';
   }
 
   setting(q: Queryable, channelId: string, key: SettingKey) {
@@ -397,6 +422,12 @@ export class CasinoService {
             balance,
             needed: bet,
           });
+        // The wallet's own cap (the Lab's; the canonical one is 10^12): checked before the draw with the largest
+        // possible win, never after it (a drawn win is never thrown away).
+        if (balance - bet + lim.max_win > hold.maxBalance)
+          throw new CasinoError(409, 'balance_cap', {
+            max_balance: hold.maxBalance,
+          });
         // The draw (Core only).
         if (game === 'slot') {
           const stops = drawStops(this.rng);
@@ -437,10 +468,6 @@ export class CasinoService {
           };
         }
         const payout = Math.min(raw, lim.max_win);
-        if (balance - bet + payout > hold.maxBalance)
-          throw new CasinoError(409, 'balance_cap', {
-            max_balance: hold.maxBalance,
-          });
         // Pay: the bet, then the win — two movements of the canonical ledger (or the Lab's), keyed by the round.
         await this.economy.move(q, now, {
           channelId,
@@ -493,7 +520,7 @@ export class CasinoService {
       });
     } catch (e) {
       const err = this.mapped(e);
-      if (err.code !== 'idempotency_conflict')
+      if (NOTED_REFUSALS.has(err.code))
         await this.noteRefusal(channelId, viewer, game, err).catch(() => {});
       throw err;
     }
@@ -600,10 +627,7 @@ export class CasinoService {
     viewer: CasinoViewer,
     req: { round_id: unknown; step: unknown; done?: unknown },
   ) {
-    if (
-      typeof req.round_id !== 'string' ||
-      !/^[0-9a-f-]{36}$/.test(req.round_id)
-    )
+    if (typeof req.round_id !== 'string' || !ROUND_ID.test(req.round_id))
       throw new CasinoError(400, 'invalid_round');
     if (
       typeof req.step !== 'number' ||
@@ -632,7 +656,7 @@ export class CasinoService {
    * viewer and one every 30 s on the channel. The Core writes the text from the real round (never the client's).
    */
   async share(channelId: string, viewer: CasinoViewer, roundId: unknown) {
-    if (typeof roundId !== 'string' || !/^[0-9a-f-]{36}$/.test(roundId))
+    if (typeof roundId !== 'string' || !ROUND_ID.test(roundId))
       throw new CasinoError(400, 'invalid_round');
     return this.db.tx(async (q) => {
       await q.query('select pg_advisory_xact_lock(hashtext($1))', [
@@ -648,6 +672,17 @@ export class CasinoService {
         throw new CasinoError(404, 'round_not_found');
       if (row.shared_at) return { shared: true, already: true };
       const now = this.clock.now();
+      // The chat only hears the casino while it plays: open, during the live, no global pause, the viewer not
+      // blocked, a recent round.
+      const avail = await this.availability(q, channelId);
+      if (avail.reason) throw new CasinoError(409, avail.reason);
+      await assertNotGloballyPaused(q, channelId).catch((e: unknown) => {
+        throw this.mapped(e);
+      });
+      if (await activeBlock(q, channelId, viewer.id, 'all', now))
+        throw new CasinoError(409, 'viewer_blocked');
+      if (now.getTime() - row.created_at.getTime() > SHARE_MAX_AGE_MS)
+        throw new CasinoError(409, 'share_too_old');
       const lim = await this.limits(q, channelId);
       const mine = (
         await q.query<{ at: Date }>(
@@ -790,7 +825,7 @@ export class CasinoService {
     roundId: unknown,
     viewer: CasinoViewer | null,
   ) {
-    if (typeof roundId !== 'string' || !/^[0-9a-f-]{36}$/.test(roundId))
+    if (typeof roundId !== 'string' || !ROUND_ID.test(roundId))
       throw new CasinoError(400, 'invalid_round');
     const r = (
       await this.db.query<RoundRow>(

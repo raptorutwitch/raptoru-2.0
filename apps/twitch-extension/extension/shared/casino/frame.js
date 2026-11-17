@@ -222,6 +222,7 @@ export const REFUSAL = {
   share_cooldown: 'Tu as déjà partagé récemment.',
   share_busy: 'LeCroupier_ vient de parler : réessaie dans quelques secondes.',
   chat_unavailable: 'Le chat est indisponible pour le moment.',
+  share_too_old: 'Cette partie est trop ancienne pour être partagée.',
   identity_required: 'Partage ton identité Twitch avec l’extension pour jouer.',
   casino_unavailable: 'Le Casino ne répond pas : réessaie, rien n’a été payé deux fois.',
   network_error: 'Connexion perdue : réessaie (la même partie n’est jamais payée deux fois).',

@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 16/11/2026** (livraison de la Roue du Sub V3, journal
+**Mis à jour le 18/11/2026** (Casino intégré en Lab, branche locale `feat/casino` ; avant : livraison de la Roue du Sub V3, journal
 [archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md](archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
@@ -47,7 +47,12 @@ V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et es
 expressions et la latence ; essayer « Envoyer une vraie annonce test » ; téléverser le ZIP be1744e75f63 en Hosted Test
 (jamais pendant un live), l'essayer, puis la revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md
 § 15 ; choisir les directions du casino (prototypes/casino-directions, hors dépôt).
-Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
+Casino (18/11, docs/CASINO.md) : machine à sous avec le Coffre, roulette, spectateurs, Studio › Casino — intégrés et
+testés en Lab sur la branche LOCALE feat/casino (a8deef5f Core + migration 20261201130000_casino, 91839307 extension,
+Studio, Lab). Non poussé, non fusionné, non déployé ; fermé par défaut (casino.open = 0, CASINO_EXTENSION = off).
+Essayer : npm run casino:demo -w @raptoru/core-api (http://127.0.0.1:4497) ; contrôle : npm run casino:check.
+À valider par Antoni avant la Production : CASINO.md § 10 (limites, plafond de gain, variable, jetons 40/200).
+Prochain chantier : la validation du Casino par Antoni (Lab), ou au choix (par exemple Chaos V2 lot 0, docs/chaos/).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans

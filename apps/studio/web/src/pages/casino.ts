@@ -11,6 +11,7 @@ import {
   page,
   patch,
   poller,
+  pp,
   run,
   scrub,
   seg,
@@ -293,7 +294,7 @@ export function mountCasinoPage(root: HTMLElement) {
       z('active'),
       (state?.active ?? []).map((x) => ({
         key: x.round_id,
-        html: `<div class="mg-r d-in"><span class="mg-r__w"><b>${esc(x.viewer_name)}</b><small>${gameLabel(x.game)} · mise ${fmt(x.bet)}</small></span><span class="mg-r__g"><small>${x.phase === 'bonus' ? 'Coffre' : x.phase === 'draw' ? 'tirage' : 'résultat'}</small></span></div>`,
+        html: `<div class="mg-r d-in">${pp(x.viewer_name, 26)}<span class="mg-r__w"><b>${esc(x.viewer_name)}</b><small>${gameLabel(x.game)} · mise ${fmt(x.bet)}</small></span><span class="mg-r__g"><small>${x.phase === 'bonus' ? 'Coffre' : x.phase === 'draw' ? 'tirage' : 'résultat'}</small></span></div>`,
       })),
       '<div class="d-empty">Aucune partie en cours.</div>',
     );
@@ -301,7 +302,7 @@ export function mountCasinoPage(root: HTMLElement) {
       z('list'),
       (state?.recent ?? []).map((x) => ({
         key: x.round_id,
-        html: `<button type="button" class="mg-r d-in" data-round="${esc(x.round_id)}" title="Détail technique de la partie">
+        html: `<button type="button" class="mg-r d-in" data-round="${esc(x.round_id)}" title="Détail technique de la partie">${pp(x.viewer_name, 26)}
           <span class="mg-r__w"><b>${esc(x.viewer_name)}</b><small>${gameLabel(x.game)} · mise ${fmt(x.bet)}${outcome(x) ? ` · ${esc(outcome(x))}` : ''}${x.capped ? ' · plafonné' : ''}${x.shared ? ' · partagé' : ''}</small></span>
           <span class="mg-r__g"><b class="d-num ${x.payout > x.bet ? 'win' : ''}">${x.payout ? `+${fmt(x.payout)}` : `−${fmt(x.bet)}`}</b><small>${hhmm(x.created_at)}</small></span></button>`,
       })),

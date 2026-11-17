@@ -36,3 +36,5 @@ create table if not exists casino_rounds (
 );
 create index if not exists casino_rounds_recent on casino_rounds (channel_id, created_at desc);
 create index if not exists casino_rounds_viewer on casino_rounds (channel_id, viewer_id, created_at desc);
+-- A viewer's last share (the share cooldown), without reading all their rounds.
+create index if not exists casino_rounds_shared on casino_rounds (channel_id, viewer_id, shared_at desc) where shared_at is not null;

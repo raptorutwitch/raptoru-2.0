@@ -39,7 +39,8 @@ const hash = (str) => {
 const jet = (v, bet) => Math.floor(v * bet);
 
 /**
- * Joue un Coffre. c = { script, bet, credit, step } (step : dernière relance déjà montrée, -1 au départ).
+ * Joue un Coffre. c = { script, bet, credit, paid?, step } (paid : le montant payé si le gain a été plafonné ; step :
+ * dernière relance déjà montrée, -1 au départ).
  * o = { replay, onStep(i), getFast(), toggleFast(), host, spectator (the player's name), follow(i) (spectator: resolves
  * when the player reached respin i), onCredit() }. Renvoie une promesse résolue à la fermeture, avec un
  * compte rendu : { shown (Jetons affichés à la fin), mismatch (écarts écran/scénario), ms, skips }.
@@ -491,11 +492,12 @@ function play(c, o = {}) {
     for (let k = 0; k < n; k++) rain += `<i class="cn" style="left:${Math.round(Math.random() * 96)}%;--d:${(1.3 + Math.random() * 1.1).toFixed(2)}s;--w:${(Math.random() * 0.9).toFixed(2)}s;--r:${Math.round(Math.random() * 720 - 360)}deg"></i>`;
     const f = document.createElement('div');
     f.className = `cfin ${lvl}`;
-    f.innerHTML = `${rain}<span class="kicker">${kicker}</span><b>+0</b><small>${xs(Math.round(x * 10) / 10)} la mise</small><p>${bits.join(' · ')}</p>${o.replay ? '<p class="fine">Replay : ce gain a été crédité à l’époque.</p>' : o.spectator ? `<p class="fine">Gain de ${Frame.esc(o.spectator)}, déjà sur son solde.</p>` : '<p class="fine">Déjà sur ton solde.</p>'}`;
+    f.innerHTML = `${rain}<span class="kicker">${kicker}</span><b>+0</b><small>${xs(Math.round(x * 10) / 10)} la mise</small><p>${bits.join(' · ')}</p>${c.paid < c.credit ? `<p class="fine">Plafonné : le tirage valait +${fmt(c.credit)} (gain maximum par partie).</p>` : ''}${o.replay ? '<p class="fine">Replay : ce gain a été crédité à l’époque.</p>' : o.spectator ? `<p class="fine">Gain de ${Frame.esc(o.spectator)}, déjà sur son solde.</p>` : '<p class="fine">Déjà sur ton solde.</p>'}`;
     $('.cof__vault').append(f);
     Audio.win(lvl === 'small' ? 1 : lvl === 'good' ? 2 : 3);
-    await countTo((v) => (f.querySelector('b').textContent = `+${fmt(v)}`), 0, c.credit, T(lvl === 'small' ? 700 : 1500, 250));
-    f.querySelector('b').textContent = `+${fmt(c.credit)}`;
+    const paid = c.paid ?? c.credit;
+    await countTo((v) => (f.querySelector('b').textContent = `+${fmt(v)}`), 0, paid, T(lvl === 'small' ? 700 : 1500, 250));
+    f.querySelector('b').textContent = `+${fmt(paid)}`;
     if (!o.replay && !o.follow && o.onCredit) o.onCredit(); // le solde affiché reçoit le gain maintenant (il est crédité depuis le tirage)
     end();
   }

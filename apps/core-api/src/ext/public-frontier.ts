@@ -178,6 +178,7 @@ export function createPublicFrontier(
   // Casino (docs/CASINO.md): Production plays only once CASINO_EXTENSION allows it (the façade's door AND the service).
   const casinoAudience = parseMusicAudience(config.CASINO_EXTENSION);
   core.casino.productionApproved = casinoAudience.mode !== 'off';
+  core.casino.labEnvironment = lab;
   const facade = new ExtFacade(
     call,
     new TwitchNames(app),

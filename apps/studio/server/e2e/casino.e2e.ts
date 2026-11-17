@@ -72,6 +72,10 @@ test('Studio › Casino: open, the live, a round recorded, a refusal counted; St
     timeout: 10_000,
   });
   await expect(tab.locator('[data-z="day"]')).toContainText('Machine');
+  await page.screenshot({
+    path: test.info().outputPath('studio-casino.png'),
+    fullPage: true,
+  });
   // Studio never plays for a viewer: the cockpit refuses every casino path but admin/…
   const forbidden = await page.request.post('/api/casino/state', {
     headers: STUDIO,
