@@ -9,7 +9,7 @@
 // stream's ban alerts are Studio's own, untouched and never synchronised with this screen.
 
 import { errorLabel } from './api.js';
-import { createMiniGames } from './mini-games.js';
+import { createMiniGames } from './mini-games.js';
 import { casinoGames } from './casino/casino.js';
 import { createMachine, face } from './random-ban-machine.js';
 import { createChargesGauge } from './random-ban-gauge.js';
@@ -30,15 +30,36 @@ const SHEET = 'modules/arcade/arcade.css';
 const esc = (t) =>
   String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-/** The module's own sheet, once per document (no line in the shells' central style lists). */
+/**
+ * The module's own sheet, once per document (no line in the shells' central style lists). Asked as soon as this module
+ * is loaded (below), so it is usually there when Mini-jeux opens.
+ */
 function ensureSheet(document) {
-  if (document.querySelector('link[data-rb-sheet]')) return;
-  const link = document.createElement('link');
+  let link = document.querySelector('link[data-rb-sheet]');
+  if (link) return link;
+  link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = SHEET;
   link.dataset.rbSheet = '1';
+  link.addEventListener('load', () => (link.dataset.rbSheet = 'ready'), { once: true });
+  link.addEventListener('error', () => (link.dataset.rbSheet = 'ready'), { once: true });
   document.head?.append(link);
+  return link;
 }
+/**
+ * Nothing of Mini-jeux is painted before its sheet applies (19/11): unstyled, its icons (inline SVGs sized by that
+ * sheet) were drawn at the full width of the panel for a few frames — the « giant cross » seen on opening. The node
+ * stays invisible (its place kept) until the sheet has loaded, or failed (then shown as it is).
+ */
+function hideUntilStyled(link, node) {
+  if (!link || link.sheet || link.dataset.rbSheet === 'ready') return;
+  node.style.visibility = 'hidden';
+  const show = () => node.style.removeProperty('visibility');
+  link.addEventListener('load', show, { once: true });
+  link.addEventListener('error', show, { once: true });
+  (node.ownerDocument?.defaultView ?? globalThis).setTimeout(show, 10_000); // (load or error always comes: a last resort)
+}
+if (globalThis.document?.head) ensureSheet(globalThis.document);
 
 /** Random Ban's mark: a die (chance) in a scope (the aim). */
 export const RB_ICON =
@@ -111,13 +132,14 @@ const SNIPER_HOLD_MS = 20_000; // a Sniper's verdict, from the moment the Core g
 const OPEN = ['queued', 'searching', 'timeout_requested'];
 
 export function createRandomBanGame({ document, client, module, back = null }) {
-  ensureSheet(document);
+  const styles = ensureSheet(document);
   const win = document.defaultView ?? globalThis;
   const reduced = win.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const machine = createMachine(document, { reduced });
   const gauge = createChargesGauge(document, { reducedMotion: reduced });
   const node = document.createElement('div');
   node.className = 'rb';
+  hideUntilStyled(styles, node);
   node.innerHTML = `
     <header class="rb__bar">
       <span class="rb__head">
@@ -726,8 +748,8 @@ export function createRandomBanGame({ document, client, module, back = null }) {
 
 /** The Hub's « Mini-jeux »: its catalog, Random Ban the first game, then the casino (docs/CASINO.md). */
 export function createRandomBanView({ document, client, module }) {
-  ensureSheet(document);
-  return createMiniGames({
+  const sheet = ensureSheet(document);
+  const view = createMiniGames({
     document,
     games: [
       {
@@ -747,6 +769,8 @@ export function createRandomBanView({ document, client, module }) {
       ...casinoGames({ document, client }),
     ],
   });
+  hideUntilStyled(sheet, view.node);
+  return view;
 }
 
 registerViewerModule('random_ban_ext', createRandomBanView, {
