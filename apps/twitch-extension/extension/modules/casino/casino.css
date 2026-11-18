@@ -199,3 +199,30 @@ svg.fill { fill: currentColor; stroke: none; }
 .is-watch .spin svg.eye, .cof .spin svg.eye { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 .spin[data-state='watch'] { --hi: #ece4ff; --c: #a58ff0; --lo: #7462c4; --edge: #2f2468; cursor: default; }
 .spin[data-state='watch'] .spin__cap small { font-size: 11px; letter-spacing: 0.06em; }
+
+/* --- The spectator's card (19/11): who is played, live, the stake (gold), the win (green / neutral) ---------------- */
+.wc { min-width: 0; height: 100%; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); align-content: start; gap: 7px; padding: 8px 9px; border-radius: 12px; background: linear-gradient(180deg, #0d0817, #0a0612); box-shadow: inset 0 0 0 1px rgba(255, 61, 90, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+.wc__top { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 24px; }
+.wc__live { display: inline-flex; align-items: center; padding: 3px 7px 3px 6px; border-radius: 6px; font: 900 10px/1 var(--font); letter-spacing: 0.08em; color: #ffd6dc; background: rgba(255, 61, 90, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 61, 90, 0.4); }
+.wc__snd { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; color: var(--dim); background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.14); }
+.wc__snd svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.wc__snd .off, .wc__snd[aria-pressed='true'] .on-hide { display: none; }
+.wc__snd[aria-pressed='true'] .off { display: block; }
+.wc__snd[aria-pressed='true'] { color: var(--ink); }
+.wc__who { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 7px; }
+.wc__av { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; font: 900 13px/1 var(--font); color: #1d1336; background: linear-gradient(160deg, #ffe7a3, #f6c344 60%, #cf8d10); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+.wc__id { min-width: 0; display: grid; gap: 2px; }
+.wc__id b { font: 900 14px/1.1 var(--font); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc__st { font: 700 11px/1.2 var(--font); color: rgba(240, 228, 255, 0.82); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc__st.is-play { color: #c9ffd9; }
+.wc__st.is-left { color: rgba(240, 228, 255, 0.6); }
+.wc__amt { display: grid; gap: 1px; padding: 5px 8px 6px; border-radius: 9px; background: rgba(255, 255, 255, 0.035); }
+.wc__amt small { font: 800 10px/1.2 var(--font); letter-spacing: 0.06em; text-transform: uppercase; color: rgba(240, 228, 255, 0.78); }
+.wc__amt b { font: 900 17px/1.15 var(--font); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+.wc__bet { box-shadow: inset 2px 0 0 var(--gold); }
+.wc__bet b { color: var(--gold); }
+.wc__win { box-shadow: inset 2px 0 0 rgba(240, 228, 255, 0.3); }
+.wc__win b.is-pos { color: #5ce08a; }
+.wc__win:has(b.is-pos) { box-shadow: inset 2px 0 0 #5ce08a; background: rgba(54, 196, 94, 0.08); }
+.wc__extra { align-self: end; padding: 4px 7px; border-radius: 7px; font: 800 10.5px/1.25 var(--font); color: var(--gold-2); background: rgba(255, 201, 77, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 201, 77, 0.25); }
+.wc__extra[hidden] { display: none; }

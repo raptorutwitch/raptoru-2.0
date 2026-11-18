@@ -64,6 +64,7 @@ const TEMPLATE = `
         <button type="button" class="tgl k-lilac" data-act="sound" aria-pressed="false" title="Son" aria-label="Son"><span class="tgl__cap"><i data-i="sound"></i></span><span class="tgl__lbl"><i class="led"></i>Son</span></button>
       </div>
       <div class="launchbox"><button type="button" class="spin" id="spin" aria-label="Lancer"></button></div>
+      <div class="wcard" id="wcard" hidden></div>
     </div>
   </div>
   <div class="drawer" id="drawer" hidden></div>
@@ -253,7 +254,7 @@ export function mountSlot(D, ctx) {
     $('#lcd').classList.toggle('locked', lock);
     $('[data-act="fast"]').setAttribute('aria-pressed', String(s.fast));
     $('[data-act="auto"]').setAttribute('aria-pressed', String(auto));
-    $('[data-act="sound"]').setAttribute('aria-pressed', String(s.sound));
+    D.querySelectorAll('[data-act="sound"]').forEach((b) => b.setAttribute('aria-pressed', String(s.sound)));
     if (!busy) paintPlate();
     if (!presentingCredit) paintBoard();
     paintClosed();
@@ -564,13 +565,22 @@ export function mountSlot(D, ctx) {
     ackFn = null;
     f?.();
   };
-  function strip(gain = '…') {
-    $('#rstrip').innerHTML = `<span>Mise <b>${watched ? fmt(watched.bet) : '—'}</b></span><span>Gain <b class="${gain.startsWith('+') ? 'g' : ''}">${gain}</b></span><span class="when">en direct</span>`;
+  let wcard = null;
+  let cofCard = null; // the same card, in the followed Coffre's side
+  const cardState = { state: 'wait', text: '', bet: null, win: undefined, extra: '' };
+  /** The spectator's card: who, live, the round's stake, its win once the Core revealed it (Frame.watchCard). */
+  function card(o) {
+    Object.assign(cardState, o);
+    wcard?.set(cardState);
+    cofCard?.set(cardState);
   }
-  function note(text) {
+  const waiting = () => card({ state: 'wait', text: 'attend son prochain tour' });
+  const left = () => card({ state: 'left', text: 'a quitté le jeu', extra: '' });
+  /** The plate shows no note to a spectator (the card says it): an empty plate until a win. */
+  function note() {
     plateLocked = true;
-    plate.className = 'plate replay';
-    plate.innerHTML = `<small>${text}</small>`;
+    plate.className = 'plate';
+    plate.innerHTML = '';
   }
   function closeCoffre() {
     if (!cof) return;
@@ -598,6 +608,10 @@ export function mountSlot(D, ctx) {
     void CoffreView.play(c, {
       follow: () => new Promise((ok) => (q.length ? ok(q.shift()) : (take = ok))),
       spectator: name,
+      onCard: (h) => {
+        cofCard = Frame.watchCard(h, name);
+        cofCard.set(cardState);
+      },
       seed: roundId,
       instant,
       control,
@@ -606,7 +620,10 @@ export function mountSlot(D, ctx) {
       onReady: ack,
       onStep: ack,
     }).then(() => {
-      if (cof === mine) cof = null;
+      if (cof === mine) {
+        cof = null;
+        cofCard = null;
+      }
     });
   }
   const winPlate = (payout, bet, coffre) => {
@@ -628,15 +645,15 @@ export function mountSlot(D, ctx) {
     watchFast = !!(ev.fast || fast);
     const d = ev.data ?? {};
     if (ev.kind === 'presence') {
-      if (d.game === null && !busy) note(`${esc(name)} a quitté le jeu.`);
+      if (d.game === null && !busy) left();
       return;
     }
     if (ev.kind === 'start') {
       closeCoffre();
       watched = { round_id: ev.round_id, bet: d.bet, best: null };
       view.clearWins();
-      note(`${esc(name)} lance…`);
-      strip();
+      note();
+      card({ state: 'play', text: 'lance…', bet: d.bet, win: null, extra: '' });
       update();
       return;
     }
@@ -647,6 +664,7 @@ export function mountSlot(D, ctx) {
       const r = asSpin({ outcome: d });
       // `late`: how long ago the player's reels started (the Core's clock): ours start there, both land together.
       $('#reels').dataset.round = ev.round_id; // (the round on the reels: read by the Lab's timing checks)
+      card({ state: 'play', text: 'joue…', bet: watched.bet, win: null });
       await view.spin(r, { fast: watchFast, elapsed: late });
       if (destroyed) return;
       const shown = view.markWins(r);
@@ -659,6 +677,7 @@ export function mountSlot(D, ctx) {
         plateLocked = true;
         plate.className = 'plate';
         plate.innerHTML = `<em>COFFRE</em><small>${d.coffre.k} BONUS</small>`;
+        card({ text: 'ouvre le Coffre', extra: `Coffre · ${d.coffre.k} BONUS` });
         popPlate();
         Audio.bonus();
       }
@@ -689,7 +708,7 @@ export function mountSlot(D, ctx) {
       }
       busy = false;
       winPlate(d.payout, d.bet, !!d.coffre);
-      strip(d.payout ? `+${fmt(d.payout)}` : 'aucun');
+      card({ state: 'done', text: 'tour terminé', bet: d.bet, win: d.payout, extra: '' });
       pushHist(ev.round_id, d);
       update();
     }
@@ -713,8 +732,10 @@ export function mountSlot(D, ctx) {
     if (at < 0) {
       watched = null;
       view.clearWins();
-      note(pres?.data.game === null ? `${esc(name)} a quitté le jeu.` : `En attente du prochain tour de ${esc(name)}…`);
-      strip('—');
+      note();
+      card({ bet: null, win: undefined, extra: '' });
+      if (pres?.data.game === null) left();
+      else waiting();
       update();
       return;
     }
@@ -738,11 +759,11 @@ export function mountSlot(D, ctx) {
     watched.best = res.data.lines.slice().sort((a, b) => b.win - a.win)[0] ?? null;
     if (end) {
       winPlate(end.data.payout, end.data.bet, !!end.data.coffre);
-      strip(end.data.payout ? `+${fmt(end.data.payout)}` : 'aucun');
+      card({ state: 'done', text: 'tour terminé', bet: end.data.bet, win: end.data.payout, extra: '' });
       update();
       return;
     }
-    strip();
+    card({ state: 'play', text: cofE ? 'ouvre le Coffre' : 'joue…', bet: watched.bet, win: null, extra: cofE ? `Coffre · ${cofE.data.k} BONUS` : '' });
     if (cofE) {
       busy = true;
       update();
@@ -757,10 +778,11 @@ export function mountSlot(D, ctx) {
     spect = { live: true, follow: true, round: { bet: 0 } };
     body.classList.add('is-watch');
     $('#spect').hidden = false;
-    $('#spect').innerHTML = `<i class="live-dot"></i><span>Spectateur · ${esc(name)}</span>`;
-    $('#rstrip').hidden = false;
-    strip('—');
-    note(`En attente du prochain tour de ${esc(name)}…`);
+    $('#spect').hidden = true; // (the card says who is watched)
+    wcard = Frame.watchCard($('#wcard'), name, { sound: true });
+    $('#wcard').hidden = false;
+    note();
+    waiting();
     update();
   }
 

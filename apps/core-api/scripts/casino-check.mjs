@@ -350,18 +350,24 @@ try {
   await shot(bob, '07-spectateur-coffre');
   const spectUi = await bob.evaluate(() => {
     const D = document.querySelector('.cz-host').shadowRoot;
+    const seen = (el) => !!el && el.getClientRects().length > 0;
     return {
-      tag: D.querySelector('.cof__info')?.textContent,
+      card: D.querySelector('.cof [data-cof="card"]')?.textContent,
       ctl: D.querySelector('.cof .spin')?.dataset.state,
       disabled: D.querySelector('.cof .spin')?.disabled,
-      bet: getComputedStyle(D.querySelector('.betbar')).visibility,
+      controls: [
+        ...D.querySelectorAll(
+          '.cof .spin, .cof .toggles, .betbar, .cab .toggles, #spin',
+        ),
+      ].filter(seen).length,
     };
   });
   check(
-    /Spectateur/.test(spectUi.tag ?? '') &&
+    /Luna/.test(spectUi.card ?? '') &&
+      /EN DIRECT/.test(spectUi.card ?? '') &&
       spectUi.ctl === 'watch' &&
       spectUi.disabled === true &&
-      spectUi.bet === 'hidden',
+      spectUi.controls === 0,
     'le spectateur suit le Coffre de Luna, sans aucune commande active',
     JSON.stringify(spectUi),
   );

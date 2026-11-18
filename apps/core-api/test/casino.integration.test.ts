@@ -160,6 +160,54 @@ describe.skipIf(!isLocal)('casino, real Postgres, two Cores', () => {
     expect((await ledger()) - before).toBe(-500);
   });
 
+  it('ALL-IN above the per-spin maximum, 10 intents from two Cores: exactly one, 0 left, never below', async () => {
+    await editWallet(
+      a,
+      clock.now(),
+      CH,
+      V.id,
+      'set',
+      { tokens: 1_000_000 },
+      'test',
+    );
+    await a.query('delete from casino_rounds');
+    await settingsOf(a).set(
+      CH,
+      'casino.roulette_all_in_max_win',
+      36_000_000,
+      'test',
+    );
+    const black = (db: Db) => {
+      const c = casino(db);
+      c.rng = { int: (n) => (n === 37 ? 2 : 0) }; // pocket 2 = 15, black: the ALL-IN on red loses
+      return c;
+    };
+    const [A, B] = [black(a), black(b)];
+    const out = await Promise.allSettled(
+      Array.from({ length: 10 }, (_, i) =>
+        (i % 2 ? A : B).spinRoulette(CH, V, {
+          key: `allin-race-${i}-x`,
+          bets: { red: 1_000_000 },
+        }),
+      ),
+    );
+    const refused = out.filter(
+      (r) => r.status === 'rejected',
+    ) as PromiseRejectedResult[];
+    expect(out.length - refused.length).toBe(1);
+    // after the first, the balance is 0: the others are refused for the money (or as above the maximum), never paid
+    expect(
+      refused.every(
+        (r) =>
+          r.reason instanceof CasinoError &&
+          ['insufficient_tokens', 'above_max'].includes(r.reason.code),
+      ),
+    ).toBe(true);
+    expect(await labTokens()).toBe(0);
+    expect(await a.query('select 1 from casino_rounds')).toHaveLength(1);
+    await settingsOf(a).set(CH, 'casino.roulette_all_in_max_win', 0, 'test');
+  });
+
   it('a failure inside the spin’s transaction (a crash before the commit): nothing debited, nothing recorded', async () => {
     await editWallet(
       a,

@@ -92,7 +92,6 @@ function play(c, o = {}) {
   const reelsBg = [0, 1, 2, 3, 4].map((k) => `<i class="creel" data-reel="${k}" style="grid-column:${k + 1}"></i>`).join('');
   const cols = reelsBg + [0, 1, 2, 3, 4].map((k) => `<i class="ccol" data-col="${k}" style="grid-column:${k + 1}"><span>×2</span></i>`).join('');
   const tgl = (act, k, icon, label, title) => `<button type="button" class="tgl ${k}" data-cof="${act}" aria-pressed="false" title="${title}" aria-label="${label}"><span class="tgl__cap">${ICON[icon]}</span><span class="tgl__lbl"><i class="led"></i>${label}</span></button>`;
-  const demoTag = o.spectator ? `<span class="cof__tag replay">Spectateur · ${Frame.esc(o.spectator)}</span>` : '';
   el.innerHTML = `
     <div class="cof__jack">${JACKS.map(([id, label, v]) => `<span class="jk j-${id}" data-j="${id}"><em>${label}</em><b>${compact(jet(v, bet))}</b></span>`).join('')}</div>
     <div class="cof__vault" data-cof="vault">
@@ -105,11 +104,14 @@ function play(c, o = {}) {
       <span class="tot"><small>Gain du Coffre</small><b>0</b><em></em></span>
     </div>
     <div class="cof__side">
-      <div class="cof__info"><b>Le Coffre</b><small>${S.k} BONUS · mise ${compact(bet)}</small>${o.replay ? '<span class="cof__tag replay">Replay · déjà crédité</span>' : demoTag}</div>
+      <div class="cof__info"><b>Le Coffre</b><small>${S.k} BONUS · mise ${compact(bet)}</small>${o.replay ? '<span class="cof__tag replay">Replay · déjà crédité</span>' : ''}</div>
       <div class="toggles">${tgl('fast', 'k-amber', 'bolt', 'Rapide', 'Rapide : animations courtes, même résultat')}${tgl('auto', 'k-blue', 'auto', 'Auto', 'Auto : enchaîne les relances. Toucher à nouveau pour l’arrêter tout de suite.')}${tgl('skip', 'k-lilac', 'skip', 'Passer', 'Passer : termine l’animation en cours (même résultat)')}</div>
       <div class="launchbox"><button type="button" class="spin" data-cof="go"></button></div>
+      ${o.follow ? '<div class="wcard" data-cof="card"></div>' : ''}
     </div>`;
   host.append(el);
+  // A spectator: the card of the followed player in place of the controls (slot.js fills it, Frame.watchCard).
+  if (o.follow) o.onCard?.(el.querySelector('[data-cof="card"]'));
   const $ = (s) => el.querySelector(s);
   const cellEl = (i) => el.querySelector(`.cc[data-c="${i}"]`);
   const fx = $('.cof__fx');

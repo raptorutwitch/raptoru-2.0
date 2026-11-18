@@ -429,6 +429,36 @@ const fits = (p) =>
       scroll: document.documentElement.scrollWidth > innerWidth + 1,
     };
   });
+/** The spectator's card (19/11): its texts, and the player's controls still visible on a spectator's screen. */
+const cardOf = (p, sel = '#wcard') =>
+  p.evaluate((sel) => {
+    const D = document.querySelector('.cz-host')?.shadowRoot;
+    const c = D?.querySelector(sel);
+    const t = (k) => c?.querySelector(`[data-wc="${k}"]`)?.textContent ?? null;
+    const seen = (el) =>
+      !!el &&
+      el.getClientRects().length > 0 &&
+      getComputedStyle(el).visibility !== 'hidden';
+    return {
+      shown: seen(c),
+      text: c?.textContent ?? '',
+      st: t('st'),
+      bet: t('bet'),
+      win: t('win'),
+      winPos: !!c?.querySelector('[data-wc="win"].is-pos'),
+      betColor: c
+        ? getComputedStyle(c.querySelector('[data-wc="bet"]')).color
+        : null,
+      controls: [
+        ...D.querySelectorAll(
+          '.betbar, .toggles, .board, #spin, .rstrip, .chips, .tray, .fastsw, .launch, [data-act="auto"], [data-act="fast"]',
+        ),
+      ]
+        .filter(seen)
+        .map((e) => e.className || e.id),
+    };
+  }, sel);
+const digits = (t) => Number(String(t ?? '').replace(/\D/g, '') || 0);
 /** Alice spins and the machine is idle again (a natural Coffre on the way is played to its end). */
 const aliceSpin = async (alice) => {
   await cz(alice, '#spin').click();
@@ -499,10 +529,21 @@ try {
     null,
     15000,
   );
-  const wait1 = await cz(bob, '#plate').innerText();
+  const wait1 = await cardOf(bob);
   check(
-    /attente|Alice/.test(wait1),
-    `Bob suit Alice avant son premier tour (« ${wait1.trim()} »)`,
+    wait1.shown &&
+      /Alice/.test(wait1.text) &&
+      /EN DIRECT/.test(wait1.text) &&
+      /attend/.test(wait1.st) &&
+      wait1.bet === '—' &&
+      wait1.win === '—',
+    `Bob suit Alice avant son premier tour : son panneau la nomme, en direct, en attente (« ${wait1.st} »)`,
+    JSON.stringify(wait1),
+  );
+  check(
+    !wait1.controls.length,
+    'spectateur : aucune commande du joueur à l’écran (ni Rapide, Auto, Lancer, mise, Derniers gains)',
+    wait1.controls.join(', '),
   );
   const f1 = await fits(bob);
   check(
@@ -522,10 +563,50 @@ try {
     () => true,
     () => false,
   );
+  const during = [];
+  let sampling = true;
+  const sampler = (async () => {
+    while (sampling) {
+      const c = await cardOf(bob).catch(() => null);
+      const running = await bob
+        .evaluate(() => {
+          const r = document
+            .querySelector('.cz-host')
+            ?.shadowRoot?.querySelector('#reels');
+          return (
+            !!r &&
+            Number(r.dataset.startAt ?? 0) > Number(r.dataset.landAt ?? 0)
+          );
+        })
+        .catch(() => false);
+      if (c && running) during.push(c);
+      await sleep(80);
+    }
+  })();
   await aliceSpin(alice);
   check(await anim, 'le spin d’Alice s’anime chez Bob (rouleaux qui défilent)');
   await waitEnds(bob, e0 + 1);
+  sampling = false;
+  await sampler;
   await sleep(300);
+  {
+    const r0 = (await api('/api/admin')).recent[0];
+    const c = await cardOf(bob);
+    check(
+      during.length > 0 &&
+        during.every((x) => x.win === '…' && digits(x.bet) === r0.bet),
+      `pendant le tour : la mise d’Alice (${r0.bet}) affichée, le gain caché (« … » sur ${during.length} relevés)`,
+      JSON.stringify(during.map((x) => [x.bet, x.win])),
+    );
+    check(
+      digits(c.win) === r0.payout &&
+        c.winPos === r0.payout > 0 &&
+        digits(c.bet) === r0.bet &&
+        /terminé/.test(c.st),
+      `fin du tour : le gain montré est celui du Core (${r0.payout}), ${r0.payout ? 'en vert' : 'neutre'} ; mise en or (${c.betColor})`,
+      JSON.stringify(c),
+    );
+  }
   check(
     JSON.stringify(await grid(bob)) === JSON.stringify(await grid(alice)),
     'Bob voit exactement les rouleaux d’Alice',
@@ -925,6 +1006,7 @@ try {
   );
   await sleep(1500);
   await shot(bob, 'w08-roulette-roue');
+  const ballCard = await cardOf(bob, '#wcard2');
   await until(
     bob,
     () =>
@@ -939,6 +1021,29 @@ try {
     true,
     'la roue tourne chez Bob et s’arrête sur le 17, le numéro du Core',
   );
+  {
+    const r0 = (await api('/api/admin')).recent[0];
+    await sleep(200);
+    const [under, beside] = [await cardOf(bob), await cardOf(bob, '#wcard2')];
+    check(
+      ballCard.shown && ballCard.win === '…' && digits(ballCard.bet) === r0.bet,
+      `roulette : pendant que la bille tourne, le panneau de Bob montre la mise (${r0.bet}), le gain caché`,
+      JSON.stringify(ballCard),
+    );
+    check(
+      digits(beside.win) === r0.payout &&
+        digits(under.win) === r0.payout &&
+        /17/.test(under.st ?? ''),
+      `roulette : la bille arrêtée, le gain du Core (${r0.payout}) apparaît, le 17 dans l’état`,
+      JSON.stringify([under, beside]),
+    );
+    check(
+      !under.controls.length,
+      'roulette : aucune commande du joueur chez le spectateur',
+      under.controls.join(', '),
+    );
+    await shot(bob, 'w08b-roulette-panneau');
+  }
   {
     await sleep(300);
     const ta = await marks(alice);
@@ -990,9 +1095,8 @@ try {
     bob,
     () =>
       /quitté/.test(
-        document
-          .querySelector('.cz-host')
-          ?.shadowRoot?.querySelector('#spectText, #plate')?.textContent ?? '',
+        document.querySelector('.cz-host')?.shadowRoot?.querySelector('#wcard')
+          ?.textContent ?? '',
       ),
     null,
     15000,

@@ -94,6 +94,10 @@ const LIMITS: [key: string, label: string][] = [
   ['casino.slot_max_bet', 'Machine : mise maximum'],
   ['casino.roulette_max_total', 'Roulette : mise totale max.'],
   ['casino.max_win', 'Gain maximum par partie'],
+  [
+    'casino.roulette_all_in_max_win',
+    'Roulette : gain max. d’un ALL-IN (0 = off)',
+  ],
   ['casino.share_cooldown_s', 'Partage : délai par viewer'],
   ['casino.announce_min_x', 'Annonce automatique dès'],
 ];

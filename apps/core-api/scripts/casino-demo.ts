@@ -70,6 +70,13 @@ const core = createCore(db, systemClock, new DevFakeCreditProvider());
 const casino = core.casino;
 await core.moduleSettings.set(CH, 'casino.open', 1, 'demo');
 await core.moduleSettings.set(CH, 'random_ban_ext.enabled', 1, 'demo'); // the Mini-jeux card
+// ALL-IN above the per-spin maximum (19/11): ON in the demo only — its Production value is Antoni's (0 = off).
+await core.moduleSettings.set(
+  CH,
+  'casino.roulette_all_in_max_win',
+  36_000_000,
+  'demo',
+);
 for (const v of Object.values(VIEWERS))
   await editWallet(
     db,
@@ -212,6 +219,7 @@ ul{margin:0;padding-left:18px;max-height:180px;overflow:auto;font-size:12.5px}sm
 <button data-do="live" id="live">Live</button><button data-do="open" id="open">Casino ouvert</button>
 <button data-do="f3">Prochain tour d’Alice : Coffre 3 BONUS</button><button data-do="f5">… 5 BONUS</button><button data-do="fg">… grille pleine (GRAND)</button><button data-do="f17">… roulette : le 17</button><br><button data-do="luna-slot">Luna joue à la machine</button><button data-do="luna-coffre">Luna ouvre un Coffre</button><button data-do="luna-roulette">Luna joue à la roulette</button>
 <div style="margin-top:6px">Gain max par partie <input id="maxwin" value="1000000"> <button data-do="maxwin">Appliquer</button></div>
+<div>Gain max d’un ALL-IN (0 = sans exception) <input id="aimax" value="36000000"> <button data-do="aimax">Appliquer</button></div>
 <div>Solde d’Alice <input id="bal" value="1000000"> <button data-do="bal">Appliquer</button></div></div>
 <div class="box"><h3>LeCroupier_ (chat simulé, file réelle du Core)</h3><ul id="chat"></ul></div>
 <div class="box"><h3>Studio › Casino (lecture)</h3><div id="admin"></div></div>
@@ -232,6 +240,7 @@ document.addEventListener('click', async (e) => {
   if (d === 'luna-coffre') { await post('/api/force', { bonus: 4 }); await post('/api/luna', { game: 'slot' }); }
   if (d === 'luna-roulette') await post('/api/luna', { game: 'roulette' });
   if (d === 'maxwin') await post('/api/maxwin', { value: Number(document.getElementById('maxwin').value) });
+  if (d === 'aimax') await post('/api/aimax', { value: Number(document.getElementById('aimax').value) });
   if (d === 'bal') await post('/api/balance', { tokens: Number(document.getElementById('bal').value) });
   tick();
 });
@@ -330,6 +339,13 @@ createServer(async (req, res) => {
       const b = await body(req);
       await core.moduleSettings
         .set(CH, 'casino.max_win', Number(b.value), 'demo')
+        .catch(() => {});
+      return json(res, 200, { ok: true });
+    }
+    if (p === '/api/aimax') {
+      const b = await body(req);
+      await core.moduleSettings
+        .set(CH, 'casino.roulette_all_in_max_win', Number(b.value), 'demo')
         .catch(() => {});
       return json(res, 200, { ok: true });
     }

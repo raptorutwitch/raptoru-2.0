@@ -449,7 +449,8 @@ img.sym { object-fit: contain; }
 /* Replay / spectator badge in the window */
 .rbadge span { white-space: nowrap; }
 /* A spectator's Coffre: no control of the player's, only « Quitter » */
-.cof.is-spect .cof__side .toggles { visibility: hidden; }
+.cof.is-spect .cof__side { grid-template-rows: auto minmax(0, 1fr); }
+.cof.is-spect .cof__side .toggles, .cof.is-spect .cof__side .launchbox { display: none; }
 
 /* A Twitch emote or an illustration instead of a drawing (skin.js) */
 .sym.skin { display: grid; place-items: center; overflow: visible; }
@@ -465,11 +466,14 @@ img.sym { object-fit: contain; }
 @keyframes skinshake { 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
 
 /* --- Spectator: the followed player's machine; nothing here acts on it ------------------------------------------- */
-.slot-body.is-watch .betbar, .slot-body.is-watch .toggles, .slot-body.is-watch .board { pointer-events: none; opacity: 0.45; filter: saturate(0.6); }
-.slot-body.is-watch .betbar { visibility: hidden; }
-.slot-body.is-watch .rstrip { pointer-events: none; }
+/* 19/11: the player's controls are gone; the right column is the spectator's card (Frame.watchCard), the window takes
+   the bet row's height. */
+.slot-body.is-watch .cab { grid-template-areas: 'stage side' 'stage side'; }
+.slot-body.is-watch .betbar, .slot-body.is-watch .rstrip, .slot-body.is-watch .rbadge { display: none; }
+.slot-body.is-watch .side { display: block; padding: 0; background: none; box-shadow: none; }
+.slot-body.is-watch .side > :not(.wcard) { display: none; }
+.wcard { height: 100%; }
+.wcard[hidden] { display: none; }
 .slot-body.is-watch .window { box-shadow: 0 0 0 2px rgba(255, 61, 90, 0.55), 0 0 16px rgba(255, 61, 90, 0.2); cursor: default; }
-.slot-body.is-watch .rbadge { letter-spacing: 0.04em; text-transform: none; font-size: 11px; color: #fff; background: rgba(12, 6, 18, 0.86); box-shadow: inset 0 0 0 1px rgba(255, 61, 90, 0.6); max-width: 60%; }
-.slot-body.is-watch .rbadge span { overflow: hidden; text-overflow: ellipsis; }
-.slot-body.is-watch .spin { pointer-events: none; }
 .cof.is-spect .spin[data-state='watch'] { pointer-events: none; }
+.cof .wc__extra { display: none; }

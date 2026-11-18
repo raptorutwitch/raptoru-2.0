@@ -17,10 +17,13 @@ import { CasinoError, ROUND_ID } from './errors.js';
 import { CasinoFeed, POS } from './feed.js';
 import { cryptoIntRng, floatFrom, type IntRng } from './rng.js';
 import {
+  ALL_IN_MAX_WIN,
   BET_STEP,
   colorOf,
   ORDER,
+  playable,
   rouletteError,
+  rouletteLimit,
   settleRoulette,
   SPOTS,
   stakeOf,
@@ -102,6 +105,15 @@ export const CASINO_SETTINGS = {
     min: 1_000,
     max: 30_000_000,
     help: 'machine : un gain plus grand est payé à ce montant et marqué « plafonné » ; roulette : une mise qui pourrait le dépasser est refusée avant le tirage.',
+  },
+  roulette_all_in_max_win: {
+    label:
+      'Roulette : gain maximum d’un ALL-IN (0 = ALL-IN limité au plafond par tour)',
+    unit: 'Jetons',
+    default: 0,
+    min: 0,
+    max: ALL_IN_MAX_WIN,
+    help: 'au-dessus de 0 : une mise qui engage TOUT le solde peut dépasser la mise totale maximum par tour ; ce montant remplace alors le gain maximum par partie (refus avant le tirage au-delà, jamais un gain réduit). Les mises ordinaires gardent leur plafond (docs/CASINO.md § 4).',
   },
   share_cooldown_s: {
     label: 'Partage dans le chat : délai par viewer',
@@ -260,6 +272,7 @@ export class CasinoService {
     const slotMax = v('slot_max_bet');
     const rouletteMax = v('roulette_max_total');
     const maxWin = v('max_win');
+    const allInMaxWin = v('roulette_all_in_max_win');
     const shareCooldown = v('share_cooldown_s');
     const announce = v('announce');
     const announceMinX = v('announce_min_x');
@@ -269,6 +282,9 @@ export class CasinoService {
       roulette_max_total: rouletteMax,
       roulette_step: BET_STEP,
       max_win: maxWin,
+      // 0: no exception (ALL-IN = up to the per-spin maximum); else never below the ordinary win cap.
+      roulette_all_in_max_win:
+        allInMaxWin > 0 ? Math.max(allInMaxWin, maxWin) : 0,
       share_cooldown_s: shareCooldown,
       announce: announce === 1,
       announce_min_x: announceMinX,
@@ -387,22 +403,14 @@ export class CasinoService {
             });
           bet = stake;
         } else {
-          const err = rouletteError(stake, lim.roulette_max_total);
+          // The shape first (the per-spin maximum is checked with the balance, below: an ALL-IN may pass it).
+          const err = rouletteError(stake, Number.MAX_SAFE_INTEGER);
           if (err)
-            throw new CasinoError(err === 'above_max' ? 409 : 400, err, {
+            throw new CasinoError(400, err, {
               max: lim.roulette_max_total,
               step: BET_STEP,
             });
-          const bets = stake as RouletteBets;
-          bet = stakeOf(bets);
-          // A bet that could win more than the cap is refused here (never a capped roulette result).
-          let best = 0;
-          for (let n = 0; n <= 36; n++)
-            best = Math.max(best, settleRoulette(bets, n).gross);
-          if (best > lim.max_win)
-            throw new CasinoError(409, 'above_max_win', {
-              max_win: lim.max_win,
-            });
+          bet = stakeOf(stake as RouletteBets);
         }
         // The wallet: locked, read; never below 0.
         const hold = await this.economy.hold(
@@ -413,6 +421,21 @@ export class CasinoService {
           'tokens',
         );
         const balance = hold.balances.get(viewer.id) ?? 0;
+        // The round's win cap: the ordinary one, or an ALL-IN's (the whole balance, above the per-spin maximum).
+        let cap = lim.max_win;
+        let most = cap; // the most this round can pay
+        if (game === 'roulette') {
+          const bets = stake as RouletteBets;
+          const r = rouletteLimit(bets, balance, lim);
+          if (r.refusal)
+            throw new CasinoError(409, r.refusal, {
+              max: lim.roulette_max_total,
+              max_win: r.cap,
+              balance,
+            });
+          cap = r.cap;
+          most = r.best;
+        }
         if (balance < bet)
           throw new CasinoError(409, 'insufficient_tokens', {
             balance,
@@ -420,7 +443,7 @@ export class CasinoService {
           });
         // The wallet's own cap (the Lab's; the canonical one is 10^12): checked before the draw with the largest
         // possible win, never after it (a drawn win is never thrown away).
-        if (balance - bet + lim.max_win > hold.maxBalance)
+        if (balance - bet + most > hold.maxBalance)
           throw new CasinoError(409, 'balance_cap', {
             max_balance: hold.maxBalance,
           });
@@ -463,7 +486,7 @@ export class CasinoService {
             seed: this.rng.int(2 ** 31),
           };
         }
-        const payout = Math.min(raw, lim.max_win);
+        const payout = Math.min(raw, cap);
         // Pay: the bet, then the win — two movements of the canonical ledger (or the Lab's), keyed by the round.
         await this.economy.move(q, now, {
           channelId,
@@ -776,7 +799,16 @@ export class CasinoService {
       this.limits(this.db, channelId),
       this.availability(this.db, channelId),
     ]);
-    if (total > lim.roulette_max_total) throw new CasinoError(400, 'above_max');
+    if (total > lim.roulette_max_total) {
+      // An ALL-IN being placed: shown only if it is the whole balance (as the spin will require).
+      const { tokens } = await this.economy.balances(
+        this.db,
+        channelId,
+        viewer.id,
+      );
+      if (!lim.roulette_all_in_max_win || total !== playable(tokens))
+        throw new CasinoError(400, 'above_max');
+    }
     if (!av.games.roulette)
       throw new CasinoError(409, av.reason ?? 'game_closed');
     await this.feed.draft(channelId, viewer, clean, total);

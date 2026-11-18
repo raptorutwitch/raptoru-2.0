@@ -234,3 +234,35 @@ export const REFUSAL = {
   timeout: 'Pas de réponse : réessaie (la même partie n’est jamais payée deux fois).',
 };
 export const refusalText = (e) => REFUSAL[e?.code] ?? REFUSAL[e?.message] ?? 'Ça n’a pas marché : réessaie.';
+
+/**
+ * The spectator's card (docs/CASINO.md § 6, 19/11): the followed player, live, the round's stake (gold) and win (green,
+ * neutral when nothing) — never a win before the Core revealed it (`win: null` = still hidden). Built once in `host`,
+ * then only its texts change: its live dot never restarts. `set({ state, text, bet, win, extra })`:
+ * state = play | wait | done | left · bet = Jetons or null · win = undefined (no round) | null (hidden) | Jetons.
+ */
+export function watchCard(host, name, { sound = false } = {}) {
+  host.innerHTML = `<div class="wc" role="status" aria-live="polite">
+    <div class="wc__top"><span class="wc__live"><i class="live-dot"></i>EN DIRECT</span>${sound ? `<button type="button" class="wc__snd" data-act="sound" title="Son (ce navigateur)" aria-label="Son" aria-pressed="false">${ICON.sound}</button>` : ''}</div>
+    <div class="wc__who"><span class="wc__av" aria-hidden="true">${esc(String(name).slice(0, 1).toUpperCase())}</span><span class="wc__id"><b>${esc(name)}</b><small class="wc__st" data-wc="st"></small></span></div>
+    <div class="wc__amt wc__bet"><small>Mise</small><b data-wc="bet">—</b></div>
+    <div class="wc__amt wc__win"><small>Gain</small><b data-wc="win">—</b></div>
+    <div class="wc__extra" data-wc="extra" hidden></div>
+  </div>`;
+  const el = (k) => host.querySelector(`[data-wc="${k}"]`);
+  const text = (e, t) => e.textContent !== t && (e.textContent = t);
+  return {
+    set({ state = 'wait', text: st = '', bet = null, win, extra = '' } = {}) {
+      const s = el('st');
+      text(s, st);
+      s.className = `wc__st is-${state}`;
+      text(el('bet'), bet ? fmt(bet) : '—');
+      const w = el('win');
+      text(w, win === undefined ? '—' : win === null ? '…' : win > 0 ? `+${fmt(win)}` : '0');
+      w.className = win > 0 ? 'is-pos' : '';
+      const x = el('extra');
+      text(x, extra);
+      x.hidden = !extra;
+    },
+  };
+}

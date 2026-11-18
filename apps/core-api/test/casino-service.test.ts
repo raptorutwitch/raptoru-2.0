@@ -278,6 +278,187 @@ describe('casino — one intent, one payment', () => {
   });
 });
 
+describe('casino — roulette ALL-IN (the whole balance, above the per-spin maximum)', () => {
+  const setTokens = (core: TestCore, tokens: number, id = ALICE.id) =>
+    editWallet(core.db, core.clock.now(), CH, id, 'set', { tokens }, 'test');
+  const allInOn = (core: TestCore, cap = 36_000_000) =>
+    core.moduleSettings.set(CH, 'casino.roulette_all_in_max_win', cap, 'test');
+  const RED_POCKET = 1; // ORDER[1] = 32, red
+  const BLACK_POCKET = 2; // ORDER[2] = 15, black
+
+  it('off by default: ALL-IN stays within the per-spin maximum (Production unchanged)', async () => {
+    const core = await lab(1_000_000);
+    await liveOn(core);
+    const c = core.casino;
+    expect((await c.limits(core.db, CH)).roulette_all_in_max_win).toBe(0);
+    expect(
+      await code(
+        c.spinRoulette(CH, ALICE, {
+          key: 'allin-off-1',
+          bets: { red: 1_000_000 },
+        }),
+      ),
+    ).toBe('above_max');
+    c.rng = scripted([RED_POCKET]);
+    const r = await c.spinRoulette(CH, ALICE, {
+      key: 'allin-off-2',
+      bets: { red: 100_000 },
+    });
+    expect(r.round.payout).toBe(200_000);
+    expect(await tokens(core)).toBe(1_100_000);
+  });
+
+  it('on: the whole balance passes the maximum and is paid in full; ordinary bets keep the maximum', async () => {
+    const core = await lab(1_000_000);
+    await liveOn(core);
+    await allInOn(core);
+    const c = core.casino;
+    // ordinary bets above the maximum: refused, nothing debited
+    for (const bets of [{ red: 500_000 }, { red: 999_980 }, { red: 120_000 }])
+      expect(
+        await code(
+          c.spinRoulette(CH, ALICE, { key: `allin-ord-${bets.red}`, bets }),
+        ),
+      ).toBe('above_max');
+    expect(await rounds(core)).toBe(0);
+    // ALL-IN on red, won: 2 000 000 paid in full (the ordinary 1 000 000 cap does not apply)
+    c.rng = scripted([RED_POCKET]);
+    const won = await c.spinRoulette(CH, ALICE, {
+      key: 'allin-win',
+      bets: { red: 1_000_000 },
+    });
+    expect(won.round).toMatchObject({
+      bet: 1_000_000,
+      raw_payout: 2_000_000,
+      payout: 2_000_000,
+      capped: false,
+    });
+    expect(await tokens(core)).toBe(2_000_000);
+    // ALL-IN split over several spots (the whole balance), lost
+    c.rng = scripted([BLACK_POCKET]);
+    const lost = await c.spinRoulette(CH, ALICE, {
+      key: 'allin-lost',
+      bets: { red: 1_500_000, d3: 500_000 },
+    });
+    expect(lost.round.payout).toBe(0);
+    expect(await tokens(core)).toBe(0);
+  });
+
+  it('on: within the ordinary limits, the whole balance on a number (36 ×) with the ALL-IN cap', async () => {
+    const core = await lab(100_000);
+    await liveOn(core);
+    const c = core.casino;
+    expect(
+      await code(
+        c.spinRoulette(CH, ALICE, {
+          key: 'allin-n-off',
+          bets: { n32: 100_000 },
+        }),
+      ),
+    ).toBe('above_max_win');
+    await allInOn(core);
+    c.rng = scripted([RED_POCKET]); // 32
+    const r = await c.spinRoulette(CH, ALICE, {
+      key: 'allin-n-on',
+      bets: { n32: 100_000 },
+    });
+    expect(r.round.payout).toBe(3_600_000);
+    expect(await tokens(core)).toBe(3_600_000);
+  });
+
+  it('on: odd balances (whole bets of 20), a possible win above the ALL-IN cap refused before the draw, never reduced', async () => {
+    const core = await lab(1_000_010);
+    await liveOn(core);
+    await allInOn(core);
+    const c = core.casino;
+    // 1 000 010 → ALL-IN = 1 000 000 (10 stay)
+    c.rng = scripted([BLACK_POCKET]);
+    await c.spinRoulette(CH, ALICE, {
+      key: 'allin-odd',
+      bets: { red: 1_000_000 },
+    });
+    expect(await tokens(core)).toBe(10);
+    // 2 000 000 on one number could pay 72 000 000 > 36 000 000: refused, nothing moves
+    await setTokens(core, 2_000_000);
+    expect(
+      await code(
+        c.spinRoulette(CH, ALICE, {
+          key: 'allin-big-n',
+          bets: { n7: 2_000_000 },
+        }),
+      ),
+    ).toBe('above_max_win');
+    expect(await tokens(core)).toBe(2_000_000);
+  });
+
+  it('a very large balance: within the integer columns and the wallet, or refused before any payment', async () => {
+    const core = await lab(500_000_000);
+    await liveOn(core);
+    await allInOn(core, 2_000_000_000);
+    const c = core.casino;
+    c.rng = scripted([RED_POCKET]);
+    const r = await c.spinRoulette(CH, ALICE, {
+      key: 'allin-huge',
+      bets: { red: 500_000_000 },
+    });
+    expect(r.round.payout).toBe(1_000_000_000);
+    expect(await tokens(core)).toBe(1_000_000_000);
+    // the Lab wallet holds at most 1 000 000 000: a win that could pass it is refused before the draw
+    expect(
+      await code(
+        c.spinRoulette(CH, ALICE, {
+          key: 'allin-huge-2',
+          bets: { red: 1_000_000_000 },
+        }),
+      ),
+    ).toBe('balance_cap');
+    expect(await tokens(core)).toBe(1_000_000_000);
+    // the setting itself never goes past the integer bound
+    expect(
+      await code(
+        core.moduleSettings.set(
+          CH,
+          'casino.roulette_all_in_max_win',
+          3_000_000_000,
+          'test',
+        ),
+      ),
+    ).not.toBe('ok');
+  });
+
+  it('double clicks and two tabs: one ALL-IN, never below 0', async () => {
+    const core = await lab(1_000_000);
+    await liveOn(core);
+    await allInOn(core);
+    const c = core.casino;
+    c.rng = scripted([BLACK_POCKET, BLACK_POCKET, BLACK_POCKET]);
+    const same = await Promise.allSettled(
+      Array.from({ length: 5 }, () =>
+        c.spinRoulette(CH, ALICE, {
+          key: 'allin-same',
+          bets: { red: 1_000_000 },
+        }),
+      ),
+    );
+    expect(same.every((x) => x.status === 'fulfilled')).toBe(true);
+    expect(await rounds(core)).toBe(1);
+    await setTokens(core, 1_000_000);
+    const tabs = await Promise.all(
+      ['allin-tab-1', 'allin-tab-2', 'allin-tab-3'].map((key) =>
+        code(c.spinRoulette(CH, ALICE, { key, bets: { red: 1_000_000 } })),
+      ),
+    );
+    expect(tabs.filter((x) => x === 'ok')).toHaveLength(1);
+    expect(
+      tabs
+        .filter((x) => x !== 'ok')
+        .every((x) => x === 'insufficient_tokens' || x === 'above_max'),
+    ).toBe(true);
+    expect(await tokens(core)).toBe(0);
+    expect(await rounds(core)).toBe(2);
+  });
+});
+
 describe('casino — the Coffre, the cap, the announcements', () => {
   it('3 BONUS: the Coffre drawn whole with the spin and paid with it (= the engine); watching changes nothing', async () => {
     const core = await lab();

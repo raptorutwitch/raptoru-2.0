@@ -90,3 +90,44 @@ export function settleRoulette(bets: RouletteBets, number: number) {
   const stake = stakeOf(bets);
   return { stake, gross, net: gross - stake, wins };
 }
+
+/**
+ * The highest ALL-IN win cap a channel may set: it keeps every amount of a round within the casino_rounds integer
+ * columns (2 147 483 647) — the stake too, since the best gross of any set of bets is at least 36/37 of its stake.
+ */
+export const ALL_IN_MAX_WIN = 2_000_000_000;
+
+/** The whole balance in whole bets of 20 (what ALL-IN stakes). */
+export const playable = (balance: number) =>
+  Math.floor(Math.max(0, balance) / BET_STEP) * BET_STEP;
+
+/**
+ * The limits of a set of bets for this balance (docs/CASINO.md § 4, ALL-IN of 19/11). Ordinary bets: at most the
+ * per-spin maximum, and no possible win above the win cap. An ALL-IN — the stake is the WHOLE balance — when the
+ * channel allows it (`roulette_all_in_max_win` > 0): no per-spin maximum, and its own win cap. Either way a set that
+ * could win more than its cap is refused BEFORE the draw: a roulette win is never reduced.
+ */
+export function rouletteLimit(
+  bets: RouletteBets,
+  balance: number,
+  lim: {
+    roulette_max_total: number;
+    max_win: number;
+    roulette_all_in_max_win: number;
+  },
+): {
+  allIn: boolean;
+  cap: number;
+  best: number;
+  refusal: 'above_max' | 'above_max_win' | null;
+} {
+  const total = stakeOf(bets);
+  const allIn = lim.roulette_all_in_max_win > 0 && total === playable(balance);
+  const cap = allIn ? lim.roulette_all_in_max_win : lim.max_win;
+  if (!allIn && total > lim.roulette_max_total)
+    return { allIn, cap, best: 0, refusal: 'above_max' };
+  let best = 0;
+  for (let n = 0; n <= 36; n++)
+    best = Math.max(best, settleRoulette(bets, n).gross);
+  return { allIn, cap, best, refusal: best > cap ? 'above_max_win' : null };
+}

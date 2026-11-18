@@ -257,13 +257,27 @@
 .pop__n .np { min-width: 18px; height: 18px; font-size: 10px; }
 
 /* --- Spectator: the followed player's mat and chips, shown as they are, never active ------------------------------- */
-.roulette-body.is-watch .mat, .roulette-body.is-watch .bar, .roulette-body.is-watch .notch ~ * { cursor: default; }
+/* 19/11: no control of the player's; the bar under the mat is the spectator's card in a row (Frame.watchCard), the
+   mat takes the rest of the height; beside the wheel, the same card (the number is on the wheel). */
+.wcard[hidden] { display: none; }
+.roulette-body.is-watch .mat, .roulette-body.is-watch .notch ~ * { cursor: default; }
 .roulette-body.is-watch .mat { pointer-events: none; }
-.roulette-body.is-watch .chips, .roulette-body.is-watch .tray, .roulette-body.is-watch .fastsw { pointer-events: none; opacity: 0.4; filter: saturate(0.5); }
-.roulette-body.is-watch .launch.watch:disabled { color: #fff; background: radial-gradient(120% 90% at 50% 8%, #ece4ff 0%, #a58ff0 46%, #7462c4 100%); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 2px 0 #2f2468, 0 0 0 2px rgba(255, 61, 90, 0.45); }
-.roulette-body.is-watch .launch.watch .t { font-size: 14px; }
-.roulette-body.is-watch #skip { display: none; }
-.roulette-body.is-watch .spect { box-shadow: inset 0 0 0 1px rgba(255, 61, 90, 0.6); }
-.roulette-body.is-watch .spect i:not(.live-dot) { font-style: normal; color: var(--gold); }
-/* the spectator's label sits over the (inactive) chips, never over the mat */
-.roulette-body.is-watch > .spect { top: auto; right: auto; left: 14px; bottom: 14px; max-width: 286px; z-index: 30; }
+.roulette-body.is-watch .rt { grid-template-rows: minmax(0, 1fr) 58px; }
+.roulette-body.is-watch .bar { display: block; }
+.roulette-body.is-watch .bar > :not(.wcard), .roulette-body.is-watch > .spect { display: none; }
+.bar .wcard { height: 100%; }
+.bar .wc { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr) 26px; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'live bet win snd' 'who bet win snd'; align-items: center; gap: 3px 8px; padding: 5px 8px 5px 9px; }
+.bar .wc__top { display: contents; }
+.bar .wc__live { grid-area: live; justify-self: start; padding: 2px 6px 2px 5px; font-size: 9.5px; }
+.bar .wc__snd { grid-area: snd; }
+.bar .wc__who { grid-area: who; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; }
+.bar .wc__av { width: 22px; height: 22px; font-size: 11px; }
+.bar .wc__id { grid-auto-flow: column; justify-content: start; align-items: baseline; gap: 6px; }
+.bar .wc__id b { font-size: 13px; }
+.bar .wc__bet { grid-area: bet; }
+.bar .wc__win { grid-area: win; }
+.bar .wc__amt { height: 100%; align-content: center; padding: 3px 8px; }
+.bar .wc__extra { display: none; }
+.roulette-body.is-watch .wkick, .roulette-body.is-watch .wover .banner, .roulette-body.is-watch #skip { display: none; }
+.wside .wcard { width: 100%; max-width: 176px; }
+.wside .wc { height: auto; text-align: left; }

@@ -88,6 +88,7 @@ const TEMPLATE = `
         <button type="button" class="launch" id="spin"></button>
         <button type="button" class="fastsw" data-act="fast" aria-pressed="false" title="Rapide\u00a0: résultat immédiat, la roue ne tourne pas (s’applique au prochain lancer)" aria-label="Rapide"><i data-i="bolt"></i><span class="st">RAPIDE</span></button>
       </div>
+      <div class="wcard" id="wcard" hidden></div>
     </div>
   </div>
   <div class="wover" id="stagew" hidden>
@@ -96,6 +97,7 @@ const TEMPLATE = `
       <div class="wkick" id="wkick"></div>
       <div class="banner" id="banner" aria-live="polite"></div>
       <button type="button" class="skip" id="skip"></button>
+      <div class="wcard" id="wcard2" hidden></div>
     </div>
   </div>
   <div class="spect" id="spect" hidden><span id="spectText"></span><button type="button" class="xbtn" data-act="endspect" aria-label="Quitter le replay"></button></div>
@@ -136,6 +138,11 @@ export function mountRoulette(D, ctx) {
   const STEP = () => limits().roulette_step ?? 20;
   const MAXT = () => limits().roulette_max_total;
   const bal = () => balance ?? Infinity;
+  // ALL-IN (Core: rouletteLimit): the WHOLE balance, in whole steps, may pass the per-spin maximum when the channel
+  // allows it (its own win cap; 0 = no exception). Ordinary bets keep the maximum.
+  const AICAP = () => limits().roulette_all_in_max_win || 0;
+  const whole = () => (balance === null ? 0 : Math.floor(Math.max(0, balance) / STEP()) * STEP());
+  const isAllIn = (bets) => AICAP() > 0 && balance !== null && T.total(bets) === whole();
 
   // The viewer's own settings and mat (this browser only), cleaned: only the mat's spots, only whole steps.
   const P = Frame.prefs('casino:roulette', { chip: null, custom: null, bets: {}, last: null, sound: false, fast: false });
@@ -144,7 +151,7 @@ export function mountRoulette(D, ctx) {
   const legal = (v) => Number.isSafeInteger(v) && v >= STEP() && v % STEP() === 0;
   const clean = (b) => Object.fromEntries(Object.entries(b && typeof b === 'object' ? b : {}).filter(([id, v]) => own(id) && legal(v)));
   s.bets = clean(s.bets);
-  if (T.total(s.bets) > MAXT()) s.bets = {};
+  if (T.total(s.bets) > MAXT() && !isAllIn(s.bets)) s.bets = {};
   s.last = s.last && Object.keys(clean(s.last)).length ? clean(s.last) : null;
   if (!legal(s.custom)) s.custom = null;
   if (s.chip !== ALLIN && !legal(s.chip)) s.chip = null;
@@ -178,7 +185,11 @@ export function mountRoulette(D, ctx) {
   const REFUSE = {
     empty: () => 'Pose au moins un jeton.',
     min: () => `Jeton minimum\u00a0: ${fmt(STEP())}.`,
-    max: () => `Maximum ${fmt(MAXT())} par tour.`,
+    max: () =>
+      AICAP()
+        ? `Maximum ${fmt(MAXT())} par tour, sauf un ALL-IN de tout ton solde (${fmt(whole())}).`
+        : `Maximum ${fmt(MAXT())} par tour.`,
+    maxWinAllIn: () => `ALL-IN\u00a0: ces mises pourraient rapporter plus que le gain maximum d’un ALL-IN (${fmt(AICAP())} Jetons).`,
     balance: () => 'Solde insuffisant.',
     invalid: () => 'Montant invalide\u00a0: des chiffres, ou «\u00a02k\u00a0».',
     step: () => `Le jeton libre doit être un multiple de ${STEP()} (ex.\u00a040, 100, 1\u00a0500).`,
@@ -195,8 +206,9 @@ export function mountRoulette(D, ctx) {
   /** Why the mat cannot hold these bets (null: it can). */
   function whyNot(bets) {
     const t = T.total(bets);
-    if (t > MAXT()) return 'max';
     if (t > bal()) return 'balance';
+    if (isAllIn(bets)) return bestWin(bets) > AICAP() ? 'maxWinAllIn' : null;
+    if (t > MAXT()) return 'max';
     if (bestWin(bets) > limits().max_win) return 'maxWin';
     return null;
   }
@@ -208,7 +220,8 @@ export function mountRoulette(D, ctx) {
     if (!s.chip) s.chip = chipSet[1];
   }
   /** ALL-IN: what remains legally playable now (balance, per-spin maximum, chips already down), in whole steps. */
-  const allIn = () => Chips.allIn({ balance: bal(), staked: total(), maxTotal: MAXT(), min: STEP(), step: STEP() });
+  const allIn = () =>
+    Chips.allIn({ balance: bal(), staked: total(), maxTotal: AICAP() ? Infinity : MAXT(), min: STEP(), step: STEP() });
 
   /** The mat showed the last result: back to a neutral mat at the first gesture. */
   function settled() {
@@ -486,7 +499,7 @@ export function mountRoulette(D, ctx) {
     for (const k of ['undo', 'clear', 'double']) $(`[data-act="${k}"]`).disabled = lock || !t;
     $('[data-act="rebet"]').disabled = lock || !last || sameAsLast();
     $('[data-act="fast"]').setAttribute('aria-pressed', String(fast));
-    $('[data-act="sound"]').setAttribute('aria-pressed', String(s.sound));
+    D.querySelectorAll('[data-act="sound"]').forEach((b) => b.setAttribute('aria-pressed', String(s.sound)));
     if (!busy) paintBoard();
     paintClosed();
     if (spect?.follow) {
@@ -724,8 +737,12 @@ export function mountRoulette(D, ctx) {
   // --- Spectator: ONE player followed (casino.js reads the Core's feed and hands us their stages, in order) ----------
   // Each stage arrives once the player's screen showed it: the bets being placed, the spin, the ball (the same flight,
   // the Core's seed), the mat's wins. Nothing here acts on the player's game.
-  function watchKick(text) {
-    $('#spectText').innerHTML = `<i class="live-dot"></i><b class="rtag">Spectateur</b>${esc(name)}${text ? ` · <i>${text}</i>` : ''}`;
+  const cards = [];
+  const cardState = { state: 'wait', text: '', bet: null, win: undefined, extra: '' };
+  /** The spectator's card, under the mat and beside the wheel: who, live, the stake, the win once shown (Frame.watchCard). */
+  function card(o) {
+    Object.assign(cardState, o);
+    for (const c of cards) c.set(cardState);
   }
   const asWatched = (d) => {
     const stake = T.total(d.bets ?? {});
@@ -736,14 +753,15 @@ export function mountRoulette(D, ctx) {
     const d = ev.data ?? {};
     const f = !!(ev.fast || fast);
     if (ev.kind === 'presence') {
-      if (d.game === null && !busy) watchKick('a quitté le jeu');
+      if (d.game === null && !busy) card({ state: 'left', text: 'a quitté le jeu', bet: null, win: undefined });
       return;
     }
     if (ev.kind === 'draft') {
       if (busy) return;
       if (lastResult) settled();
       s.bets = clean(d.bets);
-      watchKick(Object.keys(s.bets).length ? 'pose ses jetons' : 'prépare sa mise');
+      const t = total();
+      card({ state: t ? 'play' : 'wait', text: t ? 'pose ses jetons' : 'prépare sa mise', bet: t || null, win: undefined });
       update();
       return;
     }
@@ -752,7 +770,7 @@ export function mountRoulette(D, ctx) {
       settled();
       s.bets = clean(d.bets);
       spect.round.bet = d.bet;
-      watchKick('rien ne va plus');
+      card({ state: 'play', text: 'rien ne va plus', bet: d.bet, win: null });
       update();
       return;
     }
@@ -760,6 +778,7 @@ export function mountRoulette(D, ctx) {
       const r = asWatched(d);
       s.bets = r.bets;
       spect.round.bet = r.stake;
+      card({ state: 'play', text: 'la bille tourne…', bet: r.stake, win: null });
       busy = true;
       clearResult();
       wres.hidden = true;
@@ -775,7 +794,7 @@ export function mountRoulette(D, ctx) {
       markMat(r);
       hist.unshift({ round_id: ev.round_id, number: r.number });
       hist.length = Math.min(hist.length, 12);
-      watchKick(r.gross ? `+${fmt(r.gross)}` : 'perdu');
+      card({ state: 'done', text: `tour terminé · le ${r.number}`, bet: r.stake, win: r.gross });
       update();
       stageTimer = W.setTimeout(() => void closeStage(), f ? 1300 : 2200);
     }
@@ -801,21 +820,22 @@ export function mountRoulette(D, ctx) {
       lastResult = r;
       markMat(r);
       hist.unshift({ round_id: start.round_id, number: r.number });
-      watchKick(r.gross ? `+${fmt(r.gross)}` : 'perdu');
+      card({ state: 'done', text: `tour terminé · le ${r.number}`, bet: r.stake, win: r.gross });
       update();
       if (draft && draft.seq > res.seq) await apply(draft);
       return;
     }
     if (draft) return apply(draft);
-    watchKick(pres?.data.game === null ? 'a quitté le jeu' : 'prépare sa mise');
+    card(pres?.data.game === null ? { state: 'left', text: 'a quitté le jeu' } : { state: 'wait', text: 'prépare sa mise' });
     update();
   }
   function enterWatch() {
     spect = { live: true, follow: true, round: { viewer_name: name, bet: 0 } };
     body.classList.add('is-watch');
-    $('#spect').hidden = false;
-    $('[data-act="endspect"]').setAttribute('aria-label', 'Quitter le mode spectateur');
-    watchKick('prépare sa mise');
+    $('#spect').hidden = true; // (the card says who is watched)
+    cards.push(Frame.watchCard($('#wcard'), name, { sound: true }), Frame.watchCard($('#wcard2'), name));
+    $('#wcard').hidden = $('#wcard2').hidden = false;
+    card({ state: 'wait', text: 'prépare sa mise' });
     update();
   }
 
@@ -887,7 +907,7 @@ export function mountRoulette(D, ctx) {
     void loadHistory().then(() => Frame.drawerOpen() && d.repaint());
   }
   const payHTML = () =>
-    `<b class="pop__t">Paiements <small>mise comprise</small></b><dl class="pays"><dt>Numéro</dt><dd>×36</dd><dt>Colonne <i>2:1</i></dt><dd>×3</dd><dt>Douzaine</dt><dd>×3</dd><dt>Chances simples<small>rouge, noir, pair, impair, 1–18, 19–36</small></dt><dd>×2</dd></dl><p class="pop__n"><span class="np c-green">0</span> fait perdre tout, sauf les jetons posés sur le 0.</p><p class="pop__n">Jusqu’à ${fmt(MAXT())} par tour, chaque mise en multiples de ${STEP()}\u202f; gain maximum par partie\u00a0: ${fmt(limits().max_win)}. Clic droit ou appui long sur une case\u00a0: retirer un jeton.</p>`;
+    `<b class="pop__t">Paiements <small>mise comprise</small></b><dl class="pays"><dt>Numéro</dt><dd>×36</dd><dt>Colonne <i>2:1</i></dt><dd>×3</dd><dt>Douzaine</dt><dd>×3</dd><dt>Chances simples<small>rouge, noir, pair, impair, 1–18, 19–36</small></dt><dd>×2</dd></dl><p class="pop__n"><span class="np c-green">0</span> fait perdre tout, sauf les jetons posés sur le 0.</p><p class="pop__n">Jusqu’à ${fmt(MAXT())} par tour, chaque mise en multiples de ${STEP()}\u202f; gain maximum par partie\u00a0: ${fmt(limits().max_win)}.${AICAP() ? ` ALL-IN\u00a0: tout ton solde, même au-delà de ${fmt(MAXT())}, gain maximum ${fmt(AICAP())} (une mise qui pourrait le dépasser est refusée avant le tirage, jamais réduite).` : ''} Clic droit ou appui long sur une case\u00a0: retirer un jeton.</p>`;
 
   // --- Commands -----------------------------------------------------------------------------------------------------
   // The mat: a click places, a right click or a long press (450 ms) removes; a hover (or a press) shows what it covers.
