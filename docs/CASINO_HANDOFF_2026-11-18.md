@@ -42,7 +42,11 @@ spectateurs.
 
 **Jamais vérifié** : le vrai Twitch (Hosted Test), la Production.
 
-## 3. Problèmes ouverts (signalés par Antoni le 18/11, NON résolus)
+## 3. Problèmes signalés par Antoni le 18/11 — corrigés le 19/11 (`f9515627`), à valider par Antoni
+
+Description d'origine conservée ci-dessous. Correctifs et mesures : CASINO.md § 6 (« Synchronisé, sans résultat en
+avance », « Stabilité de l'affichage ») ; contrôle `casino:watch-check`. Cause des flashs confirmée : la piste 1 (redessin
+du panneau, rechargement des feuilles `<link>`, animations rejouées), déclenchée aussi par la Tombola toutes les 5 s.
 
 ### 3.1 Retard des animations spectateur (priorité 1)
 

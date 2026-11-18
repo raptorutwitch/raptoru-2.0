@@ -51,10 +51,11 @@ expressions et la latence ; essayer « Envoyer une vraie annonce test » ; tél�
 premier pour ce chantier).** Branche LOCALE `feat/casino` (code `850187ae` + commit de passation), non poussée, non
 fusionnée, non déployée ; fermé par défaut. Antoni a validé le 18/11 : suivi spectateur de parties successives, spins,
 Coffre, mises de roulette, départ signalé, catalogue Mini-jeux ; mécanique des jeux et du Coffre définitive.
-Ouvert (NON résolu) : 1) décalage spectateur (≈ 3 s machine, plus à la roulette ; objectif < 1 s, début
-d'animation simultané, résultats toujours protégés) ; 2) flashs / déformations / zooms intermittents chez joueur et
-spectateur. Prochain chantier : ces deux correctifs, puis validation Lab par Antoni ; la personnalisation par émotes
-seulement ensuite, après son GO. Démo : npm run casino:demo -w @raptoru/core-api (http://127.0.0.1:4497).
+Corrigés le 19/11 (commit `f9515627`), À VALIDER PAR ANTONI : 1) le spectateur démarre avec le joueur (mesuré en Lab :
+départ ≈ 100–400 ms, arrêt ≈ 30–480 ms) ; 2) flashs / zooms (feuilles adoptées, pas de redessin sur lecture identique,
+animations restaurées). Détail : CASINO.md § 6. Prochain chantier : la validation manuelle d'Antoni (démo Alice/Bob),
+puis, après son GO seulement, la personnalisation par émotes. Démo : npm run casino:demo -w @raptoru/core-api
+(http://127.0.0.1:4497).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
