@@ -7,6 +7,11 @@ Rien n'est poussé, fusionné ni déployé. En Production, le Casino reste ferm�
 - le réglage Studio `casino.open`, à 0 par défaut ;
 - la publication de l'extension.
 
+**Ouvert au 18/11 (signalé par Antoni, non résolu) :** le spectateur démarre ses animations après la fin de celles du
+joueur (≈ 3 s machine, plus à la roulette ; objectif < 1 s) ; des flashs, déformations et zooms intermittents
+apparaissent chez le joueur et le spectateur. Détail, pistes et critères :
+[CASINO_HANDOFF_2026-11-18.md](CASINO_HANDOFF_2026-11-18.md).
+
 Sources de conception : les prototypes validés `prototypes/casino-v7` et `casino-v8`, hors dépôt. Pour les règles,
 l'étude du bonus (rapport « Raptoru 2.0 — Le jeu bonus de la machine à sous ») et `casino-v7/etude`.
 
@@ -126,7 +131,7 @@ Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à 
     résultat sur le tapis). S'il quitte le jeu, on le voit (« a quitté le jeu ») ; rien ne reste figé.
   - **Jamais de résultat en avance :** le Core ne publie une étape qu'une fois que l'écran du joueur l'a montrée (ses
     rouleaux arrêtés, sa bille posée, une relance jouée, la fin). Le lancement ne transmet que la mise. Le spectateur
-    rejoue chaque étape avec la même animation, donc un peu après le joueur : environ la durée d'une étape (≈ 2 s pour
+    rejoue chaque étape avec la même animation, APRÈS le joueur (jugé trop lent par Antoni le 18/11, à corriger) : la durée d'une étape (≈ 2 s pour
     les rouleaux, ≈ 6 s pour la roue). Si l'écran du joueur se ferme, le Core publie l'étape une fois son animation
     finie (9 s machine, 14 s roulette, 7 s pour l'ouverture du Coffre). Les relances du Coffre attendent toujours le
     joueur.

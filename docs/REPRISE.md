@@ -47,14 +47,14 @@ V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et es
 expressions et la latence ; essayer « Envoyer une vraie annonce test » ; téléverser le ZIP be1744e75f63 en Hosted Test
 (jamais pendant un live), l'essayer, puis la revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md
 § 15 ; choisir les directions du casino (prototypes/casino-directions, hors dépôt).
-Casino (17/11, docs/CASINO.md) : machine à sous avec le Coffre, roulette, spectateurs, Studio › Casino — intégrés et
-testés en Lab sur la branche LOCALE feat/casino (a8deef5f Core + migration 20261201130000_casino, 91839307 extension,
-Studio, Lab). 18/11 : mode spectateur refait (on suit un joueur, journal Core casino_feed + migration
-20261202130000_casino_feed, bandeau « parties en direct »). Non poussé, non fusionné, non déployé ; fermé par défaut.
-Essayer : npm run casino:demo -w @raptoru/core-api (http://127.0.0.1:4497) ; contrôles : npm run casino:check et
-npm run casino:watch-check (Alice joue, Bob et Carla regardent).
-À valider par Antoni avant la Production : CASINO.md § 10 (limites, plafond de gain, variable, jetons 40/200).
-Prochain chantier : la validation du Casino par Antoni (Lab), ou au choix (par exemple Chaos V2 lot 0, docs/chaos/).
+**Casino — EN COURS, passation du 18/11 : [CASINO_HANDOFF_2026-11-18.md](CASINO_HANDOFF_2026-11-18.md) (à lire en
+premier pour ce chantier).** Branche LOCALE `feat/casino` (code `850187ae` + commit de passation), non poussée, non
+fusionnée, non déployée ; fermé par défaut. Antoni a validé le 18/11 : suivi spectateur de parties successives, spins,
+Coffre, mises de roulette, départ signalé, catalogue Mini-jeux ; mécanique des jeux et du Coffre définitive.
+Ouvert (NON résolu) : 1) décalage spectateur (≈ 3 s machine, plus à la roulette ; objectif < 1 s, début
+d'animation simultané, résultats toujours protégés) ; 2) flashs / déformations / zooms intermittents chez joueur et
+spectateur. Prochain chantier : ces deux correctifs, puis validation Lab par Antoni ; la personnalisation par émotes
+seulement ensuite, après son GO. Démo : npm run casino:demo -w @raptoru/core-api (http://127.0.0.1:4497).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
