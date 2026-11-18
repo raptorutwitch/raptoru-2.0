@@ -1,7 +1,7 @@
 # Casino : machine à sous (avec le Coffre) et roulette de l'extension
 
-État au 17/11/2026 : **intégré et jouable en Lab**, branche locale `feat/casino`. Rien n'est poussé, fusionné ni
-déployé. En Production, le Casino reste fermé tant qu'Antoni n'a pas validé :
+État au 18/11/2026 : **intégré et jouable en Lab** (mode spectateur refait le 18/11), branche locale `feat/casino`.
+Rien n'est poussé, fusionné ni déployé. En Production, le Casino reste fermé tant qu'Antoni n'a pas validé :
 
 - la variable `CASINO_EXTENSION` du Core, à `off` par défaut ;
 - le réglage Studio `casino.open`, à 0 par défaut ;
@@ -12,15 +12,16 @@ l'étude du bonus (rapport « Raptoru 2.0 — Le jeu bonus de la machine à sous
 
 ## 1. Qui fait quoi
 
-| Partie       | Rôle                                                                                                             | Code                                                                                        |
-| ------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Core         | Vérifie la mise et le solde, tire, calcule, débite, crédite et enregistre la partie, dans une seule transaction  | `apps/core-api/src/casino/` (`slot.ts`, `coffre.ts`, `roulette.ts`, `rng.ts`, `service.ts`) |
-| Core, portes | Extension : `/v1/ext/casino/*` (identité du jeton Twitch). Studio : `casino/<chaîne>/admin/*` en lecture seule   | `ext/casino-ext.ts`, `http/casino-routes.ts`, `http/studio-cockpit-routes.ts`               |
-| Core, module | Réglages bornés `casino.*` et supervision du Centre de contrôle                                                  | `modules/casino.ts`                                                                         |
-| Extension    | Trois tuiles de Mini-jeux (machine, roulette, parties en cours) ; les écrans jouent les animations, rien d'autre | `extension/shared/casino/`, `modules/casino/*.css`                                          |
-| Studio       | Page « Casino » : ouverture, limites, chiffres, parties, refus                                                   | `web/src/pages/casino.ts`, `server/src/casino/relay.ts`                                     |
-| Bot          | Rien de nouveau : les messages passent par la file existante (`cmd_steps`, origine `module:casino`)              | —                                                                                           |
-| Base         | `casino_rounds` : une ligne par partie                                                                           | `supabase/migrations/20261201130000_casino.sql` (+ jumelle Lab)                             |
+| Partie       | Rôle                                                                                                            | Code                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Core         | Vérifie la mise et le solde, tire, calcule, débite, crédite et enregistre la partie, dans une seule transaction | `apps/core-api/src/casino/` (`slot.ts`, `coffre.ts`, `roulette.ts`, `rng.ts`, `service.ts`) |
+| Core, direct | Le journal public des spectateurs : les étapes déjà montrées par l'écran du joueur, dans l'ordre (§ 6)          | `casino/feed.ts`                                                                            |
+| Core, portes | Extension : `/v1/ext/casino/*` (identité du jeton Twitch). Studio : `casino/<chaîne>/admin/*` en lecture seule  | `ext/casino-ext.ts`, `http/casino-routes.ts`, `http/studio-cockpit-routes.ts`               |
+| Core, module | Réglages bornés `casino.*` et supervision du Centre de contrôle                                                 | `modules/casino.ts`                                                                         |
+| Extension    | Deux cartes de Mini-jeux (machine, roulette) et le bandeau « parties en direct » ; les écrans animent seulement | `extension/shared/casino/` (`follow.js` : le suivi), `modules/casino/*.css`                 |
+| Studio       | Page « Casino » : ouverture, limites, chiffres, parties, refus                                                  | `web/src/pages/casino.ts`, `server/src/casino/relay.ts`                                     |
+| Bot          | Rien de nouveau : les messages passent par la file existante (`cmd_steps`, origine `module:casino`)             | —                                                                                           |
+| Base         | `casino_rounds` : une ligne par partie ; `casino_feed` : le journal des spectateurs (courte durée)              | `20261201130000_casino.sql`, `20261202130000_casino_feed.sql` (+ jumelles Lab)              |
 
 ## 2. La machine à sous
 
@@ -116,13 +117,31 @@ Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à 
     Casino fermé.
   - Un live qui s'arrête pendant un Coffre ne change rien : le gain est déjà crédité, le Coffre reste lisible et se
     termine.
-- **Spectateurs :** dans Mini-jeux, la tuile « Parties en cours » liste les parties actives : pseudo, jeu, mise, état.
-  - **États affichés :** Tirage, Coffre avec la relance, Résultat. Aucun résultat n'est montré avant son animation.
-  - **Fréquence :** la liste se relit toutes les 4 s, seulement quand elle est ouverte.
-  - **Regarder une partie :** on suit le tour du joueur. Son Coffre avance quand lui avance : la progression est relue
-    toutes les 1,5 s, seulement pendant qu'on regarde.
-  - **Arrivée en cours de partie :** on reprend là où la partie en est, sans rejouer ce qui est passé.
-  - **Droits :** aucune commande du joueur, aucune route d'écriture. Un spectateur ne fait que lire.
+- **Spectateurs (refonte du 18/11) :** on suit un JOUEUR, pas une partie isolée.
+  - **Entrée :** dans Mini-jeux, sous les deux jeux, le bandeau « Regarder les parties en direct » : le nombre de
+    viewers en jeu et leurs initiales (toucher une initiale suit ce joueur), ou « Personne ne joue en ce moment ». Il se
+    met à jour seul. « Regarder › » ouvre la liste : pseudo, jeu, mise, état (En jeu, Coffre, Entre deux tours).
+  - **Suivi :** tous ses tours s'enchaînent sans rien rouvrir : les rouleaux, les lignes, le Coffre relance par relance,
+    le tour suivant ; s'il passe à la roulette, on le suit sur la roulette (ses jetons pendant qu'il mise, la roue, le
+    résultat sur le tapis). S'il quitte le jeu, on le voit (« a quitté le jeu ») ; rien ne reste figé.
+  - **Jamais de résultat en avance :** le Core ne publie une étape qu'une fois que l'écran du joueur l'a montrée (ses
+    rouleaux arrêtés, sa bille posée, une relance jouée, la fin). Le lancement ne transmet que la mise. Le spectateur
+    rejoue chaque étape avec la même animation, donc un peu après le joueur : environ la durée d'une étape (≈ 2 s pour
+    les rouleaux, ≈ 6 s pour la roue). Si l'écran du joueur se ferme, le Core publie l'étape une fois son animation
+    finie (9 s machine, 14 s roulette, 7 s pour l'ouverture du Coffre). Les relances du Coffre attendent toujours le
+    joueur.
+  - **Rythme :** Rapide et Passer du joueur sont transmis (le spectateur les suit, même résultat) ; Auto enchaîne
+    les tours chez le spectateur aussi. Un spectateur en retard (onglet caché, connexion lente) accélère pour rattraper.
+  - **Mises de la roulette en préparation :** l'écran du joueur les envoie (300 ms après le dernier geste) ; affichées
+    comme « pose ses jetons », jamais débitées, remplacées par les vraies au lancement.
+  - **Technique :** une seule requête en attente par spectateur (long-poll, réponse dès qu'une étape est publiée, au
+    plus 20 s sinon). Chaque événement a un numéro (seq) : pas de doublon, pas de trou, reprise exacte après une coupure.
+    Rafraîchir la page revient au même joueur, à l'étape où il en est. Un Core réveille ses spectateurs aussitôt ; un
+    autre Core les réveille en moins d'une seconde (une lecture par chaîne et par seconde, seulement s'il y a des
+    spectateurs). Le journal ne garde que quelques heures.
+  - **Droits :** un spectateur n'a aucune commande active (mise, jetons, Lancer, Auto, Rapide, Passer, Coffre). Côté
+    Core, toute écriture vise le tour de celui qui l'envoie : agir sur le tour d'un autre est refusé. Le détail d'un
+    tour d'un autre viewer n'est lisible qu'une fois sa fin publiée.
 - **Partage :** depuis l'historique, le viewer partage son propre tour.
   - Le Core relit la vraie partie et écrit le message de LeCroupier_ : court, pertes comprises, jamais présentées comme
     des gains.
@@ -167,7 +186,8 @@ ne joue jamais à la place d'un viewer.
 **Démo rapide, sans Studio :** `npm run casino:demo -w @raptoru/core-api`, puis ouvrir http://127.0.0.1:4497.
 
 - **Ce qui tourne :** un Core en mémoire, le portefeuille de test et la vraie extension.
-- **Les comptes fictifs :** Alice joue (1 000 000 Jetons) et Bob regarde.
+- **Les comptes fictifs :** Alice joue (1 000 000 Jetons) ; Bob la regarde : dans sa fenêtre, Mini-jeux › bandeau
+  « Regarder les parties en direct » › l'initiale d'Alice. Un lien en haut ouvre Carla, un 2ᵉ spectateur.
 - **Les commandes du Lab :**
   - live oui / non, Casino ouvert / fermé ;
   - gain maximum, solde d'Alice ;
@@ -175,6 +195,9 @@ ne joue jamais à la place d'un viewer.
     choisis, et cela n'existe que dans cette démo ;
   - Luna joue ou ouvre un Coffre, à regarder depuis Bob.
 - **À l'écran :** le chat simulé de LeCroupier_ et la lecture de Studio.
+
+**Contrôles automatiques :** `npm run casino:check -w @raptoru/core-api` (le Casino entier, 25 points) et
+`npm run casino:watch-check -w @raptoru/core-api` (les spectateurs : Alice, Bob et Carla dans trois navigateurs).
 
 **Lab complet :** `npm run studio:lab`. On y trouve Studio › Casino, l'extension du Lab et le live simulé
 (Simulation › Simuler début).
@@ -187,8 +210,8 @@ ne joue jamais à la place d'un viewer.
    - total par tour de la roulette (100 000) ;
    - délai de partage (300 s) ;
    - seuil d'annonce (×500).
-2. **Le déploiement du Core et de sa migration** `20261201130000_casino.sql` (additive). Sauvegarde, puis
-   `--migrations-approved`.
+2. **Le déploiement du Core et de ses migrations** `20261201130000_casino.sql` et `20261202130000_casino_feed.sql`
+   (additives). Sauvegarde, puis `--migrations-approved`.
 3. **La variable `CASINO_EXTENSION`** : `testers:<id>,…` pour un Hosted Test, puis `on`.
 4. **Studio :** release avec la page Casino, puis `casino.open = 1`, `casino.slot_open` et `casino.roulette_open`.
 5. **L'extension :**
@@ -203,5 +226,5 @@ ne joue jamais à la place d'un viewer.
 | Tout le Casino | Studio › Casino › Fermé (`casino.open = 0`, immédiat) ; ou `CASINO_EXTENSION=off` (redémarrage du Core)   |
 | Un jeu         | `casino.slot_open = 0` / `casino.roulette_open = 0`                                                       |
 | Les annonces   | `casino.announce = 0`                                                                                     |
-| Core           | Redéployer le Core précédent : il ignore `casino_rounds` (migration additive)                             |
+| Core           | Redéployer le Core précédent : il ignore `casino_rounds` et `casino_feed` (migrations additives)          |
 | Extension      | Ne pas publier, ou version précédente dans la console Twitch : sans Casino, les tuiles n'apparaissent pas |

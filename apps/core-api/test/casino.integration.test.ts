@@ -229,4 +229,41 @@ describe.skipIf(!isLocal)('casino, real Postgres, two Cores', () => {
     );
     expect(Number(sum[0]!.s)).toBe(-300);
   });
+  it('spectators: two Cores publish the same stages at once — each stage once, in order; a spectator never sees ahead', async () => {
+    await editWallet(
+      a,
+      clock.now(),
+      CH,
+      V.id,
+      'set',
+      { tokens: 10_000 },
+      'test',
+    );
+    const [A, B] = [casino(a), casino(b)];
+    const before = await A.watch(CH, V.id, -1, 0);
+    const r = await A.spinSlot(CH, V, { key: 'feed-two-cores-1', bet: 100 });
+    const id = r.round.round_id;
+    const seen = await B.watch(CH, V.id, before.cursor, 0);
+    expect(seen.events.map((e) => e.kind)).toEqual(['start']);
+    // the player's client resends its progress while a second Core settles the same round: never twice
+    await Promise.all(
+      Array.from({ length: 10 }, (_, k) =>
+        (k % 2 ? A : B).progress(CH, V, { round_id: id, stage: 'result' }),
+      ),
+    );
+    const rows = await a.query<{ kind: string; pos: number }>(
+      'select kind, pos from casino_feed where round_id = $1 order by seq',
+      [id],
+    );
+    expect(rows.map((x) => x.kind)).toEqual(['start', 'result', 'end']);
+    const after = await A.watch(CH, V.id, seen.cursor, 0);
+    expect(after.events.map((e) => e.kind)).toEqual(['result', 'end']);
+    // a long-poll on one Core is woken by a spin on the other (the shared check, not this process's wake)
+    const t0 = Date.now();
+    const waiting = B.watch(CH, V.id, after.cursor, 6_000);
+    await new Promise((ok) => setTimeout(ok, 200));
+    await A.spinSlot(CH, V, { key: 'feed-two-cores-2', bet: 100 });
+    expect((await waiting).events.map((e) => e.kind)).toEqual(['start']);
+    expect(Date.now() - t0).toBeLessThan(4_000);
+  });
 });

@@ -113,12 +113,16 @@ export function mountSlot(D, ctx) {
 
   let busy = false;
   let auto = false;
-  let spect = null; // a Replay (own round) or a spectator's round: { round, live }
+  let spect = null; // a Replay (own round), or the followed player: { follow: true }
+  const name = ctx.follow?.name ?? 'le joueur'; // spectator: the followed player
+  let watched = null; // spectator: the round followed { round_id, bet, best }
   let autoTimer = null;
   let pendingKey = null; // the intent's key until the Core decided (a lost answer resends it)
   let hist = []; // the viewer's last rounds (Core, newest first)
   let destroyed = false;
   let presentingCredit = 0;
+  /** The bet on screen: the player's own, a Replay's, or the followed player's. */
+  const shownBet = () => (spect?.follow ? (watched?.bet ?? 0) : spect ? spect.round.bet : s.bet);
 
   const idle = () => {
     body.dispatchEvent(new globalThis.CustomEvent('jdm:host-idle', { bubbles: true, composed: true }));
@@ -226,7 +230,9 @@ export function mountSlot(D, ctx) {
     if (destroyed) return;
     showBet();
     const closed = !!closedReason() && !spect;
-    const st = spect && !busy
+    const st = spect?.follow
+      ? ['watch', 'eye', 'En direct', `Spectateur : tu regardes ${name} jouer`]
+      : spect && !busy
       ? ['replay', 'close', 'Retour', spect.live ? 'Quitter la partie' : 'Quitter le replay']
       : auto
         ? ['stop', 'stop', 'Stop', 'Arrêter Auto']
@@ -240,6 +246,7 @@ export function mountSlot(D, ctx) {
     spinBtn.setAttribute('aria-label', st[3]);
     spinBtn.title = st[3];
     cab.classList.toggle('is-auto', auto);
+    spinBtn.disabled = !!spect?.follow;
     const lock = busy || !!spect;
     $('[data-bet="down"]').disabled = $('[data-bet="min"]').disabled = lock || s.bet <= MIN();
     $('[data-bet="up"]').disabled = $('[data-bet="max"]').disabled = lock || s.bet >= maxAllowed();
@@ -277,7 +284,7 @@ export function mountSlot(D, ctx) {
   const betInput = $('#bet');
   let editing = false;
   function showBet() {
-    if (!editing) betInput.value = fmt(spect ? spect.round.bet : s.bet);
+    if (!editing) betInput.value = fmt(shownBet());
     betInput.disabled = busy || !!spect;
   }
   on(betInput, 'focus', () => {
@@ -370,26 +377,40 @@ export function mountSlot(D, ctx) {
     if (auto) autoTimer = W.setTimeout(() => auto && void spin(), res.round.payout >= res.round.bet * 10 ? 1300 : 450);
   }
 
-  /** Plays a round the Core decided: the reels, the lines one by one, the Coffre; Replay and spectators too. */
-  async function playRound(round, { fast = false, replay = false, spectator = null, follow = null, from = null } = {}) {
+  /**
+   * The player's screen has shown a stage of their round: the spectators may see it now (the Core publishes it, never
+   * before). Fire and forget, one retry; a lost one is published by the Core once overdue, or with the next stage.
+   */
+  function reveal(roundId, stage, step = null, fast = false) {
+    const go = (n) => client.casinoProgress(roundId, stage, step, fast).catch(() => n > 0 && W.setTimeout(() => void go(n - 1), 1200));
+    void go(1);
+  }
+
+  /** Plays a round the Core decided: the reels, the lines one by one, the Coffre (the player's own, or a Replay). */
+  async function playRound(round, { fast = false, replay = false, from = null } = {}) {
     const r = asSpin(round);
     const line = round.outcome.line_win;
     const coffre = round.outcome.coffre;
     const x = line / round.bet;
     const level = line === 0 ? 0 : x >= 50 ? 4 : x >= 10 ? 3 : x >= 2 ? 2 : 1;
+    const own = !replay;
     if (from === 'settled') view.renderStatic(r.stops);
-    else await view.spin(r, { fast });
+    else {
+      const sp = await view.spin(r, { fast });
+      // The reels stopped on the player's screen: the spectators may see them now.
+      if (own) reveal(round.round_id, 'result', null, fast || !!sp?.skipped);
+    }
     if (destroyed) return;
     const shown = view.markWins(r);
     if (shown.wildMax >= 2) Audio.wild();
-    if (!replay && !spectator) {
+    if (own) {
       presentingCredit = round.payout;
       hist.unshift(light(round));
       hist.length = Math.min(hist.length, KEEP);
     }
     if (from !== 'settled' || !coffre) await presentLines(r, { level, x, steps: shown.steps, fast, credit: line });
     if (coffre && !destroyed) {
-      if (!replay && !spectator) stopAuto(); // le Coffre ne démarre jamais seul : le joueur relance lui-même
+      if (own) stopAuto(); // le Coffre ne démarre jamais seul : le joueur relance lui-même
       plateLocked = true;
       plate.className = 'plate';
       plate.innerHTML = `<em>COFFRE</em><small>${coffre.k} BONUS</small>`;
@@ -397,15 +418,16 @@ export function mountSlot(D, ctx) {
       if (from !== 'settled') await new Promise((ok) => W.setTimeout(ok, fast ? 350 : 1100));
       Audio.bonus();
       await CoffreView.play(
-        { script: coffre, bet: round.bet, credit: coffre.win, paid: round.capped ? Math.max(0, round.payout - (round.outcome.line_win ?? 0)) : coffre.win, step: round.mine && !replay ? (round.progress_step ?? -1) : spectator ? Math.max(-1, round.progress_step ?? -1) : -1 },
+        { script: coffre, bet: round.bet, credit: coffre.win, paid: round.capped ? Math.max(0, round.payout - (round.outcome.line_win ?? 0)) : coffre.win, step: round.mine && !replay ? (round.progress_step ?? -1) : -1 },
         {
           replay,
-          spectator,
-          follow,
+          seed: round.round_id,
           getFast: () => s.fast,
           toggleFast,
           host: body,
-          onStep: replay || spectator ? null : (i) => void client.casinoProgress(round.round_id, i, i >= coffre.steps.length).catch(() => {}),
+          // Each stage the player's screen showed goes to the spectators (and keeps the progress for a reconnection).
+          onReady: own ? () => reveal(round.round_id, 'coffre', null, s.fast) : null,
+          onStep: own ? (i) => (i >= coffre.steps.length ? reveal(round.round_id, 'end', null, s.fast) : reveal(round.round_id, 'step', i, s.fast)) : null,
           onCredit: () => refreshWallet(),
         },
       );
@@ -415,7 +437,7 @@ export function mountSlot(D, ctx) {
       plate.innerHTML = lastWin;
       popPlate();
     }
-    if (round.capped && !replay && !spectator)
+    if (round.capped && own)
       await Frame.card(
         `<h2>Gain plafonné</h2><div class="big">+${fmt(round.payout)}</div><p>Le tirage valait ${fmt(round.raw_payout)} Jetons : le gain maximum par partie est de ${fmt(limits().max_win)} Jetons (règle du Casino).</p>`,
         [[1, 'Compris', 'gold']],
@@ -498,7 +520,6 @@ export function mountSlot(D, ctx) {
     plate.className = 'plate';
     paintPlate();
     update();
-    if (ctx.watch) ctx.onLeave?.(); // a spectator goes back to the catalogue
   }
   async function replay(id) {
     if (busy) return;
@@ -517,46 +538,197 @@ export function mountSlot(D, ctx) {
     update();
     idle();
   }
-  /** Spectator: another viewer's round, from where it is now (no replay of what is over), at the player's pace. */
-  async function watch(id) {
-    let round;
-    try {
-      round = (await client.casinoRound(id)).round;
-    } catch (e) {
-      Frame.toast(Frame.refusalText(e), true);
-      return ctx.onLeave?.();
-    }
-    busy = true;
-    enterSpect(round, true);
-    const coffre = round.outcome.coffre;
-    const age = Date.now() - Date.parse(round.created_at);
-    // The Coffre follows the player's progress: each respin plays once he reached it (read every 1.5 s, no more).
-    let progress = round.progress_step ?? -1;
-    let finished = round.finished;
-    const follow = async (i) => {
-      for (;;) {
-        if (destroyed || !spect) return;
-        if (progress >= i || finished) return;
-        await new Promise((ok) => W.setTimeout(ok, 1500));
-        try {
-          const r = (await client.casinoRound(id)).round;
-          progress = r.progress_step ?? progress;
-          finished = r.finished || r.phase === 'done';
-        } catch {
-          /* the next read */
-        }
-      }
+  // --- Spectateur : on suit UN joueur (casino.js lit le flux du Core et nous donne ses étapes, dans l'ordre) --------
+  // Chaque étape arrive une fois que l'écran du joueur l'a montrée : on la joue avec la même animation (un peu après
+  // lui). Aucune commande n'agit : ni mise, ni Lancer, ni Auto, ni Rapide, ni Passer, ni le Coffre.
+  let watchFast = false; // le rythme de l'étape en cours (Rapide du joueur, ou un spectateur en retard)
+  let cof = null; // le Coffre suivi : { feed(item), control }
+  let ackFn = null;
+  const ackWait = () => new Promise((ok) => (ackFn = ok));
+  const ack = () => {
+    const f = ackFn;
+    ackFn = null;
+    f?.();
+  };
+  function strip(gain = '…') {
+    $('#rstrip').innerHTML = `<span>Mise <b>${watched ? fmt(watched.bet) : '—'}</b></span><span>Gain <b class="${gain.startsWith('+') ? 'g' : ''}">${gain}</b></span><span class="when">en direct</span>`;
+  }
+  function note(text) {
+    plateLocked = true;
+    plate.className = 'plate replay';
+    plate.innerHTML = `<small>${text}</small>`;
+  }
+  function closeCoffre() {
+    if (!cof) return;
+    cof.control.close?.();
+    cof = null;
+    ack();
+  }
+  function openCoffre(roundId, bet, data, steps, instant) {
+    closeCoffre();
+    const q = [];
+    let take = null;
+    const control = {};
+    const c = { script: { k: data.k, start: data.start, steps: steps.slice(), total: 0, full: false, filled: data.k, jackpots: [], cols: 0, doubler: false }, bet, credit: 0, paid: 0, step: steps.length - 1 };
+    const mine = {
+      control,
+      feed: (item) => {
+        if (take) {
+          const t = take;
+          take = null;
+          t(item);
+        } else q.push(item);
+      },
     };
-    await playRound(round, {
-      spectator: round.viewer_name,
-      follow: coffre ? follow : null,
-      from: coffre ? (age > 6000 ? 'settled' : null) : age > 4000 ? 'settled' : null,
+    cof = mine;
+    void CoffreView.play(c, {
+      follow: () => new Promise((ok) => (q.length ? ok(q.shift()) : (take = ok))),
+      spectator: name,
+      seed: roundId,
+      instant,
+      control,
+      host: body,
+      getFast: () => watchFast,
+      onReady: ack,
+      onStep: ack,
+    }).then(() => {
+      if (cof === mine) cof = null;
     });
-    if (!spect) return;
-    busy = false;
-    $('#rstrip').innerHTML = `<span>Joueur <b>${esc(round.viewer_name)}</b></span><span>Mise <b>${fmt(round.bet)}</b></span><span>Gain <b class="${round.payout ? 'g' : ''}">${round.payout ? '+' + fmt(round.payout) : 'aucun'}</b></span><span class="when">partie terminée</span>`;
+  }
+  const winPlate = (payout, bet, coffre) => {
+    plateLocked = false;
+    plate.className = 'plate';
+    lastWin = payout ? `${coffre ? '<em>COFFRE</em>' : ''}<b>+${fmt(payout)}</b><small>${times(payout / bet)}</small>` : '';
+    plate.innerHTML = lastWin;
+    if (payout) popPlate();
+  };
+  function pushHist(roundId, d) {
+    hist.unshift({ round_id: roundId, bet: d.bet, payout: d.payout, best: watched?.best ?? null, coffre: d.coffre ? { total: d.coffre.total, full: d.coffre.full } : null });
+    hist.length = Math.min(hist.length, 8);
+    paintBoard();
+  }
+
+  /** One stage of the followed player (in order, once). `fast`: the player's Rapide / Passer, or a late spectator. */
+  async function apply(ev, { fast = false } = {}) {
+    if (destroyed) return;
+    watchFast = !!(ev.fast || fast);
+    const d = ev.data ?? {};
+    if (ev.kind === 'presence') {
+      if (d.game === null && !busy) note(`${esc(name)} a quitté le jeu.`);
+      return;
+    }
+    if (ev.kind === 'start') {
+      closeCoffre();
+      watched = { round_id: ev.round_id, bet: d.bet, best: null };
+      view.clearWins();
+      note(`${esc(name)} lance…`);
+      strip();
+      update();
+      return;
+    }
+    if (ev.round_id && watched?.round_id !== ev.round_id) watched = { round_id: ev.round_id, bet: d.bet ?? watched?.bet ?? 0, best: null };
+    if (ev.kind === 'result') {
+      busy = true;
+      update();
+      const r = asSpin({ outcome: d });
+      await view.spin(r, { fast: watchFast });
+      if (destroyed) return;
+      const shown = view.markWins(r);
+      if (shown.wildMax >= 2) Audio.wild();
+      watched.best = d.lines.slice().sort((a, b) => b.win - a.win)[0] ?? null;
+      const x = d.line_win / watched.bet;
+      const level = d.line_win === 0 ? 0 : x >= 50 ? 4 : x >= 10 ? 3 : x >= 2 ? 2 : 1;
+      await presentLines(r, { level, x, steps: shown.steps, fast: watchFast, credit: d.line_win });
+      if (d.coffre) {
+        plateLocked = true;
+        plate.className = 'plate';
+        plate.innerHTML = `<em>COFFRE</em><small>${d.coffre.k} BONUS</small>`;
+        popPlate();
+        Audio.bonus();
+      }
+      busy = false;
+      update();
+      return;
+    }
+    if (ev.kind === 'coffre') {
+      busy = true;
+      update();
+      const w = ackWait();
+      openCoffre(ev.round_id, watched.bet, d, [], false);
+      await w;
+      return;
+    }
+    if (ev.kind === 'step') {
+      if (!cof) return; // (the Coffre was closed under us: its next stage is the end)
+      const w = ackWait();
+      cof.feed({ step: d });
+      await w;
+      return;
+    }
+    if (ev.kind === 'end') {
+      if (cof) {
+        const w = ackWait();
+        cof.feed({ end: d.coffre });
+        await w;
+      }
+      busy = false;
+      winPlate(d.payout, d.bet, !!d.coffre);
+      strip(d.payout ? `+${fmt(d.payout)}` : 'aucun');
+      pushHist(ev.round_id, d);
+      update();
+    }
+  }
+
+  /** Rejoining (a new spectator, a refresh, a lost connection): the player's current round as it is now, no replay. */
+  async function snapshot(events) {
+    closeCoffre();
+    const at = events.map((e) => e.kind).lastIndexOf('start');
+    const pres = [...events].reverse().find((e) => e.kind === 'presence');
+    if (at < 0) {
+      watched = null;
+      view.clearWins();
+      note(pres?.data.game === null ? `${esc(name)} a quitté le jeu.` : `En attente du prochain tour de ${esc(name)}…`);
+      strip('—');
+      update();
+      return;
+    }
+    const start = events[at];
+    const mine = events.slice(at).filter((e) => e.round_id === start.round_id);
+    const res = mine.find((e) => e.kind === 'result');
+    const cofE = mine.find((e) => e.kind === 'coffre');
+    const end = mine.find((e) => e.kind === 'end');
+    watched = { round_id: start.round_id, bet: start.data.bet, best: null };
+    if (!res) return apply(start);
+    const r = asSpin({ outcome: res.data });
+    view.renderStatic(r.stops);
+    view.showWins(r);
+    watched.best = res.data.lines.slice().sort((a, b) => b.win - a.win)[0] ?? null;
+    if (end) {
+      winPlate(end.data.payout, end.data.bet, !!end.data.coffre);
+      strip(end.data.payout ? `+${fmt(end.data.payout)}` : 'aucun');
+      update();
+      return;
+    }
+    strip();
+    if (cofE) {
+      busy = true;
+      update();
+      const w = ackWait();
+      openCoffre(start.round_id, watched.bet, cofE.data, mine.filter((e) => e.kind === 'step').map((e) => e.data), true);
+      await w;
+    }
     update();
-    idle();
+  }
+
+  function enterWatch() {
+    spect = { live: true, follow: true, round: { bet: 0 } };
+    body.classList.add('is-watch');
+    $('#spect').hidden = false;
+    $('#spect').innerHTML = `<i class="live-dot"></i><span>Spectateur · ${esc(name)}</span>`;
+    $('#rstrip').hidden = false;
+    strip('—');
+    note(`En attente du prochain tour de ${esc(name)}…`);
+    update();
   }
 
   // --- Historique, partage, table des gains -------------------------------------------------------------------------
@@ -636,7 +808,7 @@ export function mountSlot(D, ctx) {
     });
   }
   function paytableHTML() {
-    const bet = spect ? spect.round.bet : s.bet;
+    const bet = shownBet();
     const val = (sym, k) => (sym.pays[k] ? compact(Math.floor((bet * sym.pays[k]) / 100)) : '');
     const order = ['sept', 'diamant', 'bar', 'cloche', 'raisin', 'cerise', 'citron', 'wild'];
     const rows = order
@@ -658,7 +830,7 @@ export function mountSlot(D, ctx) {
       <div class="plines"><span>10 lignes</span>${lines}</div>`;
   }
   function openPaytable() {
-    Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(spect ? spect.round.bet : s.bet)}</small>`, render: paytableHTML });
+    Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(shownBet())}</small>`, render: paytableHTML });
   }
 
   // --- Commandes ----------------------------------------------------------------------------------------------------
@@ -670,6 +842,8 @@ export function mountSlot(D, ctx) {
   on(body, 'click', (e) => {
     const b = e.target.closest('[data-bet], [data-act]');
     if (!b || b.disabled) return;
+    // Spectator: only the rules and the sound (this browser); nothing acts on the followed player's game.
+    if (spect?.follow && b.dataset.act !== 'pay' && b.dataset.act !== 'sound') return;
     const k = b.dataset.bet || b.dataset.act;
     if (k === 'down') stepBet(-1);
     else if (k === 'up') stepBet(1);
@@ -687,12 +861,14 @@ export function mountSlot(D, ctx) {
     else if (k === 'auto') toggleAuto();
   });
   on(spinBtn, 'click', () => {
+    if (spect?.follow) return;
     if (spect) return busy ? (view.isRunning() ? view.skip() : present?.skip()) : endSpect();
     if (auto) return busy ? (void spin(), Frame.toast('Auto arrêté.')) : stopAuto('Auto arrêté.');
     void spin();
   });
-  on(win, 'click', () => busy && (spect ? view.skip() : void spin()));
+  on(win, 'click', () => !spect?.follow && busy && (spect ? view.skip() : void spin()));
   on(W, 'keydown', (e) => {
+    if (spect?.follow) return;
     if (e.key === 'Escape' && spect && !Frame.drawerOpen() && !D.querySelector('.card')) return endSpect();
     if (e.code === 'Space' && e.target === D.ownerDocument.body && !D.querySelector('.cof')) {
       e.preventDefault();
@@ -714,9 +890,9 @@ export function mountSlot(D, ctx) {
   }
 
   async function start() {
+    if (ctx.follow) return enterWatch();
     update();
     await loadHistory();
-    if (ctx.watch) return watch(ctx.watch);
     // A Coffre left unfinished (closed tab, other device, reconnection): it resumes where it was, already paid.
     const resume = casino.me?.resume;
     if (resume && !destroyed) {
@@ -730,10 +906,15 @@ export function mountSlot(D, ctx) {
       refreshWallet();
     }
   }
-  setTimeout(() => void start());
+  // A spectator is ready at once (casino.js hands it the player's stages as soon as it is mounted).
+  if (ctx.follow) enterWatch();
+  else setTimeout(() => void start());
 
   return {
     busy: () => busy || !!present,
+    /** Spectator: the followed player's next stage, or a snapshot to rejoin them (casino.js). */
+    apply,
+    snapshot,
     destroy() {
       destroyed = true;
       stopAuto();
@@ -742,6 +923,7 @@ export function mountSlot(D, ctx) {
       if (view.isRunning()) view.skip();
       ro?.disconnect();
       for (const [t, ev, fn, opt] of listeners) t.removeEventListener(ev, fn, opt);
+      closeCoffre();
       D.querySelector('.cof')?.remove();
     },
   };

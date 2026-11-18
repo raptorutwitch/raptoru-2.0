@@ -39,6 +39,23 @@ export async function casinoExt(
     let m: RegExpExecArray | null;
     if (method === 'GET' && (m = ROUND.exec(path)))
       return await ok(`${base}/rounds/${m[1]}${who ? `?${who}` : ''}`);
+    // Spectators: anyone may watch (anonymous too); the Core only ever sends what the player's screen showed.
+    const num = (k: string, d = 0) => {
+      const n = Number(qs.get(k) ?? d);
+      return Number.isSafeInteger(n) ? n : d;
+    };
+    if (method === 'GET' && path === '/casino/watch') {
+      const player = qs.get('player') ?? '';
+      if (!/^\d{1,32}$/.test(player))
+        return { status: 400, body: { ok: false, error: 'invalid_player' } };
+      return await ok(
+        `${base}/watch?player=${player}&after=${num('after', -1)}&wait_ms=${num('wait_ms')}`,
+      );
+    }
+    if (method === 'GET' && path === '/casino/live')
+      return await ok(
+        `${base}/live?after=${num('after', -1)}&wait_ms=${num('wait_ms')}`,
+      );
     if (!viewer)
       return { status: 403, body: { ok: false, error: 'identity_required' } };
     if (method === 'GET' && path === '/casino/history') {
@@ -67,8 +84,17 @@ export async function casinoExt(
       return await ok(`${base}/progress`, {
         viewer,
         round_id: b.round_id,
+        stage: b.stage,
         step: b.step,
         done: b.done,
+        fast: b.fast,
+      });
+    if (method === 'POST' && path === '/casino/draft')
+      return await ok(`${base}/draft`, { viewer, bets: b.bets });
+    if (method === 'POST' && path === '/casino/presence')
+      return await ok(`${base}/presence`, {
+        viewer,
+        game: b.game ?? null,
       });
     if (method === 'POST' && path === '/casino/share')
       return await ok(`${base}/share`, { viewer, round_id: b.round_id });

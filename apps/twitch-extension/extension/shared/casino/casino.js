@@ -1,22 +1,22 @@
-// Casino (docs/CASINO.md) — the extension's entry: three tiles of the Mini-jeux catalogue (the slot machine, the
-// roulette, the rounds being played now) and their screens. Each screen lives in a Shadow DOM (the validated casino
-// styles stay inside; the extension's stay outside) and takes the extension's real header (its title, its ‹ back to
-// the catalogue). The Core decides everything; offline or closed, the games say so and the history stays readable.
-// A spectator opens a round from « Parties en cours »: he sees the same round as the player, never a control of his.
-// The games' code loads with their first screen (a Mini-jeux catalogue without the casino open loads none of it).
+// Casino (docs/CASINO.md) — the extension's entry: two game tiles of the Mini-jeux catalogue (the slot machine, the
+// roulette) and a band under them, « Regarder les parties en direct ». Each screen lives in a Shadow DOM (the validated
+// casino styles stay inside; the extension's stay outside) and takes the extension's real header (its title, its ‹ back
+// to the catalogue). The Core decides everything; offline or closed, the games say so and the history stays readable.
+// A spectator follows a PLAYER (follow.js: the Core's feed of their revealed stages): every round, every Coffre, the
+// other game, on the same screens as the player's, with no control of theirs. A player says which game they have open
+// (their spectators follow them). The games' code loads with their first screen.
 import * as Frame from './frame.js';
+import { createFollower } from './follow.js';
 
 const LOADERS = { slot: () => import('./slot.js').then((m) => m.mountSlot), roulette: () => import('./roulette.js').then((m) => m.mountRoulette) };
 
 const { ICON, esc, fmt, compact } = Frame;
 // The shared frame, then each game's own sheet (as the validated prototype loaded them: their class names never meet).
 const SHEETS = { base: 'modules/casino/casino.css', slot: 'modules/casino/slot.css', roulette: 'modules/casino/roulette.css' };
-const LIVE_POLL_MS = 4000;
 const GAME = {
   slot: { label: 'Machine à sous', icon: ICON.slots },
   roulette: { label: 'Roulette', icon: ICON.roulette },
 };
-const PHASE = { draw: 'Tirage', bonus: 'Coffre', result: 'Résultat' };
 
 /** Loads a sheet into the shadow root (shown once loaded: no unstyled flash); resolves at once if already there. */
 function sheet(D, href) {
@@ -52,17 +52,52 @@ function shell(document) {
   return { host, D };
 }
 
+const STATE = { playing: 'En jeu', bonus: 'Coffre', idle: 'Entre deux tours' };
+// The followed player survives a refresh of the page (this tab only): the spectator comes back to them.
+const FOLLOW_KEY = 'casino:follow';
+const remembered = () => {
+  try {
+    const v = JSON.parse(globalThis.sessionStorage?.getItem(FOLLOW_KEY) ?? 'null');
+    return v && typeof v.id === 'string' && /^\d{1,32}$/.test(v.id) ? v : null;
+  } catch {
+    return null;
+  }
+};
+const remember = (p) => {
+  try {
+    if (p) globalThis.sessionStorage?.setItem(FOLLOW_KEY, JSON.stringify({ id: p.id, name: p.name, game: p.game }));
+    else globalThis.sessionStorage?.removeItem(FOLLOW_KEY);
+  } catch {
+    /* memory only */
+  }
+};
+const initial = (name) => esc(String(name ?? '?').trim().charAt(0).toUpperCase() || '?');
+
+/** The game of a snapshot: its round's, else where the player is. */
+function gameOf(events, fallback) {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind === 'start') return e.game;
+    if (e.kind === 'presence' && e.data?.game) return e.data.game;
+  }
+  return fallback;
+}
+
 /**
- * One casino screen for Mini-jeux: `kind` = 'slot' | 'roulette' | 'live'; `watch` = a round id (spectator).
- * Returns the Mini-jeux game view: { node, start, destroy, busy, ownsHeader, headLabel, headIcon }.
+ * One casino screen for Mini-jeux: `kind` = 'slot' | 'roulette' (play) | 'live' (who plays now, then follow one of
+ * them); `follow` = a player { id, name } to follow at once. Returns the Mini-jeux game view.
  */
-function casinoScreen({ document, client, kind }) {
+function casinoScreen({ document, client, kind, follow = null }) {
   const { host, D } = shell(document);
-  let game = null;
-  let screen = kind; // 'slot' | 'roulette' | 'live'
-  let watching = null; // the round watched (spectator)
+  let game = null; // the mounted game screen
+  let screen = kind; // 'slot' | 'roulette' | 'live' | 'follow'
+  let followed = null; // the followed player { id, name, game }
+  let follower = null;
+  let liveLoop = null; // the players list's long-poll
+  let presenceTimer = null;
+  let present = null; // the game this viewer has open (player)
   let destroyed = false;
-  let liveTimer = null;
+  let token = 0; // each opening invalidates the previous one's async work
   const W = globalThis;
   const body = () => D.getElementById('body');
   const redrawHeader = () => host.dispatchEvent(new globalThis.CustomEvent('jdm:host-redraw', { bubbles: true, composed: true }));
@@ -74,108 +109,212 @@ function casinoScreen({ document, client, kind }) {
     b.querySelector('[data-retry]').addEventListener('click', () => void retry());
   }
 
-  async function open(next, watch = null) {
-    if (destroyed) return;
+  /** The game this viewer has open (their spectators follow them from one game to the other); a beat every minute. */
+  function setPresence(g) {
+    W.clearInterval(presenceTimer);
+    if (present === g) return;
+    const was = present;
+    present = g;
+    if (g || was) void client.casinoPresence(g).catch(() => {});
+    if (g) presenceTimer = W.setInterval(() => !W.document?.hidden && void client.casinoPresence(g).catch(() => {}), 60_000);
+  }
+
+  function stopAll() {
+    token += 1;
+    follower?.stop();
+    follower = null;
+    liveLoop = null;
     game?.destroy();
     game = null;
-    W.clearTimeout(liveTimer);
+  }
+
+  /** Mounts a game screen (player, or spectator with `opts.follow`). */
+  async function mount(next, opts = {}) {
+    const my = token;
     Frame.useRoot(D);
-    screen = next;
-    watching = watch;
     const b = body();
     b.className = 'cz is-loading';
     b.innerHTML = '<p class="cz-load">Chargement du Casino…</p>';
     let casino;
-    let mount;
+    let mountFn;
     try {
-      [casino, mount] = await Promise.all([client.casinoState(), next === 'live' ? null : LOADERS[next](), useSheets(D, next)]);
+      [casino, mountFn] = await Promise.all([client.casinoState(), LOADERS[next](), useSheets(D, next)]);
     } catch (e) {
-      return fail(e, () => open(next, watch));
+      if (my === token) fail(e, () => (opts.follow ? followPlayer(followed) : open(next)));
+      return null;
     }
-    if (destroyed) return;
+    if (destroyed || my !== token) return null;
     Frame.useRoot(D);
-    const ctx = { client, casino, watch: watch?.round_id ?? null, onLeave: () => void open('live') };
-    if (next === 'live') game = mountLive(D, { client, casino, onWatch: (r) => void open(r.game, r) });
-    else game = mount(D, ctx);
+    game = mountFn(D, { client, casino, follow: opts.follow ?? null, onLeave: () => void openLive() });
     redrawHeader();
+    return casino;
   }
 
-  /** « Parties en cours »: the rounds being played now (light list, read every 4 s while this screen is open). */
-  function mountLive(D2, { client: c, casino, onWatch }) {
+  /** Plays a game (the viewer's own rounds). */
+  async function open(next) {
+    if (destroyed) return;
+    stopAll();
+    screen = next;
+    followed = null;
+    const casino = await mount(next);
+    if (casino?.me) setPresence(next);
+  }
+
+  /** « Parties en direct »: who is playing now (updated as they start, stop, change game). */
+  async function openLive() {
+    if (destroyed) return;
+    stopAll();
+    remember(null);
+    setPresence(null);
+    screen = 'live';
+    followed = null;
+    redrawHeader();
+    const my = token;
+    Frame.useRoot(D);
+    try {
+      await useSheets(D, 'live');
+    } catch {
+      /* the shared sheet: retried by the next screen */
+    }
+    if (my !== token) return;
     const b = body();
     b.className = 'cz live-body';
-    let rows = casino.active ?? [];
+    let players = [];
+    let reason = null;
     const paint = () => {
       b.innerHTML = `<div class="live">
-        <header class="live__head"><b>Parties en cours</b><small>Regarde les autres viewers jouer : tu vois la même partie qu’eux, sans pouvoir miser à leur place.</small></header>
+        <header class="live__head"><b>Parties en direct</b><small>Choisis un joueur : tu vois ses parties comme lui, tour après tour, sans pouvoir y toucher.</small></header>
         ${
-          rows.length
-            ? `<ul class="live__list">${rows
+          players.length
+            ? `<ul class="live__list">${players
                 .map(
-                  (r) => `<li class="live__row">
-                    <span class="live__ic" aria-hidden="true">${GAME[r.game]?.icon ?? ''}</span>
-                    <span class="live__who"><b>${esc(r.viewer_name)}</b><small>${GAME[r.game]?.label ?? r.game} · mise ${compact(r.bet)}</small></span>
-                    <span class="live__st ${r.phase}">${PHASE[r.phase] ?? ''}${r.phase === 'bonus' && r.steps ? ` · relance ${Math.max(0, r.progress_step + 1)}/${r.steps}` : ''}${r.phase === 'result' && r.payout !== null ? ` · ${r.payout ? '+' + fmt(r.payout) : 'perdu'}` : ''}</span>
-                    <button type="button" class="btn go live__go" data-watch="${esc(r.round_id)}">${ICON.eye}<span>Regarder</span></button>
+                  (p) => `<li class="live__row">
+                    <span class="live__av" aria-hidden="true">${initial(p.name)}</span>
+                    <span class="live__who"><b>${esc(p.name)}</b><small>${GAME[p.game]?.label ?? 'Casino'}${p.bet ? ` · mise ${compact(p.bet)}` : ''}</small></span>
+                    <span class="live__st ${p.state}">${STATE[p.state] ?? ''}</span>
+                    <button type="button" class="btn go live__go" data-follow="${esc(p.id)}">${ICON.eye}<span>Regarder</span></button>
                   </li>`,
                 )
                 .join('')}</ul>`
-            : '<p class="live__empty">Aucune partie en cours pour l’instant.<br><small>Elles apparaissent ici dès qu’un viewer joue pendant le live.</small></p>'
+            : '<p class="live__empty">Personne ne joue en ce moment.<br><small>Les joueurs apparaissent ici dès qu’ils ouvrent la machine à sous ou la roulette.</small></p>'
         }
-        ${casino.availability.open ? '' : `<p class="live__note">${esc(Frame.REFUSAL[casino.availability.reason] ?? '')}</p>`}
+        ${reason ? `<p class="live__note">${esc(reason)}</p>` : ''}
       </div>`;
       b.querySelectorAll('svg').forEach((s) => s.setAttribute('aria-hidden', 'true'));
     };
-    const onClick = (e) => {
-      const id = e.target.closest('[data-watch]')?.dataset.watch;
-      const r = id && rows.find((x) => x.round_id === id);
-      if (r) onWatch(r);
-    };
-    b.addEventListener('click', onClick);
-    let alive = true;
-    const tick = async () => {
-      if (!alive) return;
-      try {
-        const st = await c.casinoState();
-        rows = st.active ?? [];
-        casino = st;
-        paint();
-      } catch {
-        /* the next read */
-      }
-      if (alive) liveTimer = W.setTimeout(tick, LIVE_POLL_MS);
+    b.onclick = (e) => {
+      const id = e.target.closest('[data-follow]')?.dataset.follow;
+      const p = id && players.find((x) => x.id === id);
+      if (p) void followPlayer(p);
     };
     paint();
-    liveTimer = W.setTimeout(tick, LIVE_POLL_MS);
-    return {
-      busy: () => false,
-      destroy() {
-        alive = false;
-        W.clearTimeout(liveTimer);
-        b.removeEventListener('click', onClick);
-      },
+    let after = -1;
+    let fails = 0;
+    liveLoop = my;
+    while (liveLoop === my && !destroyed) {
+      if (W.document?.hidden) {
+        await new Promise((ok) => W.setTimeout(ok, 1000));
+        continue;
+      }
+      try {
+        const res = await client.casinoLive(after, after < 0 ? 0 : 20_000);
+        if (liveLoop !== my) return;
+        fails = 0;
+        after = res.cursor;
+        players = res.players ?? [];
+        paint();
+      } catch (e) {
+        if (liveLoop !== my) return;
+        fails += 1;
+        reason = fails > 1 ? Frame.refusalText(e) : null;
+        paint();
+        await new Promise((ok) => W.setTimeout(ok, Math.min(8000, 500 * 2 ** fails)));
+      }
+    }
+  }
+
+  /**
+   * Follows ONE player: their stages from the Core's feed, played in order on the screen of the game they are in —
+   * every round, every Coffre, the other game — until the spectator leaves. A late spectator (a hidden tab, a slow
+   * device) plays the waiting stages faster; rejoining (first time, a refresh, a lost cursor) starts from a snapshot.
+   */
+  async function followPlayer(p) {
+    if (destroyed) return;
+    stopAll();
+    setPresence(null);
+    screen = 'follow';
+    followed = { id: p.id, name: p.name ?? 'le joueur', game: p.game ?? 'slot' };
+    remember(followed);
+    // What this screen played (read by the Lab's checks: a stage is played once, every round reaches its end).
+    host.dataset.stages = '0';
+    host.dataset.ends = '0';
+    const my = token;
+    let mounted = null;
+    const ensure = async (g) => {
+      if (!g || g === mounted) return my === token && !!game;
+      game?.destroy();
+      game = null;
+      mounted = g;
+      followed.game = g;
+      await mount(g, { follow: { id: followed.id, name: followed.name } });
+      return my === token && !!game;
     };
+    const f = createFollower({
+      client,
+      player: followed.id,
+      onPlayer: (pl) => {
+        if (pl?.name && followed) followed.name = pl.name;
+      },
+      onStatus: (st) => body()?.classList.toggle('is-retry', st === 'retry'),
+    });
+    follower = f;
+    if (!(await ensure(followed.game))) return;
+    while (follower === f && !destroyed) {
+      const item = await f.next();
+      if (follower !== f || destroyed) return;
+      try {
+        if (item.kind === 'snapshot') {
+          const g = gameOf(item.events, item.player?.game ?? mounted);
+          if (!(await ensure(g))) return;
+          await game.snapshot(item.events);
+          host.dataset.seq = String(item.events.at(-1)?.seq ?? host.dataset.seq ?? 0);
+          continue;
+        }
+        const g = item.kind === 'presence' ? item.data?.game : item.game;
+        if (g && g !== mounted && !(await ensure(g))) return;
+        await game.apply(item, { fast: f.backlog() >= 2 });
+        host.dataset.stages = String(Number(host.dataset.stages) + 1);
+        host.dataset.seq = String(item.seq);
+        if (item.kind === 'end') host.dataset.ends = String(Number(host.dataset.ends) + 1);
+      } catch (e) {
+        // one stage that cannot be shown never freezes the following ones
+        globalThis.console?.warn?.('[casino] spectator stage', e);
+      }
+    }
   }
 
   return {
     node: host,
     ownsHeader: true,
-    headLabel: () => (watching ? 'Spectateur' : screen === 'live' ? 'Parties en cours' : GAME[screen].label),
-    headIcon: () => (screen === 'live' ? ICON.eye : GAME[screen]?.icon ?? null),
-    busy: () => !!game?.busy?.(),
+    headLabel: () => (screen === 'follow' ? `Spectateur · ${followed?.name ?? ''}` : screen === 'live' ? 'Parties en direct' : GAME[screen].label),
+    headIcon: () => (screen === 'live' || screen === 'follow' ? ICON.eye : (GAME[screen]?.icon ?? null)),
+    busy: () => screen !== 'follow' && !!game?.busy?.(),
     start() {
-      void open(kind);
+      const back = kind === 'live' && !follow ? remembered() : null;
+      if (follow || back) void followPlayer(follow ?? back);
+      else if (kind === 'live') void openLive();
+      else void open(kind);
     },
     destroy() {
       destroyed = true;
-      W.clearTimeout(liveTimer);
-      game?.destroy();
-      game = null;
+      stopAll();
+      setPresence(null);
+      W.clearInterval(presenceTimer);
     },
-    /** The header's ‹ while watching: back to the rounds in progress (not the catalogue). */
+    /** The header's ‹ while following: back to the players (not the catalogue). */
     back() {
-      if (!watching) return false;
-      void open('live');
+      if (screen !== 'follow') return false;
+      void openLive();
       return true;
     },
   };
@@ -184,10 +323,14 @@ function casinoScreen({ document, client, kind }) {
 const TILE_ICON = {
   slot: '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="10" width="36" height="28" rx="6" fill="#2a1a46" stroke="#f2c65f" stroke-width="2.5"/><path d="M18 10v28M30 10v28" stroke="#f2c65f" stroke-width="2"/><text x="12" y="29" font-size="10" font-weight="900" fill="#ff5c7a" font-family="Arial Black,Impact,sans-serif">7</text><text x="22" y="29" font-size="10" font-weight="900" fill="#ff5c7a" font-family="Arial Black,Impact,sans-serif">7</text><text x="34" y="29" font-size="10" font-weight="900" fill="#ff5c7a" font-family="Arial Black,Impact,sans-serif">7</text></svg>',
   roulette: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="17" fill="#3a1020" stroke="#f2c65f" stroke-width="2.5"/><circle cx="24" cy="24" r="11" fill="none" stroke="#f2c65f" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="4" fill="#f2c65f"/><circle cx="34" cy="16" r="2.6" fill="#fff"/></svg>',
-  live: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M5 24s7-12 19-12 19 12 19 12-7 12-19 12S5 24 5 24z" fill="#1d1a3a" stroke="#f2c65f" stroke-width="2.5"/><circle cx="24" cy="24" r="6" fill="#f2c65f"/><circle cx="38" cy="11" r="4" fill="#ff3d5a"/></svg>',
 };
+const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
-/** The casino's tiles for the Mini-jeux catalogue (hidden when the Core does not offer the casino to this viewer). */
+/**
+ * The casino in the Mini-jeux catalogue: two game tiles, and under them a band (not a game) « Regarder les parties en
+ * direct » — how many play now, who (a touch on one follows them), updated as they come and go. Hidden when the Core
+ * does not offer the casino to this viewer.
+ */
 export function casinoGames({ document, client }) {
   let cached = null;
   let at = 0;
@@ -208,6 +351,65 @@ export function casinoGames({ document, client }) {
   };
   const closedLine = (st, game) =>
     st.availability.games[game] ? null : st.availability.reason === 'stream_offline' ? 'Ouvert pendant le live' : 'Fermé pour le moment';
+
+  /** The band: painted from the players list, kept current by a long-poll while the catalogue shows it. */
+  function band(el, { open }) {
+    let alive = true;
+    let players = [];
+    const paint = () => {
+      const n = players.length;
+      const who = players
+        .slice(0, 4)
+        .map((p) => `<button type="button" class="mg__av" data-follow="${esc(p.id)}" title="Regarder ${esc(p.name)}" aria-label="Regarder ${esc(p.name)}">${initial(p.name)}</button>`)
+        .join('');
+      el.classList.toggle('is-empty', !n);
+      el.innerHTML = `<button type="button" class="mg__bandmain" data-live aria-label="Regarder les parties en direct${n ? `, ${n} en jeu` : ''}">
+          <span class="mg__bandic">${EYE}${n ? `<i class="mg__bandn">${n}</i>` : ''}</span>
+          <span class="mg__bandtx"><b>Regarder les parties en direct</b><small>${n ? `${n} viewer${n > 1 ? 's' : ''} en jeu en ce moment` : 'Personne ne joue en ce moment'}</small></span>
+        </button>
+        ${n ? `<span class="mg__avs">${who}${n > 4 ? `<span class="mg__more">+${n - 4}</span>` : ''}</span><button type="button" class="mg__bandgo" data-live>Regarder ›</button>` : ''}`;
+    };
+    el.onclick = (e) => {
+      const id = e.target.closest('[data-follow]')?.dataset.follow;
+      const p = id && players.find((x) => x.id === id);
+      if (p) return open({ follow: p });
+      if (e.target.closest('[data-live]')) open({});
+    };
+    (async () => {
+      let after = -1;
+      let fails = 0;
+      try {
+        const st = await state();
+        players = st.players ?? [];
+        after = st.live_cursor ?? -1;
+      } catch {
+        /* the long-poll below */
+      }
+      paint();
+      while (alive) {
+        if (globalThis.document?.hidden) {
+          await new Promise((ok) => globalThis.setTimeout(ok, 1000));
+          continue;
+        }
+        try {
+          const res = await client.casinoLive(after, after < 0 ? 0 : 20_000);
+          if (!alive) return;
+          fails = 0;
+          after = res.cursor;
+          players = res.players ?? [];
+          paint();
+        } catch {
+          fails += 1;
+          await new Promise((ok) => globalThis.setTimeout(ok, Math.min(15_000, 1000 * 2 ** fails)));
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+      el.onclick = null;
+    };
+  }
+
   return [
     {
       id: 'casino_slot',
@@ -235,17 +437,11 @@ export function casinoGames({ document, client }) {
     },
     {
       id: 'casino_live',
-      label: 'Parties en cours',
-      tagline: 'Regarde les autres viewers jouer, en direct.',
-      cta: 'Regarder',
-      icon: TILE_ICON.live,
+      band: true,
+      label: 'Parties en direct',
       available,
-      create: () => casinoScreen({ document, client, kind: 'live' }),
-      async peek() {
-        const st = await state();
-        const n = st.active?.length ?? 0;
-        return n ? `${n} partie${n > 1 ? 's' : ''} en ce moment` : 'Aucune partie en ce moment';
-      },
+      mount: band,
+      create: (arg = {}) => casinoScreen({ document, client, kind: 'live', follow: arg.follow ?? null }),
     },
   ];
 }

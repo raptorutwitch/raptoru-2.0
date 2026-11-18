@@ -13,6 +13,8 @@ import type { ModuleSettings } from '../module-settings/service.js';
 import { liveChannelSession } from '../stream/channel-sessions.js';
 import { activeSession } from '../stream/stream-sessions.js';
 import { generateCoffre, type CoffreScript } from './coffre.js';
+import { CasinoError, ROUND_ID } from './errors.js';
+import { CasinoFeed, POS } from './feed.js';
 import { cryptoIntRng, floatFrom, type IntRng } from './rng.js';
 import {
   BET_STEP,
@@ -45,9 +47,7 @@ import {
 // - A per-round win cap (casino.max_win), shown in the rules and on a capped round — never a silent change.
 
 export const CASINO_MODULE = 'casino';
-/** A round id: a UUID, strictly (a malformed one never reaches PostgreSQL). */
-export const ROUND_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export { CasinoError, ROUND_ID };
 
 /** The module's bounded settings (Studio › Casino; module-settings), stored as `casino.<key>`. */
 export const CASINO_SETTINGS = {
@@ -159,17 +159,7 @@ export interface CasinoViewer {
   display_name: string;
 }
 
-export class CasinoError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    readonly details: Record<string, unknown> = {},
-  ) {
-    super(code);
-  }
-}
-
-interface RoundRow {
+export interface RoundRow {
   round_id: string;
   channel_id: string;
   viewer_id: string;
@@ -234,13 +224,17 @@ export class CasinoService {
   labEnvironment: boolean | null = null;
   /** The game's draws (crypto); a test may replace them. */
   rng: IntRng = cryptoIntRng;
+  /** The spectators' feed: each player's revealed stages, in order (feed.ts). */
+  readonly feed: CasinoFeed;
 
   constructor(
     private readonly db: Db,
     private readonly clock: Clock,
     private readonly economy: EconomyPort,
     private readonly settings: ModuleSettings,
-  ) {}
+  ) {
+    this.feed = new CasinoFeed(db, clock);
+  }
 
   private get lab() {
     return this.labEnvironment ?? this.economy.mode !== 'canonical';
@@ -344,7 +338,7 @@ export class CasinoService {
       throw new CasinoError(400, 'idempotency_key_required');
     const requestHash = hashOf([game, viewer.id, stake ?? null]);
     try {
-      return await this.db.tx(async (q) => {
+      const res = await this.db.tx(async (q) => {
         // One viewer's spins one at a time: a resent intent waits for the first and replays it.
         await q.query('select pg_advisory_xact_lock(hashtext($1))', [
           `casino:${channelId}:${viewer.id}`,
@@ -512,12 +506,16 @@ export class CasinoService {
           )
         )[0]!;
         await this.maybeAnnounce(q, channelId, row, lim, now);
+        // The spectators see the stake now; the result only once the player's screen showed it (feed.ts).
+        await this.feed.start(q, row);
         return {
           round: this.ownView(row),
           balance: balance - bet + payout,
           replayed: false,
         };
       });
+      if (!res.replayed) this.feed.wake(channelId);
+      return res;
     } catch (e) {
       const err = this.mapped(e);
       if (NOTED_REFUSALS.has(err.code))
@@ -619,36 +617,147 @@ export class CasinoService {
   }
 
   /**
-   * The player watched the Coffre up to `step` (display only: no Jeton, never a draw). Monotonic; `done` once the end
-   * was shown. Stored for the reconnection (another device resumes there) and for the spectators.
+   * The player's screen has shown a stage of their OWN round (display only: no Jeton, never a draw): `stage` =
+   * result (the reels stopped / the ball settled) | coffre (the Coffre opened) | step (respin `step` played) | end.
+   * The spectators receive it now (feed.ts: never before); the Coffre's progress is kept for the reconnection (another
+   * device resumes there). Monotonic and idempotent. (`step` alone, older clients: -1 = opened, `done` = the end.)
    */
   async progress(
     channelId: string,
     viewer: CasinoViewer,
-    req: { round_id: unknown; step: unknown; done?: unknown },
+    req: {
+      round_id: unknown;
+      stage?: unknown;
+      step?: unknown;
+      done?: unknown;
+      fast?: unknown;
+    },
   ) {
     if (typeof req.round_id !== 'string' || !ROUND_ID.test(req.round_id))
       throw new CasinoError(400, 'invalid_round');
-    if (
-      typeof req.step !== 'number' ||
-      !Number.isInteger(req.step) ||
-      req.step < -1 ||
-      req.step > 64
-    )
-      throw new CasinoError(400, 'invalid_step');
+    const step =
+      typeof req.step === 'number' &&
+      Number.isInteger(req.step) &&
+      req.step >= -1 &&
+      req.step <= 64
+        ? req.step
+        : null;
+    let pos: number;
+    if (req.stage === 'result') pos = POS.result;
+    else if (req.stage === 'coffre') pos = POS.coffre;
+    else if (req.stage === 'end') pos = POS.end;
+    else if (req.stage === 'step' && step !== null && step >= 0)
+      pos = POS.step(step);
+    else if (req.stage === undefined && step !== null)
+      pos =
+        req.done === true ? POS.end : step < 0 ? POS.coffre : POS.step(step);
+    else throw new CasinoError(400, 'invalid_step');
     const now = this.clock.now();
-    const done = req.done === true;
-    const r = (
-      await this.db.query<{ progress_step: number; finished_at: Date | null }>(
-        `update casino_rounds set progress_step = greatest(progress_step, $4), progress_at = $5,
-           finished_at = case when $6 and finished_at is null then $5 else finished_at end
-         where round_id = $1 and channel_id = $2 and viewer_id = $3
-         returning progress_step, finished_at`,
-        [req.round_id, channelId, viewer.id, req.step, now, done],
+    const out = await this.db.tx(async (q) => {
+      const r = (
+        await q.query<RoundRow>(
+          'select * from casino_rounds where round_id = $1 and channel_id = $2 and viewer_id = $3',
+          [req.round_id, channelId, viewer.id],
+        )
+      )[0];
+      if (!r) throw new CasinoError(404, 'round_not_found');
+      const coffre =
+        r.game === 'slot' ? (r.outcome as SlotOutcome).coffre : null;
+      if (
+        (pos === POS.coffre && !coffre) ||
+        (pos > POS.coffre &&
+          pos < POS.end &&
+          (!coffre || pos - POS.step(0) >= coffre.steps.length))
       )
-    )[0];
-    if (!r) throw new CasinoError(404, 'round_not_found');
-    return { progress_step: r.progress_step, finished: !!r.finished_at };
+        throw new CasinoError(400, 'invalid_step');
+      if (coffre && pos >= POS.coffre) {
+        const shown =
+          pos === POS.coffre
+            ? -1
+            : pos === POS.end
+              ? coffre.steps.length
+              : pos - POS.step(0);
+        await q.query(
+          `update casino_rounds set progress_step = greatest(progress_step, $2), progress_at = $3,
+             finished_at = case when $4 and finished_at is null then $3 else finished_at end
+           where round_id = $1`,
+          [r.round_id, shown, now, pos === POS.end],
+        );
+      } else if (!coffre && pos >= POS.result)
+        await q.query(
+          'update casino_rounds set finished_at = coalesce(finished_at, $2) where round_id = $1',
+          [r.round_id, now],
+        );
+      const pub = await this.feed.publish(q, r, pos, req.fast === true);
+      const after = (
+        await q.query<{ progress_step: number; finished_at: Date | null }>(
+          'select progress_step, finished_at from casino_rounds where round_id = $1',
+          [r.round_id],
+        )
+      )[0]!;
+      return {
+        progress_step: after.progress_step,
+        finished: !!after.finished_at,
+        published: pub.last,
+        wrote: pub.wrote,
+      };
+    });
+    if (out.wrote) this.feed.wake(channelId);
+    return {
+      progress_step: out.progress_step,
+      finished: out.finished,
+      published: out.published,
+    };
+  }
+
+  /** The roulette bets the player is placing (spectators see them; never debited: the spin re-checks everything). */
+  async draft(channelId: string, viewer: CasinoViewer, bets: unknown) {
+    if (!bets || typeof bets !== 'object' || Array.isArray(bets))
+      throw new CasinoError(400, 'invalid_bets');
+    const entries = Object.entries(bets as Record<string, unknown>);
+    if (entries.length > 60) throw new CasinoError(400, 'too_many_bets');
+    const clean: Record<string, number> = {};
+    let total = 0;
+    for (const [id, v] of entries) {
+      if (!Object.hasOwn(SPOTS, id)) throw new CasinoError(400, 'unknown_spot');
+      if (
+        typeof v !== 'number' ||
+        !Number.isSafeInteger(v) ||
+        v < BET_STEP ||
+        v % BET_STEP !== 0
+      )
+        throw new CasinoError(400, 'invalid_amount');
+      clean[id] = v;
+      total += v;
+    }
+    const [lim, av] = await Promise.all([
+      this.limits(this.db, channelId),
+      this.availability(this.db, channelId),
+    ]);
+    if (total > lim.roulette_max_total) throw new CasinoError(400, 'above_max');
+    if (!av.games.roulette)
+      throw new CasinoError(409, av.reason ?? 'game_closed');
+    await this.feed.draft(channelId, viewer, clean, total);
+    return { ok: true };
+  }
+
+  /** The game the player has open (slot | roulette | null): spectators follow them from one to the other. */
+  async presence(channelId: string, viewer: CasinoViewer, game: unknown) {
+    if (game !== null && game !== 'slot' && game !== 'roulette')
+      throw new CasinoError(400, 'invalid_game');
+    return this.feed.presence(channelId, viewer, game);
+  }
+
+  /** A spectator follows a player: the revealed stages after their cursor (long-poll). Public, anonymous too. */
+  watch(channelId: string, player: unknown, after: number, waitMs: number) {
+    if (typeof player !== 'string')
+      throw new CasinoError(400, 'invalid_player');
+    return this.feed.watch(channelId, player, after, waitMs);
+  }
+
+  /** « Regarder les parties en direct »: who is playing now (long-poll on its changes). Public, anonymous too. */
+  livePlayers(channelId: string, after: number, waitMs: number) {
+    return this.feed.live(channelId, after, waitMs);
   }
 
   /**
@@ -733,10 +842,10 @@ export class CasinoService {
   /** What the extension shows (any viewer, anonymous too): availability, limits, the tables, the rounds in progress. */
   async viewerState(channelId: string, viewer: CasinoViewer | null) {
     const q = this.db;
-    const [availability, limits, active] = await Promise.all([
+    const [availability, limits, live] = await Promise.all([
       this.availability(q, channelId),
       this.limits(q, channelId),
-      this.active(channelId),
+      this.feed.live(channelId, -1, 0),
     ]);
     let me: Record<string, unknown> | null = null;
     if (viewer) {
@@ -782,7 +891,8 @@ export class CasinoService {
         slot: slotTable(),
         roulette: { order: ORDER, spots: Object.keys(SPOTS) },
       },
-      active,
+      players: live.players,
+      live_cursor: live.cursor,
       me,
       server_now: this.clock.now().toISOString(),
     };
@@ -819,7 +929,10 @@ export class CasinoService {
     return out;
   }
 
-  /** One round, public (spectators, Replay): the whole draw, the player's progress, the server's time. */
+  /**
+   * One round: its player's whole round (the Replay, a resumed Coffre); another viewer's only once its end is public
+   * (feed.ts) — before, its stake alone (never a result ahead of the player's screen).
+   */
   async round(
     channelId: string,
     roundId: unknown,
@@ -835,12 +948,28 @@ export class CasinoService {
     )[0];
     if (!r) throw new CasinoError(404, 'round_not_found');
     const now = this.clock.now().getTime();
+    const mine = !!viewer && viewer.id === r.viewer_id;
+    const ended =
+      mine ||
+      (
+        await this.db.query(
+          'select 1 from casino_feed where round_id = $1 and pos = $2',
+          [r.round_id, POS.end],
+        )
+      ).length > 0 ||
+      now - r.created_at.getTime() > 30 * 60_000;
     return {
-      round: {
-        ...publicView(r),
-        mine: !!viewer && viewer.id === r.viewer_id,
-        phase: phaseOf(r, now) ?? 'done',
-      },
+      round: ended
+        ? { ...publicView(r), mine, phase: phaseOf(r, now) ?? 'done' }
+        : {
+            round_id: r.round_id,
+            game: r.game,
+            viewer_name: r.viewer_name,
+            bet: r.bet,
+            created_at: r.created_at.toISOString(),
+            mine: false,
+            revealed: false,
+          },
       server_now: new Date(now).toISOString(),
     };
   }

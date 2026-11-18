@@ -4,7 +4,7 @@
 // and plays the main paths in Chromium at 565 × 376, asserting what the viewer sees against what the Core decided:
 // catalogue → games · the window fits · a spin is paid once (double click too) · Rapide · Auto stops at once · the Coffre
 // is paid with the spin and resumes after a reload without a second credit · history and Replay never move a Jeton ·
-// a share once, then refused · a spectator sees another viewer's round without any control · offline: closed, nothing
+// a share once, then refused · a spectator follows another viewer from the band, without any control · offline: closed, nothing
 // debited, history readable · roulette: the Core's number, ALL-IN in multiples of 20. Nothing leaves the machine.
 import { spawn } from 'node:child_process';
 import console from 'node:console';
@@ -150,11 +150,11 @@ try {
   const tiles = await alice
     .locator('.mg__tile:not([hidden])')
     .evaluateAll((els) => els.map((e) => e.dataset.game));
+  await alice.waitForSelector('.mg__band:not([hidden])', { timeout: 10000 });
   check(
-    ['casino_slot', 'casino_roulette', 'casino_live'].every((g) =>
-      tiles.includes(g),
-    ),
-    'Mini-jeux montre la machine, la roulette et les parties en cours',
+    ['casino_slot', 'casino_roulette'].every((g) => tiles.includes(g)) &&
+      !tiles.includes('casino_live'),
+    'Mini-jeux montre la machine et la roulette en cartes, le direct en bandeau',
     tiles.join(','),
   );
   await shot(alice, '01-catalogue');
@@ -324,33 +324,19 @@ try {
     'historique et Replay : le solde ne bouge pas',
   );
 
-  // --- 4. Spectator ----------------------------------------------------------------------------------------------
+  // --- 4. Spectator (the whole follow is checked by casino-watch-check.mjs) --------------------------------------
   console.log('Spectateur');
   const bob = await viewer('bob');
   const bobBefore = await balanceOf('bob');
-  await bob.click('.mg__tile[data-game="casino_live"]');
-  await bob.waitForFunction(
-    () =>
-      document.querySelector('.cz-host')?.shadowRoot?.querySelector('.live'),
-    null,
-    { timeout: 15000 },
-  );
   await api('/api/force', { bonus: 4 });
   await api('/api/luna', { game: 'slot' });
-  await bob.waitForFunction(
-    () =>
-      document
-        .querySelector('.cz-host')
-        ?.shadowRoot?.querySelector('[data-watch]'),
-    null,
-    { timeout: 9000 },
-  );
-  await shot(bob, '06-parties-en-cours');
-  await inCz(bob, '[data-watch]').first().click();
+  await bob.waitForSelector('.mg__av', { timeout: 15000 });
+  await shot(bob, '06-parties-en-direct');
+  await bob.click('.mg__av');
   await bob.waitForFunction(
     () => document.querySelector('.cz-host')?.shadowRoot?.querySelector('.cof'),
     null,
-    { timeout: 15000 },
+    { timeout: 20000 },
   );
   await bob.waitForTimeout(3000);
   await shot(bob, '07-spectateur-coffre');
@@ -359,16 +345,16 @@ try {
     return {
       tag: D.querySelector('.cof__info')?.textContent,
       ctl: D.querySelector('.cof .spin')?.dataset.state,
-      bet:
-        !!D.querySelector('[data-play]:not([hidden])') &&
-        getComputedStyle(D.querySelector('[data-play]')).visibility,
+      disabled: D.querySelector('.cof .spin')?.disabled,
+      bet: getComputedStyle(D.querySelector('.betbar')).visibility,
     };
   });
   check(
     /Spectateur/.test(spectUi.tag ?? '') &&
-      spectUi.ctl === 'done' &&
+      spectUi.ctl === 'watch' &&
+      spectUi.disabled === true &&
       spectUi.bet === 'hidden',
-    'le spectateur voit la partie de Luna, sans aucune commande de mise',
+    'le spectateur suit le Coffre de Luna, sans aucune commande active',
     JSON.stringify(spectUi),
   );
   check(

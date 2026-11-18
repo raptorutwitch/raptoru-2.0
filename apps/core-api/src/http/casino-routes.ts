@@ -19,9 +19,22 @@ const Spin = z.strictObject({
 const Progress = z.strictObject({
   viewer: Viewer,
   round_id: z.unknown(),
-  step: z.unknown(),
+  stage: z.unknown().optional(),
+  step: z.unknown().optional(),
   done: z.unknown().optional(),
+  fast: z.unknown().optional(),
 });
+const Draft = z.strictObject({ viewer: Viewer, bets: z.unknown() });
+const Presence = z.strictObject({ viewer: Viewer, game: z.unknown() });
+/** A long-poll's wait (ms), bounded by the feed. */
+const waitOf = (url: URL) => {
+  const n = Number(url.searchParams.get('wait_ms') ?? 0);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 0), 25_000) : 0;
+};
+const afterOf = (url: URL) => {
+  const n = Number(url.searchParams.get('after') ?? -1);
+  return Number.isSafeInteger(n) ? n : 0;
+};
 const Share = z.strictObject({ viewer: Viewer, round_id: z.unknown() });
 
 async function mapped<T>(fn: () => Promise<T>): Promise<T> {
@@ -90,6 +103,46 @@ export function casinoRoutes(casino: CasinoService): Route[] {
         const b = parse(Progress, body);
         return mapped(() => casino.progress(params[0]!, b.viewer, b));
       },
+    },
+    {
+      method: 'POST',
+      pattern: at('draft'),
+      auth: 'studio',
+      handle: ({ params, body }) => {
+        const b = parse(Draft, body);
+        return mapped(() => casino.draft(params[0]!, b.viewer, b.bets));
+      },
+    },
+    {
+      method: 'POST',
+      pattern: at('presence'),
+      auth: 'studio',
+      handle: ({ params, body }) => {
+        const b = parse(Presence, body);
+        return mapped(() => casino.presence(params[0]!, b.viewer, b.game));
+      },
+    },
+    // Spectators (public): follow a player (their revealed stages after a cursor), who is playing now. Long-poll.
+    {
+      method: 'GET',
+      pattern: at('watch'),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() =>
+          casino.watch(
+            params[0]!,
+            url.searchParams.get('player') ?? '',
+            afterOf(url),
+            waitOf(url),
+          ),
+        ),
+    },
+    {
+      method: 'GET',
+      pattern: at('live'),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() => casino.livePlayers(params[0]!, afterOf(url), waitOf(url))),
     },
     {
       method: 'POST',

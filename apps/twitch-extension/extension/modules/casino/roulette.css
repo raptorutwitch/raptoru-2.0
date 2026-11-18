@@ -255,3 +255,15 @@
 .pays dd { margin: 0; font: 900 13px/1 var(--font); color: var(--gold); text-align: right; }
 .pop__n { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 11px; color: var(--faint); line-height: 1.3; }
 .pop__n .np { min-width: 18px; height: 18px; font-size: 10px; }
+
+/* --- Spectator: the followed player's mat and chips, shown as they are, never active ------------------------------- */
+.roulette-body.is-watch .mat, .roulette-body.is-watch .bar, .roulette-body.is-watch .notch ~ * { cursor: default; }
+.roulette-body.is-watch .mat { pointer-events: none; }
+.roulette-body.is-watch .chips, .roulette-body.is-watch .tray, .roulette-body.is-watch .fastsw { pointer-events: none; opacity: 0.4; filter: saturate(0.5); }
+.roulette-body.is-watch .launch.watch:disabled { color: #fff; background: radial-gradient(120% 90% at 50% 8%, #ece4ff 0%, #a58ff0 46%, #7462c4 100%); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 2px 0 #2f2468, 0 0 0 2px rgba(255, 61, 90, 0.45); }
+.roulette-body.is-watch .launch.watch .t { font-size: 14px; }
+.roulette-body.is-watch #skip { display: none; }
+.roulette-body.is-watch .spect { box-shadow: inset 0 0 0 1px rgba(255, 61, 90, 0.6); }
+.roulette-body.is-watch .spect i:not(.live-dot) { font-style: normal; color: var(--gold); }
+/* the spectator's label sits over the (inactive) chips, never over the mat */
+.roulette-body.is-watch > .spect { top: auto; right: auto; left: 14px; bottom: 14px; max-width: 286px; z-index: 30; }

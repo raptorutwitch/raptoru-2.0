@@ -36,6 +36,7 @@ const VIEWERS: Record<
   alice: { id: '9001', display_name: 'Alice', tokens: 1_000_000 },
   bob: { id: '9002', display_name: 'Bob', tokens: 50_000 },
   luna: { id: '9003', display_name: 'Luna', tokens: 500_000 },
+  carla: { id: '9004', display_name: 'Carla', tokens: 20_000 },
 };
 const ROOT = fileURLToPath(new URL('../../', import.meta.url)); // apps/
 const EXT = join(ROOT, 'twitch-extension', 'extension');
@@ -179,10 +180,10 @@ button{margin:2px 4px 2px 0;padding:5px 9px;border:0;border-radius:7px;backgroun
 button.on{background:#ff9f1a;color:#2a1600}input{padding:4px 6px;border-radius:6px;border:0;width:110px}
 table{width:100%;border-collapse:collapse;font-size:12px}td{padding:3px 5px;border-bottom:1px solid #ffffff12}
 ul{margin:0;padding-left:18px;max-height:180px;overflow:auto;font-size:12.5px}small{opacity:.7}</style></head><body>
-<header><b>Casino · démo Lab</b> — tout est local et fictif : Core en mémoire, portefeuille de test, chat simulé. <b>Alice</b> joue (1 000 000 Jetons), <b>Bob</b> regarde (spectateur). Aucune donnée réelle.</header>
+<header><b>Casino · démo Lab</b> — tout est local et fictif : Core en mémoire, portefeuille de test, chat simulé. <b>Alice</b> joue (1 000 000 Jetons) ; <b>Bob</b> la regarde : Mini-jeux › « Regarder les parties en direct » › Alice. <a href="/ext/video_component.html?anchor=component&as=carla&demoModule=random_ban_ext" target="_blank" style="color:#ffd27a">Un 2ᵉ spectateur (Carla)</a>. Aucune donnée réelle.</header>
 <main>
 <figure><figcaption>Alice <small>joueuse · fenêtre 565 × 376</small></figcaption><iframe id="alice" src="/ext/video_component.html?anchor=component&as=alice&demoModule=random_ban_ext"></iframe></figure>
-<figure><figcaption>Bob <small>spectateur</small></figcaption><iframe id="bob" src="/ext/video_component.html?anchor=component&as=bob&demoModule=random_ban_ext"></iframe></figure>
+<figure><figcaption>Bob <small>spectateur (aucune commande n’agit)</small></figcaption><iframe id="bob" src="/ext/video_component.html?anchor=component&as=bob&demoModule=random_ban_ext"></iframe></figure>
 <div class="col">
 <div class="box"><h3>Lab</h3>
 <button data-do="live" id="live">Live</button><button data-do="open" id="open">Casino ouvert</button>
@@ -323,12 +324,15 @@ createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (p === '/api/luna') {
-      // Another viewer plays (the spectators see her round in « Parties en cours »)
+      // Another viewer plays, through the same Core calls as a real player's screen: her open game (presence), the
+      // spin, then each stage once her animation would have shown it (the spectators get them then, never before).
       const b = await body(req);
       const luna = VIEWERS.luna!;
       const v = { id: luna.id, display_name: luna.display_name };
+      const game = b.game === 'roulette' ? 'roulette' : 'slot';
+      await casino.presence(CH, v, game);
       const out =
-        b.game === 'roulette'
+        game === 'roulette'
           ? await casino.spinRoulette(CH, v, {
               key: `luna-${Date.now()}-${++n}`,
               bets: { red: 2000, n17: 200, d3: 400 },
@@ -339,26 +343,35 @@ createServer(async (req, res) => {
             });
       forced = [];
       forcedSeed = null;
-      // Luna « watches » her Coffre like a player would: one respin every 2.5 s (her client's progress, display only).
+      const id = out.round.round_id;
       const coffre = (
         out.round.outcome as { coffre?: { steps: unknown[] } | null }
       ).coffre;
-      if (coffre) {
-        let i = -1;
-        const next = () => {
-          i++;
-          void casino
-            .progress(CH, v, {
-              round_id: out.round.round_id,
-              step: i,
-              done: i >= coffre.steps.length,
-            })
-            .catch(() => {});
-          if (i < coffre.steps.length) setTimeout(next, 2500);
-        };
-        setTimeout(next, 4000);
-      }
-      return json(res, 200, { ok: true, round: out.round.round_id });
+      const stage = (st: string, step: number | null = null) =>
+        void casino
+          .progress(CH, v, {
+            round_id: id,
+            stage: st,
+            ...(step === null ? {} : { step }),
+          })
+          .catch(() => {});
+      setTimeout(
+        () => {
+          stage('result');
+          if (!coffre) return;
+          let i = -1;
+          const next = () => {
+            if (i < 0) stage('coffre');
+            else if (i < coffre.steps.length) stage('step', i);
+            else return stage('end');
+            i++;
+            setTimeout(next, 2500);
+          };
+          setTimeout(next, 2500);
+        },
+        game === 'roulette' ? 7000 : 2600,
+      );
+      return json(res, 200, { ok: true, round: id });
     }
     if (p === '/api/force') {
       const b = await body(req);

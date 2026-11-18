@@ -187,3 +187,15 @@ svg.fill { fill: currentColor; stroke: none; }
 .live__empty { margin: 0; align-self: center; text-align: center; color: var(--dim); font-size: 13px; line-height: 1.5; }
 .live__empty small { color: var(--faint); font-size: 11px; }
 .live__note { margin: 0; text-align: center; font-size: 11px; color: var(--faint); }
+
+/* --- Spectators (docs/CASINO.md § 6): a player followed, no control of theirs --------------------------------------- */
+.live-dot { display: inline-block; flex: none; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #ff3d5a; box-shadow: 0 0 0 2px rgba(255, 61, 90, 0.25); animation: livedot 1.6s ease-in-out infinite; vertical-align: 1px; }
+@keyframes livedot { 50% { opacity: 0.35; } }
+.is-retry .live-dot { background: #8a7ca8; animation: none; }
+.live__av { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; font: 900 13px/1 var(--font); color: #1d1336; background: linear-gradient(160deg, #ffe7a3, #f6c344 60%, #cf8d10); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+.live__st.playing { color: #c9ffd9; background: rgba(54, 196, 94, 0.22); }
+.live__st.idle { color: var(--dim); }
+/* A spectator's controls: visible (the player's game as it is), never active */
+.is-watch .spin svg.eye, .cof .spin svg.eye { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.spin[data-state='watch'] { --hi: #ece4ff; --c: #a58ff0; --lo: #7462c4; --edge: #2f2468; cursor: default; }
+.spin[data-state='watch'] .spin__cap small { font-size: 11px; letter-spacing: 0.06em; }

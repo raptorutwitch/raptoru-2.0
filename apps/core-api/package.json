@@ -24,7 +24,8 @@
     "presence:report": "tsx --env-file-if-exists=.env src/scripts/presence-report.ts",
     "loyalty:report": "tsx --env-file-if-exists=.env src/scripts/loyalty-report.ts",
     "studio:installation": "tsx --env-file-if-exists=.env src/scripts/studio-installation.ts",
-    "test:local-https-core": "tsx test/tools/local-https-core.ts"
+    "test:local-https-core": "tsx test/tools/local-https-core.ts",
+    "casino:watch-check": "node scripts/casino-watch-check.mjs"
   },
   "dependencies": {
     "@raptoru/schemas": "*",

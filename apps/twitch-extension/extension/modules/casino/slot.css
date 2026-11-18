@@ -463,3 +463,13 @@ img.sym { object-fit: contain; }
 @keyframes skinpulse { 50% { transform: scale(1.06); } }
 @keyframes skinspin { to { transform: rotate(360deg); } }
 @keyframes skinshake { 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+
+/* --- Spectator: the followed player's machine; nothing here acts on it ------------------------------------------- */
+.slot-body.is-watch .betbar, .slot-body.is-watch .toggles, .slot-body.is-watch .board { pointer-events: none; opacity: 0.45; filter: saturate(0.6); }
+.slot-body.is-watch .betbar { visibility: hidden; }
+.slot-body.is-watch .rstrip { pointer-events: none; }
+.slot-body.is-watch .window { box-shadow: 0 0 0 2px rgba(255, 61, 90, 0.55), 0 0 16px rgba(255, 61, 90, 0.2); cursor: default; }
+.slot-body.is-watch .rbadge { letter-spacing: 0.04em; text-transform: none; font-size: 11px; color: #fff; background: rgba(12, 6, 18, 0.86); box-shadow: inset 0 0 0 1px rgba(255, 61, 90, 0.6); max-width: 60%; }
+.slot-body.is-watch .rbadge span { overflow: hidden; text-overflow: ellipsis; }
+.slot-body.is-watch .spin { pointer-events: none; }
+.cof.is-spect .spin[data-state='watch'] { pointer-events: none; }

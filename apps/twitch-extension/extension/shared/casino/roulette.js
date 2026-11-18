@@ -139,7 +139,8 @@ export function mountRoulette(D, ctx) {
 
   // The viewer's own settings and mat (this browser only), cleaned: only the mat's spots, only whole steps.
   const P = Frame.prefs('casino:roulette', { chip: null, custom: null, bets: {}, last: null, sound: false, fast: false });
-  const s = P.get();
+  // A spectator's screen shows the followed player's chips: never its own saved mat.
+  const s = ctx.follow ? { ...P.get(), bets: {}, last: null } : P.get();
   const legal = (v) => Number.isSafeInteger(v) && v >= STEP() && v % STEP() === 0;
   const clean = (b) => Object.fromEntries(Object.entries(b && typeof b === 'object' ? b : {}).filter(([id, v]) => own(id) && legal(v)));
   s.bets = clean(s.bets);
@@ -148,10 +149,13 @@ export function mountRoulette(D, ctx) {
   if (!legal(s.custom)) s.custom = null;
   if (s.chip !== ALLIN && !legal(s.chip)) s.chip = null;
   Audio.setEnabled(s.sound);
-  const save = () => P.save();
+  const save = () => !ctx.follow && P.save();
 
   let busy = false;
-  let spect = null; // a Replay (own round) or a spectator's round: { round, live }
+  let spect = null; // a Replay (own round), or the followed player: { follow: true, round }
+  const name = ctx.follow?.name ?? 'le joueur'; // spectator: the followed player
+  let draftSig = null; // the bets the spectators last saw (player)
+  let draftTimer = null;
   let pending = null; // { key, sig }: the intent's key, kept for the same bets until the Core decided
   let skipAsked = false; // Passer before the Core answered: the wheel goes straight to its end
   let hist = []; // the viewer's last rounds (Core, newest first)
@@ -438,7 +442,7 @@ export function mountRoulette(D, ctx) {
     return Frame.REFUSAL[a.reason] ?? Frame.REFUSAL.game_closed;
   }
   function paintClosed() {
-    const why = spect || ctx.watch ? null : closedReason();
+    const why = spect ? null : closedReason();
     const el = $('#closed');
     el.hidden = !why;
     if (why) el.innerHTML = `<b>${why}</b><small>L’historique et les Replays restent disponibles.</small>`;
@@ -485,6 +489,26 @@ export function mountRoulette(D, ctx) {
     $('[data-act="sound"]').setAttribute('aria-pressed', String(s.sound));
     if (!busy) paintBoard();
     paintClosed();
+    if (spect?.follow) {
+      spinBtn.className = 'launch watch';
+      spinBtn.innerHTML = `<span class="t">En direct</span>${t ? `<small><i></i>${fmt(t)}</small>` : ''}`;
+      spinBtn.disabled = true;
+      spinBtn.setAttribute('aria-label', `Spectateur : tu regardes ${name} jouer`);
+      $('[data-act="fast"]').disabled = true;
+    } else scheduleDraft();
+  }
+
+  /** The bets being placed reach the spectators (display only: never debited; the spin re-checks everything). */
+  function scheduleDraft() {
+    if (busy || spect || balance === null || closedReason()) return;
+    const sig = JSON.stringify(s.bets);
+    if (sig === draftSig) return;
+    W.clearTimeout(draftTimer);
+    draftTimer = W.setTimeout(() => {
+      if (busy || spect || destroyed) return;
+      draftSig = JSON.stringify(s.bets);
+      void client.casinoDraft(s.bets).catch(() => {});
+    }, 300);
   }
 
   // --- The draw: the wheel takes the whole game area; it fades at the stop (or on a touch), the mat shows the result
@@ -589,6 +613,9 @@ export function mountRoulette(D, ctx) {
     openStage();
     const sig = JSON.stringify(bets);
     if (pending?.sig !== sig) pending = { key: newIdempotencyKey(), sig };
+    // The spin carries these bets to the spectators: no draft of the same mat afterwards.
+    W.clearTimeout(draftTimer);
+    draftSig = sig;
     let res;
     try {
       res = await client.casinoSpin('roulette', { bets }, pending.key);
@@ -606,6 +633,8 @@ export function mountRoulette(D, ctx) {
     balance = res.balance;
     const r = asResult(res.round);
     await play(r, { fast: s.fast });
+    // The ball settled on the player's screen: the spectators may see it now (never before).
+    reveal(res.round.round_id, s.fast);
     if (destroyed) return;
     s.last = { ...r.bets };
     save();
@@ -651,7 +680,6 @@ export function mountRoulette(D, ctx) {
     clearResult();
     void closeStage();
     update();
-    if (ctx.watch) ctx.onLeave?.(); // a spectator goes back to the catalogue
   }
   async function replay(id) {
     if (busy || spect) return;
@@ -672,27 +700,99 @@ export function mountRoulette(D, ctx) {
     update();
     idle();
   }
-  /** Spectator: another viewer's round. Already well under way: its final state at once; fresh: the same flight. */
-  async function watch(id) {
-    let res;
-    try {
-      res = await client.casinoRound(id);
-    } catch (e) {
-      Frame.toast(Frame.refusalText(e), true);
-      return ctx.onLeave?.();
+  function reveal(roundId, fast) {
+    const go = (n) => client.casinoProgress(roundId, 'result', null, fast).catch(() => n > 0 && W.setTimeout(() => void go(n - 1), 1200));
+    void go(1);
+  }
+
+  // --- Spectator: ONE player followed (casino.js reads the Core's feed and hands us their stages, in order) ----------
+  // Each stage arrives once the player's screen showed it: the bets being placed, the spin, the ball (the same flight,
+  // the Core's seed), the mat's wins. Nothing here acts on the player's game.
+  function watchKick(text) {
+    $('#spectText').innerHTML = `<i class="live-dot"></i><b class="rtag">Spectateur</b>${esc(name)}${text ? ` · <i>${text}</i>` : ''}`;
+  }
+  const asWatched = (d) => {
+    const stake = T.total(d.bets ?? {});
+    return { pocket: d.pocket, number: d.number, color: T.color(d.number), seed: d.seed, bets: clean(d.bets), wins: d.wins ?? [], stake, gross: d.payout, net: d.payout - stake };
+  };
+  async function apply(ev, { fast = false } = {}) {
+    if (destroyed) return;
+    const d = ev.data ?? {};
+    const f = !!(ev.fast || fast);
+    if (ev.kind === 'presence') {
+      if (d.game === null && !busy) watchKick('a quitté le jeu');
+      return;
     }
-    if (destroyed) return;
-    const round = res.round;
-    const age = (Date.parse(res.server_now) || Date.now()) - Date.parse(round.created_at);
-    busy = true;
-    enterSpect(round, true);
-    const r = asResult(round);
-    await play(r, { fast: !(age <= 2000) });
-    busy = false;
-    if (destroyed) return;
-    if (spect?.round === round) showResult(r, 'live');
+    if (ev.kind === 'draft') {
+      if (busy) return;
+      if (lastResult) settled();
+      s.bets = clean(d.bets);
+      watchKick(Object.keys(s.bets).length ? 'pose ses jetons' : 'prépare sa mise');
+      update();
+      return;
+    }
+    if (ev.kind === 'start') {
+      await closeStage();
+      settled();
+      s.bets = clean(d.bets);
+      spect.round.bet = d.bet;
+      watchKick('rien ne va plus');
+      update();
+      return;
+    }
+    if (ev.kind === 'result') {
+      const r = asWatched(d);
+      s.bets = r.bets;
+      spect.round.bet = r.stake;
+      busy = true;
+      clearResult();
+      wres.hidden = true;
+      update();
+      openStage();
+      await play(r, { fast: f });
+      if (destroyed) return;
+      busy = false;
+      lastResult = r;
+      showResult(r, 'live');
+      markMat(r);
+      hist.unshift({ round_id: ev.round_id, number: r.number });
+      hist.length = Math.min(hist.length, 12);
+      watchKick(r.gross ? `+${fmt(r.gross)}` : 'perdu');
+      update();
+      stageTimer = W.setTimeout(() => void closeStage(), f ? 1300 : 2200);
+    }
+  }
+  /** Rejoining (a new spectator, a refresh, a lost connection): where the player is now — no replay of the past. */
+  async function snapshot(events) {
+    const at = events.map((e) => e.kind).lastIndexOf('start');
+    const pres = [...events].reverse().find((e) => e.kind === 'presence');
+    const draft = [...events].reverse().find((e) => e.kind === 'draft');
+    if (at >= 0) {
+      const start = events[at];
+      const res = events.find((e) => e.kind === 'result' && e.round_id === start.round_id);
+      if (!res) return apply(start);
+      const r = asWatched(res.data);
+      s.bets = r.bets;
+      spect.round.bet = r.stake;
+      lastResult = r;
+      markMat(r);
+      hist.unshift({ round_id: start.round_id, number: r.number });
+      watchKick(r.gross ? `+${fmt(r.gross)}` : 'perdu');
+      update();
+      if (draft && draft.seq > res.seq) await apply(draft);
+      return;
+    }
+    if (draft) return apply(draft);
+    watchKick(pres?.data.game === null ? 'a quitté le jeu' : 'prépare sa mise');
     update();
-    idle();
+  }
+  function enterWatch() {
+    spect = { live: true, follow: true, round: { viewer_name: name, bet: 0 } };
+    body.classList.add('is-watch');
+    $('#spect').hidden = false;
+    $('[data-act="endspect"]').setAttribute('aria-label', 'Quitter le mode spectateur');
+    watchKick('prépare sa mise');
+    update();
   }
 
   // --- History, share, payouts ------------------------------------------------------------------------------------
@@ -807,11 +907,11 @@ export function mountRoulette(D, ctx) {
   on(mat, 'pointerleave', () => hover(null));
 
   on(body, 'click', (e) => {
-    const c = e.target.closest('[data-chip]');
+    const c = !spect?.follow && e.target.closest('[data-chip]');
     if (c) return void (!c.disabled && setChip(Number(c.dataset.chip)));
-    const ai = e.target.closest('[data-allin]');
+    const ai = !spect?.follow && e.target.closest('[data-allin]');
     if (ai) return void (!ai.disabled && setChip(ALLIN));
-    const cu = e.target.closest('[data-custom]');
+    const cu = !spect?.follow && e.target.closest('[data-custom]');
     if (cu) {
       if (cu.disabled) return;
       if (s.custom && s.chip !== s.custom && !e.target.closest('.pen')) return setChip(s.custom);
@@ -820,6 +920,15 @@ export function mountRoulette(D, ctx) {
     const b = e.target.closest('[data-act]');
     if (!b || b.disabled) return;
     const k = b.dataset.act;
+    if (spect?.follow) {
+      if (k === 'pay') Frame.pop(b, payHTML(), { side: 'right' });
+      else if (k === 'sound') {
+        s.sound = !s.sound;
+        Audio.setEnabled(s.sound);
+        update();
+      } else if (k === 'endspect') ctx.onLeave?.();
+      return;
+    }
     if (k === 'pay') Frame.pop(b, payHTML(), { side: 'right' });
     else if (k === 'hist') openHistory();
     else if (k === 'sound') {
@@ -840,6 +949,7 @@ export function mountRoulette(D, ctx) {
     else if (k === 'endspect') endSpect();
   });
   on(spinBtn, 'click', async () => {
+    if (spect?.follow) return;
     if (spect) return busy ? skip() : endSpect();
     if (busy) return skip();
     await closeStage();
@@ -847,6 +957,7 @@ export function mountRoulette(D, ctx) {
     void spin();
   });
   on(stagew, 'click', (e) => {
+    if (spect?.follow) return; // the player's wheel: never skipped by a spectator
     if (busy) return skip(); // Passer
     if (spect) {
       if (e.target.closest('#skip')) endSpect(); // Fermer (Replay) · Retour (spectator)
@@ -855,6 +966,7 @@ export function mountRoulette(D, ctx) {
     void closeStage();
   });
   on(W, 'keydown', (e) => {
+    if (spect?.follow) return;
     if (e.key === 'Escape' && spect && !Frame.drawerOpen() && !D.querySelector('.card')) return endSpect();
     if (e.code !== 'Space' || e.target !== D.ownerDocument.body) return;
     e.preventDefault();
@@ -877,18 +989,21 @@ export function mountRoulette(D, ctx) {
   }
 
   async function start() {
-    if (ctx.watch) return watch(ctx.watch);
+    if (ctx.follow) return enterWatch();
     await loadHistory();
   }
-  if (ctx.watch) body.classList.add('is-spect'); // no betting control shows before the watched round arrives
   update();
-  W.setTimeout(() => void start());
+  if (ctx.follow) enterWatch();
+  else W.setTimeout(() => void start());
 
   return {
     busy: () => busy || (!stagew.hidden && !spect),
+    /** Spectator: the followed player's next stage, or a snapshot to rejoin them (casino.js). */
+    apply,
+    snapshot,
     destroy() {
       destroyed = true;
-      for (const t of [stageTimer, closeTimer, aiTimer, press?.t]) W.clearTimeout(t);
+      for (const t of [stageTimer, closeTimer, aiTimer, press?.t, draftTimer]) W.clearTimeout(t);
       if (wheel.isRunning()) wheel.skip();
       Frame.closePop();
       for (const [t, ev, fn, opt] of listeners) t.removeEventListener(ev, fn, opt);

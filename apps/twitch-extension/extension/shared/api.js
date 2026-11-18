@@ -112,7 +112,7 @@ export function createClient({
     });
   }
 
-  async function call(method, path, { body, idempotencyKey } = {}) {
+  async function call(method, path, { body, idempotencyKey, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
     if (demoMode) {
       // The intent's key goes along (a local Lab demo source keys its purchases like the real EBS; the fixtures ignore it).
       const responsePayload = await (fixtureCall ?? demoCall)(method, path, body, idempotencyKey);
@@ -159,7 +159,7 @@ export function createClient({
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = typeof AbortController === 'function' ? new AbortController() : null;
       const timeout = controller
-        ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+        ? setTimeout(() => controller.abort(), timeoutMs)
         : null;
       try {
         traceTimeoutDebug('api.request.attempt', { method, route, attempt: attempt + 1 });
@@ -550,8 +550,15 @@ export function createClient({
       call('GET', `/casino/history?limit=${limit}${game ? `&game=${encodeURIComponent(game)}` : ''}`),
     casinoSpin: (game, payload, idempotencyKey) =>
       call('POST', `/casino/${game === 'roulette' ? 'roulette' : 'slot'}/spin`, { body: payload, idempotencyKey }),
-    casinoProgress: (roundId, step, done = false) =>
-      call('POST', '/casino/progress', { body: { round_id: roundId, step, done } }),
+    /** The player's screen showed a stage of their round (result | coffre | step | end): the spectators get it now. */
+    casinoProgress: (roundId, stage, step = null, fast = false) =>
+      call('POST', '/casino/progress', { body: { round_id: roundId, stage, ...(step === null ? {} : { step }), fast } }),
+    casinoDraft: (bets) => call('POST', '/casino/draft', { body: { bets } }),
+    casinoPresence: (game) => call('POST', '/casino/presence', { body: { game } }),
+    /** Spectators (long-poll): a player's revealed stages after a cursor (-1: a snapshot to rejoin), who plays now. */
+    casinoWatch: (player, after, waitMs = 20_000) =>
+      call('GET', `/casino/watch?player=${encodeURIComponent(player)}&after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
+    casinoLive: (after, waitMs = 20_000) => call('GET', `/casino/live?after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
     casinoShare: (roundId) => call('POST', '/casino/share', { body: { round_id: roundId } }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),

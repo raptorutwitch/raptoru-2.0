@@ -41,8 +41,10 @@ const jet = (v, bet) => Math.floor(v * bet);
 /**
  * Joue un Coffre. c = { script, bet, credit, paid?, step } (paid : le montant payé si le gain a été plafonné ; step :
  * dernière relance déjà montrée, -1 au départ).
- * o = { replay, onStep(i), getFast(), toggleFast(), host, spectator (the player's name), follow(i) (spectator: resolves
- * when the player reached respin i), onCredit() }. Renvoie une promesse résolue à la fermeture, avec un
+ * o = { replay, onStep(i), onReady() (the grid is on screen), getFast(), toggleFast(), host, seed (the round: the
+ * decor), spectator (the player's name), follow(i) (spectator: resolves with { step } once the player played respin i,
+ * or { end }; c.script then holds only the stages already revealed), instant (rejoin without the intro), onCredit() }.
+ * Renvoie une promesse résolue à la fermeture, avec un
  * compte rendu : { shown (Jetons affichés à la fin), mismatch (écarts écran/scénario), ms, skips }.
  */
 /**
@@ -50,16 +52,21 @@ const jet = (v, bet) => Math.floor(v * bet);
  * doublings are applied). Never a total: the totals are the script's.
  */
 function withBoards(script) {
-  if (script.steps.every((st) => st.board)) return script;
-  const b = new Array(15).fill(null);
-  for (const x of script.start) b[x.cell] = { kind: 'value', v: x.v };
+  if (script.steps.every((st) => st.board)) return { ...script, steps: script.steps.slice() };
+  let b = startBoard(script);
   const steps = script.steps.map((st) => {
-    for (const c of st.coins) b[c.cell] = { kind: c.kind, v: c.v };
-    for (const col of st.cols) for (let k = col * 3; k < col * 3 + 3; k++) if (b[k].kind === 'value') b[k] = { kind: 'value', v: b[k].v * 2 };
-    if (st.doubled) for (let k = 0; k < 15; k++) if (b[k] && b[k].kind === 'value') b[k] = { kind: 'value', v: b[k].v * 2 };
-    return { ...st, board: b.map((x) => (x ? { ...x } : null)) };
+    b = boardAfter(b, st);
+    return { ...st, board: b };
   });
   return { ...script, steps };
+}
+/** The grid after one respin (its coins, then its columns ×2 and its doubler), from the grid before it. */
+function boardAfter(prev, st) {
+  const b = prev.map((x) => (x ? { ...x } : null));
+  for (const c of st.coins) b[c.cell] = { kind: c.kind, v: c.v };
+  for (const col of st.cols) for (let k = col * 3; k < col * 3 + 3; k++) if (b[k].kind === 'value') b[k] = { kind: 'value', v: b[k].v * 2 };
+  if (st.doubled) for (let k = 0; k < 15; k++) if (b[k] && b[k].kind === 'value') b[k] = { kind: 'value', v: b[k].v * 2 };
+  return b;
 }
 
 function play(c, o = {}) {
@@ -110,7 +117,7 @@ function play(c, o = {}) {
   // --- Commandes : toujours là. Relancer · Passer · Auto / Stop Auto · Rapide -----------------------------------
   function paintControls() {
     const st = o.follow
-      ? ['done', 'close', 'Quitter', 'Quitter la partie (le joueur continue)']
+      ? ['watch', 'eye', 'En direct', `Spectateur : ${o.spectator ?? 'le joueur'} relance lui-même`]
       : phase === 'end'
         ? ['done', 'close', o.replay ? 'Fin' : 'Retour', o.replay ? 'Quitter le replay' : 'Retour à la machine']
         : auto
@@ -128,6 +135,7 @@ function play(c, o = {}) {
     $('[data-cof="auto"]').setAttribute('aria-pressed', String(auto));
     $('[data-cof="auto"] .tgl__lbl').lastChild.textContent = auto ? 'Stop' : 'Auto';
     $('[data-cof="skip"]').disabled = !anim;
+    goBtn.disabled = !!o.follow;
     el.classList.toggle('is-auto', auto);
   }
   function skip() {
@@ -145,8 +153,7 @@ function play(c, o = {}) {
     const b = e.target.closest('[data-cof]');
     if (!b || b.disabled) return;
     const k = b.dataset.cof;
-    if (o.follow && k === 'go') return close();
-    if (o.follow && k !== 'fast') return;
+    if (o.follow) return; // a spectator never acts on the player's Coffre
     if (k === 'fast') {
       if (o.toggleFast) o.toggleFast();
       paintControls();
@@ -172,6 +179,7 @@ function play(c, o = {}) {
     }
   };
   globalThis.addEventListener('keydown', onKey, true);
+  if (o.control) o.control.close = () => close();
 
   // --- Attentes interrompables (Passer) ---------------------------------------------------------------------------
   function begin() {
@@ -527,25 +535,45 @@ function play(c, o = {}) {
   (async () => {
     paintControls();
     const from = Math.min(c.step, S.steps.length - 1); // (une fin déjà atteinte : on remontre la fin)
-    if (from < 0) await intro();
+    if (from < 0 && !o.instant) await intro();
     else {
       settleTo(from);
-      Frame.toast('Coffre repris là où il en était (déjà crédité).');
+      if (!o.follow) Frame.toast('Coffre repris là où il en était (déjà crédité).');
     }
     auditBoard(from);
-    for (let i = from + 1; i < S.steps.length; i++) {
-      if (o.follow) {
+    if (o.onReady) o.onReady();
+    if (o.follow) {
+      // Spectator: the player's respins arrive one by one, once the player's screen played them (the Core never sends
+      // the next ones ahead); { step } plays it, { end } closes the scenario with its totals.
+      for (let i = from + 1; ; i++) {
         phase = 'wait';
         paintControls();
-        await o.follow(i);
-        phase = phase === 'closed' ? 'closed' : 'run';
-      } else await waitGo();
-      if (phase === 'closed') return;
-      phase = 'run';
-      await respin(i);
-      if (phase === 'closed') return;
-      if (o.onStep) o.onStep(i);
-    }
+        const item = await o.follow(i);
+        if (phase === 'closed') return;
+        if (!item || item.end) {
+          if (item?.end) {
+            const e = item.end;
+            Object.assign(S, { total: e.total, full: e.full, filled: e.filled, jackpots: e.jackpots, cols: e.cols, doubler: e.doubler });
+            c.credit = e.win;
+            c.paid = e.paid ?? e.win;
+          }
+          break;
+        }
+        S.steps[i] = { ...item.step, board: boardAfter(i > 0 ? S.steps[i - 1].board : startBoard(S), item.step) };
+        phase = 'run';
+        await respin(i);
+        if (phase === 'closed') return;
+        if (o.onStep) o.onStep(i);
+      }
+    } else
+      for (let i = from + 1; i < S.steps.length; i++) {
+        await waitGo();
+        if (phase === 'closed') return;
+        phase = 'run';
+        await respin(i);
+        if (phase === 'closed') return;
+        if (o.onStep) o.onStep(i);
+      }
     if (phase === 'closed') return;
     phase = 'run';
     await finale();

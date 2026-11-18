@@ -309,7 +309,11 @@ describe('casino — the Coffre, the cap, the announcements', () => {
     await c.progress(CH, ALICE, { round_id: r.round.round_id, step: 2 });
     await c.progress(CH, ALICE, { round_id: r.round.round_id, step: 1 }); // never backwards
     expect(
-      (await c.round(CH, r.round.round_id, null)).round.progress_step,
+      (
+        (await c.round(CH, r.round.round_id, ALICE)).round as {
+          progress_step: number;
+        }
+      ).progress_step,
     ).toBe(2);
     expect(
       await code(c.progress(CH, BOB, { round_id: r.round.round_id, step: 3 })),
@@ -446,13 +450,16 @@ describe('casino — shares, history, spectators, rights', () => {
     });
     const st = await c.viewerState(CH, null);
     expect(st.me).toBeNull();
-    expect(st.active.map((x) => x.game).sort()).toEqual(['roulette', 'slot']);
-    expect(st.active.every((x) => x.payout === null)).toBe(true); // draw phase: no spoiler
-    core.clock.set(new Date(core.clock.now().getTime() + 60_000));
-    expect((await c.viewerState(CH, null)).active).toEqual([]);
+    // the players in a game now (spectators): who, which game — never a result
+    expect(st.players.map((x) => x.name).sort()).toEqual(['Alice', 'Bob']);
+    expect(JSON.stringify(st.players)).not.toContain('payout');
+    core.clock.set(new Date(core.clock.now().getTime() + 10 * 60_000));
+    expect((await c.viewerState(CH, null)).players).toEqual([]);
+    // another viewer's round: whole once its end is public (here: long over)
     expect((await c.round(CH, r.round.round_id, BOB)).round).toMatchObject({
       mine: false,
       viewer_name: 'Alice',
+      payout: r.round.payout,
     });
   });
 

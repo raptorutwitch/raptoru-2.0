@@ -4,6 +4,8 @@
 // lists real games only (a game may say it is not offered here: `available() → Promise<boolean>`, its tile is hidden).
 // The last screen of the session is reopened (no extra click for a returning player). A game whose view says
 // `ownsHeader` (the casino) takes the extension's header: its title, and its ‹ goes back to this catalogue.
+// An entry with `band: true` is not a game tile but a band under the tiles (the casino's « parties en direct »):
+// `mount(el, { open(arg) })` paints and updates it while the catalogue shows (returns its cleanup).
 
 const esc = (t) =>
   String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -16,6 +18,9 @@ export function createMiniGames({ document, games }) {
   let view = null;
   let started = false;
   let peeked = false;
+  let bandsOff = []; // the bands' cleanups (while the catalogue shows)
+  const tiles = games.filter((g) => !g.band);
+  const bands = games.filter((g) => g.band);
 
   const remember = (id) => {
     try {
@@ -37,15 +42,33 @@ export function createMiniGames({ document, games }) {
     if (was !== !!view?.ownsHeader) node.dispatchEvent(new win.CustomEvent('jdm:host-redraw', { bubbles: true }));
   };
 
+  function unmountBands() {
+    for (const off of bandsOff) off?.();
+    bandsOff = [];
+  }
+  /** The bands come alive once the catalogue is shown to someone (started), each only if its game is offered. */
+  async function mountBands() {
+    unmountBands();
+    for (const g of bands) {
+      const el = node.querySelector(`[data-band="${g.id}"]`);
+      if (!el) continue;
+      const ok = g.available ? await g.available().catch(() => false) : true;
+      if (!ok || node.dataset.screen !== 'catalog' || !el.isConnected) continue;
+      el.hidden = false;
+      bandsOff.push(g.mount(el, { open: (arg) => open(g, arg) }));
+    }
+  }
+
   function catalog() {
     const was = !!view?.ownsHeader;
     view?.destroy?.();
+    unmountBands();
     view = null;
     remember('catalog');
     node.dataset.screen = 'catalog';
     node.innerHTML = `<div class="mg__home">
         <header class="mg__hero"><span class="mg__mark" aria-hidden="true">${games[0]?.icon ?? ''}</span><div><b>Mini-jeux</b><small>Des parties rapides, en Jetons</small></div></header>
-        <div class="mg__tiles" role="list">${games
+        <div class="mg__tiles" role="list">${tiles
           .map(
             (g) => `<button type="button" class="mg__tile" role="listitem" data-game="${esc(g.id)}">
               <span class="mg__ticon" aria-hidden="true">${g.icon}</span>
@@ -54,15 +77,19 @@ export function createMiniGames({ document, games }) {
             </button>`,
           )
           .join('')}</div>
+        ${bands.map((g) => `<div class="mg__band" data-band="${esc(g.id)}" hidden></div>`).join('')}
       </div>`;
-    if (started) void peek();
+    if (started) {
+      void peek();
+      void mountBands();
+    }
     void offered();
     headerChanged(was);
   }
 
   /** Hides the tiles of the games the server does not offer to this viewer (the casino closed in Production). */
   async function offered() {
-    for (const g of games) {
+    for (const g of tiles) {
       if (!g.available) continue;
       const ok = await g.available().catch(() => false);
       const tile = node.querySelector(`[data-game="${g.id}"]`);
@@ -73,7 +100,7 @@ export function createMiniGames({ document, games }) {
   async function peek() {
     if (peeked) return;
     peeked = true;
-    for (const g of games) {
+    for (const g of tiles) {
       const line = await g.peek?.().catch(() => null);
       const el = node.querySelector(`[data-peek="${g.id}"]`);
       if (el && line) el.textContent = line;
@@ -81,12 +108,13 @@ export function createMiniGames({ document, games }) {
     peeked = false;
   }
 
-  function open(game) {
+  function open(game, arg = {}) {
     const was = !!view?.ownsHeader;
     view?.destroy?.();
+    unmountBands();
     remember(game.id);
     node.dataset.screen = game.id;
-    view = game.create({ back: games.length ? catalog : null });
+    view = game.create({ back: games.length ? catalog : null, ...arg });
     node.replaceChildren(view.node);
     if (started) view.start?.();
     headerChanged(was);
@@ -122,10 +150,14 @@ export function createMiniGames({ document, games }) {
     start() {
       started = true;
       if (view) view.start?.();
-      else void peek();
+      else {
+        void peek();
+        void mountBands();
+      }
     },
     destroy() {
       started = false;
+      unmountBands();
       view?.destroy?.();
       node.removeEventListener('click', onClick);
     },
