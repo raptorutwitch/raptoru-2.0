@@ -88,6 +88,7 @@ export async function casinoExt(
         step: b.step,
         done: b.done,
         fast: b.fast,
+        of: b.of,
       });
     if (method === 'POST' && path === '/casino/draft')
       return await ok(`${base}/draft`, { viewer, bets: b.bets });

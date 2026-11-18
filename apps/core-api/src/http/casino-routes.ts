@@ -23,6 +23,7 @@ const Progress = z.strictObject({
   step: z.unknown().optional(),
   done: z.unknown().optional(),
   fast: z.unknown().optional(),
+  of: z.unknown().optional(),
 });
 const Draft = z.strictObject({ viewer: Viewer, bets: z.unknown() });
 const Presence = z.strictObject({ viewer: Viewer, game: z.unknown() });

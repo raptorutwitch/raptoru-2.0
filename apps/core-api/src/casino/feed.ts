@@ -33,13 +33,28 @@ const OVERDUE_MS = { slot: 9_000, roulette: 14_000, coffre: 7_000 } as const;
 const PRESENT_MS = 150_000;
 const WAIT_MAX_MS = 25_000;
 const CHECK_EVERY_MS = 1_000;
+/** While a spectator waits, the overdue stages are looked at this often (a closed tab never blocks them long). */
+const RECHECK_MS = 3_000;
+const SETTLE_EVERY_MS = 1_000;
+/** A woken read waits this long: a spin's start, result and end, written a few ms apart, leave in one answer. */
+const COALESCE_MS = 25;
+/** A result published this long after its spin was delayed on its way; its moment is then the spin + ANSWER_MS. */
+const RESULT_QUEUED_MS = 1_500;
+const ANSWER_MS = 300;
 const PRUNE_EVERY_MS = 10 * 60_000;
 const KEEP_MS = 6 * 3_600_000;
 const DRAFT_GAP_MS = 150;
 const PRESENCE_GAP_MS = 20_000;
 
 export type FeedKind =
-  'start' | 'result' | 'coffre' | 'step' | 'end' | 'draft' | 'presence';
+  | 'start'
+  | 'result'
+  | 'coffre'
+  | 'step'
+  | 'end'
+  | 'draft'
+  | 'presence'
+  | 'skip';
 interface FeedRow {
   seq: number;
   viewer_id: string;
@@ -151,6 +166,7 @@ export class CasinoFeed {
     { timer: ReturnType<typeof setInterval>; last: number }
   >();
   private pruned = new Map<string, number>();
+  private settled = new Map<string, number>();
   private lastWrite = new Map<string, number>();
   private lastGame = new Map<string, Game | null>();
 
@@ -201,6 +217,14 @@ export class CasinoFeed {
       )[0]?.pos ?? -1,
     );
     const now = this.clock.now();
+    // The player's animation starts as the spin's answer arrives (the result is posted then). A result reaching the Core
+    // more than 1.5 s after its spin met a queue on the way (a busy server), not a later start: its moment is the spin's,
+    // plus the usual answer time — spectators join the player's timeline instead of replaying it late.
+    const created = r.created_at.getTime();
+    const resultAt =
+      now.getTime() - created > RESULT_QUEUED_MS
+        ? new Date(created + ANSWER_MS)
+        : now;
     let wrote = false;
     if (done < POS.start) await this.start(q, r);
     for (const st of stages) {
@@ -218,12 +242,46 @@ export class CasinoFeed {
           st.pos,
           JSON.stringify(st.data),
           fast,
-          now,
+          st.pos === POS.result ? resultAt : now,
         ],
       );
       wrote = true;
     }
     return { wrote, last: Math.max(done, upTo) };
+  }
+
+  /**
+   * Passer: the player jumped to the end of the animation of stage `need` (`at` names it). Written only when that stage
+   * is already public, once; it carries no data (what it shows is already public). Returns whether it was written.
+   */
+  async skip(q: Queryable, r: RoundRow, need: number, at: string) {
+    await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+      `casino-feed:${r.round_id}`,
+    ]);
+    const rows = await q.query<{ pos: number | null; skipped: boolean }>(
+      `select max(pos) as pos, bool_or(kind = 'skip' and data->>'at' = $2) as skipped
+       from casino_feed where round_id = $1`,
+      [r.round_id, at],
+    );
+    const pub =
+      rows[0]?.pos === null || rows[0]?.pos === undefined
+        ? -1
+        : Number(rows[0].pos);
+    if (pub < need || rows[0]?.skipped) return false;
+    await q.query(
+      `insert into casino_feed (channel_id, viewer_id, viewer_name, round_id, game, kind, pos, data, fast, at)
+       values ($1, $2, $3, $4, $5, 'skip', null, $6, true, $7)`,
+      [
+        r.channel_id,
+        r.viewer_id,
+        r.viewer_name,
+        r.round_id,
+        r.game,
+        JSON.stringify({ at }),
+        this.clock.now(),
+      ],
+    );
+    return true;
   }
 
   /** The roulette bets being placed (display only: never debited, never a round). The latest replaces the previous. */
@@ -291,6 +349,10 @@ export class CasinoFeed {
   /** Stages whose animation is over but that the player's client never confirmed (a closed tab): published now. */
   async settle(channelId: string, viewerId?: string) {
     const now = this.clock.now().getTime();
+    // At most once a second per channel and player: every spectator's read would ask it again.
+    const key = `${channelId}:${viewerId ?? '*'}`;
+    if (now - (this.settled.get(key) ?? -Infinity) < SETTLE_EVERY_MS) return;
+    this.settled.set(key, now);
     const rows = await this.db.query<
       RoundRow & { fpos: number | null; fat: Date | null }
     >(
@@ -351,7 +413,8 @@ export class CasinoFeed {
           player: await this.player(channelId, playerId),
           server_now: this.clock.now().toISOString(),
         };
-      await this.waitChange(channelId, left);
+      await this.waitChange(channelId, Math.min(left, RECHECK_MS));
+      await new Promise((ok) => setTimeout(ok, COALESCE_MS));
     }
   }
 
@@ -478,7 +541,8 @@ export class CasinoFeed {
           server_now: new Date(now).toISOString(),
         };
       }
-      await this.waitChange(channelId, left);
+      await this.waitChange(channelId, Math.min(left, RECHECK_MS));
+      await new Promise((ok) => setTimeout(ok, COALESCE_MS));
     }
   }
 

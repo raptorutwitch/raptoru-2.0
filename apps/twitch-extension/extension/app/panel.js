@@ -505,9 +505,14 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function updateState(next, { render = true } = {}) {
-    // Hub and identical poll: nothing to redraw (an open module's view decides for itself: onState).
-    const unchanged = render && !openModule && !loadError
-      && JSON.stringify(stableState(state)) === JSON.stringify(stableState(next));
+    // Hub and identical poll: nothing to redraw (an open module's view decides for itself: onState). A module of the
+    // module host draws its own screen (kept across redraws, never fed by them): an identical poll redraws nothing
+    // either — a redraw re-attaches its node, which restarts its animations (the casino's flashes of 18/11).
+    const hostOwnScreen = !!hostView && hostViewId === openModule && !hostDef;
+    // Such a screen never shows the raffle: its countdown (moving at every read) is not a reason to redraw it.
+    const comparable = (v) => (hostOwnScreen && v ? { ...stableState(v), raffle: null } : stableState(v));
+    const unchanged = render && (!openModule || hostOwnScreen) && !loadError
+      && JSON.stringify(comparable(state)) === JSON.stringify(comparable(next));
     const previous = state;
     // An error screen shown before this state must be redrawn away: never absorbed by a live update.
     const hadLoadError = !!loadError;
@@ -1092,6 +1097,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function render() {
     hubCarousel?.destroy();
     hubCarousel = null;
+    // A view kept across redraws is about to be moved (detached, then attached again: `attached`): it may note the
+    // state of its animations so that the move shows nothing (the casino).
+    if (hostView?.node?.isConnected) hostView.detaching?.();
     root.replaceChildren();
     // Les callbacks pointent toujours vers le Soundboard actuellement rendu.
     // Un rerender d’état ne doit jamais conserver un listener vers une vue

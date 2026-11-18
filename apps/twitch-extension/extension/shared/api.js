@@ -551,8 +551,9 @@ export function createClient({
     casinoSpin: (game, payload, idempotencyKey) =>
       call('POST', `/casino/${game === 'roulette' ? 'roulette' : 'slot'}/spin`, { body: payload, idempotencyKey }),
     /** The player's screen showed a stage of their round (result | coffre | step | end): the spectators get it now. */
-    casinoProgress: (roundId, stage, step = null, fast = false) =>
-      call('POST', '/casino/progress', { body: { round_id: roundId, stage, ...(step === null ? {} : { step }), fast } }),
+    // stage 'skip' + of (result | coffre | step | end): the player pressed Passer on that stage's animation.
+    casinoProgress: (roundId, stage, step = null, fast = false, of = null) =>
+      call('POST', '/casino/progress', { body: { round_id: roundId, stage, ...(step === null ? {} : { step }), fast, ...(of ? { of } : {}) } }),
     casinoDraft: (bets) => call('POST', '/casino/draft', { body: { bets } }),
     casinoPresence: (game) => call('POST', '/casino/presence', { body: { game } }),
     /** Spectators (long-poll): a player's revealed stages after a cursor (-1: a snapshot to rejoin), who plays now. */

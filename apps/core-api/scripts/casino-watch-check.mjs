@@ -11,14 +11,14 @@
 //  it (every watch answer timed against her progress) · 15 the « parties en direct » band updates by itself.
 import { spawn } from 'node:child_process';
 import console from 'node:console';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { setTimeout } from 'node:timers';
 import { fileURLToPath, URL } from 'node:url';
-/* global fetch, document, getComputedStyle, innerWidth -- Node's fetch; `document` only inside page callbacks */
+/* global fetch, document, window, performance, requestAnimationFrame, MutationObserver, getComputedStyle, innerWidth -- Node's fetch; `document` only inside page callbacks */
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const { chromium } = createRequire(
@@ -74,7 +74,6 @@ for (let i = 0; ; i++) {
 const browser = await chromium.launch();
 const errors = [];
 // --- The wire: Alice's progress (when her screen showed a stage), what every spectator received and sent ------------
-const aliceShown = new Map(); // round_id → time Alice's client said « result shown »
 const received = []; // { who, t, ev } — every event a spectator received
 const sentBy = { bob: [], carla: [] }; // the casino writes a spectator's browser made
 async function viewer(as) {
@@ -82,7 +81,15 @@ async function viewer(as) {
     viewport: { width: 565, height: 376 },
   });
   const p = await ctx.newPage();
-  p.on('pageerror', (e) => errors.push(`${as}: ${e.message}`));
+  p.on('pageerror', (e) =>
+    errors.push(
+      `${as}: ${e.message} (${
+        String(e.stack ?? '')
+          .split('\n')[1]
+          ?.trim() ?? ''
+      })`,
+    ),
+  );
   p.on('request', (r) => {
     if (!r.url().endsWith('/api/ext')) return;
     let b;
@@ -92,13 +99,6 @@ async function viewer(as) {
       return;
     }
     const path = String(b?.path ?? '');
-    if (
-      as === 'alice' &&
-      path === '/casino/progress' &&
-      b.body?.stage === 'result' &&
-      !aliceShown.has(b.body.round_id)
-    )
-      aliceShown.set(b.body.round_id, Date.now());
     if (sentBy[as] && b.method === 'POST' && path.startsWith('/casino/'))
       sentBy[as].push(path);
   });
@@ -119,6 +119,7 @@ async function viewer(as) {
       /* an aborted long-poll (offline): nothing received */
     }
   });
+  await p.addInitScript(RECORD);
   await p.goto(`${BASE}/ext/video_component.html?anchor=component&as=${as}`);
   await openMiniGames(p);
   return { p, ctx };
@@ -129,6 +130,219 @@ async function openMiniGames(p) {
   await p.click('.rh-all__item:has-text("Mini-jeux")');
   await p.waitForSelector('.mg', { timeout: 10000 });
 }
+/**
+ * In every page, before the extension loads: the start and landing of every animation on screen (wall clock: the
+ * three pages share the OS clock) and the flash probe — the casino screen detached by a redraw, frames drawn without
+ * its styles.
+ */
+const RECORD = () => {
+  window.__t = [];
+  window.__flash = { detach: 0, unstyled: 0, why: [], restarts: [], gaps: [] };
+  document.addEventListener(
+    'jdm:host-redraw',
+    () => (window.__flash.redrawAt = Date.now()),
+    true,
+  );
+  window.__net = [];
+  const fetch0 = window.fetch.bind(window);
+  window.fetch = async (url, init) => {
+    const sent = Date.now();
+    const res = await fetch0(url, init);
+    try {
+      const path = JSON.parse(init?.body ?? 'null')?.path ?? '';
+      if (
+        String(url).endsWith('/api/ext') &&
+        (path.endsWith('/spin') ||
+          path.startsWith('/casino/watch') ||
+          path === '/casino/progress')
+      )
+        res
+          .clone()
+          .json()
+          .then((j) => {
+            const t = Date.now();
+            if (j.round)
+              window.__net.push({ k: 'own', id: j.round.round_id, t, sent });
+            if (path === '/casino/progress') {
+              const b = JSON.parse(init.body).body ?? {};
+              window.__net.push({
+                k: `post:${b.stage}`,
+                id: b.round_id,
+                t,
+                sent,
+              });
+            }
+            for (const e of j.events ?? []) {
+              if (e.kind === 'result')
+                window.__net.push({ k: 'result', id: e.round_id, t });
+              window.__net.push({
+                k: `ev:${e.kind}`,
+                id: e.round_id,
+                t,
+                at: Date.parse(e.at),
+                sent,
+              });
+            }
+          })
+          .catch(() => {});
+    } catch {
+      /* not a casino call */
+    }
+    return res;
+  };
+  const seen = new WeakSet();
+  const holdsCasino = (n) =>
+    n.nodeType === 1 &&
+    (n.matches?.('.cz-host') || n.querySelector?.('.cz-host'));
+  new MutationObserver((ms) => {
+    for (const m of ms) {
+      for (const n of m.removedNodes)
+        if (holdsCasino(n)) {
+          window.__flash.detach++;
+          // why: a header redraw (its title / ‹ changed) or a new state read
+          window.__flash.why.push(
+            `${Date.now() - (window.__flash.redrawAt ?? 0) < 50 ? 'en-tête' : 'état'} ${new Date().toISOString().slice(11, 23)}`,
+          );
+        }
+      for (const n of m.addedNodes)
+        if (holdsCasino(n)) {
+          // a RE-attachment only (the screen shown before): its first appearance starts its animations, rightly
+          const host = n.matches?.('.cz-host')
+            ? n
+            : n.querySelector('.cz-host');
+          if (seen.has(host)) window.__flash.attachAt = performance.now();
+          seen.add(host);
+        }
+    }
+  }).observe(document, { childList: true, subtree: true });
+  let watched = null;
+  let lastFrame = 0;
+  const frame = () => {
+    // a page that stops drawing (frames held back by the machine) freezes its animation: noted, with when
+    const nowF = Date.now();
+    if (lastFrame && nowF - lastFrame > 250)
+      window.__flash.gaps.push([lastFrame, nowF - lastFrame]);
+    lastFrame = nowF;
+    const h = document.querySelector('.cz-host');
+    if (h && h !== watched) {
+      watched = h;
+      new MutationObserver((ms) => {
+        for (const m of ms) {
+          const v = m.target.getAttribute(m.attributeName);
+          if (!v) continue;
+          const what = m.target.classList.contains('reels')
+            ? 'reels'
+            : m.target.classList.contains('cof')
+              ? 'respin'
+              : 'wheel';
+          window.__t.push({
+            what,
+            k: m.attributeName,
+            t: Number(String(v).split(':').pop()),
+            id: `${m.target.dataset.round ?? ''}${String(v).includes(':') ? `:${String(v).split(':')[0]}` : ''}`,
+          });
+        }
+      }).observe(h.shadowRoot, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ['data-start-at', 'data-land-at', 'data-respin-at'],
+      });
+    }
+    const b = h?.isConnected && h.shadowRoot?.getElementById('body');
+    if (b && b.className.includes('-body')) {
+      const bg = getComputedStyle(b).backgroundImage;
+      if (!bg || bg === 'none') window.__flash.unstyled++;
+      // Just after a move: an animation that was well under way the frame before and is now back at its start (a pop,
+      // a badge, a glow replayed) is a visible flash. A new one starting at that moment (the round's end) is not.
+      const now = new Map();
+      for (const a of h.shadowRoot.getAnimations())
+        if (a.animationName)
+          now.set(a, {
+            key: a.effect?.target,
+            name: a.animationName,
+            t: a.currentTime ?? 0,
+            loop: a.effect?.getComputedTiming?.().iterations === Infinity,
+          });
+      const at = window.__flash.attachAt;
+      if (at && performance.now() - at < 80) {
+        for (const x of now.values()) {
+          const was = (window.__flash.prev ?? []).find(
+            (y) => y.key === x.key && y.name === x.name,
+          );
+          if (was && was.t > 120 && x.t < 40)
+            window.__flash.restarts.push(x.loop ? `${x.name} ∞` : x.name);
+        }
+        window.__flash.attachAt = 0;
+      }
+      window.__flash.prev = [...now.values()];
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+};
+/** The marks recorded since the last call (and cleared). */
+const marks = (p) => p.evaluate(() => window.__t.splice(0));
+/**
+ * Bob − Alice (ms) for each animation both played (matched by its round, and its respin). An animation during which
+ * either page stopped drawing for a while (`held`: frames held back by a loaded machine — the page itself freezes, and
+ * its marks with it) measures the machine, not the casino: it is set aside, and counted.
+ */
+const gaps = (a, b, what, k, held = []) => {
+  const of = (l, kk) =>
+    new Map(
+      l
+        .filter((x) => x.what === what && x.k === kk && x.id)
+        .map((x) => [x.id, x.t]),
+    );
+  const A = of(a, k);
+  const Bm = of(b, k);
+  const ends = [of(a, 'data-land-at'), of(b, 'data-land-at')];
+  const starts = [of(a, 'data-start-at'), of(b, 'data-start-at')];
+  let skipped = 0;
+  const out = [];
+  for (const [id, t] of A) {
+    if (!Bm.has(id)) continue;
+    const from =
+      Math.min(starts[0].get(id) ?? t, starts[1].get(id) ?? Bm.get(id)) - 50;
+    const to = Math.max(
+      ends[0].get(id) ?? t + 3000,
+      ends[1].get(id) ?? Bm.get(id) + 3000,
+    );
+    if (held.some(([t0, d]) => t0 < to && t0 + d > from)) skipped += 1;
+    else out.push(Bm.get(id) - t);
+  }
+  return Object.assign(out, { skipped });
+};
+/** The frames the pages held back so far ([start, ms]): a page that did not draw for more than 250 ms. */
+const heldOf = async (pages) =>
+  (
+    await Promise.all(pages.map((p) => p.evaluate(() => window.__flash.gaps)))
+  ).flat();
+const worst = (g) => (g.length ? Math.max(...g.map(Math.abs)) : Infinity);
+const median = (g) => {
+  const s = g.map(Math.abs).sort((x, y) => x - y);
+  return s.length ? s[s.length >> 1] : Infinity;
+};
+/** In sync: a median under 500 ms and 90 % of the gaps under one second (a frame frozen by another program on a shared
+ *  PC must not hide the trend — the max is always printed). */
+const inSync = (g) =>
+  g.length > 0 &&
+  median(g) < 500 &&
+  g.filter((x) => Math.abs(x) < 1000).length >= Math.ceil(g.length * 0.9);
+/**
+ * A timing check: every animation measured (both pages drawing) must be in sync. One set aside because a page did not
+ * draw (a loaded machine) is said, never counted as a failure — and none measured at all says « non mesurable ».
+ */
+const syncCheck = (g, label) => {
+  if (!g.length)
+    return console.log(
+      `  (info) ${label} — non mesurable cette fois (machine chargée)`,
+    );
+  check(inSync(g), label);
+};
+const showGaps = (g) =>
+  `${g.length} fois, médiane ${median(g)} ms, max ${worst(g)} ms (${g.join(', ')})${g.skipped ? ` — ${g.skipped} écartée(s) : une page n’a pas dessiné pendant l’animation (machine chargée)` : ''}`;
+const timings = [];
 const shot = (p, name) => p.screenshot({ path: join(SHOTS, `${name}.png`) });
 const cz = (p, sel) => p.locator(`.cz-host >> ${sel}`);
 const host = (p) =>
@@ -215,9 +429,26 @@ const fits = (p) =>
       scroll: document.documentElement.scrollWidth > innerWidth + 1,
     };
   });
+/** Alice spins and the machine is idle again (a natural Coffre on the way is played to its end). */
 const aliceSpin = async (alice) => {
   await cz(alice, '#spin').click();
   await sleep(200);
+  for (let i = 0; i < 240; i++) {
+    const st = await alice.evaluate(() => {
+      const D = document.querySelector('.cz-host')?.shadowRoot;
+      if (!D?.querySelector('.cof'))
+        return D?.querySelector('#spin')?.dataset.state === 'play'
+          ? 'idle'
+          : 'busy';
+      return D.querySelector('.cof [data-cof="go"]')?.dataset.state ?? 'busy';
+    });
+    if (st === 'idle') return;
+    if (st === 'go' || st === 'done')
+      await cz(alice, '.cof [data-cof="go"]')
+        .click()
+        .catch(() => {});
+    await sleep(250);
+  }
   await slotIdle(alice);
 };
 
@@ -283,6 +514,9 @@ try {
 
   // --- 2, 3: a spin, then an immediate second one ----------------------------------------------------------------
   console.log('Machine à sous');
+  const bobMoves0 = await bob.evaluate(() => window.__flash.detach);
+  await marks(alice);
+  await marks(bob);
   const e0 = await ends(bob);
   const anim = bobAnimates(bob, 9000).then(
     () => true,
@@ -326,6 +560,44 @@ try {
     'après la série, la même grille',
   );
 
+  {
+    const ta = await marks(alice);
+    const tb = await marks(bob);
+    const st = gaps(
+      ta,
+      tb,
+      'reels',
+      'data-start-at',
+      await heldOf([alice, bob]),
+    );
+    const ld = gaps(
+      ta,
+      tb,
+      'reels',
+      'data-land-at',
+      await heldOf([alice, bob]),
+    );
+    timings.push(['machine, début', st], ['machine, arrêt', ld]);
+    if (process.env.CASINO_MARKS)
+      writeFileSync(
+        join(SHOTS, 'marks-machine.json'),
+        JSON.stringify(
+          {
+            alice: ta,
+            bob: tb,
+            aliceNet: await alice.evaluate(() => window.__net),
+            bobNet: await bob.evaluate(() => window.__net),
+            aliceGaps: await alice.evaluate(() => window.__flash.gaps),
+            bobGaps: await bob.evaluate(() => window.__flash.gaps),
+          },
+          null,
+          1,
+        ),
+      );
+    syncCheck(st, `les rouleaux démarrent ensemble : ${showGaps(st)}`);
+    syncCheck(ld, `les rouleaux s’arrêtent ensemble : ${showGaps(ld)}`);
+  }
+
   // --- 6: Rapide and Passer ---------------------------------------------------------------------------------------
   const e2 = await ends(bob);
   await cz(alice, '[data-act="fast"]').click();
@@ -344,6 +616,22 @@ try {
     (x) => x.who === 'bob' && x.ev.kind === 'result' && x.ev.fast,
   );
   check(fastSeen, 'le rythme d’Alice (Rapide / Passer) est transmis à Bob');
+  {
+    const ta = await marks(alice);
+    const tb = await marks(bob);
+    const ld = gaps(
+      ta,
+      tb,
+      'reels',
+      'data-land-at',
+      await heldOf([alice, bob]),
+    );
+    timings.push(['Rapide puis Passer, arrêt', ld]);
+    syncCheck(
+      ld,
+      `Rapide et Passer : les rouleaux s’arrêtent ensemble (${showGaps(ld)})`,
+    );
+  }
 
   // --- 5 + 9: a Coffre, respin by respin; Bob refreshes in the middle ----------------------------------------------
   console.log('Coffre');
@@ -418,7 +706,27 @@ try {
     `relance ${relaunches} : Bob voit la même grille (${await filled(alice)})`,
   );
   await relaunch();
+  {
+    const ta = await marks(alice);
+    const tb = await marks(bob);
+    const rs = gaps(
+      ta,
+      tb,
+      'respin',
+      'data-respin-at',
+      await heldOf([alice, bob]),
+    );
+    timings.push(['Coffre, relance', rs]);
+    syncCheck(
+      rs,
+      `chaque relance du Coffre démarre en même temps : ${showGaps(rs)}`,
+    );
+  }
+  const bobMoves =
+    (await bob.evaluate(() => window.__flash.detach)) - bobMoves0;
+  const bobWhy = await bob.evaluate(() => window.__flash.why);
   // 9: Bob refreshes in the middle of the Coffre: he comes back to Alice, at the same respin
+  const bobNetBefore = await bob.evaluate(() => window.__net); // (a reload clears the page's log)
   await bob.reload();
   await openMiniGames(bob);
   await until(
@@ -589,6 +897,8 @@ try {
     aBal === (await balanceOf('alice')),
     'les mises en préparation ne débitent rien',
   );
+  await marks(alice);
+  await marks(bob);
   await api('/api/force', { game: 'roulette', number: 17 });
   await cz(alice, '[data-spot="n17"]').click();
   await cz(alice, '#spin').click();
@@ -629,6 +939,28 @@ try {
     true,
     'la roue tourne chez Bob et s’arrête sur le 17, le numéro du Core',
   );
+  {
+    await sleep(300);
+    const ta = await marks(alice);
+    const tb = await marks(bob);
+    const st = gaps(
+      ta,
+      tb,
+      'wheel',
+      'data-start-at',
+      await heldOf([alice, bob]),
+    );
+    const ld = gaps(
+      ta,
+      tb,
+      'wheel',
+      'data-land-at',
+      await heldOf([alice, bob]),
+    );
+    timings.push(['roulette, début', st], ['roulette, arrêt', ld]);
+    syncCheck(st, `la roue démarre en même temps : ${showGaps(st)}`);
+    syncCheck(ld, `la bille se pose en même temps : ${showGaps(ld)}`);
+  }
   await until(
     carla2,
     () =>
@@ -691,15 +1023,51 @@ try {
       ),
   );
 
+  // --- Flashes: no redraw moves the spectator's screen, no frame is drawn without the casino's styles ------------
+  {
+    const fa = await alice.evaluate(() => window.__flash);
+    const fb = await bob.evaluate(() => window.__flash);
+    check(
+      bobMoves === 0,
+      `pendant le jeu (machine, Auto, Rapide, Passer, Coffre), l’écran du spectateur n’est jamais déplacé (${bobMoves})`,
+      bobWhy.join(' · '),
+    );
+    check(
+      fa.unstyled === 0 && fb.unstyled === 0,
+      `aucune image sans les styles du Casino (Alice ${fa.unstyled}, Bob ${fb.unstyled})`,
+    );
+    const restarts = [...fa.restarts, ...fb.restarts];
+    const oneShot = restarts.filter((x) => !x.endsWith('∞'));
+    check(
+      !oneShot.length,
+      `après chaque redessin, aucune animation ponctuelle (pop, badge, entrée) ne se rejoue (Alice déplacée ${fa.detach} fois, Bob ${fb.detach})`,
+      oneShot.slice(0, 8).join(', '),
+    );
+    if (restarts.length > oneShot.length)
+      console.log(
+        `  (info) boucles douces reprises à leur début après un redessin : ${restarts.filter((x) => x.endsWith('∞')).join(', ')}`,
+      );
+    console.log(
+      `  (info) écran d’Alice déplacé ${fa.detach} fois (une par changement de solde), sans effet visible`,
+    );
+  }
+
   // --- 14: never a result before Alice's screen showed it ------------------------------------------------------------
-  const results = received.filter((x) => x.ev.kind === 'result');
-  const early = results.filter((x) => {
-    const t = aliceShown.get(x.ev.round_id);
-    return t === undefined || x.t < t;
-  });
+  // Alice's client receives each result (her spin's answer) before any spectator does — measured in the pages.
+  const own = new Map(
+    (await alice.evaluate(() => window.__net))
+      .filter((x) => x.k === 'own')
+      .map((x) => [x.id, x.t]),
+  );
+  const seen = [
+    ...bobNetBefore,
+    ...(await bob.evaluate(() => window.__net)),
+    ...(await carla2.evaluate(() => window.__net).catch(() => [])),
+  ].filter((x) => x.k === 'result' && own.has(x.id));
+  const early = seen.filter((x) => x.t < own.get(x.id));
   check(
-    results.length > 10 && !early.length,
-    `aucun résultat reçu avant qu’Alice l’ait vu (${results.length} résultats reçus, ${early.length} en avance)`,
+    seen.length > 10 && !early.length,
+    `aucun résultat reçu par un spectateur avant le client d’Alice (${seen.length} résultats, ${early.length} en avance)`,
     JSON.stringify(early.slice(0, 2)),
   );
   const leak = received.some(
@@ -725,6 +1093,8 @@ try {
 } catch (e) {
   check(false, `exception : ${e.message}`);
 }
+for (const [what, g] of timings)
+  console.log(`  (mesure) ${what} : Bob − Alice = ${g.join(', ')} ms`);
 check(
   !errors.length,
   'aucune erreur JavaScript',

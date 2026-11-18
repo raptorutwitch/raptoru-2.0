@@ -144,6 +144,9 @@ export function createMiniGames({ document, games }) {
     },
     headLabel: () => (view?.ownsHeader ? (view.headLabel?.() ?? null) : null),
     headIcon: () => (view?.ownsHeader ? (view.headIcon?.() ?? null) : null),
+    /** The panel re-attached this node (a redraw): the open game puts its restarted one-shot animations back. */
+    detaching: () => view?.detaching?.(),
+    attached: () => view?.attached?.(),
     get intro() {
       return view?.ownsHeader ? false : undefined;
     },

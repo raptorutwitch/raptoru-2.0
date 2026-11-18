@@ -69,13 +69,18 @@ export function toast(text, bad = false, ms = 2200) {
   toastTimer = win().setTimeout(() => t.classList.remove('show'), ms);
 }
 
+let drawerSeq = 0;
 /** A side drawer over the game (the game stays visible beside it); closed by ×, Escape or a click beside it. */
 export function drawer({ side = 'left', width = 236, title, tools = '', head, foot = '', render, onClick, onClose }) {
   const el = byId('drawer');
   const toolsHTML = () => (typeof tools === 'function' ? tools() : tools);
   el.innerHTML = `<div class="drawer__scrim" data-close></div><aside class="drawer__panel" style="--dw:${width}px" role="dialog" aria-label="${title.replace(/<[^>]+>/g, ' ').trim()}"><div class="drawer__head"><b>${title}</b><span class="drawer__tools">${toolsHTML()}</span><button type="button" class="xbtn" data-close aria-label="Fermer">${ICON.close}</button></div>${head ? `<div class="drawer__sum">${head()}</div>` : ''}<div class="drawer__body">${render()}</div>${foot ? `<p class="drawer__foot">${foot}</p>` : ''}</aside>`;
+  // This drawer, not another one opened since (a late repaint — history loaded after a close — never writes into it).
+  const mine = String((drawerSeq += 1));
+  el.dataset.drawer = mine;
   // Only the CONTENT is replaced: the panel itself is never rebuilt (its entry animation would replay).
   const paint = () => {
+    if (el.hidden || el.dataset.drawer !== mine || !el.querySelector('.drawer__body')) return;
     el.querySelector('.drawer__tools').innerHTML = toolsHTML();
     if (head) el.querySelector('.drawer__sum').innerHTML = head();
     el.querySelector('.drawer__body').innerHTML = render();

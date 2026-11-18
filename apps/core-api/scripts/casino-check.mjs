@@ -77,7 +77,15 @@ async function viewer(as) {
     viewport: { width: 565, height: 376 },
   });
   const p = await ctx.newPage();
-  p.on('pageerror', (e) => errors.push(`${as}: ${e.message}`));
+  p.on('pageerror', (e) =>
+    errors.push(
+      `${as}: ${e.message} (${
+        String(e.stack ?? '')
+          .split('\n')[1]
+          ?.trim() ?? ''
+      })`,
+    ),
+  );
   await p.goto(`${BASE}/ext/video_component.html?anchor=component&as=${as}`);
   await p.waitForSelector('.rh-all-toggle', { timeout: 15000 });
   await p.click('.rh-all-toggle');

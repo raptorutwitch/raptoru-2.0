@@ -580,16 +580,21 @@ export function mountRoulette(D, ctx) {
     stageTimer = W.setTimeout(() => void closeStage(), s.fast ? 1300 : 2200);
   }
   /** The wheel plays the Core's result (its seed: the same ball for the player, the spectators and the Replay). */
-  async function play(r, { fast = false } = {}) {
-    const done = wheel.spin(r, { fast });
-    if (skipAsked && wheel.isRunning()) wheel.skip();
+  async function play(r, { fast = false, elapsed = 0 } = {}) {
+    const done = wheel.spin(r, { fast, elapsed });
+    if (skipAsked && wheel.isRunning()) {
+      wheel.skip();
+      if (!spect) tellSkip();
+    }
     skipAsked = false;
     await done;
   }
   /** Passer: the same result, now — during the whole draw, the Core's answer included. */
   function skip() {
-    if (wheel.isRunning()) wheel.skip();
-    else if (busy) skipAsked = true;
+    if (wheel.isRunning()) {
+      wheel.skip();
+      if (!spect) tellSkip();
+    } else if (busy) skipAsked = true;
   }
 
   // --- A spin: the Core decides, the screen plays it --------------------------------------------------------------
@@ -632,9 +637,13 @@ export function mountRoulette(D, ctx) {
     if (destroyed) return;
     balance = res.balance;
     const r = asResult(res.round);
-    await play(r, { fast: s.fast });
-    // The ball settled on the player's screen: the spectators may see it now (never before).
+    // The wheel starts on the player's screen: the result goes to the spectators now (never before this screen has it),
+    // who play the same flight on the same timeline: the ball lands at the same moment for everyone.
     reveal(res.round.round_id, s.fast);
+    playing = res.round.round_id;
+    $('#wheel').dataset.round = res.round.round_id; // (the round on the wheel: read by the Lab's timing checks)
+    await play(r, { fast: s.fast });
+    playing = null;
     if (destroyed) return;
     s.last = { ...r.bets };
     save();
@@ -700,9 +709,16 @@ export function mountRoulette(D, ctx) {
     update();
     idle();
   }
+  let lastReveal = Promise.resolve();
+  let playing = null; // the player's round on the wheel (for Passer)
   function reveal(roundId, fast) {
     const go = (n) => client.casinoProgress(roundId, 'result', null, fast).catch(() => n > 0 && W.setTimeout(() => void go(n - 1), 1200));
-    void go(1);
+    lastReveal = go(1);
+  }
+  /** Passer: the spectators jump to the same end (after the result itself: accepted only once public). */
+  function tellSkip() {
+    const id = playing;
+    if (id) void lastReveal.finally(() => client.casinoProgress(id, 'skip', null, true, 'result').catch(() => {}));
   }
 
   // --- Spectator: ONE player followed (casino.js reads the Core's feed and hands us their stages, in order) ----------
@@ -715,7 +731,7 @@ export function mountRoulette(D, ctx) {
     const stake = T.total(d.bets ?? {});
     return { pocket: d.pocket, number: d.number, color: T.color(d.number), seed: d.seed, bets: clean(d.bets), wins: d.wins ?? [], stake, gross: d.payout, net: d.payout - stake };
   };
-  async function apply(ev, { fast = false } = {}) {
+  async function apply(ev, { fast = false, late = 0 } = {}) {
     if (destroyed) return;
     const d = ev.data ?? {};
     const f = !!(ev.fast || fast);
@@ -749,7 +765,9 @@ export function mountRoulette(D, ctx) {
       wres.hidden = true;
       update();
       openStage();
-      await play(r, { fast: f });
+      // `late`: how long ago the player's wheel started (the Core's clock): the same flight, at the same moment.
+      $('#wheel').dataset.round = ev.round_id; // (the round on the wheel: read by the Lab's timing checks)
+      await play(r, { fast: f, elapsed: late });
       if (destroyed) return;
       busy = false;
       lastResult = r;
@@ -763,7 +781,7 @@ export function mountRoulette(D, ctx) {
     }
   }
   /** Rejoining (a new spectator, a refresh, a lost connection): where the player is now — no replay of the past. */
-  async function snapshot(events) {
+  async function snapshot(events, { lateOf = () => Infinity } = {}) {
     const at = events.map((e) => e.kind).lastIndexOf('start');
     const pres = [...events].reverse().find((e) => e.kind === 'presence');
     const draft = [...events].reverse().find((e) => e.kind === 'draft');
@@ -771,6 +789,12 @@ export function mountRoulette(D, ctx) {
       const start = events[at];
       const res = events.find((e) => e.kind === 'result' && e.round_id === start.round_id);
       if (!res) return apply(start);
+      // The ball still runs on the player's screen: join its flight where it is.
+      if (lateOf(res) < 8000) {
+        await apply(start);
+        await apply(res, { late: lateOf(res) });
+        return;
+      }
       const r = asWatched(res.data);
       s.bets = r.bets;
       spect.round.bet = r.stake;
@@ -1000,6 +1024,7 @@ export function mountRoulette(D, ctx) {
     busy: () => busy || (!stagew.hidden && !spect),
     /** Spectator: the followed player's next stage, or a snapshot to rejoin them (casino.js). */
     apply,
+    skip: (ev) => ev.data?.at === 'result' && wheel.isRunning() && wheel.skip(),
     snapshot,
     destroy() {
       destroyed = true;

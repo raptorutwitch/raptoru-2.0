@@ -121,6 +121,7 @@ function create(rootEl, { audio } = {}) {
     rootEl.classList.remove('won', 'lost');
   }
   function finish(result) {
+    rootEl.dataset.landAt = String(Date.now()); // the ball settled on screen (read by the Lab's timing checks)
     running = null;
     rootEl.classList.remove('spinning');
     trail.setAttribute('opacity', '0');
@@ -154,8 +155,10 @@ function create(rootEl, { audio } = {}) {
     ballG.setAttribute('opacity', '0');
     setRotor(B.at(sim, 0).theta);
     return new Promise((resolve) => {
-      const t0 = performance.now();
-      let lastT = 0;
+      // `elapsed` (s): a spectator joins the player's flight where it is (the same ball, at the same time).
+      const elapsed = Math.max(0, (opts.elapsed ?? 0) / 1000);
+      const t0 = performance.now() - elapsed * 1000;
+      let lastT = elapsed;
       let ev = 0;
       let skipFrom = null;
       running = {
@@ -163,7 +166,9 @@ function create(rootEl, { audio } = {}) {
           if (!skipFrom) skipFrom = { t: (performance.now() - t0) / 1000, s: B.at(sim, lastT) };
         },
       };
+      let shownAt = 0;
       const frame = (ts) => {
+        if (!shownAt) rootEl.dataset.startAt = String((shownAt = Date.now())); // the first frame on screen (Lab timing checks)
         const t = Math.max(0, (ts - t0) / 1000);
         let s;
         let done;

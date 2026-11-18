@@ -7,9 +7,8 @@ Rien n'est poussé, fusionné ni déployé. En Production, le Casino reste ferm�
 - le réglage Studio `casino.open`, à 0 par défaut ;
 - la publication de l'extension.
 
-**Ouvert au 18/11 (signalé par Antoni, non résolu) :** le spectateur démarre ses animations après la fin de celles du
-joueur (≈ 3 s machine, plus à la roulette ; objectif < 1 s) ; des flashs, déformations et zooms intermittents
-apparaissent chez le joueur et le spectateur. Détail, pistes et critères :
+**Corrigé le 19/11, à valider par Antoni :** le spectateur démarre ses animations en même temps que le joueur (§ 6) ;
+les flashs, déformations et zooms intermittents (§ 6, « Stabilité de l'affichage »). Signalés le 18/11, détail dans
 [CASINO_HANDOFF_2026-11-18.md](CASINO_HANDOFF_2026-11-18.md).
 
 Sources de conception : les prototypes validés `prototypes/casino-v7` et `casino-v8`, hors dépôt. Pour les règles,
@@ -129,14 +128,19 @@ Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à 
   - **Suivi :** tous ses tours s'enchaînent sans rien rouvrir : les rouleaux, les lignes, le Coffre relance par relance,
     le tour suivant ; s'il passe à la roulette, on le suit sur la roulette (ses jetons pendant qu'il mise, la roue, le
     résultat sur le tapis). S'il quitte le jeu, on le voit (« a quitté le jeu ») ; rien ne reste figé.
-  - **Jamais de résultat en avance :** le Core ne publie une étape qu'une fois que l'écran du joueur l'a montrée (ses
-    rouleaux arrêtés, sa bille posée, une relance jouée, la fin). Le lancement ne transmet que la mise. Le spectateur
-    rejoue chaque étape avec la même animation, APRÈS le joueur (jugé trop lent par Antoni le 18/11, à corriger) : la durée d'une étape (≈ 2 s pour
-    les rouleaux, ≈ 6 s pour la roue). Si l'écran du joueur se ferme, le Core publie l'étape une fois son animation
+  - **Synchronisé, sans résultat en avance (19/11) :** une étape devient publique quand elle COMMENCE sur l'écran du
+    joueur (ses rouleaux partent, sa roue part, une relance, la finale du Coffre) : jamais avant que son propre client
+    ait le résultat (son tirage vient de lui répondre), jamais au tirage. Le lancement seul ne transmet que la mise. Le
+    spectateur joue la même animation sur la même chronologie : il la commence là où en est celle du joueur (l'heure
+    du Core, estimée par le meilleur de ses dernières réponses), donc les rouleaux et la bille se posent en même temps
+    chez tous. Un résultat arrivé au Core plus de 1,5 s après son tirage (une file d'attente) prend pour moment le
+    tirage + 300 ms. Mesuré en Lab (trois navigateurs) : départ ≈ 100–300 ms après le joueur, arrêt ≈ 30–200 ms,
+    relance du Coffre ≈ 100–400 ms. Si l'écran du joueur se ferme, le Core publie l'étape une fois son animation
     finie (9 s machine, 14 s roulette, 7 s pour l'ouverture du Coffre). Les relances du Coffre attendent toujours le
     joueur.
-  - **Rythme :** Rapide et Passer du joueur sont transmis (le spectateur les suit, même résultat) ; Auto enchaîne
-    les tours chez le spectateur aussi. Un spectateur en retard (onglet caché, connexion lente) accélère pour rattraper.
+  - **Rythme :** Rapide est transmis avec l'étape ; Passer est un événement à part (`skip`, accepté seulement pour une
+    étape déjà publique, une fois) qui fait sauter le spectateur à la même fin. Auto enchaîne les tours chez le
+    spectateur aussi. Un spectateur très en retard (onglet caché qui revient, plus de 6 s) joue vite pour rattraper.
   - **Mises de la roulette en préparation :** l'écran du joueur les envoie (300 ms après le dernier geste) ; affichées
     comme « pose ses jetons », jamais débitées, remplacées par les vraies au lancement.
   - **Technique :** une seule requête en attente par spectateur (long-poll, réponse dès qu'une étape est publiée, au
@@ -147,6 +151,13 @@ Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à 
   - **Droits :** un spectateur n'a aucune commande active (mise, jetons, Lancer, Auto, Rapide, Passer, Coffre). Côté
     Core, toute écriture vise le tour de celui qui l'envoie : agir sur le tour d'un autre est refusé. Le détail d'un
     tour d'un autre viewer n'est lisible qu'une fois sa fin publiée.
+- **Stabilité de l'affichage (19/11) :** cause mesurée des flashs : le panneau redessinait le module ouvert à chaque
+  lecture d'état (toutes les 5 s, le compte à rebours de la Tombola change à chaque lecture) et rattachait l'écran du
+  Casino ; ses feuilles `<link>` se rechargeaient (images sans styles : icônes à leur taille naturelle) et ses
+  animations ponctuelles se rejouaient. Corrigé : feuilles construites adoptées par le shadow root, pas de redessin
+  d'un écran de module hôte sur une lecture identique (hors Tombola), crochets `detaching` / `attached` qui remettent
+  chaque animation où elle en était. Contrôle : `casino:watch-check` (0 image sans styles, 0 animation ponctuelle
+  rejouée).
 - **Partage :** depuis l'historique, le viewer partage son propre tour.
   - Le Core relit la vraie partie et écrit le message de LeCroupier_ : court, pertes comprises, jamais présentées comme
     des gains.

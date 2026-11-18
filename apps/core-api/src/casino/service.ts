@@ -244,24 +244,25 @@ export class CasinoService {
     return this.settings.get(q, channelId, `${CASINO_MODULE}.${key}`);
   }
 
+  /** Every `casino.*` setting in one read (a spin used to read them one by one, under its lock). */
+  private async values(q: Queryable, channelId: string) {
+    const all = await this.settings.getMany(
+      q,
+      channelId,
+      Object.keys(CASINO_SETTINGS).map((k) => `${CASINO_MODULE}.${k}`),
+    );
+    return (key: SettingKey) => all.get(`${CASINO_MODULE}.${key}`)!;
+  }
+
   async limits(q: Queryable, channelId: string) {
-    const [
-      slotMin,
-      slotMax,
-      rouletteMax,
-      maxWin,
-      shareCooldown,
-      announce,
-      announceMinX,
-    ] = await Promise.all([
-      this.setting(q, channelId, 'slot_min_bet'),
-      this.setting(q, channelId, 'slot_max_bet'),
-      this.setting(q, channelId, 'roulette_max_total'),
-      this.setting(q, channelId, 'max_win'),
-      this.setting(q, channelId, 'share_cooldown_s'),
-      this.setting(q, channelId, 'announce'),
-      this.setting(q, channelId, 'announce_min_x'),
-    ]);
+    const v = await this.values(q, channelId);
+    const slotMin = v('slot_min_bet');
+    const slotMax = v('slot_max_bet');
+    const rouletteMax = v('roulette_max_total');
+    const maxWin = v('max_win');
+    const shareCooldown = v('share_cooldown_s');
+    const announce = v('announce');
+    const announceMinX = v('announce_min_x');
     return {
       slot_min_bet: slotMin,
       slot_max_bet: Math.max(slotMin, slotMax),
@@ -283,12 +284,13 @@ export class CasinoService {
 
   /** Open or closed, and why (the extension shows it; a spin re-checks it in its transaction). */
   async availability(q: Queryable, channelId: string) {
-    const [open, slot, roulette, live] = await Promise.all([
-      this.setting(q, channelId, 'open'),
-      this.setting(q, channelId, 'slot_open'),
-      this.setting(q, channelId, 'roulette_open'),
+    const [v, live] = await Promise.all([
+      this.values(q, channelId),
       this.live(q, channelId),
     ]);
+    const open = v('open');
+    const slot = v('slot_open');
+    const roulette = v('roulette_open');
     const reason =
       !this.lab && !this.productionApproved
         ? 'not_approved'
@@ -631,6 +633,7 @@ export class CasinoService {
       step?: unknown;
       done?: unknown;
       fast?: unknown;
+      of?: unknown;
     },
   ) {
     if (typeof req.round_id !== 'string' || !ROUND_ID.test(req.round_id))
@@ -642,6 +645,8 @@ export class CasinoService {
       req.step <= 64
         ? req.step
         : null;
+    if (req.stage === 'skip')
+      return this.skip(channelId, viewer, req.round_id, req.of, step);
     let pos: number;
     if (req.stage === 'result') pos = POS.result;
     else if (req.stage === 'coffre') pos = POS.coffre;
@@ -708,6 +713,43 @@ export class CasinoService {
       finished: out.finished,
       published: out.published,
     };
+  }
+
+  /**
+   * The player pressed Passer on an animation of their round: its spectators jump to the same end. Only for a stage
+   * already public (nothing is revealed by it), once per stage.
+   */
+  private async skip(
+    channelId: string,
+    viewer: CasinoViewer,
+    roundId: string,
+    of: unknown,
+    step: number | null,
+  ) {
+    const need =
+      of === 'result'
+        ? POS.result
+        : of === 'coffre'
+          ? POS.coffre
+          : of === 'end'
+            ? POS.end
+            : of === 'step' && step !== null && step >= 0
+              ? POS.step(step)
+              : null;
+    if (need === null) throw new CasinoError(400, 'invalid_step');
+    const at = of === 'step' ? `step:${step}` : String(of);
+    const wrote = await this.db.tx(async (q) => {
+      const r = (
+        await q.query<RoundRow>(
+          'select * from casino_rounds where round_id = $1 and channel_id = $2 and viewer_id = $3',
+          [roundId, channelId, viewer.id],
+        )
+      )[0];
+      if (!r) throw new CasinoError(404, 'round_not_found');
+      return this.feed.skip(q, r, need, at);
+    });
+    if (wrote) this.feed.wake(channelId);
+    return { skipped: wrote };
   }
 
   /** The roulette bets the player is placing (spectators see them; never debited: the spin re-checks everything). */

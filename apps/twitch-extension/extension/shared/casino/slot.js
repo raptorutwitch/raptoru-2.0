@@ -339,6 +339,7 @@ export function mountSlot(D, ctx) {
       // Passer : le même résultat, tout de suite (rouleaux, puis décompte des gains) ; et Auto s'arrête.
       if (view.isRunning()) view.skip();
       else present?.skip();
+      tellSkip(playing, 'result');
       stopAuto();
       return;
     }
@@ -381,10 +382,17 @@ export function mountSlot(D, ctx) {
    * The player's screen has shown a stage of their round: the spectators may see it now (the Core publishes it, never
    * before). Fire and forget, one retry; a lost one is published by the Core once overdue, or with the next stage.
    */
+  let lastReveal = Promise.resolve();
   function reveal(roundId, stage, step = null, fast = false) {
     const go = (n) => client.casinoProgress(roundId, stage, step, fast).catch(() => n > 0 && W.setTimeout(() => void go(n - 1), 1200));
-    void go(1);
+    lastReveal = go(1);
   }
+  /** Passer: the spectators jump to the same end (after the stage itself: the Core accepts it only once public). */
+  function tellSkip(roundId, of, step = null) {
+    if (!roundId) return;
+    void lastReveal.finally(() => client.casinoProgress(roundId, 'skip', step, true, of).catch(() => {}));
+  }
+  let playing = null; // the player's round on screen (for Passer)
 
   /** Plays a round the Core decided: the reels, the lines one by one, the Coffre (the player's own, or a Replay). */
   async function playRound(round, { fast = false, replay = false, from = null } = {}) {
@@ -396,9 +404,14 @@ export function mountSlot(D, ctx) {
     const own = !replay;
     if (from === 'settled') view.renderStatic(r.stops);
     else {
-      const sp = await view.spin(r, { fast });
-      // The reels stopped on the player's screen: the spectators may see them now.
-      if (own) reveal(round.round_id, 'result', null, fast || !!sp?.skipped);
+      // The reels start on the player's screen: the result goes to the spectators now (never before this screen has
+      // it), and they play the same animation on the same timeline (the Core's clock): both land together.
+      if (own) {
+        reveal(round.round_id, 'result', null, fast);
+        playing = round.round_id;
+        $('#reels').dataset.round = round.round_id; // (the round on the reels: read by the Lab's timing checks)
+      }
+      await view.spin(r, { fast });
     }
     if (destroyed) return;
     const shown = view.markWins(r);
@@ -425,9 +438,10 @@ export function mountSlot(D, ctx) {
           getFast: () => s.fast,
           toggleFast,
           host: body,
-          // Each stage the player's screen showed goes to the spectators (and keeps the progress for a reconnection).
-          onReady: own ? () => reveal(round.round_id, 'coffre', null, s.fast) : null,
-          onStep: own ? (i) => (i >= coffre.steps.length ? reveal(round.round_id, 'end', null, s.fast) : reveal(round.round_id, 'step', i, s.fast)) : null,
+          // Each stage goes to the spectators as it STARTS on the player's screen (the opening, a respin, the finale):
+          // they play it at the same time. It also keeps the progress for a reconnection.
+          onBegin: own ? (stage, i) => reveal(round.round_id, stage, i, s.fast) : null,
+          onSkip: own ? (at) => at && tellSkip(round.round_id, at.of, at.step) : null,
           onCredit: () => refreshWallet(),
         },
       );
@@ -609,7 +623,7 @@ export function mountSlot(D, ctx) {
   }
 
   /** One stage of the followed player (in order, once). `fast`: the player's Rapide / Passer, or a late spectator. */
-  async function apply(ev, { fast = false } = {}) {
+  async function apply(ev, { fast = false, late = 0 } = {}) {
     if (destroyed) return;
     watchFast = !!(ev.fast || fast);
     const d = ev.data ?? {};
@@ -631,7 +645,9 @@ export function mountSlot(D, ctx) {
       busy = true;
       update();
       const r = asSpin({ outcome: d });
-      await view.spin(r, { fast: watchFast });
+      // `late`: how long ago the player's reels started (the Core's clock): ours start there, both land together.
+      $('#reels').dataset.round = ev.round_id; // (the round on the reels: read by the Lab's timing checks)
+      await view.spin(r, { fast: watchFast, elapsed: late });
       if (destroyed) return;
       const shown = view.markWins(r);
       if (shown.wildMax >= 2) Audio.wild();
@@ -679,8 +695,18 @@ export function mountSlot(D, ctx) {
     }
   }
 
+  /** The player pressed Passer on a stage this screen is playing: the same jump to the end (the same result). */
+  function watchSkip(ev) {
+    if (ev.round_id !== watched?.round_id) return;
+    const at = ev.data?.at ?? '';
+    if (at === 'result') {
+      if (view.isRunning()) view.skip();
+      else present?.skip();
+    } else cof?.control.skip?.();
+  }
+
   /** Rejoining (a new spectator, a refresh, a lost connection): the player's current round as it is now, no replay. */
-  async function snapshot(events) {
+  async function snapshot(events, { lateOf = () => Infinity } = {}) {
     closeCoffre();
     const at = events.map((e) => e.kind).lastIndexOf('start');
     const pres = [...events].reverse().find((e) => e.kind === 'presence');
@@ -699,6 +725,13 @@ export function mountSlot(D, ctx) {
     const end = mine.find((e) => e.kind === 'end');
     watched = { round_id: start.round_id, bet: start.data.bet, best: null };
     if (!res) return apply(start);
+    // Its reels are still turning on the player's screen: join them where they are (the same landing).
+    if (!cofE && lateOf(res) < 3500) {
+      await apply(start);
+      await apply(res, { late: lateOf(res) });
+      if (end) await apply(end);
+      return;
+    }
     const r = asSpin({ outcome: res.data });
     view.renderStatic(r.stops);
     view.showWins(r);
@@ -914,6 +947,7 @@ export function mountSlot(D, ctx) {
     busy: () => busy || !!present,
     /** Spectator: the followed player's next stage, or a snapshot to rejoin them (casino.js). */
     apply,
+    skip: watchSkip,
     snapshot,
     destroy() {
       destroyed = true;

@@ -43,6 +43,29 @@ const EXT = join(ROOT, 'twitch-extension', 'extension');
 const CAL = join(ROOT, 'twitch-extension', 'calibration');
 
 const db = await createTestDb();
+// CASINO_DEMO_SLOW=<ms>: logs every query slower than that (this demo's database runs on the server's only thread).
+if (process.env.CASINO_DEMO_SLOW) {
+  const limit = Number(process.env.CASINO_DEMO_SLOW);
+  const wrap = (target: { query: (...a: never[]) => Promise<unknown> }) => {
+    const q = target.query.bind(target);
+    target.query = (async (...a: never[]) => {
+      const t = Date.now();
+      try {
+        return await q(...a);
+      } finally {
+        const d = Date.now() - t;
+        if (d > limit)
+          console.log(
+            `[slow ${d} ms] ${String(a[0]).replace(/\s+/g, ' ').slice(0, 160)}`,
+          );
+      }
+    }) as typeof target.query;
+  };
+  wrap(db as never);
+  const tx = db.tx.bind(db);
+  db.tx = ((fn: (q: never) => Promise<unknown>) =>
+    tx((q) => (wrap(q as never), fn(q as never)))) as typeof db.tx;
+}
 const core = createCore(db, systemClock, new DevFakeCreditProvider());
 const casino = core.casino;
 await core.moduleSettings.set(CH, 'casino.open', 1, 'demo');

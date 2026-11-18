@@ -96,7 +96,9 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
       return pl.dist + P.over * Math.cos(1.5 * Math.PI * u) * (1 - u) * (1 - u);
     };
     return new Promise((resolve) => {
-      const t0 = performance.now();
+      // `elapsed` (ms): a spectator joins the player's timeline where it is (the same reels, the same stops, at the same time).
+      const elapsed = Math.max(0, opts.elapsed ?? 0);
+      const t0 = performance.now() - elapsed;
       let skipped = false;
       let anticSound = false;
       running = {
@@ -114,7 +116,9 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
           if (any) audio.reelStop(2);
         },
       };
+      let shownAt = 0;
       const frame = (ts) => {
+        if (!shownAt) reelsEl.dataset.startAt = String((shownAt = Date.now())); // the first frame on screen (Lab timing checks)
         const t = Math.max(0, ts - t0); // un premier frame peut dater d'avant t0
         let all = true;
         for (const pl of plan) {
@@ -129,7 +133,7 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
           if (!pl.stopped && t >= pl.stopAt) {
             pl.stopped = true;
             reels[pl.r].classList.remove('anticipate');
-            if (!skipped) audio.reelStop(pl.r);
+            if (!skipped && pl.stopAt >= elapsed) audio.reelStop(pl.r);
             if (opts.onReelStop) opts.onReelStop(pl.r, skipped);
             const next = pl.r + 1;
             if (antic[next] && !skipped) {
@@ -146,6 +150,7 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
           running = null;
           reels.forEach((r) => r.classList.remove('anticipate'));
           renderStatic(result.stops);
+          reelsEl.dataset.landAt = String(Date.now()); // every reel at rest on screen (read by the Lab's timing checks)
           resolve({ skipped });
         } else requestAnimationFrame(frame);
       };

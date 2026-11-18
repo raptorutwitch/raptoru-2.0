@@ -85,6 +85,7 @@ function play(c, o = {}) {
   // --- La scène -------------------------------------------------------------------------------------------------
   const el = document.createElement('div');
   el.className = `cof${o.replay ? ' is-replay' : ''}${o.follow ? ' is-spect' : ''}`;
+  if (o.seed) el.dataset.round = o.seed; // (the round: read by the Lab's timing checks)
   el.setAttribute('role', 'region');
   el.setAttribute('aria-label', 'Le Coffre du Raptor');
   const cells = Array.from({ length: 15 }, (_, i) => `<div class="cc" data-c="${i}" style="grid-column:${Math.floor(i / 3) + 1};grid-row:${(i % 3) + 1}"></div>`).join('');
@@ -142,7 +143,9 @@ function play(c, o = {}) {
     if (!anim || anim.skipped) return;
     audit.skips++;
     anim.skip();
+    if (o.onSkip) o.onSkip(skipAt); // the player's Passer reaches the spectators
   }
+  let skipAt = null; // the stage on screen ({ of, step }), for onSkip
   function setAuto(on) {
     auto = on;
     clearTimeout(autoTimer);
@@ -179,7 +182,10 @@ function play(c, o = {}) {
     }
   };
   globalThis.addEventListener('keydown', onKey, true);
-  if (o.control) o.control.close = () => close();
+  if (o.control) {
+    o.control.close = () => close();
+    o.control.skip = () => skip(); // a spectator: the player pressed Passer
+  }
 
   // --- Attentes interrompables (Passer) ---------------------------------------------------------------------------
   function begin() {
@@ -378,6 +384,7 @@ function play(c, o = {}) {
   }
 
   async function respin(i) {
+    el.dataset.respinAt = `${i}:${Date.now()}`; // when this respin starts on screen (read by the Lab's timing checks)
     const st = S.steps[i];
     const prev = i > 0 ? S.steps[i - 1] : null;
     const prevBoard = prev ? prev.board : startBoard(S);
@@ -535,7 +542,11 @@ function play(c, o = {}) {
   (async () => {
     paintControls();
     const from = Math.min(c.step, S.steps.length - 1); // (une fin déjà atteinte : on remontre la fin)
-    if (from < 0 && !o.instant) await intro();
+    if (from < 0 && !o.instant) {
+      skipAt = { of: 'coffre', step: null };
+      if (o.onBegin) o.onBegin('coffre', null); // the Coffre opens on screen
+      await intro();
+    }
     else {
       settleTo(from);
       if (!o.follow) Frame.toast('Coffre repris là où il en était (déjà crédité).');
@@ -570,12 +581,16 @@ function play(c, o = {}) {
         await waitGo();
         if (phase === 'closed') return;
         phase = 'run';
+        skipAt = { of: 'step', step: i };
+        if (o.onBegin) o.onBegin('step', i); // the respin starts on screen: its spectators start it too
         await respin(i);
         if (phase === 'closed') return;
         if (o.onStep) o.onStep(i);
       }
     if (phase === 'closed') return;
     phase = 'run';
+    skipAt = { of: 'end', step: null };
+    if (o.onBegin) o.onBegin('end', null); // the finale starts: its totals may be shown now
     await finale();
     if (phase === 'closed') return;
     phase = 'end';

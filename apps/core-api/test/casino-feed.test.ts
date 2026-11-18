@@ -280,4 +280,50 @@ describe('casino spectators — the feed of a player', () => {
     await c.presence(CH, ALICE, null);
     expect((await c.livePlayers(CH, -1, 0)).players).toEqual([]);
   });
+
+  it('Passer: the spectators jump too — only for a stage already public, once; never on another viewer’s round', async () => {
+    const core = await lab();
+    const c = core.casino;
+    c.rng = scripted([3, 7, 11, 19, 25]);
+    const r = await c.spinSlot(CH, ALICE, { key: 'feed-skip-0001', bet: 100 });
+    const id = r.round.round_id;
+    // nothing public yet: a skip would tell nothing true — ignored
+    expect(
+      await c.progress(CH, ALICE, {
+        round_id: id,
+        stage: 'skip',
+        of: 'result',
+      }),
+    ).toEqual({ skipped: false });
+    await c.progress(CH, ALICE, { round_id: id, stage: 'result' });
+    expect(
+      await c.progress(CH, ALICE, {
+        round_id: id,
+        stage: 'skip',
+        of: 'result',
+      }),
+    ).toEqual({ skipped: true });
+    expect(
+      await c.progress(CH, ALICE, {
+        round_id: id,
+        stage: 'skip',
+        of: 'result',
+      }),
+    ).toEqual({ skipped: false });
+    const w = await watch(core);
+    expect(
+      w.events.filter((e) => e.round_id === id).map((e) => e.kind),
+    ).toEqual(['start', 'result', 'end', 'skip']);
+    expect(w.events.at(-1)!.data).toEqual({ at: 'result' });
+    expect(
+      await code(
+        c.progress(CH, BOB, { round_id: id, stage: 'skip', of: 'result' }),
+      ),
+    ).toBe('round_not_found');
+    expect(
+      await code(
+        c.progress(CH, ALICE, { round_id: id, stage: 'skip', of: 'nope' }),
+      ),
+    ).toBe('invalid_step');
+  });
 });

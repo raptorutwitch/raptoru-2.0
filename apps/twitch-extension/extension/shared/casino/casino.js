@@ -35,11 +35,59 @@ function sheet(D, href) {
   D.insertBefore(l, D.getElementById('body'));
   return done;
 }
-/** Only the open game's sheet stays in the shadow root (the shared one always). */
-function useSheets(D, game) {
-  for (const l of D.querySelectorAll('link[data-sheet]')) if (l.dataset.sheet !== SHEETS.base && l.dataset.sheet !== SHEETS[game]) l.remove();
-  const base = sheet(D, SHEETS.base);
-  return Promise.all([base, game in SHEETS && game !== 'base' ? sheet(D, SHEETS[game]) : null]);
+// The sheets as constructed stylesheets, adopted by the shadow root: they belong to the root, not to an element, so
+// they survive the panel moving the screen (a redraw detaches and re-attaches it). A <link> inside the root is unloaded
+// and loaded again at each move: frames drawn without the casino's styles (icons at their natural size: the flash, the
+// « zoom » seen on 18/11). Read once per page from a parsed <link> (same origin, no fetch), shared by every screen.
+const CAN_ADOPT = (() => {
+  try {
+    return typeof globalThis.ShadowRoot !== 'undefined' && 'adoptedStyleSheets' in globalThis.ShadowRoot.prototype && typeof new globalThis.CSSStyleSheet().replaceSync === 'function';
+  } catch {
+    return false;
+  }
+})();
+const CONSTRUCTED = new Map(); // href → Promise<CSSStyleSheet | null>
+function constructed(D, href) {
+  if (CONSTRUCTED.has(href)) return CONSTRUCTED.get(href);
+  const p = new Promise((ok) => {
+    const l = D.ownerDocument.createElement('link');
+    l.rel = 'stylesheet';
+    l.media = 'print'; // parsed, never applied here
+    l.href = href;
+    const done = (cs) => {
+      l.remove();
+      if (!cs) CONSTRUCTED.delete(href); // a failure is retried at the next opening
+      ok(cs);
+    };
+    l.addEventListener('load', () => {
+      try {
+        const cs = new globalThis.CSSStyleSheet();
+        cs.replaceSync([...l.sheet.cssRules].map((r) => r.cssText).join('\n'));
+        done(cs);
+      } catch {
+        done(null);
+      }
+    });
+    l.addEventListener('error', () => done(null));
+    (D.ownerDocument.head ?? D.ownerDocument.documentElement).append(l); // loads even while the screen is detached
+  });
+  CONSTRUCTED.set(href, p);
+  return p;
+}
+/** Only the open game's sheet stays in the shadow root (the shared one always, first). */
+async function useSheets(D, game) {
+  const hrefs = [SHEETS.base, ...(game in SHEETS && game !== 'base' ? [SHEETS[game]] : [])];
+  if (CAN_ADOPT) {
+    const list = await Promise.all(hrefs.map((h) => constructed(D, h)));
+    if (list.every(Boolean)) {
+      D.adoptedStyleSheets = list;
+      for (const l of D.querySelectorAll('link[data-sheet]')) l.remove();
+      return;
+    }
+  }
+  // Without constructed sheets (an old browser): <link> elements, as before.
+  for (const l of D.querySelectorAll('link[data-sheet]')) if (!hrefs.includes(l.dataset.sheet)) l.remove();
+  await Promise.all(hrefs.map((h) => sheet(D, h)));
 }
 
 /** A casino screen: its shadow root and its body. */
@@ -52,6 +100,8 @@ function shell(document) {
   return { host, D };
 }
 
+// A spectator this far behind the player's screen (a hidden tab coming back) plays the stages fast to catch up.
+const CATCH_UP_MS = 6000;
 const STATE = { playing: 'En jeu', bonus: 'Coffre', idle: 'Entre deux tours' };
 // The followed player survives a refresh of the page (this tab only): the spectator comes back to them.
 const FOLLOW_KEY = 'casino:follow';
@@ -98,6 +148,9 @@ function casinoScreen({ document, client, kind, follow = null }) {
   let present = null; // the game this viewer has open (player)
   let destroyed = false;
   let token = 0; // each opening invalidates the previous one's async work
+  let moved = null; // the CSS animations noted before the panel moves this screen (detaching → attached)
+  const cssAnimations = () =>
+    typeof D.getAnimations === 'function' && typeof W.CSSAnimation !== 'undefined' ? D.getAnimations().filter((a) => a instanceof W.CSSAnimation) : [];
   const W = globalThis;
   const body = () => D.getElementById('body');
   const redrawHeader = () => host.dispatchEvent(new globalThis.CustomEvent('jdm:host-redraw', { bubbles: true, composed: true }));
@@ -266,6 +319,7 @@ function casinoScreen({ document, client, kind, follow = null }) {
         if (pl?.name && followed) followed.name = pl.name;
       },
       onStatus: (st) => body()?.classList.toggle('is-retry', st === 'retry'),
+      onSkip: (ev) => game?.skip?.(ev), // the player's Passer: the animation playing here jumps to its end
     });
     follower = f;
     if (!(await ensure(followed.game))) return;
@@ -276,13 +330,16 @@ function casinoScreen({ document, client, kind, follow = null }) {
         if (item.kind === 'snapshot') {
           const g = gameOf(item.events, item.player?.game ?? mounted);
           if (!(await ensure(g))) return;
-          await game.snapshot(item.events);
+          await game.snapshot(item.events, { lateOf: f.lateOf });
           host.dataset.seq = String(item.events.at(-1)?.seq ?? host.dataset.seq ?? 0);
           continue;
         }
         const g = item.kind === 'presence' ? item.data?.game : item.game;
         if (g && g !== mounted && !(await ensure(g))) return;
-        await game.apply(item, { fast: f.backlog() >= 2 });
+        // Each stage starts where the player's screen is (`late`, the Core's clock): the reels and the ball land with the
+        // player's. A Passer already pressed, or a spectator far behind (a hidden tab coming back), plays it fast.
+        const late = f.lateOf(item);
+        await game.apply(item, { fast: f.skipped(item) || late > CATCH_UP_MS, late });
         host.dataset.stages = String(Number(host.dataset.stages) + 1);
         host.dataset.seq = String(item.seq);
         if (item.kind === 'end') host.dataset.ends = String(Number(host.dataset.ends) + 1);
@@ -316,6 +373,23 @@ function casinoScreen({ document, client, kind, follow = null }) {
       if (screen !== 'follow') return false;
       void openLive();
       return true;
+    },
+    /**
+     * The panel has just moved this screen (a redraw re-attaches its node): the browser restarted every CSS animation
+     * of the shadow root. The one-shot ones (a plate's pop, a badge, the Coffre's entrance…) had already played: they
+     * are put back at their end, so nothing pops again. Loops (a glow, a blinking dot) simply go on.
+     */
+    detaching() {
+      moved = cssAnimations().map((a) => ({ el: a.effect?.target, name: a.animationName, t: a.currentTime }));
+    },
+    attached() {
+      const before = moved;
+      moved = null;
+      for (const a of cssAnimations()) {
+        const was = before?.find((x) => x.el === a.effect?.target && x.name === a.animationName);
+        if (was && typeof was.t === 'number') a.currentTime = was.t; // a loop or a running one: where it was
+        else if (a.effect?.getComputedTiming?.().iterations !== Infinity && (a.currentTime ?? 0) < 80) a.finish(); // had ended
+      }
     },
   };
 }
