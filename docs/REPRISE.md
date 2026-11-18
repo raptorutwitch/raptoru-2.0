@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 18/11/2026** (Casino intégré en Lab, spectateurs refaits, branche locale `feat/casino` ; avant : livraison de la Roue du Sub V3, journal
+**Mis à jour le 19/11/2026** (Casino : panneau spectateur, ALL-IN de la roulette, zoom de Mini-jeux corrigé, branche locale `feat/casino` ; avant : livraison de la Roue du Sub V3, journal
 [archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md](archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
@@ -51,11 +51,16 @@ expressions et la latence ; essayer « Envoyer une vraie annonce test » ; tél�
 premier pour ce chantier).** Branche LOCALE `feat/casino` (code `850187ae` + commit de passation), non poussée, non
 fusionnée, non déployée ; fermé par défaut. Antoni a validé le 18/11 : suivi spectateur de parties successives, spins,
 Coffre, mises de roulette, départ signalé, catalogue Mini-jeux ; mécanique des jeux et du Coffre définitive.
-Corrigés le 19/11 (commit `f9515627`), À VALIDER PAR ANTONI : 1) le spectateur démarre avec le joueur (mesuré en Lab :
-départ ≈ 100–400 ms, arrêt ≈ 30–480 ms) ; 2) flashs / zooms (feuilles adoptées, pas de redessin sur lecture identique,
-animations restaurées). Détail : CASINO.md § 6. Prochain chantier : la validation manuelle d'Antoni (démo Alice/Bob),
-puis, après son GO seulement, la personnalisation par émotes. Démo : npm run casino:demo -w @raptoru/core-api
-(http://127.0.0.1:4497).
+Le 19/11, Antoni a validé la synchronisation joueur/spectateur et la disparition des gros flashs (commit `f9515627`).
+Livré ensuite le 19/11, À VALIDER PAR ANTONI :
+
+1. le panneau spectateur (machine, Coffre, roulette ; CASINO.md § 6) ;
+2. le vrai ALL-IN de la roulette (§ 4 et § 5). Son réglage `casino.roulette_all_in_max_win` vaut 0 par défaut :
+   désactivé tant qu'Antoni ne choisit pas une valeur pour la Production (§ 10) ;
+3. le zoom bref à l'ouverture de Mini-jeux : `arcade.css` chargée trop tard (§ 6).
+
+Ensuite : Antoni choisit ses symboles à partir de [CASINO_SYMBOLES.md](CASINO_SYMBOLES.md). L'intégration des émotes
+ne commence qu'après son GO. Démo : `npm run casino:demo -w @raptoru/core-api` (http://127.0.0.1:4497).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans

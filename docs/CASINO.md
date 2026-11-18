@@ -9,7 +9,16 @@ Rien n'est poussé, fusionné ni déployé. En Production, le Casino reste ferm�
 
 **Corrigé le 19/11, à valider par Antoni :** le spectateur démarre ses animations en même temps que le joueur (§ 6) ;
 les flashs, déformations et zooms intermittents (§ 6, « Stabilité de l'affichage »). Signalés le 18/11, détail dans
-[CASINO_HANDOFF_2026-11-18.md](CASINO_HANDOFF_2026-11-18.md).
+[CASINO_HANDOFF_2026-11-18.md](CASINO_HANDOFF_2026-11-18.md). Synchronisation validée par Antoni le 19/11.
+
+**Livré le 19/11, à valider par Antoni :**
+
+- le panneau spectateur de la machine, du Coffre et de la roulette (§ 6) ;
+- le vrai ALL-IN de la roulette (§ 4 et § 5). Il est désactivé tant qu'Antoni ne règle pas sa valeur en Production
+  (§ 10) ;
+- la correction du zoom bref à l'ouverture de Mini-jeux (§ 6, « Stabilité de l'affichage »).
+
+L'inventaire des symboles pour les émotes est dans [CASINO_SYMBOLES.md](CASINO_SYMBOLES.md).
 
 Sources de conception : les prototypes validés `prototypes/casino-v7` et `casino-v8`, hors dépôt. Pour les règles,
 l'étude du bonus (rapport « Raptoru 2.0 — Le jeu bonus de la machine à sous ») et `casino-v7/etude`.
@@ -78,9 +87,23 @@ C'est le modèle recommandé par l'étude. Le test `casino-engine.test.ts` le pr
   - plusieurs paris par tour, seulement sur les cases du tapis ;
   - chaque mise est un multiple de 20 ;
   - total par tour : `casino.roulette_max_total`, 100 000 par défaut.
-- **RTP :** 97,30 % pour chaque pari.
-- **Jetons à l'écran :** ils s'adaptent au solde. Le jeton libre est un multiple de 20, et l'ALL-IN correspond à ce qui
-  reste misable, arrondi au multiple de 20 inférieur.
+- **ALL-IN (19/11) :** une exception voulue au plafond par tour.
+  - **Ce qu'est un ALL-IN :** une mise qui engage tout le solde, arrondi au multiple de 20 inférieur. Avec 1 000 010
+    Jetons, c'est 1 000 000.
+  - **Quand l'exception est active** (`casino.roulette_all_in_max_win` > 0) :
+    - l'ALL-IN n'a pas de plafond par tour ;
+    - son gain possible est borné par ce réglage, au lieu du gain maximum par partie ;
+    - une mise qui pourrait le dépasser est refusée avant le tirage, jamais réduite.
+  - **Désactivée** (0, valeur par défaut) : l'ALL-IN reste limité au plafond par tour, comme avant.
+  - **Mises ordinaires :** elles gardent leur plafond. Une mise au-dessus du plafond qui n'est pas tout le solde est
+    refusée (500 000 sur 1 000 000, par exemple).
+  - **Le jeton ALL :** l'interface applique la même règle que le Core, `rouletteLimit`, avant d'envoyer. Un ALL-IN
+    qu'elle accepte n'est donc pas refusé par le Core, sauf si le solde change entre-temps. La règle est écrite dans
+    « Paiements ».
+- **RTP :** 97,30 % pour chaque pari, ALL-IN compris.
+- **Jetons à l'écran :** ils s'adaptent au solde. Le jeton libre est un multiple de 20. Le jeton ALL engage ce qui reste
+  misable, arrondi au multiple de 20 inférieur : tout le solde si l'exception est active, sinon dans la limite du
+  plafond par tour.
 - **La bille :** sa trajectoire suit une graine visuelle tirée par le Core (`outcome.seed`). Le joueur, les spectateurs
   et le Replay voient le même vol. Le numéro, lui, vient toujours du Core.
 
@@ -112,6 +135,47 @@ C'est le modèle recommandé par l'étude. Le test `casino-engine.test.ts` le pr
 
 Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à la mise maximale, et 95,1 % jusqu'à
 1 000 de mise. Studio › Casino calcule cet effet en direct pour les valeurs en cours.
+
+**L'ALL-IN de la roulette (19/11) :**
+
+- **Gain maximum d'un ALL-IN :** `casino.roulette_all_in_max_win`. Il est à 0 par défaut (exception désactivée),
+  jamais en dessous du gain maximum ordinaire, et au plus 2 000 000 000.
+- **Pourquoi 2 000 000 000 au plus :** les montants d'une partie tiennent dans les colonnes entières de `casino_rounds`
+  (2 147 483 647 au plus). La mise est bornée aussi, car le meilleur gain de toute mise vaut au moins 36/37 de cette
+  mise.
+- **Contrôles du portefeuille, avant le tirage :**
+  - le Lab plafonne un solde à 1 000 000 000 ; le Wallet canonique n'a pas de plafond de solde, seulement une borne de
+    10¹² par opération ;
+  - le Core vérifie que solde − mise + meilleur gain possible reste dans ces limites. Sinon : refus `balance_cap`.
+- **Espérance :** inchangée. Un ALL-IN perd en moyenne 2,70 % de la mise, comme tout pari.
+- **Exemple, 1 000 000 en ALL-IN :**
+
+  | Pari         | Chance de gagner   | Solde si gagné |
+  | ------------ | ------------------ | -------------- |
+  | Rouge        | 48,6 % (18 sur 37) | 2 000 000      |
+  | Douzaine     | 32,4 %             | 3 000 000      |
+  | Numéro plein | 2,7 %              | 36 000 000     |
+
+  Dans tous les cas, le solde tombe à 0 si le pari perd.
+
+- **Somme maximale créée en un tour :** le gain maximum d'un ALL-IN, moins la mise. Avec la valeur de la démo,
+  36 000 000, un ALL-IN reste possible :
+
+  | Pari          | Solde maximum (36 000 000 ÷ le paiement) |
+  | ------------- | ---------------------------------------- |
+  | Chance simple | 18 000 000                               |
+  | Douzaine      | 12 000 000                               |
+  | Numéro plein  | 1 000 000                                |
+
+  Au-delà, l'interface et le Core refusent le même ALL-IN avant le tirage, avec un message clair.
+
+- **Martingale :** aucune interdiction particulière. Doubler en ALL-IN, c'est tout remettre à chaque tour. Une perte
+  ramène le solde à 0, et le gain maximum d'un ALL-IN borne la série par le haut. Exemple : 5 rouges de suite font
+  passer 1 000 000 à 32 000 000, avec une chance sur 37 environ (2,7 %). La série s'arrête là, car un ALL-IN sur une
+  chance simple n'est plus accepté au-delà de 18 000 000.
+- **Rien d'autre ne change :** le tirage, la transaction unique, la clé d'intention, le verrou du viewer et du Wallet.
+  Testé sur PGlite (refus, gros soldes, doubles clics) et sur un vrai PostgreSQL : 10 ALL-IN simultanés depuis deux
+  Cores donnent une seule partie, un solde à 0, jamais négatif.
 
 ## 6. Live, spectateurs, partages
 
@@ -148,6 +212,28 @@ Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à 
     Rafraîchir la page revient au même joueur, à l'étape où il en est. Un Core réveille ses spectateurs aussitôt ; un
     autre Core les réveille en moins d'une seconde (une lecture par chaîne et par seconde, seulement s'il y a des
     spectateurs). Le journal ne garde que quelques heures.
+  - **Le panneau spectateur (19/11) :** le plateau et les animations restent ceux du joueur. Les commandes du joueur
+    disparaissent : Rapide, Auto, Lancer, la barre de mise, Derniers gains, le gros bouton EN DIRECT. À leur place,
+    une carte (`Frame.watchCard`) :
+    - le joueur suivi : son initiale et son pseudo ;
+    - EN DIRECT, avec une pastille rouge ;
+    - l'état, en clair : « attend son prochain tour », « lance… », « joue… », « ouvre le Coffre », « pose ses
+      jetons », « la bille tourne… », « tour terminé », « a quitté le jeu » ;
+    - la mise du tour, en or ;
+    - le gain du tour, en vert s'il est positif, neutre s'il est nul. Il reste « … » tant que le Core ne l'a pas rendu
+      public : fin du tour à la machine, bille arrêtée à la roulette ;
+    - « Coffre · n BONUS » pendant un Coffre ;
+    - un bouton Son, pour ce navigateur seulement.
+
+    La disposition dépend du jeu :
+    - **Machine :** la carte occupe la colonne de droite, et les rouleaux prennent la hauteur de l'ancienne barre de
+      mise (symboles de 66 px au lieu de 59).
+    - **Coffre :** la même carte remplace ses commandes.
+    - **Roulette :** la carte tient en une ligne sous le tapis, et le tapis gagne de la hauteur ; à côté de la roue, la
+      carte verticale, avec le numéro sur la roue.
+
+    La carte est construite une seule fois, puis seuls ses textes changent : sa pastille ne redémarre jamais.
+
   - **Droits :** un spectateur n'a aucune commande active (mise, jetons, Lancer, Auto, Rapide, Passer, Coffre). Côté
     Core, toute écriture vise le tour de celui qui l'envoie : agir sur le tour d'un autre est refusé. Le détail d'un
     tour d'un autre viewer n'est lisible qu'une fois sa fin publiée.
@@ -158,6 +244,20 @@ Avec 1 000 000 de plafond et 10 000 de mise maximale, la machine rend 92,0 % à 
   d'un écran de module hôte sur une lecture identique (hors Tombola), crochets `detaching` / `attached` qui remettent
   chaque animation où elle en était. Contrôle : `casino:watch-check` (0 image sans styles, 0 animation ponctuelle
   rejouée).
+- **Zoom bref à l'ouverture de Mini-jeux (19/11) :**
+  - **Le symptôme :** une icône géante, la « croix » de Random Ban, quelques images au premier affichage de Mini-jeux.
+  - **La cause, mesurée image par image :** la feuille `modules/arcade/arcade.css` n'était demandée qu'à l'ouverture de
+    Mini-jeux, et le catalogue se dessinait aussitôt. Ses icônes, des SVG en ligne dont la taille vient de cette feuille,
+    occupaient toute la largeur tant qu'elle chargeait :
+    - le dé et viseur de Random Ban en 549 × 549 px, dans le titre ;
+    - les icônes des cartes entre 350 et 530 px.
+  - **Le constat :** 6 sessions sur 6, de 4 à 22 images chacune, toujours pendant le chargement de la feuille. Le
+    panneau et le Casino n'y étaient pour rien.
+  - **Corrigé dans `random-ban-view.js` :**
+    - la feuille est demandée dès le chargement de l'extension ;
+    - Mini-jeux et Random Ban restent invisibles, leur place gardée, jusqu'à ce qu'elle soit appliquée (ou en erreur).
+  - **Contrôle :** 0 icône agrandie sur 30 sessions d'entrées et sorties, et encore 0 avec les feuilles ralenties de
+    0,4 s et 2,5 s.
 - **Partage :** depuis l'historique, le viewer partage son propre tour.
   - Le Core relit la vraie partie et écrit le message de LeCroupier_ : court, pertes comprises, jamais présentées comme
     des gains.
@@ -180,6 +280,9 @@ Le fichier `extension/shared/casino/skin.js` règle les symboles, et seulement l
 - **Repli :** une image absente ou en erreur revient seule au dessin d'origine.
 - **Ce qui ne change pas :** les probabilités, les gains et les tirages ne lisent jamais ce fichier. Par défaut, les
   fruits validés restent en place.
+
+L'inventaire complet, pour choisir les émotes, est dans [CASINO_SYMBOLES.md](CASINO_SYMBOLES.md) : les 9 symboles,
+leurs rôles et valeurs, les tailles d'affichage mesurées et les animations possibles.
 
 ## 8. Studio › Casino
 
@@ -207,6 +310,8 @@ ne joue jamais à la place d'un viewer.
 - **Les commandes du Lab :**
   - live oui / non, Casino ouvert / fermé ;
   - gain maximum, solde d'Alice ;
+  - gain maximum d'un ALL-IN. La démo le met à 36 000 000 (exception active) ; 0 rend l'ALL-IN ordinaire. Pour un
+    très gros solde, régler celui d'Alice, par exemple à 500 000 000 ;
   - prochain tour : Coffre à 3 ou 5 BONUS, grille pleine, ou roulette sur le 17. Ce sont de vrais tirages, seulement
     choisis, et cela n'existe que dans cette démo ;
   - Luna joue ou ouvre un Coffre, à regarder depuis Bob.
@@ -225,9 +330,13 @@ ne joue jamais à la place d'un viewer.
      RTP au § 5 ;
    - total par tour de la roulette (100 000) ;
    - délai de partage (300 s) ;
-   - seuil d'annonce (×500).
-2. **Le déploiement du Core et de ses migrations** `20261201130000_casino.sql` et `20261202130000_casino_feed.sql`
-   (additives). Sauvegarde, puis `--migrations-approved`.
+   - seuil d'annonce (×500) ;
+   - **le gain maximum d'un ALL-IN** (`casino.roulette_all_in_max_win`). Il vaut 0 par défaut : l'ALL-IN reste dans le
+     plafond par tour, comme aujourd'hui. Pour le vrai ALL-IN, il faut choisir une valeur, par exemple 36 000 000 :
+     un ALL-IN reste alors possible jusqu'à 1 000 000 sur un numéro et 18 000 000 sur une chance simple (§ 5). Aucune
+     valeur n'est réglée pour la Production à ta place.
+2. **Le déploiement du Core et de ses migrations** `20261201130000_casino.sql`, `20261202130000_casino_feed.sql` et
+   `20261203130000_casino_feed_skip.sql` (additives). Sauvegarde, puis `--migrations-approved`.
 3. **La variable `CASINO_EXTENSION`** : `testers:<id>,…` pour un Hosted Test, puis `on`.
 4. **Studio :** release avec la page Casino, puis `casino.open = 1`, `casino.slot_open` et `casino.roulette_open`.
 5. **L'extension :**
