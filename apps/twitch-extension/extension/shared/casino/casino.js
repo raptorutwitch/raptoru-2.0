@@ -7,6 +7,7 @@
 // (their spectators follow them). The games' code loads with their first screen.
 import * as Frame from './frame.js';
 import { createFollower } from './follow.js';
+import { createWalletSync } from './wallet-sync.js';
 
 const LOADERS = { slot: () => import('./slot.js').then((m) => m.mountSlot), roulette: () => import('./roulette.js').then((m) => m.mountRoulette) };
 
@@ -153,6 +154,8 @@ function casinoScreen({ document, client, kind, follow = null }) {
     typeof D.getAnimations === 'function' && typeof W.CSSAnimation !== 'undefined' ? D.getAnimations().filter((a) => a instanceof W.CSSAnimation) : [];
   const W = globalThis;
   const body = () => D.getElementById('body');
+  // The Wallet changed outside the game (a credit, another tab): the player's screen reads its balance again from the Core.
+  const walletSync = createWalletSync({ pull: () => client.casinoState(), game: () => (screen === 'slot' || screen === 'roulette' ? game : null) });
   const redrawHeader = () => host.dispatchEvent(new globalThis.CustomEvent('jdm:host-redraw', { bubbles: true, composed: true }));
 
   function fail(e, retry) {
@@ -356,6 +359,8 @@ function casinoScreen({ document, client, kind, follow = null }) {
     headLabel: () => (screen === 'follow' ? `Spectateur · ${followed?.name ?? ''}` : screen === 'live' ? 'Parties en direct' : GAME[screen].label),
     headIcon: () => (screen === 'live' || screen === 'follow' ? ICON.eye : (GAME[screen]?.icon ?? null)),
     busy: () => screen !== 'follow' && !!game?.busy?.(),
+    /** The extension read the session again (panel): its Wallet, for the open game (wallet-sync.js). */
+    onWallet: (wallet) => void walletSync(wallet),
     start() {
       const back = kind === 'live' && !follow ? remembered() : null;
       if (follow || back) void followPlayer(follow ?? back);

@@ -281,3 +281,30 @@
 .roulette-body.is-watch .wkick, .roulette-body.is-watch .wover .banner, .roulette-body.is-watch #skip { display: none; }
 .wside .wcard { width: 100%; max-width: 176px; }
 .wside .wc { height: auto; text-align: left; }
+
+/* --- Mise rapide (19/11) : une languette en miroir de « Paiements », sur le bord droit du plateau ; son panneau pose
+   une chance simple et lance en un clic (le même tapis, le même tirage du Core, les mêmes paiements). */
+.plateau { margin-right: 6px; }
+.notch.qk { left: auto; right: -15px; padding-left: 0; padding-right: 7px; }
+.notch.qk::before { right: auto; left: 0; border-radius: 3px 8px 8px 3px; background: linear-gradient(270deg, #8a5d14, #f2cf72 40%, #c8922a 70%, #7a5210); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 2px 0 2px rgba(0, 0, 0, 0.25); }
+.notch.qk span { transform: none; }
+.notch.qk:hover, .notch.qk:focus-visible { transform: translateX(1px); }
+.roulette-body.is-watch .notch.qk, .roulette-body.is-spect .notch.qk { display: none; }
+.pop.leftof { width: min(218px, calc(100cqw - 34px)); }
+.qk__amts { display: flex; flex-wrap: wrap; gap: 4px; margin: 7px 0; }
+.qk__a { flex: 1 0 auto; min-width: 30px; height: 24px; padding: 0 6px; border-radius: 12px; font: 900 10.5px/24px var(--font); color: var(--dim); background: var(--well); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.18); transition: filter 0.14s; }
+.qk__a.on { color: #2a1600; background: linear-gradient(180deg, #ffe69a, var(--gold)); box-shadow: 0 0 8px rgba(255, 201, 77, 0.45); }
+.qk__a.allin { letter-spacing: 0.04em; }
+.qk__bets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.qk__b { height: 32px; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 9px; border-radius: 9px; font: 900 12px/1 var(--font); color: #fff; background: linear-gradient(180deg, #3d2c5c, #241838); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 0 0 1px rgba(242, 198, 95, 0.3), 0 3px 6px rgba(0, 0, 0, 0.45); transition: filter 0.14s, transform 0.14s var(--pop); }
+.qk__b small { font: 900 10px/1 var(--font); color: var(--gold); white-space: nowrap; }
+.qk__b.q-red { background: linear-gradient(180deg, #e23a50, #8e0c22); }
+.qk__b.q-black { background: linear-gradient(180deg, #44444f, #121218); }
+.qk__b:hover:not(:disabled), .qk__a:hover:not(:disabled) { filter: brightness(1.16); }
+.qk__b:active:not(:disabled) { transform: scale(0.96); }
+.qk__re { width: 100%; height: 28px; margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 5px; border-radius: 9px; font: 900 11.5px/1 var(--font); color: #e4edff; background: linear-gradient(180deg, #2f63bd, #173a7a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+.qk__re svg { width: 13px; height: 13px; }
+.qk__re b { color: #fff; }
+.qk__a:disabled, .qk__b:disabled, .qk__re:disabled { opacity: 0.38; filter: grayscale(0.6); cursor: default; }
+.qk .pop__n { display: block; margin-top: 6px; }
+.qk .pop__n .np { display: inline-grid; vertical-align: -4px; margin: 0 1px; }

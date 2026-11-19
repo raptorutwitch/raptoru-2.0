@@ -97,6 +97,7 @@ export function mountSlot(D, ctx) {
   const s = P.get();
   Audio.setEnabled(s.sound);
   let balance = casino.me?.balance ?? null;
+  let serial = 0; // bumped each time this screen takes a balance from the Core itself, or starts a spin (wallet-sync.js)
   const limits = () => casino.limits;
   const MIN = () => limits().slot_min_bet;
   const CAP = () => limits().slot_max_bet;
@@ -349,6 +350,7 @@ export function mountSlot(D, ctx) {
     if (why) return stopAuto(), Frame.toast(why, true), update();
     if (balance !== null && s.bet > balance) return stopAuto(), Frame.toast(REFUSE.balance(s.bet), true), update();
     busy = true;
+    serial += 1;
     update();
     plateLocked = false;
     lastWin = '';
@@ -371,6 +373,7 @@ export function mountSlot(D, ctx) {
     }
     if (destroyed) return;
     balance = res.balance;
+    serial += 1;
     await playRound(res.round, { fast: s.fast });
     busy = false;
     update();
@@ -934,9 +937,11 @@ export function mountSlot(D, ctx) {
 
   /** The Core's state again (availability, limits, balance): after a refusal, and on every opening. */
   async function reload() {
+    serial += 1;
     try {
       casino = await client.casinoState();
       balance = casino.me?.balance ?? balance;
+      serial += 1;
       cfg = slotConfig(casino.tables.slot);
     } catch {
       /* the last one */
@@ -967,6 +972,14 @@ export function mountSlot(D, ctx) {
 
   return {
     busy: () => busy || !!present,
+    /** The Wallet follow-up (wallet-sync.js): the balance this screen plays with, and the Core's newer state. */
+    wallet: () => ({ balance, serial, busy: busy || !!present || !!ctx.follow }),
+    sync(state) {
+      if (destroyed || busy || present || ctx.follow) return;
+      casino = state;
+      balance = state.me?.balance ?? balance;
+      update();
+    },
     /** Spectator: the followed player's next stage, or a snapshot to rejoin them (casino.js). */
     apply,
     skip: watchSkip,

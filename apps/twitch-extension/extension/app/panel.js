@@ -517,6 +517,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     // An error screen shown before this state must be redrawn away: never absorbed by a live update.
     const hadLoadError = !!loadError;
     state = next;
+    // A module-host screen that plays with the viewer's balance (the casino) follows every Wallet read, even when the
+    // header alone changes: its playable balance is then read again from the Core (never taken from this session).
+    if (hostView && hostViewId === openModule && !hostDef) hostView.onWallet?.(next?.wallet ?? null);
     emoteAccess.onState(previous, next, { render });
     loadError = null;
     retryLoad = null;

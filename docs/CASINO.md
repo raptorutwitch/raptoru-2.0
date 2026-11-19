@@ -18,6 +18,13 @@ les flashs, déformations et zooms intermittents (§ 6, « Stabilité de l'affic
   (§ 10) ;
 - la correction du zoom bref à l'ouverture de Mini-jeux (§ 6, « Stabilité de l'affichage »).
 
+**Livré le 19/11 (deuxième lot), à valider par Antoni :**
+
+- le symbole BONUS dessiné en coffre au trésor doré (§ 2) ;
+- le solde de jeu qui suit le Wallet sans recharger l'extension (§ 4, « Solde ») ;
+- les mises rapides de la roulette (§ 4) ;
+- le prototype du blackjack multijoueur, hors extension et hors Core (§ 12).
+
 L'inventaire des symboles pour les émotes est dans [CASINO_SYMBOLES.md](CASINO_SYMBOLES.md).
 
 Sources de conception : les prototypes validés `prototypes/casino-v7` et `casino-v8`, hors dépôt. Pour les règles,
@@ -47,7 +54,9 @@ Ce sont les règles validées en V7, avec le Coffre de la V8 :
   - cerise 40 / 115 / 350 ;
   - citron 35 / 115 / 350 ;
   - raisin 65 / 225 / 700.
-- **BONUS :** 3, 4 ou 5 BONUS n'importe où ouvrent le Coffre. Ils ne paient rien directement.
+- **BONUS :** 3, 4 ou 5 BONUS n'importe où ouvrent le Coffre. Ils ne paient rien directement. Depuis le 19/11, le
+  symbole est un coffre au trésor doré avec son étiquette BONUS (dessin SVG original, `symbols.js`). Seul le dessin
+  change : probabilités, gains et déclenchement sont les mêmes.
 - **RTP :** le jeu de base rend 73,12 % (énumération exacte) et le Coffre 21,96 %, soit **95,08 %** au total.
 - **Mise :** de 20 à 10 000 Jetons. Les deux bornes sont réglables, sans jamais dépasser 10 000.
 
@@ -101,6 +110,27 @@ C'est le modèle recommandé par l'étude. Le test `casino-engine.test.ts` le pr
     qu'elle accepte n'est donc pas refusé par le Core, sauf si le solde change entre-temps. La règle est écrite dans
     « Paiements ».
 - **RTP :** 97,30 % pour chaque pari, ALL-IN compris.
+- **Mise rapide (19/11) :** une languette « Mise rapide » sur le bord droit du plateau, en miroir de « Paiements ».
+  - **Ce qu'elle ouvre :** un petit panneau avec le montant (les jetons du tapis, le jeton libre et ALL-IN), six chances
+    simples (Rouge, Noir, Pair, Impair, 1–18, 19–36) et « Rejouer ».
+  - **En un clic :** le pari est posé sur la vraie case du tapis et lancé.
+  - **Ce qui ne change pas :** le tirage du Core, les paiements (×2, le 0 fait perdre), les limites et l'ALL-IN sont
+    exactement ceux du tapis.
+  - **Le tapis :** il remplace les jetons déjà posés (le panneau le dit), et le tapis classique reste entier.
+  - **Indisponible :** un pari impossible (solde, plafond) est grisé, avec la raison en info-bulle. La languette est
+    masquée pour un spectateur et en Replay.
+- **Solde (19/11) :** la machine et la roulette gardent le solde avec lequel elles jouent.
+  - **Le problème corrigé :** un crédit extérieur, par exemple +1 000 000 après un ALL-IN perdu, changeait l'en-tête
+    mais pas ce solde. La roulette refusait alors de rejouer.
+  - **Maintenant :** à chaque relecture de session, l'extension transmet le Wallet au jeu ouvert
+    (`panel.js` → `casino.js` → `wallet-sync.js`).
+  - **La source :** si le Wallet diffère, le jeu relit son état **au Core**. Le nombre de la session n'est jamais utilisé
+    comme solde jouable.
+  - **Les réponses périmées :** une relecture n'est appliquée que si elle est la plus récente, et si le jeu n'a pas reçu
+    entre-temps un solde du Core (un tirage, un refus).
+  - **Pendant un tirage :** rien n'est appliqué. La fin du tour relit la session, ce qui converge vers le bon solde.
+  - **Plusieurs onglets :** c'est le même mécanisme (relecture toutes les 5 s quand le panneau est ouvert).
+  - **Tests :** `apps/twitch-extension/test/casino-wallet-sync.test.js`, avec 8 cas de course.
 - **Jetons à l'écran :** ils s'adaptent au solde. Le jeton libre est un multiple de 20. Le jeton ALL engage ce qui reste
   misable, arrondi au multiple de 20 inférieur : tout le solde si l'exception est active, sinon dans la limite du
   plafond par tour.
@@ -353,3 +383,16 @@ ne joue jamais à la place d'un viewer.
 | Les annonces   | `casino.announce = 0`                                                                                     |
 | Core           | Redéployer le Core précédent : il ignore `casino_rounds` et `casino_feed` (migrations additives)          |
 | Extension      | Ne pas publier, ou version précédente dans la console Twitch : sans Casino, les tuiles n'apparaissent pas |
+
+## 12. Blackjack multijoueur — prototype (19/11)
+
+**Hors extension, hors Core :** `prototypes/casino-blackjack` (local, comme les autres prototypes). Pour le lancer :
+`node start.mjs`. Il contient :
+
+- les règles précises ;
+- la grille exacte des paris sur la banque, et l'analyse anti-comptage qui a fixé la coupe à 25 % et le Blackjack à
+  ×19 ;
+- les choix multijoueur et timers ;
+- ce qui reste à faire au Core.
+
+Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas validé le prototype.

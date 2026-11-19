@@ -121,8 +121,8 @@ export function pop(anchor, inner, { side = 'below', key } = {}) {
   const ab = anchor.getBoundingClientRect();
   const w = el.offsetWidth;
   const h = el.offsetHeight;
-  if (side === 'right') {
-    el.style.left = `${Math.min(hb.width - w - 4, ab.right - hb.left + 6)}px`;
+  if (side === 'right' || side === 'leftof') {
+    el.style.left = side === 'right' ? `${Math.min(hb.width - w - 4, ab.right - hb.left + 6)}px` : `${Math.max(4, ab.left - hb.left - w - 6)}px`;
     el.style.top = `${Math.max(4, Math.min(hb.height - h - 4, ab.top - hb.top + ab.height / 2 - h / 2))}px`;
   } else {
     el.style.left = `${Math.max(4, Math.min(hb.width - w - 4, ab.left - hb.left + ab.width / 2 - w / 2))}px`;

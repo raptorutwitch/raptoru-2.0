@@ -16,6 +16,8 @@ const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style
   <linearGradient id="gPink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe0fb"/><stop offset=".5" stop-color="#ff4fd8"/><stop offset="1" stop-color="#8a0068"/></linearGradient>
   <linearGradient id="gBar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3160"/><stop offset="1" stop-color="#120d24"/></linearGradient>
   <linearGradient id="gWild" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b86"/><stop offset=".5" stop-color="#ff2f55"/><stop offset="1" stop-color="#8a0f30"/></linearGradient>
+  <linearGradient id="gWood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c0662f"/><stop offset=".55" stop-color="#7d3414"/><stop offset="1" stop-color="#461806"/></linearGradient>
+  <radialGradient id="gGlow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffd24a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd24a" stop-opacity="0"/></radialGradient>
   <radialGradient id="gCoin" cx="40%" cy="35%" r="75%"><stop offset="0" stop-color="#fff3bd"/><stop offset=".55" stop-color="#ffb400"/><stop offset="1" stop-color="#8f4f00"/></radialGradient>
 </defs>
 <symbol id="s-cerise" viewBox="0 0 64 64">
@@ -64,11 +66,18 @@ const SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style
   <path d="M50 10l1.6 4 4 1.6-4 1.6-1.6 4-1.6-4-4-1.6 4-1.6z" fill="#fff6c9"/>
 </symbol>
 <symbol id="s-bonus" viewBox="0 0 64 64">
-  <circle cx="32" cy="32" r="29" fill="#2a0b4a" stroke="#c46bff" stroke-width="2.4"/>
-  <circle cx="32" cy="32" r="24.5" fill="url(#gCoin)" stroke="#7a3f00" stroke-width="1.2"/>
-  <circle cx="32" cy="32" r="19.5" fill="none" stroke="#fff3c4" stroke-width="1.3" opacity=".8"/>
-  <path d="M32 14l2.4 5 5.4.6-4 3.7 1.1 5.4L32 26l-4.9 2.7 1.1-5.4-4-3.7 5.4-.6z" fill="#fff8d8"/>
-  <text x="32" y="42.5" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="10.5" fill="#5a2a00" letter-spacing=".4">BONUS</text>
+  <ellipse cx="32" cy="22" rx="30" ry="17" fill="url(#gGlow)"/>
+  <path d="M7 26C7 11 17 5 32 5s25 6 25 21z" fill="url(#gWood)" stroke="#4a1704" stroke-width="1.3"/>
+  <path d="M12 26c0-10 3.4-16.3 6.8-18.4l4.6-1.3C20 9.6 17.6 16 17.6 26zM52 26c0-10-3.4-16.3-6.8-18.4l-4.6-1.3C44 9.6 46.4 16 46.4 26z" fill="url(#gGold)" stroke="#7a4300" stroke-width=".8"/>
+  <path d="M15.5 16c3.5-6 9-8.4 15-8.8" stroke="#ffe7a8" stroke-width="1.7" stroke-linecap="round" fill="none" opacity=".7"/>
+  <rect x="6" y="28" width="52" height="22" rx="3" fill="url(#gWood)" stroke="#4a1704" stroke-width="1.3"/>
+  <rect x="12" y="28" width="5.6" height="22" fill="url(#gGold)"/><rect x="46.4" y="28" width="5.6" height="22" fill="url(#gGold)"/>
+  <rect x="3.5" y="24" width="57" height="6" rx="2.4" fill="url(#gGold)" stroke="#7a4300" stroke-width="1"/>
+  <path d="M26 23h12v11c0 3-2.7 5.2-6 6.4-3.3-1.2-6-3.4-6-6.4z" fill="url(#gGold)" stroke="#7a4300" stroke-width="1.1"/>
+  <circle cx="32" cy="29.4" r="2.2" fill="#3a1500"/><path d="M30.9 30.4h2.2l.6 4.8h-3.4z" fill="#3a1500"/>
+  <rect x="7" y="45.5" width="50" height="13" rx="3.5" fill="#2a0b4a" stroke="#c46bff" stroke-width="1.7"/>
+  <text x="32" y="55.6" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="10.5" fill="url(#gGold)" letter-spacing=".5">BONUS</text>
+  <path d="M55 2.5l1.4 3.4 3.4 1.4-3.4 1.4L55 12.1l-1.4-3.4-3.4-1.4 3.4-1.4zM8 6l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z" fill="#fff6c9"/>
 </symbol>
 </svg>`;
 

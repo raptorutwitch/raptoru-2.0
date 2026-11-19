@@ -66,6 +66,7 @@ const TEMPLATE = `
   <div class="rt" id="game">
     <div class="plateau">
       <button type="button" class="notch" data-act="pay" title="Paiements et règles" aria-label="Paiements et règles"><span>Paiements</span></button>
+      <button type="button" class="notch qk" data-act="quick" title="Mise rapide\u00a0: une chance simple, posée et lancée en un clic" aria-label="Mise rapide"><span>Mise rapide</span></button>
       <div class="mat" id="mat" data-play>${matHTML()}</div>
       <div class="closed" id="closed" role="status" hidden></div>
     </div>
@@ -159,6 +160,7 @@ export function mountRoulette(D, ctx) {
   const save = () => !ctx.follow && P.save();
 
   let busy = false;
+  let serial = 0; // bumped each time this screen takes a balance from the Core itself, or starts a spin (wallet-sync.js)
   let spect = null; // a Replay (own round), or the followed player: { follow: true, round }
   const name = ctx.follow?.name ?? 'le joueur'; // spectator: the followed player
   let draftSig = null; // the bets the spectators last saw (player)
@@ -222,6 +224,53 @@ export function mountRoulette(D, ctx) {
   /** ALL-IN: what remains legally playable now (balance, per-spin maximum, chips already down), in whole steps. */
   const allIn = () =>
     Chips.allIn({ balance: bal(), staked: total(), maxTotal: AICAP() ? Infinity : MAXT(), min: STEP(), step: STEP() });
+
+  // --- Mise rapide: an even-money bet in two touches — the same mat spot, the same spin, the same Core, the same pays
+  const QUICK = [['red', 'Rouge'], ['black', 'Noir'], ['even', 'Pair'], ['odd', 'Impair'], ['low', '1–18'], ['high', '19–36']];
+  /** The quick bet's amount: the chip chosen (the same as the mat's), ALL-IN = the whole playable balance. */
+  const quickAmount = () =>
+    s.chip === ALLIN ? Chips.allIn({ balance: bal(), staked: 0, maxTotal: AICAP() ? Infinity : MAXT(), min: STEP(), step: STEP() }).amount : s.chip;
+  function quickHTML() {
+    const lock = busy || !!spect || !!closedReason() || balance === null;
+    const amt = quickAmount();
+    const amounts = [...chipSet, ...(s.custom && !chipSet.includes(s.custom) ? [s.custom] : [])]
+      .map((v) => `<button type="button" class="qk__a${v === s.chip ? ' on' : ''}" data-qamt="${v}" role="radio" aria-checked="${v === s.chip}"${lock || v > bal() ? ' disabled' : ''}>${chipText(v)}</button>`)
+      .join('');
+    const ai = `<button type="button" class="qk__a allin${s.chip === ALLIN ? ' on' : ''}" data-qamt="allin" role="radio" aria-checked="${s.chip === ALLIN}"${lock || !whole() ? ' disabled' : ''}>ALL-IN</button>`;
+    const bets = QUICK.map(([id, l]) => {
+      const no = !amt ? 'balance' : whyNot({ [id]: amt });
+      const tip = no ? REFUSE[no]() : `${l}\u00a0: ${fmt(amt)} Jetons, rapporte ${fmt(amt * 2)}`;
+      return `<button type="button" class="qk__b q-${id}" data-qbet="${id}"${lock || no ? ' disabled' : ''} title="${esc(tip)}"><span>${l}</span><small>${amt ? compact(amt) : '—'}</small></button>`;
+    }).join('');
+    const re = s.last && !whyNot(s.last);
+    return `<b class="pop__t">Mise rapide <small>posée et lancée en un clic</small></b>
+      <div class="qk__amts" role="radiogroup" aria-label="Mise">${amounts}${ai}</div>
+      <div class="qk__bets">${bets}</div>
+      <button type="button" class="qk__re" data-qre${lock || !re ? ' disabled' : ''}>${ICON.rebet.replace('<svg', '<svg class="line"')}Rejouer${s.last ? ` <b>${fmt(T.total(s.last))}</b>` : ''}</button>
+      <p class="pop__n">Payé ×2, mise comprise. Le <span class="np c-green">0</span> fait perdre.${total() ? ' Remplace les jetons du tapis.' : ''}</p>`;
+  }
+  const paintQuick = () => {
+    const el = $('#qk');
+    if (el) el.innerHTML = quickHTML();
+  };
+  /** One even chance, the chosen amount, launched now (the mat then shows it like any other bet). */
+  async function quick(id) {
+    if (busy || spect) return;
+    const amt = quickAmount();
+    if (!amt) return refuse('balance');
+    const bets = { [id]: amt };
+    const no = whyNot(bets);
+    if (no) return refuse(no);
+    Frame.closePop();
+    await closeStage();
+    if (busy || spect || destroyed) return;
+    settled();
+    s.bets = bets;
+    undoStack.length = 0;
+    save();
+    update();
+    void spin();
+  }
 
   /** The mat showed the last result: back to a neutral mat at the first gesture. */
   function settled() {
@@ -502,6 +551,7 @@ export function mountRoulette(D, ctx) {
     D.querySelectorAll('[data-act="sound"]').forEach((b) => b.setAttribute('aria-pressed', String(s.sound)));
     if (!busy) paintBoard();
     paintClosed();
+    paintQuick();
     if (spect?.follow) {
       spinBtn.className = 'launch watch';
       spinBtn.innerHTML = `<span class="t">En direct</span>${t ? `<small><i></i>${fmt(t)}</small>` : ''}`;
@@ -621,6 +671,7 @@ export function mountRoulette(D, ctx) {
     const no = whyNot(bets);
     if (no) return refuse(no);
     busy = true;
+    serial += 1;
     skipAsked = false;
     settled();
     update();
@@ -649,6 +700,7 @@ export function mountRoulette(D, ctx) {
     }
     if (destroyed) return;
     balance = res.balance;
+    serial += 1;
     const r = asResult(res.round);
     // The wheel starts on the player's screen: the result goes to the spectators now (never before this screen has it),
     // who play the same flight on the same timeline: the ball lands at the same moment for everyone.
@@ -951,6 +1003,13 @@ export function mountRoulette(D, ctx) {
   on(mat, 'pointerleave', () => hover(null));
 
   on(body, 'click', (e) => {
+    const q = !spect?.follow && e.target.closest('[data-qbet], [data-qamt], [data-qre]');
+    if (q) {
+      if (q.disabled) return;
+      if (q.dataset.qbet) return void quick(q.dataset.qbet);
+      if (q.hasAttribute('data-qre')) return void (Frame.closePop(), closeStage().then(rebetAndSpin));
+      return setChip(q.dataset.qamt === 'allin' ? ALLIN : Number(q.dataset.qamt));
+    }
     const c = !spect?.follow && e.target.closest('[data-chip]');
     if (c) return void (!c.disabled && setChip(Number(c.dataset.chip)));
     const ai = !spect?.follow && e.target.closest('[data-allin]');
@@ -974,6 +1033,7 @@ export function mountRoulette(D, ctx) {
       return;
     }
     if (k === 'pay') Frame.pop(b, payHTML(), { side: 'right' });
+    else if (k === 'quick') Frame.pop(b, `<div class="qk" id="qk">${quickHTML()}</div>`, { side: 'leftof' });
     else if (k === 'hist') openHistory();
     else if (k === 'sound') {
       s.sound = !s.sound;
@@ -1023,9 +1083,11 @@ export function mountRoulette(D, ctx) {
 
   /** The Core's state again (availability, limits, balance): after a refusal. */
   async function reload() {
+    serial += 1;
     try {
       casino = await client.casinoState();
       balance = casino.me?.balance ?? balance;
+      serial += 1;
     } catch {
       /* the last one */
     }
@@ -1042,6 +1104,14 @@ export function mountRoulette(D, ctx) {
 
   return {
     busy: () => busy || (!stagew.hidden && !spect),
+    /** The Wallet follow-up (wallet-sync.js): the balance this screen plays with, and the Core's newer state. */
+    wallet: () => ({ balance, serial, busy: busy || !!spect || !!ctx.follow }),
+    sync(state) {
+      if (destroyed || busy || spect || ctx.follow) return;
+      casino = state;
+      balance = state.me?.balance ?? balance;
+      update();
+    },
     /** Spectator: the followed player's next stage, or a snapshot to rejoin them (casino.js). */
     apply,
     skip: (ev) => ev.data?.at === 'result' && wheel.isRunning() && wheel.skip(),
