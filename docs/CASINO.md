@@ -408,3 +408,14 @@ Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas valid
 - **Paris banque :** les retours sont affichés en Jetons entiers.
 - **Décisions :** 30 s, puis 20 s, puis 12 s pour un absent ; le temps n'apparaît qu'à 8 s.
 - **Historique :** les résultats des dernières manches.
+
+**V3 (19/11) :**
+
+- **Présentation :** les 7 scores de la banque sont en arc autour d'elle, et les mises se posent directement sur sa
+  place.
+- **Historique :** une languette ouvre un panneau latéral, avec des manches repliées.
+- **Pendant la manche :** un badge BUSTED, et des jetons qui volent au règlement.
+- **Places :** on choisit la sienne dans le salon.
+- **Grille :** en cotes « paye a:b » à dénominateur 1, 2 ou 5 (17 et 18 à 11:2, 19 à 6:1, 20 à 4:1, 21 à 12:1,
+  Blackjack à 18:1, Bust à 12:5). Le RTP passe à 89,9-95,8 %, contre 90,2-96,2 % avant. Détail et avant/après dans le
+  README du prototype.
