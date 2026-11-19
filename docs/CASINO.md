@@ -396,3 +396,15 @@ ne joue jamais à la place d'un viewer.
 - ce qui reste à faire au Core.
 
 Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas validé le prototype.
+
+**V2 (19/11, après le premier essai d'Antoni) :** l'ergonomie est refaite, les règles et la grille ne changent pas.
+
+- **Table :** elle s'adapte au nombre de joueurs, chaque place a un avatar et un pseudo, et le tour du joueur se voit
+  d'un coup d'œil.
+- **Mises :** elles se posent comme à la roulette (jeton, puis cercle ou case banque), puis PRÊT les verrouille. Le
+  délai de secours de 45 s ne démarre qu'au premier PRÊT et rend les mises non confirmées.
+- **Économie :** mise dès 100, sans maximum fixe ; c'est le gain potentiel (doubles et splits compris) qui est borné
+  avant la donne.
+- **Paris banque :** les retours sont affichés en Jetons entiers.
+- **Décisions :** 30 s, puis 20 s, puis 12 s pour un absent ; le temps n'apparaît qu'à 8 s.
+- **Historique :** les résultats des dernières manches.
