@@ -780,6 +780,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       CASINO,
       CASINO_FEED,
       CASINO_SKIP,
+      CASINO_V1,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(
