@@ -419,3 +419,19 @@ Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas valid
 - **Grille :** en cotes « paye a:b » à dénominateur 1, 2 ou 5 (17 et 18 à 11:2, 19 à 6:1, 20 à 4:1, 21 à 12:1,
   Blackjack à 18:1, Bust à 12:5). Le RTP passe à 89,9-95,8 %, contre 90,2-96,2 % avant. Détail et avant/après dans le
   README du prototype.
+
+**Finition visuelle (20/11) :** même jeu, mêmes règles, même grille.
+
+- **Tapis :** la zone de jeu est un arc de feutre plus chaud, avec un seul liseré d'or et des coins plus sombres (plus
+  d'ovale complet). Les cartes de la banque sont centrées et éclairées ; le sabot n'est plus qu'une indication dans un
+  coin, détaillée au survol.
+- **Paris banque :** 7 cases identiques, droites, opaques et symétriques, avec « B » pour Blackjack (nom complet au
+  survol). Le titre suit la courbe.
+- **Places :** chaque place est posée sur la courbe du feutre. Le joueur actif reçoit une étiquette verte « JOUE » ; une
+  main busted est désaturée, et ses cartes et sa mise restent lisibles. Aux résultats, l'étiquette de mise affiche le
+  net.
+- **Boutons :** une couleur et une icône par action ; l'état désactivé est éteint.
+- **Historique :** pour chaque joueur, mise principale et mains, chaque pari banque (misé, retour) et le net.
+- **Bulle :** la mise, le gain net et le retour total.
+- **Contrôles :** 81 contrôles Chromium, dont un audit de chevauchements et de textes coupés à 565 × 376 et en panneau
+  318.
