@@ -392,3 +392,34 @@ Mandat d'Antoni du 20/11. **Aucun niveau ni aucune XP de viewer n'a été modifi
 - Procédure proposée, non écrite : une normalisation version 2 par le chemin gardé du 15/11 (exposant 1, cible = max,
   qui rend le niveau WizeBot exact). Simulation, phrase tapée, audit par compte, annulable ; aucune annonce ; badges
   donnés sans annonce. **Décision d'Antoni.**
+
+## 15. Restauration des niveaux WizeBot, exécutée en Production (20/11/2026, GO d'Antoni)
+
+- **Sauvegarde Coolify juste avant** : 20/11 à 12:57:26 UTC, `success`, 12 301 274 octets.
+- **Méthode** : l'ajustement administratif existant (Studio › Progression, mode « ajouter »), un par compte.
+  - Chaque clé est unique (`wb-restore-v1-<id>`, `curve-restore-v1-<id>`) : un rejeu ne change rien.
+  - Il prend le même verrou que les gains de présence et de chat, et ajoute l'XP sans rien remplacer.
+  - Mouvement `grant` : jamais annoncé, jamais dans Semaine / Mois.
+  - Aucun redéploiement.
+- **Montants**, calculés sur des données figées, jamais sur l'XP du moment :
+  - WizeBot (363 comptes) : + 1 000 × (niveau WizeBot − niveau normalisé) ;
+  - sans WizeBot (69 comptes) : + 1 000 × (niveau affiché le 15/11 − 1) − XP du 15/11, d'après le journal de
+    normalisation.
+- **Résultat** :
+  - 432 comptes restaurés, 3 441 niveaux rendus (3 307 WizeBot, 134 courbe) ; niveau max 60 → 141 ;
+  - 727 comptes inchangés à l'XP près ; aucun compte écarté (aucun mouvement administratif, tous rattachés par
+    identifiant) ;
+  - aucun niveau baissé, aucun badge perdu ; Semaine, Mois et compteurs identiques ;
+  - 0 événement de Level Up, 0 message de chat ;
+  - seconde exécution complète : 432 rejeux, 0 changement.
+- **Badges** :
+  - **0 badge nouveau** : les 85 viewers au palier 25 ou plus avaient déjà, avec les anciens paliers tous les
+    10 niveaux, tous les badges de leur nouveau niveau ;
+  - le plus haut (141) a les badges 1 à 6 ;
+  - les badges 12 et suivants (niveaux 300 et plus) n'ont pas encore de visuel ; ils s'importeront par le numéro.
+- **Retour arrière** : seulement le fichier d'annulation de l'opération (mode « retirer », mêmes montants), dans le
+  dossier privé `_migration-exports\levels-2026-11-20\restauration\`.
+- **Ne plus jamais utiliser « Annuler la normalisation »** : elle recompterait l'import WizeBot en plus de la
+  restauration.
+- **Reste à coder** : un historique WizeBot rattaché plus tard reçoit encore le niveau compressé (paramètres v1
+  figés). Il faut une normalisation v2 (exposant 1) et désactiver l'annulation v1.
