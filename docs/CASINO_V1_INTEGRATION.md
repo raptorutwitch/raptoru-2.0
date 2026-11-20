@@ -53,9 +53,16 @@ plafond de gain par tour : ×1 000 (mise max 1 000, gain max 1 000 000, réglage
   « database already up to date » (les 4 migrations Casino avaient été appliquées par la commande post-déploiement du
   premier essai), journaux sans erreur, `/health` et `/ready` 200. Bot inchangé (`2c04a5db`, actif).
 - **Studio 0.1.41** publié (Latest), workflow `44689178516`.
-- **Casino toujours fermé en Production** : `CASINO_EXTENSION = off`, `casino.open = 0`. Rien n'est visible des viewers.
+- **Casino fermé** après ce déploiement (`CASINO_EXTENSION = off`, `casino.open = 0`), puis, le 20/11 (GO d'Antoni) :
+  inventaire `298e940290ab` validé (PR #93), ZIP `2e2eaf3ae34a` construit et téléversé en Hosted Test,
+  `CASINO_EXTENSION=on`, `casino.open=1`, les 4 jeux ouverts. Le Core refuse hors live (`stream_offline`). Inchangé
+  après le déploiement des correctifs niveaux (Core `1f05b97c`).
 
 ## Restent (gestes d'Antoni)
+
+**État au 20/11** : points 1 à 4 faits (Studio 0.1.42 installé). L'extension publique (`be1744e75f63`) ne contient pas
+le Casino ; la suite (essai hors live en Hosted Test, choix de `CASINO_EXTENSION` avant la publication, revue Twitch,
+essai réel en live) est dans [REPRISE.md](REPRISE.md) § 5.4. Liste d'origine :
 
 1. Installer Studio 0.1.41 (« Rechercher une mise à jour »).
 2. Extension : relire `apps/twitch-extension/release-inventory/INVENTAIRE-298e940290ab.md`, y écrire la ligne
