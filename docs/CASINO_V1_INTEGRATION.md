@@ -6,15 +6,15 @@ extérieure). Branche locale `feat/casino` (worktree `agent`).
 
 ## État
 
-| Étape | État | Preuve |
-| --- | --- | --- |
-| Archive des prototypes | fait | `Documents\Sauvegarde Raptoru 2.06-11-20-prototypes-casino` (593 fichiers, manifeste SHA-256 vérifié par extraction) |
-| Prototypes versionnés | fait | `b04b39d1` (`prototypes/casino-blackjack`, `prototypes/casino-emotes`, lançables seuls) |
-| Core : blackjack + machine à émotes | fait | `d9d42006` ; `test/casino-blackjack.test.ts` (12) |
-| Core : concurrence sur vrai Postgres (deux Cores) | fait | `ac28bbad` ; `test/casino-blackjack.integration.test.ts` (3) |
-| Extension : blackjack, machine à émotes, spectateurs, annonce | fait | `298e9402` ; contrôle Chromium sur le vrai Core local (ci-dessous) |
-| Studio : réglages, ouverture par jeu, tables | fait | `298e9402` (`pages/casino.ts`, relais `/api/casino/bj`) |
-| Docs, CI, PR, déploiement | en cours | § Livraison |
+| Étape                                                         | État     | Preuve                                                                                                               |
+| ------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| Archive des prototypes                                        | fait     | `Documents\Sauvegarde Raptoru 2.06-11-20-prototypes-casino` (593 fichiers, manifeste SHA-256 vérifié par extraction) |
+| Prototypes versionnés                                         | fait     | `b04b39d1` (`prototypes/casino-blackjack`, `prototypes/casino-emotes`, lançables seuls)                              |
+| Core : blackjack + machine à émotes                           | fait     | `d9d42006` ; `test/casino-blackjack.test.ts` (12)                                                                    |
+| Core : concurrence sur vrai Postgres (deux Cores)             | fait     | `ac28bbad` ; `test/casino-blackjack.integration.test.ts` (3)                                                         |
+| Extension : blackjack, machine à émotes, spectateurs, annonce | fait     | `298e9402` ; contrôle Chromium sur le vrai Core local (ci-dessous)                                                   |
+| Studio : réglages, ouverture par jeu, tables                  | fait     | `298e9402` (`pages/casino.ts`, relais `/api/casino/bj`)                                                              |
+| Docs, CI, PR, déploiement                                     | en cours | § Livraison                                                                                                          |
 
 ## Décisions techniques
 
