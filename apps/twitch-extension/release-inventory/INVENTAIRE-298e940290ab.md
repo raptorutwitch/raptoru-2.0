@@ -23,3 +23,5 @@ pas (le reste de l'extension fonctionne).
 - 850187ae 2026-11-18 feat(casino): spectators follow a player, live — never a result ahead of the player's screen
 - 22310e85 2026-11-17 fix(casino): security review — shares only while the casino plays, the wallet cap before the draw, strict ids
 - 91839307 2026-11-17 feat(casino): extension, Studio and Lab — the slot machine with the Coffre, the roulette, spectators
+
+Validé par Antoni : oui
