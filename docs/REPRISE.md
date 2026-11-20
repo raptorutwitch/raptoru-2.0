@@ -49,7 +49,9 @@ expressions et la latence ; essayer « Envoyer une vraie annonce test » ; tél�
 § 15 ; choisir les directions du casino (prototypes/casino-directions, hors dépôt).
 **Casino V1 — mandat d'Antoni du 20/11 (« CASINO V1 : intégration finale et mise en Production », GO pour déployer si
 tous les contrôles passent).** Les 4 jeux (machine à fruits + Coffre, machine à émotes, roulette, blackjack multijoueur)
-sont validés par Antoni et intégrés Core + extension + Studio sur `feat/casino`. Journal, statut exact de livraison et
+sont validés par Antoni et intégrés (PR #90, `main` `18a4b048`). **Core `18a4b048` DÉPLOYÉ le 20/11** (migrations
+Casino appliquées après sauvegarde de 06:28 UTC), bot inchangé `2c04a5db`, **Studio 0.1.41 publié** (à installer).
+Casino FERMÉ en Production (`CASINO_EXTENSION=off`, `casino.open=0`) jusqu'à la publication de l'extension. Journal, statut exact de livraison et
 étapes restantes : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) (à lire en premier pour ce chantier) ; module :
 [CASINO.md](CASINO.md) § 12 (blackjack) et § 13 (machine à émotes). L'extension publique ne montre le Casino qu'après
 la publication de l'extension (inventaire + Hosted Test + revue Twitch : gestes d'Antoni).
