@@ -9,14 +9,28 @@ import * as Frame from './frame.js';
 import { createFollower } from './follow.js';
 import { createWalletSync } from './wallet-sync.js';
 
-const LOADERS = { slot: () => import('./slot.js').then((m) => m.mountSlot), roulette: () => import('./roulette.js').then((m) => m.mountRoulette) };
+const LOADERS = {
+  slot: () => import('./slot.js').then((m) => m.mountSlot),
+  roulette: () => import('./roulette.js').then((m) => m.mountRoulette),
+  book: () => import('./book.js').then((m) => m.mountBook),
+  blackjack: () => import('./blackjack.js').then((m) => m.mountBlackjack),
+};
 
 const { ICON, esc, fmt, compact } = Frame;
 // The shared frame, then each game's own sheet (as the validated prototype loaded them: their class names never meet).
-const SHEETS = { base: 'modules/casino/casino.css', slot: 'modules/casino/slot.css', roulette: 'modules/casino/roulette.css' };
+const SHEETS = {
+  base: 'modules/casino/casino.css',
+  slot: 'modules/casino/slot.css',
+  roulette: 'modules/casino/roulette.css',
+  // The emote machine is the fruit machine's cabinet + its own sheet (as in its validated prototype).
+  book: ['modules/casino/slot.css', 'modules/casino/book.css'],
+  blackjack: 'modules/casino/blackjack.css',
+};
 const GAME = {
   slot: { label: 'Machine à sous', icon: ICON.slots },
   roulette: { label: 'Roulette', icon: ICON.roulette },
+  book: { label: 'Machine à émotes', icon: ICON.slots },
+  blackjack: { label: 'Blackjack', icon: ICON.cards },
 };
 
 /** Loads a sheet into the shadow root (shown once loaded: no unstyled flash); resolves at once if already there. */
@@ -77,7 +91,7 @@ function constructed(D, href) {
 }
 /** Only the open game's sheet stays in the shadow root (the shared one always, first). */
 async function useSheets(D, game) {
-  const hrefs = [SHEETS.base, ...(game in SHEETS && game !== 'base' ? [SHEETS[game]] : [])];
+  const hrefs = [SHEETS.base, ...(game in SHEETS && game !== 'base' ? [SHEETS[game]].flat() : [])];
   if (CAN_ADOPT) {
     const list = await Promise.all(hrefs.map((h) => constructed(D, h)));
     if (list.every(Boolean)) {
@@ -155,7 +169,7 @@ function casinoScreen({ document, client, kind, follow = null }) {
   const W = globalThis;
   const body = () => D.getElementById('body');
   // The Wallet changed outside the game (a credit, another tab): the player's screen reads its balance again from the Core.
-  const walletSync = createWalletSync({ pull: () => client.casinoState(), game: () => (screen === 'slot' || screen === 'roulette' ? game : null) });
+  const walletSync = createWalletSync({ pull: () => client.casinoState(), game: () => (screen in LOADERS && screen !== 'live' && screen !== 'follow' ? game : null) });
   const redrawHeader = () => host.dispatchEvent(new globalThis.CustomEvent('jdm:host-redraw', { bubbles: true, composed: true }));
 
   function fail(e, retry) {
@@ -403,6 +417,10 @@ const TILE_ICON = {
   slot: '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="10" width="36" height="28" rx="6" fill="#2a1a46" stroke="#f2c65f" stroke-width="2.5"/><path d="M18 10v28M30 10v28" stroke="#f2c65f" stroke-width="2"/><text x="12" y="29" font-size="10" font-weight="900" fill="#ff5c7a" font-family="Arial Black,Impact,sans-serif">7</text><text x="22" y="29" font-size="10" font-weight="900" fill="#ff5c7a" font-family="Arial Black,Impact,sans-serif">7</text><text x="34" y="29" font-size="10" font-weight="900" fill="#ff5c7a" font-family="Arial Black,Impact,sans-serif">7</text></svg>',
   roulette: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="17" fill="#3a1020" stroke="#f2c65f" stroke-width="2.5"/><circle cx="24" cy="24" r="11" fill="none" stroke="#f2c65f" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="24" cy="24" r="4" fill="#f2c65f"/><circle cx="34" cy="16" r="2.6" fill="#fff"/></svg>',
 };
+TILE_ICON.book =
+  '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="10" width="36" height="28" rx="6" fill="#2a1a46" stroke="#f2c65f" stroke-width="2.5"/><circle cx="24" cy="24" r="8" fill="#ffd36b" stroke="#7a3f00" stroke-width="1.5"/><path d="M24 18.5l1.6 3.2 3.5.5-2.5 2.4.6 3.5-3.2-1.7-3.2 1.7.6-3.5-2.5-2.4 3.5-.5z" fill="#fff8d8"/></svg>';
+TILE_ICON.blackjack =
+  '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="9" y="11" width="18" height="26" rx="3" fill="#fff" stroke="#f2c65f" stroke-width="2" transform="rotate(-10 18 24)"/><rect x="21" y="11" width="18" height="26" rx="3" fill="#fff" stroke="#f2c65f" stroke-width="2" transform="rotate(8 30 24)"/><text x="27" y="30" font-size="11" font-weight="900" fill="#d3203b" font-family="Arial Black,Impact,sans-serif" transform="rotate(8 30 24)">A</text></svg>';
 const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 /**
@@ -512,6 +530,30 @@ export function casinoGames({ document, client }) {
       async peek() {
         const st = await state();
         return closedLine(st, 'roulette') ?? `Jusqu’à ${fmt(st.limits.roulette_max_total)} par tour`;
+      },
+    },
+    {
+      id: 'casino_book',
+      label: 'Machine à émotes',
+      tagline: 'Les émotes de la chaîne, le BONUS Qilby et 10 tours gratuits.',
+      icon: TILE_ICON.book,
+      available,
+      create: () => casinoScreen({ document, client, kind: 'book' }),
+      async peek() {
+        const st = await state();
+        return closedLine(st, 'book') ?? `Mise ${fmt(st.limits.book_min_bet)} à ${fmt(st.limits.book_max_bet)}`;
+      },
+    },
+    {
+      id: 'casino_blackjack',
+      label: 'Blackjack',
+      tagline: 'Jusqu’à 10 joueurs par table contre la banque.',
+      icon: TILE_ICON.blackjack,
+      available,
+      create: () => casinoScreen({ document, client, kind: 'blackjack' }),
+      async peek() {
+        const st = await state();
+        return closedLine(st, 'blackjack') ?? `Mise dès ${fmt(st.limits.bj_main_min)}`;
       },
     },
     {

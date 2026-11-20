@@ -13,7 +13,12 @@ import type { ModuleSettings } from '../module-settings/service.js';
 import { liveChannelSession } from '../stream/channel-sessions.js';
 import { activeSession } from '../stream/stream-sessions.js';
 import {
+  FREE_GAMES as BOOK_FREE_GAMES,
+  LINES as BOOK_LINES,
+  PAYS as BOOK_PAYS,
   playRound as playBook,
+  SCATTER_PAYS as BOOK_SCATTER,
+  STRIPS as BOOK_STRIPS,
   type BookRound,
   type BookTest,
 } from './book.js';
@@ -943,7 +948,13 @@ export class CasinoService {
 
   /** The game the player has open (slot | roulette | null): spectators follow them from one to the other. */
   async presence(channelId: string, viewer: CasinoViewer, game: unknown) {
-    if (game !== null && game !== 'slot' && game !== 'roulette')
+    if (
+      game !== null &&
+      game !== 'slot' &&
+      game !== 'roulette' &&
+      game !== 'book' &&
+      game !== 'blackjack'
+    )
       throw new CasinoError(400, 'invalid_game');
     return this.feed.presence(channelId, viewer, game);
   }
@@ -1051,18 +1062,25 @@ export class CasinoService {
     if (viewer) {
       const w = await this.economy.balances(q, channelId, viewer.id);
       // A Coffre this viewer has not finished watching (closed tab, other device): resumed where it was.
-      const unfinished = (
-        await q.query<RoundRow>(
-          `select * from casino_rounds where channel_id = $1 and viewer_id = $2 and finished_at is null and created_at > $3
-             and ((game = 'slot' and outcome->'coffre' <> 'null'::jsonb) or (game = 'book' and outcome->'feature' <> 'null'::jsonb))
-           order by created_at desc limit 1`,
-          [
-            channelId,
-            viewer.id,
-            new Date(this.clock.now().getTime() - 86_400_000),
-          ],
-        )
-      )[0];
+      // A bonus this viewer has not finished watching (closed tab, other device): resumed where it was — the Coffre on
+      // the fruit machine, the free spins on the emote machine (each screen takes its own).
+      const unfinishedOf = async (game: 'slot' | 'book') =>
+        (
+          await q.query<RoundRow>(
+            `select * from casino_rounds where channel_id = $1 and viewer_id = $2 and game = $3 and finished_at is null
+               and created_at > $4 and outcome->$5 <> 'null'::jsonb
+             order by created_at desc limit 1`,
+            [
+              channelId,
+              viewer.id,
+              game,
+              new Date(this.clock.now().getTime() - 86_400_000),
+              game === 'slot' ? 'coffre' : 'feature',
+            ],
+          )
+        )[0];
+      const unfinished = await unfinishedOf('slot');
+      const unfinishedBook = await unfinishedOf('book');
       const lastShare = (
         await q.query<{ at: Date | null }>(
           'select max(shared_at) as at from casino_rounds where channel_id = $1 and viewer_id = $2',
@@ -1072,6 +1090,7 @@ export class CasinoService {
       me = {
         balance: w.tokens,
         resume: unfinished ? this.ownView(unfinished) : null,
+        resume_book: unfinishedBook ? this.ownView(unfinishedBook) : null,
         share_ready_in_s: lastShare
           ? Math.max(
               0,
@@ -1090,6 +1109,14 @@ export class CasinoService {
       tables: {
         slot: slotTable(),
         roulette: { order: ORDER, spots: Object.keys(SPOTS) },
+        // The emote machine (display only: the Core draws every round).
+        book: {
+          strips: BOOK_STRIPS,
+          lines: BOOK_LINES,
+          pays: BOOK_PAYS,
+          scatter_pays: BOOK_SCATTER,
+          free_games: BOOK_FREE_GAMES,
+        },
       },
       players: live.players,
       live_cursor: live.cursor,

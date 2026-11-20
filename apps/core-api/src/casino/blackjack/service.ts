@@ -135,6 +135,8 @@ export class BlackjackService {
         players: r.state.seats.filter(Boolean).length,
         seats: TABLE_SEATS,
         taken: r.state.seats.map(Boolean),
+        // Who sits there (public at the table): a spectator following a player opens that player's table.
+        users: r.state.seats.filter(Boolean).map((x) => x!.user),
         phase: r.state.phase,
         round: r.state.round,
       })),
@@ -667,14 +669,12 @@ export class BlackjackService {
       no: r.table_no,
       phase: r.state.phase,
       round: r.state.round,
-      players: r.state.seats
-        .filter(Boolean)
-        .map((s) => ({
-          id: s!.user,
-          name: s!.name,
-          in_round: s!.inRound,
-          status: s!.status,
-        })),
+      players: r.state.seats.filter(Boolean).map((s) => ({
+        id: s!.user,
+        name: s!.name,
+        in_round: s!.inRound,
+        status: s!.status,
+      })),
       next_at: r.state.next ? new Date(r.state.next.at).toISOString() : null,
       created_at: r.created_at.toISOString(),
     }));

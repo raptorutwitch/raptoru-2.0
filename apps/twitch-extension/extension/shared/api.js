@@ -549,7 +549,7 @@ export function createClient({
     casinoHistory: (game, limit = 50) =>
       call('GET', `/casino/history?limit=${limit}${game ? `&game=${encodeURIComponent(game)}` : ''}`),
     casinoSpin: (game, payload, idempotencyKey) =>
-      call('POST', `/casino/${game === 'roulette' ? 'roulette' : 'slot'}/spin`, { body: payload, idempotencyKey }),
+      call('POST', `/casino/${game === 'roulette' ? 'roulette' : game === 'book' ? 'book' : 'slot'}/spin`, { body: payload, idempotencyKey }),
     /** The player's screen showed a stage of their round (result | coffre | step | end): the spectators get it now. */
     // stage 'skip' + of (result | coffre | step | end): the player pressed Passer on that stage's animation.
     casinoProgress: (roundId, stage, step = null, fast = false, of = null) =>
@@ -561,6 +561,18 @@ export function createClient({
       call('GET', `/casino/watch?player=${encodeURIComponent(player)}&after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
     casinoLive: (after, waitMs = 20_000) => call('GET', `/casino/live?after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
     casinoShare: (roundId) => call('POST', '/casino/share', { body: { round_id: roundId } }),
+    /** Blackjack (docs/CASINO.md § 12): the lobby, a table's redacted state (long-poll; spectators too), the intents. The
+     *  Core decides everything: the identity is the token's, an action carries its turn token and its own id. */
+    bjTables: () => call('GET', '/casino/bj/tables'),
+    bjState: (table, after = -1, waitMs = 0) =>
+      call('GET', `/casino/bj/state?table=${encodeURIComponent(table)}&after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
+    bjJoin: (tableId = null, seat = null) => call('POST', '/casino/bj/join', { body: { ...(tableId ? { table_id: tableId } : {}), ...(seat === null ? {} : { seat }) } }),
+    bjBet: (main, side, ready) => call('POST', '/casino/bj/bet', { body: { main, side, ready } }),
+    bjClear: () => call('POST', '/casino/bj/clear', { body: {} }),
+    bjAct: (type, token, actionId) => call('POST', '/casino/bj/act', { body: { type, token, action_id: actionId } }),
+    bjInsure: (body) => call('POST', '/casino/bj/insure', { body }),
+    bjLeave: () => call('POST', '/casino/bj/leave', { body: {} }),
+    bjAnnounce: (tableId) => call('POST', '/casino/bj/announce', { body: { table_id: tableId } }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
     /** « Mes commandes »: the commands the streamer let this viewer edit (identity from the token), and the change of one

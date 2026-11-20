@@ -98,6 +98,15 @@ const LIMITS: [key: string, label: string][] = [
     'casino.roulette_all_in_max_win',
     'Roulette : gain max. d’un ALL-IN (0 = off)',
   ],
+  ['casino.book_min_bet', 'Machine à émotes : mise minimum'],
+  ['casino.book_max_bet', 'Machine à émotes : mise maximum'],
+  ['casino.bj_main_min', 'Blackjack : mise principale minimum'],
+  ['casino.bj_max_win', 'Blackjack : gain net possible max. par manche'],
+  ['casino.bj_side_max_return', 'Blackjack : retour max. des paris banque'],
+  [
+    'casino.bj_announce_gap_s',
+    'Blackjack : délai entre deux annonces de table',
+  ],
   ['casino.share_cooldown_s', 'Partage : délai par viewer'],
   ['casino.announce_min_x', 'Annonce automatique dès'],
 ];
@@ -144,7 +153,31 @@ function rtpAt(x: number) {
   }
   return 95.1;
 }
-const gameLabel = (g: string) => (g === 'slot' ? 'Machine' : 'Roulette');
+const GAME_LABEL: Record<string, string> = {
+  slot: 'Machine',
+  roulette: 'Roulette',
+  book: 'Machine à émotes',
+  blackjack: 'Blackjack',
+};
+const gameLabel = (g: string) => GAME_LABEL[g] ?? g;
+/** A blackjack table, as the Core's admin route shows it (read only). */
+interface BjTable {
+  id: string;
+  no: number;
+  phase: string;
+  round: number;
+  players: { id: string; name: string; in_round: boolean; status: string }[];
+  next_at: string | null;
+}
+const BJ_PHASE: Record<string, string> = {
+  betting: 'mises',
+  shuffle: 'nouveau sabot',
+  dealing: 'distribution',
+  insurance: 'assurance',
+  players: 'décisions',
+  dealer: 'la banque joue',
+  settled: 'résultats',
+};
 const outcome = (r: Round) =>
   r.game === 'roulette'
     ? `le ${r.number}`
@@ -153,7 +186,7 @@ const outcome = (r: Round) =>
       : '';
 
 export function mountCasinoPage(root: HTMLElement) {
-  const p = page(root, { title: 'Casino · machine à sous et roulette' });
+  const p = page(root, { title: 'Casino · machines, roulette et blackjack' });
   p.body.innerHTML = `<div class="cz-adm">
     <div class="cz-adm__main">
       <div class="mg-bar"><span class="d-faint">Chances et gains sont fixes (Coffre compris).</span><span class="d-sp"></span><span data-z="apply"></span></div>
@@ -161,6 +194,7 @@ export function mountCasinoPage(root: HTMLElement) {
       <section class="mg-t"><header><h2>Limites économiques</h2></header><div class="mg-set" data-z="limits"></div><p class="d-faint cz-adm__rtp" data-z="rtp"></p></section>
       <section class="mg-t"><header><h2>Aujourd’hui</h2></header><div data-z="day"></div></section>
       <section class="mg-t"><header><h2>Refus et transactions bloquées</h2></header><div data-z="refusals"></div></section>
+      <section class="mg-t"><header><h2>Tables de blackjack</h2></header><div data-z="bj"></div></section>
     </div>
     <aside class="mg-feed">
       <h2 class="d-lb">En cours</h2>
@@ -224,7 +258,7 @@ export function mountCasinoPage(root: HTMLElement) {
     };
     patch(
       z('games'),
-      `${row('casino.slot_open', 'Machine à sous')}${row('casino.roulette_open', 'Roulette')}${row('casino.announce', 'Annonces automatiques (GRAND, gros gains)')}
+      `${row('casino.slot_open', 'Machine à sous')}${row('casino.roulette_open', 'Roulette')}${row('casino.book_open', 'Machine à émotes')}${row('casino.blackjack_open', 'Blackjack')}${row('casino.announce', 'Annonces automatiques (GRAND, gros gains)')}${row('casino.bj_announce', 'Blackjack : proposer l’annonce d’une nouvelle table')}
        ${state && !state.production_approved && state.availability.economy === 'canonical' ? '<p class="d-note">Ce Core n’autorise pas le Casino : variable CASINO_EXTENSION à off (le seul verrou qui ne se lève pas d’ici).</p>' : ''}`,
     );
   }
@@ -314,7 +348,28 @@ export function mountCasinoPage(root: HTMLElement) {
     );
   }
 
+  let bj: BjTable[] | null = null;
+  function paintBj() {
+    patch(
+      z('bj'),
+      !bj
+        ? '<p class="d-faint">Tables illisibles pour le moment.</p>'
+        : !bj.length
+          ? '<p class="d-faint">Aucune table : la première s’ouvre toute seule quand un viewer s’assoit.</p>'
+          : `<table class="cz-adm__t"><thead><tr><th>Table</th><th>Phase</th><th>Manche</th><th>Joueurs</th></tr></thead><tbody>${bj
+              .map(
+                (t) =>
+                  `<tr><td>n°${t.no}</td><td>${esc(BJ_PHASE[t.phase] ?? t.phase)}</td><td>${fmt(t.round)}</td><td>${t.players.length ? t.players.map((x) => `${esc(x.name)}${x.in_round ? '' : ' <span class="d-faint">(attend)</span>'}${x.status === 'left' ? ' <span class="d-faint">(parti)</span>' : ''}`).join(', ') : '<span class="d-faint">vide</span>'}</td></tr>`,
+              )
+              .join('')}</tbody></table>`,
+    );
+  }
+
   async function read() {
+    void tryGetJson<{ tables: BjTable[] }>('/api/casino/bj').then((r) => {
+      bj = r?.tables ?? null;
+      paintBj();
+    });
     const [st, set] = await Promise.all([
       getJson<CasinoAdmin>('/api/casino/state').catch((e: unknown) => {
         readError = errText(e);

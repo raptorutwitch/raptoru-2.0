@@ -129,8 +129,16 @@ function forceCoffre(k: number, grand: boolean) {
   seed = seededRng(sd);
 }
 
+// Casino V1: the blackjack tables' pending steps, as the Core's ticker runs them (public-frontier.ts).
+setInterval(
+  () =>
+    void core.blackjack
+      .tick()
+      .catch((e: Error) => console.error('[casino-demo] blackjack', e.message)),
+  250,
+);
 const call = internalLabCall([
-  ...casinoRoutes(casino),
+  ...casinoRoutes(casino, core.blackjack),
   ...modulesRoutes(core.modules),
 ]);
 

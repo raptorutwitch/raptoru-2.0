@@ -30,6 +30,9 @@ export function casinoRelay(core: LabCoreCall, channelId = LAB_CHANNEL_ID) {
     try {
       if (req.method === 'GET' && p === '/state')
         return (reply(200, await core(`${base}/state`)), true);
+      // The blackjack tables (read only: the Core runs them).
+      if (req.method === 'GET' && p === '/bj')
+        return (reply(200, await core(`${base}/bj`)), true);
       const m = ROUND.exec(p);
       if (req.method === 'GET' && m)
         return (reply(200, await core(`${base}/rounds/${m[1]}`)), true);

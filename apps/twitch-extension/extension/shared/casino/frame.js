@@ -55,6 +55,7 @@ export const ICON = {
   eye: '<svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   slots: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M9 5v14M15 5v14"/></svg>',
   roulette: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5V9M12 15v5.5M3.5 12H9M15 12h5.5"/></svg>',
+  cards: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="11" height="15" rx="2"/><path d="M8 4.5 17.5 3a2 2 0 0 1 2.3 1.7l1.6 10.6a2 2 0 0 1-1.7 2.3l-4.2.6"/></svg>',
   coin: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" class="c"/><path d="M12 8.6 15.4 12 12 15.4 8.6 12z" class="d"/></svg>',
 };
 
