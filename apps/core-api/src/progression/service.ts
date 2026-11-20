@@ -80,14 +80,13 @@ export function normalizeWizebotLevel(
   );
 }
 
-/** The XP an attached WizeBot history starts with: its level on the curve, normalized once Level Up V2 is active. */
+/**
+ * The XP an attached WizeBot history brings: its WizeBot level read on the current scale, NEVER compressed (since the
+ * 20/11 restoration, docs/LEVEL_UP_V2.md § 15; the v1 normalization only stays as the audit of the accounts of 15/11).
+ * The import adds it to the XP earned since, in one movement keyed import:<source>:<id> (never twice for a viewer).
+ */
 export function importXp(level: number, rules: ProgressionRules) {
-  return xpForLevel(
-    rules.wizebot_normalization
-      ? normalizeWizebotLevel(level, rules.wizebot_normalization)
-      : level,
-    rules,
-  );
+  return xpForLevel(level, rules);
 }
 
 type Settings = { enabled: boolean; rules: ProgressionRules };
@@ -1862,6 +1861,9 @@ export class ProgressionService {
   async revertImport(channelId: string, source: 'wizebot') {
     return this.db.tx(async (q) => {
       const s = await this.settings(channelId, q);
+      // After Level Up V2 the imports carry the restored WizeBot levels (20/11): removing them would wipe that history.
+      if (s.rules.wizebot_normalization)
+        throw new ProgressionError(410, 'import_revert_disabled');
       const gone = await q.query(
         `delete from progression_ledger where channel_id = $1 and kind = 'import' and key like $2 returning twitch_user_id`,
         [channelId, `import:${source}:%`],
@@ -2797,11 +2799,6 @@ export class ProgressionService {
   }
 
   /**
-   * Undo Level Up V2 (its own audit kept, marked reverted): the normalization movements go, every XP is recomputed
-   * from the ledger, the previous curve comes back. Refused once a history was attached after the activation (its XP
-   * was counted on the new scale).
-   */
-  /**
    * Studio's « Envoyer une vraie annonce test » (Level Up V2, a typed confirmation): ONE real Twitch announcement
    * « [TEST] … » made with the channel's own text and colour, on the same outbox as a real one (LeCroupier_ sends it;
    * « Sortie chat réelle » and the bot's rate limit apply), its sound on the OBS source FIRST and the announcement
@@ -2867,45 +2864,14 @@ export class ProgressionService {
     });
   }
 
-  async revertLevelV2(channelId: string) {
-    return this.db.tx(async (q) => {
-      const s = await this.settings(channelId, q);
-      const n = s.rules.wizebot_normalization;
-      if (!n) throw new ProgressionError(409, 'not_applied');
-      const since = await q.query(
-        `select 1 from progression_ledger where channel_id = $1 and kind = 'import' and created_at > $2 limit 1`,
-        [channelId, n.applied_at],
-      );
-      if (since.length)
-        throw new ProgressionError(409, 'imports_since_activation');
-      const gone = await q.query(
-        `delete from progression_ledger where channel_id = $1 and kind = 'normalization' and key like $2 returning 1`,
-        [channelId, `normalize:v${n.version}:%`],
-      );
-      await q.query(
-        `update progression_accounts a set xp = coalesce((select greatest(0, sum(amount)) from progression_ledger l
-           where l.channel_id = a.channel_id and l.twitch_user_id = a.twitch_user_id), 0)
-         where a.channel_id = $1`,
-        [channelId],
-      );
-      const rules: ProgressionRules = {
-        ...s.rules,
-        ...n.previous_curve,
-        ...(n.previous_rates ?? {}),
-        level_model: 'curve',
-        wizebot_normalization: null,
-      };
-      await q.query(
-        `update progression_settings set rules = $2, updated_at = $3 where channel_id = $1`,
-        [channelId, JSON.stringify(rules), this.now()],
-      );
-      await q.query(
-        `update progression_normalizations set reverted_at = $3 where channel_id = $1 and version = $2 and reverted_at is null`,
-        [channelId, n.version, this.now()],
-      );
-      await this.relevelAll(q, channelId, rules);
-      return { reverted: true, movements: gone.length };
-    });
+  /**
+   * The undo of Level Up V2 is DISABLED for good (20/11): after the WizeBot restoration (Studio adjustments
+   * wb-restore-v1-* / curve-restore-v1-*), recomputing the XP from the ledger without the normalization movements
+   * would count the historical progression twice. The audit rows stay; the restoration has its own rollback
+   * (docs/LEVEL_UP_V2.md § 15).
+   */
+  async revertLevelV2(): Promise<never> {
+    throw new ProgressionError(410, 'level_v2_revert_disabled');
   }
 
   // --- public reads (raptoru.fr) ---------------------------------------------------------------------------------------

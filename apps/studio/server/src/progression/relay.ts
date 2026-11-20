@@ -94,11 +94,9 @@ export class ProgressionRelay {
         'POST /api/progression/adjust': '/adjust',
         'POST /api/progression/import/attach': '/import/attach',
         'POST /api/progression/import/resolve': '/import/resolve',
-        'POST /api/progression/import/revert': '/import/revert',
         // Level Up V2: the guarded activation / undo (the typed confirmation travels to Core, which checks it).
         'POST /api/progression/level-v2/simulate': '/level-v2/simulate',
         'POST /api/progression/level-v2/activate': '/level-v2/activate',
-        'POST /api/progression/level-v2/revert': '/level-v2/revert',
         // « Tester un Level Up » › a real « [TEST] » line in the chat (typed confirmation, checked by Core).
         'POST /api/progression/level-v2/test-chat': '/level-v2/test-chat',
         // The rankings' pseudos from Twitch, by the stable id (the Core also runs it daily).

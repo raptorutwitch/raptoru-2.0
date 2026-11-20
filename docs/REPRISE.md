@@ -56,6 +56,11 @@ Casino FERMÉ en Production (`CASINO_EXTENSION=off`, `casino.open=0`) jusqu'à l
 [CASINO.md](CASINO.md) § 12 (blackjack) et § 13 (machine à émotes). L'extension publique ne montre le Casino qu'après
 la publication de l'extension (inventaire + Hosted Test + revue Twitch : gestes d'Antoni).
 
+**Niveaux (20/11, mandat d'Antoni)** : texte des Level Up vérifié (relu à chaque annonce) ; message récompensé au plus
+toutes les **120 s** (avant 60 s) et badges sub tous les **25 niveaux** (n → 25 × n), appliqués en Production via Studio ;
+aucune XP ni aucun niveau modifié. Étude de restauration WizeBot en lecture seule (363 viewers monteraient, max 60 → 141) :
+rapport privé `Documents\Raptoru\_migration-exports\levels-2026-11-20\`, synthèse LEVEL_UP_V2.md § 14. Restauration
+EXÉCUTÉE le 20/11 (432 comptes, § 15) ; annulations désactivées et rattachements futurs non compressés (§ 15).
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
 le checkout principal (c'est le dossier de données du Studio installé). Travailler dans

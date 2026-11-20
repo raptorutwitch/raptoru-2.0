@@ -325,3 +325,106 @@ Studio › Progression › Level Up › **Tester un Level Up** : un test adminis
 - Aucun message ni annonce envoyé par le déploiement ; aucune XP, aucun niveau, aucun badge modifié.
 - Retour arrière : Core `f04b41a2` et bot `13969a8c` (`--rollback`) ; la migration reste (additive) ; sauvegarde de
   14:02 UTC.
+
+## 14. Équilibrage, badges tous les 25 niveaux, étude de restauration WizeBot (20/11/2026)
+
+Mandat d'Antoni du 20/11. **Aucun niveau ni aucune XP de viewer n'a été modifié.**
+
+**Texte des annonces.**
+
+- La chaîne a été vérifiée : Studio, puis le Core (`progression_settings`), relu **à chaque annonce** (aucun cache),
+  puis la file des commandes, puis LeCroupier\_.
+- Texte enregistré en Production le 20/11 : « 🚀 Level UP - {liste} ! », identique octet pour octet.
+- Les 12 dernières annonces réelles (jusqu'au 19/11, 22:55 UTC) portaient l'ancien texte : aucun Level Up n'a eu lieu
+  depuis l'enregistrement.
+- La « fois précédente » est expliquée. Le texte du premier V2 (« @{pseudo} vient d'atteindre le niveau {niveau} ! »,
+  sans `{liste}`) était lu comme le texte par défaut, sans le dire.
+- Studio refuse maintenant un texte sans `{liste}`, et le Core relit le texte modifié dès l'annonce suivante (test
+  « a text changed in Studio is the NEXT announcement's text »).
+- Correctif Studio : une saisie non enregistrée n'est plus écrasée par le rafraîchissement de 6 s quand on clique
+  ailleurs avant « Enregistrer ».
+- Variable disponible : `{liste}`, qui devient « Pseudo [Titre] (niveau) · … », sans @.
+
+**Équilibrage (appliqué en Production le 20/11).** Seul le délai entre deux messages récompensés change : 60 s → **120 s**.
+
+- Inchangé : 1 000 XP par niveau, 1 XP par minute de présence, 3 XP par message, anti-farm.
+- Données réelles de la semaine : les messages font 23 % de l'XP. Le plus bavard gagne environ 49 XP/h par le chat,
+  contre 60 XP/h par la présence.
+- Le plafond d'un farmeur (un message valable par délai) passe de 240 à **150 XP/h**, soit 2,5 fois un lurker.
+
+| XP par heure (modèle calé sur la semaine) | 60 s | 120 s | Heures par niveau (120 s) |
+| ----------------------------------------- | ---- | ----- | ------------------------- |
+| Lurker                                    | 60   | 60    | 16,7                      |
+| Occasionnel (5 msg/h)                     | 68   | 68    | 14,8                      |
+| Régulier (20 msg/h)                       | 88   | 84    | 11,9                      |
+| Très actif (45 msg/h)                     | 113  | 101   | 9,9                       |
+| Spammeur (300 msg/h)                      | 195  | 137   | 7,3                       |
+| Plafond théorique                         | 240  | 150   | 6,7                       |
+
+**Badges tous les 25 niveaux (appliqué en Production le 20/11).**
+
+- Les 11 badges sub gardent leur image et leur identifiant. Le badge n passe au palier **25 × n** (25, 50, …, 275).
+- Aucun badge n'a été retiré ni donné : les détenteurs sont inchangés (159, 64, 29, 11, 5, 1).
+- Un badge déjà débloqué reste (règle du § 6) : un viewer de niveau 12 garde le badge n°1, maintenant nommé « Niveau 25 ».
+- L'importeur de Studio suit la même règle, sans dernier palier : badge 41 → niveau 1 025, ordre par numéro.
+- Paliers testés aux frontières 24/25, 49/50, 74/75, 99/100, 999/1 000/1 025. Un ajustement administratif donne les
+  badges sans aucune annonce.
+- Retour arrière : les valeurs d'avant sont gardées dans le dossier privé
+  `Documents\Raptoru\_migration-exports\levels-2026-11-20\`.
+
+**Étude de restauration WizeBot (lecture seule).**
+
+- Rapport complet et CSV viewer par viewer : dossier privé ci-dessus (données de viewers, jamais dans le dépôt).
+- Le basculement des niveaux date du 29/10 : niveau WizeBot importé tel quel, aucune présence ni aucun message compté
+  avant. La perte ressentie vient de la compression du 15/11 (135 → 50).
+- Formule de restauration : XP = 1 000 × (niveau WizeBot − 1) + XP gagnée depuis le 29/10. L'écart vaut exactement les
+  niveaux retirés par la compression, sans double comptage.
+- La simulation est recoupée avec le journal d'audit du Core : identique pour les 926 comptes audités, et aucun
+  mouvement administratif sur ces comptes.
+- Chiffres :
+  - 1 159 comptes, dont 930 avec WizeBot ;
+  - **363 viewers monteraient**, de +3 niveaux en médiane, 12 d'au moins 50, au plus +85 ;
+  - niveau max 60 → 141 ;
+  - 888 correspondances certaines (identifiant Twitch), 42 probables (pseudo identique au 29/10), 0 ambiguë ;
+  - 454 historiques WizeBot > 1 jamais rattachés, sans compte actif correspondant ;
+  - 69 viewers sans WizeBot ont perdu de 1 à 11 niveaux affichés le 15/11 (changement de courbe), hors du périmètre
+    d'une restauration WizeBot.
+- Procédure proposée, non écrite : une normalisation version 2 par le chemin gardé du 15/11 (exposant 1, cible = max,
+  qui rend le niveau WizeBot exact). Simulation, phrase tapée, audit par compte, annulable ; aucune annonce ; badges
+  donnés sans annonce. **Décision d'Antoni.**
+
+## 15. Restauration des niveaux WizeBot, exécutée en Production (20/11/2026, GO d'Antoni)
+
+- **Sauvegarde Coolify juste avant** : 20/11 à 12:57:26 UTC, `success`, 12 301 274 octets.
+- **Méthode** : l'ajustement administratif existant (Studio › Progression, mode « ajouter »), un par compte.
+  - Chaque clé est unique (`wb-restore-v1-<id>`, `curve-restore-v1-<id>`) : un rejeu ne change rien.
+  - Il prend le même verrou que les gains de présence et de chat, et ajoute l'XP sans rien remplacer.
+  - Mouvement `grant` : jamais annoncé, jamais dans Semaine / Mois.
+  - Aucun redéploiement.
+- **Montants**, calculés sur des données figées, jamais sur l'XP du moment :
+  - WizeBot (363 comptes) : + 1 000 × (niveau WizeBot − niveau normalisé) ;
+  - sans WizeBot (69 comptes) : + 1 000 × (niveau affiché le 15/11 − 1) − XP du 15/11, d'après le journal de
+    normalisation.
+- **Résultat** :
+  - 432 comptes restaurés, 3 441 niveaux rendus (3 307 WizeBot, 134 courbe) ; niveau max 60 → 141 ;
+  - 727 comptes inchangés à l'XP près ; aucun compte écarté (aucun mouvement administratif, tous rattachés par
+    identifiant) ;
+  - aucun niveau baissé, aucun badge perdu ; Semaine, Mois et compteurs identiques ;
+  - 0 événement de Level Up, 0 message de chat ;
+  - seconde exécution complète : 432 rejeux, 0 changement.
+- **Badges** :
+  - **0 badge nouveau** : les 85 viewers au palier 25 ou plus avaient déjà, avec les anciens paliers tous les
+    10 niveaux, tous les badges de leur nouveau niveau ;
+  - le plus haut (141) a les badges 1 à 6 ;
+  - les badges 12 et suivants (niveaux 300 et plus) n'ont pas encore de visuel ; ils s'importeront par le numéro.
+- **Retour arrière** : seulement le fichier d'annulation de l'opération (mode « retirer », mêmes montants), dans le
+  dossier privé `_migration-exports\levels-2026-11-20\restauration\`.
+- **Annulations désactivées (code, 20/11)** : « Annuler la normalisation » et « Annuler l'import » ont disparu de
+  Studio (et du relais) ; le Core refuse `POST …/level-v2/revert` (410 `level_v2_revert_disabled`) et, une fois
+  Level Up V2 actif, `POST …/import/revert` (410 `import_revert_disabled`). Elles recompteraient ou effaceraient
+  la progression historique. L'audit `progression_normalizations` reste.
+- **Rattachements futurs (code, 20/11)** : un historique WizeBot rattaché après la restauration compte son niveau
+  WizeBot entier (`importXp` = 1 000 × (L − 1), jamais compressé), ajouté à l'XP gagnée entre-temps, en un seul
+  mouvement `import:wizebot:<id>` (rejoué ou second historique : rien de plus). Badges selon le niveau (paliers
+  de 25), jamais d'annonce, périodes intactes. Tests : `progression-level-v2.suite.ts`, bloc « WizeBot histories
+  attached after the 20/11 restoration ».

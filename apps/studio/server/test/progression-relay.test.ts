@@ -104,10 +104,14 @@ describe('relay', () => {
     await call('/api/progression/level-v2');
     await call('/api/progression/levelups');
     await call('/api/progression/level-v2/activate', { confirm: 'x' });
-    await call('/api/progression/level-v2/revert', { confirm: 'x' });
     await call('/api/progression/viewers/42/notify', {
       level_up_notify: 'text',
     });
+    // The two undos are gone since the 20/11 WizeBot restoration: never relayed (the Core refuses them too).
+    expect(
+      (await call('/api/progression/level-v2/revert', { confirm: 'x' })).status,
+    ).toBe(404);
+    expect((await call('/api/progression/import/revert', {})).status).toBe(404);
     expect(calls.map((c) => c[0])).toEqual([
       '/v1/studio/progression/import/status',
       '/v1/studio/progression/import/waiting?q=old',
@@ -118,7 +122,6 @@ describe('relay', () => {
       '/v1/studio/progression/level-v2',
       '/v1/studio/progression/levelups',
       '/v1/studio/progression/level-v2/activate',
-      '/v1/studio/progression/level-v2/revert',
       '/v1/studio/progression/viewers/42/notify',
     ]);
     calls.length = 0;

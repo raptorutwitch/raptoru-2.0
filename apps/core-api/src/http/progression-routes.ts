@@ -321,15 +321,10 @@ export function progressionRoutes(
     },
     {
       method: 'POST',
+      // Disabled for good since the 20/11 restoration: always 410 level_v2_revert_disabled, whatever the body.
       pattern: admin('/level-v2/revert'),
       auth,
-      handle: ({ body }) => {
-        parse(
-          z.strictObject({ confirm: z.literal('ANNULER LA NORMALISATION') }),
-          body,
-        );
-        return mapped(() => svc.revertLevelV2(ch));
-      },
+      handle: () => mapped(() => svc.revertLevelV2()),
     },
     {
       // Studio's « Tester un Level Up » › « Envoyer le test dans le chat » : a real « [TEST] » Twitch announcement,
