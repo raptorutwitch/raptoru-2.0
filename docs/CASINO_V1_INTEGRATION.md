@@ -34,3 +34,33 @@ extérieure). Branche locale `feat/casino` (worktree `agent`).
 - **Machine à émotes** : jeu `book` du service existant, tour entier tiré au spin (comme le Coffre) ; parité exacte avec
   le moteur du prototype (3 000 tours). Mise 20–1 000 par défaut (plafond de gain : § 13 de CASINO.md).
 - **Historique** : une ligne `casino_rounds` (jeu `blackjack`) par joueur et manche réglée.
+
+## RTP et plafond (machine à émotes)
+
+Simulation du moteur du Core, 2 000 000 de tours : RTP 95,4 % (exact : 95,23 %), plus gros tour ×1 569. Effet d'un
+plafond de gain par tour : ×1 000 (mise max 1 000, gain max 1 000 000, réglages par défaut) −0,03 point ; ×500
+−0,36 ; ×100 −7,6. Garder `book_max_bet` ≤ `max_win` ÷ 1 000.
+
+## Livraison (20/11/2026)
+
+- **PR #90** fusionnée : `main` = `18a4b048`. CI verte. Un correctif hors Casino en passant : la liste « À traiter »
+  des points de chaîne regardait 7 jours en arrière avec l'horloge de la base au lieu de celle du Core (un test figé au
+  12/11 échouait seul depuis le 19/11).
+- **Sauvegarde** Production 06:28 UTC (`success`, 12 291 170 octets), hors live.
+- **Core** : 1ᵉʳ déploiement de `18a4b048` (06:29) noté ÉCHEC par le script — la sortie du migrateur n'était pas dans
+  le journal (Coolify l'envoie au journal de débogage) et le ticker du blackjack signalait la table absente pendant
+  quelques minutes. Retour à `2c04a5db` (DÉPLOYÉ), puis `18a4b048` avec `--migrations-approved` : DÉPLOYÉ, migrateur
+  « database already up to date » (les 4 migrations Casino avaient été appliquées par la commande post-déploiement du
+  premier essai), journaux sans erreur, `/health` et `/ready` 200. Bot inchangé (`2c04a5db`, actif).
+- **Studio 0.1.41** publié (Latest), workflow `44689178516`.
+- **Casino toujours fermé en Production** : `CASINO_EXTENSION = off`, `casino.open = 0`. Rien n'est visible des viewers.
+
+## Restent (gestes d'Antoni)
+
+1. Installer Studio 0.1.41 (« Rechercher une mise à jour »).
+2. Extension : relire `apps/twitch-extension/release-inventory/INVENTAIRE-298e940290ab.md`, y écrire la ligne
+   « Validé par Antoni : oui », puis `npm run package:production -w @raptoru/twitch-extension -- --shell v2` (le
+   `--check` est déjà OK : 2 202 fichiers, 16,6 Mo). Ce ZIP remplace celui du 16/11 (`be1744e75f63`, mini-profil).
+3. Variable du Core `CASINO_EXTENSION = testers:<ton id Twitch>` (Coolify, redémarrage du Core), Hosted Test hors live,
+   puis revue Twitch ; après approbation : `CASINO_EXTENSION = on`.
+4. Studio › Casino : choisir le gain max d'un ALL-IN (0 = désactivé), vérifier les limites, puis « Ouvert ».
