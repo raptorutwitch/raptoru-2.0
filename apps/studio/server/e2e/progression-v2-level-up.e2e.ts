@@ -11,7 +11,7 @@ import { expect, test } from '@playwright/test';
 // (unchecked by default, kept by the Core); Kirito_TV (sound turned on) one message short of level 10 sends one chat
 // message → nothing at once (the grouping window, 30 s here); at its end the INVISIBLE OBS source plays ONE sound (it
 // draws nothing) and ONE real Twitch announcement (mode announce, no @) is due exactly 3 s after it on the commands
-// outbox; the badge of level 10 in the inventory; Studio lists it, and lists Kirito_TV among the viewers who turned the
+// outbox; no badge at level 10 (one every 25 levels since 20/11); Studio lists it, and lists Kirito_TV among the viewers who turned the
 // sound on; Studio's test announcement takes the same path. Isolated stack: no Twitch, no real data.
 
 const PORT = Number(process.env.E2E_PORT ?? 4399);
@@ -61,7 +61,7 @@ const labCore = async <T = Record<string, unknown>>(
   return r.json() as Promise<T>;
 };
 
-test('Level Up V2: activated in Studio, the grouped announcement for everyone, the sound only when turned on (nothing drawn), the badge of level 10', async ({
+test('Level Up V2: activated in Studio, the grouped announcement for everyone, the sound only when turned on (nothing drawn), no badge before level 25', async ({
   page,
   browser,
 }) => {
@@ -100,7 +100,7 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
     enabled: true,
   });
 
-  // Two numbered pictures (placeholders) → the badges of levels 10 and 20, with their image.
+  // Two numbered pictures (placeholders) → the badges of levels 25 and 50 (every 25 since 20/11), with their image.
   const folder = mkdtempSync(join(tmpdir(), 'e2e-badges-'));
   writeFileSync(join(folder, '1. Premier.png'), placeholder(0x40));
   writeFileSync(join(folder, '2. Second.png'), placeholder(0xc0));
@@ -108,7 +108,7 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
   await expect(lu).toContainText('Tes badges sub trouvés');
   await lu.getByRole('button', { name: 'Importer 2 badges' }).click();
   await expect(toasts).toContainText('2 badges importés.');
-  await expect(lu).toContainText('Niveau 20');
+  await expect(lu).toContainText('Niveau 50');
 
   // The extension's mini-profile (docs/MINI_PROFIL.md): its level, and the sound switch in its Préférences (⚙) — off by
   // default, kept by the Core.
@@ -220,12 +220,11 @@ test('Level Up V2: activated in Studio, the grouped announcement for everyone, t
       Date.parse(real.playedAt),
   ).toBe(3000);
 
-  // The badge of level 10, given by the level-up, with its image.
+  // Level 10: no level badge yet (the first one, id niveau-10, unlocks at level 25 since 20/11).
   const kirito = await labCore<{
-    inventory: { id: string; image: string | null }[];
+    inventory: { id: string; kind: string }[];
   }>(`/v1/lab/progression/viewers/${KIRITO}`);
-  const badge = kirito.inventory.find((i) => i.id === 'niveau-10');
-  expect(badge?.image).toMatch(/^\/v1\/cosmetics\/images\/[0-9a-f]{64}$/);
+  expect(kirito.inventory.filter((i) => i.kind === 'badge')).toEqual([]);
 
   // The Core: the level-up's sound played with its announcement, its chat line given to LeCroupier_.
   const ev = (
