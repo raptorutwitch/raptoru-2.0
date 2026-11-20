@@ -12,6 +12,17 @@ Aucune archive n'a été créée, copiée ni versionnée. Les ZIP **ne vont jama
 Les 7 statuts à ne pas confondre : sur `main` → construit → publié → déployé → activé → vérifié en test → **testé en
 live**. Seul « validé par Antoni » vaut validation ([PROJECT_STATUS.md](PROJECT_STATUS.md) § 2).
 
+## 0. Relevé du 20/11/2026 (fait foi sur les tableaux plus bas, restés au 10/11)
+
+| Élément               | Valeur                                                                                                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core                  | `1f05b97c` (PR #94), déployé le 20/11 15:47 UTC ; avant : `18a4b048` (Casino V1, 20/11 au matin), `2c04a5db` (16/11)                                                                                                            |
+| Bot                   | `2c04a5db` (16/11)                                                                                                                                                                                                              |
+| Studio                | 0.1.42 publiée (workflow `44767214343`) et installée ; 0.1.41 (Casino, workflow `44689178516`) ; 0.1.40 et 0.1.39 (Roue V3, 16/11)                                                                                              |
+| Extension publique    | `be1744e75f63` (`raptoru-live-PRODUCTION-be1744e75f63-depuis-0bf7907-95-commits-shell-v2.zip`, SHA-256 `1e60fa0b…72375`), prouvée par Antoni le 20/11                                                                           |
+| Extension Hosted Test | `raptoru-live-PRODUCTION-2e2eaf3ae34a-depuis-be1744e-8-commits-shell-v2.zip`, SHA-256 `df177a480eb00bc01901316aa077a9c03893fe3a5f70c9858debadc6f1436868`, inventaire `INVENTAIRE-298e940290ab.md` validé (PR #93) ; non soumise |
+| Emplacement des ZIP   | `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\agent\apps\twitch-extension\release\` (hors Git)                                                                                                                             |
+
 ## 1. Core et bot (Coolify, VPS)
 
 | Date (UTC)      | Core                   | Bot               | Contenu                                                                                                                         | Statut                                                                                                                                              |

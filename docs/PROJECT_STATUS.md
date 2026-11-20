@@ -1,8 +1,8 @@
 # État du projet Raptoru 2.0
 
-**Photographie du 10/11/2026, ~16:00**, complétée le 11/11 par la passe post-live (§ 6, § 12 ; détail :
-[REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md)). **Actualisée le 15/11/2026**
-(clôture) : § 1 « Où on en est » et § 3 (Core, bot, Studio relevés en lecture seule ; le reste du tableau date du 10/11).
+**Checkpoint du 20/11/2026** : § 1, § 3, § 5, § 6, § 7, § 12 et § 13 actualisés (Core, bot, Studio, extension et
+drapeaux relevés en lecture seule le 20/11 ; le reste du § 3 date du 10/11). Photographie précédente (16/11) :
+[archive/PROJECT_STATUS_2026-11-16.md](archive/PROJECT_STATUS_2026-11-16.md).
 
 - Production relevée en lecture seule : `coolify-deploy.mjs status`, `/health`, `/ready`, `build-info.json` du Studio
   installé, `raptoru.fr/api/status`.
@@ -37,33 +37,19 @@ Raptoru 2.0 est la plateforme de stream auto-hébergée du streamer Twitch `rapt
 
 SAMMI est abandonné depuis le 20/10. Le dépôt est **public** depuis le 28/10 ([../SECURITY.md](../SECURITY.md)).
 
-**Où on en est (16/11)** :
+**Où on en est (20/11)** — détail et preuves : [REPRISE.md](REPRISE.md) § 5 :
 
-- Production : Core **`2c04a5db`**, bot **`2c04a5db`** (sains), Studio **0.1.40** publié, **0.1.39** installé ; barème V3
-  actif depuis le 16/11 10:22 UTC.
-- Livré le 16/11 : **Roue du Sub V3** (barème à 4 montants par palier de 3 mois, abonnements offerts exclus, ancienneté
-  confirmée, roue Arcade) — barème V3 activé par Antoni dans Studio 0.1.39 ([SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 13).
-- Livré le 15/11 :
-  - **Level Up V2** (actif ; vraie annonce Twitch groupée, son au choix du viewer) ;
-  - **Commandes Chat** : action son, viewers par ID Twitch ; V2.1 expressions et édition déléguée ; sons immédiats,
-    30–120 ms mesurés en Lab, pas dans le vrai OBS.
-  - Détail : [REPRISE.md](REPRISE.md) § 0, [COMMANDS_V2_STATUS.md](COMMANDS_V2_STATUS.md), [LEVEL_UP_V2.md](LEVEL_UP_V2.md).
-- **Extension complète en attente** : Level Up V2, mini-profil et « Mes commandes modifiables ».
-  - Inventaire `INVENTAIRE-a971386f8c8d.md` (95 commits), **validé par Antoni le 16/11**.
-  - ZIP construit le 16/11 : `raptoru-live-PRODUCTION-be1744e75f63-depuis-0bf7907-95-commits-shell-v2.zip`
-    ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.0). Ni Hosted Test, ni revue Twitch pour cette version.
-  - Méthode de travail : [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md).
-- Relevé du 10/11, conservé ci-dessous pour mémoire : Core `bbce104`, bot `900637f`, Studio 0.1.29.
-- **Music Hub** est livré dans le code et ouvert **aux seuls testeurs** ; son extension (shell v2) est en **Hosted Test**
-  (Antoni).
-- L'extension **publique** reste la version présumée `0bf7907` (shell legacy), jamais prouvée.
-- Extension Next (socle v2) est **fusionnée dans `main`** depuis la PR #59.
-- OBS est passé en **33.0.1** : plugins réparés, SE.Live désactivé ([OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md)).
-- **Passe post-live (11/11) livrée** : Core **`052ab2ec`** déployé (Portefeuille, `!addpoints` / `!removepoints`,
-  Musique dans la modération) ; Studio **0.1.30** publié, à installer ; ZIP de l'extension (Tombola, Portefeuille, tutoriel)
-  en attente de la validation d'Antoni ([REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md)).
-- **Prochain chantier : Chaos V2**, en phase de conception ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Rien n'est
-  construit.
+- Production : Core **`1f05b97c`**, bot **`2c04a5db`** (sains, un seul bot actif), Studio **0.1.42** publié et
+  installé, extension publique **`be1744e75f63`** (prouvée par Antoni le 20/11 : Level Up V2, mini-profil, Commandes
+  V2.1, Mini-jeux V5, Music Hub).
+- **Casino V1** (4 jeux) : déployé côté Core, ouvert par réglage (`CASINO_EXTENSION=on`, `casino.open=1`), refusé
+  hors live ; **pas dans l'extension publique** : ZIP `2e2eaf3ae34a` en Hosted Test, revue Twitch et essai réel à
+  faire ([CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md)).
+- **Niveaux** : restauration WizeBot exécutée le 20/11 (432 comptes, définitive), badges tous les 25 niveaux,
+  anciennes annulations bloquées, rattachements futurs non compressés ([LEVEL_UP_V2.md](LEVEL_UP_V2.md) § 15).
+- Roue du Sub V3 active depuis le 16/11 ; Music Hub ouvert à tous (`MUSIC_HUB_EXTENSION=on`).
+- OBS **33.0.1** (plugins réparés, SE.Live désactivé, [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md)).
+- **Prochaine priorité** : le Casino jusqu'au public, puis Chaos V2 lot 0 ([ROADMAP.md](ROADMAP.md) § 0).
 
 ## 2. Statuts : ne jamais les confondre
 
@@ -81,28 +67,28 @@ SAMMI est abandonné depuis le 20/10. Le dépôt est **public** depuis le 28/10 
 | **Validé**              | **testé à la main par Antoni**                                                  | une trace écrite (document, message)                                   |
 | Testé en live           | utilisé pendant un vrai live                                                    | trace écrite datée                                                     |
 
-## 3. Environnements et versions (relevé du 16/11/2026 pour `main`, Core, bot, Studio et base ; 10/11 pour le reste)
+## 3. Environnements et versions (relevé du 20/11/2026 pour `main`, Core, bot, Studio, extension et drapeaux ; 10/11 pour le reste)
 
-| Élément                            | Version                                                                                                                                                                                                  | Source du relevé                                         | Retour arrière                                      |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------- |
-| `origin/main`                      | dernier code **`2c04a5db`** (PR #84 Roue du Sub V3, PR #85 test d'outillage)                                                                                                                             | `git fetch` le 16/11                                     | —                                                   |
-| Core `raptoru-core` (Coolify, VPS) | **`2c04a5db`**, déployé le 16/11 vers 04:44 UTC, sain (`/health`, `/ready`) ; dernière migration : `20261130130000_sub_wheel_v3.sql` (16/11)                                                             | `coolify-deploy.mjs status core` le 16/11                | `c1da930a` (la migration reste : additive, ignorée) |
-| Bot `raptoru-bot` (Coolify, VPS)   | **`2c04a5db`** (Roue du Sub V3 : `is_gift`, `sub_months`, 16/11) ; bail actif vu par le Core                                                                                                             | `status bot` le 16/11                                    | `d2fd5bb7`                                          |
-| Variable Core                      | `MUSIC_HUB_EXTENSION=testers:1239040922` (LeCroupier_ ; le diffuseur est toujours inclus)                                                                                                                | livraison du 10/11                                       | `off`, puis redémarrage du Core                     |
-| Base PostgreSQL 17                 | sauvegarde Coolify quotidienne ; sauvegarde manuelle le 16/11 à 04:41 UTC (9 744 425 octets), avant la migration de la Roue V3                                                                           | API Coolify le 16/11                                     | [BACKUPS.md](BACKUPS.md)                            |
-| Studio installé (PC)               | **0.1.39** (`2c04a5db`) ; **0.1.40** publiée le 16/11 11:26 UTC depuis `3e27f454` (« Tester dans OBS » de la Roue), à installer par Antoni                                                               | `build-info.json` lu le 16/11                            | réinstaller 0.1.39 (release publique)               |
-| Site raptoru.fr                    | `74f7542`                                                                                                                                                                                                | `https://raptoru.fr/api/status` le 10/11                 | redéployer `542b1f2`                                |
-| Extension **publique**             | **non prouvée**, présumée `0bf7907` (shell legacy, 22/10) ; ZIP de `0bf7907` introuvable sur le disque                                                                                                   | `apps/twitch-extension/PUBLISHED`                        | console Twitch                                      |
-| Extension **Hosted Test**          | dernier connu : ZIP `bbce1048a078` shell v2 (10/11, Antoni) ; la version suivante (inventaire `a971386f8c8d`, 95 commits) est validée et son ZIP `be1744e75f63` construit le 16/11, pas encore téléversé | [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3     | ancien ZIP `5ee8623` conservé                       |
-| OBS                                | **33.0.1** ; obs-shaderfilter 2.6.1, Composite Blur 1.6.1, Advanced Masks 1.6.1, Image Reaction 1.4, Downstream Keyer 0.4.1, Move Transition 3.2.1 ; **SE.Live désactivé**                               | journal OBS du 10/11                                     | [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md) § 4    |
-| Coolify                            | API sur `https://dashboard.raptoru.fr` (l'ancien `coolify.raptoru.fr` renvoie 502)                                                                                                                       | 10/11                                                    | —                                                   |
-| Staging `raptoru-core-staging`     | `core-staging.raptoru.fr` ; version non revérifiée                                                                                                                                                       | —                                                        | —                                                   |
-| Lab                                | Core local réel, base Docker, `%APPDATA%\Raptoru Studio Lab` ; jamais la Production                                                                                                                      | [GUIDE_LAB.md](studio-refonte/architecture/GUIDE_LAB.md) | —                                                   |
+| Élément                            | Version                                                                                                                                                                    | Source du relevé                                         | Retour arrière                                                                      |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `origin/main`                      | `5ebf395e` (PR #95, documents) ; dernier code **`1f05b97c`** (PR #94)                                                                                                      | `git fetch` le 20/11                                     | —                                                                                   |
+| Core `raptoru-core` (Coolify, VPS) | **`1f05b97c`**, déployé le 20/11 15:47 UTC, sain (`/health`, `/ready`) ; dernières migrations : les 4 du Casino (20/11)                                                    | `coolify-deploy.mjs status core` le 20/11                | `18a4b048` (`deploy core 18a4b04828b1f214bb6122214d4dfc142a1d396f --rollback --go`) |
+| Bot `raptoru-bot` (Coolify, VPS)   | **`2c04a5db`** (16/11) ; bail actif vu par le Core                                                                                                                         | `status bot` le 20/11                                    | `d2fd5bb7`                                                                          |
+| Drapeaux du Core                   | `CASINO_EXTENSION=on`, `MUSIC_HUB_EXTENSION=on`                                                                                                                            | API Coolify (lecture seule) le 20/11                     | `off`, puis redémarrage du Core (GO)                                                |
+| Base PostgreSQL 17                 | sauvegarde Coolify quotidienne ; sauvegardes manuelles du 20/11 : 06:28 (Casino), 12:57:26 (restauration des niveaux), 15:28:18 UTC (12 310 947 octets)                    | API Coolify le 20/11                                     | [BACKUPS.md](BACKUPS.md)                                                            |
+| Studio installé (PC)               | **0.1.42** (`1f05b97c`), publiée le 20/11 (Latest) et installée                                                                                                            | `build-info.json` lu le 20/11                            | réinstaller 0.1.41 (release publique)                                               |
+| Site raptoru.fr                    | `74f7542`                                                                                                                                                                  | `https://raptoru.fr/api/status` le 10/11                 | redéployer `542b1f2`                                                                |
+| Extension **publique**             | **`be1744e75f63`** (shell v2, 95 commits depuis `0bf7907`), prouvée par Antoni dans la console Twitch le 20/11                                                             | `apps/twitch-extension/PUBLISHED`                        | console Twitch                                                                      |
+| Extension **Hosted Test**          | ZIP `raptoru-live-PRODUCTION-2e2eaf3ae34a-depuis-be1744e-8-commits-shell-v2.zip` (Casino), SHA-256 `df177a48…f1436868`, inventaire `298e940290ab` validé                   | [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 0     | version publique inchangée                                                          |
+| OBS                                | **33.0.1** ; obs-shaderfilter 2.6.1, Composite Blur 1.6.1, Advanced Masks 1.6.1, Image Reaction 1.4, Downstream Keyer 0.4.1, Move Transition 3.2.1 ; **SE.Live désactivé** | journal OBS du 10/11                                     | [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md) § 4                                    |
+| Coolify                            | API sur `https://dashboard.raptoru.fr` (l'ancien `coolify.raptoru.fr` renvoie 502)                                                                                         | 20/11                                                    | —                                                                                   |
+| Staging `raptoru-core-staging`     | `core-staging.raptoru.fr` ; version non revérifiée                                                                                                                         | —                                                        | —                                                                                   |
+| Lab                                | Core local réel, base Docker, `%APPDATA%\Raptoru Studio Lab` ; jamais la Production                                                                                        | [GUIDE_LAB.md](studio-refonte/architecture/GUIDE_LAB.md) | —                                                                                   |
 
 **Checkout principal** `C:\Users\Antoni\Documents\Raptoru 2.0` :
 
 - c'est le dossier de données du Studio installé ;
-- il est sur `main` local `11ffe3f`, **618 commits derrière** `origin/main` (15/11), avec 88 entrées dans `git status` ;
+- il est sur `main` local `11ffe3f`, **683 commits derrière** `origin/main` (20/11), avec 88 entrées dans `git status` ;
   son `CLAUDE.md` a été resynchronisé sur `origin/main` le 15/11 (seul fichier écrit, avec l'accord d'Antoni) ;
 - conduite à tenir : [REPRISE.md](REPRISE.md) § 3.
 
@@ -116,19 +102,24 @@ SAMMI est abandonné depuis le 20/10. Le dépôt est **public** depuis le 28/10 
 L'état de chaque module (livré / développé / à valider / à développer) se lit dans **[ROADMAP.md](ROADMAP.md) § 1**,
 seule source de ces états.
 
-| Catégorie                                     | Contenu                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **En Production et utilisées**                | économie canonique (Wallet, Jetons, crédits TTS et Soundboard, Daily, fidélité, présence) · Commands V2 · modération D4 · Tombola · Jeu des mots · Roulette, Slot, Duel (chat) · Soundboard · TTS · Bonk · alertes Twitch V2 · points de chaîne et effets · Random Ban V3 · Roue du Sub V2 · Caution · Votekick V2 · Spotify V2 · Dock OBS · progression et classements (site) · boutique cosmétique · statistiques de modules (privées) · Studio Coulisses |
-| **En Production pour les testeurs seulement** | **Music Hub** : demandes payantes, skip payant progressif, contrôles du lecteur pour les supermods, historique de la soirée, Open Bar, nouveau `!song`. Fermé à tous les autres viewers par `MUSIC_HUB_EXTENSION` ; son module d'extension n'existe que dans le Hosted Test                                                                                                                                                                                 |
-| **Déployées mais éteintes ou vides**          | moteur de défis (`CHALLENGES_ENGINE` off, aucun défi) · catalogue cosmétique sans contenu définitif · boutique et profil d'alertes Halloween (événement fermé le 02/11)                                                                                                                                                                                                                                                                                     |
-| **Lab uniquement**                            | Coffre mystère et Objectif de soirée (`labOnly`) · simulateurs du Lab                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Branches non fusionnées**                   | Chaudron des subs (PR #47) · titres équipés depuis Studio (PR #54) ; Level Up V2 fusionné (PR #70, la PR #43 est fermée) · détails : [ROADMAP.md](ROADMAP.md) § 2.3 (branches)                                                                                                                                                                                                                                                                              |
-| **En conception**                             | **Chaos V2** : recherche du 10/11, aucune implémentation ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md))                                                                                                                                                                                                                                                                                                                                                         |
+| Catégorie                                | Contenu                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **En Production et utilisées**           | économie canonique (Wallet, Jetons, crédits TTS et Soundboard, Daily, fidélité, présence) · Commands V2 et Commandes Chat V2.1 · modération D4 · Tombola · Jeu des mots · Roulette, Slot, Duel (chat) · Soundboard · TTS · Bonk · alertes Twitch V2 · points de chaîne, récompenses et effets · Random Ban et Mini-jeux V5 · Roue du Sub V3 · Caution · Votekick V2 · Spotify V2 · Music Hub · Dock OBS · progression, Level Up V2 et classements (site) · mini-profil · boutique cosmétique · statistiques de modules (privées) · Studio Coulisses |
+| **Déployé côté Core, pas encore public** | **Casino V1** (machine à fruits + Coffre, roulette, machine à émotes, blackjack multijoueur) : réglages ouverts, refus hors live, module d'extension seulement dans le Hosted Test `2e2eaf3ae34a`                                                                                                                                                                                                                                                                                                                                                   |
+| **Déployées mais éteintes ou vides**     | moteur de défis (`CHALLENGES_ENGINE` off, aucun défi) · catalogue cosmétique sans contenu définitif · boutique et profil d'alertes Halloween (événement fermé le 02/11)                                                                                                                                                                                                                                                                                                                                                                             |
+| **Lab uniquement**                       | Coffre mystère et Objectif de soirée (`labOnly`) · simulateurs du Lab                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Branches non fusionnées**              | Chaudron des subs (PR #47) · titres équipés depuis Studio (PR #54) · étude Croupier IA (suspendue) · détails : [ROADMAP.md](ROADMAP.md) § 2.3                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **En conception**                        | **Chaos V2** : recherche du 10/11, aucune implémentation ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md))                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
-## 6. Travaux récents (08/11 → 10/11)
+## 6. Travaux récents (08/11 → 20/11)
 
 | Date         | Événement                                                                                                                                                                                                                                                 | Preuve                                                                                           |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 20/11        | **Casino V1** : PR #90 (`18a4b048`), 4 migrations, Core déployé, Studio 0.1.41 ; inventaire `298e940290ab` validé (PR #93) ; Casino ouvert par réglage ; ZIP `2e2eaf3ae34a` en Hosted Test                                                                | [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md)                                             |
+| 20/11        | **Niveaux** : restauration WizeBot (432 comptes) ; PR #94 (annulations bloquées, rattachements futurs, badges /25), Core `1f05b97c`, Studio 0.1.42 ; PR #95 (reprise)                                                                                     | [LEVEL_UP_V2.md](LEVEL_UP_V2.md) § 14–15                                                         |
+| 20/11        | Extension `be1744e75f63` prouvée publique par Antoni (console Twitch)                                                                                                                                                                                     | `apps/twitch-extension/PUBLISHED`                                                                |
+| 16/11        | **Roue du Sub V3** : Core et bot `2c04a5db`, barème V3 actif ; Studio 0.1.39 puis 0.1.40                                                                                                                                                                  | [SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 13                                                          |
+| 13–15/11     | Récompenses Twitch, Mini-jeux V5 (PR #67) ; Level Up V2 et mini-profil (PR #70, #71) ; Commandes Chat V2.1 (Core `c1da930a`, Studio 0.1.38)                                                                                                               | [archive/REPRISE_2026-11-11_2026-11-20.md](archive/REPRISE_2026-11-11_2026-11-20.md)             |
 | 08–09/11     | **Music Hub** en Lab : module de l'extension (shell v2), page Studio, overlays OBS, historique par Daily, Windows SMTC, skip payant, Open Bar, `!song` v2                                                                                                 | [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md) § 0–14                                      |
 | 09/11 nuit   | **Audit de fiabilité** : 15 correctifs testés (3 P1 : double débit après réponse perdue, session effacée, crédits TTS)                                                                                                                                    | [AUDIT_FIABILITE_2026-11-09.md](AUDIT_FIABILITE_2026-11-09.md)                                   |
 | 10/11 02–05h | **Livraison officielle** : PR #59 (`900637f` : audit, Music Hub, socle Extension Next), #60 (`0871ce1`), #61 (`bbce104` : passe après le test réel) ; Core et bot déployés ; Studio 0.1.28 puis 0.1.29 publiés ; ZIP Hosted Test `5ee8623` puis `bbce104` | [RELEASE_2026-11-10.md](RELEASE_2026-11-10.md), [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) |
@@ -143,10 +134,12 @@ Avant le 08/11 : [archive/PROJECT_STATUS_2026-11-08.md](archive/PROJECT_STATUS_2
 
 ## 7. Tests et validations
 
-### Derniers tests automatiques (10/11)
+### Derniers tests automatiques
 
 | Sur                | Résultat                                                                                                                                                                                              | Source                                                                |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| PR #94 (20/11)     | progression Core 64/64 (dont Level Up V2 34/34) ; Studio serveur 12/12 ; typecheck, lint ; CI de la PR et de `main` `1f05b97c` vertes (quality, core, e2e, studio, images)                            | CI GitHub                                                             |
+| PR #90 (20/11)     | Casino : blackjack 12 + intégration PostgreSQL à deux Cores 3 ; parité avec les prototypes (20 000 mains, 3 000 tours) ; contrôle Chromium sur un Core local ; CI verte                               | [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md)                  |
 | PR #59 (`900637f`) | Core 1 480 ; intégration PostgreSQL 191/191 en séquentiel ; Studio 1 057 ; bot 290 ; extension 132 ; E2E CI 121/121                                                                                   | [RELEASE_2026-11-10.md](RELEASE_2026-11-10.md) § 2                    |
 | PR #61 (`bbce104`) | typecheck 8/8, lint 0 ; Core 1 489 ; Studio 1 061 ; desktop 36 ; extension 132 ; `test:requests` identique ; E2E musique et achats 28/28 ; CI de la PR et de `main` vertes                            | [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md) § 15 ; CI GitHub |
 | PR #64 (11/11)     | Core 1 510 ; intégration PostgreSQL 42 fichiers / 209 tests ; extension 132 ; Studio serveur 1 061 (soir) ; E2E Lab Tombola, Portefeuille, Music Hub, cycle de vie 18/18 ; typecheck 8/8, lint, build | [RAPPORT_POST_LIVE.md](RAPPORT_POST_LIVE.md) § 3                      |
@@ -198,7 +191,7 @@ vrais Jetons et vrai Spotify, **à la main seulement**.
 | OBS            | URL des sources navigateur : paramètres `selive-notify-*` **retirés le 10/11 à 17:06** (15 sources). Restent : `Navigateur web 2` avec une ancienne clé TTS (O10), une fermeture incomplète à 17:05 (O11)                                 | [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md) O1, O10, O11 |
 | Studio         | **Deux fenêtres plein écran au premier plan** (overlay Halloween et Chaos) restent ouvertes en permanence quand Studio tourne, réglage « Overlay actif » allumé depuis Halloween ; impact probable sur la fluidité du jeu                 | [chaos/AUDIT_CHAOS_V1.md](chaos/AUDIT_CHAOS_V1.md) D1     |
 | Poste          | écran principal à 59 Hz alors qu'il accepte 165 Hz ; OBS en priorité GPU temps réel (administrateur)                                                                                                                                      | [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md) O7–O8        |
-| Extension      | version publique non prouvée ; 95 commits non publiés (inventaire `a971386f8c8d`) ; le Hosted Test doit rester hors de la chaîne en live                                                                                                  | [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3      |
+| Extension      | publique `be1744e75f63` ; Casino (`2e2eaf3ae34a`) en Hosted Test, revue Twitch à faire ; le Hosted Test doit rester hors de la chaîne en live                                                                                             | [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3      |
 | Extension Next | vrais appareils et soumission à faire ; restes non bloquants : Hub à 377×251, TTS en mobile paysage, bande « Vider » du Bonk                                                                                                              | [ROADMAP.md](ROADMAP.md) § 2.1                            |
 | Studio         | densité et responsive en fenêtre réduite, textes qui se chevauchent dans les notifications, notifications répétitives, états normaux présentés comme des incidents (retours d'Antoni, non chiffrés) ; code mort ; ancien Lab ; lots F3–F7 | [ROADMAP.md](ROADMAP.md) § 2.2                            |
 | Tests          | E2E instables connus : `tombola-bonbons`, `effects-player`, `alerts`, `progression-studio`, `raffle-lab` sous charge ; arrêt de la pile E2E locale ; `alerts-se` pendant les releases Windows (nettoyage corrigé le 10/11)                | [studio-refonte/ROADMAP.md](studio-refonte/ROADMAP.md)    |
@@ -219,39 +212,20 @@ Retours arrière Core, bot, Studio et extension : [RELEASE_2026-11-10.md](RELEAS
 
 ## 12. Ce qui demande encore Antoni
 
-0. **Passe post-live** : installer Studio 0.1.30 ; petit test `!addpoints` réel ; recette Lab
-   ([RECETTE_MODERATION_EXTENSION.md](RECETTE_MODERATION_EXTENSION.md)) puis ligne de validation de
-   `INVENTAIRE-bb8700814939.md` et ZIP en Hosted Test ; décisions `!solde @x`, `!wallet set`, mots réservés, catalogue.
-1. **Music Hub** :
-   - tester Studio 0.1.29 et le Hosted Test `bbce104` ;
-   - suivre le parcours réel de [TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 6 ;
-   - puis décider : fermer le chantier ou ouvrir plus largement. L'ouverture publique passe par une **soumission**
-     Twitch.
-2. **OBS** :
-   - décider du sort de la source `Navigateur web 2` (ancienne clé TTS, O10) ;
-   - déclencher une fois les effets FX Cam, Votekick et Chaos ;
-   - écouter les transitions stinger.
-3. **Poste** :
-   - couper Studio › Halloween « Overlay actif » (fenêtres permanentes) ;
-   - choisir la fréquence de l'écran (59 / 165 Hz).
-4. **Chaos V2** : GO pour le lot 0 (mesures PresentMon), puis arbitrages Q1–Q10 de
+1. **Casino** ([REPRISE.md](REPRISE.md) § 5.4) : Hosted Test hors live ; choisir `CASINO_EXTENSION` (`testers:<ids>`
+   ou `on`) avant la publication ; soumettre à la revue Twitch ; essai réel en live après publication.
+2. **Validations réelles en live** : premier tirage V3 de la Roue ; vraie annonce test Level Up ; commande d'Aouh ;
+   parcours viewer de Music Hub ([extension/TWITCH_SUBMISSION_2026-11-10.md](extension/TWITCH_SUBMISSION_2026-11-10.md) § 6) ;
+   effets FX Cam et Votekick ; transitions stinger.
+3. **OBS et poste** : sort de la source `Navigateur web 2` (O10) ; couper Studio › Halloween « Overlay actif » ;
+   fréquence de l'écran (59 / 165 Hz).
+4. **Chaos V2** : GO pour le lot 0, puis arbitrages Q1–Q10 de
    [chaos/QUESTIONS_OUVERTES_CHAOS_V2.md](chaos/QUESTIONS_OUVERTES_CHAOS_V2.md).
-5. **Extension** :
-   - prouver la version publique ;
-   - décider de la soumission du shell v2 (review de 8 à 14 jours).
-6. **Git** :
-   - trier les PR ouvertes ([CLEANUP_LATER.md](CLEANUP_LATER.md) § 2) ;
-   - fusionner la branche de consolidation ;
-   - mettre à jour le checkout principal en préservant les données de Studio.
-7. **Contenu métier** : défis, cosmétiques, récompenses ; décision Level Up V2.
+5. **Git** : trier les PR ouvertes ([CLEANUP_LATER.md](CLEANUP_LATER.md) § 2) ; mettre à jour le checkout principal en
+   préservant les données de Studio.
+6. **Contenu métier** : défis, cosmétiques, récompenses.
 
 ## 13. Prochaine priorité
 
-**Chaos V2, lot 0** : mesurer avant de construire, sans code.
-
-- Couper les fenêtres permanentes.
-- Fixer la fréquence de l'écran.
-- Suivre le protocole PresentMon sur Overwatch.
-
-Puis lot 1 : le lecteur natif, limité au flip, avec un bouton de test ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md)).
-En parallèle, sur le temps d'Antoni : les derniers tests réels de Music Hub.
+**Casino V1 jusqu'au public** ([REPRISE.md](REPRISE.md) § 5.4), puis **Chaos V2, lot 0** : mesurer avant de
+construire, sans code ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md)).

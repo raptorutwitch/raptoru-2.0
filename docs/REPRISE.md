@@ -1,85 +1,33 @@
-# Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
+# Reprise : point d'entrée unique (Claude Code, Codex, ChatGPT ou autre)
 
-**Mis à jour le 20/11/2026** (Casino V1 : blackjack multijoueur et machine à émotes intégrés, livraison en cours — [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) ; avant : Casino du 19/11 ; avant : livraison de la Roue du Sub V3, journal
-[archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md](archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
-précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
-[`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
+**Checkpoint global du 20/11/2026** (mandat d'Antoni « Checkpoint global & roadmap »). À lire **en premier**, puis
+vérifier l'état soi-même (§ 4). Les règles de [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
+Version précédente de ce fichier (11 → 20/11) :
+[archive/REPRISE_2026-11-11_2026-11-20.md](archive/REPRISE_2026-11-11_2026-11-20.md). Résumé à coller dans une
+conversation ChatGPT : [REPRISE_CHATGPT.md](REPRISE_CHATGPT.md).
 
-## 0. Résumé compact, à copier dans une nouvelle conversation
+## 0. Résumé compact
 
 ```text
-Raptoru 2.0 — reprise au 16/11/2026 (source : docs/REPRISE.md du dépôt raptorutwitch/raptoru-2.0)
-Roue du Sub V3 DÉPLOYÉE (16/11, mandat d'Antoni) : Core et bot 2c04a5db, migration 20261130130000_sub_wheel_v3 appliquée,
-Studio 0.1.39 installé, barème V3 ACTIF (grid 3, choisi par Antoni le 16/11 à 10:22 UTC). Studio 0.1.40 publié (11:26 UTC) :
-« Tester dans OBS » de la Roue joue la roue affichée dans OBS (PR #87).
-Abonnements offerts exclus et ancienneté jamais prise pour « 1 mois » : actifs dès maintenant (Core + bot).
-Journal : docs/archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md ; module : docs/SUB_WHEEL_V3.md § 13.
+Raptoru 2.0 — checkpoint du 20/11/2026 (source : docs/REPRISE.md, dépôt public raptorutwitch/raptoru-2.0, branche main)
+Plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
+Le Core décide (données, Jetons, règles), le bot LeCroupier_ parle à Twitch, Raptoru Studio (Electron, PC d'Antoni)
+pilote OBS, l'extension Twitch et raptoru.fr parlent aux viewers. SAMMI abandonné. Dépôt public : aucun secret.
 
-Projet : plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
-Règle de partage : le Core décide (données, Jetons, règles, files), le bot LeCroupier_ parle à Twitch (EventSub, chat),
-Raptoru Studio (Electron, PC d'Antoni) pilote OBS et affiche les lecteurs, l'extension Twitch et raptoru.fr parlent
-aux viewers. SAMMI abandonné (20/10). Dépôt public : aucun secret.
-
-Production (relevé du 16/11, 11:30 UTC) : Core 2c04a5db, bot 2c04a5db (sains, un seul bot actif), Studio 0.1.40
-publié (Latest), 0.1.39 installé sur le PC, site inchangé. Dernier code sur main : 3e27f454 (PR #87, Studio seul).
-Sons de commandes immédiats : la demande de Studio attend sur le Core (wait_ms) au lieu d'interroger toutes les 2 s ;
-mesuré dans le Lab : 30–120 ms du message reçu par le Core au son joué (avant : + 0 à 2 s d'attente). Pas mesuré
-dans le vrai OBS ni avec le vrai chat Twitch.
-Commandes Chat (docs/COMMANDS_V2_STATUS.md) : action « son » (joué par la source OBS sonore « Level Up »), viewers
-précis par ID Twitch ; V2.1 : déclencheur « message contenant une expression » (sans « ! », une fois par message, mot
-entier ou n'importe où) et édition déléguée (Studio › Règles › Modification déléguée : le viewer active / coupe la
-commande et change ses expressions depuis l'extension, Commandes › « Mes commandes modifiables », Production comprise).
-Le « bug Streamer » était le délai de 5 min par personne (refus silencieux) + le « Tester » de Studio avec un ID fictif
-(corrigé : il parle avec l'ID de la chaîne).
-Level Up V2 : 1 000 XP/niveau, normalisation WizeBot appliquée (910 comptes, 441 niveaux changés), 11 badges sub
-(266 attributions), préférences historiques restaurées. Vraie annonce Twitch « 🚀 LEVEL UP — Pseudo [Titre] (niveau) »
-groupée sur 5 min (8 pseudos), sans @ ; un seul son par annonce, 3 s avant le bandeau (0–5 s), seulement si un viewer
-nommé l'a activé. Pseudos du classement repris de Twitch par l'identifiant (0 numérique). Studio › Level Up : réglages,
-« Viewers avec son activé », « Pseudos du classement », vraie annonce [TEST] sur confirmation.
-Extension : mini-profil (avatar, Jetons/Crédits, niveau et rang, abonnement et multiplicateur, restrictions, Préférences)
-et « Mes commandes modifiables » fusionnés dans les deux shells, PAS ENCORE PUBLIC : inventaire a971386f8c8d
-(95 commits) validé par Antoni le 16/11 ; ZIP construit le 16/11 :
-raptoru-live-PRODUCTION-be1744e75f63-depuis-0bf7907-95-commits-shell-v2.zip (SHA-256 1e60fa0b…72375, dans
-Worktrees\agent\apps\twitch-extension\release\) ; reste Hosted Test (Antoni), revue Twitch. Publique : présumée 0bf7907.
-
-Gestes d'Antoni restants : installer Studio 0.1.40 (« Rechercher une mise à jour »), regarder le premier vrai tirage
-V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et essayer en vrai les
-expressions et la latence ; essayer « Envoyer une vraie annonce test » ; téléverser le ZIP be1744e75f63 en Hosted Test
-(jamais pendant un live), l'essayer, puis la revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md
-§ 15 ; choisir les directions du casino (prototypes/casino-directions, hors dépôt).
-**Casino V1 — mandat d'Antoni du 20/11 (« CASINO V1 : intégration finale et mise en Production », GO pour déployer si
-tous les contrôles passent).** Les 4 jeux (machine à fruits + Coffre, machine à émotes, roulette, blackjack multijoueur)
-sont validés par Antoni et intégrés (PR #90, `main` `18a4b048`). **Core `18a4b048` DÉPLOYÉ le 20/11** (migrations
-Casino appliquées après sauvegarde de 06:28 UTC), bot inchangé `2c04a5db`, **Studio 0.1.41 publié** (à installer).
-Puis (20/11, GO d'Antoni) : Casino OUVERT pour le Hosted Test (`CASINO_EXTENSION=on`, `casino.open=1`, 4 jeux),
-inventaire 298e940290ab validé (PR #93), ZIP `raptoru-live-PRODUCTION-2e2eaf3ae34a-…` téléversé en Hosted Test. Journal, statut exact de livraison et
-étapes restantes : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) (à lire en premier pour ce chantier) ; module :
-[CASINO.md](CASINO.md) § 12 (blackjack) et § 13 (machine à émotes). L'extension publique ne montre le Casino qu'après
-la publication de l'extension (inventaire + Hosted Test + revue Twitch : gestes d'Antoni).
-
-**Niveaux (20/11, mandat d'Antoni)** : texte des Level Up vérifié (relu à chaque annonce) ; message récompensé au plus
-toutes les **120 s** (avant 60 s) et badges sub tous les **25 niveaux** (n → 25 × n), appliqués en Production via Studio ;
-aucune XP ni aucun niveau modifié. Étude de restauration WizeBot en lecture seule (363 viewers monteraient, max 60 → 141) :
-rapport privé `Documents\Raptoru\_migration-exports\levels-2026-11-20\`, synthèse LEVEL_UP_V2.md § 14. Restauration
-EXÉCUTÉE le 20/11 (432 comptes, § 15) ; annulations désactivées et rattachements futurs non compressés (§ 15) :
-PR #94, **Core `1f05b97c` DÉPLOYÉ le 20/11 15:47 UTC** (sauvegarde 15:28 UTC, bot inchangé `2c04a5db`), **Studio
-0.1.42 publié** (à installer par Antoni : il retire les boutons d'annulation ; le Core les refuse déjà, 410).
-Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
-publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
-le checkout principal (c'est le dossier de données du Studio installé). Travailler dans
-Documents\Raptoru 2.0 - Worktrees\<nom>. « Validé » = testé à la main par Antoni.
-
-Méthode (adoptée le 15/11) : docs/AGENT_WORKFLOW.md — classes A/B/C/D, tests locaux ciblés, une seule CI (celle de
-main), attentes en arrière-plan, doc dans la même PR. Le checkout principal est en retard sur main : lire les documents
-avec git show origin/main:<chemin> ou dans Documents\Raptoru 2.0 - Worktrees\agent (worktree réutilisable).
-À lire avant de coder : docs/AGENT_WORKFLOW.md § 0, docs/REPRISE.md § 0, puis au besoin docs/PROJECT_STATUS.md,
-docs/ROADMAP.md et le document du module.
+Production (relevé du 20/11, 16:00 UTC) : Core 1f05b97c, bot 2c04a5db (un seul bot actif), Studio 0.1.42 publié ET
+installé, extension publique be1744e75f63 (prouvée par Antoni dans la console Twitch le 20/11).
+Casino V1 (4 jeux) : Core déployé, CASINO_EXTENSION=on, casino.open=1, 4 jeux ouverts, refusé hors live
+(stream_offline). L'extension publique NE contient PAS le Casino : ZIP 2e2eaf3ae34a (inventaire 298e940290ab
+validé) en Hosted Test ; restent l'essai réel, la revue Twitch, la publication. Ne pas dire « Casino disponible pour tous ».
+Niveaux : restauration WizeBot EXÉCUTÉE le 20/11 (432 comptes, définitive, NE JAMAIS LA REJOUER) ; badges tous les
+25 niveaux ; anciennes annulations bloquées (Core 410 + Studio) ; rattachements WizeBot futurs non compressés.
+Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Prochaines tâches : docs/REPRISE.md § 5.4.
 ```
 
-## 1. Le projet en dix lignes
+## 1. Le projet
 
-- **Raptoru 2.0** : la plateforme de stream auto-hébergée du streamer Twitch `raptoru_` (identifiant 83603689).
-  Antoni est l'unique décideur.
+- **Raptoru 2.0** : la plateforme de stream du streamer Twitch `raptoru_` (identifiant 83603689). Antoni est l'unique
+  décideur ; « **validé** » = testé à la main par Antoni, jamais un test automatique.
 - **Le Core décide, le bot parle à Twitch, Studio pilote OBS et affiche, l'extension et le site parlent aux viewers.**
 
 | Composant                    | Code                                                  | Technologie                            | Où il tourne         |
@@ -93,61 +41,43 @@ docs/ROADMAP.md et le document du module.
 | Site raptoru.fr              | dépôt séparé `raptorutwitch/Leaderboard-Jeu-des-mots` | —                                      | Coolify              |
 
 Monorepo npm workspaces + turbo. Environnements : **Production** (VPS + PC), **Lab** (Core local réel, base Docker,
-jamais la Production), **Hosted Test** (extension visible des seuls testeurs), **staging** (`core-staging.raptoru.fr`).
+jamais la Production), **Hosted Test** (extension visible des seuls comptes testeurs), **staging**
+(`core-staging.raptoru.fr`). Architecture : [ARCHITECTURE.md](ARCHITECTURE.md) ; code par module :
+[INVENTAIRE_MODULES.md](INVENTAIRE_MODULES.md).
 
-## 2. Limites d'autonomie : jamais sans GO explicite d'Antoni
+## 2. Limites d'autonomie
 
-**Production, Twitch et OBS** :
+Sans GO explicite d'Antoni pour l'étape (un mandat écrit peut le donner pour un lot entier) :
 
-- push, fusion dans `main`, déploiement Coolify, migration distante, variable ou drapeau, redémarrage d'un service ;
-- release ou installation de Studio ;
-- publication de l'extension, Hosted Test, console Twitch ;
-- toute action sur OBS (scènes, sources, plugins), Twitch, StreamElements, Spotify ou le Wallet : soldes, crédits,
-  débits, remboursements, sanctions, messages dans le vrai chat.
+- **Production, Twitch, OBS** : push, fusion, déploiement Coolify, migration distante, variable ou drapeau,
+  redémarrage, release ou installation de Studio, publication ou Hosted Test de l'extension, console Twitch, OBS,
+  StreamElements, Spotify, Wallet (soldes, crédits, remboursements, sanctions), messages dans le vrai chat.
+- **Destruction** : `git clean`, `reset --hard`, `checkout .`, réécriture d'historique, suppression de branche, de
+  worktree, de sauvegarde, de média ou de données de Studio.
+- **Contenu métier** : ne jamais inventer défis, montants, récompenses ni cosmétiques.
+- **Dépôt public** : aucun secret, `.env`, jeton, dump, journal ni donnée de viewer ([../SECURITY.md](../SECURITY.md)).
+- Une garde automatique qui refuse une opération ne se contourne pas : signaler l'action manuelle précise. Lancer un
+  installateur de Studio est refusé par la garde : c'est Antoni qui installe.
 
-**Destruction** :
-
-- `git clean`, `reset --hard`, `checkout .` ou `-f`, réécriture d'historique ;
-- suppression de branche, de worktree, de sauvegarde, de média ou de données de Studio.
-
-**Contenu et sécurité** :
-
-- ne pas créer de contenu métier à la place d'Antoni : défis, montants, récompenses, cosmétiques ;
-- dépôt **public** : aucun secret, `.env`, jeton, dump, journal ni donnée de viewer, y compris les clés des URL de
-  sources OBS ([../SECURITY.md](../SECURITY.md)).
-
-**Méthode** :
-
-- lots verticaux en autonomie, puis un livrable testable ;
-- interrompre Antoni seulement pour une décision métier, un blocage, la Production ou une action destructrice ;
-- « **Validé** » = testé à la main par Antoni.
-
-Registre des décisions et de leurs raisons : [DECISIONS_TECHNIQUES.md](DECISIONS_TECHNIQUES.md).
+Registre des décisions et de leurs raisons : [DECISIONS_TECHNIQUES.md](DECISIONS_TECHNIQUES.md). Méthode :
+[AGENT_WORKFLOW.md](AGENT_WORKFLOW.md).
 
 ## 3. Où travailler sans rien casser
 
-**Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0`**
-
-- C'est le **dossier de données du Studio installé** : `.env`, jetons Twitch, `apps/studio/server/.runtime`.
-- Il est sur `main` local `11ffe3f`, **523 commits derrière** `origin/main`, avec 79 modifications non commitées.
-- On n'y travaille pas et on ne le nettoie pas. Pour lire un document à jour depuis là :
-  `git show origin/main:<chemin>`. Sa mise à jour demande un GO et une sauvegarde des données de Studio.
-
-**Nouveaux worktrees** : **uniquement** dans `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\<nom>`, à partir de
-`origin/main` ou de la branche du chantier.
-
-**Carte des worktrees, branches et dossiers** : [WORKSPACES.md](WORKSPACES.md). Propositions de nettoyage, sans rien
-supprimer : [CLEANUP_LATER.md](CLEANUP_LATER.md). Sauvegardes : [BACKUPS.md](BACKUPS.md). Ne jamais déplacer ni
-supprimer `Documents\Sauvegarde Raptoru 2.0`, `Documents\OBS-Backups` ni `Documents\Raptoru 2.0 - Livraisons`.
-
-**Ports du Studio installé** : 4100 (serveur et lecteurs OBS), 4110 (Dock), 3789. Tests : 4389–4399 (E2E),
-4471–4482 (banc de l'extension). OBS WebSocket : 4455. Détail : [ARCHITECTURE.md](ARCHITECTURE.md).
-
-**Tester sans toucher la Production** :
-
-- `npm run studio:lab` (Lab isolé) ;
-- **jamais `npm run studio` depuis le checkout principal**, qui ouvrirait le profil de Production ;
-- `Ouvrir Music Hub (Lab).cmd` (à la racine d'un worktree à jour, absent du checkout principal en retard) pour voir l'extension du Lab en viewer, modérateur ou supermod.
+- **Checkout principal `C:\Users\Antoni\Documents\Raptoru 2.0`** : c'est le **dossier de données du Studio installé**
+  (`.env`, jetons Twitch, `apps/studio/server/.runtime`). Il est sur `main` local `11ffe3f9`, **683 commits derrière**
+  `origin/main` (20/11), avec 88 entrées dans `git status`. On n'y travaille pas, on ne le nettoie pas, on n'y lance
+  jamais `npm run studio`. Lire un document à jour depuis là : `git show origin/main:<chemin>`.
+- **Worktrees** : uniquement dans `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\<nom>` (27 au 20/11), créés
+  depuis `origin/main`. `agent` (réutilisable ; garde les ZIP de l'extension sous `apps/twitch-extension/release/`)
+  et `levels` (dernier chantier) sont à jour. Carte : [WORKSPACES.md](WORKSPACES.md) ; nettoyage proposé :
+  [CLEANUP_LATER.md](CLEANUP_LATER.md).
+- **Branche de référence : `main`** (GitHub `raptorutwitch/raptoru-2.0`). Une PR par lot, CI verte avant fusion.
+- **Dossiers à ne jamais déplacer ni supprimer** : `Documents\Sauvegarde Raptoru 2.0`, `Documents\OBS-Backups`,
+  `Documents\Raptoru 2.0 - Livraisons`, `Documents\Raptoru\_migration-exports\` (exports privés des niveaux, hors Git).
+- **Ports du Studio installé** : 4100 (serveur et lecteurs OBS), 4110 (Dock), 3789. Tests : 4389–4399 (E2E),
+  4471–4482 (banc de l'extension). OBS WebSocket : 4455.
+- **Tester sans toucher la Production** : `npm run studio:lab` depuis un worktree.
 
 ## 4. Vérifier l'état soi-même (lecture seule)
 
@@ -158,112 +88,117 @@ git -C "C:\Users\Antoni\Documents\Raptoru 2.0" worktree list
 
 # Depuis un worktree à jour (l'ancienne adresse coolify.raptoru.fr répond 502)
 export COOLIFY_URL=https://dashboard.raptoru.fr
-node scripts/coolify-deploy.mjs status core     # SHA déployé, santé, sauvegarde, commit vu par le Core, bail du bot
+node scripts/coolify-deploy.mjs status core     # SHA déployé, santé, sauvegarde, bail du bot
 node scripts/coolify-deploy.mjs status bot
 curl -s https://raptoru.fr/api/status
 
 # Studio installé
 cat "$LOCALAPPDATA/Programs/Raptoru Studio/resources/app/build-info.json"
 
-# Archive de référence de l'extension
-sha256sum "C:/Users/Antoni/Documents/Raptoru 2.0 - Worktrees/music-finish/apps/twitch-extension/release/raptoru-live-PRODUCTION-bbce1048a078-depuis-0bf7907-72-commits-shell-v2.zip"
+# Extension : version publique déclarée et ZIP du Hosted Test Casino
+cat apps/twitch-extension/PUBLISHED
+sha256sum "C:/Users/Antoni/Documents/Raptoru 2.0 - Worktrees/agent/apps/twitch-extension/release/raptoru-live-PRODUCTION-2e2eaf3ae34a-depuis-be1744e-8-commits-shell-v2.zip"
 ```
 
-**Relevé du 10/11** :
+Un écart avec le § 5 veut dire que quelqu'un a agi depuis : le comprendre avant d'agir. La version publique de
+l'extension se prouve dans la console Twitch (Antoni) ou en live par F12 › `shared/runtime-config.js` › `buildId`.
 
-| Élément            | Valeur                                          |
-| ------------------ | ----------------------------------------------- |
-| `origin/main`      | `afe98cf`                                       |
-| Core               | `bbce104`, sain ; dernière sauvegarde 04:00 UTC |
-| Bot                | `900637f`, bail actif                           |
-| Studio             | 0.1.29 (`bbce104`)                              |
-| Site               | `74f7542`                                       |
-| ZIP de l'extension | `80bdab00…f9f5b`                                |
+## 5. État exact au 20/11/2026
 
-Un écart veut dire que quelqu'un a agi depuis : le comprendre avant d'agir.
+### 5.1 Versions (relevé du 20/11, ~16:00 UTC)
 
-La version **publique** de l'extension ne se lit pas hors live. Antoni peut la prouver par la console Twitch, ou en
-live par F12 › `shared/runtime-config.js` › `buildId` ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.3).
+| Élément                      | Valeur                                                                                                                                                                         | Preuve                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `origin/main`                | `5ebf395e` (PR #95) ; dernier code `1f05b97c` (PR #94)                                                                                                                         | `git log`                         |
+| Core                         | **`1f05b97c`**, déployé le 20/11 15:47 UTC (déploiement `v647t4hullbip5ezaqzx7khq`), `/health` et `/ready` OK ; aucune migration depuis Casino V1                              | `coolify-deploy.mjs status core`  |
+| Bot                          | **`2c04a5db`** (16/11), actif, seul bail                                                                                                                                       | `status bot`                      |
+| Studio                       | **0.1.42 publié (Latest) et installé** (`build-info.json` : 0.1.42, `1f05b97c`)                                                                                                | lu le 20/11                       |
+| Extension publique           | **`be1744e75f63`** (shell v2, 95 commits depuis `0bf7907` : Level Up V2, mini-profil, Commandes V2.1, Mini-jeux V5, Music Hub), prouvée par Antoni le 20/11                    | `apps/twitch-extension/PUBLISHED` |
+| Extension Hosted Test        | ZIP `raptoru-live-PRODUCTION-2e2eaf3ae34a-depuis-be1744e-8-commits-shell-v2.zip`, SHA-256 `df177a48…f1436868` (Casino, 8 commits), inventaire `298e940290ab` validé par Antoni | `Worktrees\agent\…\release\`      |
+| Drapeaux du Core             | `CASINO_EXTENSION=on`, `MUSIC_HUB_EXTENSION=on`                                                                                                                                | API Coolify, lecture seule, 20/11 |
+| Dernière sauvegarde manuelle | 20/11 15:28:18 UTC, `success`, 12 310 947 octets (avant le déploiement `1f05b97c`)                                                                                             | API Coolify                       |
+| Retour arrière Core          | `node scripts/coolify-deploy.mjs deploy core 18a4b04828b1f214bb6122214d4dfc142a1d396f --rollback --go`                                                                         | livraison du 20/11                |
 
-## 5. Situation au 15/11
+### 5.2 Casino V1 : développé et déployé côté Core ; ni essayé en réel, ni public
 
-**Level Up V2 : CLÔTURÉ le 15/11** (GO d'Antoni). Finitions déployées vers 14:25 UTC (Core et bot `d2fd5bb7`,
-Studio 0.1.35) : [archive/LIVRAISON_2026-11-15_LEVEL_UP_FINITIONS.md](archive/LIVRAISON_2026-11-15_LEVEL_UP_FINITIONS.md).
+- **Code** : machine à fruits + Coffre du Raptor, roulette, machine à émotes, blackjack multijoueur (10 places par
+  table, 8 tables au plus, spectateurs). Core `apps/core-api/src/casino/`, 4 migrations Casino appliquées le 20/11,
+  Studio › Casino. PR #90 (`18a4b048`, déployé le 20/11 au matin), inventaire et release PR #93. Tests automatiques :
+  parité des règles avec les prototypes (20 000 mains, 3 000 tours), concurrence sur vrai PostgreSQL, contrôle
+  Chromium sur un Core local. Journal : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) ; module :
+  [CASINO.md](CASINO.md).
+- **Réglages en Production (relevés le 20/11)** : `casino.open=1`, les 4 jeux à 1 ; machine 20–10 000 Jetons ;
+  émotes 20–1 000 ; roulette 100 000 max par tour (ALL-IN limité au plafond du tour) ; blackjack mise principale
+  100 min, gain net 1 000 000 max par manche, paris annexes 100 000 max ; gain max par partie 1 000 000 ; partage dans
+  le chat toutes les 300 s ; annonce de table toutes les 600 s ; annonces automatiques des gros gains **coupées**.
+- **Garde conservée** : le Core refuse tout jeu hors live (`stream_offline`), avant tout débit.
+- **Visibilité** : l'extension publique `be1744e75f63` ne contient pas le Casino. Avec `CASINO_EXTENSION=on`, **tous**
+  les viewers le verront dès la publication de la version Casino.
+- **Non fait** : aucune partie réelle avec de vrais viewers, aucune revue Twitch.
 
-Activation du matin (GO d'Antoni) :
+### 5.3 Progression, WizeBot et badges : clos le 20/11
 
-- **Fusions** : PR #70 puis #71, `main` = `f04b41a2`.
-- **Core** : `f04b41a2` déployé, migration `20261126130000_progression_level_up.sql` appliquée.
-- **Level Up V2** : actif. Chiffres et retour arrière :
-  [archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md](archive/LIVRAISON_2026-11-15_LEVEL_UP_MINI_PROFIL.md).
-- **Studio** : 0.1.34 publié.
+- **Restauration exécutée le 20/11** (sauvegarde 12:57:26 UTC) : 1 159 comptes examinés ; **432 restaurés** (363
+  WizeBot, 69 touchés par l'ancienne courbe) ; **3 441 niveaux rendus** (3 307 WizeBot, 134 courbe), niveau max
+  60 → 141 ; 727 inchangés ; aucun badge perdu, aucun nouveau badge nécessaire ; 0 annonce, 0 message ; Semaine et
+  Mois intacts ; rejeu complet = 0 changement (clés `wb-restore-v1-<id>`, `curve-restore-v1-<id>`).
+- **Règles en vigueur** : 1 000 XP par niveau ; un message récompensé au plus toutes les 120 s ; badges sub tous les
+  **25 niveaux** ; l'XP gagnée depuis la migration est conservée.
+- **Sécurisation (PR #94, Core `1f05b97c`, Studio 0.1.42)** : « Annuler la normalisation » et « Annuler l'import »
+  retirés de Studio ; le Core répond 410 (`level_v2_revert_disabled`, `import_revert_disabled`). Un historique WizeBot
+  rattaché plus tard compte son niveau entier + l'XP gagnée entre-temps, une seule fois (clé `import:wizebot:<id>`).
+- **Vérifié après déploiement** : les 432 comptes identiques avant et après (XP, niveaux, badges) ; 49 événements de
+  Level Up, aucun nouveau. Un vrai rattachement futur n'est couvert que par les tests automatiques.
+- **Traces privées, hors Git** : exports, plan, journaux et fichier de retour arrière (mode « retirer », mêmes
+  montants) dans `Documents\Raptoru\_migration-exports\levels-2026-11-20\` (`restauration\`). Détail :
+  [LEVEL_UP_V2.md](LEVEL_UP_V2.md) § 14–15.
 
-**Ensuite (15/11)** : Commandes Chat (action son, viewers par ID, V2.1 expressions et édition déléguée, sons
-immédiats) — Core `c1da930a`, Studio 0.1.38 ([COMMANDS_V2_STATUS.md](COMMANDS_V2_STATUS.md)) ; méthode de travail
-[AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) (PR #82). Studio 0.1.38 est installé sur le PC.
+### 5.4 Prochaines tâches (ordre réel)
 
-**En attente d'Antoni** :
+Le Hosted Test ne permet **pas** un essai avec de vrais viewers sur `raptoru_` en live (il retire l'extension aux
+non-testeurs, [CASINO.md](CASINO.md) § 6) et le Casino refuse hors live. D'où l'ordre :
 
-- **Roue du Sub V3** (16/11, mandat de livraison d'Antoni ; [SUB_WHEEL_V3.md](SUB_WHEEL_V3.md) § 13) :
-  - barème : 12 parts (5 petits, 3 moyens, 3 bons, 1 jackpot), un palier par 3 mois d'ancienneté confirmée,
-    (1 500 · 2 000 · 2 500 · 3 000) × (palier + 1) jusqu'à 60 mois ; Prime / T1 ×1, T2 ×2, T3 ×3 ; jackpot T3 de
-    189 000 à 60 mois ; coût ≈ ×1,9 sur les 20 derniers vrais tirages ;
-  - abonnement offert : jamais de roue (commit `f8f39218`) ; ancienneté inconnue : jamais tirée « à 1 mois », confirmée
-    par le partage, le badge du chat ou Studio ;
-  - barème choisi dans Studio › Roue du Sub › Barème (`sw_settings.grid`) ; un droit acquis avant garde l'ancienne roue ;
-  - nouvelle roue Arcade dans le lecteur d'effets (`wheel-v3.js`) ; Studio installé avant la release : les tirages V3
-    s'affichent avec l'ancienne roue (bons montants) ;
-  - ordre : sauvegarde, Core (migration `20261130130000_sub_wheel_v3`), bot, release Studio, puis barème V3 ;
-  - **déployé le 16/11** : Core et bot `2c04a5db` (PR #84, #85), migration appliquée après sauvegarde (04:41 UTC),
-    Studio 0.1.39 publié ; barème toujours sur l'ancienne roue (`grid` 1) ;
-  - Studio 0.1.39 installé, barème V3 choisi par Antoni (16/11, 10:22 UTC) ; reste à regarder le premier vrai tirage V3 ;
-  - Studio 0.1.40 publié le 16/11 (11:26 UTC, depuis `3e27f454`, PR #87) : « Tester dans OBS » joue la roue affichée dans
-    OBS (avant : il ouvrait seulement le panneau « Tests ») ; à installer par Antoni ;
-- « Envoyer une vraie annonce test » (le son, puis le bandeau 3 s après) ;
-- régler et essayer en vrai la commande d'Aouh (expressions, latence, édition déléguée après publication) ;
-- l'extension : inventaire `INVENTAIRE-a971386f8c8d.md` (95 commits : Commandes V2.1 en plus de Level Up V2 et du
-  mini-profil) **validé par Antoni le 16/11**, ZIP `be1744e75f63` construit
-  ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 3.0) ; reste le Hosted Test (Antoni, hors live), puis la revue.
+1. **Antoni** : vérifier le ZIP Casino en Hosted Test, **hors live**, sur un compte testeur (affichage, état « hors
+   live », navigation).
+2. **Antoni (décision)** : avant la publication, choisir `CASINO_EXTENSION=testers:<ids>` (essai réel restreint pendant
+   un live, recommandé) ou garder `on` (ouvert à tous dès la publication).
+3. **Antoni** : soumettre la version `2e2eaf3ae34a` à la revue Twitch (8 à 14 jours, une soumission à la fois).
+4. Après approbation : publier, mettre à jour `PUBLISHED` (agent, commit), puis **essai réel en live** : mises, gains,
+   remboursements, spectateurs, blackjack à plusieurs.
+5. Corriger **uniquement** les problèmes observés ; passer `CASINO_EXTENSION=on` si l'accès était restreint.
+6. Ensuite : [ROADMAP.md](ROADMAP.md) § 0.2.
 
-**En Production** : tous les modules de [ROADMAP.md](ROADMAP.md) § 1 marqués « Livré ». Music Hub y est **seulement
-pour les testeurs**. Le public garde l'extension présumée `0bf7907` (shell legacy) : ni le mini-profil, ni
-l'interrupteur du son, tant que la nouvelle version n'est pas publiée.
+## 6. Comment reprendre dans une nouvelle session
 
-**Période précédente** (livraisons du 10 au 14/11, OBS, Chaos V2) :
+1. Lire ce fichier (§ 0, § 5), puis [../CLAUDE.md](../CLAUDE.md) et [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) § 0.
+2. Lancer les commandes du § 4 ; comparer avec le § 5.1.
+3. [ROADMAP.md](ROADMAP.md) § 0 (priorités, pauses) et § 1 (état de chaque module).
+4. Au besoin, [PROJECT_STATUS.md](PROJECT_STATUS.md) (versions, tests, problèmes ouverts, actions d'Antoni).
+5. Le document du module visé ([README.md](README.md) § 4), puis son code via
+   [INVENTAIRE_MODULES.md](INVENTAIRE_MODULES.md).
+6. Créer un worktree (`git worktree add "../Raptoru 2.0 - Worktrees/<nom>" -b <branche> origin/main`) et y travailler.
+7. Avant de s'arrêter : mettre ce fichier à jour, court ; le détail daté va dans `archive/` ou le journal du chantier.
 
-- [REPRISE_SESSION_POST_LIVE_2026-11-11.md](REPRISE_SESSION_POST_LIVE_2026-11-11.md) ;
-- [PROJECT_STATUS.md](PROJECT_STATUS.md), photographie du 10/11 ;
-- [ROADMAP.md](ROADMAP.md).
+**Si on change de modèle ou d'outil** : ce fichier et [REPRISE_CHATGPT.md](REPRISE_CHATGPT.md) suffisent comme
+contexte ; ne pas refaire une analyse qu'un document enregistre, sauf si le code a changé depuis.
 
-**Ce qui reste à vérifier** (Antoni) : Music Hub et ses parcours viewer réels, la recette d'usage de Studio, les effets
-OBS ([PROJECT_STATUS.md](PROJECT_STATUS.md) § 12).
+## 7. À ne jamais rejouer ni faire
 
-**Prochain chantier possible** : **Chaos V2, lot 0** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md)).
+- **Restauration des niveaux du 20/11** : ne pas la rejouer, ni l'annuler, ni recalculer ses XP. Ne pas rétablir les
+  annulations « normalisation » ou « import ».
+- Rejouer la normalisation WizeBot du 15/11, l'import économique du 20/10 ou une migration déjà appliquée.
+- Toucher aux soldes de Jetons hors d'un parcours prévu ; régénérer un ZIP de l'extension sans changement de code.
+- Activer le Hosted Test sur `raptoru_` pendant un live.
+- Lancer `npm run studio` ou `git clean` / `reset` / `checkout .` dans le checkout principal.
+- Réactiver SAMMI ou SE.Live ; modifier une scène ou une URL de source OBS sans GO.
+- Présenter un test automatique, un déploiement, une publication ou un Hosted Test comme une validation.
+- Relancer le projet suspendu de personnalité IA de LeCroupier_ ([ROADMAP.md](ROADMAP.md) § 6).
 
-## 6. Quels fichiers lire avant de coder
+## 8. Risques connus
 
-1. Ce fichier, puis [../CLAUDE.md](../CLAUDE.md).
-2. [PROJECT_STATUS.md](PROJECT_STATUS.md) (état), [ROADMAP.md](ROADMAP.md) (§ 0–2).
-3. [ARCHITECTURE.md](ARCHITECTURE.md) et [INVENTAIRE_MODULES.md](INVENTAIRE_MODULES.md) (le code du module visé).
-4. Selon le chantier :
-   - Chaos V2 : `chaos/ARCHITECTURE_CHAOS_V2.md` puis `chaos/ROADMAP_CHAOS_V2.md` ;
-   - musique : [music/MUSIC_HUB_STATE.md](music/MUSIC_HUB_STATE.md) ;
-   - extension : [extension/SOCLE.md](extension/SOCLE.md) ;
-   - Studio : [studio-refonte/CONTEXTE.md](studio-refonte/CONTEXTE.md), puis
-     [DESIGN_SYSTEM.md](studio-refonte/DESIGN_SYSTEM.md) et
-     [architecture/GUIDE_MODULE.md](studio-refonte/architecture/GUIDE_MODULE.md) ;
-   - OBS : [OBS_ENVIRONNEMENT.md](OBS_ENVIRONNEMENT.md).
-5. Créer un worktree dans `…Worktrees\`, et tenir un journal de reprise du chantier.
-6. Avant de s'arrêter : mettre à jour **ce fichier**, court. Le détail daté va dans `archive/`.
-
-## 7. Ce qu'il ne faut surtout pas faire
-
-- Lancer `npm run studio` depuis le checkout principal, ou y faire `git clean`, `reset` ou `checkout .`.
-- Téléverser une ancienne archive : la seule référence est `bbce1048a078` ; les ZIP de `Documents\Raptoru\…` sont
-  d'un ancien projet.
-- Activer le Hosted Test sur la chaîne en live : il retire l'extension à tous les non-testeurs.
-- Réactiver SE.Live ou SAMMI.
-- Modifier une scène OBS ou une URL de source sans GO.
-- Copier une URL de source OBS, un `.env`, un jeton ou un dump dans le dépôt.
-- Présenter un test automatique, un déploiement ou une publication comme une validation.
-- Présenter Chaos V2 comme existant : il est **en conception**.
+- Casino : `CASINO_EXTENSION=on` ouvre le Casino à tous au moment même de la publication Twitch (§ 5.4, point 2).
+- Checkout principal très en retard : sa mise à jour demande un GO et une sauvegarde des données de Studio.
+- Copies de la base hors VPS seulement manuelles ([BACKUPS.md](BACKUPS.md)).
+- Deux fenêtres plein écran permanentes de Studio (Halloween, Chaos V1) si « Overlay actif » est allumé.
+- Tests : plantage vitest Windows 0xC0000409 sous charge, E2E instables connus ([AGENT_WORKFLOW.md](AGENT_WORKFLOW.md)).
+- Détail : [PROJECT_STATUS.md](PROJECT_STATUS.md) § 9.
