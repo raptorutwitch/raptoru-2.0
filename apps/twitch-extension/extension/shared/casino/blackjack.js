@@ -82,8 +82,8 @@ function stackHTML(amount) {
 }
 const totText = (h) => (h.cards.length ? (h.soft && h.total < 21 ? `${h.total - 10}/${h.total}` : String(h.total)) : '');
 
-/** Dans la case : « B » pour Blackjack (le nom complet au survol). */
-const SHORT = { ...SIDE_LABEL, BJ: 'B' };
+/** Dans la case : « BJ » pour Blackjack (le nom complet au survol). Libellé seul : le pari reste `BJ`. */
+const SHORT = { ...SIDE_LABEL, BJ: 'BJ' };
 /** Gain net d'un pari banque gagné (le retour, mise comprise, est sideReturn). */
 const sideNet = (k, v) => sideReturn(k, v) - v;
 /** Le feutre : la zone intérieure est une ellipse de demi-axes (largeur du tapis, ARC_B) dont le bas touche le bord.
@@ -335,7 +335,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     fresh.push(...df);
     const dt = $('[data-tot="dealer"]');
     dt.textContent = s.dealer.cards.length ? (s.dealer.natural ? 'BJ' : s.dealer.total > 21 ? `${s.dealer.total} · bust` : String(s.dealer.total)) : '';
-    dt.className = `tot${s.dealer.natural ? ' bj' : s.dealer.total > 21 ? ' bust' : ''}`;
+    dt.className = `tot${s.dealer.natural ? ' is-bj' : s.dealer.total > 21 ? ' bust' : ''}`;
     paintSides(s, me);
     paintSeats(s, fresh);
     paintSpot(s, fresh, me);
@@ -480,8 +480,9 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       ms.innerHTML = pile ? stackHTML(p.bet.main) : '';
     }
     const tot = el.querySelector('.tot');
-    tot.textContent = h ? (h.natural ? 'BJ' : totText(h)) : '';
-    tot.className = `tot${h?.natural ? ' bj' : busted ? ' bust' : ''}`;
+    tot.textContent = h ? (h.natural ? 'BLACKJACK' : totText(h)) : '';
+    // `is-bj`, jamais `bj` : `.bj` est la racine de la table (position absolue, inset 0) et étirait l'étiquette.
+    tot.className = `tot${h?.natural ? ' is-bj' : busted ? ' bust' : ''}`;
     tot.dataset.hands = p.hands.length > 1 ? `${hi + 1}/${p.hands.length}` : '';
     const stake = p.hands.length ? p.hands.reduce((a, x) => a + x.stake, 0) : (myBetting ? draft.main : p.bet?.main) ?? 0;
     const sides = myBetting ? Object.keys(draft.side).length : p.sideCount;
@@ -555,7 +556,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       const bjMe = m?.kind === 'blackjack';
       // Ma main d'abord (son verdict, son montant), puis les à-côtés et le total : jamais « égalité » pour un net nul.
       const extra = r ? [...Object.entries(r.side ?? {}).map(([k, x]) => `pari ${SIDE_LABEL[k]} ${signedTxt(x.payout - x.stake)}`), ...(r.insurance ? [`assurance ${signedTxt(r.insurance.payout - r.insurance.stake)}`] : [])] : [];
-      html = `<div class="msg res${bjMe ? ' bj' : ''}"><b>${out}</b>${m ? `<span class="me ${m.net > 0 ? 'g' : m.net < 0 ? 'l' : ''}">${KIND[m.kind] ?? ''}${m.net ? ` ${signedTxt(m.net)}` : ''}</span>${extra.length ? `<small>${extra.join(' · ')} · <b class="${r.net > 0 ? 'g' : r.net < 0 ? 'l' : ''}">total ${signedTxt(r.net)}</b></small>` : ''}` : ''}</div>`;
+      html = `<div class="msg res${bjMe ? ' is-bj' : ''}"><b>${out}</b>${m ? `<span class="me ${m.net > 0 ? 'g' : m.net < 0 ? 'l' : ''}">${KIND[m.kind] ?? ''}${m.net ? ` ${signedTxt(m.net)}` : ''}</span>${extra.length ? `<small>${extra.join(' · ')} · <b class="${r.net > 0 ? 'g' : r.net < 0 ? 'l' : ''}">total ${signedTxt(r.net)}</b></small>` : ''}` : ''}</div>`;
     }
     if (spot.dataset.key !== key) {
       spot.dataset.key = key;
