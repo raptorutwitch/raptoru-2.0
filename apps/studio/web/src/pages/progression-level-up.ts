@@ -369,6 +369,8 @@ export function mountLevelUpScene(
   }
   const poll = poller(read, 6000);
 
+  /** The announcement form holds an edit not saved yet. */
+  let announceDirty = false;
   const save = (
     patchRules: Partial<LuRules>,
     btn: HTMLElement | null,
@@ -455,7 +457,9 @@ export function mountLevelUpScene(
 
   function paintAnnounce() {
     const r = rules;
-    if (!r || zz('announce').contains(document.activeElement)) return;
+    // Typed but not saved yet (the focus may have left the field): the 6 s refresh never puts the stored text back over it.
+    if (!r || announceDirty || zz('announce').contains(document.activeElement))
+      return;
     patch(
       zz('announce'),
       grp(
@@ -606,7 +610,7 @@ export function mountLevelUpScene(
     patch(
       zz('badges'),
       grp(
-        'Badges de niveau (tous les 10 niveaux)',
+        'Badges de niveau (tous les 25 niveaux)',
         'star',
         `<div class="pg-lu-acts"><button type="button" class="d-btn" data-lu="badges-pick">Importer mes badges sub…</button></div>
         ${planHtml}
@@ -752,14 +756,17 @@ export function mountLevelUpScene(
             { purpose: 'badge', data_base64: await base64(img) },
           );
           await postJson('/api/cosmetics/items', {
-            reward_id: `niveau-${b.level}`,
+            // Badge n's id since its first import (15/11, then one badge every 10 levels): a new import updates it, never a
+            // second copy; its palier is unlock_level.
+            reward_id: `niveau-${10 * b.n}`,
             kind: 'badge',
             label: `Niveau ${b.level}`,
             description: `Badge sub n°${b.n} (${b.name}), débloqué au niveau ${b.level}.`,
             rarity: 'common',
             category: 'niveau',
             unlock_level: b.level,
-            sort: b.level,
+            // The badge's number (the catalogue's order is capped at 1 000; a level is not, past badge 40).
+            sort: b.n,
             status: 'published',
             image_id: up.image_id,
           });
@@ -846,6 +853,7 @@ export function mountLevelUpScene(
         b,
         'Texte et délais enregistrés.',
       ).then((ok) => {
+        if (ok) announceDirty = false;
         if (!ok)
           toast(
             'Le texte doit contenir {liste} ; regroupement : 30 s au moins.',
@@ -990,6 +998,7 @@ export function mountLevelUpScene(
   // The test's pseudo and level: the preview follows each key (no repaint, the field keeps its focus).
   host.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement;
+    if (t.matches('[data-lu-text], [data-lu-num]')) announceDirty = true;
     if (t.matches('[data-lu-test-pseudo]')) testPseudo = t.value.trim();
     else if (t.matches('[data-lu-test-level]'))
       testLevel = Math.max(

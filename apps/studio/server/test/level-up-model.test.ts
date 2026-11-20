@@ -5,7 +5,7 @@ import {
 } from '../../web/src/pages/level-up-model.js';
 
 // Level Up V2 (docs/LEVEL_UP_V2.md): what Studio decides before sending anything — the order of the sub badges (one every
-// 10 levels) and the rows of the first extension's sound choices.
+// 25 levels) and the rows of the first extension's sound choices.
 
 // The streamer's folder as it is (« Badge de ma chaine », inspected on 15/11/2026): eleven numbered sub badges (the 11th is
 // also kept as a Bits badge — on purpose, confirmed by Antoni), older versions of 1 to 8 in « Obsolète », Bits badges and
@@ -37,21 +37,21 @@ const FOLDER = [
   f('Obsolète/7. Warhammer titan Badge.png', 'o7'),
 ];
 
-describe('the sub badges in their order (one every 10 levels)', () => {
-  it('the numbered pictures at the top of the folder, 1 → level 10 … 10 → level 100; subfolders and old versions aside', () => {
+describe('the sub badges in their order (one every 25 levels, no last palier)', () => {
+  it('the numbered pictures at the top of the folder, 1 → level 25 … 11 → level 275; subfolders and old versions aside', () => {
     const plan = planSubBadges(FOLDER);
     expect(plan.badges.map((b) => [b.n, b.level, b.name])).toEqual([
-      [1, 10, 'UglyTitan'],
-      [2, 20, 'CartTtian'],
-      [3, 30, 'FemaleTitan'],
-      [4, 40, 'JawTitan'],
-      [5, 50, 'ArmoredTitan'],
-      [6, 60, 'ColossalTitan'],
-      [7, 70, 'WarHammerTitan'],
-      [8, 80, 'BeastTitan'],
-      [9, 90, 'AttackTitan'],
-      [10, 100, 'FoundingTitan'],
-      [11, 110, 'Badge HK'],
+      [1, 25, 'UglyTitan'],
+      [2, 50, 'CartTtian'],
+      [3, 75, 'FemaleTitan'],
+      [4, 100, 'JawTitan'],
+      [5, 125, 'ArmoredTitan'],
+      [6, 150, 'ColossalTitan'],
+      [7, 175, 'WarHammerTitan'],
+      [8, 200, 'BeastTitan'],
+      [9, 225, 'AttackTitan'],
+      [10, 250, 'FoundingTitan'],
+      [11, 275, 'Badge HK'],
     ]);
     // « 10. » sorts after « 1. » as a number, never as text; an old « 7. » in « Obsolète » is never a second 7.
     expect(plan.badges.filter((b) => b.n === 7).map((b) => b.path)).toEqual([
@@ -84,18 +84,28 @@ describe('the sub badges in their order (one every 10 levels)', () => {
       f('sans numero.png', 's'),
     ]);
     expect(plan.badges.map((b) => [b.n, b.level, !!b.doubt])).toEqual([
-      [1, 10, false],
-      [4, 40, true],
-      [5, 50, true],
+      [1, 25, false],
+      [4, 100, true],
+      [5, 125, true],
     ]);
     expect(plan.issues).toEqual([
       expect.stringContaining('Le numéro 2 est porté par 2 images différentes'),
-      'Aucun badge numéroté 3 : le palier 30 reste vide.',
+      'Aucun badge numéroté 3 : le palier 75 reste vide.',
     ]);
     expect(plan.ignored.map((i) => i.why).sort()).toEqual([
       'no_number',
       'not_image',
     ]);
+  });
+
+  it('no last palier: badge 40 → level 1 000, badge 41 → level 1 025', () => {
+    const many = Array.from({ length: 41 }, (_, i) =>
+      f(`${i + 1}. B${i + 1}.png`, `h${i + 1}`),
+    );
+    const plan = planSubBadges(many);
+    expect(plan.badges.at(-2)).toMatchObject({ n: 40, level: 1000 });
+    expect(plan.badges.at(-1)).toMatchObject({ n: 41, level: 1025 });
+    expect(plan.issues).toEqual([]);
   });
 });
 

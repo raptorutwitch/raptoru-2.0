@@ -1,6 +1,6 @@
 // Level Up V2 (docs/LEVEL_UP_V2.md) — what Studio decides BEFORE sending anything to the Core, without a DOM (tested in
 // apps/studio/server/test/level-up-model.test.ts):
-// - the order of the streamer's sub badges from their folder (one badge every 10 levels), the real ambiguities only;
+// - the order of the streamer's sub badges from their folder (one badge every 25 levels), the real ambiguities only;
 // - the rows of the first extension's sound choices from their Supabase export (CSV or JSON).
 
 export interface BadgeFile {
@@ -30,12 +30,15 @@ export interface BadgePlan {
   issues: string[];
 }
 
+/** One sub badge every 25 levels (Antoni, 20/11/2026): badge n → level 25 × n, no last palier. */
+export const BADGE_STEP = 25;
+
 const IMAGE = /\.(png|webp|jpe?g)$/i;
 const NUMBERED = /^(\d{1,3})\s*[.)_-]?\s*(.*?)\.(png|webp|jpe?g)$/i;
 
 /**
  * The sub badges in their order of progression: only the numbered pictures at the TOP of the chosen folder (the
- * subfolders hold older versions or other badges); badge n → level 10 × n. Never guessed: a number used by two different
+ * subfolders hold older versions or other badges); badge n → level BADGE_STEP × n. Never guessed: a number used by two different
  * files leaves its palier empty (said in `issues`), a missing number is said, one picture used by two paliers is a doubt
  * (`doubt`, waits for a tick). The same picture kept in a subfolder too (the « Badge HK » sub badge is also a Bits badge,
  * confirmed by Antoni on 15/11) is only a remark (`note`).
@@ -71,7 +74,7 @@ export function planSubBadges(files: BadgeFile[]): BadgePlan {
     const distinct = new Set(list.map((x) => x.f.hash));
     if (distinct.size > 1) {
       issues.push(
-        `Le numéro ${n} est porté par ${list.length} images différentes (${list.map((x) => x.f.path).join(', ')}) : le palier ${10 * n} reste vide tant qu’il n’en reste qu’une.`,
+        `Le numéro ${n} est porté par ${list.length} images différentes (${list.map((x) => x.f.path).join(', ')}) : le palier ${BADGE_STEP * n} reste vide tant qu’il n’en reste qu’une.`,
       );
       continue;
     }
@@ -85,7 +88,7 @@ export function planSubBadges(files: BadgeFile[]): BadgePlan {
     const elsewhere = twins.filter((o) => !atRoot(o));
     badges.push({
       n,
-      level: 10 * n,
+      level: BADGE_STEP * n,
       path: f.path,
       name,
       doubt: otherPalier.length
@@ -100,7 +103,7 @@ export function planSubBadges(files: BadgeFile[]): BadgePlan {
   for (let n = 1; n <= max; n++)
     if (!byNumber.has(n))
       issues.push(
-        `Aucun badge numéroté ${n} : le palier ${10 * n} reste vide.`,
+        `Aucun badge numéroté ${n} : le palier ${BADGE_STEP * n} reste vide.`,
       );
   return { badges, ignored, issues };
 }

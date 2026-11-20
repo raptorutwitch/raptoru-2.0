@@ -477,6 +477,27 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       ).rejects.toThrow();
     });
 
+    it('a text changed in Studio is the NEXT announcement’s text — read at each announcement (no cache, no restart), kept exactly as typed', async () => {
+      await chatOn();
+      await levelUp('1', 999, 0);
+      at(300_000);
+      await svc.tick();
+      // Antoni's text of 20/11/2026, saved as Studio sends it.
+      await svc.updateSettings(CH, {
+        rules: { level_up_chat_text: '🚀 Level UP - {liste} !' },
+      });
+      expect((await svc.settings(CH)).rules.level_up_chat_text).toBe(
+        '🚀 Level UP - {liste} !',
+      );
+      await levelUp('2', 999, 400_000);
+      at(700_000);
+      await svc.tick();
+      expect(await texts()).toEqual([
+        '🚀 LEVEL UP — a⁀na (2)',
+        '🚀 Level UP - b⁀ob (2) !',
+      ]);
+    });
+
     it('Studio’s test: ONE real « [TEST] » announcement (the channel text and colour, an optional title of the catalogue) — no XP, no level, no event, no reward; refused without the chat output', async () => {
       await activate();
       const count = async (table: string) =>
@@ -1154,7 +1175,7 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
     });
   });
 
-  describe('level badges (one every 10 levels)', () => {
+  describe('level badges (one every 10 levels; every 25 since 20/11/2026)', () => {
     const badge = (lvl: number, active = true) =>
       svc.upsertReward(CH, {
         reward_id: `niveau-${lvl}`,
@@ -1356,6 +1377,111 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       await Promise.allSettled([cycle(), cycle(), cycle()]);
       expect(await xp('1')).toBe(1000);
       expect((await events()).length).toBe(1);
+    });
+  });
+
+  describe('1 000 XP per level, badges every 25 levels (20/11/2026)', () => {
+    const badge = (lvl: number) =>
+      svc.upsertReward(CH, {
+        reward_id: `palier-${lvl}`,
+        kind: 'badge',
+        label: `Niveau ${lvl}`,
+        description: '',
+        rarity: 'common',
+        category: 'niveau',
+        unlock_level: lvl,
+        active: true,
+        sort: lvl,
+      });
+    const owned = async (id: string) =>
+      (await svc.viewer(CH, id)).inventory
+        .filter((i) => i.kind === 'badge')
+        .map((i) => i.id)
+        .sort();
+
+    it('a big real gain: several levels at once, the surplus kept, ONE event at the final level; a replay counts nothing', async () => {
+      await activate();
+      await svc.adjust(
+        CH,
+        {
+          viewer: '1',
+          mode: 'set_xp',
+          value: 999,
+          reason: 'test',
+          request_id: 'adj-0000-big1',
+        },
+        studio,
+      );
+      const cycle = {
+        streamId: 's1',
+        seconds: 3_001 * 60 + 30,
+        viewerIds: ['1'],
+        at: new Date(T0.getTime() + 77),
+      };
+      await db.tx((q) => svc.presenceListener.validated(q, cycle));
+      expect(await xp('1')).toBe(999 + 3_002); // 4 001: 1 XP per minute, rounded
+      expect(await level('1')).toBe(5); // 1 + floor(4 001 / 1 000): 1 XP kept towards 6
+      // The same presence reading again (a replay): nothing more.
+      await db.tx((q) => svc.presenceListener.validated(q, cycle));
+      expect(await xp('1')).toBe(4_001);
+      expect((await events()).map((e) => [e.from_level, e.to_level])).toEqual([
+        [1, 5],
+      ]);
+    });
+
+    it('the paliers 25, 50, 75, 100 … and past 1 000: the badge exactly at its level (24/25, 49/50, 74/75, 99/100, 999/1 000/1 025), never announced by an adjustment', async () => {
+      await activate();
+      for (const lvl of [25, 50, 75, 100, 1000, 1025]) await badge(lvl);
+      const cases: [string, number, string[]][] = [
+        ['1', 24, []],
+        ['2', 25, ['palier-25']],
+        ['3', 49, ['palier-25']],
+        ['4', 50, ['palier-25', 'palier-50']],
+        ['5', 74, ['palier-25', 'palier-50']],
+        ['6', 75, ['palier-25', 'palier-50', 'palier-75']],
+      ];
+      for (const [id, lvl] of cases)
+        await svc.adjust(
+          CH,
+          {
+            viewer: id,
+            mode: 'set_level',
+            value: lvl,
+            reason: 'test',
+            request_id: `adj-0000-pal-${id}`,
+          },
+          studio,
+        );
+      for (const [id, lvl, want] of cases) {
+        expect(await level(id)).toBe(lvl);
+        expect(await owned(id)).toEqual(want);
+      }
+      const step = async (id: string, lvl: number, key: string) =>
+        svc.adjust(
+          CH,
+          {
+            viewer: id,
+            mode: 'set_level',
+            value: lvl,
+            reason: 'test',
+            request_id: key,
+          },
+          studio,
+        );
+      await step('1', 99, 'adj-0000-pal-99');
+      expect(await owned('1')).toEqual(['palier-25', 'palier-50', 'palier-75']);
+      await step('1', 100, 'adj-0000-pal-100');
+      expect(await owned('1')).toContain('palier-100');
+      await step('1', 999, 'adj-0000-pal-999');
+      expect(await owned('1')).not.toContain('palier-1000');
+      await step('1', 1025, 'adj-0000-pal-1025');
+      expect(await level('1')).toBe(1025);
+      expect(await xp('1')).toBe(1_024_000);
+      expect(await owned('1')).toEqual(
+        [25, 50, 75, 100, 1000, 1025].map((l) => `palier-${l}`).sort(),
+      );
+      // Administrative moves (a future restoration included): badges yes, announcements never.
+      expect(await events()).toEqual([]);
     });
   });
 }
