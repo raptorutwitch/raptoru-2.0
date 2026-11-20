@@ -129,6 +129,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261202130000_casino_feed.sql',
   // Casino spectators: the player's Passer reaches them (« skip »); Lab twin 20261203120000.
   '20261203130000_casino_feed_skip.sql',
+  // Casino V1: the emote machine and the multiplayer blackjack (casino_bj_tables); Lab twin 20261204120000.
+  '20261204130000_casino_v1.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -259,6 +261,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261202120000_casino_feed_lab.sql',
   // Casino spectators: the Lab twin of 20261203130000_casino_feed_skip.sql (same content).
   '20261203120000_casino_feed_skip_lab.sql',
+  // Casino V1: the Lab twin of 20261204130000_casino_v1.sql (same content).
+  '20261204120000_casino_v1_lab.sql',
 ]);
 
 /**

@@ -56,18 +56,31 @@ export async function casinoExt(
       return await ok(
         `${base}/live?after=${num('after', -1)}&wait_ms=${num('wait_ms')}`,
       );
+    // Blackjack: the lobby and a table's redacted state are open to every viewer (spectators too, anonymous).
+    if (method === 'GET' && path === '/casino/bj/tables')
+      return await ok(`${base}/bj/tables${who ? `?${who}` : ''}`);
+    if (method === 'GET' && path === '/casino/bj/state') {
+      const table = qs.get('table') ?? '';
+      if (!/^[0-9a-f-]{36}$/.test(table))
+        return { status: 400, body: { ok: false, error: 'invalid_table' } };
+      return await ok(
+        `${base}/bj/state?table=${table}&after=${num('after', -1)}&wait_ms=${num('wait_ms')}${who ? `&${who}` : ''}`,
+      );
+    }
     if (!viewer)
       return { status: 403, body: { ok: false, error: 'identity_required' } };
     if (method === 'GET' && path === '/casino/history') {
       const game = qs.get('game');
       const limit = Number(qs.get('limit') ?? 50);
       return await ok(
-        `${base}/history?${who}${game === 'slot' || game === 'roulette' ? `&game=${game}` : ''}&limit=${Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 50}`,
+        `${base}/history?${who}${game === 'slot' || game === 'roulette' || game === 'book' || game === 'blackjack' ? `&game=${game}` : ''}&limit=${Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 50}`,
       );
     }
     if (
       method === 'POST' &&
-      (path === '/casino/slot/spin' || path === '/casino/roulette/spin')
+      (path === '/casino/slot/spin' ||
+        path === '/casino/roulette/spin' ||
+        path === '/casino/book/spin')
     ) {
       if (!idempotencyKey)
         return {
@@ -77,8 +90,37 @@ export async function casinoExt(
       return await ok(`${base}${path.slice('/casino'.length)}`, {
         viewer,
         key: idempotencyKey,
-        ...(path === '/casino/slot/spin' ? { bet: b.bet } : { bets: b.bets }),
+        ...(path === '/casino/roulette/spin'
+          ? { bets: b.bets }
+          : { bet: b.bet }),
+        // A Lab scenario (the Core refuses it outside the Lab).
+        ...(path === '/casino/book/spin' && b.test != null
+          ? { test: b.test }
+          : {}),
       });
+    }
+    // Blackjack intents: the verified viewer + the intent's fields only (the Core validates each one).
+    const bjMatch =
+      /^\/casino\/bj\/(join|bet|clear|act|insure|leave|announce|rig)$/.exec(
+        path,
+      );
+    if (method === 'POST' && bjMatch) {
+      const pick: Json = {};
+      for (const k of [
+        'table_id',
+        'seat',
+        'main',
+        'side',
+        'ready',
+        'type',
+        'token',
+        'action_id',
+        'stake',
+        'even',
+        'rig',
+      ])
+        if (b[k] !== undefined) pick[k] = b[k];
+      return await ok(`${base}/bj/${bjMatch[1]}`, { viewer, ...pick });
     }
     if (method === 'POST' && path === '/casino/progress')
       return await ok(`${base}/progress`, {

@@ -12,9 +12,14 @@ import {
 import type { ModuleSettings } from '../module-settings/service.js';
 import { liveChannelSession } from '../stream/channel-sessions.js';
 import { activeSession } from '../stream/stream-sessions.js';
+import {
+  playRound as playBook,
+  type BookRound,
+  type BookTest,
+} from './book.js';
 import { generateCoffre, type CoffreScript } from './coffre.js';
 import { CasinoError, ROUND_ID } from './errors.js';
-import { CasinoFeed, POS } from './feed.js';
+import { bonusSteps, CasinoFeed, POS } from './feed.js';
 import { cryptoIntRng, floatFrom, type IntRng } from './rng.js';
 import {
   ALL_IN_MAX_WIN,
@@ -75,6 +80,74 @@ export const CASINO_SETTINGS = {
     default: 1,
     min: 0,
     max: 1,
+  },
+  book_open: {
+    label: 'Machine à émotes ouverte',
+    unit: '0 / 1',
+    default: 1,
+    min: 0,
+    max: 1,
+  },
+  blackjack_open: {
+    label: 'Blackjack ouvert',
+    unit: '0 / 1',
+    default: 1,
+    min: 0,
+    max: 1,
+    help: 'fermé : plus de place ni de mise ; une manche déjà engagée se termine et se paie normalement.',
+  },
+  book_min_bet: {
+    label: 'Machine à émotes : mise minimum',
+    unit: 'Jetons',
+    default: 20,
+    min: 10,
+    max: 10_000,
+  },
+  book_max_bet: {
+    label: 'Machine à émotes : mise maximum',
+    unit: 'Jetons',
+    default: 1_000,
+    min: 10,
+    max: 10_000,
+    help: 'le gain d’un tour (tours gratuits compris) est payé jusqu’au « gain maximum par partie » : au-delà de « gain maximum ÷ 1 000 », ce plafond retire du RTP (docs/CASINO.md § 13).',
+  },
+  bj_main_min: {
+    label: 'Blackjack : mise principale minimum',
+    unit: 'Jetons',
+    default: 100,
+    min: 10,
+    max: 100_000,
+    help: 'en multiples de 10 ; aucun maximum fixe : c’est le gain possible qui est borné (ligne suivante).',
+  },
+  bj_max_win: {
+    label: 'Blackjack : gain net possible maximum par manche',
+    unit: 'Jetons',
+    default: 1_000_000,
+    min: 10_000,
+    max: 30_000_000,
+    help: 'pire cas compté avant la donne : 3 splits + 4 doubles gagnés (8 × la mise) + le meilleur pari banque. Une mise qui pourrait le dépasser est refusée avec la mise maximale possible ; jamais un gain réduit.',
+  },
+  bj_side_max_return: {
+    label: 'Blackjack : retour maximum des paris banque par manche',
+    unit: 'Jetons',
+    default: 100_000,
+    min: 1_000,
+    max: 10_000_000,
+  },
+  bj_announce: {
+    label: 'Blackjack : proposer l’annonce d’une nouvelle table',
+    unit: '0 / 1',
+    default: 1,
+    min: 0,
+    max: 1,
+    help: 'le joueur qui ouvre une table peut, d’un clic, faire annoncer la table par LeCroupier_ (jamais automatique).',
+  },
+  bj_announce_gap_s: {
+    label: 'Blackjack : délai minimum entre deux annonces de table',
+    unit: 's',
+    default: 600,
+    min: 60,
+    max: 86_400,
   },
   slot_min_bet: {
     label: 'Machine : mise minimum',
@@ -160,12 +233,12 @@ const NOTED_REFUSALS = new Set([
 ]);
 const ANNOUNCE_GAP_MS = 120_000;
 /** How long a round stays « en cours » for spectators (its animation), unless the Coffre is still being watched. */
-const ACTIVE_MS = { slot: 9_000, roulette: 13_000 } as const;
+const ACTIVE_MS = { slot: 9_000, roulette: 13_000, book: 9_000 } as const;
 /** A Coffre nobody advanced for this long is shown as finished to spectators (the player left). */
 const COFFRE_STALE_MS = 180_000;
 const COFFRE_FINISHED_SHOWN_MS = 8_000;
 
-export type Game = 'slot' | 'roulette';
+export type Game = 'slot' | 'roulette' | 'book' | 'blackjack';
 export interface CasinoViewer {
   id: string;
   display_name: string;
@@ -183,7 +256,7 @@ export interface RoundRow {
   raw_payout: number;
   payout: number;
   capped: boolean;
-  outcome: SlotOutcome | RouletteOutcome;
+  outcome: SlotOutcome | RouletteOutcome | BookOutcome;
   economy: 'lab' | 'canonical';
   progress_step: number;
   progress_at: Date | null;
@@ -201,6 +274,8 @@ export interface SlotOutcome {
   line_win: number;
   coffre: (CoffreScript & { win: number }) | null;
 }
+/** The emote machine: the whole round (base spin, the feature's symbol and every free spin), drawn at once. */
+export type BookOutcome = BookRound;
 export interface RouletteOutcome {
   bets: RouletteBets;
   pocket: number;
@@ -251,6 +326,10 @@ export class CasinoService {
   private get lab() {
     return this.labEnvironment ?? this.economy.mode !== 'canonical';
   }
+  /** The Lab (scenarios, the simulated live) — never Production. */
+  isLab() {
+    return this.lab;
+  }
 
   setting(q: Queryable, channelId: string, key: SettingKey) {
     return this.settings.get(q, channelId, `${CASINO_MODULE}.${key}`);
@@ -276,7 +355,15 @@ export class CasinoService {
     const shareCooldown = v('share_cooldown_s');
     const announce = v('announce');
     const announceMinX = v('announce_min_x');
+    const bookMin = v('book_min_bet');
     return {
+      book_min_bet: bookMin,
+      book_max_bet: Math.max(bookMin, v('book_max_bet')),
+      bj_main_min: Math.ceil(v('bj_main_min') / 10) * 10,
+      bj_max_win: v('bj_max_win'),
+      bj_side_max_return: v('bj_side_max_return'),
+      bj_announce: v('bj_announce') === 1,
+      bj_announce_gap_s: v('bj_announce_gap_s'),
       slot_min_bet: slotMin,
       slot_max_bet: Math.max(slotMin, slotMax),
       roulette_max_total: rouletteMax,
@@ -322,6 +409,8 @@ export class CasinoService {
       games: {
         slot: reason === null && slot === 1,
         roulette: reason === null && roulette === 1,
+        book: reason === null && v('book_open') === 1,
+        blackjack: reason === null && v('blackjack_open') === 1,
       },
       economy: this.economy.mode,
     };
@@ -335,6 +424,23 @@ export class CasinoService {
     req: { key: string; bet: unknown },
   ) {
     return this.play(channelId, viewer, 'slot', req.key, req.bet);
+  }
+
+  /** The emote machine. `test`: a Lab scenario (forced BONUS, symbol, expansion) — refused outside the Lab. */
+  async spinBook(
+    channelId: string,
+    viewer: CasinoViewer,
+    req: { key: string; bet: unknown; test?: unknown },
+  ) {
+    if (req.test != null && !this.lab) throw new CasinoError(403, 'lab_only');
+    return this.play(
+      channelId,
+      viewer,
+      'book',
+      req.key,
+      req.bet,
+      (req.test ?? null) as BookTest | null,
+    );
   }
 
   async spinRoulette(
@@ -351,10 +457,16 @@ export class CasinoService {
     game: Game,
     key: string,
     stake: unknown,
+    test: BookTest | null = null,
   ) {
     if (!/^[A-Za-z0-9_:-]{8,128}$/.test(key ?? ''))
       throw new CasinoError(400, 'idempotency_key_required');
-    const requestHash = hashOf([game, viewer.id, stake ?? null]);
+    const requestHash = hashOf([
+      game,
+      viewer.id,
+      stake ?? null,
+      ...(test ? [test] : []),
+    ]);
     try {
       const res = await this.db.tx(async (q) => {
         // One viewer's spins one at a time: a resent intent waits for the first and replays it.
@@ -389,8 +501,20 @@ export class CasinoService {
         const roundId = randomUUID();
         let bet: number;
         let raw: number;
-        let outcome: SlotOutcome | RouletteOutcome;
-        if (game === 'slot') {
+        let outcome: SlotOutcome | RouletteOutcome | BookOutcome;
+        if (game === 'book') {
+          if (
+            typeof stake !== 'number' ||
+            !Number.isSafeInteger(stake) ||
+            stake % 10 !== 0
+          )
+            throw new CasinoError(400, 'invalid_bet');
+          if (stake < lim.book_min_bet)
+            throw new CasinoError(409, 'below_min', { min: lim.book_min_bet });
+          if (stake > lim.book_max_bet)
+            throw new CasinoError(409, 'above_max', { max: lim.book_max_bet });
+          bet = stake;
+        } else if (game === 'slot') {
           if (typeof stake !== 'number' || !Number.isSafeInteger(stake))
             throw new CasinoError(400, 'invalid_bet');
           if (stake < lim.slot_min_bet)
@@ -448,7 +572,11 @@ export class CasinoService {
             max_balance: hold.maxBalance,
           });
         // The draw (Core only).
-        if (game === 'slot') {
+        if (game === 'book') {
+          const r = playBook(this.rng, bet, test);
+          raw = r.payout;
+          outcome = r;
+        } else if (game === 'slot') {
           const stops = drawStops(this.rng);
           const grid = windowAt(stops);
           const ev = evaluate(grid, bet);
@@ -617,9 +745,11 @@ export class CasinoService {
     if (last && now.getTime() - Date.parse(last.at) < ANNOUNCE_GAP_MS) return;
     const text = coffre?.full
       ? `🏆 ${row.viewer_name} remplit le Coffre du Raptor et décroche le GRAND : +${fmt(row.payout)} Jetons à la machine à sous !`
-      : row.game === 'slot'
-        ? `🏆 ${row.viewer_name} réussit un ${xs(x)} à la machine à sous : +${fmt(row.payout)} Jetons !`
-        : `🏆 ${row.viewer_name} rafle +${fmt(row.payout)} Jetons à la roulette (${xs(x)}) !`;
+      : row.game === 'book'
+        ? `🏆 ${row.viewer_name} réussit un ${xs(x)} à la machine à émotes : +${fmt(row.payout)} Jetons !`
+        : row.game === 'slot'
+          ? `🏆 ${row.viewer_name} réussit un ${xs(x)} à la machine à sous : +${fmt(row.payout)} Jetons !`
+          : `🏆 ${row.viewer_name} rafle +${fmt(row.payout)} Jetons à la roulette (${xs(x)}) !`;
     const written = await insertAnnouncement(q, {
       channelId,
       now,
@@ -665,7 +795,7 @@ export class CasinoService {
       typeof req.step === 'number' &&
       Number.isInteger(req.step) &&
       req.step >= -1 &&
-      req.step <= 64
+      req.step <= 500
         ? req.step
         : null;
     if (req.stage === 'skip')
@@ -689,29 +819,25 @@ export class CasinoService {
         )
       )[0];
       if (!r) throw new CasinoError(404, 'round_not_found');
-      const coffre =
-        r.game === 'slot' ? (r.outcome as SlotOutcome).coffre : null;
+      // The bonus (the Coffre's respins, the emote machine's free spins): its steps, or null.
+      const steps = bonusSteps(r);
       if (
-        (pos === POS.coffre && !coffre) ||
+        (pos === POS.coffre && steps === null) ||
         (pos > POS.coffre &&
           pos < POS.end &&
-          (!coffre || pos - POS.step(0) >= coffre.steps.length))
+          (steps === null || pos - POS.step(0) >= steps))
       )
         throw new CasinoError(400, 'invalid_step');
-      if (coffre && pos >= POS.coffre) {
+      if (steps !== null && pos >= POS.coffre) {
         const shown =
-          pos === POS.coffre
-            ? -1
-            : pos === POS.end
-              ? coffre.steps.length
-              : pos - POS.step(0);
+          pos === POS.coffre ? -1 : pos === POS.end ? steps : pos - POS.step(0);
         await q.query(
           `update casino_rounds set progress_step = greatest(progress_step, $2), progress_at = $3,
              finished_at = case when $4 and finished_at is null then $3 else finished_at end
            where round_id = $1`,
           [r.round_id, shown, now, pos === POS.end],
         );
-      } else if (!coffre && pos >= POS.result)
+      } else if (steps === null && pos >= POS.result)
         await q.query(
           'update casino_rounds set finished_at = coalesce(finished_at, $2) where round_id = $1',
           [r.round_id, now],
@@ -927,8 +1053,8 @@ export class CasinoService {
       // A Coffre this viewer has not finished watching (closed tab, other device): resumed where it was.
       const unfinished = (
         await q.query<RoundRow>(
-          `select * from casino_rounds where channel_id = $1 and viewer_id = $2 and game = 'slot'
-             and finished_at is null and outcome->'coffre' <> 'null'::jsonb and created_at > $3
+          `select * from casino_rounds where channel_id = $1 and viewer_id = $2 and finished_at is null and created_at > $3
+             and ((game = 'slot' and outcome->'coffre' <> 'null'::jsonb) or (game = 'book' and outcome->'feature' <> 'null'::jsonb))
            order by created_at desc limit 1`,
           [
             channelId,
@@ -991,10 +1117,7 @@ export class CasinoService {
         phase,
         started_at: r.created_at.toISOString(),
         progress_step: r.progress_step,
-        steps:
-          r.game === 'slot'
-            ? ((r.outcome as SlotOutcome).coffre?.steps.length ?? null)
-            : null,
+        steps: bonusSteps(r),
         // the result only once the round shows it (no spoiler in the list)
         payout: phase === 'result' ? r.payout : null,
       });
@@ -1054,7 +1177,13 @@ export class CasinoService {
     viewer: CasinoViewer,
     o: { game?: unknown; limit?: number },
   ) {
-    const game = o.game === 'slot' || o.game === 'roulette' ? o.game : null;
+    const game =
+      o.game === 'slot' ||
+      o.game === 'roulette' ||
+      o.game === 'book' ||
+      o.game === 'blackjack'
+        ? o.game
+        : null;
     const limit = Math.min(Math.max(o.limit ?? 50, 1), 100);
     const rows = await this.db.query<RoundRow>(
       `select * from casino_rounds where channel_id = $1 and viewer_id = $2 and ($3::text is null or game = $3)
@@ -1192,9 +1321,10 @@ interface Refusals {
 /** Where a round is for spectators (null: over). */
 function phaseOf(r: RoundRow, now: number): 'draw' | 'bonus' | 'result' | null {
   const age = now - r.created_at.getTime();
+  if (r.game === 'blackjack') return null; // a table is followed by its own spectator view
   if (r.game === 'roulette')
     return age < ACTIVE_MS.roulette ? (age < 8_000 ? 'draw' : 'result') : null;
-  const coffre = (r.outcome as SlotOutcome).coffre;
+  const coffre = bonusSteps(r) !== null;
   if (!coffre)
     return age < ACTIVE_MS.slot ? (age < 4_000 ? 'draw' : 'result') : null;
   if (r.finished_at)
@@ -1227,6 +1357,16 @@ function publicView(r: RoundRow) {
 function lightView(r: RoundRow) {
   const slot = r.game === 'slot' ? (r.outcome as SlotOutcome) : null;
   const roul = r.game === 'roulette' ? (r.outcome as RouletteOutcome) : null;
+  const book = r.game === 'book' ? (r.outcome as BookOutcome) : null;
+  const bj =
+    r.game === 'blackjack'
+      ? (r.outcome as unknown as {
+          table: number;
+          round: number;
+          outcome: string;
+          dealer: number;
+        })
+      : null;
   const best = slot?.lines.slice().sort((a, b) => b.win - a.win)[0];
   return {
     round_id: r.round_id,
@@ -1253,6 +1393,19 @@ function lightView(r: RoundRow) {
         }
       : {}),
     ...(roul ? { number: roul.number, color: roul.color } : {}),
+    ...(book
+      ? {
+          lines: book.base.eval.lines.length,
+          feature: book.feature
+            ? {
+                symbol: book.feature.symbol,
+                games: book.feature.games,
+                win: book.feature.total,
+              }
+            : null,
+        }
+      : {}),
+    ...(bj ? { table: bj.table, round: bj.round, dealer: bj.outcome } : {}),
   };
 }
 
@@ -1263,9 +1416,26 @@ export function shareText(r: {
   bet: number;
   payout: number;
   capped: boolean;
-  outcome: SlotOutcome | RouletteOutcome;
+  outcome: SlotOutcome | RouletteOutcome | BookOutcome;
 }): string {
   const name = r.viewer_name;
+  if (r.game === 'blackjack') {
+    const net = r.payout - r.bet;
+    return net > 0
+      ? `🃏 ${name} gagne +${fmt(net)} Jetons au Blackjack (mises ${fmt(r.bet)}) !`
+      : net === 0
+        ? `🃏 ${name} récupère sa mise au Blackjack (${fmt(r.bet)} Jetons).`
+        : `🃏 ${name} laisse ${fmt(-net)} Jetons à la banque au Blackjack.`;
+  }
+  if (r.game === 'book') {
+    const o = r.outcome as BookOutcome;
+    const cap = r.capped ? ' (gain plafonné)' : '';
+    if (o.feature)
+      return `🎰 ${name} déclenche ${o.feature.games} tours gratuits à la machine à émotes : +${fmt(r.payout)} Jetons (${xs(r.payout / r.bet)} la mise)${cap} !`;
+    if (r.payout > 0)
+      return `🎰 ${name} gagne ${fmt(r.payout)} Jetons à la machine à émotes (mise ${fmt(r.bet)}, ${xs(r.payout / r.bet)})${cap}.`;
+    return `🎰 ${name} a tenté ${fmt(r.bet)} Jetons à la machine à émotes… pas de gain cette fois.`;
+  }
   if (r.game === 'roulette') {
     const o = r.outcome as RouletteOutcome;
     const where = `le ${o.number} ${COLOR_FR[o.color] ?? ''}`.trim();

@@ -63,6 +63,7 @@ const SW_V3 = '20261130130000_sub_wheel_v3.sql';
 const CASINO = '20261201130000_casino.sql';
 const CASINO_FEED = '20261202130000_casino_feed.sql';
 const CASINO_SKIP = '20261203130000_casino_feed_skip.sql';
+const CASINO_V1 = '20261204130000_casino_v1.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -671,7 +672,8 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== SW_V3 &&
           f !== CASINO &&
           f !== CASINO_FEED &&
-          f !== CASINO_SKIP,
+          f !== CASINO_SKIP &&
+          f !== CASINO_V1,
       ),
       lab: [
         ...MIGRATION_SCOPES.lab,
@@ -706,6 +708,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         CASINO,
         CASINO_FEED,
         CASINO_SKIP,
+        CASINO_V1,
       ],
       // Refonte H8: a main Core file production did not hold on 25/10.
       mainCore: MIGRATION_SCOPES.mainCore!.filter(

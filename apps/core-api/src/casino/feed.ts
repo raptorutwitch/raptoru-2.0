@@ -2,12 +2,22 @@ import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { CasinoError } from './errors.js';
 import type {
+  BookOutcome,
   CasinoViewer,
   Game,
   RouletteOutcome,
   RoundRow,
   SlotOutcome,
 } from './service.js';
+
+/** A round's bonus steps (the Coffre's respins, the emote machine's free spins), null when it has none. */
+export function bonusSteps(r: { game: Game; outcome: unknown }): number | null {
+  if (r.game === 'slot')
+    return (r.outcome as SlotOutcome).coffre?.steps.length ?? null;
+  if (r.game === 'book')
+    return (r.outcome as BookOutcome).feature?.spins.length ?? null;
+  return null;
+}
 
 // Casino spectators (docs/CASINO.md § 6) — the public feed of each player's session. A spectator follows a PLAYER (not
 // a round): every round of theirs, its bonus, the next one, the other game. One rule keeps the result hidden: a stage
@@ -28,7 +38,13 @@ export const POS = {
   end: 900,
 } as const;
 /** After this, a stage the player's client never confirmed is published anyway (its animation is over). */
-const OVERDUE_MS = { slot: 9_000, roulette: 14_000, coffre: 7_000 } as const;
+const OVERDUE_MS = {
+  slot: 9_000,
+  roulette: 14_000,
+  book: 9_000,
+  blackjack: 0,
+  coffre: 7_000,
+} as const;
 /** A player is « en jeu » while the feed heard from them recently (presence beats every minute while a game is open). */
 const PRESENT_MS = 150_000;
 const WAIT_MAX_MS = 25_000;
@@ -78,6 +94,7 @@ const COLS =
 
 /** A round's stages after its start, each with only what it reveals. */
 export function stagesOf(r: RoundRow): Stage[] {
+  if (r.game === 'book') return bookStages(r);
   if (r.game === 'roulette') {
     const o = r.outcome as RouletteOutcome;
     return [
@@ -144,6 +161,57 @@ export function stagesOf(r: RoundRow): Stage[] {
         paid: r.capped ? Math.max(0, r.payout - o.line_win) : c.win,
       },
     }),
+  ];
+}
+
+/** The emote machine: the base spin, then (if 3+ BONUS) the expanding symbol, each free spin, the end. */
+function bookStages(r: RoundRow): Stage[] {
+  const o = r.outcome as BookOutcome;
+  const result: Stage = {
+    pos: POS.result,
+    kind: 'result',
+    data: {
+      stops: o.base.stops,
+      grid: o.base.grid,
+      lines: o.base.eval.lines,
+      scatter: o.base.eval.scatter,
+      line_win: o.base.eval.total,
+      feature: o.feature ? { trigger: true } : null,
+    },
+  };
+  const end: Stage = {
+    pos: POS.end,
+    kind: 'end',
+    data: {
+      payout: r.payout,
+      raw_payout: r.raw_payout,
+      capped: r.capped,
+      bet: r.bet,
+      line_win: o.base.eval.total,
+      feature: o.feature
+        ? {
+            symbol: o.feature.symbol,
+            games: o.feature.games,
+            total: o.feature.total,
+            series: o.feature.series,
+          }
+        : null,
+    },
+  };
+  if (!o.feature) return [result, end];
+  return [
+    result,
+    {
+      pos: POS.coffre,
+      kind: 'coffre',
+      data: { symbol: o.feature.symbol, games: 10 },
+    },
+    ...o.feature.spins.map((st, i) => ({
+      pos: POS.step(i),
+      kind: 'step' as const,
+      data: { ...st },
+    })),
+    end,
   ];
 }
 
@@ -366,7 +434,8 @@ export class CasinoFeed {
     for (const r of rows) {
       const pos = r.fpos === null ? -1 : Number(r.fpos);
       if (pos >= POS.coffre) continue; // a Coffre waits for its player (manual relaunch), never for a clock
-      const coffre = r.game === 'slot' && !!(r.outcome as SlotOutcome).coffre;
+      if (r.game === 'blackjack') continue; // a blackjack row is a settled table round, not a spin
+      const coffre = bonusSteps(r) !== null;
       let target = -1;
       if (pos < POS.result && now - r.created_at.getTime() > OVERDUE_MS[r.game])
         target = POS.result;

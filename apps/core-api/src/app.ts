@@ -8,6 +8,7 @@ import { votekickLimits, votekickModule } from './modules/votekick.js';
 import { MODULES } from './modules/index.js';
 import { casinoModule } from './modules/casino.js';
 import { CasinoService } from './casino/service.js';
+import { BlackjackService } from './casino/blackjack/service.js';
 import { randomBanExtModule, randomBanModule } from './modules/random-ban.js';
 import { RandomBanModeration } from './random-ban/moderation.js';
 import { randomBanPricing } from './random-ban/pricing.js';
@@ -101,6 +102,8 @@ export interface Core {
   moduleSettings: ModuleSettings;
   /** Casino (docs/CASINO.md): the extension's slot machine and roulette. */
   casino: CasinoService;
+  /** Casino V1: the multiplayer blackjack tables (docs/CASINO.md § 12). */
+  blackjack: BlackjackService;
   /** The module host (modules/host.ts): the modules of modules/index.ts. */
   modules: ModuleHost;
 }
@@ -278,6 +281,7 @@ export function createCore(
   // Casino (docs/CASINO.md): its rounds on this Core's economy; its settings and supervision on the host.
   const casino = new CasinoService(db, clock, economy, moduleSettings);
   modules.add(casinoModule(casino));
+  const blackjack = new BlackjackService(db, clock, economy, casino);
   return {
     credits,
     daily: new DailyService(db, clock, credits),
@@ -304,6 +308,7 @@ export function createCore(
     moduleSettings,
     modules,
     casino,
+    blackjack,
     twitchViewers,
     soundLab,
     ttsLab,

@@ -140,7 +140,7 @@ export function createPublicFrontier(
     // Roue du Sub V2 (R8): the viewer frontier's own tours / team actions, in-process only (never on HTTP).
     ...subWheelRoutes(core.subWheel, core.alerts),
     // Casino (docs/CASINO.md): the extension's spins, rounds, history, progress, shares; Studio's admin reads.
-    ...casinoRoutes(core.casino),
+    ...casinoRoutes(core.casino, core.blackjack),
     // Music Hub (docs/music/MUSIC_HUB_STATE.md): the extension's song requests on Spotify V2, in-process only.
     ...musicExtRoutes(core.spotify),
     // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
@@ -227,6 +227,15 @@ export function createPublicFrontier(
             console.error('[core-api] tombola tick failed', e.message),
           )
           .finally(() => (ticking = false));
+      }, 250);
+      // Casino V1: the blackjack tables' pending steps (deal pacing, decisions, the dealer, the next round); after a
+      // restart the saved steps run late with their safe defaults. An empty table has none.
+      const blackjackTick = setInterval(() => {
+        core.blackjack
+          .tick()
+          .catch((e: Error) =>
+            console.error('[core-api] blackjack tick failed', e.message),
+          );
       }, 250);
       const avatars = new AvatarCache(db, clock, app);
       core.votekick.attachAvatars(avatars);
@@ -372,6 +381,7 @@ export function createPublicFrontier(
         clearInterval(votekickTick);
         clearInterval(wordGameTick);
         clearInterval(raffleTick);
+        clearInterval(blackjackTick);
         clearInterval(avatarTick);
         clearInterval(expirySweep);
       };

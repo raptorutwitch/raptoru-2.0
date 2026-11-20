@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BlackjackService } from '../casino/blackjack/service.js';
 import { CasinoError, type CasinoService } from '../casino/service.js';
 import { HttpError, limitParam, parse, type Route } from './server.js';
 
@@ -15,6 +16,22 @@ const Spin = z.strictObject({
   key: z.string().regex(/^[A-Za-z0-9_:-]{8,128}$/),
   bet: z.unknown().optional(),
   bets: z.unknown().optional(),
+  test: z.unknown().optional(),
+});
+// Blackjack: the viewer + the intent's fields (the engine validates each value; never a body-chosen identity).
+const BjBody = z.strictObject({
+  viewer: Viewer,
+  table_id: z.unknown().optional(),
+  seat: z.unknown().optional(),
+  main: z.unknown().optional(),
+  side: z.unknown().optional(),
+  ready: z.unknown().optional(),
+  type: z.unknown().optional(),
+  token: z.unknown().optional(),
+  action_id: z.unknown().optional(),
+  stake: z.unknown().optional(),
+  even: z.unknown().optional(),
+  rig: z.unknown().optional(),
 });
 const Progress = z.strictObject({
   viewer: Viewer,
@@ -60,10 +77,98 @@ function viewerOf(url: URL) {
   };
 }
 
-export function casinoRoutes(casino: CasinoService): Route[] {
+export function casinoRoutes(
+  casino: CasinoService,
+  blackjack: BlackjackService,
+): Route[] {
   const at = (rest: string) =>
     new RegExp(`^\\/v1\\/lab\\/casino\\/(\\d{1,32})\\/${rest}$`);
+  const bj = (
+    path: string,
+    fn: (ch: string, b: z.infer<typeof BjBody>) => Promise<unknown>,
+  ): Route => ({
+    method: 'POST',
+    pattern: at(`bj\\/${path}`),
+    auth: 'studio',
+    handle: ({ params, body }) =>
+      mapped(() => fn(params[0]!, parse(BjBody, body))),
+  });
   return [
+    {
+      method: 'POST',
+      pattern: at('book\\/spin'),
+      auth: 'studio',
+      handle: ({ params, body }) => {
+        const b = parse(Spin, body);
+        return mapped(() =>
+          casino.spinBook(params[0]!, b.viewer, {
+            key: b.key,
+            bet: b.bet,
+            test: b.test,
+          }),
+        );
+      },
+    },
+    // Blackjack: the lobby, a table's redacted state (long-poll; anyone may watch), the player's intents.
+    {
+      method: 'GET',
+      pattern: at('bj\\/tables'),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() => blackjack.tables(params[0]!, viewerOf(url))),
+    },
+    {
+      method: 'GET',
+      pattern: at('bj\\/state'),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() =>
+          blackjack.state(
+            params[0]!,
+            url.searchParams.get('table') ?? '',
+            viewerOf(url),
+            afterOf(url),
+            waitOf(url),
+          ),
+        ),
+    },
+    bj('join', (ch, b) =>
+      blackjack.join(ch, b.viewer, { table_id: b.table_id, seat: b.seat }),
+    ),
+    bj('bet', (ch, b) =>
+      blackjack.bet(ch, b.viewer, {
+        main: b.main,
+        side: b.side,
+        ready: b.ready,
+      }),
+    ),
+    bj('clear', (ch, b) => blackjack.clear(ch, b.viewer)),
+    bj('act', (ch, b) =>
+      blackjack.act(ch, b.viewer, {
+        type: b.type,
+        token: b.token,
+        action_id: b.action_id,
+      }),
+    ),
+    bj('insure', (ch, b) =>
+      blackjack.insure(ch, b.viewer, {
+        stake: b.stake,
+        even: b.even,
+        action_id: b.action_id,
+      }),
+    ),
+    bj('leave', (ch, b) => blackjack.leave(ch, b.viewer)),
+    bj('announce', (ch, b) => blackjack.announce(ch, b.viewer, b.table_id)),
+    bj('rig', (ch, b) => blackjack.rig(ch, b.viewer, b.rig)),
+    {
+      method: 'GET',
+      pattern: at('admin\\/bj'),
+      auth: 'studio',
+      handle: ({ params }) =>
+        mapped(async () => ({
+          tables: await blackjack.adminTables(params[0]!),
+        })),
+    },
     {
       method: 'GET',
       pattern: at('state'),
