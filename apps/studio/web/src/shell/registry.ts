@@ -13,6 +13,7 @@ export const VIEW_IDS = [
   'commands',
   'word-game',
   'mini-games',
+  'casino',
   'alerts',
   'channel-points',
   'effects',
@@ -243,6 +244,18 @@ export const PAGES: Page[] = [
     view: 'mini-games',
     desc: 'Interrupteur, mises, délais et derniers tirages.',
     keywords: 'roulette slot machine duel',
+  },
+  {
+    id: 'casino',
+    // The extension's casino (docs/CASINO.md): its own page; the anchor links the host's module `casino` to it.
+    anchor: 'casino',
+    label: 'Casino',
+    section: 'modules',
+    group: 'Jeux & tirages',
+    icon: 'dice',
+    view: 'casino',
+    desc: 'Machine à sous et roulette de l’extension : ouverture, limites, parties.',
+    keywords: 'casino machine à sous coffre roulette jetons extension',
   },
   {
     id: 'bonk',

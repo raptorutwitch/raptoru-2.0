@@ -1954,10 +1954,11 @@ export class ChannelPointsService {
    */
   async attention(channelId: string) {
     const handRefunds = await this.db.query<RedemptionRow>(
-      `select * from cp_redemptions where channel_id = $1 and source = 'twitch' and received_at > now() - interval '7 days'
+      `select * from cp_redemptions where channel_id = $1 and source = 'twitch' and received_at > $2
          and (results::text like '%à rembourser à la main%' or results::text like '%remboursement nécessaire%')
        order by received_at desc limit 30`,
-      [channelId],
+      // The Core's clock (as every other date of this service), not the database's: 7 days back.
+      [channelId, new Date(this.clock.now().getTime() - 7 * 86_400_000)],
     );
     const actions = this.twitch
       ? (await this.twitch.list(channelId, 50)).filter(

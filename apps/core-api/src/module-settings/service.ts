@@ -118,6 +118,19 @@ export class ModuleSettings {
     return row ? Number(row.value) : spec.default;
   }
 
+  /** Several values in one read (a module reading all its settings at once): key → value, defaults included. */
+  async getMany(q: Queryable, channelId: string, keys: string[]) {
+    const out = new Map<string, number>();
+    for (const k of keys) out.set(k, this.spec(k).default);
+    if (!keys.length || !(await this.ready(q))) return out;
+    for (const r of await q.query<{ key: string; value: number | string }>(
+      'select key, value from module_settings where channel_id = $1 and key = any($2::text[])',
+      [channelId, keys],
+    ))
+      out.set(r.key, Number(r.value));
+    return out;
+  }
+
   /** What Studio shows: every setting with its value, default and bounds. */
   async list(channelId: string) {
     const stored = new Map<string, number>();

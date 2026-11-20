@@ -112,7 +112,7 @@ export function createClient({
     });
   }
 
-  async function call(method, path, { body, idempotencyKey } = {}) {
+  async function call(method, path, { body, idempotencyKey, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
     if (demoMode) {
       // The intent's key goes along (a local Lab demo source keys its purchases like the real EBS; the fixtures ignore it).
       const responsePayload = await (fixtureCall ?? demoCall)(method, path, body, idempotencyKey);
@@ -159,7 +159,7 @@ export function createClient({
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = typeof AbortController === 'function' ? new AbortController() : null;
       const timeout = controller
-        ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+        ? setTimeout(() => controller.abort(), timeoutMs)
         : null;
       try {
         traceTimeoutDebug('api.request.attempt', { method, route, attempt: attempt + 1 });
@@ -542,6 +542,37 @@ export function createClient({
     moduleModerationActivity: (id) => call('GET', `/modules/v3/moderation/${encodeURIComponent(id)}/activity`),
     moduleModerationRefund: (activityId, reason) =>
       call('POST', '/modules/v3/moderation/refund', { body: { activity_id: activityId, reason } }),
+    /** Casino (docs/CASINO.md): state (availability, limits, the tables, the rounds in progress), one round (spectators,
+     *  Replay), the viewer's history; a spin with the intent's key (a resent spin replays the round: the Core decides). */
+    casinoState: () => call('GET', '/casino/state'),
+    casinoRound: (roundId) => call('GET', `/casino/rounds/${encodeURIComponent(roundId)}`),
+    casinoHistory: (game, limit = 50) =>
+      call('GET', `/casino/history?limit=${limit}${game ? `&game=${encodeURIComponent(game)}` : ''}`),
+    casinoSpin: (game, payload, idempotencyKey) =>
+      call('POST', `/casino/${game === 'roulette' ? 'roulette' : game === 'book' ? 'book' : 'slot'}/spin`, { body: payload, idempotencyKey }),
+    /** The player's screen showed a stage of their round (result | coffre | step | end): the spectators get it now. */
+    // stage 'skip' + of (result | coffre | step | end): the player pressed Passer on that stage's animation.
+    casinoProgress: (roundId, stage, step = null, fast = false, of = null) =>
+      call('POST', '/casino/progress', { body: { round_id: roundId, stage, ...(step === null ? {} : { step }), fast, ...(of ? { of } : {}) } }),
+    casinoDraft: (bets) => call('POST', '/casino/draft', { body: { bets } }),
+    casinoPresence: (game) => call('POST', '/casino/presence', { body: { game } }),
+    /** Spectators (long-poll): a player's revealed stages after a cursor (-1: a snapshot to rejoin), who plays now. */
+    casinoWatch: (player, after, waitMs = 20_000) =>
+      call('GET', `/casino/watch?player=${encodeURIComponent(player)}&after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
+    casinoLive: (after, waitMs = 20_000) => call('GET', `/casino/live?after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
+    casinoShare: (roundId) => call('POST', '/casino/share', { body: { round_id: roundId } }),
+    /** Blackjack (docs/CASINO.md § 12): the lobby, a table's redacted state (long-poll; spectators too), the intents. The
+     *  Core decides everything: the identity is the token's, an action carries its turn token and its own id. */
+    bjTables: () => call('GET', '/casino/bj/tables'),
+    bjState: (table, after = -1, waitMs = 0) =>
+      call('GET', `/casino/bj/state?table=${encodeURIComponent(table)}&after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
+    bjJoin: (tableId = null, seat = null) => call('POST', '/casino/bj/join', { body: { ...(tableId ? { table_id: tableId } : {}), ...(seat === null ? {} : { seat }) } }),
+    bjBet: (main, side, ready) => call('POST', '/casino/bj/bet', { body: { main, side, ready } }),
+    bjClear: () => call('POST', '/casino/bj/clear', { body: {} }),
+    bjAct: (type, token, actionId) => call('POST', '/casino/bj/act', { body: { type, token, action_id: actionId } }),
+    bjInsure: (body) => call('POST', '/casino/bj/insure', { body }),
+    bjLeave: () => call('POST', '/casino/bj/leave', { body: {} }),
+    bjAnnounce: (tableId) => call('POST', '/casino/bj/announce', { body: { table_id: tableId } }),
     /** Commands V2 public list (« Commandes » for every viewer): Core's public projection, read-only. */
     commandsPublic: () => call('GET', '/commands/public'),
     /** « Mes commandes »: the commands the streamer let this viewer edit (identity from the token), and the change of one

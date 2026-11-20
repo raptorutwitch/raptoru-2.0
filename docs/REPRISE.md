@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 16/11/2026** (livraison de la Roue du Sub V3, journal
+**Mis à jour le 20/11/2026** (Casino V1 : blackjack multijoueur et machine à émotes intégrés, livraison en cours — [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) ; avant : Casino du 19/11 ; avant : livraison de la Roue du Sub V3, journal
 [archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md](archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
@@ -47,7 +47,12 @@ V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et es
 expressions et la latence ; essayer « Envoyer une vraie annonce test » ; téléverser le ZIP be1744e75f63 en Hosted Test
 (jamais pendant un live), l'essayer, puis la revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md
 § 15 ; choisir les directions du casino (prototypes/casino-directions, hors dépôt).
-Prochain chantier : au choix d'Antoni (par exemple Chaos V2 lot 0, docs/chaos/).
+**Casino V1 — mandat d'Antoni du 20/11 (« CASINO V1 : intégration finale et mise en Production », GO pour déployer si
+tous les contrôles passent).** Les 4 jeux (machine à fruits + Coffre, machine à émotes, roulette, blackjack multijoueur)
+sont validés par Antoni et intégrés Core + extension + Studio sur `feat/casino`. Journal, statut exact de livraison et
+étapes restantes : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) (à lire en premier pour ce chantier) ; module :
+[CASINO.md](CASINO.md) § 12 (blackjack) et § 13 (machine à émotes). L'extension publique ne montre le Casino qu'après
+la publication de l'extension (inventaire + Hosted Test + revue Twitch : gestes d'Antoni).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans

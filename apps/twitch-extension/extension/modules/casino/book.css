@@ -1,0 +1,127 @@
+/* Machine n°2 — SEULEMENT ce qui est nouveau. Tout le reste vient tel quel de la machine à fruits (vendor/casino.css,
+   vendor/slot.css) : même cadre, mêmes rouleaux, mêmes boutons, même plaque, même colonne de droite.
+   Calme pendant les tours ordinaires ; plus expressif aux grands moments (BONUS, carrousel, extension). */
+
+/* --- Les émotes dans les cases (la case et ses tailles : celles de la machine à fruits) ---------------------------- */
+.sym.emo img { display: block; width: calc(100% * var(--scale, 1)); height: calc(100% * var(--scale, 1)); object-fit: contain; border-radius: 14%; }
+.sym.emo[data-idle='glow'] { animation: emoglow 2.4s ease-in-out infinite; }
+.cell.win .sym.emo[data-win='glow'] img { filter: drop-shadow(0 0 8px rgba(255, 210, 110, 0.95)); }
+@keyframes emoglow { 50% { filter: drop-shadow(0 0 7px rgba(196, 107, 255, 0.85)); } }
+.sym.bonusmark { overflow: visible; }
+.cell .sym.bonusmark { animation: emoglow 2.4s ease-in-out infinite; }
+
+/* --- 3 BONUS : les BONUS s'illuminent (un anneau qui respire, contenu dans la case) ---------------------------------- */
+.reels.bonus-hit .cell:not(.bonus-glow) .sym { filter: saturate(0.5) brightness(0.55); transition: filter 0.3s; }
+.cell.bonus-glow::before { content: ''; position: absolute; inset: 4% 3%; border-radius: 14px; pointer-events: none; box-shadow: inset 0 0 0 2px rgba(255, 225, 140, 0.95), 0 0 14px rgba(196, 107, 255, 0.7); animation: ringbreath 0.9s ease-in-out infinite alternate; }
+.cell.bonus-glow .sym { animation: bonuspop 0.5s var(--pop); }
+@keyframes ringbreath { from { opacity: 0.55; } to { opacity: 1; } }
+@keyframes bonuspop { 0% { transform: scale(1); } 45% { transform: scale(1.16); } 100% { transform: scale(1.04); } }
+
+/* --- Les tours gratuits : le cadre doré de la machine (.cab.is-free, déjà prévu par slot.css) ----------------------- */
+.fsboard { position: relative; min-width: 0; display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'head head' 'count sym' 'tot tot'; gap: 5px 6px; padding: 6px 7px 7px; border-radius: 10px; background: linear-gradient(180deg, #1a1004, #0d0816); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(255, 201, 77, 0.45); }
+.fsb__head { grid-area: head; font: 900 10px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-2); }
+.fsb__count { grid-area: count; display: flex; align-items: center; gap: 6px; }
+.fsb__count b { font: 900 26px/1 var(--font); color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(255, 201, 77, 0.55); }
+.fsb__count small { display: grid; gap: 2px; font: 700 10px/1.15 var(--font); color: rgba(255, 228, 170, 0.85); white-space: nowrap; }
+.fsb__sym { grid-area: sym; display: grid; justify-items: center; gap: 1px; }
+.fsb__sym .sym { width: 34px; height: 34px; filter: drop-shadow(0 0 6px rgba(255, 201, 77, 0.6)); }
+.fsb__sym small { font: 800 8.5px/1 var(--font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold-2); }
+.fsb__tot { grid-area: tot; display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; justify-content: space-between; padding: 4px 6px; border-radius: 7px; background: rgba(255, 201, 77, 0.08); }
+.fsb__tot small { font: 800 9.5px/1 var(--font); text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 228, 170, 0.85); }
+.fsb__tot b { font: 900 14px/1 var(--font); color: var(--gold); font-variant-numeric: tabular-nums; }
+.fsb__series { position: absolute; right: 6px; top: 5px; padding: 1px 5px; border-radius: 5px; font: 900 9.5px/14px var(--font); color: #2a1600; background: var(--gold); }
+.cab.in-free .betbar { filter: saturate(0.6); opacity: 0.75; }
+
+/* --- Le carrousel du symbole extensible (dans la vitre, au-dessus des rouleaux) --------------------------------------- */
+.carousel { position: absolute; inset: var(--bz); z-index: 9; display: grid; grid-template-rows: auto auto auto; align-content: center; justify-items: center; gap: 10px; border-radius: 10px; background: radial-gradient(70% 55% at 50% 50%, rgba(80, 40, 140, 0.55), transparent 70%), rgba(7, 4, 14, 0.9); animation: carin 0.32s var(--ease); }
+.carousel.out { transition: opacity 0.28s; opacity: 0; }
+@keyframes carin { from { opacity: 0; } }
+.car__title { display: grid; justify-items: center; gap: 3px; }
+.car__title small { font: 900 10px/1 var(--font); letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold-2); }
+.car__title b { font: 900 16px/1 var(--font); color: #fff; }
+.car__view { position: relative; width: 100%; height: 86px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+.car__track { position: absolute; left: 0; top: 7px; display: flex; gap: 10px; will-change: transform; }
+.car__tile { flex: none; width: 72px; height: 72px; display: grid; place-items: center; border-radius: 14px; background: linear-gradient(180deg, #2a1d44, #150e24); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.2); transition: transform 0.35s var(--pop), opacity 0.3s, box-shadow 0.3s; }
+.car__tile .sym { width: 58px; height: 58px; }
+.car__mark { position: absolute; left: 50%; top: 3px; width: 80px; height: 80px; margin-left: -40px; border-radius: 17px; pointer-events: none; box-shadow: inset 0 0 0 2.5px var(--gold), 0 0 16px rgba(255, 201, 77, 0.45); }
+.carousel.done .car__tile:not(.chosen) { opacity: 0.28; }
+.carousel.done .car__tile.chosen { transform: scale(1.12); box-shadow: inset 0 0 0 2px #fff3c4, 0 0 22px rgba(255, 201, 77, 0.7); background: linear-gradient(180deg, #4a3108, #1e1204); }
+.carousel.done .car__mark { animation: markpop 0.5s var(--pop); }
+@keyframes markpop { 50% { transform: scale(1.12); } }
+.car__name { min-height: 30px; display: grid; justify-items: center; gap: 2px; }
+.car__name b { font: 900 15px/1 var(--font); color: var(--gold); text-shadow: 0 0 10px rgba(255, 201, 77, 0.5); }
+.car__name small { font: 700 11px/1 var(--font); color: rgba(255, 228, 170, 0.85); }
+
+/* --- Bandeaux (10 tours gratuits, +10 tours) et fin du bonus ------------------------------------------------------- */
+.fsbanner { position: absolute; left: 50%; top: 50%; z-index: 9; transform: translate(-50%, -50%) scale(0.8); display: grid; justify-items: center; gap: 4px; padding: 12px 22px 11px; border-radius: 14px; text-align: center; pointer-events: none; opacity: 0; background: linear-gradient(180deg, rgba(60, 36, 4, 0.95), rgba(26, 15, 2, 0.97)); box-shadow: inset 0 0 0 1.5px rgba(255, 201, 77, 0.85), 0 0 26px rgba(255, 176, 40, 0.4); }
+.fsbanner.in { transition: transform 0.36s var(--pop), opacity 0.25s; transform: translate(-50%, -50%); opacity: 1; }
+.fsbanner.out { transition: opacity 0.25s; opacity: 0; }
+.fsbanner em { font: 900 16px/1 var(--font); font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
+.fsbanner small { font: 700 11px/1 var(--font); color: rgba(255, 228, 170, 0.85); }
+.fsbanner__sym .sym { width: 46px; height: 46px; }
+.fsend { position: absolute; inset: var(--bz); z-index: 10; border-radius: 10px; display: grid; place-content: center; justify-items: center; gap: 3px; text-align: center; opacity: 0; background: radial-gradient(75% 45% at 50% 50%, rgba(80, 50, 6, 0.9), rgba(10, 5, 2, 0.95)); }
+.fsend.in { transition: opacity 0.3s; opacity: 1; }
+.fsend.out { transition: opacity 0.3s; opacity: 0; }
+.fsend .kicker { padding: 4px 12px 3px; border-radius: 8px; font: 900 12px/1 var(--font); letter-spacing: 0.2em; text-transform: uppercase; color: #3a2200; background: linear-gradient(180deg, #ffe9a0, #f2b832); }
+.fsend__sym .sym { width: 52px; height: 52px; margin: 4px 0; filter: drop-shadow(0 0 10px rgba(255, 201, 77, 0.6)); }
+.fsend b { font: 900 clamp(26px, 13cqw, 42px)/1 var(--font); color: var(--gold); font-variant-numeric: tabular-nums; text-shadow: 0 0 22px rgba(255, 201, 77, 0.7), 0 2px 0 #7a4a00; }
+.fsend small { font: 800 11.5px/1.2 var(--font); color: rgba(255, 225, 160, 0.88); }
+
+/* --- L'extension : le symbole déjà là s'éclaire, puis son rouleau se remplit depuis sa case ------------------------- */
+.xlayer { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.cell.x-seed::before { content: ''; position: absolute; inset: 5% 4%; border-radius: 12px; box-shadow: inset 0 0 0 2px #fff3c4, 0 0 16px rgba(255, 201, 77, 0.8); animation: ringbreath 0.35s ease-in-out infinite alternate; }
+.cell.x-seed .sym { animation: bonuspop 0.45s var(--pop); }
+.reels.x-on .cell .sym { filter: saturate(0.55) brightness(0.55); transition: filter 0.25s; }
+.xcol { position: absolute; container-type: size; border-radius: 8px; overflow: hidden; background: linear-gradient(180deg, rgba(74, 49, 8, 0.96), rgba(30, 18, 4, 0.96)); box-shadow: inset 0 0 0 1.5px rgba(255, 225, 140, 0.9), 0 0 14px rgba(255, 190, 60, 0.5); clip-path: inset(calc(var(--top) * 1%) 0 calc(var(--bot) * 1%) 0 round 8px); --top: 33.4; --bot: 33.4; }
+.xcol[data-from='0'] { --top: 0; --bot: 66.7; }
+.xcol[data-from='2'] { --top: 66.7; --bot: 0; }
+.xcol.fill { animation: xfill 0.34s cubic-bezier(0.25, 0.9, 0.3, 1) forwards; }
+@keyframes xfill { to { clip-path: inset(0 0 0 0 round 8px); } }
+.xcol__cells { position: absolute; inset: 0; display: grid; grid-template-rows: repeat(3, 1fr); place-items: center; }
+.xcell .sym { width: min(86cqw, 29cqh); height: min(86cqw, 29cqh); filter: drop-shadow(0 0 6px rgba(255, 201, 77, 0.55)); }
+.xcol.fill .xcell .sym { animation: xcellin 0.5s var(--pop) both; }
+.xcol.fill .xcell:nth-child(2) .sym { animation-delay: 0.05s; }
+.xcol.fill .xcell:nth-child(3) .sym { animation-delay: 0.1s; }
+@keyframes xcellin { from { transform: scale(0.6); opacity: 0.4; } }
+.xcol__sweep { position: absolute; left: 0; right: 0; height: 40%; top: -40%; background: linear-gradient(180deg, transparent, rgba(255, 244, 200, 0.55), transparent); }
+.xcol.fill .xcol__sweep { animation: sweep 0.7s ease-out 0.15s; }
+@keyframes sweep { to { top: 100%; } }
+.xlayer.lit .xcol { animation: xfill 0s forwards, xlit 1s ease-in-out infinite alternate; }
+@keyframes xlit { from { box-shadow: inset 0 0 0 1.5px rgba(255, 225, 140, 0.9), 0 0 10px rgba(255, 190, 60, 0.35); } to { box-shadow: inset 0 0 0 2px #fff3c4, 0 0 20px rgba(255, 190, 60, 0.7); } }
+
+/* --- Divers ------------------------------------------------------------------------------------------------------------ */
+.testbadge { background: linear-gradient(180deg, #ffd6a0, #f08a34); color: #2a1100; }
+.htag.test { background: rgba(240, 138, 52, 0.22); color: #ffc58a; }
+.prule__ico { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 7px; font: 900 15px/1 var(--font); color: #2a1600; background: var(--gold); }
+.pvol { display: flex; align-items: center; gap: 8px; margin: 10px 2px 2px; font: 700 11px/1 var(--font); color: var(--dim); }
+.pvol input { flex: 1; accent-color: var(--gold); }
+
+/* --- Passe de polish (20/11) ----------------------------------------------------------------------------------------- */
+/* Moins pastel : un peu plus de contraste et un peu moins de saturation sur les émotes (les fichiers ne changent pas). */
+.sym.emo:not([data-skin='bonus']) img { filter: contrast(1.12) saturate(0.86) brightness(0.92); }
+.reel { background: linear-gradient(90deg, #07040d, #160f26 50%, #07040d); }
+/* Le BONUS : la photo ronde, cerclée d'or, avec son étiquette — reconnaissable au premier coup d'œil. */
+.sym.emo[data-skin='bonus'] { position: relative; }
+.sym.emo[data-skin='bonus'] img { border-radius: 50%; box-shadow: 0 0 0 2.5px #f2c65f, 0 0 0 4px #3b0f7a, 0 0 12px rgba(196, 107, 255, 0.55); }
+.cell .sym.emo[data-skin='bonus']::after, .xcell .sym.emo[data-skin='bonus']::after { content: 'BONUS'; position: absolute; left: 50%; bottom: -9%; transform: translateX(-50%); padding: 0 4px; border-radius: 5px; font: 900 7.5px/10px var(--font); letter-spacing: 0.06em; color: #2a1600; background: linear-gradient(180deg, #ffe9a0, #f2b832); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+
+/* --- Passe du 21/11 ------------------------------------------------------------------------------------------------ */
+/* Émotes un peu plus petites : la grille respire (la case ne change pas, seule l'image rétrécit). */
+.cell .sym.emo, .xcell .sym.emo { --scale: 0.84; }
+/* Le BONUS : sa case est surbrillée, et une aura douce tourne autour de la photo (contenue dans la case). */
+.reel .cell[data-s='bonus'] { background: radial-gradient(closest-side, rgba(196, 107, 255, 0.28), rgba(196, 107, 255, 0.06) 70%, transparent); }
+.reel .cell[data-s='bonus']::before { content: ''; position: absolute; inset: 7% 6%; border-radius: 12px; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(231, 198, 255, 0.45); }
+.sym.emo[data-skin='bonus'] img { box-shadow: 0 0 0 2.5px #f2c65f, 0 0 0 4px #3b0f7a, 0 0 14px 2px rgba(196, 107, 255, 0.7); animation: aura 2.2s ease-in-out infinite; }
+@keyframes aura { 50% { box-shadow: 0 0 0 2.5px #ffe08a, 0 0 0 4px #4a1a90, 0 0 20px 5px rgba(214, 140, 255, 0.85); } }
+.tape.blur .sym.emo[data-skin='bonus'] img { animation: none; }
+/* L'émote animée qui s'éveille sur un gain : un fondu discret depuis l'image fixe. */
+.sym.emo img.awake { animation: awake 0.35s ease-out; }
+@keyframes awake { from { opacity: 0.55; transform: scale(0.94); } }
+/* L'extension, ligne par ligne : les cases de la ligne en cours s'allument. */
+.xcell { position: relative; transition: filter 0.12s; }
+.xlayer.lit .xcell { filter: brightness(0.82); }
+.xlayer.lit .xcell.hit { filter: brightness(1.15); }
+.xcell.hit::before { content: ''; position: absolute; inset: 3px; border-radius: 9px; box-shadow: inset 0 0 0 2px #fff3c4, 0 0 12px rgba(255, 210, 110, 0.85); }
+.xcell.hit .sym { animation: winpulse 0.3s var(--pop); }
+/* Le suspense après 2 BONUS (la machine à fruits ralentit déjà les rouleaux suivants) : un cadre doré plus présent. */
+.reel.anticipate { box-shadow: inset 0 0 0 2px rgba(255, 201, 77, 0.95), inset 0 0 18px rgba(255, 190, 60, 0.35); }

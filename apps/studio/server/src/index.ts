@@ -32,6 +32,7 @@ import {
 } from './twitch-oauth/twitch-connections.js';
 import { commandsRelay } from './commands/relay.js';
 import { miniGamesRelay } from './mini-games/relay.js';
+import { casinoRelay } from './casino/relay.js';
 import { ManagedProcess, PidStore } from './test-lab/managed-process.js';
 import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -418,7 +419,7 @@ const TEST_LAB_PRODUCTION_ACTIONS = new Set([
 ]);
 /** The paths served by the relay chain (relays to the profile's Core). */
 const RELAYED =
-  /^\/api\/(mini-games\/|module-settings$|daily\/config$|modules(\/|$))/;
+  /^\/api\/(mini-games\/|casino\/|module-settings$|daily\/config$|modules(\/|$))/;
 
 /** Several relays behind one handler slot: the first that knows the path answers. */
 export function chainRelays(
@@ -1540,6 +1541,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     relays: labCore
       ? chainRelays(
           miniGamesRelay(labCore, cockpitChannel),
+          // Casino (docs/CASINO.md): Studio reads its state and rounds; its settings are module settings.
+          casinoRelay(labCore, cockpitChannel),
           moduleSettingsRelay(labCore, cockpitChannel),
           // The fictional player (claim / report) only off the Production profile.
           modulesRelay(labCore, cockpitChannel, { labPlayer: !production }),

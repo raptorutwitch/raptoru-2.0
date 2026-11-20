@@ -3,6 +3,7 @@ import { type MusicAudience, musicOpenTo } from './music-audience.js';
 import { moduleFacade } from '@raptoru/schemas';
 import { commandsMine, commandsPublic, commandsTeam } from './commands-ext.js';
 import { subWheelExt } from './sub-wheel-ext.js';
+import { casinoExt } from './casino-ext.js';
 import { musicExt } from './music-ext.js';
 import {
   BONK_LAB_RULES,
@@ -86,6 +87,8 @@ export interface ExtConfig {
   lab?: boolean;
   /** Music Hub in Production (MUSIC_HUB_EXTENSION): who gets the music module. Absent: closed (the Lab: open). */
   music?: MusicAudience;
+  /** Casino in Production (CASINO_EXTENSION): who gets the casino. Absent: closed (the Lab: open). */
+  casino?: MusicAudience;
 }
 
 /** Module descriptions when the payment is real (the canonical Wallet): what pays, never a price. */
@@ -296,6 +299,20 @@ export class ExtFacade {
         who.team,
         idempotencyKey,
       );
+    // Casino (docs/CASINO.md): the slot machine and the roulette — the Lab, or Production for the audience of
+    // CASINO_EXTENSION (closed by default: the extension does not even see it). The Core decides every round.
+    if (path.startsWith('/casino/') && this.casinoOpen(who))
+      return casinoExt(
+        this.core,
+        this.C,
+        method,
+        rawPath,
+        body as Record<string, unknown> | undefined,
+        who.viewer
+          ? { id: who.viewer.id, display_name: who.viewer.display_name }
+          : null,
+        idempotencyKey,
+      );
     // Halloween shop (docs/HALLOWEEN.md): its state, a purchase, a conversion — the JWT's viewer, never a body field.
     if (method === 'GET' && path === '/events/state')
       return ok((await this.eventShop(who)) ?? { enabled: false });
@@ -465,6 +482,18 @@ export class ExtFacade {
   private musicOpen(who: Who): boolean {
     return musicOpenTo(
       this.config.music ?? { mode: 'off' },
+      !!this.config.lab,
+      {
+        role: who.caller.role,
+        userId: who.viewer?.id ?? who.caller.userId,
+      },
+    );
+  }
+
+  /** Casino for this caller: the Lab always; Production per CASINO_EXTENSION (closed by default). */
+  private casinoOpen(who: Who): boolean {
+    return musicOpenTo(
+      this.config.casino ?? { mode: 'off' },
       !!this.config.lab,
       {
         role: who.caller.role,

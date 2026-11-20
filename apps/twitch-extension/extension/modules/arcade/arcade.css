@@ -1117,3 +1117,135 @@
     transition: none !important;
   }
 }
+
+/* --- Le bandeau « Regarder les parties en direct » (Casino) : sous les jeux, pas un jeu -------------------------- */
+.mg__band {
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  padding: calc(8 * var(--u)) calc(10 * var(--u));
+  border: 1px dashed rgba(255, 92, 122, 0.45);
+  border-radius: calc(14 * var(--u));
+  background: linear-gradient(90deg, rgba(255, 47, 85, 0.1), transparent 70%);
+}
+.mg__band.is-empty {
+  border-color: var(--mg-line);
+  background: none;
+  opacity: 0.8;
+}
+.mg__bandmain {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mg__bandic {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: calc(32 * var(--u));
+  height: calc(32 * var(--u));
+  border-radius: 50%;
+  background: rgba(255, 47, 85, 0.16);
+  color: var(--mg-hot);
+}
+.mg__bandic svg {
+  width: 62%;
+  height: 62%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.mg__bandn {
+  position: absolute;
+  top: calc(-4 * var(--u));
+  right: calc(-4 * var(--u));
+  min-width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+  padding: 0 calc(4 * var(--u));
+  border-radius: 999px;
+  background: var(--mg-a);
+  color: #fff;
+  font-size: calc(10.5 * var(--u));
+  font-style: normal;
+  font-weight: 900;
+  line-height: calc(16 * var(--u));
+  text-align: center;
+}
+.mg__bandtx {
+  display: grid;
+  min-width: 0;
+}
+.mg__bandtx b {
+  font-size: calc(13.5 * var(--u));
+}
+.mg__bandtx small {
+  overflow: hidden;
+  color: var(--mg-dim);
+  font-size: calc(11.5 * var(--u));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg__band.is-empty .mg__bandic {
+  background: var(--mg-panel);
+  color: var(--mg-dim);
+}
+.mg__avs {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.mg__av {
+  display: grid;
+  place-items: center;
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  margin-left: calc(-6 * var(--u));
+  padding: 0;
+  border: 2px solid #1a1320;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #ffe7a3, #f6c344 60%, #cf8d10);
+  color: #1d1336;
+  font-family: inherit;
+  font-size: calc(11.5 * var(--u));
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+.mg__av:first-child {
+  margin-left: 0;
+}
+.mg__av:hover,
+.mg__av:focus-visible {
+  transform: translateY(calc(-2 * var(--u)));
+}
+.mg__more {
+  margin-left: calc(4 * var(--u));
+  color: var(--mg-dim);
+  font-size: calc(11 * var(--u));
+  font-weight: 800;
+}
+.mg__bandgo {
+  flex: none;
+  padding: calc(6 * var(--u)) calc(12 * var(--u));
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 47, 85, 0.18);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mg__bandgo:hover,
+.mg__bandgo:focus-visible {
+  background: linear-gradient(120deg, var(--mg-a), var(--mg-b));
+}

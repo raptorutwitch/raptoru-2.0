@@ -505,13 +505,21 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
   function updateState(next, { render = true } = {}) {
-    // Hub and identical poll: nothing to redraw (an open module's view decides for itself: onState).
-    const unchanged = render && !openModule && !loadError
-      && JSON.stringify(stableState(state)) === JSON.stringify(stableState(next));
+    // Hub and identical poll: nothing to redraw (an open module's view decides for itself: onState). A module of the
+    // module host draws its own screen (kept across redraws, never fed by them): an identical poll redraws nothing
+    // either — a redraw re-attaches its node, which restarts its animations (the casino's flashes of 18/11).
+    const hostOwnScreen = !!hostView && hostViewId === openModule && !hostDef;
+    // Such a screen never shows the raffle: its countdown (moving at every read) is not a reason to redraw it.
+    const comparable = (v) => (hostOwnScreen && v ? { ...stableState(v), raffle: null } : stableState(v));
+    const unchanged = render && (!openModule || hostOwnScreen) && !loadError
+      && JSON.stringify(comparable(state)) === JSON.stringify(comparable(next));
     const previous = state;
     // An error screen shown before this state must be redrawn away: never absorbed by a live update.
     const hadLoadError = !!loadError;
     state = next;
+    // A module-host screen that plays with the viewer's balance (the casino) follows every Wallet read, even when the
+    // header alone changes: its playable balance is then read again from the Core (never taken from this session).
+    if (hostView && hostViewId === openModule && !hostDef) hostView.onWallet?.(next?.wallet ?? null);
     emoteAccess.onState(previous, next, { render });
     loadError = null;
     retryLoad = null;
@@ -524,8 +532,25 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       && hostDef.onState(hostView, next, previous, variantContext(hostDef, (next?.modules ?? []).find((m) => m.id === openModule) ?? hostDef.card?.(next)))) {
       return;
     }
+    // A module-host view in the middle of an animation (casino): its redraw waits for its `jdm:host-idle`.
+    if (render && !unchanged && hostView && hostViewId === openModule && !hostDef && hostView.busy?.()) {
+      deferredRender = true;
+      return;
+    }
     if (render && !unchanged) renderPreservingViewport();
   }
+  let deferredRender = false;
+  // A module-host view changed what the header shows (its title, its ‹): drawn again now.
+  root.addEventListener?.('jdm:host-redraw', () => {
+    if (hostView) renderPreservingViewport();
+  });
+  // A module-host view changed the viewer's balance (a casino round): the session is read again now.
+  root.addEventListener?.('jdm:host-refresh', () => onRefresh?.());
+  root.addEventListener?.('jdm:host-idle', () => {
+    if (!deferredRender) return;
+    deferredRender = false;
+    renderPreservingViewport();
+  });
 
   /**
    * Tombola V2: the screen reads Core itself, the host only shows « Ouverte » on the Hub card. The
@@ -1075,6 +1100,9 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   function render() {
     hubCarousel?.destroy();
     hubCarousel = null;
+    // A view kept across redraws is about to be moved (detached, then attached again: `attached`): it may note the
+    // state of its animations so that the move shows nothing (the casino).
+    if (hostView?.node?.isConnected) hostView.detaching?.();
     root.replaceChildren();
     // Les callbacks pointent toujours vers le Soundboard actuellement rendu.
     // Un rerender d’état ne doit jamais conserver un listener vers une vue
@@ -1537,7 +1565,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       back.title = 'Retour au Hub';
       // Chevron seul, carré compact (même forme que la Tombola V2) : module-back.css.
       back.append(hubIcon(document, 'chevL', 'jdm-back__icon'));
-      back.addEventListener('click', () => navigateTo(null));
+      // A module-host view may take the ‹ first (a casino game goes back to the Mini-jeux catalogue).
+      back.addEventListener('click', () => {
+        if (hostedView && !registered && hostView?.back?.()) return renderPreservingViewport();
+        navigateTo(null);
+      });
       headLeft.append(back);
       if (isRaffle) {
         const raffleHeader = state?.raffle ?? {};
@@ -1553,12 +1585,18 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       const heading = el('div', 'jdm-module__screen-title');
       // The title's icon: the module's, or a control the view puts there (Soundboard: its volume popover).
       let screenIcon = hostedView && registered?.headIcon ? registered.headIcon(hostView, variantContext(registered, mod)) : null;
+      const hostIcon = hostedView && !registered ? hostView?.headIcon?.() : null;
+      if (!screenIcon && hostIcon) {
+        screenIcon = el('span', 'jdm-module__screen-icon');
+        screenIcon.innerHTML = hostIcon; // the view's own inline SVG (no user text)
+        screenIcon.setAttribute('aria-hidden', 'true');
+      }
       if (!screenIcon) {
         screenIcon = el('span', 'jdm-module__screen-icon', mod.icon);
         screenIcon.setAttribute('aria-hidden', 'true');
       }
       if (!isModeration) heading.append(screenIcon);
-      heading.append(el('strong', 'jdm-module__screen-name', registered?.headLabel ?? visibleModuleLabel(mod)));
+      heading.append(el('strong', 'jdm-module__screen-name', registered?.headLabel ?? (hostedView && !registered ? hostView?.headLabel?.() : null) ?? visibleModuleLabel(mod)));
       // A control the view puts after the title (Bonk: its tour's « ? »).
       const headAfter = hostedView && registered?.headAfter ? registered.headAfter(hostView, variantContext(registered, mod)) : null;
       if (headAfter) heading.append(headAfter);
@@ -1578,7 +1616,7 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       item.classList.add('is-open');
       const body = el('div', 'jdm-module__body');
       if (!isModeration) body.dataset.scrollKey = `module-${mod.id}`;
-      if (!isModeration && registered?.intro !== false) {
+      if (!isModeration && registered?.intro !== false && !(hostedView && !registered && hostView?.intro === false)) {
         const intro = el('div', 'jdm-module__intro');
         intro.append(
           el('strong', 'jdm-module__intro-title', mod.label),

@@ -1,0 +1,12 @@
+{
+  "name": "casino-emotes-prototype",
+  "private": true,
+  "type": "module",
+  "description": "Machine à sous n°2 (mécaniques Book of Ra Deluxe, émotes de la chaîne) : prototype local 565 × 376, Jetons fictifs, aucune connexion.",
+  "scripts": {
+    "start": "node start.mjs",
+    "check": "node tools/check.mjs",
+    "rtp": "node tools/rtp.mjs",
+    "emotes": "node tools/prepare-emotes.mjs --force"
+  }
+}
