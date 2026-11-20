@@ -31,7 +31,7 @@ Compléments au 08/11 :
     porte extension (`/modules/v3`) et porte chat.
   - Guides : [studio-refonte/architecture/](studio-refonte/architecture/GUIDE_MODULE.md).
 - **Extension** : deux shells, tous deux sur `main` depuis la PR #59 (10/11).
-  - **legacy** : la version publique (présumée `0bf7907`, non prouvée).
+  - **legacy** : la version publique (`be1744e75f63`, prouvée par la console Twitch le 20/11).
   - **v2, « Extension Next »** : une entrée `app/boot.js` choisit le shell, et des modules de session (dont Musique)
     sont chargés à la demande.
   - L'emballage est verrouillé : `node apps/twitch-extension/scripts/package.mjs --target production|staging|calibration
