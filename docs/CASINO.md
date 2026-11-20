@@ -435,3 +435,15 @@ Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas valid
 - **Bulle :** la mise, le gain net et le retour total.
 - **Contrôles :** 81 contrôles Chromium, dont un audit de chevauchements et de textes coupés à 565 × 376 et en panneau
   318.
+
+**Passe corrective du 20/11 (règles + UI) :**
+
+- **Banque bust :** vérifié dans tous les cas, le moteur était juste : toute main vivante gagne, une main bust perd,
+  aucune égalité. L'« égalité » affichée venait du net total (main + paris banque). L'étiquette et le centre montrent
+  désormais le résultat de la main, puis les paris banque, l'assurance et le total.
+- **Assurance :** officielle, seulement face à un As : la moitié de la mise au plus, payée 2:1 si la banque a
+  blackjack, perdue sinon (la main continue). Un joueur qui a un blackjack face à un As se voit proposer l'even money.
+  Au Core : phase `insurance` avant la vérification de la banque, clés `ins:` / `insp:`.
+- **UI :** panneau « Règles » à gauche ; languettes discrètes (icône, nom au survol) ; BUSTED au milieu de la place ;
+  titre courbe abaissé ; historique avec un résumé par manche (ma main, mes paris banque ✓/✗, l'assurance).
+- **Tests :** 47 tests et 95 contrôles Chromium.
