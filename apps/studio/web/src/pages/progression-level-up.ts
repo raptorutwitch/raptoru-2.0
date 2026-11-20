@@ -167,7 +167,6 @@ interface PrefsImport {
 }
 
 const ACTIVATE = 'NORMALISER LES NIVEAUX';
-const UNDO = 'ANNULER LA NORMALISATION';
 const STATUS_FR: Record<string, string> = {
   pending: 'en attente',
   delivered: 'joué',
@@ -444,13 +443,14 @@ export function mountLevelUpScene(
         ${row('Comptes', `<span>${fmt(s.accounts)} dont ${fmt(s.attachedAccounts)} avec un historique WizeBot</span>`)}
         ${row('Niveau WizeBot le plus haut', `<span>${fmt(s.maxWizebotLevel)} → 50</span>`)}
         <p class="d-note">Un historique WizeBot devient le niveau normalisé (exposant ${c.exponent}), plus toute l’XP gagnée depuis. Sans historique : l’XP est gardée, le niveau se lit à 1 000 XP par niveau. Les gains passent à 1 XP par minute de présence et 3 XP par message. Jamais d’annonce ni de son pour ce recalcul ; les badges de niveau sont donnés selon le niveau recalculé.</p>
+        ${fixed ? `<p class="d-note">Depuis la restauration du 20/11, un historique WizeBot rattaché compte son niveau WizeBot entier (1 000 XP par niveau), plus l’XP gagnée depuis.</p>` : ''}
         ${simHtml}
         <div class="pg-lu-acts">${
           fixed
-            ? `<button type="button" class="d-btn danger" data-lu="revert">Annuler la normalisation…</button>`
+            ? ''
             : `<button type="button" class="d-btn" data-lu="simulate">Simuler</button><button type="button" class="d-btn pri" data-lu="activate">Activer Level Up V2…</button>`
         }</div>
-        <p class="d-note">Garanties : la simulation n’écrit rien. L’activation se fait une seule fois, avec la phrase tapée, et chaque compte garde une ligne d’audit (niveau et XP avant). Elle s’annule tant qu’aucun historique n’a été rattaché depuis. En Production : sauvegarde Coolify vérifiée avant (docs/LEVEL_UP_V2.md § 9).</p>`,
+        <p class="d-note">Garanties : la simulation n’écrit rien. L’activation se fait une seule fois, avec la phrase tapée, et chaque compte garde une ligne d’audit (niveau et XP avant). Elle ne s’annule plus depuis la restauration WizeBot du 20/11 (elle compterait deux fois la progression historique). En Production : sauvegarde Coolify vérifiée avant (docs/LEVEL_UP_V2.md § 9).</p>`,
       ),
     );
   }
@@ -815,27 +815,6 @@ export function mountLevelUpScene(
         ).then((done) => {
           if (!done) return;
           sim = null;
-          o.onChanged();
-          void read();
-        });
-      });
-      return;
-    }
-    if (act === 'revert') {
-      void typed(
-        'Annuler la normalisation ?',
-        'L’XP, la courbe et les gains d’avant reviennent (l’audit reste). Impossible si un historique WizeBot a été rattaché depuis l’activation. Les badges déjà donnés restent.',
-        UNDO,
-        'Annuler la normalisation',
-      ).then((ok) => {
-        if (!ok) return;
-        void run(
-          b,
-          () => postJson('/api/progression/level-v2/revert', { confirm: UNDO }),
-          'Normalisation annulée.',
-          REFUS,
-        ).then((done) => {
-          if (!done) return;
           o.onChanged();
           void read();
         });

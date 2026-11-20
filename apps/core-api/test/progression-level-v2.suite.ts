@@ -204,7 +204,8 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         svc.updateSettings(CH, { rules: { curve_base: 500 } }),
       ).rejects.toMatchObject({ code: 'level_curve_locked' });
       await svc.updateSettings(CH, { rules: { message_xp: 6 } });
-      // A history attached months later: the same frozen normalization (74 → 33), never a notification.
+      // A history attached months later: its WHOLE WizeBot level since the 20/11 restoration (74, never compressed),
+      // never a notification.
       await db.query(
         `insert into viewers (twitch_user_id, login, display_name) values ('7', 'late', 'Late')`,
       );
@@ -213,7 +214,7 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
         login: 'late',
         display_name: 'Late',
       });
-      expect([await xp('7'), await level('7')]).toEqual([32_000, 33]);
+      expect([await xp('7'), await level('7')]).toEqual([73_000, 74]);
       expect((await events()).filter((e) => e.twitch_user_id === '7')).toEqual(
         [],
       );
@@ -235,39 +236,26 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       ]);
     });
 
-    it('the undo puts the previous curve and XP back (audit kept); refused once a history was attached since', async () => {
-      await importRows([
-        ['1', 'ana', 20],
-        [null, 'max_pending', 135], // the max is frozen over EVERY history, attached or not
-      ]);
-      await svc.updateSettings(CH, { rules: { message_xp: 5 } });
-      const before = [await xp('1'), await level('1')];
+    it('the undos are disabled for good since the 20/11 restoration (410): nothing written, the audit kept', async () => {
+      await importRows([['1', 'ana', 20]]);
       await activate();
-      expect(await level('1')).toBe(13);
-      expect((await svc.settings(CH)).rules).toMatchObject({
-        xp_per_minute: 1,
-        message_xp: 3,
-        message_cooldown_s: 60,
+      const before = [await xp('1'), await level('1')];
+      await expect(svc.revertLevelV2()).rejects.toMatchObject({
+        status: 410,
+        code: 'level_v2_revert_disabled',
       });
-      expect(await svc.revertLevelV2(CH)).toEqual({
-        reverted: true,
-        movements: 1,
+      await expect(svc.revertImport(CH, 'wizebot')).rejects.toMatchObject({
+        status: 410,
+        code: 'import_revert_disabled',
       });
       expect([await xp('1'), await level('1')]).toEqual(before);
-      expect((await svc.settings(CH)).rules.message_xp).toBe(5); // the pace before
       expect(
-        (await svc.history(CH, '1')).normalization?.revertedAt,
+        (await svc.settings(CH)).rules.wizebot_normalization,
       ).not.toBeNull();
-      // Activated again after the undo: the same result, the audit row current again.
-      await activate();
-      expect(await level('1')).toBe(13);
       expect((await svc.history(CH, '1')).normalization?.revertedAt).toBeNull();
-      // Refused once a history was attached after the activation (its XP was counted on the new scale).
-      clock.current = new Date(T0.getTime() + 60_000);
-      await importRows([['2', 'bob', 5]]);
-      await expect(svc.revertLevelV2(CH)).rejects.toMatchObject({
-        code: 'imports_since_activation',
-      });
+      expect(
+        (await svc.history(CH, '1')).movements.map((m) => m.kind).sort(),
+      ).toEqual(['import', 'normalization']);
     });
   });
 
@@ -1482,6 +1470,129 @@ export function levelV2Suite(freshDb: () => Promise<Db>) {
       );
       // Administrative moves (a future restoration included): badges yes, announcements never.
       expect(await events()).toEqual([]);
+    });
+  });
+
+  describe('WizeBot histories attached after the 20/11 restoration (the whole level, never compressed, once)', () => {
+    const badge = (lvl: number) =>
+      svc.upsertReward(CH, {
+        reward_id: `niveau-${lvl}`,
+        kind: 'badge',
+        label: `Niveau ${lvl}`,
+        description: '',
+        rarity: 'common',
+        category: 'niveau',
+        unlock_level: lvl,
+        active: true,
+        sort: lvl,
+      });
+    const owned = async (id: string) =>
+      (await svc.viewer(CH, id)).inventory
+        .filter((i) => i.kind === 'badge')
+        .map((i) => i.id)
+        .sort();
+    const back = (id: string, login: string) =>
+      svc.identify(CH, { viewer: id, login, display_name: login });
+    /** ana (135) restored like on 20/11: normalized 50, then + 1 000 × (135 − 50) by a Studio adjustment. */
+    const restored = async () => {
+      await importRows([
+        ['1', 'ana', 135],
+        [null, 'oldfan', 74], // nobody known by that pseudo yet: pending
+      ]);
+      await activate();
+      expect(await level('1')).toBe(50);
+      await svc.adjust(
+        CH,
+        {
+          viewer: '1',
+          mode: 'add',
+          value: 85_000,
+          reason: 'Restauration WizeBot',
+          request_id: 'wb-restore-v1-1',
+        },
+        studio,
+      );
+      expect([await xp('1'), await level('1')]).toEqual([134_000, 135]);
+    };
+
+    it('an old viewer coming back with XP earned meanwhile: WizeBot level + that XP, badges every 25 (older kept), no event, periods untouched', async () => {
+      await restored();
+      for (const l of [10, 25, 50, 75, 100]) await badge(l);
+      await db.query(
+        `insert into viewers (twitch_user_id, login, display_name) values ('8', 'oldfan', 'OldFan')`,
+      );
+      await presence(['8'], 2500 * 60); // 2 500 XP earned before the history is attached (level 3)
+      const eventsBefore = (await events()).length;
+      const week = async () =>
+        (await svc.leaderboard(CH, 10, 'xp', 'week')).entries
+          .filter((e) => e.twitchUserId === '8')
+          .map((e) => [e.xp, e.watchMinutes, e.messages]);
+      const weekBefore = await week();
+      await back('8', 'oldfan');
+      expect([await xp('8'), await level('8')]).toEqual([75_500, 76]); // 1 000 × 73 + 2 500
+      expect(await owned('8')).toEqual([
+        'niveau-10',
+        'niveau-25',
+        'niveau-50',
+        'niveau-75',
+      ]); // 100 not reached
+      expect((await events()).length).toBe(eventsBefore);
+      expect(await week()).toEqual(weekBefore);
+      // Seen again, attached again (the next run, a second sign-in): nothing more, ever.
+      await back('8', 'oldfan');
+
+      await svc.importHistory(
+        CH,
+        { source: 'wizebot', dry_run: false, rows: [] },
+        studio,
+      );
+      await expect(
+        svc.attachManually(
+          CH,
+          { source: 'wizebot', login: 'oldfan', viewer: '8', reason: 'test' },
+          studio,
+        ),
+      ).rejects.toMatchObject({ code: 'already_attached' });
+      expect(await xp('8')).toBe(75_500);
+      // The restored account never moved.
+      expect([await xp('1'), await level('1')]).toEqual([134_000, 135]);
+    });
+
+    it('an already restored account: a second history (another pseudo) never adds anything; the restoration replay changes nothing', async () => {
+      await restored();
+      await importRows([['1', 'ana_old', 135]]);
+      await expect(
+        svc.attachManually(
+          CH,
+          { source: 'wizebot', login: 'ana_old', viewer: '1', reason: 'test' },
+          studio,
+        ),
+      ).rejects.toMatchObject({ code: 'viewer_has_history' });
+      expect(
+        await svc.adjust(
+          CH,
+          {
+            viewer: '1',
+            mode: 'add',
+            value: 85_000,
+            reason: 'Restauration WizeBot',
+            request_id: 'wb-restore-v1-1',
+          },
+          studio,
+        ),
+      ).toMatchObject({ changed: false, xp: 134_000 });
+      await back('1', 'ana');
+      expect([await xp('1'), await level('1')]).toEqual([134_000, 135]);
+    });
+
+    it('no WizeBot history: a viewer seen again keeps their XP and level', async () => {
+      await restored();
+      await presence(['5'], 1500 * 60);
+      await back('5', 'eve');
+      expect([await xp('5'), await level('5')]).toEqual([1500, 2]);
+      expect(
+        (await svc.history(CH, '5')).movements.map((m) => m.kind),
+      ).not.toContain('import');
     });
   });
 }

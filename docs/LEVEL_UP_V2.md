@@ -419,7 +419,12 @@ Mandat d'Antoni du 20/11. **Aucun niveau ni aucune XP de viewer n'a été modifi
   - les badges 12 et suivants (niveaux 300 et plus) n'ont pas encore de visuel ; ils s'importeront par le numéro.
 - **Retour arrière** : seulement le fichier d'annulation de l'opération (mode « retirer », mêmes montants), dans le
   dossier privé `_migration-exports\levels-2026-11-20\restauration\`.
-- **Ne plus jamais utiliser « Annuler la normalisation »** : elle recompterait l'import WizeBot en plus de la
-  restauration.
-- **Reste à coder** : un historique WizeBot rattaché plus tard reçoit encore le niveau compressé (paramètres v1
-  figés). Il faut une normalisation v2 (exposant 1) et désactiver l'annulation v1.
+- **Annulations désactivées (code, 20/11)** : « Annuler la normalisation » et « Annuler l'import » ont disparu de
+  Studio (et du relais) ; le Core refuse `POST …/level-v2/revert` (410 `level_v2_revert_disabled`) et, une fois
+  Level Up V2 actif, `POST …/import/revert` (410 `import_revert_disabled`). Elles recompteraient ou effaceraient
+  la progression historique. L'audit `progression_normalizations` reste.
+- **Rattachements futurs (code, 20/11)** : un historique WizeBot rattaché après la restauration compte son niveau
+  WizeBot entier (`importXp` = 1 000 × (L − 1), jamais compressé), ajouté à l'XP gagnée entre-temps, en un seul
+  mouvement `import:wizebot:<id>` (rejoué ou second historique : rien de plus). Badges selon le niveau (paliers
+  de 25), jamais d'annonce, périodes intactes. Tests : `progression-level-v2.suite.ts`, bloc « WizeBot histories
+  attached after the 20/11 restoration ».

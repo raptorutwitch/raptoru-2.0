@@ -836,7 +836,7 @@ export function mountProgressionPage(root: HTMLElement) {
             : '<small>État de la reprise indisponible.</small>'
         }
         <small>Démarre chaque viewer à son niveau WizeBot, une seule fois. Chaque ligne est gardée ; celles qu’on ne peut pas rattacher avec certitude attendent : elles se rattachent seules au retour du viewer, ou ici.</small>
-        <div class="pg-wrap"><button type="button" class="d-btn sm" data-act="dry-run">Simuler</button><button type="button" class="d-btn sm" data-act="import">Importer…</button><button type="button" class="d-btn sm" data-act="resolve">Rattacher les lignes en attente</button><button type="button" class="d-btn sm" data-act="waiting">Historiques en attente</button><button type="button" class="d-btn bad sm" data-act="revert">Annuler l’import…</button></div>
+        <div class="pg-wrap"><button type="button" class="d-btn sm" data-act="dry-run">Simuler</button><button type="button" class="d-btn sm" data-act="import">Importer…</button><button type="button" class="d-btn sm" data-act="resolve">Rattacher les lignes en attente</button><button type="button" class="d-btn sm" data-act="waiting">Historiques en attente</button></div>
         ${
           res
             ? `<dl class="d-kv"><dt>${lastDry ? 'Simulation, rien écrit' : 'Import terminé'}</dt><dd>${fmt(res.read)} lus</dd><dt>${lastDry ? 'À rattacher' : 'Rattachés'}</dt><dd>${fmt((lastDry ? res.would_import : res.imported) ?? 0)}</dd><dt>Par identifiant / pseudo</dt><dd>${fmt(res.by_id)} / ${fmt(res.by_login)}</dd><dt>Déjà rattachés</dt><dd>${fmt(res.already)}</dd><dt>Inconnus</dt><dd>${fmt(res.unresolved.length)}</dd><dt>Ambigus</dt><dd>${fmt(res.ambiguous.length)}</dd><dt>Conflits</dt><dd>${fmt(res.conflicts.length)}</dd></dl>`
@@ -1250,21 +1250,6 @@ export function mountProgressionPage(root: HTMLElement) {
         reload();
       });
     if (a === 'waiting') return openWaiting();
-    if (a === 'revert') {
-      void confirmBox({
-        title: 'Annuler l’import WizeBot ?',
-        body: 'Les XP importées sont retirées. L’XP gagnée depuis reste.',
-        yes: 'Annuler l’import',
-        no: 'Garder',
-      }).then((yes) => {
-        if (!yes) return;
-        void run(
-          b,
-          () => postJson('/api/progression/import/revert', {}),
-          'Import annulé.',
-        ).then(reload);
-      });
-    }
   });
   p.root.addEventListener('submit', (e) => {
     e.preventDefault();
