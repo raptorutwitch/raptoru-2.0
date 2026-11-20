@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blackjack — prototype</title>
+  <link rel="stylesheet" href="page.css">
+  <link rel="stylesheet" href="src/bj.css">
+</head>
+<body>
+  <main class="stage-page">
+    <div class="frames">
+      <div class="frame" id="frame"><span class="tag" id="tag">Extension · composant vidéo 565 × 376</span><div class="ext"><section class="mod">
+        <header class="mod__head">
+          <button type="button" class="mod__back" id="back" aria-label="Retour aux tables" title="Retour aux tables (tu restes assis)"><svg viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+          <h1 class="mod__title"><i><svg viewBox="0 0 24 24"><rect x="4" y="3" width="11" height="15" rx="2"/><path d="M9 21h9a2 2 0 0 0 2-2V8"/></svg></i><span id="title">Blackjack</span></h1>
+          <div class="wallet" role="status" title="Jetons FICTIFS du prototype"><svg class="coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" class="c"/><path d="M12 8.6 15.4 12 12 15.4 8.6 12z" class="d"/></svg><b id="balance">0</b><span class="delta" id="delta"></span></div>
+        </header>
+        <div class="mod__body" id="host"></div>
+      </section></div></div>
+
+      <div class="frame spectframe" id="frame2" hidden><span class="tag">Vue spectateur (un autre viewer, non assis)</span><div class="ext"><section class="mod">
+        <header class="mod__head">
+          <button type="button" class="mod__back" id="back2" aria-label="Retour aux tables"><svg viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+          <h1 class="mod__title"><i><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></i><span id="title2">Spectateur</span></h1>
+          <div></div>
+        </header>
+        <div class="mod__body" id="host2"></div>
+      </section></div></div>
+    </div>
+
+    <aside class="lab" id="lab">
+      <h2>LAB — outils de démonstration</h2>
+      <p>Hors de l’interface du jeu. Jetons <b>fictifs</b>. Le « Core » tourne dans cette page (<code>src/core-sim.js</code>) : il distribue, chronomètre et paie ; l’écran ne fait que lui envoyer des intentions, à travers un réseau simulé (latence 35–105 ms).</p>
+      <fieldset><legend>Mes Jetons fictifs</legend><div class="row">
+        <button data-lab="give" data-n="1000">+1 000</button><button data-lab="give" data-n="100000">+100 000</button><button data-lab="zero">Mettre à 0</button>
+      </div></fieldset>
+      <fieldset><legend>Joueurs à ma table (moi compris)</legend>
+        <div class="row"><button data-lab="size" data-n="1">1</button><button data-lab="size" data-n="2">2</button><button data-lab="size" data-n="3">3</button><button data-lab="size" data-n="5">5</button><button data-lab="size" data-n="7">7</button><button data-lab="size" data-n="10">10</button><button data-lab="bot" data-style="basic">+1</button></div>
+        <div class="row" style="margin-top:5px"><button data-lab="bot" data-style="afk">+1 absent (ne dit jamais PRÊT)</button><button data-lab="bot" data-style="slow">+1 lent</button><button data-lab="bot" data-style="leaver">+1 qui part en pleine main</button></div>
+        <div class="row" style="margin-top:5px"><button data-lab="crowd">+15 au salon (plusieurs tables)</button><button data-lab="nobots">Retirer tous</button></div>
+      </fieldset>
+      <fieldset><legend>Forcer la prochaine manche</legend>
+        <div class="row"><select id="rig">
+          <option value="">— au hasard —</option>
+          <option value="pair8">Ma paire de 8 (split)</option>
+          <option value="resplit">Mes 8, puis encore des 8 (re-split jusqu’à 4 mains)</option>
+          <option value="pairA">Ma paire d’As (As splittés)</option>
+          <option value="double11">Mon 11 contre un 6 (doubler)</option>
+          <option value="bj">Mon blackjack</option>
+          <option value="dealerBJ">Blackjack de la banque (As visible : assurance payée 2:1)</option>
+          <option value="aceNoBJ">As visible, pas de blackjack (assurance perdue, la main continue)</option>
+          <option value="evenMoney">Mon blackjack contre un As (even money)</option>
+          <option value="dealerBJ10">Blackjack de la banque (10 visible)</option>
+          <option value="dealerBust">La banque saute (6 + 10, puis des 10)</option>
+          <option value="soft17">La banque fait 17 souple (As + 6 : elle reste)</option>
+          <option value="allBust">Tout le monde saute, la banque finit sa main</option>
+          <option value="push">Égalité (mon 20 contre 20)</option>
+        </select><button data-lab="rig">Armer</button></div>
+        <div class="armed" id="armed"></div>
+      </fieldset>
+      <fieldset><legend>Moi</legend><div class="row">
+        <button data-lab="offline">Me déconnecter 6 s</button><button data-lab="lose">Perdre la prochaine réponse</button><button data-lab="reload">Rafraîchir mon écran</button>
+      </div></fieldset>
+      <fieldset><legend>Économie (fictive)</legend>
+        <div class="row">Gain potentiel max par manche <select id="maxWin"><option value="100000">100 000</option><option value="1000000" selected>1 000 000</option><option value="10000000">10 000 000</option></select></div>
+        <p class="note" style="margin:6px 0 0">Pire cas compté : 3 splits + 4 doubles gagnés (8 × la mise) + le meilleur pari banque. Une mise qui pourrait dépasser est refusée avant la donne, avec la mise maximale possible ; un gain n'est jamais plafonné après coup. Minimum 100, pas de maximum fixe.</p>
+      </fieldset>
+      <fieldset><legend>Core</legend><div class="row">
+        <button data-lab="crash">Interrompre le Core 5 s</button>
+      </div><p class="note" style="margin:6px 0 0">Pendant l’interruption, rien n’est accepté et aucun timer ne joue ; à la reprise, les échéances passées s’appliquent (RESTER) et chaque paiement reste unique.</p></fieldset>
+      <fieldset><legend>Affichage</legend><div class="row">
+        <button data-lab="narrow" id="narrowBtn">Format panneau 318 × 496</button><button data-lab="spect" id="spectBtn">Vue spectateur</button>
+      </div><div class="row" style="margin-top:6px"><label><input type="checkbox" id="sound"> Son</label> Volume <input type="range" id="vol" min="0" max="100" value="50"></div>
+      <p class="note" style="margin:6px 0 0">Clavier pendant ton tour : <code>T</code> tirer · <code>R</code> rester · <code>D</code> doubler · <code>S</code> split. Entrée : PRÊT. Clic droit sur ta mise ou un pari banque : retirer un jeton.</p></fieldset>
+      <fieldset><legend>Grille des paris sur la banque (exacte)</legend><div class="kv" id="pays"></div></fieldset>
+      <fieldset><legend>Journal du Core (ma table)</legend><div class="log" id="log"></div></fieldset>
+    </aside>
+  </main>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

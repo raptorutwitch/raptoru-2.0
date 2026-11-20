@@ -1,0 +1,11 @@
+{
+  "name": "casino-blackjack-prototype",
+  "private": true,
+  "type": "module",
+  "description": "Blackjack multijoueur (8 paquets, paris sur la banque) : prototype local, Jetons fictifs, Core simulé dans la page, aucune connexion.",
+  "scripts": {
+    "start": "node start.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "odds": "node tools/odds.mjs"
+  }
+}

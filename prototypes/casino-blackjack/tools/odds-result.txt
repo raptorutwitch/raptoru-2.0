@@ -1,0 +1,50 @@
+
+1. EXACT — résultat final de la banque (8 paquets, reste sur 17 souple, termine toujours sa main)
+   résultat   probabilité   paiement brut   RTP       avantage maison
+   17          14.5215 %    ×6.5            94.39 %    5.61 %
+   18          13.9318 %    ×6.5            90.56 %    9.44 %
+   19          13.3629 %    ×7              93.54 %    6.46 %
+   20          17.9709 %    ×5              89.85 %   10.15 %
+   21           7.2838 %    ×13             94.69 %    5.31 %
+   BJ           4.7451 %    ×19             90.16 %    9.84 %
+   BUST        28.1839 %    ×3.4            95.83 %    4.17 %
+   somme des probabilités : 1.000000000000
+
+2. ESTIMÉ (simulation, 400 000 manches à 7 joueurs, stratégie de base, coupe à 25 %)
+   RTP du jeu principal ≈ 99.62 % (± 0.14 % à 95 %) — avantage maison ≈ 0.38 %
+   résultat de la banque : simulé vs exact
+   17     14.521 % vs  14.522 %   écart -0.01 σ
+   18     13.993 % vs  13.932 %   écart 1.12 σ
+   19     13.336 % vs  13.363 %   écart -0.50 σ
+   20     17.903 % vs  17.971 %   écart -1.11 σ
+   21      7.299 % vs   7.284 %   écart 0.37 σ
+   BJ      4.730 % vs   4.745 %   écart -0.44 σ
+   BUST   28.217 % vs  28.184 %   écart 0.47 σ
+   avec des joueurs qui tirent jusqu’à 19 (la banque doit rester identique) :
+   17     14.489 %   écart -0.58 σ
+   18     13.969 %   écart 0.68 σ
+   19     13.390 %   écart 0.51 σ
+   20     17.918 %   écart -0.87 σ
+   21      7.319 %   écart 0.86 σ
+   BJ      4.760 %   écart 0.45 σ
+   BUST   28.153 %   écart -0.43 σ
+
+3. Compteur parfait, coupe à 25 % (800 sabots, 4108 manches à 7 joueurs) — EXACT manche par manche
+   pari    manches favorables   meilleur cas   gain moyen par manche (s’il ne mise QUE dans ces cas)
+   17          0.15 %            1.44 %      0.001 % de la mise
+   18          0.00 %           -3.21 %      0.000 % de la mise
+   19          0.02 %            0.28 %      0.000 % de la mise
+   20          0.00 %           -1.24 %      0.000 % de la mise
+   21          0.73 %            3.31 %      0.007 % de la mise
+   BJ          4.31 %           11.25 %      0.121 % de la mise
+   BUST        0.00 %           -0.51 %      0.000 % de la mise
+
+3. Compteur parfait, coupe à 50 % (800 sabots, 7991 manches à 7 joueurs) — EXACT manche par manche
+   pari    manches favorables   meilleur cas   gain moyen par manche (s’il ne mise QUE dans ces cas)
+   17          3.23 %            8.51 %      0.053 % de la mise
+   18          0.06 %            1.88 %      0.000 % de la mise
+   19          1.23 %            4.48 %      0.015 % de la mise
+   20          0.33 %            6.56 %      0.006 % de la mise
+   21          5.01 %           10.82 %      0.104 % de la mise
+   BJ         12.54 %           47.94 %      0.879 % de la mise
+   BUST        0.78 %            2.89 %      0.005 % de la mise
