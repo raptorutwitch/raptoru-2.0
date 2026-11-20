@@ -51,7 +51,8 @@ expressions et la latence ; essayer « Envoyer une vraie annonce test » ; tél�
 tous les contrôles passent).** Les 4 jeux (machine à fruits + Coffre, machine à émotes, roulette, blackjack multijoueur)
 sont validés par Antoni et intégrés (PR #90, `main` `18a4b048`). **Core `18a4b048` DÉPLOYÉ le 20/11** (migrations
 Casino appliquées après sauvegarde de 06:28 UTC), bot inchangé `2c04a5db`, **Studio 0.1.41 publié** (à installer).
-Casino FERMÉ en Production (`CASINO_EXTENSION=off`, `casino.open=0`) jusqu'à la publication de l'extension. Journal, statut exact de livraison et
+Puis (20/11, GO d'Antoni) : Casino OUVERT pour le Hosted Test (`CASINO_EXTENSION=on`, `casino.open=1`, 4 jeux),
+inventaire 298e940290ab validé (PR #93), ZIP `raptoru-live-PRODUCTION-2e2eaf3ae34a-…` téléversé en Hosted Test. Journal, statut exact de livraison et
 étapes restantes : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) (à lire en premier pour ce chantier) ; module :
 [CASINO.md](CASINO.md) § 12 (blackjack) et § 13 (machine à émotes). L'extension publique ne montre le Casino qu'après
 la publication de l'extension (inventaire + Hosted Test + revue Twitch : gestes d'Antoni).
@@ -60,7 +61,9 @@ la publication de l'extension (inventaire + Hosted Test + revue Twitch : gestes 
 toutes les **120 s** (avant 60 s) et badges sub tous les **25 niveaux** (n → 25 × n), appliqués en Production via Studio ;
 aucune XP ni aucun niveau modifié. Étude de restauration WizeBot en lecture seule (363 viewers monteraient, max 60 → 141) :
 rapport privé `Documents\Raptoru\_migration-exports\levels-2026-11-20\`, synthèse LEVEL_UP_V2.md § 14. Restauration
-EXÉCUTÉE le 20/11 (432 comptes, § 15) ; annulations désactivées et rattachements futurs non compressés (§ 15).
+EXÉCUTÉE le 20/11 (432 comptes, § 15) ; annulations désactivées et rattachements futurs non compressés (§ 15) :
+PR #94, **Core `1f05b97c` DÉPLOYÉ le 20/11 15:47 UTC** (sauvegarde 15:28 UTC, bot inchangé `2c04a5db`), **Studio
+0.1.42 publié** (à installer par Antoni : il retire les boutons d'annulation ; le Core les refuse déjà, 410).
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
 le checkout principal (c'est le dossier de données du Studio installé). Travailler dans
