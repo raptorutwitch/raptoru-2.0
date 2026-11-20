@@ -1,4 +1,5 @@
 # Commit de l'extension servi par Twitch (version publiée).
-# 0bf7907 : présumé, non prouvé — preuve: buildId de shared/runtime-config.js servi par <client-id>.ext-twitch.tv
+# be1744e75f63 : PROUVÉ le 20/11/2026 par Antoni dans la console Twitch (version « Released ») :
+#   raptoru-live-PRODUCTION-be1744e75f63-depuis-0bf7907-95-commits-shell-v2.zip
 # Mis à jour, après approbation de Twitch, dans le même commit que la note de version.
-0bf7907
+be1744e75f639382625371da8cb7e188e220d801
