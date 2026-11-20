@@ -20,14 +20,20 @@ const deferred = () => {
 describe('casino wallet sync (the roulette refused after an external credit, 19/11)', () => {
   it('a lost ALL-IN then +1 000 000 credited: the game reads the Core again and can play', async () => {
     const g = fakeGame(0);
-    const sync = createWalletSync({ pull: async () => ({ me: { balance: 1_000_000 } }), game: () => g });
+    const sync = createWalletSync({
+      pull: async () => ({ me: { balance: 1_000_000 } }),
+      game: () => g,
+    });
     expect(await sync({ available: 1_000_000 })).toBe(true);
     expect(g.balance).toBe(1_000_000);
   });
 
   it('takes the Core’s balance, never the session’s number', async () => {
     const g = fakeGame(0);
-    const sync = createWalletSync({ pull: async () => ({ me: { balance: 750 } }), game: () => g });
+    const sync = createWalletSync({
+      pull: async () => ({ me: { balance: 750 } }),
+      game: () => g,
+    });
     await sync({ available: 1_000_000 });
     expect(g.balance).toBe(750);
   });
@@ -47,7 +53,10 @@ describe('casino wallet sync (the roulette refused after an external credit, 19/
     const g = fakeGame(100);
     g.busy = true;
     let pulls = 0;
-    const sync = createWalletSync({ pull: async () => (pulls++, { me: { balance: 9 } }), game: () => g });
+    const sync = createWalletSync({
+      pull: async () => (pulls++, { me: { balance: 9 } }),
+      game: () => g,
+    });
     expect(await sync({ available: 9 })).toBe(false);
     expect(pulls).toBe(0);
   });
@@ -68,7 +77,10 @@ describe('casino wallet sync (the roulette refused after an external credit, 19/
     const a = deferred();
     const b = deferred();
     const answers = [a.p, b.p];
-    const sync = createWalletSync({ pull: () => answers.shift(), game: () => g });
+    const sync = createWalletSync({
+      pull: () => answers.shift(),
+      game: () => g,
+    });
     const first = sync({ available: 1000 });
     const second = sync({ available: 2000 });
     b.ok({ me: { balance: 2000 } });
@@ -92,7 +104,10 @@ describe('casino wallet sync (the roulette refused after an external credit, 19/
 
   it('a Core failure leaves the balance as it was (the next session read retries)', async () => {
     const g = fakeGame(40);
-    const sync = createWalletSync({ pull: async () => Promise.reject(new Error('offline')), game: () => g });
+    const sync = createWalletSync({
+      pull: async () => Promise.reject(new Error('offline')),
+      game: () => g,
+    });
     expect(await sync({ available: 80 })).toBe(false);
     expect(g.balance).toBe(40);
   });

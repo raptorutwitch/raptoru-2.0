@@ -1,7 +1,10 @@
-# Casino : machine à sous (avec le Coffre) et roulette de l'extension
+# Casino : machine à sous (avec le Coffre), roulette, machine à émotes et blackjack de l'extension
+
+**Casino V1 (20/11/2026)** : les quatre jeux sont validés par Antoni et intégrés au Core, à l'extension et à Studio
+(§ 12 blackjack, § 13 machine à émotes ; journal et statut de livraison : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md)).
 
 État au 18/11/2026 : **intégré et jouable en Lab** (mode spectateur refait le 18/11), branche locale `feat/casino`.
-Rien n'est poussé, fusionné ni déployé. En Production, le Casino reste fermé tant qu'Antoni n'a pas validé :
+En Production, le Casino reste fermé tant qu'Antoni n'a pas validé :
 
 - la variable `CASINO_EXTENSION` du Core, à `off` par défaut ;
 - le réglage Studio `casino.open`, à 0 par défaut ;
@@ -365,10 +368,12 @@ ne joue jamais à la place d'un viewer.
      plafond par tour, comme aujourd'hui. Pour le vrai ALL-IN, il faut choisir une valeur, par exemple 36 000 000 :
      un ALL-IN reste alors possible jusqu'à 1 000 000 sur un numéro et 18 000 000 sur une chance simple (§ 5). Aucune
      valeur n'est réglée pour la Production à ta place.
-2. **Le déploiement du Core et de ses migrations** `20261201130000_casino.sql`, `20261202130000_casino_feed.sql` et
-   `20261203130000_casino_feed_skip.sql` (additives). Sauvegarde, puis `--migrations-approved`.
+2. **Le déploiement du Core et de ses migrations** `20261201130000_casino.sql`, `20261202130000_casino_feed.sql`,
+   `20261203130000_casino_feed_skip.sql` et `20261204130000_casino_v1.sql` (additives). Sauvegarde, puis
+   `--migrations-approved`.
 3. **La variable `CASINO_EXTENSION`** : `testers:<id>,…` pour un Hosted Test, puis `on`.
-4. **Studio :** release avec la page Casino, puis `casino.open = 1`, `casino.slot_open` et `casino.roulette_open`.
+4. **Studio :** release avec la page Casino, puis `casino.open = 1` ; chaque jeu (`slot_open`, `roulette_open`,
+   `book_open`, `blackjack_open`) est ouvert par défaut une fois le Casino ouvert.
 5. **L'extension :**
    - inventaire validé (la ligne « Validé par Antoni : oui » est celle d'Antoni), Hosted Test, revue Twitch ;
    - `random_ban_ext.enabled = 1`, qui porte la carte Mini-jeux.
@@ -376,18 +381,51 @@ ne joue jamais à la place d'un viewer.
 
 ## 11. Retour arrière
 
-| Quoi           | Comment                                                                                                   |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| Tout le Casino | Studio › Casino › Fermé (`casino.open = 0`, immédiat) ; ou `CASINO_EXTENSION=off` (redémarrage du Core)   |
-| Un jeu         | `casino.slot_open = 0` / `casino.roulette_open = 0`                                                       |
-| Les annonces   | `casino.announce = 0`                                                                                     |
-| Core           | Redéployer le Core précédent : il ignore `casino_rounds` et `casino_feed` (migrations additives)          |
-| Extension      | Ne pas publier, ou version précédente dans la console Twitch : sans Casino, les tuiles n'apparaissent pas |
+| Quoi             | Comment                                                                                                                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Tout le Casino   | Studio › Casino › Fermé (`casino.open = 0`, immédiat) ; ou `CASINO_EXTENSION=off` (redémarrage du Core)                                                                                                                                                                  |
+| Un jeu           | `casino.slot_open` / `roulette_open` / `book_open` / `blackjack_open = 0` (une manche de blackjack engagée se termine et se paie)                                                                                                                                        |
+| Annonce de table | `casino.bj_announce = 0`                                                                                                                                                                                                                                                 |
+| Les annonces     | `casino.announce = 0`                                                                                                                                                                                                                                                    |
+| Core             | Redéployer le Core précédent : il ignore `casino_rounds`, `casino_feed` et `casino_bj_tables` (migrations additives). Une manche de blackjack en cours reste figée jusqu'au retour d'un Core V1 (aucun Jeton perdu : les mises engagées restent dans l'état de la table) |
+| Extension        | Ne pas publier, ou version précédente dans la console Twitch : sans Casino, les tuiles n'apparaissent pas                                                                                                                                                                |
 
-## 12. Blackjack multijoueur — prototype (19/11)
+## 12. Blackjack multijoueur — Casino V1 (20/11)
 
-**Hors extension, hors Core :** `prototypes/casino-blackjack` (local, comme les autres prototypes). Pour le lancer :
-`node start.mjs`. Il contient :
+**Intégré au Core et à l'extension le 20/11** (mandat d'Antoni « CASINO V1 : intégration finale et mise en
+Production » ; journal : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md)). Les règles, la grille et l'écran sont ceux
+du prototype validé, versionné dans `prototypes/casino-blackjack` (il se lance toujours seul : `node start.mjs`).
+
+- **Le Core décide tout** (`apps/core-api/src/casino/blackjack/`) : le sabot de 8 paquets, les cartes, les tours, les
+  timers, l'assurance, les gains. `rules.ts` et `paytable.ts` sont le prototype à l'identique (test de parité sur
+  20 000 mains) ; `engine.ts` est la machine de table ; `service.ts` la porte vers Postgres et le Wallet.
+- **Une ligne par table** (`casino_bj_tables`, migration `20261204130000_casino_v1.sql`) : tout l'état de la table,
+  modifié seulement sous le verrou de sa ligne, dans la même transaction que les mouvements du Wallet. Chaque mouvement
+  a sa clé (`casino:bj:bet|unbet|double|split|ins|insp|pay|side:…`) : un double clic, deux onglets ou une requête
+  renvoyée ne paient jamais deux fois. Une action porte le jeton du tour visé et son identifiant.
+- **Timers serveur** : l'étape en attente est enregistrée avec la table et jouée par le Core (toutes les 250 ms). Après
+  un redémarrage, elle joue en retard avec son défaut sûr : RESTER, pas d'assurance, donne avec les joueurs prêts. Une
+  table vide n'a aucune étape : elle garde son numéro sans rien consommer.
+- **Tables** : la première s'ouvre toute seule quand un viewer s'assoit, sous le verrou du salon (deux premiers joueurs
+  au même instant = une seule table n°1, prouvé sur vrai Postgres avec deux Cores) ; une table pleine (10) ouvre la
+  suivante, 8 au plus. Un joueur n'est que sur une table. Une place choisie déjà prise est refusée.
+- **Présence** : l'écran du joueur lit sa table en continu ; un joueur non vu depuis 25 s ne bloque jamais la donne (son
+  assurance est refusée, sa décision devient RESTER à l'échéance) ; hors manche, sa place se libère après 90 s.
+- **Reprise** : rafraîchir l'extension redemande l'état de la table au Core ; rien n'est retiré, redistribué ni
+  remboursé, aucune animation n'est rejouée. Un joueur parti en pleine manche retrouve sa place et sa main.
+- **Spectateurs** : n'importe quel viewer regarde une table depuis le salon (ou suit un joueur depuis « Parties en
+  direct ») ; la carte cachée et l'ordre du sabot ne quittent jamais le Core ; aucune commande n'agit.
+- **Annonce dans le chat** : seulement à la personne qui a créé la table, une petite question « Une table de blackjack
+  vient d'ouvrir ! Tu veux prévenir le chat ? ». Le message part uniquement sur « Annoncer dans le chat », par la file
+  existante de LeCroupier_ (`cmd_steps`, `module:casino`), une fois par table, au plus une annonce de table toutes les
+  `casino.bj_announce_gap_s` (600 s). Chat indisponible : le blackjack reste jouable. Aucune récompense.
+- **Historique** : chaque manche réglée écrit une ligne par joueur dans `casino_rounds` (jeu `blackjack`).
+- **Réglages** (Studio › Casino) : `blackjack_open`, `bj_main_min` (100), `bj_max_win` (1 000 000, gain net possible
+  par manche, refus avant la donne), `bj_side_max_return` (100 000), `bj_announce`, `bj_announce_gap_s`.
+
+### Historique du prototype (19–20/11)
+
+Le prototype (`prototypes/casino-blackjack`, `node start.mjs`) contient :
 
 - les règles précises ;
 - la grille exacte des paris sur la banque, et l'analyse anti-comptage qui a fixé la coupe à 25 % et le Blackjack à
@@ -395,7 +433,7 @@ ne joue jamais à la place d'un viewer.
 - les choix multijoueur et timers ;
 - ce qui reste à faire au Core.
 
-Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas validé le prototype.
+Tout est dans son `README.md`. Validé par Antoni le 20/11 (mandat Casino V1).
 
 **V2 (19/11, après le premier essai d'Antoni) :** l'ergonomie est refaite, les règles et la grille ne changent pas.
 
@@ -433,8 +471,7 @@ Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas valid
 - **Boutons :** une couleur et une icône par action ; l'état désactivé est éteint.
 - **Historique :** pour chaque joueur, mise principale et mains, chaque pari banque (misé, retour) et le net.
 - **Bulle :** la mise, le gain net et le retour total.
-- **Contrôles :** 81 contrôles Chromium, dont un audit de chevauchements et de textes coupés à 565 × 376 et en panneau
-  318.
+- **Contrôles :** 81 contrôles Chromium, dont un audit de chevauchements et de textes coupés à 565 × 376 et en panneau 318.
 
 **Passe corrective du 20/11 (règles + UI) :**
 
@@ -447,3 +484,22 @@ Tout est dans son `README.md`. Rien n'est intégré tant qu'Antoni n'a pas valid
 - **UI :** panneau « Règles » à gauche ; languettes discrètes (icône, nom au survol) ; BUSTED au milieu de la place ;
   titre courbe abaissé ; historique avec un résumé par manche (ma main, mes paris banque ✓/✗, l'assurance).
 - **Tests :** 47 tests et 95 contrôles Chromium.
+
+## 13. Machine à émotes — Casino V1 (20/11)
+
+Le prototype validé (`prototypes/casino-emotes`, versionné) est la deuxième machine de la tuile Mini-jeux.
+
+- **Règles** : 5 × 3, les 10 lignes de la machine à fruits ; 9 symboles payants (4 forts dès 2, 5 communs dès 3) et le
+  BONUS Qilby, WILD sur les lignes et scatter (2 / 20 / 200 × la mise). 3 BONUS ou plus : 10 tours gratuits, un symbole
+  tiré au hasard devient extensible (il remplit ses rouleaux et paie sur les 10 lignes en plus) ; 3 BONUS pendant le
+  bonus : +10 tours. RTP exact du moteur : **95,23 %** (`prototypes/casino-emotes/tools/rtp.mjs`).
+- **Au Core** : `apps/core-api/src/casino/book.ts`, jeu `book` du service existant. Le tour ENTIER (base, symbole,
+  chaque tour gratuit) est tiré au spin et payé dans la même transaction, comme le Coffre ; l'écran ne fait que le jouer.
+  Parité exacte avec le moteur du prototype (3 000 tours identiques). Un rechargement reprend les tours gratuits là où
+  l'écran en était (`progress_step`), déjà crédités ; les spectateurs voient chaque tour gratuit quand le joueur le
+  voit.
+- **Extension** : `shared/casino/book.js` (l'écran du prototype sur les vrais modules de la machine), `book-symbols.js`,
+  `book-sfx.js`, `modules/casino/book.css`, images `assets/casino/emotes/`.
+- **Mise** : `book_min_bet` 20, `book_max_bet` 1 000 par défaut, en multiples de 10. Le gain d'un tour est payé jusqu'au
+  « gain maximum par partie » (`max_win`, 1 000 000), marqué « plafonné » au joueur. Effet mesuré par simulation
+  (3 millions de tours) : voir CASINO_V1_INTEGRATION.md § RTP et plafond.

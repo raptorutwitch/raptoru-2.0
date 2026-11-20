@@ -1,6 +1,6 @@
 # Reprise : point d'entrée pour un agent (Claude, Codex ou autre)
 
-**Mis à jour le 19/11/2026** (Casino : panneau spectateur, ALL-IN de la roulette, zoom de Mini-jeux corrigé, branche locale `feat/casino` ; avant : livraison de la Roue du Sub V3, journal
+**Mis à jour le 20/11/2026** (Casino V1 : blackjack multijoueur et machine à émotes intégrés, livraison en cours — [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) ; avant : Casino du 19/11 ; avant : livraison de la Roue du Sub V3, journal
 [archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md](archive/LIVRAISON_2026-11-16_ROUE_DU_SUB_V3.md)). À lire **en premier**, puis vérifier l'état soi-même (§ 4). Période
 précédente : [archive/REPRISE_2026-11-08_2026-11-10.md](archive/REPRISE_2026-11-08_2026-11-10.md). Les règles de
 [`../CLAUDE.md`](../CLAUDE.md) priment sur tout outil ou plugin.
@@ -47,20 +47,12 @@ V3 ; régler la commande d'Aouh (Déclenchement, Modification déléguée) et es
 expressions et la latence ; essayer « Envoyer une vraie annonce test » ; téléverser le ZIP be1744e75f63 en Hosted Test
 (jamais pendant un live), l'essayer, puis la revue Twitch ; décider des propositions de règles de docs/AGENT_WORKFLOW.md
 § 15 ; choisir les directions du casino (prototypes/casino-directions, hors dépôt).
-**Casino — EN COURS, passation du 18/11 : [CASINO_HANDOFF_2026-11-18.md](CASINO_HANDOFF_2026-11-18.md) (à lire en
-premier pour ce chantier).** Branche LOCALE `feat/casino` (code `850187ae` + commit de passation), non poussée, non
-fusionnée, non déployée ; fermé par défaut. Antoni a validé le 18/11 : suivi spectateur de parties successives, spins,
-Coffre, mises de roulette, départ signalé, catalogue Mini-jeux ; mécanique des jeux et du Coffre définitive.
-Le 19/11, Antoni a validé la synchronisation joueur/spectateur et la disparition des gros flashs (commit `f9515627`).
-Livré ensuite le 19/11, À VALIDER PAR ANTONI :
-
-1. le panneau spectateur (machine, Coffre, roulette ; CASINO.md § 6) ;
-2. le vrai ALL-IN de la roulette (§ 4 et § 5). Son réglage `casino.roulette_all_in_max_win` vaut 0 par défaut :
-   désactivé tant qu'Antoni ne choisit pas une valeur pour la Production (§ 10) ;
-3. le zoom bref à l'ouverture de Mini-jeux : `arcade.css` chargée trop tard (§ 6).
-
-Ensuite : Antoni choisit ses symboles à partir de [CASINO_SYMBOLES.md](CASINO_SYMBOLES.md). L'intégration des émotes
-ne commence qu'après son GO. Démo : `npm run casino:demo -w @raptoru/core-api` (http://127.0.0.1:4497).
+**Casino V1 — mandat d'Antoni du 20/11 (« CASINO V1 : intégration finale et mise en Production », GO pour déployer si
+tous les contrôles passent).** Les 4 jeux (machine à fruits + Coffre, machine à émotes, roulette, blackjack multijoueur)
+sont validés par Antoni et intégrés Core + extension + Studio sur `feat/casino`. Journal, statut exact de livraison et
+étapes restantes : [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md) (à lire en premier pour ce chantier) ; module :
+[CASINO.md](CASINO.md) § 12 (blackjack) et § 13 (machine à émotes). L'extension publique ne montre le Casino qu'après
+la publication de l'extension (inventaire + Hosted Test + revue Twitch : gestes d'Antoni).
 
 Interdit sans GO explicite d'Antoni : push, fusion, déploiement, release Studio, migration distante, variable,
 publication ou Hosted Test Twitch, action sur OBS / Wallet / chat. Jamais git clean / reset --hard / checkout . dans
