@@ -37,6 +37,7 @@ const SIZES = [
   ['mobile petit (360×780)', 360, 780],
   ['mobile standard (390×844)', 390, 844],
   ['mobile paysage (844×390)', 844, 390],
+  ['paysage compact — cas de l’audit (844×300)', 844, 300],
 ];
 
 const $ = (id) => document.getElementById(id);
