@@ -468,7 +468,7 @@ export function mountBook(D, ctx) {
   };
   // Plusieurs combinaisons : une puce par ligne dans la plaque, à survoler ou toucher pour la voir (reels.js explorer).
   // (tours gratuits : le symbole extensible paie aussi en dehors des combinaisons marquées — jamais « rien ce tour »)
-  const lineEx = View.explorer(view, { plate, root: body, on, lines: T().lines, label: lineLabel, unsure: () => !!inFree });
+  const lineEx = View.explorer(view, { plate, root: body, on, lines: T().lines, label: lineLabel, unsure: () => !!inFree, idle: () => !busy });
   // The winning combinations one by one; Rapide: all at once; Passer: the end state.
   async function presentLines(r, { x, steps, credit, kick = true, pace = 0 }) {
     if (!credit) return;

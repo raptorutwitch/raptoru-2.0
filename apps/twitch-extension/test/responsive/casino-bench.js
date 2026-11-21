@@ -81,6 +81,7 @@ const NEXT_SLOT = [
 const NEXT_BJ = [
   ['random', 'aléatoire'],
   ['pair', 'une paire de 8 (Split)'],
+  ['resplit', 'quatre 8 (Split jusqu’à 4 mains)'],
   ['aces', 'deux As (Split d’As)'],
   ['double', '6 + 5 = 11 (Doubler)'],
   ['blackjack', 'Blackjack'],

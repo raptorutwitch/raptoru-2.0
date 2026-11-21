@@ -564,9 +564,13 @@ export function createClient({
     /** Blackjack (docs/CASINO.md § 12): the lobby, a table's redacted state (long-poll; spectators too), the intents. The
      *  Core decides everything: the identity is the token's, an action carries its turn token and its own id. */
     bjTables: () => call('GET', '/casino/bj/tables'),
-    bjState: (table, after = -1, waitMs = 0) =>
-      call('GET', `/casino/bj/state?table=${encodeURIComponent(table)}&after=${after}&wait_ms=${waitMs}`, { timeoutMs: waitMs + 8_000 }),
-    bjJoin: (tableId = null, seat = null) => call('POST', '/casino/bj/join', { body: { ...(tableId ? { table_id: tableId } : {}), ...(seat === null ? {} : { seat }) } }),
+    // `rx` : la dernière réaction reçue (un Core qui gère les réactions répond aussi pour une réaction nouvelle).
+    bjState: (table, after = -1, waitMs = 0, rx = -1) =>
+      call('GET', `/casino/bj/state?table=${encodeURIComponent(table)}&after=${after}&wait_ms=${waitMs}${rx >= 0 ? `&rx=${rx}` : ''}`, { timeoutMs: waitMs + 8_000 }),
+    bjJoin: (tableId = null, seat = null, newTable = false) =>
+      call('POST', '/casino/bj/join', { body: { ...(tableId ? { table_id: tableId } : {}), ...(seat === null ? {} : { seat }), ...(newTable ? { new_table: true } : {}) } }),
+    /** Une réaction (un identifiant que le Core accepte : r1 … r6), jamais un texte libre. */
+    bjReact: (r) => call('POST', '/casino/bj/react', { body: { r } }),
     bjBet: (main, side, ready) => call('POST', '/casino/bj/bet', { body: { main, side, ready } }),
     bjClear: () => call('POST', '/casino/bj/clear', { body: {} }),
     bjAct: (type, token, actionId) => call('POST', '/casino/bj/act', { body: { type, token, action_id: actionId } }),

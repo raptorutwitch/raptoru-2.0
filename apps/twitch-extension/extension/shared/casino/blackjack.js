@@ -7,6 +7,7 @@ import * as R from './bj-rules.js';
 import { SIDE_LABEL, SIDE_SPOTS, betProblem, oddsText, sideReturn } from './bj-paytable.js';
 import { avatarHTML, repairAvatars } from './bj-avatar.js';
 import { Sfx } from './bj-sfx.js';
+import { createReactions, pickDealerReaction } from './bj-reactions.js';
 import * as Frame from './frame.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('fr-FR').replace(/\s/g, ' ');
@@ -70,6 +71,8 @@ const ERR = {
   table_full: 'Cette table est complète.',
   seat_taken: 'Cette place vient d’être prise.',
   casino_full: 'Toutes les tables sont pleines.',
+  tables_cap: 'Toutes les tables autorisées pour l’instant sont ouvertes : rejoins-en une (une de plus s’ouvrira quand elles seront bien remplies).',
+  react_rate: 'Doucement : une réaction toutes les deux secondes.',
 };
 const why = (e, L) =>
   e?.code === 'bad_main_bet'
@@ -125,6 +128,8 @@ const SVG = {
   reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4.2h4.2"/><ellipse cx="12" cy="12" rx="2" ry="2.9"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  smile: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.2a4.5 4.5 0 0 0 7 0"/><path d="M9.2 9.6v.4M14.8 9.6v.4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
 };
 const icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${SVG[k]}</svg>`;
 let uidN = 0;
@@ -137,7 +142,7 @@ const RULES = [
   ['Tour de la banque', 'Elle joue après tous les joueurs : elle <b>tire jusqu’à 16</b> et <b>reste dès 17</b>, même un 17 avec un As. Si elle dépasse 21, toutes les mains encore en jeu gagnent. Avec un As ou une carte de 10 visible, elle regarde d’abord si elle a blackjack : si oui, la manche est réglée aussitôt.'],
   ['Tirer / Rester', '<b>Tirer</b> : une carte de plus. <b>Rester</b> : tu gardes ta main. Au-delà de 21, ta main est perdue (bust), même si la banque saute ensuite. Sans réponse à temps, ta main reste.'],
   ['Doubler', 'Sur tes 2 premières cartes : ta mise double et tu reçois <b>une seule carte</b>, puis ta main s’arrête. Permis après un Split, sauf sur des As splittés.'],
-  ['Split', 'Deux cartes de même valeur (deux 8, ou un Roi et une Dame) : sépare-les en deux mains, chacune avec la même mise. Chaque main reçoit <b>automatiquement sa 2ᵉ carte</b> : la main 1 tout de suite, la main 2 quand vient son tour. Tu joues ensuite <b>une main à la fois</b> (celle entourée) : Tirer, Rester et Doubler ne touchent qu’elle. Jusqu’à <b>4 mains</b>. As splittés : une seule carte chacun, ni nouveau Split ni Doubler. Un 21 fait après un Split n’est pas un blackjack (payé 1:1).'],
+  ['Split', 'Deux cartes de même valeur (deux 8, ou un Roi et une Dame) : sépare-les en deux mains, chacune avec la même mise. Chaque main reçoit <b>automatiquement sa 2ᵉ carte</b> : la main 1 tout de suite, la main 2 quand vient son tour. Tu joues ensuite <b>une main à la fois</b> (celle au premier plan, les autres attendent derrière) : Tirer, Rester et Doubler ne touchent qu’elle. Jusqu’à <b>4 mains</b>. As splittés : une seule carte chacun, ni nouveau Split ni Doubler. Un 21 fait après un Split n’est pas un blackjack (payé 1:1).'],
   ['Assurance', 'Proposée quand la banque montre un <b>As</b>. Tu mises jusqu’à <b>la moitié</b> de ta mise principale ; elle paie <b>2:1 seulement si la banque a blackjack</b>, sinon tu la perds et ta main continue.<span class="ex">Exemple : mise 200, assurance 100. Banque blackjack : ta main perd 200, l’assurance rapporte +200 net (payée 2:1 : 300 rendus), bilan 0. Pas de blackjack : l’assurance perd 100, ta main se joue normalement.</span>Elle ne protège que du blackjack de la banque, jamais d’une défaite.'],
   ['Gain assuré (Even money)', 'Tu as un blackjack et la banque montre un As. <b>Gain assuré</b> : ta main est payée <b>1:1 tout de suite</b> (mise 200 → +200), quoi qu’ait la banque. Sinon, tu gardes ta chance du <b>3:2</b> (+300)… mais si la banque a aussi blackjack, c’est une égalité (+0, mise rendue).'],
   ['Paris sur le score de la banque', `Avant la donne, en plus de ta main, parie sur le résultat final de la banque : ${SIDE_SPOTS.map((k) => `${SIDE_LABEL[k]} <b>${oddsText(k)}</b>`).join(' · ')}. « 11:2 » = 11 gagnés pour 2 misés (100 → +550). Dès 10 par pari.`],
@@ -160,10 +165,13 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
             ${SIDE_SPOTS.map((k) => `<button type="button" class="side" data-side="${k}"${SHORT[k] !== SIDE_LABEL[k] ? ` data-full="${SIDE_LABEL[k]}"` : ''}><b>${SHORT[k]}</b><small>paye ${oddsText(k)}</small><span class="sv"></span></button>`).join('')}
           </div>
           <div class="spot" aria-live="polite"></div>
+          <div class="cart" hidden></div>
           <div class="seats"></div>
           <div class="myseat" aria-label="Ta place"></div>
-          <button type="button" class="htab" data-hist aria-label="Historique des manches">${icon('clock')}<span>Historique</span><i class="hn"></i></button>
-          <button type="button" class="rtab" data-rules aria-label="Règles du jeu">${icon('rules')}<span>Règles</span></button>
+          <div class="tabs">
+            <button type="button" class="rtab" data-rules aria-label="Règles du jeu">${icon('rules')}<span>Règles</span></button>
+            <button type="button" class="htab" data-hist aria-label="Historique des manches">${icon('clock')}<span>Historique</span><i class="hn"></i></button>
+          </div>
           <aside class="hist" aria-label="Historique des manches">
             <header><b>${icon('clock')}Historique</b><button type="button" class="ic" data-hist aria-label="Fermer">✕</button></header>
             <div class="htabs" role="tablist" aria-label="Quel historique">
@@ -193,6 +201,17 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   const life = new AbortController();
   const sig = { signal: life.signal };
   repairAvatars(host, life.signal);
+  // Les réactions (bj-reactions.js) : activées seulement quand le Core les annonce avec l'état de la table.
+  const rx = createReactions({
+    root: bj,
+    felt,
+    seatsEl,
+    seatEl: (seat) => host.querySelector(`.seat[data-seat="${seat}"]`),
+    send: (id) => client.react(id),
+    toast: (t, bad) => toast(t, bad),
+    prefs: Frame.prefs('casino:bj:reactions', { muted: false }),
+    signal: life.signal,
+  });
   // Le cadre change de taille (format panneau) : places et arc des paris banque se recalculent.
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => st && mode === 'table' && paint(null, false)) : null;
   ro?.observe(felt);
@@ -217,6 +236,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   let tickedFor = '';
   let serverBet = '';
   let layout = []; // l'ordre des places affichées : figé pendant une manche (personne ne bouge)
+  let centreSeat = null; // la place dont la main est montrée en grand au centre (paint)
   const open = new Set(); // les manches dépliées dans l'historique
   // A9/A10 : « Mes manches » (CAS-01/BJ-05) — le Core garde déjà l'historique du viewer et son partage ; l'onglet
   // ne fait que les lire. Le point de départ du compteur de session est local (aucun stockage serveur nécessaire) :
@@ -244,18 +264,30 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     client.unwatch();
     tableId = null;
     $('.tbl').hidden = true;
-    const LB = $('.lobby');
-    LB.hidden = false;
+    $('.lobby').hidden = false;
     onTitle('Blackjack');
+    lobbyHtml = '';
+    await paintLobby(true);
+  }
+  // Le salon se met à jour seul (mandat du 21/11, B) : une table ouverte, rejointe ou fermée ailleurs apparaît sans
+  // recharger — toutes les 6 s tant qu'il est à l'écran, jamais redessiné quand rien n'a changé.
+  let lobbyT = null;
+  let lobbyHtml = '';
+  async function paintLobby(first = false) {
+    clearTimeout(lobbyT);
+    const LB = $('.lobby');
     let tables = [];
     try {
       tables = await client.tables();
     } catch (e) {
-      fail(e);
+      if (first) fail(e);
     }
     if (destroyed || mode !== 'lobby') return;
+    lobbyT = setTimeout(() => !destroyed && mode === 'lobby' && !globalThis.document?.hidden && void paintLobby(), 6000);
     const my = client.myTable();
-    LB.innerHTML = `
+    // La politique des tables du Core (mandat du 21/11, B) : absente d'un Core plus ancien → pas de « Nouvelle table ».
+    const cr = client.createInfo();
+    const html = `
       <header><b>Tables de blackjack</b><small>8 paquets · jusqu’à 10 joueurs · chacun contre la banque · mise dès 100</small><button type="button" class="btn rules-lnk" data-rules title="Règles du jeu" aria-label="Règles du jeu">${icon('rules')}Règles</button></header>
       <div class="tlist">${
         tables
@@ -275,16 +307,18 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
           })
           .join('') || '<p class="none">Aucune table ouverte pour l’instant.</p>'
       }</div>
-      ${spectator || my ? '' : `<button type="button" class="btn go wide" data-join="">${tables.length ? 'Trouver une place' : 'Ouvrir une table'}</button>`}
-      <p class="fine">Seul contre la banque ou à plusieurs : la donne part dès que tous les joueurs assis sont prêts. Une table en pleine manche : tu joues la suivante. Une nouvelle table s’ouvre quand les autres sont complètes.</p>`;
+      ${spectator || my ? '' : `<div class="lacts"><button type="button" class="btn go wide" data-join="">${tables.length ? 'Trouver une place' : 'Ouvrir une table'}</button>${cr && tables.length ? `<button type="button" class="btn newt" data-newtable${cr.allowed ? '' : ' disabled'} title="${cr.allowed ? 'Ouvrir une nouvelle table : seul contre la banque, et les autres peuvent la rejoindre' : esc(ERR.tables_cap)}">${icon('plus')}Nouvelle table</button>` : ''}</div>`}
+      <p class="fine">Seul contre la banque ou à plusieurs : la donne part dès que tous les joueurs assis sont prêts. Une table en pleine manche : tu joues la suivante. ${cr ? `Nouvelle table : ${cr.open} ouverte${cr.open > 1 ? 's' : ''} sur ${cr.cap} possibles pour l’instant ; chaque table reste ouverte à tous.` : 'Une nouvelle table s’ouvre quand les autres sont complètes.'}</p>`;
+    if (html !== lobbyHtml) LB.innerHTML = lobbyHtml = html;
   }
   let joining = false; // un double-clic sur « S'asseoir » (BJ-02/A3) : la même demande, jamais deux
-  async function join(id, seat = null) {
+  async function join(id, seat = null, newTable = false) {
     if (joining) return;
     joining = true;
     try {
-      const j = await client.join(id ? { tableId: id, ...(seat !== null ? { seat } : {}) } : {});
-      if (j.already && id && j.table !== id) toast('Tu es déjà assis à une autre table.');
+      const j = await client.join(id ? { tableId: id, ...(seat !== null ? { seat } : {}) } : { newTable });
+      if (j.already && (id || newTable) && j.table !== id) toast('Tu es déjà assis à une autre table.');
+      else if (j.reused) toast(`La table ${j.no} était libre : tu y es seul contre la banque.`);
       else if (j.nextRound) toast('Tu rejoindras la manche suivante.');
       if (j.created && canAnnounce()) setTimeout(() => askAnnounce(j.table), 600);
       if (j.resumed) toast('Tu reprends ta place : ta main a continué sans toi.');
@@ -367,7 +401,13 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     lastSeq = -1;
     st = null;
     layout = [];
-    await client.watch(id, onState);
+    rx.reset();
+    await client.watch(id, onState, (R) => tableId === id && rx.receive(R), () => {
+      // Une table vide fermée par le Core (mandat du 21/11, B) : retour au salon, sans rien perdre.
+      if (tableId !== id || destroyed) return;
+      toast('Cette table vient de fermer (plus personne n’y jouait).');
+      void lobby();
+    });
   }
 
   // --- L'état du Core -----------------------------------------------------------------------------------------
@@ -395,12 +435,16 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     if (animate) sounds(next);
     // Split (retour d'Antoni du 21/11) : la 2ᵉ carte de chaque main est une règle du moteur, distribuée sans clic — on le dit.
     const ev = next.last;
+    // Une seule fois par manche (mandat du 21/11, A2 : pas de répétition) — la pile montre ensuite chaque main.
     if (animate && me && ev?.seat === me.seat && me.hands.length > 1) {
-      if (ev.type === 'split') toast(`Split : tu joues la main ${ev.hand + 1} d’abord ; la main ${ev.hand + 2} recevra sa 2ᵉ carte à son tour.`);
-      else if (ev.type === 'card' && ev.auto && ev.hand > 0) toast(`Main ${ev.hand + 1} : sa 2ᵉ carte est distribuée automatiquement (règle du Split).`);
+      if (ev.type === 'split' && me.hands.length === 2) toast(`Split : tu joues la main ${ev.hand + 1} d’abord ; la main ${ev.hand + 2} recevra sa 2ᵉ carte à son tour.`);
+      else if (ev.type === 'card' && ev.auto && ev.hand === 1) toast('Main 2 : sa 2ᵉ carte est distribuée automatiquement (règle du Split).');
     }
     if (animate && next.last?.type === 'peek') toast(me?.insurance?.stake ? `Pas de blackjack pour la banque : assurance perdue (−${fmt(me.insurance.stake)}), la main continue.` : 'Pas de blackjack pour la banque : la main continue.');
-    if (animate && next.phase === 'settled' && prev?.phase !== 'settled') payFlights(next);
+    if (animate && next.phase === 'settled' && prev?.phase !== 'settled') {
+      payFlights(next);
+      setTimeout(() => !destroyed && st === next && rx.dealer(pickDealerReaction(next, L()?.mainMin)), 900);
+    }
     log(next.last);
   }
 
@@ -445,6 +489,10 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const dt = $('[data-tot="dealer"]');
     dt.textContent = s.dealer.cards.length ? (s.dealer.natural ? 'BJ' : s.dealer.total > 21 ? `${s.dealer.total} · bust` : String(s.dealer.total)) : '';
     dt.className = `tot${s.dealer.natural ? ' is-bj' : s.dealer.total > 21 ? ' bust' : ''}`;
+    // Le joueur dont la main est au centre (mandat du 21/11, A3) : sa place se fait discrète (pseudo, repère, petites
+    // cartes), sans répéter score, mise ni étiquette déjà au centre. Pas quand le centre parle d'autre chose.
+    const tt = turnOf(s);
+    centreSeat = tt && !(me && !me.inRound) ? tt.seat : null;
     paintSeats(s, fresh);
     paintSides(s, me); // après les places : l'arc du portrait dépend de .has-hero
     paintSpot(s, fresh, me);
@@ -466,24 +514,21 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // ses cartes (les bords remontent à leur hauteur) ; le titre suit la même courbe, dessous. Panneau étroit : grille.
     const W = felt.clientWidth || 547;
     const H = felt.clientHeight || 364;
-    // Paysage compact (844×300 de l'audit) : la courbe ne tient plus sous les cartes de la banque à cette hauteur,
-    // même avec une largeur confortable — la grille plate (déjà prévue pour le panneau étroit) s'en sort mieux.
-    // Portrait (téléphone, retour d'Antoni du 21/11) : les 7 cases gardent leur courbe sous la banque quand la largeur
-    // laisse au moins 40 px à chacune (au doigt) ; plus étroit, la grille compacte. Jamais des cases étirées.
+    // Portrait (téléphone, mandat du 21/11, F) : 4 + 3 grandes cases symétriques sous leur titre — au doigt, bien plus
+    // lisibles qu'un arc de 7 cases de 44 px. Panneau étroit : la même grille. Paysage bas mais large (844 × 390) :
+    // l'arc revient, large et peu profond, de part et d'autre de la banque (une rangée plate de 7 cases sur toute la
+    // largeur écrasait la banque, minuscule, au-dessus d'une barre).
     const hero = felt.classList.contains('has-hero');
-    const bw = hero ? Math.min(48, Math.floor((W - 28 - 36) / 7)) : 0;
-    const flat = hero ? bw < 40 : W < 420 || H < 300;
+    const flat = hero || W < 420 || (H < 300 && W < 600);
     box.classList.toggle('flat', flat);
-    box.classList.toggle('harc', hero && !flat);
-    box.style.setProperty('--bw', `${bw}px`);
     // De l'air entre les cartes de la banque, les cases et leur titre (retour d'Antoni du 21/11) : la rangée descend
     // (bord 50, flèche 42 au lieu de 40/40), et suit l'échelle --kg comme les cartes qu'elle contourne.
     const kg = Number.parseFloat(getComputedStyle(felt).getPropertyValue('--kg')) || 1;
     // La rangée de la banque est plus basse en hauteur moyenne ou basse (bj.css) : l'arc et son titre s'y calent
     // toujours (sinon ils débordaient sur le centre, sous les mains d'un Split).
     const fit = Math.min(1, (box.clientHeight || 136 * kg) / (136 * kg));
-    const span = hero ? (W - 28 - bw) / 2 : Math.min(210 * kg, W / 2 - 41);
-    const [yEdge, depth] = hero ? [22, 14] : [50 * kg * fit, 42 * kg * fit];
+    const span = Math.min(210 * kg, W / 2 - 41);
+    const [yEdge, depth] = [50 * kg * fit, 42 * kg * fit];
     const cx = W / 2;
     felt.querySelectorAll('[data-side]').forEach((b, i) => {
       if (flat) return void ((b.style.left = ''), (b.style.top = ''));
@@ -493,7 +538,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     });
     // Une parabole exacte = une courbe de Bézier quadratique (contrôle au double de la flèche).
     // Le titre : sous les cases, avec de l'air (retour d'Antoni du 21/11 : sur PC, il touchait presque les cases).
-    const ty = hero ? yEdge + 34 : yEdge + 39 * kg * fit;
+    const ty = yEdge + 39 * kg * fit;
     $('.sides__arc path').setAttribute('d', flat ? '' : `M${cx - span} ${ty} Q${cx} ${ty + 2 * depth} ${cx + span} ${ty}`);
     for (const b of felt.querySelectorAll('[data-side]')) {
       const k = b.dataset.side;
@@ -537,7 +582,9 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // échelle --kg que le reste de l'extension (clamp 0,85-1,15) : le plafond ci-dessous suit --kg, la largeur réelle
     // (ligne suivante) continue de protéger les petites tailles.
     const kg = Number.parseFloat(getComputedStyle(felt).getPropertyValue('--kg')) || 1;
-    const max = (narrow ? (n <= 3 ? 96 : 60) : n <= 2 ? 128 : n <= 3 ? 116 : n <= 5 ? 92 : n <= 7 ? 70 : 50) * kg;
+    // Beaucoup de joueurs sur une table large (paysage 844, plein écran) : la largeur en plus élargit leurs places
+    // (mandat du 21/11, F : 10 places de 50 px laissaient un tiers du tapis vide).
+    const max = (narrow ? (n <= 3 ? 96 : 60) : n <= 2 ? 128 : n <= 3 ? 116 : n <= 5 ? 92 : n <= 7 ? 70 : W >= 760 ? 70 : 50) * kg;
     const gap = carousel ? 8 : n >= 9 ? 4 : 8;
     const sw = carousel ? Math.round(88 * kg) : Math.floor(Math.min(max, (W - 28 - gap * (perRow - 1)) / perRow));
     seatsEl.style.setProperty('--sw', `${sw}px`);
@@ -614,7 +661,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const multi = p.hands.length > 1;
     const allBusted = p.hands.length > 0 && p.hands.every((x) => x.total > 21);
     const myBetting = p.me && s.phase === 'betting' && p.status === 'seated';
-    el.className = `seat${p.me ? ' me' : ''}${turn ? ' turn' : ''}${p.status === 'left' ? ' left' : ''}${!p.connected ? ' off' : ''}${!p.inRound && s.phase !== 'betting' ? ' wait' : ''}${s.phase === 'betting' && p.bet?.ready ? ' ready' : ''}${allBusted ? ' busted' : ''}${myBetting ? ' betting' : ''}${multi ? ' multi' : ''}`;
+    el.className = `seat${p.me ? ' me' : ''}${turn ? ' turn' : ''}${p.status === 'left' ? ' left' : ''}${!p.connected ? ' off' : ''}${!p.inRound && s.phase !== 'betting' ? ' wait' : ''}${s.phase === 'betting' && p.bet?.ready ? ' ready' : ''}${allBusted ? ' busted' : ''}${myBetting ? ' betting' : ''}${multi ? ' multi' : ''}${centreSeat === i ? ' focus' : ''}`;
     const avw = el.querySelector('.avw');
     const avKey = `${p.user}|${p.avatar ?? ''}`;
     if (avw.dataset.k !== avKey) {
@@ -763,14 +810,16 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       const p = s.seats[tt.seat];
       // La clé ne dépend pas de la main jouée : passer de la main 1 à la main 2 (ou attendre la carte suivante) ne
       // redessine rien — avant, le centre se vidait puis réapparaissait à chaque carte, et les deux mains semblaient
-      // recevoir une carte ensemble (retour d'Antoni du 21/11). Nom, main active et étiquettes se mettent à jour dessous.
+      // recevoir une carte ensemble (retour d'Antoni du 21/11). Main active, scores et mises se mettent à jour dessous.
       key = `turn:${tt.seat}:${p.hands.length}:${s.roundId}`;
-      const who = `<div class="who${p.me ? ' me' : ''}">${avatarHTML(p, 'av big')}<div><b>${p.me ? 'À toi de jouer' : esc(p.name)}</b><span class="lbl"></span><small class="st"></small></div></div>`;
-      // Après un Split, le centre montre TOUTES les mains du joueur, côte à côte et en grand : chacune son nom, ses
-      // cartes, son total, sa mise ; celle à jouer entourée, les finies estompées — jamais confondu avec un Double.
-      html = p.hands.length > 1
-        ? `${who}<div class="splithands" data-n="${p.hands.length}">${p.hands.map((hd, k) => `<div class="sh"><small class="sh__lbl"></small><div class="cards big" data-zone="spot${k}"></div><span class="sh__foot"><span class="tot" data-tot="spot${k}"></span><span class="sh__bet">${kfmt(hd.stake)}</span></span></div>`).join('')}</div>`
-        : `${who}<div class="cards big" data-zone="spot"></div><span class="tot" data-tot="spot"></span>`;
+      // Mandat du 21/11 (A1, A2) : qui joue est dit par le cartouche du coin (.cart) ; le centre montre la main en jeu,
+      // en grand, avec son score et sa mise. Après un Split (2 à 4 mains), les mains en PILE : celle à jouer au premier
+      // plan, nette ; les autres derrière, décalées et estompées, leur numéro et leur score lisibles sur leur coin.
+      const n = p.hands.length;
+      const foot = (z) => `<span class="sh__foot"><span class="tot" data-tot="${z}"></span><span class="sh__bet"></span></span>`;
+      html = n > 1
+        ? `<div class="hstack${p.me ? ' me' : ''}" style="--n:${n}" role="group" aria-label="${n} mains">${p.hands.map((_, k) => `<div class="sh" data-k="${k}"><span class="sh__tag"></span><div class="cards big" data-zone="spot${k}"></div>${foot(`spot${k}`)}</div>`).join('')}</div>`
+        : `<div class="sh solo${p.me ? ' me' : ''}"><div class="cards big" data-zone="spot"></div>${foot('spot')}</div>`;
     } else if (s.phase === 'dealer') {
       key = `dealer:${s.round}`;
       html = '<div class="msg"><b>La banque joue</b><small>elle tire jusqu’à 16 et reste sur tous les 17</small></div>';
@@ -801,17 +850,17 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     if (spot.dataset.key !== key) {
       spot.dataset.key = key;
       spot.innerHTML = html;
-      spot.classList.toggle('has-split', html.includes('splithands'));
+      spot.classList.toggle('has-split', html.includes('hstack'));
       spot.classList.toggle('is-me', !!tt && !!s.seats[tt.seat]?.me);
       spot.classList.remove('in');
       void spot.offsetWidth;
       spot.classList.add('in');
     }
-    if (tt) {
+    paintCart(s, tt);
+    if (spot.querySelector('.sh') && tt) {
       const p = s.seats[tt.seat];
-      const multi = p.hands.length > 1;
-      const lbl = spot.querySelector('.who .lbl');
-      if (lbl) lbl.textContent = `${p.me ? 'ton tour' : 'à son tour'}${multi ? ` · main ${tt.hand + 1}/${p.hands.length}` : ''}`;
+      const n = p.hands.length;
+      const multi = n > 1;
       const zones = multi ? p.hands.map((h, k) => [h, k, `spot${k}`]) : [[p.hands[tt.hand], tt.hand, 'spot']];
       for (const [h, k, z] of zones) {
         const el = spot.querySelector(`[data-zone="${z}"]`);
@@ -823,16 +872,59 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
         tot.textContent = h.natural ? 'BJ' : h.total > 21 ? `${totText(h)} · bust` : totText(h);
         tot.className = `tot${h.total > 21 ? ' bust' : ''}`;
         const sh = el.closest('.sh');
-        if (!sh) continue;
-        // Une seule main active (entourée) ; les autres restent visibles, estompées une fois finies. Une main splittée
-        // qui n'a qu'une carte attend la sienne : le Core la lui donne quand vient son tour (règle du moteur).
+        sh.querySelector('.sh__bet').textContent = kfmt(h.stake); // un Double sur une main splittée change sa mise
+        if (!multi) continue;
+        // La pile : profondeur 0 = la main à jouer (au premier plan), puis les suivantes, puis celles déjà finies. Une
+        // main splittée qui n'a qu'une carte attend la sienne : le Core la lui donne quand vient son tour (règle du moteur).
         const cur = k === tt.hand;
+        const bust = h.total > 21;
+        const wait = h.cards.length === 1;
         const done = !cur && (h.done || k < tt.hand);
+        sh.style.setProperty('--d', String((k - tt.hand + n) % n));
         sh.classList.toggle('cur', cur);
         sh.classList.toggle('done', done);
-        sh.querySelector('.sh__lbl').innerHTML = `Main ${k + 1}<span class="sh__st">${cur ? ' · à jouer' : h.cards.length === 1 ? ' · attend sa 2ᵉ carte' : done ? ' · finie' : ''}</span>`;
+        sh.classList.toggle('bust', bust);
+        sh.querySelector('.sh__tag').innerHTML = `<b data-k="${k + 1}">Main ${k + 1}</b>${cur ? '' : `<i>${wait ? '…' : bust ? 'bust' : totText(h)}${done && !bust ? ' ✓' : ''}</i>`}`;
+        sh.title = `Main ${k + 1} : ${cur ? 'à jouer' : wait ? 'attend sa 2ᵉ carte' : bust ? 'bust' : done ? `finie (${totText(h)})` : totText(h)}`;
       }
+      if (multi) swapStack(spot.querySelector('.hstack'), tt.hand);
     }
+  }
+  /** La pile du Split : quand la main jouée change, celle qui finit glisse hors de la pile puis repasse derrière ; la
+   * suivante avance au premier plan (transition CSS de `--d`). Mouvement réduit : seulement le fondu. */
+  const reducedMotion = () => !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  function swapStack(box, active) {
+    if (!box) return;
+    const was = box.dataset.active;
+    box.dataset.active = String(active);
+    if (was === undefined || was === String(active) || reducedMotion()) return;
+    // `translate`/`rotate` (pas `transform`, que la pile transitionne) : les deux mouvements se composent.
+    box.querySelector(`.sh[data-k="${was}"]`)?.animate(
+      [
+        { translate: '0 0', rotate: '0deg', zIndex: 30 },
+        { translate: '-62% 10%', rotate: '-9deg', zIndex: 30, offset: 0.42 },
+        { zIndex: 0, offset: 0.43 },
+        { translate: '0 0', rotate: '0deg', zIndex: 0 },
+      ],
+      { duration: 560, easing: 'cubic-bezier(0.3, 0.75, 0.3, 1)' },
+    );
+  }
+  /** Le cartouche du coin (A2) : qui joue, et « Main 1/2 » après un Split — rien de plus (le temps restant, frame()). */
+  const cart = $('.cart');
+  function paintCart(s, tt) {
+    if (!tt) {
+      cart.hidden = true;
+      cart.dataset.k = '';
+      return;
+    }
+    const p = s.seats[tt.seat];
+    const n = p.hands.length;
+    cart.hidden = false;
+    cart.classList.toggle('me', !!p.me);
+    const k = `${p.user}|${p.avatar ?? ''}|${tt.hand}|${n}`;
+    if (cart.dataset.k === k) return;
+    cart.dataset.k = k;
+    cart.innerHTML = `${avatarHTML(p)}<b>${p.me ? 'À toi' : esc(p.name)}</b>${n > 1 ? `<i>Main ${tt.hand + 1}/${n}</i>` : ''}<small class="cart__t"></small>`;
   }
 
   // --- La barre : jetons et PRÊT, ou les 4 actions, ou ce qui se passe ------------------------------------------------
@@ -885,8 +977,9 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       key = `turn:${s.turn?.token ?? 'wait'}:${pending}:${JSON.stringify(a)}:${tt.hand}`;
       const multi = me.hands.length > 1;
       const b = (k, label, kb, extra = '') => `<button type="button" class="act k-${k}${wait && a[k] ? ' soon' : ''}" data-act="${k}"${!a[k] || pending || wait ? ' disabled' : ''} title="${label}${multi ? ` (main ${tt.hand + 1})` : ''} — touche ${kb}">${icon(k)}<b>${label}</b>${extra}</button>`;
-      // Après un Split : la main que ces boutons jouent, écrite au-dessus d'eux (une seule à la fois).
-      html = `${multi ? `<span class="forhand">Main ${tt.hand + 1} sur ${me.hands.length}</span>` : ''}${stakeHTML(engaged(me))}<div class="acts" role="group" aria-label="${multi ? `Jouer la main ${tt.hand + 1} sur ${me.hands.length}` : 'Jouer ma main'}">${b('hit', 'Tirer', 'T')}${b('stand', 'Rester', 'R')}${b('double', 'Doubler', 'D', `<small>+${kfmt(h.stake)}</small>`)}${b('split', 'Split', 'S', `<small>+${kfmt(h.stake)}</small>`)}</div><i class="tmbar big"><i></i></i>`;
+      // Après un Split : la main que ces boutons jouent est celle au premier plan de la pile, et le cartouche dit
+      // « Main 1/2 » (mandat du 21/11, A2 : plus de 3ᵉ rappel au-dessus des boutons) ; les lecteurs d'écran l'entendent ici.
+      html = `${stakeHTML(engaged(me))}<div class="acts" role="group" aria-label="${multi ? `Jouer la main ${tt.hand + 1} sur ${me.hands.length}` : 'Jouer ma main'}">${b('hit', 'Tirer', 'T')}${b('stand', 'Rester', 'R')}${b('double', 'Doubler', 'D', `<small>+${kfmt(h.stake)}</small>`)}${b('split', 'Split', 'S', `<small>+${kfmt(h.stake)}</small>`)}</div><i class="tmbar big"><i></i></i>`;
     } else {
       key = `info:${s.phase}:${s.turn?.token ?? ''}:${me.status}:${me.inRound}`;
       const who = s.turn ? s.seats[s.turn.seat] : null;
@@ -905,9 +998,11 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // Quitter (décision d'Antoni du 21/11) : dans la barre, dans TOUS les états d'un joueur assis — une porte rouge
     // compacte, séparée du reste ; son nom au survol (title) et pour les lecteurs d'écran (aria-label). Au toucher :
     // sans mise engagée, on quitte tout de suite ; avec une mise engagée, une confirmation explique ce qu'il advient.
+    // Réagir (mandat du 21/11, C) : à côté de Quitter, pour tout joueur assis, quand le Core gère les réactions.
     if (me?.status === 'seated') {
-      key = `q:${key}`;
-      html = `<button type="button" class="btn quit" data-quit title="Quitter la table" aria-label="Quitter la table">${icon('leave')}</button><i class="sep" aria-hidden="true"></i>${html}`;
+      const react = rx.enabled() ? `<button type="button" class="btn rxb" data-rx-open title="Réagir" aria-label="Réagir avec une émote">${icon('smile')}</button>` : '';
+      key = `q:${!!react}:${key}`;
+      html = `<button type="button" class="btn quit" data-quit title="Quitter la table" aria-label="Quitter la table">${icon('leave')}</button>${react}<i class="sep" aria-hidden="true"></i>${html}`;
     }
     if (bar.dataset.key !== key) {
       bar.dataset.key = key;
@@ -1112,8 +1207,8 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       ts.style.setProperty('--p', String(v));
       ts.classList.toggle('show', show);
     }
-    const label = spot.querySelector('.st');
-    if (label) label.textContent = show && msLeft > 0 ? `encore ${Math.ceil(msLeft / 1000)} s` : '';
+    const label = cart.querySelector('.cart__t');
+    if (label) label.textContent = show && msLeft > 0 && st.phase === 'players' ? `${Math.ceil(msLeft / 1000)} s` : '';
     const safety = spot.querySelector('.safety');
     if (safety) {
       const left = st.phase === 'betting' && st.betDeadline ? st.betDeadline - now() : null;
@@ -1359,6 +1454,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     let b;
     if (press?.long) return void (press = null);
     press = null;
+    if ((b = q('[data-newtable]'))) return void (!b.disabled && join(null, null, true));
     if ((b = q('[data-join]'))) return void (!b.disabled && join(b.dataset.join || null, b.dataset.seat !== undefined ? Number(b.dataset.seat) : null));
     if ((b = q('[data-watch]'))) return void openTable(b.dataset.watch);
     if ((b = q('[data-open]'))) return void openTable(b.dataset.open);
@@ -1369,11 +1465,15 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       else open.add(r);
       return paintHistory();
     }
-    if (q('[data-rules]')) return void bj.classList.toggle('rules-open'); // A8 : aussi depuis le salon
+    // Règles et Historique (mandat du 21/11, D) : un seul panneau ouvert à la fois — ouvrir l'un ferme l'autre.
+    if (q('[data-rules]')) {
+      if (bj.classList.toggle('rules-open')) felt.classList.remove('hist-open'); // A8 : aussi depuis le salon
+      return;
+    }
     if ((b = q('[data-ins]'))) return void (!b.disabled && insure(b.dataset.ins));
     if (q('[data-hist]')) {
-      felt.classList.toggle('hist-open');
-      if (felt.classList.contains('hist-open')) {
+      if (felt.classList.toggle('hist-open')) {
+        bj.classList.remove('rules-open');
         if (histTab === 'mine') void loadMyHistory();
         else paintHistory();
       }
@@ -1406,6 +1506,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     if (q('[data-ready]')) return void ready();
     if ((b = q('[data-act]'))) return void (!b.disabled && act(b.dataset.act));
     if ((b = q('[data-quit]'))) return void (!b.disabled && doQuit());
+    if ((b = q('[data-rx-open]'))) return void rx.toggle(b);
   }, sig);
   host.addEventListener('contextmenu', (e) => {
     const b = e.target.closest('[data-side], [data-main]');
@@ -1438,7 +1539,9 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     destroy() {
       destroyed = true;
       clearTimeout(syncT);
+      clearTimeout(lobbyT);
       life.abort();
+      rx.destroy();
       ro?.disconnect();
       client.unwatch();
     },
@@ -1455,6 +1558,7 @@ function coreClient(api, { onMoney = () => {} } = {}) {
   let mine = null;
   let me = null;
   let watching = null;
+  let create = null; // la politique des tables annoncée par le Core (null : un Core qui ne l'annonce pas)
   const wrap = (e) => Object.assign(e ?? new Error('network_error'), { max: e?.details?.max ?? e?.max });
   const call = async (p) => {
     try {
@@ -1479,13 +1583,15 @@ function coreClient(api, { onMoney = () => {} } = {}) {
     balance: () => balance,
     refresh,
     myTable: () => mine,
+    createInfo: () => create,
     async tables() {
       const r = await call(api.bjTables());
       mine = r.mine ?? null;
+      create = r.create && typeof r.create === 'object' ? r.create : null;
       return r.tables;
     },
-    async join({ tableId = null, seat = null } = {}) {
-      const r = await call(api.bjJoin(tableId, seat));
+    async join({ tableId = null, seat = null, newTable = false } = {}) {
+      const r = await call(api.bjJoin(tableId, seat, newTable));
       mine = r.table;
       return r;
     },
@@ -1516,14 +1622,17 @@ function coreClient(api, { onMoney = () => {} } = {}) {
       return r;
     },
     announce: (tableId) => call(api.bjAnnounce(tableId)),
+    react: (id) => call(api.bjReact(id)),
     // A9/A10 : l'historique du viewer et le partage, génériques au Casino (déjà utilisés par les autres jeux).
     history: (limit = 50) => call(api.casinoHistory('blackjack', limit)),
     share: (roundId) => call(api.casinoShare(roundId)),
-    /** Follows a table: a snapshot, then each newer state (long-poll), until unwatch. */
-    async watch(table, onState) {
+    /** Follows a table: a snapshot, then each newer state (long-poll), until unwatch. A Core that handles the reactions
+     *  joins them to every answer (`onReactions`, before the state) and also answers for a new reaction (`rx`). */
+    async watch(table, onState, onReactions = () => {}, onGone = () => {}) {
       const token = {};
       watching = token;
       let after = -1;
+      let rx = -1;
       let fails = 0;
       let phase = null;
       while (watching === token) {
@@ -1532,9 +1641,12 @@ function coreClient(api, { onMoney = () => {} } = {}) {
           continue;
         }
         try {
-          const { state } = await api.bjState(table, after, after < 0 ? 0 : 20_000);
+          const res = await api.bjState(table, after, after < 0 ? 0 : 20_000, rx);
+          const { state } = res;
           if (watching !== token) return;
           fails = 0;
+          rx = Number.isSafeInteger(res.reactions?.seq) ? res.reactions.seq : -1;
+          onReactions(res.reactions);
           const live = after >= 0;
           const seat = state.seats.find((x) => x?.me);
           me = seat?.user ?? me;
@@ -1548,7 +1660,7 @@ function coreClient(api, { onMoney = () => {} } = {}) {
         } catch (e) {
           if (watching !== token) return;
           fails += 1;
-          if (e?.code === 'no_table' || e?.status === 404) return;
+          if (e?.code === 'no_table' || e?.status === 404) return void onGone();
           await new Promise((ok) => setTimeout(ok, Math.min(8000, 400 * 2 ** fails)));
           after = -1; // back from a cut: a fresh snapshot (never an animation replayed)
         }

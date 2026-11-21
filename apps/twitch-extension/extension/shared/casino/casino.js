@@ -24,7 +24,8 @@ const SHEETS = {
   roulette: 'modules/casino/roulette.css',
   // The emote machine is the fruit machine's cabinet + its own sheet (as in its validated prototype).
   book: ['modules/casino/slot.css', 'modules/casino/book.css'],
-  blackjack: 'modules/casino/blackjack.css',
+  // The table + its reactions (bj-reactions.js).
+  blackjack: ['modules/casino/blackjack.css', 'modules/casino/bj-reactions.css'],
 };
 const GAME = {
   slot: { label: 'Machine à sous', icon: ICON.slots },

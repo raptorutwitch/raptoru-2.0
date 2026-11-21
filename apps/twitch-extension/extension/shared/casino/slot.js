@@ -489,7 +489,7 @@ export function mountSlot(D, ctx) {
     return `${name} · ${st.count} × ${sym}${st.wilds?.length ? ` (dont ${st.wilds.length} WILD)` : ''}`;
   };
   // Plusieurs combinaisons : une puce par ligne dans la plaque, à survoler ou toucher pour la voir (reels.js explorer).
-  const lineEx = View.explorer(view, { plate, root: body, on, lines: cfg.lines, label: lineLabel });
+  const lineEx = View.explorer(view, { plate, root: body, on, lines: cfg.lines, label: lineLabel, idle: () => !busy });
   // V7 : les combinaisons gagnantes se dévoilent une à une ; Rapide : tout d'un coup ; Passer : l'état final.
   async function presentLines(r, { level, x, steps, fast, credit }) {
     plate.classList.remove('old');

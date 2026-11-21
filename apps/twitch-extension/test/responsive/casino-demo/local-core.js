@@ -635,6 +635,12 @@ function rigFor(t, kind) {
   const seat = String(BJ.seatOf(t, ME));
   const rigs = {
     pair: { seats: { [seat]: [8, 8] }, dealer: [6, 10] },
+    // Re-split : chaque main 1 reçoit encore un 8, jusqu'à 4 mains ; puis 3, 10 (21), 9, 10, 7, 2.
+    resplit: {
+      seats: { [seat]: [8, 8] },
+      dealer: [6, 10],
+      then: [8, 8, 3, 10, 9, 10, 7, 2],
+    },
     aces: { seats: { [seat]: [1, 1] }, dealer: [9, 7] },
     blackjack: { seats: { [seat]: [1, 10] }, dealer: [9, 7] },
     insurance: { seats: { [seat]: [10, 9] }, dealer: [1, 10] },
@@ -751,7 +757,7 @@ if (window.top !== window) {
 
 window.__casinoDemo = {
   /** `kind`: slot/book random|loss|line|wild|lines|big|bonus (book: bigbonus too); roulette a number or 'random';
-   *  blackjack random|pair|aces|blackjack|insurance|even|double|dealer_bust|bust|many (the viewer's next deal). */
+   *  blackjack random|pair|resplit|aces|blackjack|insurance|even|double|dealer_bust|bust|many (the viewer's next deal). */
   next(game, kind) {
     forced[game] =
       game === 'roulette' && kind !== 'random' ? Number(kind) : kind;
