@@ -828,8 +828,9 @@ Deux livraisons séparées :
 - Un clic ou un toucher la fixe. Si plusieurs lignes payées passent par ce symbole, chaque nouveau clic montre la
   suivante (« 1/2 », « 2/2 »). Un symbole qui n'a rien payé, ou ailleurs : retour au tour.
 - Jamais pendant le tour ni la présentation des gains (la vitre garde « Passer »). Aucun tracé de ligne permanent ; un
-  alignement qui ne paie pas n'est jamais mis en évidence. La puce du récapitulatif correspondante s'éclaire.
-- Les puces du récapitulatif restent (résumé) ; la table des gains garde le tracé d'une ligne sur demande.
+  alignement qui ne paie pas n'est jamais mis en évidence.
+- **Plus de rangée de puces sous les rouleaux** (22/11) : la plaque garde le gain total (« +505 ») ; le montant d'une
+  ligne s'affiche quand on l'explore. La table des gains garde le tracé d'une ligne sur demande.
 
 ### 18.5 Téléphone et paysage
 
@@ -877,17 +878,22 @@ Deux livraisons séparées :
 
 ### 18.7 Réactions (Core `reactions.ts`, extension `bj-reactions.js`)
 
-- Un joueur **assis** touche « Réagir » (à côté de Quitter) : une bulle de **7 émotes** (une rangée sur PC, 4 + 3 au téléphone, au
-  doigt). L'émote apparaît 2,6 s
-  au-dessus de sa place, chez tous les joueurs **et les spectateurs**. Les spectateurs ne réagissent pas eux-mêmes en
+- Un joueur **assis** touche « Réagir » (petit bouton plein à côté de Quitter) : une bulle de **7 émotes** (une rangée
+  sur PC, 4 + 3 au téléphone, au doigt), qui **reste ouverte** après chaque envoi (une petite croix ou un clic ailleurs
+  la ferment). L'émote part aussitôt au-dessus de sa place, chez tous les joueurs **et les spectateurs**.
+- **L'envol** (22/11, « une petite émote remplie d'hélium ») : elle grandit avec un petit rebond pendant qu'elle
+  commence déjà à monter ; la montée est continue (aucun arrêt, aucune accélération brutale), dérive un peu à gauche ou
+  à droite et s'efface pendant la fin de sa montée (≈ 3 s), avant d'atteindre le centre de la table. Plusieurs émotes coexistent (un petit nuage, 6 au plus par place),
+  chacune sa trajectoire et sa durée. Les GIF et WebP animés gardent leur animation ; mouvement réduit : un fondu sur
+  place. Les spectateurs ne réagissent pas eux-mêmes en
   V1 (pas de place où l'afficher, moins de bruit). Rien ne capte le toucher ni ne masque durablement cartes, scores
   ou boutons.
 - **Téléphone, carrousel** : une réaction d'un joueur hors écran affiche un repère sur le bord (‹ émote, ou émote ›) ;
   le toucher fait défiler jusqu'à sa place. Jamais de défilement automatique.
-- **La banque réagit parfois** : au règlement, au plus une bulle par manche (≈ 1 manche sur 4), une émote et une
-  phrase courte. Choix **déterministe** à partir de la table et de la manche : tous les viewers voient la même.
+- **La banque réagit parfois** : au règlement, au plus une fois par manche (≈ 1 manche sur 4), **une émote seule**
+  (aucun texte), qui s'envole à côté de ses cartes comme celles des joueurs. Choix **déterministe** à partir de la table et de la manche : tous les viewers voient la même.
   **Aucune IA** (la personnalité de LeCroupier_ reste suspendue). Les associations, modifiables dans `reactions.js`
-  (`DEALER` : émote, probabilité, phrases) :
+  (`DEALER` : émote, probabilité) :
 
   | Situation (la plus marquante de la manche)     | Émote              | Probabilité |
   | ---------------------------------------------- | ------------------ | ----------- |
@@ -900,14 +906,16 @@ Deux livraisons séparées :
 
 - **Sécurité** :
   - seulement les identifiants `r1` … `r7`, jamais de texte libre ; aucun Jeton ; rien en base ;
-  - une réaction toutes les 1,5 s par viewer, 8 par 30 s au plus (`react_rate`) ; un viewer bloqué par la modération
-    ne réagit pas ;
+  - **rythme** (22/11) : un réservoir de 5 jetons par viewer, un de plus toutes les 2 s — une rafale de 5, puis 1 toutes
+    les 2 s, jamais plus de 5 en réserve ; appliqué **par le Core** (refus `react_rate` avec `retry_in_ms`, en mémoire,
+    sans conséquence économique), recopié dans l'extension pour un retour immédiat (les émotes s'estompent un instant
+    quand le réservoir est vide) ; un viewer bloqué par la modération ne réagit pas ;
   - transmission en mémoire dans le Core (comme la présence), jointe à l'état de la table ; le long-poll répond aussi
     pour une nouvelle réaction (`rx`) ;
   - reconnexion : une réaction de plus de 3,5 s n'est jamais rejouée.
 - **Arrêt** : `casino.bj_reactions` (joueurs) et `casino.bj_dealer_reactions` (banque), à 1 par défaut, dans Studio ›
   Casino (avec la prochaine version de Studio ; avant, seulement par l'API des réglages). Chaque viewer peut aussi
-  « Masquer les réactions » pour lui seul (bulle de choix).
+  masquer les réactions pour lui seul (petite icône dans la bulle de choix).
 - **Les 7 réactions** (choix d'Antoni du 21/11, dans cet ordre ; le Core ne transmet que l'identifiant) :
 
   | Id   | Réaction           | Visuel                                                       |
@@ -939,6 +947,23 @@ Deux livraisons séparées :
 age_ms }] }`.
 - `POST /casino/bj/react { r }` → `{ ok, n }`, ou 400 `bad_reaction`, 409 `not_seated` / `reactions_off` /
   `viewer_blocked`, 429 `react_rate` (`retry_in_ms`).
+
+### 18.9 Dernière passe du 22/11
+
+- **Bust** : le ruban diagonal « BUST » revient, posé sur la main (places, centre, pile du Split, banque), à la taille
+  des cartes ; le score à côté n'est plus qu'un nombre rouge (« 24 », jamais « 24 · bust » sous un « BUSTED »). Les
+  cartes restent reconnaissables. Mouvement réduit : sans animation d'apparition.
+- **Double-clic et lecteur Twitch** (`shared/dblclick-guard.js`, installé sur les trois surfaces : composant vidéo,
+  panneau, mobile) : le helper Twitch écoute `dblclick` en remontée sur `document` et peut passer le lecteur en plein
+  écran ; un double-clic sur un contrôle de l'extension (bouton, lien, champ, onglet, interrupteur…) ou n'importe où dans
+  un écran de jeu du Casino (`[data-guard-dblclick]`, à travers son Shadow DOM) s'arrête sur `<html>`. Les deux `click`
+  ne sont jamais touchés ; le clavier, le toucher, le défilement et les lecteurs d'écran non plus ; une zone vide de
+  l'extension laisse passer le double-clic (plein écran voulu). Vérifié en navigateur réel dans le cadre de l'extension
+  (vrais doubles clics sur le Hub, les Mini-jeux, le Blackjack et la machine). **Impossible à garantir d'ici** : ce que
+  fait le lecteur pour un double-clic hors de l'iframe, ou si Twitch écoutait un jour en capture.
+- **Double opération économique** : chaque action payante porte une clé d'idempotence par intention (jeux du Casino,
+  actions du Blackjack, modules, TTS, passer une musique, boutique) ou un verrou « en cours » (Tombola) ; un double clic
+  ne paie jamais deux fois.
 
 ### 18.8 Mise en service sans incompatibilité
 

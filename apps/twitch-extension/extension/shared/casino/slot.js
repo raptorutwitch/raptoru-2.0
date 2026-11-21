@@ -162,7 +162,7 @@ export function mountSlot(D, ctx) {
   let lastWin = '';
   const paintPlate = () => {
     // (un récapitulatif déjà affiché n'est jamais réécrit : la puce survolée ou choisie le resterait plus)
-    if (plateLocked || (plate.querySelector('.lrecap') && lastWin.includes('lrecap'))) return;
+    if (plateLocked) return;
     plate.classList.remove('fs');
     plate.innerHTML = lastWin;
   };
@@ -488,8 +488,8 @@ export function mountSlot(D, ctx) {
     if (!sym || !st.count) return name;
     return `${name} · ${st.count} × ${sym}${st.wilds?.length ? ` (dont ${st.wilds.length} WILD)` : ''}`;
   };
-  // Plusieurs combinaisons : une puce par ligne dans la plaque, à survoler ou toucher pour la voir (reels.js explorer).
-  const lineEx = View.explorer(view, { plate, root: body, on, lines: cfg.lines, label: lineLabel, idle: () => !busy });
+  // Les combinaisons s'explorent directement sur les rouleaux (reels.js explorer) ; la plaque garde le gain total.
+  const lineEx = View.explorer(view, { root: body, on, lines: cfg.lines, idle: () => !busy });
   // V7 : les combinaisons gagnantes se dévoilent une à une ; Rapide : tout d'un coup ; Passer : l'état final.
   async function presentLines(r, { level, x, steps, fast, credit }) {
     plate.classList.remove('old');
@@ -500,8 +500,8 @@ export function mountSlot(D, ctx) {
     // (le détail complet au survol). Le multiplicateur reste pour les gros gains.
     const lineSteps = steps.filter((st) => st.kind === 'line');
     plate.title = steps.map((st) => `${lineLabel(st)} +${fmt(st.win)}`).join(' · ');
-    const recap = lineEx.html(steps);
-    const final = () => (recap ? `<b>+${fmt(credit)}</b><small>${times(x)}</small>${recap}` : `<b>+${fmt(credit)}</b><small>${lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : times(x)}</small>`);
+    lineEx.track(steps);
+    const final = () => `<b>+${fmt(credit)}</b><small>${lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : times(x)}</small>`;
     const paint = (v, k) => (plate.innerHTML = `<b>+${fmt(v)}</b><small>${k || times(x)}</small>`);
     popPlate();
     let shown = 0;
