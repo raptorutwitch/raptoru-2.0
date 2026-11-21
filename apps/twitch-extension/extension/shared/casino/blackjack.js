@@ -330,12 +330,13 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     if (!me || me.status === 'left' || quitting) return;
     quitting = true;
     try {
-      if (st.phase !== 'betting' && me.inRound) {
+      // Une mise engagée = une manche donnée et pas encore réglée (après le règlement, plus rien n'est en jeu).
+      if (me.inRound && st.phase !== 'betting' && st.phase !== 'settled') {
         const ok = await modal('<b>Quitter la table ?</b><small>Ta mise reste engagée jusqu’au règlement de cette manche : ta main est jouée (RESTER) et payée normalement. Tu peux revenir la retrouver avant la fin.</small>', [['no', 'Rester', ''], ['yes', 'Quitter quand même', 'go']]);
         if (ok !== 'yes') return;
       }
       const r = await client.leave();
-      toast(r.engaged ? 'Table quittée : ta mise reste engagée jusqu’au règlement.' : r.refunded ? 'Table quittée : ta mise t’est rendue.' : 'Table quittée.');
+      toast(r.engaged && st.phase !== 'settled' ? 'Table quittée : ta mise reste engagée jusqu’au règlement.' : r.refunded ? 'Table quittée : ta mise t’est rendue.' : 'Table quittée.');
     } catch (e) {
       fail(e);
     } finally {
@@ -804,7 +805,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       const one = (h) => (h.verdict ? VERD[h.verdict] : h.natural ? 'Blackjack' : h.total > 21 ? 'Busted' : String(h.total));
       const myLine = me.hands.length > 1 ? me.hands.map((h, k) => `main ${k + 1} ${one(h)}`).join(' · ') : me.hands.length ? one(me.hands[0]) : '';
       const text =
-        me.status === 'left' ? 'Tu as quitté la table : ta mise reste engagée jusqu’au règlement.' :
+        me.status === 'left' ? (s.phase === 'settled' ? 'Tu as quitté la table : la manche est réglée, ta place se libère.' : 'Tu as quitté la table : ta mise reste engagée jusqu’au règlement.') :
         !me.inRound && s.phase !== 'betting' ? 'Tu rejoindras la manche suivante.' :
         s.phase === 'insurance' ? (me.insurance?.even ? 'Even money pris : +' + fmt(me.hands[0].stake) + ' assurés' : me.insurance?.stake ? `Assurance prise : ${fmt(me.insurance.stake)}` : me.insurance ? 'Pas d’assurance' : 'Assurance proposée') :
         s.phase === 'players' && who ? `Au tour de ${esc(who.name)}` :
