@@ -525,3 +525,79 @@ img.sym { object-fit: contain; }
 .plines span { flex-basis: 100%; margin-bottom: 3px; text-transform: none; letter-spacing: 0; line-height: 1.35; }
 .pline { margin: 0; display: grid; justify-items: center; gap: 2px; width: 40px; }
 .pline figcaption { font: 700 7.5px/1.1 var(--font); color: var(--dim); text-align: center; }
+
+/* --- Portrait haut (téléphone ≈ 390 × 844 : ≤ 560 px de large, au moins 600 px de haut) — refonte du 21/11 (retour
+   d'Antoni : une bande de rouleaux au milieu, un grand vide au-dessus, les commandes loin en bas). Une vraie borne
+   verticale, centrée d'un bloc : en haut le fronton « Derniers gains » (ses 4 derniers résultats côte à côte, toucher =
+   historique), puis la vitre sur toute la largeur — plus haute parce qu'elle montre davantage les symboles voisins
+   (--peek, relu par reels.js : les symboles gardent leur taille et leurs proportions, jamais étirés) —, la mise juste
+   dessous, et Rapide · Auto · Son à gauche du gros LANCER, sous le pouce. Les deux machines. */
+@container body (max-width: 560px) and (orientation: portrait) and (min-height: 600px) {
+  .cab { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 52px auto; grid-template-areas: 'board board' 'stage stage' 'bet bet' 'tog go'; align-content: center; gap: 16px 10px; padding: 8px 8px 10px 4px; }
+  .side { display: contents; }
+  .board, .fsboard { grid-area: board; margin-left: 12px; }
+  .board { grid-template-rows: 16px auto; gap: 6px; padding: 8px 10px 9px; }
+  .board .lbl { white-space: nowrap; font-size: 10.5px; }
+  .board__rows { display: grid; grid-template-rows: none; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .bi { height: 28px; justify-content: center; gap: 4px; padding: 0 6px; font-size: 12.5px; }
+  .bi .sym { width: 19px; height: 19px; }
+  .bi b { margin-left: 0; }
+  .board .none { padding: 6px 0 2px; }
+  .stage { container-type: inline-size; align-items: start; }
+  .window { --peek: 0.62; max-width: none; aspect-ratio: 5 / 4; }
+  .toggles { grid-area: tog; align-self: center; margin-left: 12px; gap: 8px; }
+  .tgl__cap { width: 48px; height: 48px; }
+  .tgl__cap svg { width: 22px; height: 22px; }
+  .tgl__lbl { font-size: 11.5px; }
+  .launchbox { grid-area: go; }
+  .spin { width: 108px; height: 108px; }
+  .spin__cap { inset: 11px 11px 14px; }
+  .spin__cap svg { width: 34px; height: 34px; }
+  .spin__cap small { font-size: 10.5px; }
+  .slot-body.is-watch .cab { grid-template-rows: auto auto; grid-template-areas: 'stage stage' 'side side'; }
+  .slot-body.is-watch .side { grid-area: side; }
+}
+/* Encore plus haut (≥ 700 px) : la vitre montre presque entiers les symboles voisins, le bloc grandit encore. */
+@container body (max-width: 560px) and (orientation: portrait) and (min-height: 700px) {
+  .window { --peek: 0.85; aspect-ratio: 10 / 9; }
+  .cab { row-gap: 18px; }
+}
+
+/* --- Le Coffre en portrait (≤ 560 px, plus haut que large) — 21/11 : sa colonne de jeu de 150 px écrasait le coffre en
+   bandes et coupait le gros bouton. Empilé comme la borne : les quatre jackpots, le coffre aux proportions de la vitre,
+   relances et gain, puis « Le Coffre » · Rapide · Auto · Passer · le gros bouton sur une seule rangée. */
+@container body (max-width: 560px) and (orientation: portrait) {
+  .cof { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto; grid-template-areas: 'jack' 'vault' 'meter' 'side'; align-content: center; gap: 12px; padding: 8px; }
+  .jk { flex-direction: column; gap: 3px; height: 40px; }
+  .cof__vault { aspect-ratio: 5 / 3.6; }
+  .cof__meter { height: 48px; gap: 10px; padding: 0 10px; }
+  .cof__side { grid-template-rows: auto auto; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'info go' 'tog go'; align-items: center; gap: 8px 10px; padding: 8px 10px; }
+  .cof__info { grid-area: info; grid-auto-flow: column; justify-content: start; align-items: baseline; gap: 8px; padding: 6px 9px; }
+  .cof__side .toggles { grid-area: tog; gap: 5px; }
+  .cof__side .launchbox { grid-area: go; }
+  .cof .tgl__cap { width: 40px; height: 40px; }
+  .cof .spin { width: 92px; height: 92px; }
+  .cof .spin__cap { inset: 9px 9px 12px; }
+  .cof .spin__cap svg { width: 28px; height: 28px; }
+}
+@container body (max-width: 560px) and (orientation: portrait) and (max-height: 600px) {
+  .cof { gap: 7px; padding: 6px; }
+  .jk { height: 32px; gap: 1px; }
+  .jk b { font-size: 11px; }
+  .cof__vault { aspect-ratio: 5 / 3; padding: 5px; }
+  .cof__meter { height: 40px; }
+  .cof__info { display: none; }
+  .cof__side { grid-template-rows: auto; grid-template-areas: 'tog go'; }
+  .cof .spin { width: 72px; height: 72px; }
+  .cof .spin__cap svg { width: 24px; height: 24px; }
+}
+/* Portrait moyen (≈ 390 × 560 sous la vidéo) : la vitre prend la hauteur libre en montrant un peu plus les voisins. */
+@container body (max-width: 560px) and (orientation: portrait) and (min-height: 440px) and (max-height: 599px) {
+  .window { --peek: 0.45; max-width: calc(100cqh * 3 / 2.2); aspect-ratio: 3 / 2.2; }
+}
+/* Panneau étroit (318 px) : « Derniers gains » garde sa place à côté des trois boutons et de Lancer. */
+@container body (max-width: 360px) and (max-height: 599px) {
+  .side { grid-template-columns: minmax(50px, 1fr) auto auto; gap: 6px; padding: 6px; }
+  .side .tgl__cap { width: 34px; height: 34px; }
+  .side .tgl__cap svg { width: 16px; height: 16px; }
+}

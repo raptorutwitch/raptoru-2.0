@@ -3,6 +3,9 @@
 //   /demo/*  -> extension/ with mode 'demo' (shared/demo-data.js, ?demoScenario=...)
 //   /calib-v2/*, /demo-v2/* (or -legacy) -> same, with RUNTIME.shell = 'v2' (or 'legacy')
 //   calib and demo allow the Lab-only modules (RUNTIME.labModules; a page adds ?labModules=1 to load them)
+//   /casino/*, /casino-v2/* -> extension/ in demo mode answered by the casino demo's LOCAL Core (casino-demo/
+//              local-core.js, bundled by casino-demo/build.mjs into out/casino-demo-core.js, served at
+//              /bench/casino-demo-core.js): the Core's own game engines, fictitious Jetons, no network
 //   /live/*  -> extension/ in 'test' mode (real connected client) against core.bench.invalid (never resolves):
 //              no helper -> grey-screen guard (F6); requests.mjs intercepts that host with a fake Core (F2)
 // The Twitch helper <script> is stripped from the HTML on the fly (no network to Twitch).
@@ -41,6 +44,10 @@ const TYPES = {
 
 const runtime = (variant, shell) => {
   const shellField = shell ? `, shell: ${JSON.stringify(shell)}` : '';
+  if (variant === 'casino')
+    return `import { casinoDemoCall } from '/bench/casino-demo-core.js';
+export const RUNTIME = Object.freeze({ mode: 'demo', environment: 'démo locale', apiBase: '', siteUrl: '', buildId: 'casino-demo'${shellField}, fixtureCall: casinoDemoCall });
+`;
   if (variant === 'live')
     return `export const RUNTIME = Object.freeze({ mode: 'test', apiBase: 'https://core.bench.invalid/v1/ext', siteUrl: '', buildId: 'bench-live'${shellField} });
 `;
@@ -81,7 +88,18 @@ export function startServer(
         });
         return res.end(await readFile(pages[url.pathname]));
       }
-      const m = /^\/(calib|demo|live)(?:-(legacy|v2))?(\/.*)$/.exec(
+      if (url.pathname === '/bench/casino-demo-core.js') {
+        res.writeHead(200, {
+          'content-type': 'text/javascript; charset=utf-8',
+          'cache-control': 'no-store',
+        });
+        return res.end(
+          await readFile(
+            join(ROOT, 'test', 'responsive', 'out', 'casino-demo-core.js'),
+          ),
+        );
+      }
+      const m = /^\/(calib|demo|live|casino)(?:-(legacy|v2))?(\/.*)$/.exec(
         decodeURIComponent(url.pathname),
       );
       if (!m) {

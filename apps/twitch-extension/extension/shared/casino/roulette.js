@@ -40,7 +40,13 @@ const light = (round) => ({
 });
 
 // --- The full mat: the 0 on the left, 3 rows of 12, the 2:1 on the right, dozens then even chances below -----------
-const at = (r, c, rs = 1, cs = 1) => `style="--r:${r};--c:${c};--rs:${rs};--cs:${cs}"`;
+// Each spot carries its place both ways: --r/--c on the validated horizontal mat, and --pr/--pc on the SAME mat stood
+// up for a portrait screen, as on a real vertical table (the 0 on top, 12 rows of 1·2·3, the 2:1 at the bottom, the
+// dozens then the even chances down the right side): every bet stays where a player expects it. roulette.css picks.
+const at = (r, c, rs = 1, cs = 1) => {
+  const pc = r <= 3 ? 4 - r - (rs - 1) : r;
+  return `style="--r:${r};--c:${c};--rs:${rs};--cs:${cs};--pr:${c};--pc:${pc};--prs:${cs};--pcs:${rs}"`;
+};
 function matHTML() {
   let html = `<button type="button" class="spot zero" data-spot="n0" data-n="0" ${at(1, 1, 3)} aria-label="Numéro 0">0</button>`;
   for (let n = 1; n <= 36; n++) {

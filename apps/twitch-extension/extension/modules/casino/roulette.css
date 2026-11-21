@@ -355,3 +355,59 @@
 @container body (max-width: 520px) {
   .stack { min-width: 22px; height: 22px; padding: 0 2px; font-size: 8.5px; }
 }
+
+/* --- Portrait (téléphone, panneau : plus haut que large, ≤ 560 px) — refonte du 21/11 (retour d'Antoni : le tapis
+   horizontal devenait une grille de bandes étirées). Le MÊME tapis, debout comme une vraie table verticale : le 0 en
+   haut, 12 rangées de 1·2·3, les 2:1 en bas, les douzaines puis les chances simples sur la droite (roulette.js donne à
+   chaque case sa place --pr/--pc). Toutes les mises restent possibles, au même endroit logique. Composition de haut en
+   bas : derniers numéros · le tapis (la plus grande part, cases ≈ 70 × 40 px, jamais étirées au-delà) · les jetons ·
+   les actions et LANCER sous le pouce. */
+@container body (max-width: 560px) and (orientation: portrait) {
+  .rt { grid-template-columns: minmax(0, 1fr) 132px; grid-template-rows: 28px minmax(0, 1fr) 52px 54px; grid-template-areas: 'hist hist' 'mat mat' 'chips chips' 'tray go'; gap: 8px 8px; padding: 8px 8px 9px; }
+  .bar, .left { display: contents; }
+  .histrow { grid-area: hist; grid-template-columns: minmax(0, 1fr) 30px; }
+  .board, .snd { height: 28px; }
+  .snd { width: 30px; border-radius: 14px; }
+  .board .np { min-width: 21px; height: 21px; font-size: 10.5px; }
+  .aitag { top: 10px; right: 48px; }
+  .plateau { grid-area: mat; align-self: center; height: 100%; max-height: 640px; margin-inline: 10px; }
+  .mat { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(0, 0.78fr)); grid-template-rows: minmax(0, 1.15fr) repeat(12, minmax(0, 1fr)) minmax(0, 0.9fr); }
+  .mat > * { grid-row: var(--pr) / span var(--prs, 1); grid-column: var(--pc) / span var(--pcs, 1); }
+  .spot { font-size: 15px; }
+  .spot.zero { border-radius: 9px 0 0 0; background: linear-gradient(180deg, #1cae70, #0d774c); font-size: 18px; }
+  .felt.bl { border-radius: 0 9px 0 0; }
+  .felt.br { border-radius: 0 0 9px 0; }
+  .spot.col.tr { border-radius: 0; }
+  .spot.col[data-spot='c1'] { border-radius: 0 0 0 9px; }
+  .spot.side, .spot.col { font-size: 11.5px; }
+  .spot .dia { width: 15px; height: 15px; }
+  .stack { min-width: 26px; height: 26px; font-size: 9.5px; }
+  .chips { grid-area: chips; padding: 9px 8px 4px; }
+  .tray { grid-area: tray; }
+  .act__lbl { font-size: 9.5px; }
+  .go { grid-area: go; }
+  .launch { right: 8px; bottom: 8px; }
+  .launch .t { font-size: 15px; }
+  .fastsw { width: 28px; height: 28px; }
+  .notch { height: 84px; margin-top: -42px; }
+  /* Spectateur : le tapis, puis la carte du joueur suivi (rien d'autre de la barre). */
+  .roulette-body.is-watch .rt { grid-template-rows: minmax(0, 1fr) 58px; grid-template-areas: 'mat mat' 'card card'; }
+  .roulette-body.is-watch .bar { grid-area: card; }
+}
+/* Portrait court (sous la vidéo dans l'application, ≈ 390 × 560) : la barre se serre, le tapis garde la place. */
+@container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) {
+  .rt { grid-template-rows: 24px minmax(0, 1fr) 46px 48px; gap: 6px; padding: 6px 6px 7px; }
+  .board, .snd { height: 24px; }
+  .plateau { margin-inline: 9px; padding: 4px; }
+  .spot { font-size: 13px; }
+  .spot.zero { font-size: 15px; }
+  .spot.side, .spot.col { font-size: 10.5px; }
+  .stack { min-width: 22px; height: 22px; font-size: 8.5px; }
+}
+/* Portrait étroit (panneau 318 px) : les quatre libellés du bac tiennent sans se toucher. */
+@container body (max-width: 360px) and (orientation: portrait) {
+  .rt { grid-template-columns: minmax(0, 1fr) 112px; }
+  .act__lbl { font-size: 8px; letter-spacing: -0.02em; }
+  .act__cap { width: 24px; height: 24px; }
+  .spot.side, .spot.col { font-size: 10px; }
+}

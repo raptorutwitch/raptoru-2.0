@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Casino — banc responsive</title>
+    <title>Casino — banc de test</title>
     <style>
       :root {
         color-scheme: dark;
@@ -13,6 +13,7 @@
         --text: #ece6f5;
         --muted: #a497b8;
         --accent: #b98aff;
+        --demo: #ff9900;
       }
       * {
         box-sizing: border-box;
@@ -29,13 +30,17 @@
         position: sticky;
         top: 0;
         z-index: 2;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: end;
-        gap: 12px 18px;
+        display: grid;
+        gap: 10px;
         padding: 12px 16px;
         border-bottom: 1px solid var(--line);
         background: var(--panel);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 10px 16px;
       }
       h1 {
         margin: 0 8px 2px 0;
@@ -68,15 +73,42 @@
       select:hover {
         border-color: var(--accent);
       }
+      .modes {
+        display: inline-flex;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        overflow: hidden;
+      }
+      .modes button {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: var(--muted);
+      }
+      .modes button[aria-pressed='true'] {
+        background: #3a2a55;
+        color: #fff;
+        font-weight: 700;
+      }
+      .demo {
+        padding: 8px 10px;
+        border: 1px dashed var(--demo);
+        border-radius: 10px;
+      }
+      .demo > b {
+        color: var(--demo);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        align-self: center;
+      }
       .note {
-        flex-basis: 100%;
         margin: 0;
         color: var(--muted);
         font-size: 12px;
       }
-      .note.over {
-        color: #ff9ab0;
-        font-weight: 700;
+      .note b {
+        color: var(--demo);
       }
       main {
         padding: 16px;
@@ -108,43 +140,86 @@
         border: 1px solid var(--line);
         background: #000;
       }
+      .frame-wrap[data-mode='isolated'] {
+        outline: 2px dashed #6c5a86;
+        outline-offset: 3px;
+      }
       .frame-wrap::after {
         content: attr(data-size);
         position: absolute;
         left: 4px;
-        bottom: 4px;
-        padding: 2px 6px;
-        border-radius: 5px;
+        bottom: -22px;
+        color: var(--muted);
         font: 700 11px/1.4 system-ui;
-        color: #fff;
-        background: rgba(0, 0, 0, 0.55);
         pointer-events: none;
       }
       iframe {
         display: block;
         border: 0;
       }
+      [hidden] {
+        display: none !important;
+      }
     </style>
     <script type="module" src="casino-bench.js"></script>
   </head>
   <body>
     <header>
-      <h1>Casino · banc responsive</h1>
-      <label
-        >Jeu
-        <select id="game"></select
-      ></label>
-      <label
-        >État
-        <select id="state"></select
-      ></label>
-      <label
-        >Taille
-        <select id="size"></select
-      ></label>
-      <label>Largeur <input type="number" id="w" min="200" max="2000" /></label>
-      <label>Hauteur <input type="number" id="h" min="150" max="1400" /></label>
-      <button type="button" id="reload">Recharger</button>
+      <div class="row">
+        <h1>Casino · banc de test</h1>
+        <div class="modes" role="group" aria-label="Mode">
+          <button type="button" id="mode-full" aria-pressed="true">
+            Extension complète
+          </button>
+          <button type="button" id="mode-isolated" aria-pressed="false">
+            Jeu isolé
+          </button>
+        </div>
+        <label
+          >Jeu
+          <select id="game"></select
+        ></label>
+        <label id="surface-wrap"
+          >Surface
+          <select id="surface"></select
+        ></label>
+        <label id="state-wrap" hidden
+          >État figé
+          <select id="state"></select
+        ></label>
+        <label
+          >Format
+          <select id="size"></select
+        ></label>
+        <label>Largeur <input type="number" id="w" min="200" max="2000" /></label>
+        <label>Hauteur <input type="number" id="h" min="150" max="1400" /></label>
+        <button type="button" id="reload">Recharger</button>
+      </div>
+      <div class="row demo" id="demo">
+        <b>Démo locale</b>
+        <label id="d-slot"
+          >Prochain tirage
+          <select id="next-slot"></select
+        ></label>
+        <label id="d-roulette"
+          >Prochain numéro
+          <select id="next-roulette"></select
+        ></label>
+        <label id="d-bj"
+          >Prochaine donne (ta main)
+          <select id="next-bj"></select
+        ></label>
+        <label id="d-bots"
+          >Joueurs fictifs
+          <select id="bots"></select
+        ></label>
+        <label
+          >Solde fictif
+          <span
+            ><button type="button" id="refill">Remettre 50 000</button></span
+          ></label
+        >
+      </div>
       <p class="note" id="note"></p>
     </header>
     <main>
