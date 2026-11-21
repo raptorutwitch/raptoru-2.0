@@ -56,6 +56,7 @@ const SIZES = [
   ['mobile petit', 360, 780],
   ['mobile standard', 390, 844],
   ['mobile paysage', 844, 390],
+  ['paysage compact (audit 21/11)', 844, 300],
 ];
 const QUICK_W = [377, 651, 1053, 318, 360];
 

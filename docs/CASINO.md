@@ -503,3 +503,36 @@ Le prototype validé (`prototypes/casino-emotes`, versionné) est la deuxième m
 - **Mise** : `book_min_bet` 20, `book_max_bet` 1 000 par défaut, en multiples de 10. Le gain d'un tour est payé jusqu'au
   « gain maximum par partie » (`max_win`, 1 000 000), marqué « plafonné » au joueur. Effet mesuré par simulation
   (3 millions de tours) : voir CASINO_V1_INTEGRATION.md § RTP et plafond.
+
+## 14. Post-live du 21/11 — lots A et B (PR #99, #100)
+
+Corrections du premier retour des viewers (audit `_recherches/casino-audit-2026-11-21`, hors dépôt). **Extension
+seule** : aucune règle, cote, mise ni limite du Core modifiée ; le Core en Production (`1f05b97c`) suffit.
+
+- **Split, règles réelles du moteur** (`blackjack/rules.ts`, `actions()`) : 4 mains au plus ; re-split permis sur une
+  nouvelle paire de même valeur ; As splittés : une carte chacun, jamais de re-split ni de double, et un 21 obtenu ainsi
+  n'est pas un blackjack ; doubler après un Split est permis (sauf sur As splittés). Chaque main est réglée et payée
+  sur sa propre clé (test de bout en bout : `casino-blackjack.test.ts` « split »).
+- **Affichage** : une place montre toutes ses mains (cartes, total, mise ; la main à jouer entourée) ; des verdicts
+  opposés donnent « Partagé » et le détail par main, jamais « Égalité ».
+- **Quitter** (décision d'Antoni du 21/11, comportement du Core inchangé) : sans mise engagée, la place se libère ;
+  avec une mise engagée, le joueur quitte l'écran mais sa main reste en jeu (RESTER à l'échéance) et est réglée
+  normalement ; il la retrouve s'il revient pendant la manche. Rien n'est confisqué.
+- **Mes manches** : onglet de l'Historique (route existante `/casino/history?game=blackjack`), Partager (route
+  existante `/casino/share`, mêmes protections). « Remettre à zéro » ne déplace qu'un point de départ dans le
+  navigateur du viewer (`casino:bj:session`) : jamais une opération du Wallet.
+- **Machines** : Auto suit un budget local qui reproduit le quota du Core (`shared/casino/rate-pace.js`) ; un 429
+  pendant Auto met en pause au lieu d'arrêter.
+- **Responsive** : `--g` (échelle commune de l'extension) sur les tailles qui décident de la place ; Blackjack réorganisé
+  sous 320 px de haut (`@container bj`) ; vitre des machines à proportions fixes.
+
+**Banc visuel** (données fictives locales, aucun appel au Core ni à Twitch, aucun débit) :
+
+- `npm run casino:bench -w @raptoru/twitch-extension` : ouvre une page où choisir le jeu, l'état (table vide, pleine,
+  mon tour, Split, Split mixte, blackjack de la banque, spectateur, Règles, Mes manches ; gains et erreur des machines)
+  et la taille (vidéo zoomée, panneau, référence, plein écran, mobile portrait et paysage, ou libre).
+- `npm run test:casino-responsive -w @raptoru/twitch-extension -- [--games blackjack,slot] [--quick] [--shots]` :
+  chaque jeu × état × taille, contrôles coupés ou hors champ, erreurs JS ; captures dans
+  `apps/twitch-extension/test/responsive/out/shots/<tag>/` (hors Git).
+- Limites : Chromium n'est pas le client Twitch (contrôle final dans l'extension réelle) ; un historique qui défile et
+  la languette « Gains » (qui dépasse de 3 px par design) sont signalés sans être des défauts.
