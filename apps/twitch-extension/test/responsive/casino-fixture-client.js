@@ -47,10 +47,10 @@ export function buildClient(game, data) {
     casinoPresence: async () => ({ ok: true }),
     casinoWatch: hang,
     casinoLive: hang,
-    casinoSpin: async () => {
+    casinoSpin: async (_game, body) => {
       if (data.error)
         throw Object.assign(new Error(data.error), { code: data.error });
-      return data.spin();
+      return data.spin(body?.bets);
     },
     casinoProgress: async () => ({ ok: true }),
   };

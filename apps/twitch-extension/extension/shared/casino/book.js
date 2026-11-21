@@ -456,6 +456,15 @@ export function mountBook(D, ctx) {
     paintBoard();
   }
 
+  // What actually pays (viewer feedback 21/11): the line's name (one of the 10, left to right from reel 1), the symbol
+  // counted and its BONUS standing in as WILD — read from the Core's round, never recomputed here.
+  const lineLabel = (st) => {
+    if (st.kind !== 'line') return 'BONUS';
+    const name = esc(T().lines[st.line]?.name ?? `Ligne ${st.line + 1}`);
+    const sym = BY_ID[st.symbol]?.name;
+    if (!sym || !st.count) return name;
+    return `${name} · ${st.count} × ${esc(sym)}${st.wilds?.length ? ` (dont ${st.wilds.length} BONUS)` : ''}`;
+  };
   // The winning combinations one by one; Rapide: all at once; Passer: the end state.
   async function presentLines(r, { x, steps, credit, kick = true, pace = 0 }) {
     if (!credit) return;
@@ -463,6 +472,9 @@ export function mountBook(D, ctx) {
     plateLocked = true;
     const Pr = newPresent();
     const paint = (v, k) => (plate.innerHTML = `<b>+${fmt(v)}</b><small>${k || times(x)}</small>`);
+    const lineSteps = steps.filter((st) => st.kind === 'line');
+    plate.title = steps.map((st) => `${lineLabel(st)} +${fmt(st.win)}`).join(' · ');
+    const summary = lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : lineSteps.length > 1 ? `${lineSteps.length} lignes · ${times(x)}` : times(x);
     popPlate();
     let shownV = 0;
     if (fast()) {
@@ -477,21 +489,21 @@ export function mountBook(D, ctx) {
         const dur = pace || Math.max(280, (n > 4 ? 520 : 640) * 0.86 ** i);
         view.focus(st);
         Audio.lineStep(i);
-        await countTo((v) => paint(v, `${i + 1}/${n}`), shownV, shownV + st.win, pace ? dur * 0.7 : last && level >= 3 ? dur * 1.4 : dur * 0.55);
+        await countTo((v) => paint(v, `${i + 1}/${n} · ${lineLabel(st)}`), shownV, shownV + st.win, pace ? dur * 0.7 : last && level >= 3 ? dur * 1.4 : dur * 0.55);
         shownV += st.win;
         await wait(pace ? dur * 0.3 : last ? 240 : dur * 0.45);
       }
       view.settle();
     } else {
       if (steps[0]) view.focus(steps[0], { tag: false });
-      await countTo((v) => paint(v), 0, credit, 420);
+      await countTo((v) => paint(v, steps[0] ? lineLabel(steps[0]) : ''), 0, credit, 420);
       shownV = credit;
     }
     animateWinners();
     if (kick && !Pr.skipped && level >= 4) await mega(credit, x, shownV, fast());
     else if (kick && !Pr.skipped && level === 3 && !fast()) await boom(credit, x, shownV);
     view.settle();
-    plate.innerHTML = `<b>+${fmt(credit)}</b><small>${times(x)}</small>`;
+    plate.innerHTML = `<b>+${fmt(credit)}</b><small>${summary}</small>`;
     lastWin = plate.innerHTML;
     Audio.win(Math.min(3, level));
     plateLocked = false;
@@ -943,14 +955,14 @@ export function mountBook(D, ctx) {
     const lines = T()
       .lines.map((l, i) => {
         const pts = l.rows.map((row, r) => `${r * 6 + 3},${row * 5 + 2.5}`).join(' ');
-        return `<svg viewBox="0 0 30 15" style="--c:${View.LINE_COLORS[i % View.LINE_COLORS.length]}"><rect width="30" height="15" rx="2.5"/><polyline points="${pts}"/></svg>`;
+        return `<figure class="pline" style="--c:${View.LINE_COLORS[i % View.LINE_COLORS.length]}"><svg viewBox="0 0 30 15"><rect width="30" height="15" rx="2.5"/><polyline points="${pts}"/></svg><figcaption>${esc(l.name ?? String(i + 1))}</figcaption></figure>`;
       })
       .join('');
     return `<table class="ptab"><thead><tr><th></th><th>×5</th><th>×4</th><th>×3</th><th>×2</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="prule">${symbolHTML(BY_ID.bonus)}<p><b>BONUS = WILD</b> : il remplace tous les symboles sur une ligne. N’importe où, 3 · 4 · 5 BONUS paient <b>${sc(3)} · ${sc(4)} · ${sc(5)}</b> et donnent <b>10 tours gratuits</b>.</p></div>
       <div class="prule"><span class="prule__ico">↔</span><p><b>Tours gratuits</b> : un symbole est tiré au hasard et devient <b>extensible</b>. S’il est sur assez de rouleaux (2 pour les 4 forts, 3 pour les autres, voisins ou non), ces rouleaux se remplissent et il paie sur les <b>10 lignes</b>, en plus des gains normaux. 3 BONUS : +10 tours.</p></div>
       <p class="pcap">Gains de ligne de gauche à droite, une ligne = un gain. Mise ${fmt(bet)} = 10 lignes à ${fmt(bet / 10)}. Gain maximum par partie : ${fmt(casino.limits.max_win)}.</p>
-      <div class="plines"><span>10 lignes</span>${lines}</div>
+      <div class="plines"><span>Les 10 lignes · de gauche à droite, à partir du 1er rouleau. Seules ces lignes paient (le nom de la ligne s’affiche sur la plaque quand elle paie).</span>${lines}</div>
       <label class="pvol"><span>Volume</span><input type="range" min="0" max="100" value="${Math.round(Audio.volume * 100)}" data-vol aria-label="Volume des sons"></label>`;
   }
   const openPaytable = () => Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(inFree ? inFree.bet : s.bet)}</small>`, render: paytableHTML });

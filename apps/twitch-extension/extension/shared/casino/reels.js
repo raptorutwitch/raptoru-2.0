@@ -199,7 +199,7 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
     clearWins();
     const ev = result.eval;
     const steps = ev.lines
-      .map((w) => ({ kind: 'line', cells: w.cells, win: w.win, line: w.line }))
+      .map((w) => ({ kind: 'line', cells: w.cells, win: w.win, line: w.line, symbol: w.symbol, count: w.count, wilds: w.wilds ?? [] }))
       .sort((a, b) => a.win - b.win || a.line - b.line);
     // V8 : les BONUS ne paient plus directement (ils ouvrent le Coffre) : pas d'étape « BONUS +0 », mais ils s'éclairent
     if (ev.scatter.count >= 3 && ev.scatter.win > 0) steps.push({ kind: 'scatter', cells: ev.scatter.cells, win: ev.scatter.win });

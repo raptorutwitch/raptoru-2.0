@@ -56,7 +56,13 @@ const SIZES = [
   ['mobile petit', 360, 780],
   ['mobile standard', 390, 844],
   ['mobile paysage', 844, 390],
+  ['paysage bas', 844, 300],
+  // Zone de l'extension sous la vidéo dans l'application Twitch (estimations : la taille exacte dépend du téléphone).
+  ['app Twitch portrait (est.)', 360, 480],
+  ['app Twitch compact (est.)', 300, 340],
 ];
+/** Phone-sized rows run as a touch device (pointer: coarse), like the real app. */
+const TOUCH = (label) => label.startsWith('mobile') || label.startsWith('app ');
 const QUICK_W = [377, 651, 1053, 318, 360];
 
 /** In-page, shadow-aware: is any visible interactive control (inside the Casino's Shadow DOM) cut or off-screen by
@@ -94,12 +100,19 @@ function shadowAudit() {
     return out;
   };
   const clips = (cs) =>
-    /hidden|clip|scroll/.test(`${cs.overflowX}${cs.overflowY}`);
+    /hidden|clip|scroll|auto/.test(`${cs.overflowX}${cs.overflowY}`);
+  // A list or strip that scrolls (Mes manches, the roulette's chips on a phone): what it hides is reached by
+  // scrolling, not lost.
+  const scrolls = (a, cs) =>
+    (/auto|scroll/.test(cs.overflowY) && a.scrollHeight > a.clientHeight + 1) ||
+    (/auto|scroll/.test(cs.overflowX) && a.scrollWidth > a.clientWidth + 1);
+  // Tabs that stick out of their panel on purpose (« Gains », « Paiements », « Mise rapide » : validated prototype).
+  const INTENTIONAL = '.notch';
   const visibleWindow = (el) => {
     let box = { left: 0, top: 0, right: vw, bottom: vh };
     for (const a of ancestorsOf(el)) {
       const cs = getComputedStyle(a);
-      if (!clips(cs)) continue;
+      if (!clips(cs) || scrolls(a, cs)) continue;
       const r = a.getBoundingClientRect();
       box = {
         left: Math.max(box.left, r.left),
@@ -144,8 +157,12 @@ function shadowAudit() {
   const offInteractive = [];
   const cutText = [];
   for (const el of els) {
-    const r = el.getBoundingClientRect();
-    const box = visibleWindow(el);
+    if (el.matches(INTENTIONAL)) continue;
+    // Inside a list or strip that scrolls, a control is one swipe away: what must be visible is the list itself.
+    const probe =
+      ancestorsOf(el).find((a) => scrolls(a, getComputedStyle(a))) ?? el;
+    const r = probe.getBoundingClientRect();
+    const box = visibleWindow(probe);
     const fullyOut =
       r.right <= box.left ||
       r.left >= box.right ||
@@ -206,6 +223,7 @@ async function main() {
       for (const state of states) {
         const ctx = await browser.newContext({
           viewport: { width: w, height: h },
+          ...(TOUCH(label) ? { hasTouch: true, isMobile: true } : {}),
         });
         const page = await ctx.newPage();
         const errors = [];
@@ -271,6 +289,10 @@ async function main() {
   md += `\n## Détail des cas en défaut\n\n`;
   for (const r of bad)
     md += `- ${r.game} ${r.state} ${r.size}: coupé=${[...r.cutInteractive, ...r.offInteractive].slice(0, 4).join(' ; ')}${r.errors.length ? ` · erreurs: ${r.errors.join(' ; ')}` : ''}\n`;
+  const textOnly = results.filter((r) => !bad.includes(r) && r.cutText.length);
+  if (textOnly.length) md += `\n## Texte coupé (avertissements ⚠)\n\n`;
+  for (const r of textOnly)
+    md += `- ${r.game} ${r.state} ${r.size}: ${r.cutText.slice(0, 4).join(' ; ')}\n`;
   writeFileSync(join(out, `${tag}.md`), md);
   console.log(
     `\n${results.length} mesures, ${bad.length} en défaut → ${join(out, tag + '.md')}`,

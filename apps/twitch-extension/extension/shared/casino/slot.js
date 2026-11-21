@@ -478,13 +478,26 @@ export function mountSlot(D, ctx) {
     paintBoard();
   }
 
+  // Ce qui paie vraiment (retour viewer du 21/11, « les grappes alignées ») : le nom de la ligne (une des 10, de gauche
+  // à droite depuis le 1er rouleau), le symbole compté et ses WILD — lu dans le tour du Core, jamais recalculé ici.
+  const lineLabel = (st) => {
+    if (st.kind === 'scatter') return 'BONUS';
+    const name = esc(cfg.lines[st.line]?.name ?? `Ligne ${st.line + 1}`);
+    const sym = cfg.byId[st.symbol]?.name && esc(cfg.byId[st.symbol].name);
+    if (!sym || !st.count) return name;
+    return `${name} · ${st.count} × ${sym}${st.wilds?.length ? ` (dont ${st.wilds.length} WILD)` : ''}`;
+  };
   // V7 : les combinaisons gagnantes se dévoilent une à une ; Rapide : tout d'un coup ; Passer : l'état final.
   async function presentLines(r, { level, x, steps, fast, credit }) {
     plate.classList.remove('old');
     if (!credit) return;
     plateLocked = true;
     const Pr = (present = newPresent());
-    const final = () => `<b>+${fmt(credit)}</b><small>${times(x)}</small>`;
+    // Le résultat reste lisible après l'animation : une ligne → son nom et sa combinaison ; plusieurs → leur nombre
+    // (le détail complet au survol). Le multiplicateur reste pour les gros gains.
+    const lineSteps = steps.filter((st) => st.kind === 'line');
+    plate.title = steps.map((st) => `${lineLabel(st)} +${fmt(st.win)}`).join(' · ');
+    const final = () => `<b>+${fmt(credit)}</b><small>${lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : lineSteps.length > 1 ? `${lineSteps.length} lignes · ${times(x)}` : times(x)}</small>`;
     const paint = (v, k) => (plate.innerHTML = `<b>+${fmt(v)}</b><small>${k || times(x)}</small>`);
     popPlate();
     let shown = 0;
@@ -498,7 +511,7 @@ export function mountSlot(D, ctx) {
           const st = steps[i];
           view.focus(st);
           Audio.lineStep(i);
-          paint(shown + st.win, `${i + 1}/${n}`);
+          paint(shown + st.win, `${i + 1}/${n} · ${lineLabel(st)}`);
           shown += st.win;
           await wait(perStep);
         }
@@ -517,7 +530,7 @@ export function mountSlot(D, ctx) {
         plate.classList.remove('tick');
         void plate.offsetWidth;
         plate.classList.add('tick');
-        await countTo((v) => paint(v, `${i + 1}/${n}`), shown, shown + st.win, last && level >= 3 ? dur * 1.4 : dur * 0.55);
+        await countTo((v) => paint(v, `${i + 1}/${n} · ${lineLabel(st)}`), shown, shown + st.win, last && level >= 3 ? dur * 1.4 : dur * 0.55);
         shown += st.win;
         await wait(last ? 260 : dur * 0.45);
       }
@@ -525,7 +538,7 @@ export function mountSlot(D, ctx) {
     } else {
       if (steps[0]) view.focus(steps[0], { tag: false });
       if (level < 3) {
-        await countTo((v) => paint(v), 0, credit, 450);
+        await countTo((v) => paint(v, steps[0] ? lineLabel(steps[0]) : ''), 0, credit, 450);
         shown = credit;
       }
     }
@@ -907,14 +920,15 @@ export function mountSlot(D, ctx) {
     const lines = cfg.lines
       .map((l, i) => {
         const pts = l.rows.map((row, r) => `${r * 6 + 3},${row * 5 + 2.5}`).join(' ');
-        return `<svg viewBox="0 0 30 15" style="--c:${View.LINE_COLORS[i % View.LINE_COLORS.length]}"><rect width="30" height="15" rx="2.5"/><polyline points="${pts}"/></svg>`;
+        // Chaque ligne avec son nom : celui que la plaque affiche quand elle paie (« Bosse · 3 × Cerise »).
+        return `<figure class="pline" style="--c:${View.LINE_COLORS[i % View.LINE_COLORS.length]}"><svg viewBox="0 0 30 15"><rect width="30" height="15" rx="2.5"/><polyline points="${pts}"/></svg><figcaption>${esc(l.name ?? String(i + 1))}</figcaption></figure>`;
       })
       .join('');
     return `<table class="ptab"><thead><tr><th></th><th>×5</th><th>×4</th><th>×3</th><th>×2</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="prule">${Sym.symbolHTML(cfg.byId.wild)}<p><b>WILD</b> remplace tous les symboles, sauf BONUS.</p></div>
+      <div class="prule">${Sym.symbolHTML(cfg.byId.wild)}<p><b>WILD</b> remplace tous les symboles, sauf BONUS : il complète une ligne (« dont 1 WILD » sur la plaque). Une ligne paie sa meilleure combinaison, une seule fois.</p></div>
       <div class="prule">${Sym.symbolHTML(cfg.byId.bonus)}<p><b>3 · 4 · 5 BONUS</b> n’importe où : <b>le Coffre</b>. Les BONUS deviennent des pièces ; chaque nouvelle pièce remet les 3 relances. MINI ×20 · MAJEUR ×100 · MÉGA ×500 · grille pleine : GRAND ×1 000.</p></div>
       <p class="pcap">Gain maximum par partie : <b>${fmt(limits().max_win)} Jetons</b>.</p>
-      <div class="plines"><span>10 lignes · de gauche à droite, à partir du 1er rouleau. Seules ces lignes paient : un alignement ailleurs ne compte pas.</span>${lines}</div>`;
+      <div class="plines"><span>Les 10 lignes · de gauche à droite, à partir du 1er rouleau. Seules ces lignes paient : des symboles groupés ou alignés ailleurs (une diagonale qui ne part pas du 1er rouleau, par exemple) ne comptent pas.</span>${lines}</div>`;
   }
   function openPaytable() {
     Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(shownBet())}</small>`, render: paytableHTML });
