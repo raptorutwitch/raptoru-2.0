@@ -503,3 +503,68 @@ Le prototype validé (`prototypes/casino-emotes`, versionné) est la deuxième m
 - **Mise** : `book_min_bet` 20, `book_max_bet` 1 000 par défaut, en multiples de 10. Le gain d'un tour est payé jusqu'au
   « gain maximum par partie » (`max_win`, 1 000 000), marqué « plafonné » au joueur. Effet mesuré par simulation
   (3 millions de tours) : voir CASINO_V1_INTEGRATION.md § RTP et plafond.
+
+## 14. Post-live du 21/11 — lots A et B (PR #99, #100)
+
+Corrections du premier retour des viewers (audit `_recherches/casino-audit-2026-11-21`, hors dépôt). **Extension
+seule** : aucune règle, cote, mise ni limite du Core modifiée ; le Core en Production (`1f05b97c`) suffit.
+
+- **Split, règles réelles du moteur** (`blackjack/rules.ts`, `actions()`) : 4 mains au plus ; re-split permis sur une
+  nouvelle paire de même valeur ; As splittés : une carte chacun, jamais de re-split ni de double, et un 21 obtenu ainsi
+  n'est pas un blackjack ; doubler après un Split est permis (sauf sur As splittés). Chaque main est réglée et payée
+  sur sa propre clé (test de bout en bout : `casino-blackjack.test.ts` « split »).
+- **Affichage** : une place montre toutes ses mains (cartes, total, mise ; la main à jouer entourée) ; des verdicts
+  opposés donnent « Partagé » et le détail par main, jamais « Égalité ».
+- **Quitter** (décision d'Antoni du 21/11, comportement du Core inchangé) : sans mise engagée, la place se libère ;
+  avec une mise engagée, le joueur quitte l'écran mais sa main reste en jeu (RESTER à l'échéance) et est réglée
+  normalement ; il la retrouve s'il revient pendant la manche. Rien n'est confisqué.
+- **Mes manches** : onglet de l'Historique (route existante `/casino/history?game=blackjack`), Partager (route
+  existante `/casino/share`, mêmes protections). « Remettre à zéro » ne déplace qu'un point de départ dans le
+  navigateur du viewer (`casino:bj:session`) : jamais une opération du Wallet.
+- **Machines** : Auto suit un budget local qui reproduit le quota du Core (`shared/casino/rate-pace.js`) ; un 429
+  pendant Auto met en pause au lieu d'arrêter.
+- **Responsive** : `--g` (échelle commune de l'extension) sur les tailles qui décident de la place ; Blackjack réorganisé
+  sous 320 px de haut (`@container bj`) ; vitre des machines à proportions fixes.
+
+**Banc visuel** (données fictives locales, aucun appel au Core ni à Twitch, aucun débit) :
+
+- `npm run casino:bench -w @raptoru/twitch-extension` : ouvre une page où choisir le jeu, l'état (table vide, pleine,
+  mon tour, Split, Split mixte, blackjack de la banque, spectateur, Règles, Mes manches ; gains et erreur des machines)
+  et la taille (vidéo zoomée, panneau, référence, plein écran, mobile portrait et paysage, ou libre).
+- `npm run test:casino-responsive -w @raptoru/twitch-extension -- [--games blackjack,slot] [--quick] [--shots]` :
+  chaque jeu × état × taille, contrôles coupés ou hors champ, erreurs JS ; captures dans
+  `apps/twitch-extension/test/responsive/out/shots/<tag>/` (hors Git).
+- Limites : Chromium n'est pas le client Twitch (contrôle final dans l'extension réelle) ; un historique qui défile et
+  la languette « Gains » (qui dépasse de 3 px par design) sont signalés sans être des défauts.
+
+## 15. Passe corrective de nuit du 21/11 (PR #102, #103)
+
+Toujours **extension seule** : aucune règle, cote, mise, limite ni route du Core modifiée ; le Core en Production
+(`1f05b97c`) suffit, aucun déploiement Core / Coolify.
+
+- **Blackjack — Historique** : une petite languette horloge (elle s'élargit au survol ; icône seule au toucher) ;
+  panneau à deux onglets Cette table / Mes manches ; Mes manches = une carte « Bilan de la session » (net, nombre de
+  manches, depuis quand, bouton « Remettre le bilan à zéro » confirmé) puis une carte par manche (score de la banque,
+  gain ou perte, table · manche · mise, heure discrète, « Partager dans le chat »).
+- **Blackjack — Quitter** : bouton explicite (porte) dans la barre du bas avec les autres actions, icône seule en
+  panneau étroit ; confirmation seulement si une mise est engagée (elle reste engagée jusqu'au règlement : décision
+  d'Antoni) ; un double appui n'envoie qu'une demande.
+- **Blackjack — Split** : au tour du joueur, toutes ses mains au centre, côte à côte (« Main k · à jouer » entourée,
+  mains finies estompées) ; ma place un peu plus grande, les autres en retrait ; bilan mixte « Main 1 perdue · Main 2
+  gagnée » puis « Bilan ±0 · rien gagné, rien perdu ».
+- **Blackjack — téléphone / panneau étroit** : paris sur le score de la banque en grille sous la banque ; places en
+  carrousel glissable (plus de 3 joueurs) recentré sur le joueur dont c'est le tour ; jetons sur leur propre ligne ;
+  cibles au doigt (`pointer: coarse`). Hauteur basse (≤ 380 px, dont l'application Twitch en paysage) : banque et
+  paris compacts, les places ne sont plus avalées.
+- **Machines (Slot + Book)** : sous 520 px de large, rouleaux en pleine largeur, mise dessous, puis une rangée
+  Derniers gains · Rapide / Auto / Son · Lancer. La plaque nomme ce qui paie (« +40 Haut · 3 × Cerise (dont 1
+  WILD) » ; Book : « dont 1 BONUS ») pendant le dévoilement, Rapide compris, et après ; la table des gains nomme les 10
+  lignes, dit que seules elles paient (de gauche à droite depuis le 1er rouleau), le rôle du WILD et « un gain par
+  ligne ». Tout est lu dans le tour du Core, jamais recalculé. Audit des gains (21/11) : le +80 signalé est
+  correct, aucun écart entre le calcul du Core et l'affichage ; le défaut était l'explication, corrigée ici.
+- **Roulette** : le tapis validé est conservé (ses cases deviennent hautes, faciles au doigt) ; sous 520 px, la barre du
+  bas se réagence (derniers numéros · jetons glissables · Annuler / Effacer / Reposer / Doubler + Lancer) au lieu de se
+  chevaucher ; la roue passe au-dessus du résultat ; mises posées et libellés plus petits.
+- **Banc** : matrice étendue à 844×300 et à deux estimations de l'application Twitch (360×480 portrait, 300×340
+  compact) en mode tactile ; machines et roulette réellement lancées dans le banc (grilles et tirages au format du
+  Core).
