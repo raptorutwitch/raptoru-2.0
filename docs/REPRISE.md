@@ -17,8 +17,12 @@ pilote OBS, l'extension Twitch et raptoru.fr parlent aux viewers. SAMMI abandonn
 Production (relevé du 20/11, 16:00 UTC) : Core 1f05b97c, bot 2c04a5db (un seul bot actif), Studio 0.1.42 publié ET
 installé, extension publique be1744e75f63 (prouvée par Antoni dans la console Twitch le 20/11).
 Casino V1 (4 jeux) : Core déployé, CASINO_EXTENSION=on, casino.open=1, 4 jeux ouverts, refusé hors live
-(stream_offline). L'extension publique NE contient PAS le Casino : ZIP 2e2eaf3ae34a (inventaire 298e940290ab
-validé) en Hosted Test ; restent l'essai réel, la revue Twitch, la publication. Ne pas dire « Casino disponible pour tous ».
+(stream_offline). L'extension publique NE contient PAS le Casino. Post-live du 21/11 : lots A + B, machines à faible
+hauteur, passe de nuit, passe de composition et passe corrective fusionnées (PR #99, #100, #102, #103, #105, #107 ;
+extension seule, Core inchangé) ; ZIP suivant ecaa5841eb61 PAS ENCORE ÉCRIT : son inventaire (15 commits) attend la ligne d'Antoni (remplacera
+76875d47e728). Banc : npm run casino:bench -w @raptoru/twitch-extension — par défaut la VRAIE extension (en-tête,
+Mini-jeux) jouable en démo locale (CASINO.md § 14-17) ; test:casino-compose mesure la composition dans ce cadre.
+Ne pas dire « Casino disponible pour tous ».
 Niveaux : restauration WizeBot EXÉCUTÉE le 20/11 (432 comptes, définitive, NE JAMAIS LA REJOUER) ; badges tous les
 25 niveaux ; anciennes annulations bloquées (Core 410 + Studio) ; rattachements WizeBot futurs non compressés.
 Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Prochaines tâches : docs/REPRISE.md § 5.4.
@@ -158,11 +162,16 @@ l'extension se prouve dans la console Twitch (Antoni) ou en live par F12 › `sh
 Le Hosted Test ne permet **pas** un essai avec de vrais viewers sur `raptoru_` en live (il retire l'extension aux
 non-testeurs, [CASINO.md](CASINO.md) § 6) et le Casino refuse hors live. D'où l'ordre :
 
-1. **Antoni** : vérifier le ZIP Casino en Hosted Test, **hors live**, sur un compte testeur (affichage, état « hors
-   live », navigation).
+0. **Antoni (21/11)** : essayer le banc (`npm run casino:bench -w @raptoru/twitch-extension`, mode « Extension
+   complète ») ou regarder les captures (`Documents\Raptoru 2.0 - Livraisons\2026-11-21-casino-correctifs`), puis
+   ajouter sa ligne à `apps/twitch-extension/release-inventory/INVENTAIRE-ecaa5841eb61.md` ; l'agent écrit alors le ZIP
+   `ecaa5841eb61` (`package:production -- --shell v2`) et donne son SHA-256. Il remplace `76875d47e728`.
+1. **Antoni** : vérifier ce ZIP en Hosted Test, **hors live**, sur un compte testeur (affichage, état « hors live »,
+   navigation), y compris dans l'**application** Twitch du téléphone (portrait et paysage) : console › vue mobile
+   activée pour cette version ; jamais le navigateur mobile, où Twitch n'affiche aucune extension.
 2. **Antoni (décision)** : avant la publication, choisir `CASINO_EXTENSION=testers:<ids>` (essai réel restreint pendant
    un live, recommandé) ou garder `on` (ouvert à tous dès la publication).
-3. **Antoni** : soumettre la version `2e2eaf3ae34a` à la revue Twitch (8 à 14 jours, une soumission à la fois).
+3. **Antoni** : soumettre cette version à la revue Twitch (8 à 14 jours, une soumission à la fois).
 4. Après approbation : publier, mettre à jour `PUBLISHED` (agent, commit), puis **essai réel en live** : mises, gains,
    remboursements, spectateurs, blackjack à plusieurs.
 5. Corriger **uniquement** les problèmes observés ; passer `CASINO_EXTENSION=on` si l'accès était restreint.
