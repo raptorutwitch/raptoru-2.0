@@ -1,3 +1,7 @@
+import { Buffer } from 'node:buffer';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   REACTIONS,
@@ -25,23 +29,50 @@ const settled = (over = {}, players = [{ net: 100, verdicts: ['win'] }]) => ({
   ...over,
 });
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ASSETS = join(HERE, '../extension/assets/casino/reactions');
+
 describe('reactions manifest', () => {
-  it('six ids, the ones the Core accepts (r1 … r6), each with a picture, a name and a fallback', () => {
-    expect(REACTIONS.map((r) => r.id)).toEqual([
-      'r1',
-      'r2',
-      'r3',
-      'r4',
-      'r5',
-      'r6',
+  it('seven ids in Antoni’s order (r1 … r7, the ones the Core accepts), each with a packaged picture, a name and a fallback', () => {
+    expect(REACTIONS.map((r) => [r.id, r.label])).toEqual([
+      ['r1', 'Sourire'],
+      ['r2', 'Visage attendri'],
+      ['r3', 'Colère'],
+      ['r4', 'Lunettes de soleil'],
+      ['r5', 'Sourire en coin'],
+      ['r6', 'ICANT'],
+      ['r7', 'ptn'],
     ]);
     for (const r of REACTIONS) {
-      expect(r.src).toMatch(/^[\w.-]+\.(svg|png|gif|webp)$/);
-      expect(r.label).toBeTruthy();
+      expect(r.src).toMatch(/^[\w./-]+\.(svg|png|gif|webp)$/);
+      expect(existsSync(join(ASSETS, r.src))).toBe(true); // inside the extension package, never a remote URL
       expect(r.glyph).toBeTruthy();
     }
-    for (const d of Object.values(DEALER)) {
-      expect(d.src).toMatch(/\.(svg|png|gif|webp)$/);
+    // The five Discord emojis are the bundled Twemoji (licensed CC-BY 4.0, attribution in assets/twemoji).
+    expect(
+      REACTIONS.slice(0, 5).every((r) =>
+        r.src.startsWith('../../twemoji/svg/'),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(ASSETS, '../../twemoji/license-graphics.txt'))).toBe(
+      true,
+    );
+  });
+
+  it('the animated emote is the original GIF (every frame kept, transparent), never a still', () => {
+    const g = readFileSync(join(ASSETS, 'ptn.gif'));
+    expect(g.toString('latin1', 0, 6)).toBe('GIF89a');
+    // NETSCAPE2.0 (loop) + several image descriptors after graphic-control blocks with the transparency flag.
+    expect(g.includes(Buffer.from('NETSCAPE2.0'))).toBe(true);
+    expect(g.length).toBeGreaterThan(100_000);
+  });
+
+  it('every bank situation points to a real reaction, with a probability and lines (all configurable)', () => {
+    const ids = new Set(REACTIONS.map((r) => r.id));
+    for (const [kind, d] of Object.entries(DEALER)) {
+      expect(ids.has(d.r), kind).toBe(true);
+      expect(d.chance).toBeGreaterThanOrEqual(0);
+      expect(d.chance).toBeLessThanOrEqual(0.6);
       expect(d.lines.length).toBeGreaterThan(0);
     }
   });
@@ -82,15 +113,39 @@ describe('pickDealerReaction', () => {
       ),
     ).toEqual(['blackjack']);
     expect(
-      kinds(
-        settled({ outcome: 'BUST' }, [{ net: 5000, verdicts: ['win'] }]),
-        100,
-      ),
+      kinds(settled({ outcome: 'BUST' }, [{ net: 5000, verdicts: ['win'] }])),
     ).toEqual(['big_win']);
     expect(kinds(settled({ outcome: 'BUST' }))).toEqual(['dealer_bust']);
     expect(
       kinds(settled({ outcome: 20 }, [{ net: -100, verdicts: ['bust'] }])),
     ).toEqual(['bust']);
+    expect(
+      kinds(settled({ outcome: 20 }, [{ net: -100, verdicts: ['lose'] }])),
+    ).toEqual(['dealer_win']);
+  });
+
+  it('the emote comes from the configurable association; a probability of 0 silences a situation', () => {
+    const s = settled({ outcome: 'BUST' });
+    const always = { dealer_bust: { r: 'r6', chance: 1, lines: ['Hop'] } };
+    expect(pickDealerReaction(s, 100, always)).toEqual({
+      kind: 'dealer_bust',
+      r: 'r6',
+      line: 'Hop',
+    });
+    expect(
+      pickDealerReaction(s, 100, {
+        dealer_bust: { ...always.dealer_bust, chance: 0 },
+      }),
+    ).toBeNull();
+    expect(
+      pickDealerReaction(s, 100, {
+        dealer_bust: { ...always.dealer_bust, r: 'r99' },
+      }),
+    ).toBeNull(); // an unknown emote: nothing rather than a broken picture
+    for (let round = 1; round <= 300; round++) {
+      const got = pickDealerReaction({ ...s, round });
+      if (got) expect(got.r).toBe(DEALER.dealer_bust.r);
+    }
   });
 
   it('occasional: about 35 % of the rounds where the bank busts, 20 % with a bust, never every round', () => {
