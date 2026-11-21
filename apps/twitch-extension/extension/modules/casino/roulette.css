@@ -313,7 +313,9 @@
    cases deviennent hautes, faciles au doigt) ; c'est la barre du bas qui se réagence au lieu de se chevaucher :
    1) derniers numéros + son, 2) les jetons sur toute la largeur (glissables s'ils ne tiennent pas),
    3) Annuler · Effacer · Reposer · Doubler, puis Lancer. ---------------------------------------------------------- */
-@container body (max-width: 520px) {
+/* (Jusqu'au 4:3 seulement depuis le 21/11 : en paysage franc et étroit — vidéo zoomée — cette pile écrasait le tapis
+   à 10 px par rangée ; voir le bloc « paysage étroit » plus bas.) */
+@container body (max-width: 520px) and (max-aspect-ratio: 4/3) {
   .rt { grid-template-rows: minmax(0, 1fr) auto; row-gap: 6px; padding: 6px 6px 6px 7px; }
   .bar { position: relative; grid-template-columns: minmax(0, 1fr) 118px; grid-template-rows: 24px 50px 48px; grid-template-areas: 'hist hist' 'chips chips' 'tray go'; gap: 6px; }
   .left { display: contents; }
@@ -337,7 +339,7 @@
   .wover .banner { padding: 9px 10px 8px; gap: 4px; }
   .wover .banner .np { min-width: 42px; height: 42px; font-size: 20px; }
 }
-@container body (max-width: 340px) {
+@container body (max-width: 340px) and (max-aspect-ratio: 4/3) {
   .spot.side, .spot.col { font-size: 9px; letter-spacing: 0; }
   .spot { font-size: 11.5px; }
   .spot .dia { width: 11px; height: 11px; }
@@ -354,4 +356,97 @@
 /* Une mise posée ne déborde plus sur les numéros voisins quand la case n'a que ~24 px de large. */
 @container body (max-width: 520px) {
   .stack { min-width: 22px; height: 22px; padding: 0 2px; font-size: 8.5px; }
+}
+
+/* --- Portrait (téléphone, panneau : plus haut que large, ≤ 560 px) — refonte du 21/11 (retour d'Antoni : le tapis
+   horizontal devenait une grille de bandes étirées). Le MÊME tapis, debout comme une vraie table verticale : le 0 en
+   haut, 12 rangées de 1·2·3, les 2:1 en bas, les douzaines puis les chances simples sur la droite (roulette.js donne à
+   chaque case sa place --pr/--pc). Toutes les mises restent possibles, au même endroit logique. Composition de haut en
+   bas : derniers numéros · le tapis (la plus grande part, cases ≈ 70 × 40 px, jamais étirées au-delà) · les jetons ·
+   les actions et LANCER sous le pouce. */
+@container body (max-width: 560px) and (orientation: portrait) {
+  .rt { grid-template-columns: minmax(0, 1fr) 132px; grid-template-rows: 28px minmax(0, 1fr) 52px 54px; grid-template-areas: 'hist hist' 'mat mat' 'chips chips' 'tray go'; gap: 8px 8px; padding: 8px 8px 9px; }
+  .bar, .left { display: contents; }
+  .histrow { grid-area: hist; grid-template-columns: minmax(0, 1fr) 30px; }
+  .board, .snd { height: 28px; }
+  .snd { width: 30px; border-radius: 14px; }
+  .board .np { min-width: 21px; height: 21px; font-size: 10.5px; }
+  .aitag { top: 10px; right: 48px; }
+  .plateau { grid-area: mat; align-self: center; height: 100%; max-height: 640px; margin-inline: 10px; }
+  .mat { grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, minmax(0, 0.78fr)); grid-template-rows: minmax(0, 1.15fr) repeat(12, minmax(0, 1fr)) minmax(0, 0.9fr); }
+  .mat > * { grid-row: var(--pr) / span var(--prs, 1); grid-column: var(--pc) / span var(--pcs, 1); }
+  .spot { font-size: 15px; }
+  .spot.zero { border-radius: 9px 0 0 0; background: linear-gradient(180deg, #1cae70, #0d774c); font-size: 18px; }
+  .felt.bl { border-radius: 0 9px 0 0; }
+  .felt.br { border-radius: 0 0 9px 0; }
+  .spot.col.tr { border-radius: 0; }
+  .spot.col[data-spot='c1'] { border-radius: 0 0 0 9px; }
+  .spot.side, .spot.col { font-size: 11.5px; }
+  .spot .dia { width: 15px; height: 15px; }
+  .stack { min-width: 26px; height: 26px; font-size: 9.5px; }
+  .chips { grid-area: chips; padding: 9px 8px 4px; }
+  .tray { grid-area: tray; }
+  .act__lbl { font-size: 9.5px; }
+  .go { grid-area: go; }
+  .launch { right: 8px; bottom: 8px; }
+  .launch .t { font-size: 15px; }
+  .fastsw { width: 28px; height: 28px; }
+  .notch { height: 84px; margin-top: -42px; }
+  /* Spectateur : le tapis, puis la carte du joueur suivi (rien d'autre de la barre). */
+  .roulette-body.is-watch .rt { grid-template-rows: minmax(0, 1fr) 58px; grid-template-areas: 'mat mat' 'card card'; }
+  .roulette-body.is-watch .bar { grid-area: card; }
+}
+/* Portrait court (sous la vidéo dans l'application, ≈ 390 × 560) : la barre se serre, le tapis garde la place. */
+@container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) {
+  .rt { grid-template-rows: 24px minmax(0, 1fr) 46px 48px; gap: 6px; padding: 6px 6px 7px; }
+  .board, .snd { height: 24px; }
+  .plateau { margin-inline: 9px; padding: 4px; }
+  .spot { font-size: 13px; }
+  .spot.zero { font-size: 15px; }
+  .spot.side, .spot.col { font-size: 10.5px; }
+  .stack { min-width: 22px; height: 22px; font-size: 8.5px; }
+}
+/* Portrait étroit (panneau 318 px) : les quatre libellés du bac tiennent sans se toucher. */
+@container body (max-width: 360px) and (orientation: portrait) {
+  .rt { grid-template-columns: minmax(0, 1fr) 112px; }
+  .act__lbl { font-size: 8px; letter-spacing: -0.02em; }
+  .act__cap { width: 24px; height: 24px; }
+  .spot.side, .spot.col { font-size: 10px; }
+}
+/* Au doigt : la languette des paiements et celle de la mise rapide s'élargissent un peu. */
+@media (pointer: coarse) { .notch { width: 30px; } .notch.qk { right: -18px; } .notch:not(.qk) { left: -18px; } }
+/* Portrait court (≈ 390 × 560, panneau 318 × 496) : plutôt que des cases de 20 px, le tapis garde des cases d'au
+   moins 30 px et défile au doigt dans son cadre (le numéro sorti est ramené en vue : roulette.js markMat). */
+@container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) {
+  .mat { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; background-attachment: local; grid-template-rows: 36px repeat(12, minmax(30px, 1fr)) 30px; }
+  .mat::-webkit-scrollbar { display: none; }
+}
+/* Paysage étroit (vidéo zoomée : 452 × 301, 377 × 251) : le tapis horizontal et la barre de PC, resserrés — les jetons
+   défilent dans leur bac, le tapis garde toute la hauteur que la barre ne prend pas. */
+@container body (max-width: 520px) and (min-aspect-ratio: 401/300) {
+  .bar { grid-template-columns: minmax(0, 1fr) 92px 104px; column-gap: 6px; }
+  .chips { justify-content: flex-start; gap: 5px; padding: 0 6px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .mat { grid-template-columns: 26px repeat(12, minmax(0, 1fr)) 28px; }
+  .spot { font-size: 12.5px; }
+  .spot.zero { font-size: 15px; }
+  .spot.side, .spot.col { font-size: 10.5px; }
+  .act__lbl { font-size: 9px; }
+  .launch .t { font-size: 14px; }
+}
+@container body (max-width: 520px) and (min-aspect-ratio: 401/300) and (max-height: 250px) {
+  .rt { grid-template-rows: minmax(0, 1fr) 84px; row-gap: 5px; padding: 5px 5px 5px 6px; }
+  .mat { grid-template-rows: repeat(3, minmax(0, 1fr)) 21px 22px; }
+}
+/* Au doigt : derniers numéros, son, Rapide et Passer à 32 px au moins ; en paysage, les rangées des chances simples et
+   des douzaines à 30 px. */
+@media (pointer: coarse) {
+  .board, .snd { height: 32px; }
+  .snd { width: 34px; }
+  .fastsw { width: 32px; height: 32px; }
+  .wover .skip { height: 36px; }
+  .left { grid-template-rows: 32px minmax(0, 1fr); }
+  @container body (orientation: landscape) { .mat { grid-template-rows: repeat(3, minmax(0, 1fr)) 30px 30px; } }
+  @container body (max-width: 560px) and (orientation: portrait) { .rt { grid-template-rows: 32px minmax(0, 1fr) 52px 54px; } }
+  @container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) { .rt { grid-template-rows: 32px minmax(0, 1fr) 46px 48px; } }
 }

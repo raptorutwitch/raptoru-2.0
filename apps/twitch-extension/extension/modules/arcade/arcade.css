@@ -22,6 +22,20 @@
   font-size: calc(13 * var(--u));
 }
 
+/* Un jeu du Casino occupe toute la zone du module. Son écran a une taille fixe (container `size` : il ne grandit
+   jamais avec son contenu) ; sur les pages qui grandissent avec leur contenu (mobile.html, panel.html : min-height),
+   « height: 100% » ne se résout pas et le jeu faisait 0 px de haut (constaté le 21/11 dans le banc en cadre réel) :
+   c'est la colonne flex du corps du module qui lui donne sa hauteur. */
+.mg[data-screen^="casino_"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.mg[data-screen^="casino_"] > .cz-host {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* --- Le catalogue ---------------------------------------------------------------------------------------------- */
 .mg__home {
   display: grid;
