@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   installDblclickGuard,
+  isGuardedPath,
   isGuardedTarget,
   onGuardedDblclick,
 } from '../extension/shared/dblclick-guard.js';
@@ -8,37 +9,48 @@ import {
 // Double-clic → plein écran (AUDIT § 9): the Twitch helper listens to `dblclick` bubbling on `document`. The guard on
 // <html> stops it for OUR controls only — an empty area keeps the full screen the viewer may want.
 
-/** A tiny element: `closest` by tag / role / data attribute, a parent chain (enough for the guard). */
+/** One node against one selector (tag / role / data attribute) — enough for the guard's `CONTROL` list. */
+function matchesOne(n, s) {
+  const attr = /^\[([a-z-]+)(?:="([^"]*)")?\]$/.exec(s);
+  if (attr)
+    return (
+      attr[1] in n.attrs &&
+      (attr[2] === undefined || n.attrs[attr[1]] === attr[2])
+    );
+  const withHref = /^([a-z]+)\[href\]$/.exec(s);
+  if (withHref)
+    return n.tagName === withHref[1].toUpperCase() && 'href' in n.attrs;
+  return n.tagName === s.toUpperCase();
+}
+/** A tiny element: `closest`/`matches` by tag / role / data attribute, a parent chain (enough for the guard). */
 function el(tag, attrs = {}, parent = null) {
   const node = {
     tagName: tag.toUpperCase(),
+    nodeType: 1,
     attrs,
     parent,
+    matches(selector) {
+      return selector.split(',').some((raw) => matchesOne(node, raw.trim()));
+    },
     closest(selector) {
-      for (let n = node; n; n = n.parent)
-        if (
-          selector.split(',').some((raw) => {
-            const s = raw.trim();
-            const attr = /^\[([a-z-]+)(?:="([^"]*)")?\]$/.exec(s);
-            if (attr)
-              return (
-                attr[1] in n.attrs &&
-                (attr[2] === undefined || n.attrs[attr[1]] === attr[2])
-              );
-            const withHref = /^([a-z]+)\[href\]$/.exec(s);
-            if (withHref)
-              return (
-                n.tagName === withHref[1].toUpperCase() && 'href' in n.attrs
-              );
-            return n.tagName === s.toUpperCase();
-          })
-        )
-          return n;
+      for (let n = node; n; n = n.parent) if (n.matches(selector)) return n;
       return null;
     },
   };
   return node;
 }
+/** A path crossing a Shadow DOM: `composedPath()` gives the real target first, the shadow host hides it from `target`. */
+const shadowEvent = (path) => {
+  const e = {
+    target: path[0],
+    composedPath: () => path,
+    stopped: false,
+    prevented: false,
+  };
+  e.stopPropagation = () => (e.stopped = true);
+  e.preventDefault = () => (e.prevented = true);
+  return e;
+};
 const event = (target) => {
   const e = { target, stopped: false, prevented: false };
   e.stopPropagation = () => (e.stopped = true);
@@ -75,6 +87,31 @@ describe('double-click guard', () => {
     expect(
       isGuardedTarget(el('div', { 'data-guard-dblclick': '' }, panel)),
     ).toBe(true);
+  });
+
+  it('a Shadow DOM click (Casino): composedPath finds the real button behind the opaque host target (audit UI-03)', () => {
+    const czHost = el('div', { 'data-guard-dblclick': '' }, panel);
+    const button = el('button', {}, czHost); // inside the shadow root, not a DOM ancestor of czHost
+    // `event.target` is the shadow HOST (what `closest` sees from outside); the real path still has the button.
+    expect(isGuardedPath(shadowEvent([button, czHost, panel, body]))).toBe(
+      true,
+    );
+    expect(isGuardedTarget(czHost)).toBe(true); // the host itself is still a guarded opt-in zone
+    const e = shadowEvent([button, czHost, panel, body]);
+    onGuardedDblclick(e);
+    expect(e.stopped && e.prevented).toBe(true);
+  });
+
+  it('a Shadow DOM click on empty felt: still guarded, because the host opted the whole game in', () => {
+    const czHost = el('div', { 'data-guard-dblclick': '' }, panel);
+    const felt = el('div', {}, czHost); // a bare div, no button — but the host is on the real path
+    expect(isGuardedPath(shadowEvent([felt, czHost, panel, body]))).toBe(true);
+  });
+
+  it('no composedPath (older browser): falls back to the plain target check', () => {
+    const e = event(el('button', {}, panel));
+    delete e.composedPath;
+    expect(isGuardedPath(e)).toBe(true);
   });
 
   it('installed once per surface, on <html>, in the bubbling phase (below document)', () => {

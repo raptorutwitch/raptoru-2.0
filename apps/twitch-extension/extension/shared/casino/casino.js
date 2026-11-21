@@ -109,6 +109,8 @@ async function useSheets(D, game) {
 function shell(document) {
   const host = document.createElement('div');
   host.className = 'cz-host';
+  // A game has no "empty" area where a double-click should reach Twitch's fullscreen helper (audit UI-03).
+  host.setAttribute('data-guard-dblclick', '');
   host.style.cssText = 'display:block;width:100%;height:100%;position:relative';
   const D = host.attachShadow({ mode: 'open' });
   D.innerHTML = '<div id="body" class="cz is-loading" aria-busy="true"><p class="cz-load">Chargement du Casino…</p></div>';

@@ -30,8 +30,21 @@ export function isGuardedTarget(target) {
   return !!target?.closest?.(CONTROL);
 }
 
+/**
+ * The real path, through every Shadow DOM (audit UI-03, 21/11/2026): inside the Casino's shadow root, `event.target`
+ * is the host element (`div.cz-host`), never the button the viewer actually hit, so `isGuardedTarget` found nothing
+ * and let the double-click reach `document`, where Twitch's helper could still pass it to the player (fullscreen).
+ * `composedPath()` gives the innermost element first; a `[data-guard-dblclick]` host also guards every click inside
+ * it, a game screen having no "empty" area where fullscreen is wanted.
+ */
+export function isGuardedPath(event) {
+  const path = typeof event?.composedPath === 'function' ? event.composedPath() : null;
+  if (!path) return isGuardedTarget(event?.target);
+  return path.some((n) => n?.nodeType === 1 && n.matches?.(CONTROL));
+}
+
 export function onGuardedDblclick(event) {
-  if (isGuardedTarget(event?.target)) preventBonkDoubleClick(event);
+  if (isGuardedPath(event)) preventBonkDoubleClick(event);
 }
 
 /** Installs the guard once on the surface's root element (idempotent). */
