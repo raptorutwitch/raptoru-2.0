@@ -2,7 +2,7 @@
    panneau 318 de large reste lisible (@container < 420 px). Identité du Casino : prune, or, sombre ; pas de croupier
    dessiné. Ordre de lecture : les cartes de la banque (en haut, au centre, sous une lumière) → les places sur l'arc du
    feutre → les mises → les 7 paris banque en arc sous la banque → le reste (sabot, historique), discret. */
-.bj { position: absolute; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; color: var(--ink); font: 500 12px/1.3 var(--font); container: bj / size; user-select: none; -webkit-user-select: none; }
+.bj { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; color: var(--ink); font: 500 12px/1.3 var(--font); container: bj / size; user-select: none; -webkit-user-select: none; }
 .bj button:disabled { cursor: default; }
 .tbl { display: contents; }
 .tbl[hidden], .lobby[hidden] { display: none !important; }
@@ -440,6 +440,17 @@
 .seats.carousel .seat { flex: 0 0 var(--sw); scroll-snap-align: center; }
 .seats.carousel .freepill { flex: none; align-self: center; white-space: nowrap; }
 
+/* --- La barre du bas sous 560 px (panneau, téléphone, vidéo zoomée à 125 %) : avec Quitter, jetons, ops, total et
+   PRÊT ne tiennent plus sur une ligne. Les jetons passent sur leur propre ligne, Quitter garde sa seule porte. --- */
+@container bj (max-width: 560px) {
+  .bar { height: auto; min-height: 44px; flex-wrap: wrap; padding: 6px 7px; row-gap: 5px; }
+  .bar .chips { order: -1; width: 100%; justify-content: space-between; }
+  .btn.quit span { display: none; } /* étroit : la porte seule (son nom reste dans aria-label et title) */
+  .btn.quit { width: 38px; padding: 0; }
+  .sum { margin-left: 0; }
+  .btn.ready { margin-left: auto; }
+}
+
 /* --- Panneau étroit / téléphone : les scores en grille sous la banque ; les places en carrousel ---------------- */
 @container bj (max-width: 420px) {
   .felt { grid-template-rows: 142px minmax(0, 1fr) auto; }
@@ -451,6 +462,7 @@
   .seat .hand:not(.multi) .subhand { display: flex; align-items: center; justify-content: center; gap: 3px; }
   .seat .hand:not(.multi) .tot:not(.is-bj) { position: static; }
   .msg small.hint { display: none; } /* panneau : la consigne de mise cède la place aux places (la bulle et ✎ restent) */
+  .rules, .hist { --rw: 100%; --hw: 100%; } /* téléphone : Règles et Historique en plein écran, pas un tiroir de 256 px */
   .shoe { left: 42px; top: 18px; bottom: auto; }
   .dealer { top: 6px; }
   .dealer .cards.big { --cw: 36px; }
@@ -465,12 +477,6 @@
   .seat.turn.multi .hand { display: none; }
   .splithands .cards.big { --cw: 30px; }
   .state b, .state small { white-space: normal; }
-  .bar { height: auto; min-height: 44px; flex-wrap: wrap; padding: 6px 7px; row-gap: 5px; }
-  .bar .chips { order: -1; width: 100%; justify-content: space-between; }
-  .btn.quit span { display: none; } /* étroit : la porte seule (son nom reste dans aria-label et title) */
-  .btn.quit { width: 38px; padding: 0; }
-  .sum { margin-left: 0; }
-  .btn.ready { margin-left: auto; }
   .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trow { grid-template-columns: 54px minmax(0, 1fr) auto; }
   .trow .dots { grid-column: 1 / -1; }

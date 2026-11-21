@@ -95,12 +95,13 @@ async function main() {
   window.__bench = { view, D };
   if (game === 'blackjack' && open) {
     await new Promise((r) => setTimeout(r, 150)); // the table paints once, async, before any class toggle sticks
-    const bj = D.querySelector('.bj');
-    if (open === 'rules') bj.classList.add('rules-open');
+    // The real tabs, clicked: opening a panel also paints it (a class toggle left « Cette table » empty).
+    if (open === 'rules') D.querySelector('.rtab')?.click();
     else if (open === 'hist' || open === 'histmine') {
-      D.querySelector('.felt')?.classList.add('hist-open');
+      D.querySelector('.htab')?.click();
       if (open === 'histmine') D.querySelector('[data-htab="mine"]')?.click();
     }
+    await new Promise((r) => setTimeout(r, 400)); // the panel's slide-in
   }
   document.title = `Casino bench — ${game} / ${stateId}`;
   document.body.dataset.ready = '1'; // the matrix script waits on this before screenshotting
