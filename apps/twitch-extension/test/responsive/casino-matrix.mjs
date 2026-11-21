@@ -226,7 +226,13 @@ async function main() {
         Object.assign(r, { game, state, label, size: `${w}x${h}`, errors });
         if (flag('shots'))
           await page.screenshot({
-            path: join(out, 'shots', tag, `${game}-${state}-${w}x${h}.png`),
+            // never a « : » in the name (several:rules): on NTFS it becomes an alternate data stream, not a file
+            path: join(
+              out,
+              'shots',
+              tag,
+              `${game}-${state.replace(':', '+')}-${w}x${h}.png`,
+            ),
           });
         results.push(r);
         process.stdout.write(

@@ -22,9 +22,10 @@
 }
 
 /* --- Scène : languette des gains + vitre des rouleaux dans son cadre (V5) ---------------------------------------- */
-/* align-items: center — sans quoi la vitre s'étire à toute la hauteur dispo (portrait mobile : des rouleaux très
-   hauts, une bande vide énorme entre les symboles, Lot B § 4). .window garde ses proportions, centrée à la place. */
-.stage { grid-area: stage; position: relative; min-height: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr); align-items: center; }
+/* La vitre garde ses proportions (Lot B § 4), centrée : jamais étirée en portrait (rouleaux minuscules dans un grand
+   vide), jamais plus haute que la scène en paysage compact (la 3ᵉ rangée passait sous la mise). La scène est un
+   conteneur de taille : sa hauteur réelle (cqh) plafonne la largeur de la vitre, donc sa hauteur. */
+.stage { grid-area: stage; position: relative; min-height: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); align-items: center; container-type: size; }
 .notch { position: absolute; left: -3px; top: 50%; z-index: 7; width: 24px; height: 70px; margin-top: -35px; display: grid; place-items: center; border-radius: 9px 4px 4px 9px; color: #3a2200; background: linear-gradient(90deg, #8a5d14, #f2cf72 40%, #c8922a 70%, #7a5210); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.45), inset -2px 0 2px rgba(0, 0, 0, 0.25); transition: transform 0.18s var(--pop), filter 0.18s; }
 .notch span { writing-mode: vertical-rl; transform: rotate(180deg); font: 900 10px/1 var(--font); letter-spacing: 0.16em; text-transform: uppercase; }
 .notch::before, .notch::after { content: ''; position: absolute; left: 50%; width: 9px; height: 2px; margin-left: -5px; border-radius: 1px; background: rgba(58, 34, 0, 0.45); box-shadow: 0 3px 0 rgba(58, 34, 0, 0.45); }
@@ -37,8 +38,10 @@
   grid-column: 2;
   position: relative;
   min-width: 0;
-  max-height: 100%;
-  aspect-ratio: 3 / 2; /* 5 rouleaux × 3 rangées, proportions des symboles (prototype) : jamais démesurée en hauteur */
+  width: 100%;
+  max-width: calc(100cqh * 1.5);
+  justify-self: center;
+  aspect-ratio: 3 / 2; /* 5 rouleaux × 3 rangées, proportions des symboles (prototype) */
   padding: var(--bz);
   border-radius: 16px;
   container: win / size;
@@ -481,3 +484,15 @@ img.sym { object-fit: contain; }
 .slot-body.is-watch .window { box-shadow: 0 0 0 2px rgba(255, 61, 90, 0.55), 0 0 16px rgba(255, 61, 90, 0.2); cursor: default; }
 .cof.is-spect .spin[data-state='watch'] { pointer-events: none; }
 .cof .wc__extra { display: none; }
+
+/* --- Hauteur basse (paysage compact 844 × 300, vidéo zoomée) : la colonne de jeu (derniers gains + Rapide/Auto/Son +
+   Lancer) demandait ~314 px et coupait Lancer. On garde l'en-tête « Derniers gains › » (il ouvre l'historique), on
+   replie ses 4 lignes et on réduit Lancer — jamais un bouton retiré. Vaut pour les deux machines (même cabine). --- */
+@container body (max-height: 360px) {
+  .side { gap: 5px; padding: 4px 5px 3px; }
+  .board { grid-template-rows: 18px; padding: 5px 7px; }
+  .board__rows { display: none; }
+  .spin { width: 88px; height: 88px; }
+  .spin__cap { inset: 9px 9px 11px; }
+  .spin__cap svg { width: 30px; height: 30px; }
+}
