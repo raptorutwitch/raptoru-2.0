@@ -483,6 +483,13 @@ describe('blackjack service — tables, money, secrets', () => {
 
   it('the chat announcement: the creator only, on click, once; then a channel cooldown', async () => {
     const core = await lab();
+    // Off by default since tables open freely (§ 18): the streamer offers it explicitly.
+    expect(
+      await code(
+        core.blackjack.announce(CH, A, '00000000-0000-4000-8000-000000000001'),
+      ),
+    ).toBe('announce_off');
+    await core.moduleSettings.set(CH, 'casino.bj_announce', 1, 'test');
     const j = await core.blackjack.join(CH, A, {});
     expect(j.created).toBe(true);
     await core.blackjack.join(CH, Bo, {});
