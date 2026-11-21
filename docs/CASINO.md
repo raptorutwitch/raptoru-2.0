@@ -649,3 +649,133 @@ anti-débordement (`test:casino-responsive`, jeu isolé) reste en place.
 - **Tactile** : touches de mise ≥ 44 px, languettes latérales 30 px, « Derniers gains », son, Rapide et Passer ≥ 32 px,
   croix des panneaux 36 px ; Blackjack en paysage téléphone : les 7 paris banque sur une rangée de 30 px (au lieu de
   2 rangées de 16), jetons et actions 32-34 px.
+
+## 17. Passe corrective après les essais interactifs d'Antoni (21/11 au soir)
+
+Toujours **extension seule** : aucune règle, cote, mise, limite, route ni protection du Core modifiée (Core en
+Production `1f05b97c`). Un test du Core a été ajouté (`casino-blackjack.test.ts`), sans changer son code.
+
+**Split, main par main.** Le comportement est vérifié à quatre niveaux :
+
+- **Le Core** (`engine.ts`) : Tirer, Rester et Doubler ne touchent que la main du tour (`t.turn.hand`). Au Split,
+  la main 1 reçoit sa 2ᵉ carte tout de suite. La main 2 reçoit la sienne automatiquement quand vient son tour
+  (`nextTurn` : « A split hand gets its second card when it becomes active »). C'est une règle voulue et standard,
+  conservée.
+- **Ce que reçoit l'extension** : un état par événement, `last` = `{ type: 'card', seat, hand, auto: true }` pour
+  la carte distribuée sans clic.
+- **Ce que l'extension montrait** :
+  - Quand Tirer terminait la main 1 (bust ou 21), la main 2 recevait sa 2ᵉ carte 0,4 s plus tard. Entre les deux,
+    le centre se vidait (`turn` nul) puis se redessinait, et les deux mains semblaient tirer ensemble.
+  - Corrigé :
+    - le centre et la barre gardent le joueur entre deux décisions (`turnOf`) ;
+    - rien n'est redessiné en passant d'une main à l'autre ;
+    - chaque main porte son état (« à jouer », « attend sa 2ᵉ carte », « finie ») ;
+    - la barre affiche « Main 1 sur 2 » au-dessus des actions ;
+    - un message explique la carte automatique ;
+    - la rubrique Split des Règles la décrit aussi.
+- **Le simulateur** : il exécute ce même moteur, il ne pouvait donc pas différer.
+- **Test** : un test du Core joue un Split, trois Tirer sur la main 1 jusqu'au bust, puis Doubler sur la main 2. Il
+  vérifie qu'à chaque Tirer une seule carte arrive sur la seule main active, que la main 2 reçoit exactement une carte
+  à son tour, et que Doubler ne double que sa mise.
+
+**Assurance.** Le moteur règle correctement : l'assurance payée 2:1 rend 3 × sa mise.
+
+- Exemple : main 5 000 perdue, assurance 2 500 → 7 500 rendus, bilan 0.
+- La présentation était trompeuse : « Perdu −5 000 » en gros, puis le bilan en petit.
+- Désormais, au règlement : « Main perdue −5 000 », « Assurance gagnée +5 000 », « Bilan 0 Jeton ». Tous les montants
+  sont NETS, jamais le paiement brut.
+- La place affiche le bilan (« bilan ±0 ») dès qu'il y a une assurance ou un pari banque.
+- La proposition d'assurance dit ce qu'on accepte réellement : « Assurance 2 500 : +5 000 net si elle a blackjack (ta
+  mise est compensée), sinon perdue et ta main continue ».
+
+**Even money → « Gain assuré ».**
+
+- Ce qu'on accepte réellement (`engine.ts`) : la main est payée 1:1 quoi qu'ait la banque (5 000 → +5 000).
+- Ce n'est jamais un « +0 » : l'égalité ne concerne que l'autre choix, quand la banque a aussi blackjack.
+- Les deux boutons : « Gain assuré +5K » et « Tenter le 3:2 +7K5 ou 0 ».
+- Le résultat : « Gain assuré +5 000 ». La rubrique des Règles s'appelle « Gain assuré (Even money) ».
+- Pas de confirmation supplémentaire : la décision a 12 s et les deux boutons disent chacun leur montant.
+
+**Bust.** Un seul signal : le score rouge « 26 · bust ». Le ruban BUSTED posé dessus est retiré. Le score reste en
+couleur, la place est grisée.
+
+**Mains de plusieurs cartes.**
+
+- Chaque main mesure sa largeur réelle (container `hand`). Les cartes se resserrent progressivement (jusqu'à 74 % de
+  recouvrement, la valeur reste lisible), puis rapetissent un peu seulement si ça ne suffit pas.
+- Les cartes ne débordent jamais sur la place voisine.
+- Le score passe en haut à droite (le coin vide d'une carte), avec un liseré sombre pour ne pas se fondre dans une
+  carte blanche.
+- Valable pour les places, les mains splittées et le carrousel.
+
+**Mises.**
+
+- Le Core impose des multiples de `step` (10). La mise principale va de `bj_main_min` (100) au plafond de gain
+  (splits et doubles compris, 125 000 par défaut) ; un pari banque commence à 10.
+- Le jeton libre affiche ces valeurs sous le champ. Il n'arrondit plus en silence : 1 255 est refusé avec « 1 250 ou
+  1 260 ? ».
+- L'arrondi apparent venait aussi de l'affichage : `kfmt` montrait 1 250 en « 1K2 ». Il est désormais sans arrondi
+  (« 1K25 »), testé.
+- Sur PC, le titre « Pari sur le score de la banque » descend de 6 px sous les cases.
+
+**Historique.**
+
+- Partager = trois points reliés, dans le coin de la carte. Remise à zéro = une flèche autour d'un 0, toujours
+  confirmée.
+- Les deux pictogrammes sont compacts (26 px, 32 au doigt, cible étendue invisible).
+- « Mes manches » détaille main, assurance et paris quand la manche est encore dans l'historique de la table. Le Core
+  ne renvoie que le net et le total misé (« misé 7 500 »).
+
+**Salon.**
+
+- Une ligne par table : numéro, joueurs et état, l'œil (« Regarder », spectateur), « Rejoindre » sur la même ligne.
+- Les petites places restent pour choisir la sienne à la souris ; au doigt, « Rejoindre » choisit la place.
+- Jouer seul : le Core le permet déjà (la donne part dès que tous les joueurs assis sont prêts). Le banc, lui, asseyait
+  3 joueurs fictifs par défaut ; il démarre désormais seul contre la banque.
+- Plusieurs tables : le Core les ouvre à la demande, jusqu'à 8. `join` choisit la table la plus pleine qui a une place,
+  et une nouvelle table ne s'ouvre que quand toutes sont complètes. Une table vide garde son numéro, sans nettoyage.
+- Un bouton « + » demanderait un changement du Core, non fait : voir « À décider » ci-dessous.
+
+**Machines (les deux).** Explorer les lignes gagnantes :
+
+- Avec 2 combinaisons ou plus, le récapitulatif affiche une pastille par ligne (sa forme, son montant).
+- Au survol (PC), à la sélection au doigt ou au clavier, la ligne s'éclaire sur les rouleaux, ses symboles comptés sont
+  identifiés, le reste est atténué.
+- Les 10 lignes de la table des gains sont des boutons qui dessinent la ligne sur les rouleaux, « rien ce tour » si elle
+  n'a pas payé.
+- La note explique pourquoi des symboles identiques hors ligne ne paient rien.
+- Rien n'est recalculé : c'est le résultat du Core.
+
+**Téléphone.**
+
+- Banque plus grande (cartes ≈ 8 % de la hauteur, score 18 px).
+- Les 7 paris banque gardent leur courbe sous la banque quand chaque case a au moins 40 px (≈ 390 px de large et plus),
+  sinon la grille compacte.
+- Ma place : avatar, nom et mise sur le côté ; cartes ou cercle de mise au centre, en grand. Le cercle n'est plus décalé
+  par un score vide. La main à jouer porte « à jouer ».
+- Languettes 40 × 48 au doigt. Le centre ne passe plus sous elles (le texte de l'assurance y était caché).
+- Les messages éphémères s'affichent au milieu du tapis, plus sur les boutons d'action.
+
+**Mini-jeux en paysage téléphone** (`arcade.css`, téléphone en paysage ≤ 500 px de haut seulement) :
+
+- Le bandeau titre du catalogue, déjà dit deux fois au-dessus, est retiré.
+- Les tuiles sont plus denses : icône 42 px, description sur 3 lignes au plus.
+- Aucun défilement à 844×390, 740×360, 667×375 et 844×300. Vidéo, panneau et portrait identiques au pixel près.
+
+**À décider (évolutions du Core, non faites)** :
+
+1. **Créer une table (« + »)** : `POST /casino/bj/join` avec `{ new_table: true }` ouvrirait une table neuve même si
+   d'autres ont des places, sous le verrou du salon et dans la limite `MAX_TABLES` (8).
+   - Il faudrait aussi un nettoyage des tables vides : supprimer une table vide sans manche depuis N minutes, sauf la
+     n° 1.
+   - Sans ce nettoyage, 8 tables vides finiraient par refuser `casino_full`.
+   - Ce sont une écriture et une suppression en base de Production, avec un déploiement du Core.
+2. **Le détail de « Mes manches »** : `/casino/history` pourrait renvoyer, pour le blackjack, le détail que
+   `casino_rounds.outcome.player` contient déjà (main, assurance, paris banque).
+   - C'est une lecture seule, un champ ajouté.
+   - Aujourd'hui le détail n'est visible que pour les manches encore dans l'historique de la table.
+
+**Ce qui n'est vérifiable qu'en vrai** : l'application Twitch sur un téléphone réel et le Hosted Test.
+
+L'en-tête de Raptoru Live affiche brièvement le mouvement du solde (« +7,5K » au règlement : la mise rendue et le
+gain). C'est un indicateur commun à tous les modules, laissé tel quel. Le résultat de la manche, lui, est au centre.

@@ -85,8 +85,10 @@ const NEXT_BJ = [
   ['double', '6 + 5 = 11 (Doubler)'],
   ['blackjack', 'Blackjack'],
   ['insurance', 'banque As, blackjack (Assurance)'],
-  ['even', 'Blackjack contre un As (Even Money)'],
+  ['even', 'Blackjack contre un As (gain assuré, Even Money)'],
   ['dealer_bust', 'la banque saute'],
+  ['bust', '10 + 6 puis un 10 (Tirer = dépasser 21)'],
+  ['many', 'petites cartes (main de 6 cartes ou plus)'],
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -106,7 +108,8 @@ $('game').value = GAMES[params.get('g')] ? params.get('g') : 'blackjack';
 $('surface').value = SURFACES[params.get('surface')]
   ? params.get('surface')
   : 'video';
-$('bots').value = params.get('bots') ?? '3';
+// Seul contre la banque par défaut (retour d'Antoni du 21/11) : les joueurs fictifs s'ajoutent au besoin.
+$('bots').value = params.get('bots') ?? '0';
 
 function fillStates() {
   const sel = $('state');
