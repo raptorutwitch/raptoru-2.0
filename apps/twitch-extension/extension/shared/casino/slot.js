@@ -161,7 +161,8 @@ export function mountSlot(D, ctx) {
   let plateLocked = false;
   let lastWin = '';
   const paintPlate = () => {
-    if (plateLocked) return;
+    // (un récapitulatif déjà affiché n'est jamais réécrit : la puce survolée ou choisie le resterait plus)
+    if (plateLocked || (plate.querySelector('.lrecap') && lastWin.includes('lrecap'))) return;
     plate.classList.remove('fs');
     plate.innerHTML = lastWin;
   };
@@ -487,6 +488,8 @@ export function mountSlot(D, ctx) {
     if (!sym || !st.count) return name;
     return `${name} · ${st.count} × ${sym}${st.wilds?.length ? ` (dont ${st.wilds.length} WILD)` : ''}`;
   };
+  // Plusieurs combinaisons : une puce par ligne dans la plaque, à survoler ou toucher pour la voir (reels.js explorer).
+  const lineEx = View.explorer(view, { plate, root: body, on, lines: cfg.lines, label: lineLabel });
   // V7 : les combinaisons gagnantes se dévoilent une à une ; Rapide : tout d'un coup ; Passer : l'état final.
   async function presentLines(r, { level, x, steps, fast, credit }) {
     plate.classList.remove('old');
@@ -497,7 +500,8 @@ export function mountSlot(D, ctx) {
     // (le détail complet au survol). Le multiplicateur reste pour les gros gains.
     const lineSteps = steps.filter((st) => st.kind === 'line');
     plate.title = steps.map((st) => `${lineLabel(st)} +${fmt(st.win)}`).join(' · ');
-    const final = () => `<b>+${fmt(credit)}</b><small>${lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : lineSteps.length > 1 ? `${lineSteps.length} lignes · ${times(x)}` : times(x)}</small>`;
+    const recap = lineEx.html(steps);
+    const final = () => (recap ? `<b>+${fmt(credit)}</b><small>${times(x)}</small>${recap}` : `<b>+${fmt(credit)}</b><small>${lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : times(x)}</small>`);
     const paint = (v, k) => (plate.innerHTML = `<b>+${fmt(v)}</b><small>${k || times(x)}</small>`);
     popPlate();
     let shown = 0;
@@ -917,21 +921,16 @@ export function mountSlot(D, ctx) {
         return `<tr class="${id === 'wild' ? 'wildrow' : ''}"><td>${Sym.symbolHTML(sym)}</td>${[5, 4, 3, 2].map((k) => `<td${k === 2 && sym.pays[2] ? ' class="two"' : ''}>${val(sym, k)}</td>`).join('')}</tr>`;
       })
       .join('');
-    const lines = cfg.lines
-      .map((l, i) => {
-        const pts = l.rows.map((row, r) => `${r * 6 + 3},${row * 5 + 2.5}`).join(' ');
-        // Chaque ligne avec son nom : celui que la plaque affiche quand elle paie (« Bosse · 3 × Cerise »).
-        return `<figure class="pline" style="--c:${View.LINE_COLORS[i % View.LINE_COLORS.length]}"><svg viewBox="0 0 30 15"><rect width="30" height="15" rx="2.5"/><polyline points="${pts}"/></svg><figcaption>${esc(l.name ?? String(i + 1))}</figcaption></figure>`;
-      })
-      .join('');
+    // Chaque ligne avec son nom (celui que la plaque affiche quand elle paie) ; la toucher la montre sur les rouleaux.
+    const lines = cfg.lines.map(View.plineHTML).join('');
     return `<table class="ptab"><thead><tr><th></th><th>×5</th><th>×4</th><th>×3</th><th>×2</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="prule">${Sym.symbolHTML(cfg.byId.wild)}<p><b>WILD</b> remplace tous les symboles, sauf BONUS : il complète une ligne (« dont 1 WILD » sur la plaque). Une ligne paie sa meilleure combinaison, une seule fois.</p></div>
       <div class="prule">${Sym.symbolHTML(cfg.byId.bonus)}<p><b>3 · 4 · 5 BONUS</b> n’importe où : <b>le Coffre</b>. Les BONUS deviennent des pièces ; chaque nouvelle pièce remet les 3 relances. MINI ×20 · MAJEUR ×100 · MÉGA ×500 · grille pleine : GRAND ×1 000.</p></div>
       <p class="pcap">Gain maximum par partie : <b>${fmt(limits().max_win)} Jetons</b>.</p>
-      <div class="plines"><span>Les 10 lignes · de gauche à droite, à partir du 1er rouleau. Seules ces lignes paient : des symboles groupés ou alignés ailleurs (une diagonale qui ne part pas du 1er rouleau, par exemple) ne comptent pas.</span>${lines}</div>`;
+      <div class="plines"><span>${View.LINES_NOTE}</span>${lines}</div>`;
   }
   function openPaytable() {
-    Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(shownBet())}</small>`, render: paytableHTML });
+    Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(shownBet())}</small>`, render: paytableHTML, onClick: lineEx.paytableClick });
   }
 
   // --- Commandes ----------------------------------------------------------------------------------------------------
