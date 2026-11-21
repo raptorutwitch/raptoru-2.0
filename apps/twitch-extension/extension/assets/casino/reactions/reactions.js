@@ -1,30 +1,44 @@
-// Les réactions de la table de Blackjack (docs/CASINO.md § 18) — le SEUL fichier à modifier pour changer leurs visuels.
+// Les réactions de la table de Blackjack (docs/CASINO.md § 18.7) — le SEUL fichier à modifier pour changer leurs visuels
+// ou les réactions de la banque.
 //
-// Les identifiants (r1 … r6) sont ceux que le Core accepte et transmet : ils ne changent jamais. Chacun est relié ici à
-// une image de ce dossier. Pour remplacer une émote provisoire :
-//   1. déposer le fichier dans ce dossier (PNG, GIF ou WebP animé ; carré, 112 × 112 px conseillé, moins de 200 Ko) ;
+// Les identifiants (r1 … r7) sont ceux que le Core accepte et transmet : ils ne changent jamais. Chacun est relié ici à
+// une image (chemin relatif à ce dossier). Pour remplacer une émote :
+//   1. déposer le fichier dans ce dossier (PNG, GIF ou WebP animé, transparent ; carré, 112 à 128 px conseillé) ;
 //   2. changer sa ligne `src` (et `label`, le nom lu par les lecteurs d'écran et affiché au survol).
-// Rien d'autre : ni la logique, ni la transmission, ni les animations d'apparition (un GIF ou un WebP animé garde sa
-// propre animation : l'image est affichée telle quelle, jamais redessinée). `glyph` : le repli si l'image ne charge pas.
+// Rien d'autre : ni le protocole, ni le rythme (cooldown), ni la logique, ni les animations d'apparition, ni le Core.
+// Une image animée garde sa propre animation et sa transparence : elle est affichée telle quelle (<img>, jamais redessinée).
+// `glyph` : le repli si l'image ne charge pas.
+//
+// Choix d'Antoni du 21/11 (dans cet ordre). Les cinq premières sont les emojis de Discord : Twemoji 17.0.3 (le jeu
+// d'emojis qu'affiche Discord), déjà embarqué dans l'extension (assets/twemoji, licence CC-BY 4.0, attribution dans
+// assets/twemoji/readme.txt et license-graphics.txt). Les deux dernières sont les émotes d'Antoni.
 export const REACTIONS = [
-  { id: 'r1', label: 'GG', src: 'r1.svg', glyph: '👏' },
-  { id: 'r2', label: 'Wow', src: 'r2.svg', glyph: '😮' },
-  { id: 'r3', label: 'Mdr', src: 'r3.svg', glyph: '😂' },
-  { id: 'r4', label: 'Aïe', src: 'r4.svg', glyph: '😬' },
-  { id: 'r5', label: 'Cœur', src: 'r5.svg', glyph: '❤️' },
-  { id: 'r6', label: 'En feu', src: 'r6.svg', glyph: '🔥' },
+  { id: 'r1', label: 'Sourire', src: '../../twemoji/svg/1f642.svg', glyph: '🙂' },
+  { id: 'r2', label: 'Visage attendri', src: '../../twemoji/svg/1f633.svg', glyph: '😳' },
+  { id: 'r3', label: 'Colère', src: '../../twemoji/svg/1f621.svg', glyph: '😡' },
+  { id: 'r4', label: 'Lunettes de soleil', src: '../../twemoji/svg/1f60e.svg', glyph: '😎' },
+  { id: 'r5', label: 'Sourire en coin', src: '../../twemoji/svg/1f609.svg', glyph: '😉' },
+  { id: 'r6', label: 'ICANT', src: 'ICANT.png', glyph: '😂' },
+  { id: 'r7', label: 'ptn', src: 'ptn.gif', glyph: '😱' },
 ];
 
-// La banque réagit de temps en temps (jamais une IA, jamais à chaque manche : bj-reactions.js pickDealerReaction).
-// Même principe : une image par situation (`src`, ici les émotes provisoires) et quelques phrases courtes, tirées au sort
-// de la même façon chez tous les viewers.
+// La banque réagit de temps en temps (bj-reactions.js pickDealerReaction) : au plus une fois par manche, la même chez
+// tous les viewers, jamais une IA. Pour chaque situation : l'émote (`r`, un identifiant ci-dessus), sa probabilité
+// (`chance`, 0 = jamais) et quelques phrases courtes, tirées au sort. Tout se modifie ici.
 export const DEALER = {
-  dealer_bj: { src: 'r4.svg', glyph: '😬', lines: ['Blackjack pour la maison.', 'La maison a le dernier mot… cette fois.'] },
-  blackjack: { src: 'r1.svg', glyph: '👏', lines: ['Joli blackjack !', 'Blackjack, bien joué.', 'Ça, c’est une main !'] },
-  big_win: { src: 'r6.svg', glyph: '🔥', lines: ['Belle manche !', 'La table est en feu ce soir.'] },
-  dealer_bust: { src: 'r2.svg', glyph: '😮', lines: ['Aïe, la banque saute !', 'Trop de cartes pour moi…'] },
-  bust: { src: 'r3.svg', glyph: '😂', lines: ['Ça arrive aux meilleurs.', 'Une carte de trop…'] },
+  // La banque a blackjack : elle savoure.
+  dealer_bj: { r: 'r5', chance: 0.6, lines: ['Blackjack pour la maison.', 'La maison a le dernier mot… cette fois.'] },
+  // Un joueur fait blackjack : on célèbre.
+  blackjack: { r: 'r7', chance: 0.6, lines: ['Joli blackjack !', 'Blackjack, bien joué.', 'Ça, c’est une main !'] },
+  // Un gros gain (au moins 10 fois la mise minimum) : la banque est attendrie.
+  big_win: { r: 'r2', chance: 0.5, lines: ['Belle manche !', 'Pitié pour la banque…'] },
+  // La banque saute.
+  dealer_bust: { r: 'r3', chance: 0.35, lines: ['Aïe, la banque saute !', 'Trop de cartes pour moi…'] },
+  // Un joueur dépasse 21 : réaction amusée.
+  bust: { r: 'r6', chance: 0.2, lines: ['Ça arrive aux meilleurs.', 'Une carte de trop…'] },
+  // La banque gagne contre tout le monde.
+  dealer_win: { r: 'r4', chance: 0.2, lines: ['La maison gagne.', 'Trop facile.'] },
 };
 
-/** L'adresse d'une image de ce dossier (le paquet de l'extension la sert à côté de ce fichier). */
+/** L'adresse d'une image (chemin relatif à ce dossier ; le paquet de l'extension la sert à côté). */
 export const assetUrl = (src) => new URL(src, import.meta.url).href;

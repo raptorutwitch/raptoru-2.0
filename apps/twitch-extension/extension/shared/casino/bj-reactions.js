@@ -1,8 +1,8 @@
 // Casino V1 — les réactions à la table de Blackjack (docs/CASINO.md § 18, mandat d'Antoni du 21/11, C). Un viewer assis
 // choisit une émote dans une petite bulle ; elle apparaît brièvement au-dessus de sa place, chez tous les joueurs et les
-// spectateurs. Aucun texte libre, aucun Jeton : seulement les identifiants que le Core accepte (r1 … r6), transmis par le
-// Core avec l'état de la table (long-poll), à sa cadence (anti-spam côté Core). Les visuels sont dans
-// assets/casino/reactions/reactions.js : les remplacer ne touche jamais ce fichier.
+// spectateurs. Aucun texte libre, aucun Jeton : seulement les identifiants que le Core accepte (r1 … r7), transmis par le
+// Core avec l'état de la table (long-poll), à sa cadence (anti-spam côté Core). Les visuels et les réactions de la banque
+// sont dans assets/casino/reactions/reactions.js : les changer ne touche jamais ce fichier.
 //
 // Activé seulement si le Core l'annonce (`reactions` dans la réponse de l'état de la table) : un Core qui ne connaît pas
 // les réactions n'affiche ni bouton ni bulle. La banque réagit parfois (pickDealerReaction) : un choix déterministe à
@@ -21,13 +21,13 @@ export function unit(key) {
   for (const ch of String(key)) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
   return h / 0x100000000;
 }
-// La banque ne réagit qu'aux manches qui le méritent, et pas à toutes : au plus une fois par manche, ≈ 1 manche sur 4.
-const CHANCE = { dealer_bj: 0.6, blackjack: 0.6, big_win: 0.5, dealer_bust: 0.35, bust: 0.2 };
 /**
- * La réaction de la banque à une manche réglée, ou null. Déterministe (table, manche) : chaque viewer voit la même.
- * `s` : l'état de la table (phase settled) ; `mainMin` : la mise minimum (un « gros gain » = au moins 10 fois).
+ * La réaction de la banque à une manche réglée, ou null. Déterministe (table, manche) : chaque viewer voit la même. Au
+ * plus une par manche (la situation la plus marquante), seulement avec la probabilité de cette situation (`chance`,
+ * reactions.js : ≈ 1 manche sur 4 au total). `s` : l'état de la table (phase settled) ; `mainMin` : la mise minimum (un
+ * « gros gain » = au moins 10 fois) ; `cfg` : les associations (DEALER de reactions.js par défaut).
  */
-export function pickDealerReaction(s, mainMin = 100) {
+export function pickDealerReaction(s, mainMin = 100, cfg = DEALER) {
   if (s?.phase !== 'settled') return null;
   const players = s.seats.filter((p) => p?.result);
   if (!players.length) return null;
@@ -38,12 +38,22 @@ export function pickDealerReaction(s, mainMin = 100) {
     : players.some((p) => p.result.net >= 10 * mainMin) ? 'big_win'
     : s.outcome === 'BUST' ? 'dealer_bust'
     : hands.some((h) => h.verdict === 'bust') ? 'bust'
+    : players.every((p) => p.result.net < 0) ? 'dealer_win'
     : null;
-  if (!kind || unit(`${s.table}:${s.round}:${kind}`) >= CHANCE[kind]) return null;
-  const lines = DEALER[kind]?.lines ?? [];
-  return { kind, line: lines[Math.floor(unit(`${s.table}:${s.round}:line`) * lines.length)] ?? '' };
+  const c = kind && cfg[kind];
+  if (!c || !BY_ID.has(c.r) || unit(`${s.table}:${s.round}:${kind}`) >= (c.chance ?? 0)) return null;
+  const lines = c.lines ?? [];
+  return { kind, r: c.r, line: lines[Math.floor(unit(`${s.table}:${s.round}:line`) * lines.length)] ?? '' };
 }
 
+// Les images des réactions chargées une fois, dès que le Core les annonce : une émote reçue s'affiche sans délai (le GIF
+// animé pèse ≈ 0,5 Mo). Toujours affichées par <img> : un GIF ou un WebP animé garde son animation et sa transparence.
+let preloaded = false;
+function preload() {
+  if (preloaded || typeof Image !== 'function') return;
+  preloaded = true;
+  for (const r of REACTIONS) new Image().src = assetUrl(r.src);
+}
 const imgHTML = (r, cls) => `<img class="${cls}" src="${esc(assetUrl(r.src))}" alt="${esc(r.label ?? '')}" draggable="false" data-glyph="${esc(r.glyph ?? '')}">`;
 
 /**
@@ -88,8 +98,10 @@ export function createReactions({ root, felt, seatsEl, seatEl, send, toast, pref
     const n = document.createElement('span');
     n.className = 'rx';
     n.innerHTML = imgHTML(r, 'rx__img');
-    n.style.left = `${b.left - fr.left + b.width / 2}px`;
-    n.style.top = `${Math.max(4, b.top - fr.top - 4)}px`;
+    // Ma grande place du téléphone (sous le carrousel) : l'émote dans sa partie droite, jamais sur la place d'au-dessus.
+    const hero = !!el.closest('.myseat');
+    n.style.left = `${hero ? b.right - fr.left - 34 : b.left - fr.left + b.width / 2}px`;
+    n.style.top = `${hero ? b.top - fr.top + b.height / 2 + 21 : Math.max(4, b.top - fr.top - 4)}px`;
     layer.append(n);
     onSeat.set(seat, n);
     setTimeout(() => (n.remove(), onSeat.get(seat) === n && onSeat.delete(seat)), SHOW_MS);
@@ -182,6 +194,7 @@ export function createReactions({ root, felt, seatsEl, seatEl, send, toast, pref
     receive(R) {
       caps = R ?? null;
       if (!caps?.on) close();
+      else preload();
       const list = Array.isArray(R?.list) ? R.list : [];
       const first = !primed;
       primed = !!R;
@@ -193,13 +206,13 @@ export function createReactions({ root, felt, seatsEl, seatEl, send, toast, pref
     /** La banque réagit (une manche réglée) : une bulle à côté de ses cartes, si le Core et le viewer le veulent. */
     dealer(pickd) {
       if (!pickd || !caps?.dealer || muted()) return;
-      const d = DEALER[pickd.kind];
+      const r = BY_ID.get(pickd.r);
       const deal = felt.querySelector('.dealer');
-      if (!d || !deal) return;
+      if (!r || !deal) return;
       felt.querySelector('.rx-dealer')?.remove();
       const n = document.createElement('div');
       n.className = 'rx-dealer';
-      n.innerHTML = `${imgHTML({ ...d, label: '' }, 'rx-dealer__img')}<span>${esc(pickd.line)}</span>`;
+      n.innerHTML = `${imgHTML({ ...r, label: '' }, 'rx-dealer__img')}<span>${esc(pickd.line)}</span>`;
       felt.append(n);
       const fr = felt.getBoundingClientRect();
       const b = deal.getBoundingClientRect();

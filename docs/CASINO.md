@@ -877,18 +877,29 @@ Deux livraisons séparées :
 
 ### 18.7 Réactions (Core `reactions.ts`, extension `bj-reactions.js`)
 
-- Un joueur **assis** touche « Réagir » (à côté de Quitter) : une bulle de **6 émotes**. L'émote apparaît 2,6 s
+- Un joueur **assis** touche « Réagir » (à côté de Quitter) : une bulle de **7 émotes** (une rangée sur PC, 4 + 3 au téléphone, au
+  doigt). L'émote apparaît 2,6 s
   au-dessus de sa place, chez tous les joueurs **et les spectateurs**. Les spectateurs ne réagissent pas eux-mêmes en
   V1 (pas de place où l'afficher, moins de bruit). Rien ne capte le toucher ni ne masque durablement cartes, scores
   ou boutons.
 - **Téléphone, carrousel** : une réaction d'un joueur hors écran affiche un repère sur le bord (‹ émote, ou émote ›) ;
   le toucher fait défiler jusqu'à sa place. Jamais de défilement automatique.
-- **La banque réagit parfois** : au règlement, au plus une bulle par manche (blackjack de la banque 60 %, blackjack
-  d'un joueur 60 %, gros gain ≥ 10 × la mise minimum 50 %, banque qui saute 35 %, un bust 20 % ; ≈ 1 manche sur 4).
-  Choix **déterministe** à partir de la table et de la manche : tous les viewers voient la même. Phrases fixes
-  courtes, **aucune IA** (la personnalité de LeCroupier_ reste suspendue).
+- **La banque réagit parfois** : au règlement, au plus une bulle par manche (≈ 1 manche sur 4), une émote et une
+  phrase courte. Choix **déterministe** à partir de la table et de la manche : tous les viewers voient la même.
+  **Aucune IA** (la personnalité de LeCroupier_ reste suspendue). Les associations, modifiables dans `reactions.js`
+  (`DEALER` : émote, probabilité, phrases) :
+
+  | Situation (la plus marquante de la manche)     | Émote              | Probabilité |
+  | ---------------------------------------------- | ------------------ | ----------- |
+  | Blackjack de la banque                         | Sourire en coin    | 60 %        |
+  | Blackjack d'un joueur                          | ptn                | 60 %        |
+  | Gros gain d'un joueur (≥ 10 × la mise minimum) | Visage attendri    | 50 %        |
+  | La banque saute                                | Colère             | 35 %        |
+  | Un joueur dépasse 21                           | ICANT              | 20 %        |
+  | La banque gagne contre tous                    | Lunettes de soleil | 20 %        |
+
 - **Sécurité** :
-  - seulement les identifiants `r1` … `r6`, jamais de texte libre ; aucun Jeton ; rien en base ;
+  - seulement les identifiants `r1` … `r7`, jamais de texte libre ; aucun Jeton ; rien en base ;
   - une réaction toutes les 1,5 s par viewer, 8 par 30 s au plus (`react_rate`) ; un viewer bloqué par la modération
     ne réagit pas ;
   - transmission en mémoire dans le Core (comme la présence), jointe à l'état de la table ; le long-poll répond aussi
@@ -897,10 +908,30 @@ Deux livraisons séparées :
 - **Arrêt** : `casino.bj_reactions` (joueurs) et `casino.bj_dealer_reactions` (banque), à 1 par défaut, dans Studio ›
   Casino (avec la prochaine version de Studio ; avant, seulement par l'API des réglages). Chaque viewer peut aussi
   « Masquer les réactions » pour lui seul (bulle de choix).
-- **Remplacer les émotes** : déposer les fichiers (PNG, GIF ou WebP animé, carré, 112 px conseillé) dans
-  `apps/twitch-extension/extension/assets/casino/reactions/` et changer leur ligne `src` dans `reactions.js` du même
-  dossier. Rien d'autre : identifiants, transmission et animations ne bougent pas ; une image animée garde son
-  animation (affichée telle quelle). Les 6 visuels actuels sont **provisoires** (SVG dessinés, dont un cœur animé).
+- **Les 7 réactions** (choix d'Antoni du 21/11, dans cet ordre ; le Core ne transmet que l'identifiant) :
+
+  | Id   | Réaction           | Visuel                                                       |
+  | ---- | ------------------ | ------------------------------------------------------------ |
+  | `r1` | Sourire            | 🙂 Twemoji `1f642`                                           |
+  | `r2` | Visage attendri    | 😳 Twemoji `1f633`                                           |
+  | `r3` | Colère             | 😡 Twemoji `1f621`                                           |
+  | `r4` | Lunettes de soleil | 😎 Twemoji `1f60e`                                           |
+  | `r5` | Sourire en coin    | 😉 Twemoji `1f609`                                           |
+  | `r6` | ICANT              | `ICANT.png` (émote d'Antoni, fixe)                           |
+  | `r7` | ptn                | `ptn.gif` (émote d'Antoni, animée : 75 images, transparente) |
+  - Les cinq emojis sont ceux de Discord : Discord affiche le jeu **Twemoji**, déjà embarqué dans l'extension
+    (`assets/twemoji`, version 17.0.3, SVG nets). Licence des visuels **CC-BY 4.0** : redistribution permise avec
+    attribution (`assets/twemoji/readme.txt`, `license-graphics.txt`). Ils ont été identifiés sur la capture fournie
+    par Antoni : le 2ᵉ est 😳 (_flushed_) et le 5ᵉ 😉 (_wink_), comme sur la capture.
+  - ICANT.png et ptn.gif sont les fichiers d'Antoni tels quels (128 × 128, transparents) : jamais réencodés, le GIF
+    garde toutes ses images. Une émote est toujours affichée par une image (`<img>`) : elle s'anime dans la bulle de
+    choix, au-dessus des places, dans le repère hors écran et dans la bulle de la banque. Un WebP animé futur
+    fonctionne de la même façon. Les 7 images sont chargées une fois, dès que le Core annonce les réactions.
+
+- **Remplacer une émote** : déposer le fichier (PNG, GIF ou WebP animé, transparent, carré, 112 à 128 px) dans
+  `apps/twitch-extension/extension/assets/casino/reactions/` et changer sa ligne `src` dans `reactions.js` du même
+  dossier. Rien d'autre : identifiants, protocole, rythme, logique, animations d'apparition et Core ne bougent pas.
+  Ajouter une 8ᵉ réaction demanderait en plus son identifiant dans le Core (`reactions.ts`).
 
 **Contrat** :
 
