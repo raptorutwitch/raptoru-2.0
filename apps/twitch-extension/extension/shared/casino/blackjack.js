@@ -207,6 +207,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     felt,
     seatsEl,
     seatEl: (seat) => host.querySelector(`.seat[data-seat="${seat}"]`),
+    mySeat: () => mine()?.seat ?? null,
     send: (id) => client.react(id),
     toast: (t, bad) => toast(t, bad),
     prefs: Frame.prefs('casino:bj:reactions', { muted: false }),
@@ -487,7 +488,10 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     cardsInto($('[data-zone="dealer"]'), s.dealer.cards, `d${s.roundId}`, df);
     fresh.push(...df);
     const dt = $('[data-tot="dealer"]');
-    dt.textContent = s.dealer.cards.length ? (s.dealer.natural ? 'BJ' : s.dealer.total > 21 ? `${s.dealer.total} · bust` : String(s.dealer.total)) : '';
+    // Bust (mandat d'Antoni du 22/11) : UN seul signal, le ruban diagonal « BUST » sur la main (.cards.is-bust) ; le score
+    // reste lisible, en rouge, sans répéter le mot.
+    $('[data-zone="dealer"]').classList.toggle('is-bust', s.dealer.total > 21);
+    dt.textContent = s.dealer.cards.length ? (s.dealer.natural ? 'BJ' : String(s.dealer.total)) : '';
     dt.className = `tot${s.dealer.natural ? ' is-bj' : s.dealer.total > 21 ? ' bust' : ''}`;
     // Le joueur dont la main est au centre (mandat du 21/11, A3) : sa place se fait discrète (pseudo, repère, petites
     // cartes), sans répéter score, mise ni étiquette déjà au centre. Pas quand le centre parle d'autre chose.
@@ -692,7 +696,8 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       cardsInto(sub.querySelector('.cards'), hd ? hd.cards : [], `s${i}:${s.roundId}:${k}`, fr);
       fresh.push(...fr);
       const tot = sub.querySelector('.tot');
-      tot.textContent = hd?.cards.length ? (hd.natural ? 'BLACKJACK' : hd.total > 21 ? `${totText(hd)} · bust` : totText(hd)) : '';
+      sub.querySelector('.cards').classList.toggle('is-bust', !!hd && hd.total > 21);
+      tot.textContent = hd?.cards.length ? (hd.natural ? 'BLACKJACK' : hd.total > 21 ? String(hd.total) : totText(hd)) : '';
       // `is-bj`, jamais `bj` : `.bj` est la racine de la table (position absolue, inset 0) et étirait l'étiquette.
       tot.className = `tot${hd?.natural ? ' is-bj' : hd && hd.total > 21 ? ' bust' : ''}`;
       const hbet = sub.querySelector('.hbet');
@@ -869,7 +874,8 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
         cardsInto(el, h.cards, `sp${tt.seat}:${s.roundId}:${k}`, fr);
         fresh.push(...fr);
         const tot = spot.querySelector(`[data-tot="${z}"]`);
-        tot.textContent = h.natural ? 'BJ' : h.total > 21 ? `${totText(h)} · bust` : totText(h);
+        el.classList.toggle('is-bust', h.total > 21);
+        tot.textContent = h.natural ? 'BJ' : h.total > 21 ? String(h.total) : totText(h);
         tot.className = `tot${h.total > 21 ? ' bust' : ''}`;
         const sh = el.closest('.sh');
         sh.querySelector('.sh__bet').textContent = kfmt(h.stake); // un Double sur une main splittée change sa mise

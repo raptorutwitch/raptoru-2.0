@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ArcadeSlotsView as View } from '../extension/shared/casino/reels.js';
 
-// Explorer les lignes d'un tour (§ 9 du retour d'Antoni, 21/11/2026, puis mandat du 21/11 E : directement sur les
-// symboles des rouleaux) : survol souris, toucher (épinglé), clic ailleurs, alterner entre les lignes d'un même symbole,
-// table des gains. La vue et le DOM sont simulés : seule la logique de l'explorateur est vérifiée ici (le rendu réel est
-// vérifié dans le banc, cadre réel de l'extension).
+// Explorer les gains d'un tour directement sur les rouleaux (mandats d'Antoni du 21 et du 22/11 : plus aucune rangée de
+// puces sous les rouleaux) : survol souris, toucher (épinglé), alterner entre les lignes d'un même symbole, clic
+// ailleurs, table des gains. La vue et le DOM sont simulés : seule la logique de l'explorateur est vérifiée ici (le rendu
+// réel est vérifié dans le banc, cadre réel de l'extension).
 
 const LINES = [
   { name: 'Haut', rows: [0, 0, 0, 0, 0] },
@@ -63,7 +63,7 @@ function setup({
   idle = () => true,
 } = {}) {
   let wins = steps;
-  let shown = null; // le texte de la pastille montrée, ou null (état du tour)
+  let shown = null; // ce que montrent les rouleaux, ou null (état du tour)
   const view = {
     el: { reels: true },
     cellAt: (t) => t?.pos ?? null, // a cell on the reels: [reel, visible row]
@@ -73,31 +73,13 @@ function setup({
     explore: (path, counted = null, text = '') =>
       (shown = path || counted?.length ? { text, path, counted } : null),
   };
-  const chips = [0, 1].map((i) => {
-    const attrs = {};
-    const cls = new Set();
-    const c = {
-      dataset: { lstep: String(i) },
-      setAttribute: (k, v) => (attrs[k] = v),
-      classList: { toggle: (k, on) => (on ? cls.add(k) : cls.delete(k)) },
-      lit: () => cls.has('lit'),
-      attrs,
-    };
-    c.closest = (sel) => (sel.includes('lstep') ? c : null);
-    c.contains = () => false;
-    return c;
-  });
-  const plate = { querySelectorAll: () => chips };
   const handlers = {};
-  const where = (t) =>
-    t === plate ? 'plate' : t === view.el ? 'reels' : 'root';
+  const where = (t) => (t === view.el ? 'reels' : 'root');
   const on = (target, ev, fn) => (handlers[`${where(target)}:${ev}`] = fn);
   const ex = View.explorer(view, {
-    plate,
     root: {},
     on,
     lines: LINES,
-    label: (st) => LINES[st.line].name,
     unsure,
     idle,
   });
@@ -112,8 +94,8 @@ function setup({
   return {
     ex,
     fire,
-    chips,
     outside,
+    handlers,
     shown: () => shown,
     stopped: () => stopped,
     setWins: (w) => (wins = w),
@@ -122,72 +104,20 @@ function setup({
 const cell = (r, row) => ({ pos: [r, row], closest: () => null });
 
 describe('ArcadeSlotsView.explorer', () => {
-  it('one chip per combination, none for a single combination', () => {
-    const { ex } = setup();
-    expect(ex.html(STEPS.slice(0, 1))).toBe('');
-    const html = ex.html(STEPS);
-    expect(html.match(/class="lchip"/g)).toHaveLength(2);
-    expect(html).toContain('+1 210');
+  it('no more row of line chips: nothing listens to the plate, only the reels and the screen', () => {
+    const s = setup();
+    s.ex.track(STEPS);
+    expect(Object.keys(s.handlers).sort()).toEqual([
+      'reels:click',
+      'reels:pointerout',
+      'reels:pointerover',
+      'root:click',
+    ]);
   });
 
-  it('mouse hover shows a line (only its counted cells, no traced path; name and win); leaving returns to the round', () => {
+  it('mouse: hovering a paying symbol shows its line (only its counted cells, no traced path; name and win); a symbol that paid nothing shows nothing', () => {
     const s = setup();
-    s.ex.html(STEPS);
-    s.fire('plate:pointerover', s.chips[1], { pointerType: 'mouse' });
-    expect(s.shown()).toMatchObject({
-      text: 'Milieu +1 210',
-      path: null,
-      counted: STEPS[1].cells,
-    });
-    expect(s.chips[1].lit()).toBe(true);
-    s.fire('plate:pointerout', s.chips[1], {
-      pointerType: 'mouse',
-      relatedTarget: null,
-    });
-    expect(s.shown()).toBeNull();
-    expect(s.chips[1].lit()).toBe(false);
-  });
-
-  it('touch: a tap pins (aria-pressed), a hover elsewhere comes back to it, a tap outside clears', () => {
-    const s = setup();
-    s.ex.html(STEPS);
-    s.fire('plate:pointerover', s.chips[0], { pointerType: 'touch' }); // (a touch never "hovers")
-    expect(s.shown()).toBeNull();
-    s.fire('plate:click', s.chips[0]);
-    expect(s.shown().text).toBe('Haut +40');
-    expect(s.chips[0].attrs['aria-pressed']).toBe('true');
-    s.fire('plate:pointerover', s.chips[1], { pointerType: 'mouse' });
-    expect(s.shown().text).toBe('Milieu +1 210');
-    s.fire('plate:pointerout', s.chips[1], {
-      pointerType: 'mouse',
-      relatedTarget: null,
-    });
-    expect(s.shown().text).toBe('Haut +40');
-    s.fire('root:click', s.outside);
-    expect(s.shown()).toBeNull();
-    expect(s.chips[0].attrs['aria-pressed']).toBe('false');
-  });
-
-  it('a second tap on the same chip unpins it', () => {
-    const s = setup();
-    s.ex.html(STEPS);
-    s.fire('plate:click', s.chips[1]);
-    s.fire('plate:click', s.chips[1]);
-    expect(s.shown()).toBeNull();
-    expect(s.chips[1].attrs['aria-pressed']).toBe('false');
-  });
-
-  it('chips of a round no longer on the reels do nothing', () => {
-    const s = setup();
-    s.ex.html(STEPS);
-    s.setWins([...STEPS]);
-    s.fire('plate:focusin', s.chips[0]);
-    expect(s.shown()).toBeNull();
-  });
-
-  it('on the reels, mouse: hovering a paying symbol shows its line; a symbol that paid nothing shows nothing', () => {
-    const s = setup();
-    s.ex.html(STEPS);
+    s.ex.track(STEPS);
     s.fire('reels:pointerover', cell(2, 1), { pointerType: 'mouse' });
     expect(s.shown()).toMatchObject({
       text: 'Milieu +1 210',
@@ -203,9 +133,11 @@ describe('ArcadeSlotsView.explorer', () => {
     expect(s.shown()).toBeNull();
   });
 
-  it('on the reels, touch: a tap pins the line; more taps on a shared symbol cycle its lines (n/N); elsewhere clears', () => {
+  it('touch: a tap pins the line; more taps on a shared symbol cycle its lines (n/N); elsewhere clears', () => {
     const s = setup({ steps: SHARED });
-    s.ex.html(SHARED);
+    s.ex.track(SHARED);
+    s.fire('reels:pointerover', cell(0, 0), { pointerType: 'touch' }); // (a touch never "hovers")
+    expect(s.shown()).toBeNull();
     s.fire('reels:click', cell(0, 0));
     expect(s.shown().text).toBe('Haut +40 · 1/2');
     s.fire('reels:click', cell(0, 0));
@@ -218,11 +150,15 @@ describe('ArcadeSlotsView.explorer', () => {
     expect(s.stopped()).toBe(3); // never « Passer » (a touch on the glass)
     s.fire('reels:click', cell(4, 2)); // paid nothing: back to the round
     expect(s.shown()).toBeNull();
+    s.fire('reels:click', cell(1, 1));
+    expect(s.shown().text).toBe('Milieu +1 210 · 1/2');
+    s.fire('root:click', s.outside); // anywhere else on the screen
+    expect(s.shown()).toBeNull();
   });
 
-  it('on the reels, mouse: the hover shows the 1st line, a click the next one; one line: a 2nd click releases it', () => {
+  it('mouse: the hover shows the 1st line, a click the next one; one line: a 2nd click releases it', () => {
     const s = setup({ steps: SHARED });
-    s.ex.html(SHARED);
+    s.ex.track(SHARED);
     s.fire('reels:pointerover', cell(1, 1), { pointerType: 'mouse' });
     expect(s.shown().text).toBe('Milieu +1 210 · 1/2');
     s.fire('reels:click', cell(1, 1));
@@ -231,7 +167,7 @@ describe('ArcadeSlotsView.explorer', () => {
     s.fire('reels:pointerover', cell(1, 0), { pointerType: 'mouse' });
     expect(s.shown().text).toBe('V +60 · 2/2');
     const one = setup();
-    one.ex.html(STEPS);
+    one.ex.track(STEPS);
     one.fire('reels:pointerover', cell(1, 0), { pointerType: 'mouse' });
     one.fire('reels:click', cell(1, 0));
     expect(one.shown().text).toBe('Haut +40');
@@ -239,16 +175,20 @@ describe('ArcadeSlotsView.explorer', () => {
     expect(one.shown()).toBeNull();
   });
 
-  it('on the reels: nothing while the round is still being played or shown (the glass keeps « Passer »)', () => {
+  it('nothing while the round is still being played or shown (the glass keeps « Passer »), nor for a round no longer on the reels', () => {
     let busy = true;
     const s = setup({ idle: () => !busy });
-    s.ex.html(STEPS);
+    s.ex.track(STEPS);
     s.fire('reels:click', cell(0, 0));
     expect(s.shown()).toBeNull();
     expect(s.stopped()).toBe(0);
     busy = false;
     s.fire('reels:click', cell(0, 0));
     expect(s.shown().text).toBe('Haut +40');
+    s.setWins([...STEPS]); // the reels spun again
+    s.fire('root:click', s.outside);
+    s.fire('reels:click', cell(0, 0));
+    expect(s.shown()).toBeNull();
   });
 
   it('paytable probe: a line that paid shows its win; one that did not says so only when certain', () => {
