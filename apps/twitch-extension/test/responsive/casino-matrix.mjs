@@ -56,7 +56,13 @@ const SIZES = [
   ['mobile petit', 360, 780],
   ['mobile standard', 390, 844],
   ['mobile paysage', 844, 390],
+  ['paysage bas', 844, 300],
+  // Zone de l'extension sous la vidéo dans l'application Twitch (estimations : la taille exacte dépend du téléphone).
+  ['app Twitch portrait (est.)', 360, 480],
+  ['app Twitch compact (est.)', 300, 340],
 ];
+/** Phone-sized rows run as a touch device (pointer: coarse), like the real app. */
+const TOUCH = (label) => label.startsWith('mobile') || label.startsWith('app ');
 const QUICK_W = [377, 651, 1053, 318, 360];
 
 /** In-page, shadow-aware: is any visible interactive control (inside the Casino's Shadow DOM) cut or off-screen by
@@ -206,6 +212,7 @@ async function main() {
       for (const state of states) {
         const ctx = await browser.newContext({
           viewport: { width: w, height: h },
+          ...(TOUCH(label) ? { hasTouch: true, isMobile: true } : {}),
         });
         const page = await ctx.newPage();
         const errors = [];

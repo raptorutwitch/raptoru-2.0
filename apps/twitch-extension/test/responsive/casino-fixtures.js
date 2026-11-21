@@ -69,9 +69,10 @@ export function seat(
   };
 }
 const EMPTY10 = () => Array.from({ length: 10 }, () => null);
+// The Core's view gives each seat its index (`seat: i`, engine.ts view()): isMyTurn() compares it to turn.seat.
 const put = (arr, seats) => {
   const out = EMPTY10();
-  seats.forEach((s, i) => (out[i] = s));
+  seats.forEach((s, i) => (out[i] = { ...s, seat: i }));
   return out;
 };
 
@@ -431,6 +432,8 @@ export const slotCasino = () =>
   });
 /** A spin result "as the reels' view expects it" (slot.js asSpin): resting, one line win (Haut, cerises), a bigger
  * multi-line win, or nothing (loss) — stops picked so the grid actually shows the claimed symbols on that line. */
+// The grid the Core derives from the stops (apps/core-api/src/casino/slot.ts): 3 rows read down each strip.
+const gridOf = (stops) => stops.map((s, r) => [0, 1, 2].map((row) => SLOT_STRIPS[r][(s + row) % SLOT_STRIPS[r].length]));
 export const SLOT_ROUNDS = {
   resting: null,
   lineWin: {
@@ -439,11 +442,13 @@ export const SLOT_ROUNDS = {
     round_id: 'sr1',
     outcome: {
       stops: [0, 0, 0, 3, 3],
-      grid: null,
+      grid: gridOf([0, 0, 0, 3, 3]),
       line_win: 40,
       lines: [
         {
           line: 0,
+          symbol: 'cerise',
+          count: 3,
           cells: [
             [0, 0],
             [1, 0],
@@ -462,11 +467,13 @@ export const SLOT_ROUNDS = {
     round_id: 'sr2',
     outcome: {
       stops: [7, 0, 0, 0, 3],
-      grid: null,
+      grid: gridOf([7, 0, 0, 0, 3]),
       line_win: 1750,
       lines: [
         {
           line: 0,
+          symbol: 'sept',
+          count: 4,
           cells: [
             [0, 0],
             [1, 0],
@@ -478,6 +485,8 @@ export const SLOT_ROUNDS = {
         },
         {
           line: 6,
+          symbol: 'cerise',
+          count: 3,
           cells: [
             [0, 1],
             [1, 0],
@@ -496,7 +505,7 @@ export const SLOT_ROUNDS = {
     round_id: 'sr3',
     outcome: {
       stops: [1, 4, 6, 2, 5],
-      grid: null,
+      grid: gridOf([1, 4, 6, 2, 5]),
       line_win: 0,
       lines: [],
       scatter: { count: 0, cells: [], win: 0 },

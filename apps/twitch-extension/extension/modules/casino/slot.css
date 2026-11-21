@@ -496,3 +496,32 @@ img.sym { object-fit: contain; }
   .spin__cap { inset: 9px 9px 11px; }
   .spin__cap svg { width: 30px; height: 30px; }
 }
+
+/* --- Téléphone / panneau étroit (≤ 520 px de large) : la cabine se réagence au lieu de rétrécir (retour d'Antoni du
+   21/11 : « injouable sur téléphone »). Les rouleaux sur toute la largeur, la mise dessous, puis UNE rangée de jeu :
+   Derniers gains (ouvre l'historique) · Rapide / Auto / Son · Lancer, tout au pouce. Les deux machines. --------- */
+@container body (max-width: 520px) {
+  .cab { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; grid-template-areas: 'stage' 'bet' 'side'; row-gap: 6px; padding: 6px 6px 7px 4px; }
+  .slot-body.is-watch .cab { grid-template-areas: 'stage' 'side'; grid-template-rows: minmax(0, 1fr) auto; }
+  .side { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) auto auto; grid-auto-flow: column; align-items: center; gap: 8px; padding: 6px 7px; }
+  .board { grid-template-rows: auto; align-self: stretch; align-content: center; padding: 6px 8px; }
+  .board__rows { display: none; }
+  .board .lbl { white-space: normal; line-height: 1.15; }
+  .toggles { gap: 6px; }
+  .launchbox { align-self: center; }
+  .spin { width: 76px; height: 76px; }
+  .spin__cap { inset: 8px 8px 10px; }
+  .spin__cap svg { width: 26px; height: 26px; }
+  .spin__cap small { font-size: 9px; }
+  .rstrip { margin-left: 12px; gap: 10px; font-size: 10.5px; }
+}
+@container body (max-width: 360px) {
+  .board .lbl { font-size: 8px; letter-spacing: 0.02em; }
+  .toggles { gap: 3px; }
+}
+/* La plaque nomme la ligne qui paie (« Bosse · 3 × Cerise (dont 1 WILD) ») : jamais plus large que la vitre. */
+.plate b { flex: none; }
+.plate small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.plines span { flex-basis: 100%; margin-bottom: 3px; text-transform: none; letter-spacing: 0; line-height: 1.35; }
+.pline { margin: 0; display: grid; justify-items: center; gap: 2px; width: 40px; }
+.pline figcaption { font: 700 7.5px/1.1 var(--font); color: var(--dim); text-align: center; }

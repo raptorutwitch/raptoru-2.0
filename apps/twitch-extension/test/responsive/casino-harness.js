@@ -3,6 +3,8 @@
 // at /casino-harness.html?game=blackjack&state=split2[&open=rules|hist|histmine].
 /* global document, window, URLSearchParams, setTimeout */
 import { shell, useSheets, LOADERS } from '/demo/shared/casino/casino.js';
+import * as Frame from '/demo/shared/casino/frame.js';
+import { ArcadeTable as T } from '/demo/shared/casino/table.js';
 import { installDblclickGuard } from '/demo/shared/dblclick-guard.js';
 import { startLayout } from '/demo/app/layout.js';
 import * as F from './casino-fixtures.js';
@@ -64,15 +66,19 @@ function fixtureFor(game, stateId) {
   return {
     client: buildClient('roulette', {
       casino,
-      spin: () => ({
-        balance: casino.me.balance,
-        round: {
-          bet: 1000,
-          payout: stateId === 'loss' ? 0 : 3600,
-          round_id: 'rr1',
-          ...spot,
-        },
-      }),
+      // The Core's round shape (roulette.js asResult): the pocket is the number's index in the real wheel order.
+      spin: (bets) => {
+        const won = T.settle(bets ?? {}, spot.number);
+        return {
+          balance: casino.me.balance,
+          round: {
+            bet: won.stake,
+            payout: won.gross,
+            round_id: 'rr1',
+            outcome: { pocket: T.ORDER.indexOf(spot.number), number: spot.number, seed: 42, bets, wins: won.wins },
+          },
+        };
+      },
     }),
     casino,
   };
@@ -84,6 +90,7 @@ async function main() {
   const { client, casino } = fixtureFor(game, stateId);
   const mountFn = await LOADERS[game]();
   await useSheets(D, game);
+  Frame.useRoot(D); // casino.js does it before mounting a game: drawers, toasts and cards find their root through it
   const view = mountFn(D, { client, casino, follow: null, onLeave: () => {} });
   window.__bench = { view, D };
   if (game === 'blackjack' && open) {

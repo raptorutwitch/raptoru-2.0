@@ -12,7 +12,7 @@
 /* Le bord : un liseré d'or, un rail sombre, une ombre portée vers l'intérieur. Hors de l'arc (les coins du bas), le
    feutre est plus sombre ; dans l'arc, il est plus chaud, éclairé au-dessus de la banque. */
 .felt { position: relative; min-height: 0; margin: 5px 5px 0; border-radius: 15px 15px 12px 12px; overflow: clip; isolation: isolate;
-  display: grid; grid-template-rows: 116px minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); justify-items: center;
+  display: grid; grid-template-rows: calc(136 * var(--g)) minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); justify-items: center;
   background: linear-gradient(180deg, #1a0f24, #120a19); transition: box-shadow 0.35s; }
 /* La zone de jeu : une ellipse (demi-axes : largeur du tapis × 201 px) dont seul le bas, une courbe douce, est visible.
    view.js (ARC_B) pose les places sur cette même courbe. */
@@ -61,8 +61,8 @@
 .dealer > .tot { height: 20px; min-width: 26px; font-size: 12px; border-radius: 10px; }
 
 /* --- Pari sur le score de la banque : 7 cases identiques en arc sous la banque ------------------------------- */
-.sides { position: absolute; left: 0; right: 0; top: 0; height: 116px; z-index: 2; pointer-events: none; }
-.sides__arc { position: absolute; left: 0; top: 0; width: 100%; height: 116px; overflow: visible; }
+.sides { position: absolute; left: 0; right: 0; top: 0; height: calc(136 * var(--g)); z-index: 2; pointer-events: none; }
+.sides__arc { position: absolute; left: 0; top: 0; width: 100%; height: calc(136 * var(--g)); overflow: visible; }
 .sides__arc text { font: 900 7.5px var(--font); letter-spacing: 0.2em; text-transform: uppercase; fill: rgba(242, 198, 95, 0.62); }
 .sides__t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; } /* pour les lecteurs d'écran */
 .side { position: absolute; pointer-events: auto; width: 50px; height: 28px; transform: translate(-50%, -50%); display: grid; align-content: center; justify-items: center; gap: 2px; border-radius: 8px; color: #efe6ff;
@@ -228,21 +228,25 @@
 .tip i { font-style: normal; color: var(--gold-2); font-variant-numeric: tabular-nums; }
 
 /* --- Historique : une languette, un panneau qui glisse, des manches repliées ------------------------------- */
-.htab, .rtab, .qtab { position: absolute; top: 64px; z-index: 31; width: 17px; height: 34px; padding: 11px 0 0; display: grid; justify-items: center; align-content: start; gap: 6px; overflow: hidden; color: rgba(242, 198, 95, 0.6); background: linear-gradient(90deg, #24173a, #1a1029); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.22), 0 2px 6px rgba(0, 0, 0, 0.35); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1), height 0.2s var(--ease), color 0.15s, box-shadow 0.15s, opacity 0.2s; }
-.htab { right: 0; border-radius: 8px 0 0 8px; }
-.rtab { left: 0; border-radius: 0 8px 8px 0; }
-/* Quitter (BJ-03/A4) : une porte rouge discrète, sous Règles, au bord opposé de Historique. */
-.qtab { left: 0; top: 108px; border-radius: 0 8px 8px 0; color: rgba(255, 110, 120, 0.75); }
-.htab .ico, .rtab .ico, .qtab .ico { width: 12px; height: 12px; flex: none; }
-.htab span, .rtab span, .qtab span { writing-mode: vertical-rl; transform: rotate(180deg); font: 900 7.5px/1 var(--font); letter-spacing: 0.14em; text-transform: uppercase; opacity: 0; transition: opacity 0.15s; }
-.htab:hover, .rtab:hover, .htab:focus-visible, .rtab:focus-visible { height: 92px; color: #fff3c4; box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45); }
-.qtab:hover, .qtab:focus-visible { height: 92px; color: #ffc2c9; box-shadow: inset 0 0 0 1px rgba(255, 107, 122, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45); }
-.htab:hover span, .rtab:hover span, .htab:focus-visible span, .rtab:focus-visible span, .qtab:hover span, .qtab:focus-visible span { opacity: 1; }
+/* Les languettes Historique / Règles (retour d'Antoni du 21/11) : une petite pastille discrète, l'icône seule et
+   centrée ; à la souris, elle s'ouvre proprement à l'horizontale (vers l'intérieur) et montre son nom, centré, à
+   côté de l'icône — plus de mot vertical lourd. Au toucher, jamais de survol : l'icône seule, la pastille agrandie. */
+.htab, .rtab { position: absolute; top: 12px; z-index: 31; width: 26px; height: 28px; padding: 0 6px; display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; color: rgba(242, 198, 95, 0.7); background: linear-gradient(90deg, #24173a, #1a1029); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.24), 0 2px 6px rgba(0, 0, 0, 0.35); transition: width 0.22s cubic-bezier(0.2, 0.8, 0.25, 1), color 0.15s, box-shadow 0.15s, opacity 0.2s; }
+.htab { right: 0; flex-direction: row-reverse; border-radius: 9px 0 0 9px; }
+.rtab { left: 0; border-radius: 0 9px 9px 0; }
+.htab .ico, .rtab .ico { width: 14px; height: 14px; flex: none; }
+.htab span, .rtab span { font: 800 10px/1 var(--font); letter-spacing: 0.04em; opacity: 0; transition: opacity 0.15s; }
+@media (hover: hover) {
+  .htab:hover, .htab:focus-visible { width: 98px; }
+  .rtab:hover, .rtab:focus-visible { width: 76px; }
+  .htab:hover, .rtab:hover, .htab:focus-visible, .rtab:focus-visible { color: #fff3c4; box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.55), 0 2px 8px rgba(0, 0, 0, 0.45); }
+  .htab:hover span, .rtab:hover span, .htab:focus-visible span, .rtab:focus-visible span { opacity: 1; }
+}
+@media (pointer: coarse) { .htab, .rtab { width: 34px; height: 34px; padding: 0 9px; } .htab .ico, .rtab .ico { width: 16px; height: 16px; } }
 .htab .hn:empty { display: none; }
-.htab .hn { position: absolute; top: 1px; left: 1px; width: 6px; height: 6px; border-radius: 50%; font-size: 0; background: var(--gold); box-shadow: 0 0 5px rgba(255, 201, 77, 0.7); }
+.htab .hn { position: absolute; top: 3px; left: 3px; width: 6px; height: 6px; border-radius: 50%; font-size: 0; background: var(--gold); box-shadow: 0 0 5px rgba(255, 201, 77, 0.7); }
 .felt.hist-open .htab { opacity: 0; pointer-events: none; } /* le panneau a son ✕ */
 .bj.rules-open .rtab { opacity: 0; pointer-events: none; }
-.bj.is-spect .qtab, .qtab:disabled { opacity: 0; pointer-events: none; } /* rien à quitter : spectateur, ou déjà parti */
 /* Règles (A8) : un enfant direct de `.bj`, pas de `.felt` — accessible depuis le salon aussi, pas seulement la table. */
 .bj { --rw: 232px; }
 .rules { position: absolute; left: 0; top: 0; bottom: 0; z-index: 30; width: var(--rw); display: grid; grid-template-rows: auto minmax(0, 1fr); background: linear-gradient(180deg, rgba(28, 17, 44, 0.985), rgba(16, 9, 28, 0.985)); box-shadow: 1px 0 0 rgba(242, 198, 95, 0.3), 12px 0 26px rgba(0, 0, 0, 0.55); transform: translateX(-101%); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1); }
@@ -254,26 +258,41 @@
 .rules li::marker { color: rgba(242, 198, 95, 0.6); }
 .rules li b { color: #f3ecff; font-weight: 900; }
 .felt { --hw: 256px; }
-.hist { position: absolute; right: 0; top: 0; bottom: 0; z-index: 30; width: var(--hw); display: grid; grid-template-rows: auto minmax(0, 1fr); background: linear-gradient(180deg, rgba(28, 17, 44, 0.985), rgba(16, 9, 28, 0.985)); box-shadow: -1px 0 0 rgba(242, 198, 95, 0.3), -12px 0 26px rgba(0, 0, 0, 0.55); transform: translateX(101%); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1); }
+/* Le panneau Historique : en-tête, puis un sélecteur à deux segments TOUJOURS visible (« Cette table » / « Mes
+   manches » — on revient à l'autre vue d'un toucher, sans ambiguïté), puis la liste qui défile. Trois rangées
+   explicites : sans la 2ᵉ, le sélecteur tombait dans la rangée flexible et chevauchait la liste. */
+.hist { position: absolute; right: 0; top: 0; bottom: 0; z-index: 30; width: var(--hw); display: grid; grid-template-rows: auto auto minmax(0, 1fr); background: linear-gradient(180deg, rgba(28, 17, 44, 0.985), rgba(16, 9, 28, 0.985)); box-shadow: -1px 0 0 rgba(242, 198, 95, 0.3), -12px 0 26px rgba(0, 0, 0, 0.55); transform: translateX(101%); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1); }
 .felt.hist-open .hist { transform: none; }
 .hist header { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 6px 11px; }
-.hist header b { font: 900 11.5px/1 var(--font); color: var(--gold-2); letter-spacing: 0.02em; }
-.hist header .ic { width: 22px; height: 22px; }
-/* A9/CAS-01 : « Cette table » (déjà là) et « Mes manches » (le Core, toutes tables) dans le même panneau. */
-.htabs { display: flex; gap: 4px; padding: 0 9px 7px; }
-.htabbtn { flex: 1; padding: 5px 0; border-radius: 7px; font: 800 9.5px/1 var(--font); color: var(--faint); background: rgba(255, 255, 255, 0.04); }
-.htabbtn.on { color: #fff3c4; background: rgba(242, 198, 95, 0.18); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.4); }
-.hsess { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 1px 4px; padding: 6px 8px; border-radius: 9px; background: rgba(255, 255, 255, 0.035); font: 700 9.5px/1.3 var(--font); color: var(--dim); }
-.hsess b { font-weight: 900; }
-.hist__list { overflow: auto; overscroll-behavior: contain; padding: 0 7px 9px; display: grid; align-content: start; gap: 4px; scrollbar-width: thin; scrollbar-color: rgba(242, 198, 95, 0.3) transparent; }
-/* Chaque case explicitement placée (ligne ET colonne) : un item sans ligne fixée (seulement sa colonne) passe avant
-   un item totalement libre dans l'ordre de placement automatique de la grille, et prenait la case du titre. */
-.hr.mine { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 2px 7px; padding: 6px 8px; }
-.hr.mine.old { opacity: 0.55; }
-.hr.mine .hround { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3px 7px; padding: 0; min-width: 0; }
-.hr.mine .hsum { grid-column: 1; grid-row: 2; margin: 0; min-width: 0; }
-.hshare { grid-column: 2; grid-row: 1 / 3; width: 24px; height: 24px; }
-.hshare:disabled { opacity: 0.35; }
+.hist header b { display: flex; align-items: center; gap: 6px; font: 900 12px/1 var(--font); color: var(--gold-2); letter-spacing: 0.02em; }
+.hist header b .ico { width: 13px; height: 13px; }
+.hist header .ic { width: 26px; height: 26px; }
+.htabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin: 0 9px 8px; padding: 3px; border-radius: 10px; background: rgba(0, 0, 0, 0.32); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.12); }
+.htabbtn { min-height: 26px; border-radius: 7px; font: 800 10px/1 var(--font); color: var(--dim); transition: background 0.15s, color 0.15s; }
+.htabbtn:hover { color: #fff; }
+.htabbtn.on { color: #2a1600; background: linear-gradient(180deg, #ffe69a, var(--gold)); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+.hist__list { overflow: auto; overscroll-behavior: contain; padding: 0 9px 10px; display: grid; align-content: start; gap: 5px; scrollbar-width: thin; scrollbar-color: rgba(242, 198, 95, 0.3) transparent; }
+/* « Mes manches » : le bilan de la session en carte (gros chiffre, un bouton de remise à zéro écrit en toutes
+   lettres, avec confirmation), puis une manche par carte : la banque et le net en gros, le reste petit et discret. */
+.hsess { display: grid; gap: 3px; margin-bottom: 3px; padding: 9px 10px; border-radius: 11px; background: linear-gradient(180deg, rgba(255, 201, 77, 0.1), rgba(255, 201, 77, 0.04)); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.3); }
+.hsess__row { margin: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font: 800 10.5px/1.2 var(--font); color: var(--dim); }
+.hsess__row b { font: 900 18px/1 var(--font); font-variant-numeric: tabular-nums; }
+.hsess small { font: 600 8.5px/1.3 var(--font); color: var(--faint); }
+.hsess__reset { justify-self: start; margin-top: 3px; display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 10px; font-size: 10px; }
+.hsess__reset .ico { width: 12px; height: 12px; }
+.mrow { display: grid; gap: 3px; padding: 7px 9px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.1); }
+.mrow.old { opacity: 0.55; }
+.mrow__top { margin: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font: 800 10.5px/1.2 var(--font); color: #f3ecff; }
+.mrow__top b { font: 900 13px/1 var(--font); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mrow__meta { margin: 0; display: flex; justify-content: space-between; gap: 8px; font: 600 8px/1.3 var(--font); color: var(--faint); }
+.mrow__meta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow__meta time { flex: none; opacity: 0.85; }
+.mrow__share { justify-self: start; margin-top: 2px; display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 9px; border-radius: 7px; font: 800 9px/1 var(--font); color: var(--gold-2); background: rgba(255, 201, 77, 0.08); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.3); }
+.mrow__share .ico { width: 12px; height: 12px; }
+.mrow__share:hover:not(:disabled) { background: rgba(255, 201, 77, 0.16); }
+.mrow__share:disabled { color: var(--faint); background: none; box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.12); }
+.mdiv { margin: 5px 2px 0; font: 800 8px/1 var(--font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+@media (pointer: coarse) { .htabbtn, .hsess__reset, .mrow__share { min-height: 34px; } }
 .hr { border-radius: 9px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.1); }
 .hr.open { background: rgba(255, 255, 255, 0.055); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.28); }
 .hround { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto 10px; align-items: center; gap: 3px 7px; padding: 6px 8px; text-align: left; border-radius: 9px; }
@@ -393,26 +412,63 @@
 /* Mode plat (panneau étroit OU hauteur basse, JS : paintSides) : indépendant de tout container, sinon le JS peut
    poser la classe sans qu'aucune feuille ne la mette en page (hors des deux cas prévus ci-dessous). */
 .sides.flat .sides__arc { display: none; }
-.sides.flat { display: flex; flex-wrap: wrap; justify-content: center; align-content: start; gap: 5px; padding: 64px 26px 0; }
-.sides.flat .side { position: relative; flex: 0 0 calc((100% - 15px) / 4); width: auto; height: 27px; transform: none; }
+.sides.flat { display: flex; flex-wrap: wrap; justify-content: center; align-content: start; gap: 5px; padding: 72px 22px 0; }
+.sides.flat .side { position: relative; flex: 0 0 calc((100% - 15px) / 4); width: auto; height: 28px; transform: none; }
 
-/* --- Panneau étroit : les scores en grille sous la banque, places sur 2 rangées --------------------------- */
+/* --- La barre : Quitter (décision d'Antoni du 21/11) en premier, avec les autres actions, pour tout joueur assis. */
+.btn.quit { flex: none; height: 32px; padding: 0 11px 0 9px; color: #ffc2c9; background: rgba(255, 90, 110, 0.12); box-shadow: inset 0 0 0 1px rgba(255, 107, 122, 0.45); }
+.btn.quit .ico { width: 15px; height: 15px; }
+.btn.quit:hover:not(:disabled) { color: #fff; background: rgba(255, 90, 110, 0.22); box-shadow: inset 0 0 0 1px rgba(255, 107, 122, 0.75); }
+
+/* --- Split au tour d'un joueur : toutes ses mains au centre, en grand, côte à côte ; la main à jouer entourée. --- */
+.splithands { display: flex; justify-content: center; gap: 10px; min-width: 0; }
+.sh { display: grid; justify-items: center; gap: 4px; padding: 6px 9px 7px; border-radius: 12px; background: rgba(10, 4, 18, 0.35); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.16); transition: opacity 0.2s, box-shadow 0.2s, background 0.2s; }
+.sh.cur { background: rgba(255, 201, 77, 0.08); box-shadow: inset 0 0 0 2px var(--gold), 0 0 14px rgba(255, 201, 77, 0.35); }
+.sh.done { opacity: 0.55; }
+.sh__lbl { font: 900 9px/1 var(--font); letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-2); white-space: nowrap; }
+.sh__foot { display: flex; align-items: center; gap: 5px; }
+.sh__bet { padding: 2px 6px; border-radius: 6px; font: 800 9px/1.2 var(--font); color: #f6efdf; background: rgba(0, 0, 0, 0.42); font-variant-numeric: tabular-nums; }
+.splithands[data-n='3'] .cards.big, .splithands[data-n='4'] .cards.big { --cw: calc(26 * var(--g)); }
+/* Mon tour : ma place un peu plus grande (encore plus avec plusieurs mains), les autres un peu en retrait — sans
+   qu'aucune ne disparaisse ni ne bouge (un transform ne change pas la mise en page des voisines). */
+.bj.my-turn .seat:not(.me) { --turnscale: 0.94; opacity: 0.72; }
+.seat.me.turn.multi { --turnscale: 1.14; }
+
+/* --- Carrousel des places (téléphone, panneau étroit, plus de 3 joueurs : JS paintSeats) ------------------------ */
+.seats.carousel { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; padding: 14px 20px 6px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent); }
+.seats.carousel::-webkit-scrollbar { display: none; }
+.seats.carousel .seat { flex: 0 0 var(--sw); scroll-snap-align: center; }
+.seats.carousel .freepill { flex: none; align-self: center; white-space: nowrap; }
+
+/* --- Panneau étroit / téléphone : les scores en grille sous la banque ; les places en carrousel ---------------- */
 @container bj (max-width: 420px) {
-  .felt { grid-template-rows: 128px minmax(0, 1fr) auto; }
+  .felt { grid-template-rows: 142px minmax(0, 1fr) auto; }
   .felt::before { left: -150%; right: -150%; height: 520px; }
-  .htab, .rtab { top: 8px; }
-  .qtab { top: 52px; }
   .felt { --rw: 236px; }
   .seat .pl { flex-direction: column; gap: 1px; }
   .seat .nm { font-size: 9.5px; }
+  /* Le total à côté des cartes, plus jamais dessous (il disparaissait sous l'éventail d'une place étroite). */
+  .seat .hand:not(.multi) .subhand { display: flex; align-items: center; justify-content: center; gap: 3px; }
+  .seat .hand:not(.multi) .tot:not(.is-bj) { position: static; }
   .msg small.hint { display: none; } /* panneau : la consigne de mise cède la place aux places (la bulle et ✎ restent) */
-  .shoe { left: 24px; top: 8px; bottom: auto; }
+  .shoe { left: 42px; top: 18px; bottom: auto; }
   .dealer { top: 6px; }
   .dealer .cards.big { --cw: 36px; }
-  .sides { height: 128px; }
+  .dealer > .tot { height: 22px; min-width: 28px; font-size: 13px; }
+  .sides { height: 142px; }
+  .side > b { font-size: 13px; }
+  .side > small { font-size: 7.5px; }
+  .spot { flex-wrap: wrap; justify-content: center; row-gap: 6px; }
+  /* Téléphone : à mon tour, la barre d'actions dit déjà que c'est à moi — le badge cède sa place aux cartes. Après un
+     Split, le centre montre les mains en grand et la place ne garde que l'avatar, le nom et la mise (pas de doublon). */
+  .bj.my-turn .spot .who, .spot.has-split .who { display: none; }
+  .seat.turn.multi .hand { display: none; }
+  .splithands .cards.big { --cw: 30px; }
   .state b, .state small { white-space: normal; }
   .bar { height: auto; min-height: 44px; flex-wrap: wrap; padding: 6px 7px; row-gap: 5px; }
-  .bar .chips { width: 100%; justify-content: space-between; }
+  .bar .chips { order: -1; width: 100%; justify-content: space-between; }
+  .btn.quit span { display: none; } /* étroit : la porte seule (son nom reste dans aria-label et title) */
+  .btn.quit { width: 38px; padding: 0; }
   .sum { margin-left: 0; }
   .btn.ready { margin-left: auto; }
   .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -420,30 +476,56 @@
   .trow .dots { grid-column: 1 / -1; }
 }
 
-/* --- Hauteur basse (vidéo zoomée, paysage compact) : le vrai bloquant de l'audit du 21/11 — le feutre a 116-128 px
-   fixes tout en haut (banque + paris) avant même les places ; à moins de 320 px de haut, ÇA ne descend plus assez
-   pour montrer les places (overflow: clip les avalait silencieusement). On réduit ce bloc, jamais les places. --- */
-@container bj (max-height: 320px) {
-  .felt { grid-template-rows: 58px minmax(0, 1fr) auto; }
+/* --- Hauteur basse (vidéo zoomée, paysage compact) : le vrai bloquant de l'audit du 21/11 — le feutre a 116-140 px
+   fixes tout en haut (banque + paris) avant même les places ; sous ~380 px de haut (vidéo zoomée, paysage, zone de
+   chat de l'application en paysage), ce bloc avalait les places (overflow: clip). On le réduit, jamais les places. */
+@container bj (max-height: 380px) {
+  .felt { grid-template-rows: 68px minmax(0, 1fr) auto; }
   .felt::before { height: 320px; }
   .shoe { display: none; } /* le détail du sabot, seul à être purement décoratif ici */
   .dealer { top: 1px; }
   .dealer .cards.big { --cw: 22px; }
   .dealer > .tot { height: 15px; min-width: 20px; font-size: 9px; }
-  .sides, .sides__arc { height: 58px; }
+  .sides, .sides__arc { height: 68px; }
   .sides:not(.flat) .side { width: 38px; height: 20px; }
   .sides:not(.flat) .side > b { font-size: 9px; }
   .sides:not(.flat) .side > small { display: none; }
-  .sides.flat { padding: 28px 8px 0; gap: 3px; }
-  .sides.flat .side { height: 16px; }
+  .sides.flat { padding: 30px 8px 0; gap: 3px; }
+  .felt .sides.flat .side { height: 16px; }
   .side > small { display: none; }
-  .htab, .rtab, .qtab { top: 4px; height: 24px; padding-top: 6px; }
-  .qtab { top: 30px; }
-  .msg b { font-size: 12px; }
-  .msg small { font-size: 9px; }
+  .side > b { font-size: 10px; }
+  .htab, .rtab { top: 4px; height: 24px; }
+  .spot .who { display: none; } /* qui joue : l'étiquette JOUE sur sa place et la barre le disent déjà */
+  .msg { gap: 0; }
+  .msg b { font-size: 11.5px; }
+  .msg small { font-size: 8.5px; }
+  .bar .act { height: 30px; }
+  .bar .btn, .bar .btn.quit { height: 30px; }
+  .bar .chip { width: 26px; height: 26px; }
   .rules, .hist { --rw: 100%; --hw: 100%; } /* le panneau prend tout l'écran : pas de place pour 232/256 px à côté */
-  .chip { width: 24px; height: 24px; }
   .sb { width: 32px; height: 32px; }
+  .seat .pl { flex-direction: row; gap: 3px; } /* une ligne avatar + nom : la place perd une hauteur de texte */
+  .seat { padding: 4px 2px 3px; }
+  /* Split en hauteur basse : comme au téléphone, les mains au centre (plus petites), la place sans doublon. */
+  .seat.turn.multi .hand { display: none; }
+  .splithands .cards.big { --cw: 22px; }
+  .sh { padding: 3px 7px 4px; gap: 2px; }
+}
+/* Moins de 280 px (vidéo zoomée à 150 %) : la consigne garde son titre et le compte à rebours ; « 2/4 prêts » se tait. */
+@container bj (max-height: 280px) {
+  .msg .tally { display: none; }
+}
+
+/* --- Toucher (téléphone, tablette) : des cibles au doigt, jamais un survol nécessaire --------------------------- */
+@media (pointer: coarse) {
+  .chip { width: 34px; height: 34px; font-size: 9.5px; }
+  .act { height: 40px; }
+  .btn, .btn.quit { height: 36px; }
+  .btn.quit { min-width: 40px; }
+  .btn.ready { height: 38px; }
+  .ops .ic { width: 34px; height: 34px; }
+  .sb { width: 46px; height: 46px; }
+  .sides.flat .side { height: 34px; }
 }
 
 /* --- Extension (Casino V1) : la table dans le corps du module ; avatar de secours ; annonce facultative ---------- */

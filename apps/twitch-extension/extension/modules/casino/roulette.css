@@ -308,3 +308,50 @@
 .qk__a:disabled, .qk__b:disabled, .qk__re:disabled { opacity: 0.38; filter: grayscale(0.6); cursor: default; }
 .qk .pop__n { display: block; margin-top: 6px; }
 .qk .pop__n .np { display: inline-grid; vertical-align: -4px; margin: 0 1px; }
+
+/* --- Téléphone / panneau étroit (≤ 520 px de large, retour d'Antoni du 21/11) : le tapis validé reste tel quel (ses
+   cases deviennent hautes, faciles au doigt) ; c'est la barre du bas qui se réagence au lieu de se chevaucher :
+   1) derniers numéros + son, 2) les jetons sur toute la largeur (glissables s'ils ne tiennent pas),
+   3) Annuler · Effacer · Reposer · Doubler, puis Lancer. ---------------------------------------------------------- */
+@container body (max-width: 520px) {
+  .rt { grid-template-rows: minmax(0, 1fr) auto; row-gap: 6px; padding: 6px 6px 6px 7px; }
+  .bar { position: relative; grid-template-columns: minmax(0, 1fr) 118px; grid-template-rows: 24px 50px 48px; grid-template-areas: 'hist hist' 'chips chips' 'tray go'; gap: 6px; }
+  .left { display: contents; }
+  .histrow { grid-area: hist; }
+  .chips { grid-area: chips; justify-content: flex-start; gap: 7px; padding: 8px 8px 3px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .tray { grid-area: tray; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); padding: 3px 2px; }
+  .act__lbl { font-size: 9px; }
+  .go { grid-area: go; }
+  .launch { right: 7px; bottom: 7px; }
+  .launch .t { font-size: 14px; }
+  .fastsw { width: 26px; height: 26px; }
+  .spot.side, .spot.col { font-size: 10.5px; }
+  .spot { font-size: 13px; }
+  .spot.zero { font-size: 15px; }
+  .mat { grid-template-columns: 26px repeat(12, minmax(0, 1fr)) 28px; }
+  /* La roue : au-dessus du résultat, plus à côté (la colonne de 172 px ne laissait qu'une petite roue). */
+  .wover { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; justify-items: center; align-content: center; gap: 8px; }
+  .wover .wheel { width: min(calc(100cqw - 40px), calc(100cqh - 170px)); }
+  .wside { gap: 8px; }
+  .wover .banner { padding: 9px 10px 8px; gap: 4px; }
+  .wover .banner .np { min-width: 42px; height: 42px; font-size: 20px; }
+}
+@container body (max-width: 340px) {
+  .spot.side, .spot.col { font-size: 9px; letter-spacing: 0; }
+  .spot { font-size: 11.5px; }
+  .spot .dia { width: 11px; height: 11px; }
+  .act__lbl { font-size: 8px; }
+  .bar { grid-template-columns: minmax(0, 1fr) 104px; }
+}
+@media (pointer: coarse) {
+  .chip { width: 36px; height: 36px; }
+}
+@container body (max-width: 520px) {
+  .launch:disabled .t { white-space: normal; text-align: center; font-size: 11px; line-height: 1.15; padding: 0 6px; }
+  .chips { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
+}
+/* Une mise posée ne déborde plus sur les numéros voisins quand la case n'a que ~24 px de large. */
+@container body (max-width: 520px) {
+  .stack { min-width: 22px; height: 22px; padding: 0 2px; font-size: 8.5px; }
+}
