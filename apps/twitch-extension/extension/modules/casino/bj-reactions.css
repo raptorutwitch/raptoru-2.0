@@ -9,18 +9,21 @@
 @media (pointer: coarse) { .btn.rxb { width: 40px; height: 36px; } }
 @container bj (max-width: 560px) { .btn.rxb { width: 38px; } }
 
-/* La bulle de choix : une rangée de 6 émotes, et « Masquer les réactions » (pour soi seulement) */
+/* La bulle de choix : les 7 émotes (une rangée sur PC ; 4 + 3 centrées sur un écran étroit, jamais un panneau plus grand
+   que nécessaire), et « Masquer les réactions » (pour soi seulement). Une émote animée s'anime aussi ici. */
 .rx-pal { position: absolute; z-index: 45; display: grid; gap: 6px; padding: 7px; border-radius: 14px; background: linear-gradient(180deg, #2a1a40, #1a1029); box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.45), 0 10px 24px rgba(0, 0, 0, 0.6); animation: rxpal 0.16s ease-out; }
 @keyframes rxpal { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
-.rx-pal__row { display: flex; gap: 4px; }
-.rx-pick { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, 0.05); transition: transform 0.12s, background 0.12s; }
+.rx-pal { --rxc: 40px; }
+.rx-pal__row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.rx-pick { width: var(--rxc); height: var(--rxc); display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, 0.05); transition: transform 0.12s, background 0.12s; }
 .rx-pick:hover, .rx-pick:focus-visible { background: rgba(255, 201, 77, 0.18); transform: translateY(-2px) scale(1.08); outline: none; }
 .rx-pick:active { transform: scale(0.94); }
-.rx-pick__img { width: 30px; height: 30px; object-fit: contain; pointer-events: none; }
+.rx-pick__img { width: calc(var(--rxc) - 10px); height: calc(var(--rxc) - 10px); object-fit: contain; pointer-events: none; }
 .rx-mute { justify-self: center; min-height: 24px; padding: 0 10px; border-radius: 7px; font: 800 9.5px/1 var(--font); color: var(--dim); }
 .rx-mute:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
 .rx-mute[aria-pressed='true'] { color: #ffb066; }
-@media (pointer: coarse) { .rx-pick { width: 46px; height: 46px; } .rx-pick__img { width: 34px; height: 34px; } .rx-mute { min-height: 34px; font-size: 11px; } }
+@media (pointer: coarse) { .rx-pal { --rxc: 48px; } .rx-mute { min-height: 34px; font-size: 11px; } }
+@container bj (max-width: 420px) { .rx-pal__row { width: calc(4 * var(--rxc) + 12px); } }
 
 /* L'émote au-dessus d'une place : elle surgit, monte un peu, s'efface (2,6 s) ; l'image garde sa propre animation. */
 .rxl { position: absolute; inset: 0; z-index: 26; pointer-events: none; overflow: hidden; }
