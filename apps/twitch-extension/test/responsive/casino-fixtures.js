@@ -433,7 +433,10 @@ export const slotCasino = () =>
 /** A spin result "as the reels' view expects it" (slot.js asSpin): resting, one line win (Haut, cerises), a bigger
  * multi-line win, or nothing (loss) — stops picked so the grid actually shows the claimed symbols on that line. */
 // The grid the Core derives from the stops (apps/core-api/src/casino/slot.ts): 3 rows read down each strip.
-const gridOf = (stops) => stops.map((s, r) => [0, 1, 2].map((row) => SLOT_STRIPS[r][(s + row) % SLOT_STRIPS[r].length]));
+const gridOf = (stops) =>
+  stops.map((s, r) =>
+    [0, 1, 2].map((row) => SLOT_STRIPS[r][(s + row) % SLOT_STRIPS[r].length]),
+  );
 export const SLOT_ROUNDS = {
   resting: null,
   lineWin: {

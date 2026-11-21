@@ -75,7 +75,13 @@ function fixtureFor(game, stateId) {
             bet: won.stake,
             payout: won.gross,
             round_id: 'rr1',
-            outcome: { pocket: T.ORDER.indexOf(spot.number), number: spot.number, seed: 42, bets, wins: won.wins },
+            outcome: {
+              pocket: T.ORDER.indexOf(spot.number),
+              number: spot.number,
+              seed: 42,
+              bets,
+              wins: won.wins,
+            },
           },
         };
       },
