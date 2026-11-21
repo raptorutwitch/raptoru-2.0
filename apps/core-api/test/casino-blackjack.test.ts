@@ -283,6 +283,64 @@ describe('blackjack service — tables, money, secrets', () => {
     expect(JSON.stringify(h)).toContain('blackjack');
   });
 
+  it('split: two hands, two stakes, settled independently; a resent split never debits twice (post-live audit BJ-01/BJ-07)', async () => {
+    const core = await lab([A]);
+    const t = (await core.blackjack.join(CH, A, {})).table;
+    const b0 = await tokens(core);
+    await core.blackjack.rig(CH, A, {
+      seats: { '0': [8, 8] },
+      dealer: [6, 10],
+      then: [10, 3, 10, 4],
+    });
+    await core.blackjack.bet(CH, A, { main: 100, ready: true });
+    let s = await until(core, [A], t, (x) => !!x.turn);
+    expect(s.seats[0]!.hands).toHaveLength(1);
+    const splitToken = s.turn!.token;
+    await core.blackjack.act(CH, A, {
+      type: 'split',
+      token: splitToken,
+      action_id: 'split1',
+    });
+    // A resent split (double-click, or a lost reply): the same reply, never a second stake taken.
+    await core.blackjack.act(CH, A, {
+      type: 'split',
+      token: splitToken,
+      action_id: 'split1',
+    });
+    expect(b0 - (await tokens(core))).toBe(200); // one extra stake (the split), never two
+    s = await until(core, [A], t, (x) => !!x.turn);
+    expect(s.seats[0]!.hands.map((h) => h.cards.length)).toEqual([2, 1]); // hand 2 waits for its own card
+    await core.blackjack.act(CH, A, {
+      type: 'stand',
+      token: s.turn!.token,
+      action_id: s.turn!.token,
+    });
+    s = await until(core, [A], t, (x) => !!x.turn);
+    expect(s.seats[0]!.hands[1]!.cards).toHaveLength(2); // dealt automatically once it became active
+    await core.blackjack.act(CH, A, {
+      type: 'hit',
+      token: s.turn!.token,
+      action_id: s.turn!.token,
+    });
+    s = await until(core, [A], t, (x) => x.phase === 'settled');
+    expect(s.outcome).toBe(20);
+    expect(s.seats[0]!.hands.map((h) => [h.total, h.verdict])).toEqual([
+      [18, 'lose'],
+      [21, 'win'],
+    ]);
+    // Hand 1 lost its 100, hand 2 won +100 (1:1, not a natural once split): net zero, never a "push" (BJ-07).
+    expect((await tokens(core)) - b0).toBe(0);
+    const rows = await core.db.query<{ bet: number; payout: number }>(
+      "select bet, payout from casino_rounds where game = 'blackjack' and viewer_id = $1",
+      [A.id],
+    );
+    expect(rows).toEqual([{ bet: 200, payout: 200 }]);
+    // Replaying the whole settlement pays nothing more (each hand keyed by its own index).
+    const ops = await wallOps(core);
+    await run(core, 2000, [A], t);
+    expect(await wallOps(core)).toBe(ops);
+  });
+
   it('insurance: offered on an Ace, at most half; paid 2:1 on a dealer blackjack', async () => {
     const core = await lab();
     const t = (await core.blackjack.join(CH, A, {})).table;

@@ -10,6 +10,7 @@ import { ArcadeBets as Bets } from './bets.js';
 import { ArcadeSlotsView as View } from './reels.js';
 import { Sfx } from './book-sfx.js';
 import { BY_ID, playNative, preload, symbolHTML } from './book-symbols.js';
+import { createAutoPacer } from './rate-pace.js';
 import { newIdempotencyKey } from '../api.js';
 
 const { ICON, fmt, compact, esc } = Frame;
@@ -104,6 +105,7 @@ export function mountBook(D, ctx) {
   let busy = false;
   let auto = false;
   let autoTimer = null;
+  const pacer = createAutoPacer(); // Auto's own budget, mirroring the Core's (audit SLOT-01): never races its 429
   let inFree = null; // the feature on screen: { feature, bet, played, total, granted, series }
   let pendingKey = null;
   let hist = [];
@@ -373,6 +375,14 @@ export function mountBook(D, ctx) {
     } catch (e) {
       if (!retryable(e)) pendingKey = null;
       busy = false;
+      // Rate-limited while Auto was chaining (SLOT-01): nothing was debited, so Auto waits out its own budget and
+      // tries again, instead of stopping with a red toast on a protection doing its job.
+      if (e?.code === 'rate_limited' && auto) {
+        Frame.toast('Auto ralenti…');
+        autoTimer = W.setTimeout(() => auto && void spin(), Math.max(1500, pacer.waitMs()));
+        update();
+        return;
+      }
       stopAuto();
       Frame.toast(Frame.refusalText(e), true);
       update();
@@ -388,7 +398,11 @@ export function mountBook(D, ctx) {
     update();
     idle();
     refreshWallet();
-    if (auto) autoTimer = W.setTimeout(() => auto && void spin(), res.round.payout >= res.round.bet * 10 ? 1300 : 450);
+    if (auto) {
+      pacer.spend();
+      const base = res.round.payout >= res.round.bet * 10 ? 1300 : 450;
+      autoTimer = W.setTimeout(() => auto && void spin(), Math.max(base, pacer.waitMs()));
+    }
   }
 
   /** The BONUS landing: one note per BONUS, higher each time, as its reel stops. */

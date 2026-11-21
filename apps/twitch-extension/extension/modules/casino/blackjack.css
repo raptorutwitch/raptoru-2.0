@@ -104,6 +104,8 @@
 .msg b { font: 900 15px/1.1 var(--font); color: var(--gold-2); text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
 .msg small { font: 700 10.5px/1.2 var(--font); color: var(--dim); }
 .msg .tally { color: rgba(242, 198, 95, 0.8); }
+/* Après un Split (BJ-01/BJ-07) : le verdict de chaque main, avant le bilan net — jamais juste « Égalité ». */
+.msg.res .handsline { color: var(--gold-2); font-weight: 800; }
 .msg.res .me { font: 900 16px/1 var(--font); color: #fff; }
 .msg.res .me.g { color: #7ef0a8; }
 .msg.res .me.l { color: #ffa3b0; }
@@ -128,7 +130,15 @@
 /* BLACKJACK naturel : une pastille dorée à la taille du texte, centrée au-dessus des cartes (pas sur leur coin). */
 .seat .tot.is-bj { left: 50%; right: auto; top: 0; bottom: auto; transform: translate(-50%, -88%); z-index: 5; height: 14px; min-width: 0; padding: 0 6px; border: 1px solid rgba(255, 243, 196, 0.85); border-radius: 7px; font: 900 7px/12px var(--font); letter-spacing: 0.1em; box-shadow: 0 0 8px rgba(255, 201, 77, 0.55), 0 2px 4px rgba(0, 0, 0, 0.5); }
 .seats[data-size='m'] .seat .tot.is-bj, .seats[data-size='s'] .seat .tot.is-bj { padding: 0 4px; font-size: 6.5px; letter-spacing: 0.05em; }
-.seat .tot[data-hands]:not([data-hands=''])::after { content: attr(data-hands); position: absolute; right: 0; bottom: calc(100% + 1px); padding: 1px 3px; border-radius: 4px; font: 800 7.5px/1 var(--font); color: var(--gold-2); background: rgba(10, 4, 18, 0.7); white-space: nowrap; }
+/* Split (BJ-01) : chaque main a sa propre pile de cartes, son propre total, sa propre mise ; la main à jouer
+   (`.cur`) est entourée. Sans Split, une seule `.subhand` occupe toute la place : rien ne change visuellement. */
+.seat .hand.multi { gap: 3px; align-items: flex-end; }
+.seat .hand.multi .subhand { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.seat .hand.multi .cards.mini { --cw: calc(var(--mw, 20px) * 0.7); }
+.seat .hand.multi .subhand.cur { outline: 1.5px solid rgba(126, 240, 168, 0.85); outline-offset: 1px; border-radius: 6px; }
+.seat .hand.multi .tot { position: static; height: 13px; min-width: 15px; padding: 0 3px; font-size: 8px; }
+.seat .hand.multi .hbet { font: 800 7px/1 var(--font); color: var(--gold-2); background: rgba(10, 4, 18, 0.7); border-radius: 4px; padding: 1px 3px; white-space: nowrap; }
+.seat .hbet[hidden] { display: none; }
 .seat .pl { display: flex; align-items: center; justify-content: center; gap: 4px; max-width: 100%; min-width: 0; padding: 0 2px; }
 .seat .avw { display: contents; }
 .seat .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 9.5px/1.25 var(--font); color: var(--dim); }
@@ -172,7 +182,9 @@
 .seat.busted { background: rgba(0, 0, 0, 0.22); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
 .seat.busted .cards, .seat.busted .tot, .seat.busted .pl, .seat.busted .bet:not(.res) { filter: grayscale(0.9) brightness(0.82); }
 .seat .bustb { display: none; }
-.seat.busted .bustb { display: block; position: absolute; left: 50%; top: 50%; z-index: 4; transform: translate(-50%, -50%) rotate(-7deg); padding: 2px 6px; border-radius: 5px; font: 900 8.5px/1.1 var(--font); letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, #ff4d64, #b0122c); box-shadow: 0 0 10px rgba(255, 60, 90, 0.65), 0 2px 5px rgba(0, 0, 0, 0.55); white-space: nowrap; animation: bustin 0.45s var(--pop) both; }
+/* Après un Split, chaque main dit déjà « · bust » dans son propre total (ci-dessus) : ce grand ruban reste pour
+   une seule main (sans quoi il recouvrirait les deux mains sans dire laquelle est busted). */
+.seat.busted:not(.multi) .bustb { display: block; position: absolute; left: 50%; top: 50%; z-index: 4; transform: translate(-50%, -50%) rotate(-7deg); padding: 2px 6px; border-radius: 5px; font: 900 8.5px/1.1 var(--font); letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, #ff4d64, #b0122c); box-shadow: 0 0 10px rgba(255, 60, 90, 0.65), 0 2px 5px rgba(0, 0, 0, 0.55); white-space: nowrap; animation: bustin 0.45s var(--pop) both; }
 .seats[data-size='s'] .seat.busted .bustb { padding: 2px 3px; font-size: 7px; letter-spacing: 0.04em; }
 .seat.busted .bet.res { filter: none; }
 /* Les piles de jetons pendant les mises (les autres) */
@@ -211,19 +223,25 @@
 .tip i { font-style: normal; color: var(--gold-2); font-variant-numeric: tabular-nums; }
 
 /* --- Historique : une languette, un panneau qui glisse, des manches repliées ------------------------------- */
-.htab, .rtab { position: absolute; top: 64px; z-index: 31; width: 17px; height: 34px; padding: 11px 0 0; display: grid; justify-items: center; align-content: start; gap: 6px; overflow: hidden; color: rgba(242, 198, 95, 0.6); background: linear-gradient(90deg, #24173a, #1a1029); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.22), 0 2px 6px rgba(0, 0, 0, 0.35); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1), height 0.2s var(--ease), color 0.15s, box-shadow 0.15s; }
+.htab, .rtab, .qtab { position: absolute; top: 64px; z-index: 31; width: 17px; height: 34px; padding: 11px 0 0; display: grid; justify-items: center; align-content: start; gap: 6px; overflow: hidden; color: rgba(242, 198, 95, 0.6); background: linear-gradient(90deg, #24173a, #1a1029); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.22), 0 2px 6px rgba(0, 0, 0, 0.35); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1), height 0.2s var(--ease), color 0.15s, box-shadow 0.15s, opacity 0.2s; }
 .htab { right: 0; border-radius: 8px 0 0 8px; }
 .rtab { left: 0; border-radius: 0 8px 8px 0; }
-.htab .ico, .rtab .ico { width: 12px; height: 12px; flex: none; }
-.htab span, .rtab span { writing-mode: vertical-rl; transform: rotate(180deg); font: 900 7.5px/1 var(--font); letter-spacing: 0.14em; text-transform: uppercase; opacity: 0; transition: opacity 0.15s; }
+/* Quitter (BJ-03/A4) : une porte rouge discrète, sous Règles, au bord opposé de Historique. */
+.qtab { left: 0; top: 108px; border-radius: 0 8px 8px 0; color: rgba(255, 110, 120, 0.75); }
+.htab .ico, .rtab .ico, .qtab .ico { width: 12px; height: 12px; flex: none; }
+.htab span, .rtab span, .qtab span { writing-mode: vertical-rl; transform: rotate(180deg); font: 900 7.5px/1 var(--font); letter-spacing: 0.14em; text-transform: uppercase; opacity: 0; transition: opacity 0.15s; }
 .htab:hover, .rtab:hover, .htab:focus-visible, .rtab:focus-visible { height: 92px; color: #fff3c4; box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45); }
-.htab:hover span, .rtab:hover span, .htab:focus-visible span, .rtab:focus-visible span { opacity: 1; }
+.qtab:hover, .qtab:focus-visible { height: 92px; color: #ffc2c9; box-shadow: inset 0 0 0 1px rgba(255, 107, 122, 0.5), 0 2px 8px rgba(0, 0, 0, 0.45); }
+.htab:hover span, .rtab:hover span, .htab:focus-visible span, .rtab:focus-visible span, .qtab:hover span, .qtab:focus-visible span { opacity: 1; }
 .htab .hn:empty { display: none; }
 .htab .hn { position: absolute; top: 1px; left: 1px; width: 6px; height: 6px; border-radius: 50%; font-size: 0; background: var(--gold); box-shadow: 0 0 5px rgba(255, 201, 77, 0.7); }
-.felt.hist-open .htab, .felt.rules-open .rtab { opacity: 0; pointer-events: none; } /* le panneau a son ✕ */
-.felt { --rw: 232px; }
+.felt.hist-open .htab { opacity: 0; pointer-events: none; } /* le panneau a son ✕ */
+.bj.rules-open .rtab { opacity: 0; pointer-events: none; }
+.bj.is-spect .qtab, .qtab:disabled { opacity: 0; pointer-events: none; } /* rien à quitter : spectateur, ou déjà parti */
+/* Règles (A8) : un enfant direct de `.bj`, pas de `.felt` — accessible depuis le salon aussi, pas seulement la table. */
+.bj { --rw: 232px; }
 .rules { position: absolute; left: 0; top: 0; bottom: 0; z-index: 30; width: var(--rw); display: grid; grid-template-rows: auto minmax(0, 1fr); background: linear-gradient(180deg, rgba(28, 17, 44, 0.985), rgba(16, 9, 28, 0.985)); box-shadow: 1px 0 0 rgba(242, 198, 95, 0.3), 12px 0 26px rgba(0, 0, 0, 0.55); transform: translateX(-101%); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.25, 1); }
-.felt.rules-open .rules { transform: none; }
+.bj.rules-open .rules { transform: none; }
 .rules header { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 4px 12px; }
 .rules header b { font: 900 11.5px/1 var(--font); color: var(--gold-2); }
 .rules header .ic { width: 22px; height: 22px; }
@@ -236,7 +254,19 @@
 .hist header { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 6px 11px; }
 .hist header b { font: 900 11.5px/1 var(--font); color: var(--gold-2); letter-spacing: 0.02em; }
 .hist header .ic { width: 22px; height: 22px; }
+/* A9/CAS-01 : « Cette table » (déjà là) et « Mes manches » (le Core, toutes tables) dans le même panneau. */
+.htabs { display: flex; gap: 4px; padding: 0 9px 7px; }
+.htabbtn { flex: 1; padding: 5px 0; border-radius: 7px; font: 800 9.5px/1 var(--font); color: var(--faint); background: rgba(255, 255, 255, 0.04); }
+.htabbtn.on { color: #fff3c4; background: rgba(242, 198, 95, 0.18); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.4); }
+.hsess { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 1px 4px; padding: 6px 8px; border-radius: 9px; background: rgba(255, 255, 255, 0.035); font: 700 9.5px/1.3 var(--font); color: var(--dim); }
+.hsess b { font-weight: 900; }
 .hist__list { overflow: auto; overscroll-behavior: contain; padding: 0 7px 9px; display: grid; align-content: start; gap: 4px; scrollbar-width: thin; scrollbar-color: rgba(242, 198, 95, 0.3) transparent; }
+.hr.mine { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 7px; padding: 6px 8px; }
+.hr.mine.old { opacity: 0.55; }
+.hr.mine .hround { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3px 7px; padding: 0; }
+.hr.mine .hsum { grid-column: 1 / 2; margin: 0; }
+.hshare { grid-row: 1 / 3; width: 24px; height: 24px; }
+.hshare:disabled { opacity: 0.35; }
 .hr { border-radius: 9px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.1); }
 .hr.open { background: rgba(255, 255, 255, 0.055); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.28); }
 .hround { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto 10px; align-items: center; gap: 3px 7px; padding: 6px 8px; text-align: left; border-radius: 9px; }
@@ -333,6 +363,9 @@
 .lobby header { display: grid; gap: 2px; }
 .lobby header b { font: 900 15px/1.2 var(--font); color: var(--gold-2); }
 .lobby header small { color: var(--faint); font-weight: 700; }
+/* A8 : les Règles, lisibles avant même de s'asseoir — pas seulement une fois à une table. */
+.lobby header .rules-lnk { justify-self: start; margin-top: 2px; display: inline-flex; align-items: center; gap: 5px; }
+.lobby header .rules-lnk .ico { width: 13px; height: 13px; }
 .tlist { display: grid; gap: 6px; }
 .trow { display: grid; grid-template-columns: 58px auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 11px; background: rgba(255, 255, 255, 0.04); box-shadow: inset 0 0 0 1px rgba(205, 185, 255, 0.16); }
 .trow.mine { box-shadow: inset 0 0 0 1.5px rgba(255, 201, 77, 0.7); }
@@ -355,6 +388,7 @@
   .felt { grid-template-rows: 128px minmax(0, 1fr) auto; }
   .felt::before { left: -150%; right: -150%; height: 520px; }
   .htab, .rtab { top: 8px; }
+  .qtab { top: 52px; }
   .felt { --rw: 236px; }
   .seat .pl { flex-direction: column; gap: 1px; }
   .seat .nm { font-size: 9.5px; }

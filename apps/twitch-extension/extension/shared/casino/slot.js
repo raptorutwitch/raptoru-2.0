@@ -8,6 +8,7 @@ import { ArcadeBets as Bets } from './bets.js';
 import { CoffreView } from './coffre-view.js';
 import { ArcadeSlotsView as View } from './reels.js';
 import { ArcadeSymbols as Sym } from './symbols.js';
+import { createAutoPacer } from './rate-pace.js';
 import { newIdempotencyKey } from '../api.js';
 
 const { ICON, fmt, compact, esc } = Frame;
@@ -119,6 +120,7 @@ export function mountSlot(D, ctx) {
   const name = ctx.follow?.name ?? 'le joueur'; // spectator: the followed player
   let watched = null; // spectator: the round followed { round_id, bet, best }
   let autoTimer = null;
+  const pacer = createAutoPacer(); // Auto's own budget, mirroring the Core's (audit SLOT-01): never races its 429
   let pendingKey = null; // the intent's key until the Core decided (a lost answer resends it)
   let hist = []; // the viewer's last rounds (Core, newest first)
   let destroyed = false;
@@ -364,6 +366,14 @@ export function mountSlot(D, ctx) {
     } catch (e) {
       if (!retryable(e)) pendingKey = null;
       busy = false;
+      // Rate-limited while Auto was chaining (SLOT-01): the Core refused nothing was debited, so Auto just waits
+      // out its own budget and tries again, instead of stopping with a red toast on a protection doing its job.
+      if (e?.code === 'rate_limited' && auto) {
+        Frame.toast('Auto ralenti…');
+        autoTimer = W.setTimeout(() => auto && void spin(), Math.max(1500, pacer.waitMs()));
+        update();
+        return;
+      }
       stopAuto();
       Frame.toast(Frame.refusalText(e), true);
       update();
@@ -379,7 +389,11 @@ export function mountSlot(D, ctx) {
     update();
     idle();
     refreshWallet();
-    if (auto) autoTimer = W.setTimeout(() => auto && void spin(), res.round.payout >= res.round.bet * 10 ? 1300 : 450);
+    if (auto) {
+      pacer.spend();
+      const base = res.round.payout >= res.round.bet * 10 ? 1300 : 450;
+      autoTimer = W.setTimeout(() => auto && void spin(), Math.max(base, pacer.waitMs()));
+    }
   }
 
   /**
@@ -475,6 +489,21 @@ export function mountSlot(D, ctx) {
     popPlate();
     let shown = 0;
     if (fast) {
+      // Rapide still traces each winning line with its own amount (audit SLOT-02): skipping straight to the total
+      // left a viewer with no way to tell a +80 from a bad payout. Capped to ~1 s total, a plain sum for one line.
+      if (steps.length >= 2) {
+        const n = steps.length;
+        const perStep = Math.max(120, Math.min(260, 1000 / n));
+        for (let i = 0; i < n && !Pr.skipped; i++) {
+          const st = steps[i];
+          view.focus(st);
+          Audio.lineStep(i);
+          paint(shown + st.win, `${i + 1}/${n}`);
+          shown += st.win;
+          await wait(perStep);
+        }
+        view.settle();
+      } else if (steps[0]) view.focus(steps[0], { tag: false });
       paint(credit);
       shown = credit;
     } else if (steps.length >= 2) {
@@ -885,7 +914,7 @@ export function mountSlot(D, ctx) {
       <div class="prule">${Sym.symbolHTML(cfg.byId.wild)}<p><b>WILD</b> remplace tous les symboles, sauf BONUS.</p></div>
       <div class="prule">${Sym.symbolHTML(cfg.byId.bonus)}<p><b>3 · 4 · 5 BONUS</b> n’importe où : <b>le Coffre</b>. Les BONUS deviennent des pièces ; chaque nouvelle pièce remet les 3 relances. MINI ×20 · MAJEUR ×100 · MÉGA ×500 · grille pleine : GRAND ×1 000.</p></div>
       <p class="pcap">Gain maximum par partie : <b>${fmt(limits().max_win)} Jetons</b>.</p>
-      <div class="plines"><span>10 lignes</span>${lines}</div>`;
+      <div class="plines"><span>10 lignes · de gauche à droite, à partir du 1er rouleau. Seules ces lignes paient : un alignement ailleurs ne compte pas.</span>${lines}</div>`;
   }
   function openPaytable() {
     Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(shownBet())}</small>`, render: paytableHTML });
