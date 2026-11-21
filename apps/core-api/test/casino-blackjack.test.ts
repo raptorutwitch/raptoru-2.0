@@ -341,6 +341,54 @@ describe('blackjack service — tables, money, secrets', () => {
     expect(await wallOps(core)).toBe(ops);
   });
 
+  it('split, hand by hand: Tirer / Doubler only touch the active hand; the next hand gets ONE card when its turn comes (Antoni 21/11)', async () => {
+    const core = await lab([A]);
+    const t = (await core.blackjack.join(CH, A, {})).table;
+    // 8/8 against a 6: after the split, hand 1 draws 2, then 3, 2, 10 (25: bust); hand 2 receives 3 (11), doubles on 10.
+    await core.blackjack.rig(CH, A, {
+      seats: { '0': [8, 8] },
+      dealer: [6, 10],
+      then: [2, 3, 2, 10, 3, 10],
+    });
+    await core.blackjack.bet(CH, A, { main: 100, ready: true });
+    const act = async (type: string) => {
+      const s = await until(core, [A], t, (x) => !!x.turn);
+      await core.blackjack.act(CH, A, {
+        type,
+        token: s.turn!.token,
+        action_id: s.turn!.token,
+      });
+      return s.turn!.hand;
+    };
+    const next = () =>
+      until(core, [A], t, (x) => !!x.turn || x.phase !== 'players');
+    const counts = async () =>
+      (await next()).seats[0]!.hands.map((h) => h.cards.length);
+    expect(await act('split')).toBe(0);
+    expect(await counts()).toEqual([2, 1]); // hand 1 gets its 2nd card at once; hand 2 waits for its own turn
+    expect(await act('hit')).toBe(0);
+    expect(await counts()).toEqual([3, 1]); // ONE card, on hand 1 only
+    expect(await act('hit')).toBe(0);
+    expect(await counts()).toEqual([4, 1]);
+    expect(await act('hit')).toBe(0); // 8 + 2 + 3 + 2 + 10 = 25: hand 1 is over
+    let s = await next();
+    expect(s.turn!.hand).toBe(1);
+    expect(s.seats[0]!.hands.map((h) => [h.cards.length, h.total])).toEqual([
+      [5, 25],
+      [2, 11], // exactly one card, dealt by the engine (no click), when hand 2 became active
+    ]);
+    expect(await act('double')).toBe(1);
+    s = await until(core, [A], t, (x) => x.phase === 'settled');
+    // The double doubled hand 2's stake only; hand 1 kept its cards and its stake.
+    expect(
+      s.seats[0]!.hands.map((h) => [h.cards.length, h.stake, h.doubled]),
+    ).toEqual([
+      [5, 100, false],
+      [3, 200, true],
+    ]);
+    expect(s.seats[0]!.hands.map((h) => h.verdict)[0]).toBe('bust');
+  });
+
   it('insurance: offered on an Ace, at most half; paid 2:1 on a dealer blackjack', async () => {
     const core = await lab();
     const t = (await core.blackjack.join(CH, A, {})).table;

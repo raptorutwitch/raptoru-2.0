@@ -182,15 +182,10 @@
 .seat.me .tag.joue { color: #2a1600; background: linear-gradient(180deg, #ffe69a, var(--gold)); }
 .seat .tag.left { color: #e9e1f8; background: #4a4058; }
 @keyframes tagin { from { opacity: 0; transform: translate(-50%, 5px) scale(0.7); } }
-@keyframes bustin { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-7deg) scale(1.7); } 65% { opacity: 1; transform: translate(-50%, -50%) rotate(-7deg) scale(0.92); } }
-/* Busted : la place désaturée, ses cartes et sa mise toujours lisibles ; le badge reste en couleur */
+/* Bust : la place désaturée, ses cartes et sa mise toujours lisibles ; un seul signal, le score rouge « 24 · bust »
+   (retour d'Antoni du 21/11 : le ruban BUSTED posé sur ce score faisait doublon). */
 .seat.busted { background: rgba(0, 0, 0, 0.22); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
-.seat.busted .cards, .seat.busted .tot, .seat.busted .pl, .seat.busted .bet:not(.res) { filter: grayscale(0.9) brightness(0.82); }
-.seat .bustb { display: none; }
-/* Après un Split, chaque main dit déjà « · bust » dans son propre total (ci-dessus) : ce grand ruban reste pour
-   une seule main (sans quoi il recouvrirait les deux mains sans dire laquelle est busted). */
-.seat.busted:not(.multi) .bustb { display: block; position: absolute; left: 50%; top: 50%; z-index: 4; transform: translate(-50%, -50%) rotate(-7deg); padding: 2px 6px; border-radius: 5px; font: 900 8.5px/1.1 var(--font); letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, #ff4d64, #b0122c); box-shadow: 0 0 10px rgba(255, 60, 90, 0.65), 0 2px 5px rgba(0, 0, 0, 0.55); white-space: nowrap; animation: bustin 0.45s var(--pop) both; }
-.seats[data-size='s'] .seat.busted .bustb { padding: 2px 3px; font-size: 7px; letter-spacing: 0.04em; }
+.seat.busted .cards, .seat.busted .pl, .seat.busted .bet:not(.res) { filter: grayscale(0.9) brightness(0.82); }
 .seat.busted .bet.res { filter: none; }
 /* Les piles de jetons pendant les mises (les autres) */
 .seat .ms { position: absolute; left: 50%; bottom: 0; width: 22px; height: 24px; transform: translateX(-50%); pointer-events: none; }
@@ -638,7 +633,6 @@
 .felt.has-hero .myseat .seat .hand.multi .tot { height: 16px; min-width: 20px; font-size: 10px; }
 .felt.has-hero .myseat .seat .hand.multi .hbet { font-size: 9px; }
 .felt.has-hero .myseat .seat.turn.multi .hand { display: flex; } /* mes mains splittées restent sur ma place */
-.felt.has-hero .myseat .seat.busted .bustb { font-size: 11px; }
 /* À mon tour : ma main est déjà en grand sur ma place ; le centre dit seulement que c'est à moi (et le temps). */
 .felt.has-hero .spot.is-me > .cards, .felt.has-hero .spot.is-me > .tot, .felt.has-hero .spot.is-me .splithands { display: none; }
 .bj.my-turn .felt.has-hero .spot.is-me .who { display: flex; }
@@ -702,3 +696,115 @@
   .seat .bet { min-height: 17px; font-size: 10.5px; line-height: 17px; }
   .seat .tot { height: 17px; font-size: 10.5px; }
 }
+
+/* ================================================================================================================
+   Passe corrective du 21/11 (soir) — après les essais interactifs d'Antoni dans le banc en cadre réel
+   ================================================================================================================ */
+
+/* --- Les cartes d'une main suivent la place réelle de cette main : jamais sur la place voisine ni sur le score. ---
+   Chaque main d'une place mesure sa largeur (conteneur .hand) ; les cartes se resserrent progressivement (de --ov à
+   74 % de recouvrement : la valeur reste lisible dans le coin), puis rapetissent un peu si ça ne suffit toujours pas —
+   jamais toutes d'un coup dès la 4ᵉ carte. Le score passe en haut à droite (le coin vide d'une carte). */
+.seat .hand { container: hand / inline-size; }
+.seat .cards { --fit: calc(100cqw - 4px); }
+.seat .hand.multi .cards { --fit: calc((100cqw - (var(--k, 2) - 1) * 3px) / var(--k, 2) - 4px); }
+.seat .cards.mini { --cw: min(var(--mw, 20px), var(--fit) / (1 + (var(--n, 2) - 1) * 0.26)); }
+.seat .hand.multi .cards.mini { --cw: min(var(--mw, 20px) * 0.7, var(--fit) / (1 + (var(--n, 2) - 1) * 0.26)); }
+.cards .card + .card { margin-left: calc(-1 * clamp(var(--cw) * var(--ov), (var(--n, 2) * var(--cw) - var(--fit, 9999px)) / max(1, var(--n, 2) - 1), var(--cw) * 0.74)); }
+.seat .hand:not(.multi) .tot:not(.is-bj) { top: -8px; bottom: auto; right: -3px; z-index: 6; }
+/* Posé sur une carte blanche, le score garde un liseré sombre : il ne se fond jamais dans la carte. */
+.seat .tot { box-shadow: 0 0 0 1.5px rgba(20, 10, 34, 0.9), 0 2px 4px rgba(0, 0, 0, 0.55); }
+@container bj (max-width: 420px) {
+  .seat .hand:not(.multi) .cards { --fit: calc(100cqw - 34px); } /* le score à côté des cartes (voir plus haut) */
+}
+/* Pendant les mises, la place n'a pas encore de cartes : le cercle de mise seul, centré (le score vide le décalait). */
+.seat.betting .subhand { display: none; }
+
+/* --- Split : une seule main jouée à la fois, et la barre dit laquelle ------------------------------------------ */
+.bar .forhand { position: absolute; left: 50%; top: 0; z-index: 3; transform: translate(-50%, -58%); padding: 0 9px; border-radius: 8px; font: 900 9px/15px var(--font); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; color: #2a1600; background: linear-gradient(180deg, #ffe69a, var(--gold)); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5); pointer-events: none; }
+/* Entre deux décisions (la carte arrive) : les actions restent en place, en attente, au lieu de disparaître. */
+.act.soon:disabled { color: var(--t); background: linear-gradient(180deg, var(--a), var(--b)); box-shadow: none; opacity: 0.5; }
+
+/* --- Le règlement : la main, chaque à-côté (assurance, paris banque) et le bilan, sur des lignes séparées ------- */
+.msg .bd { display: grid; gap: 2px; min-width: 200px; margin-top: 5px; padding: 6px 11px 7px; border-radius: 10px; background: rgba(10, 4, 18, 0.55); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.3); }
+.msg .bd p { margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font: 700 11.5px/1.3 var(--font); color: var(--dim); }
+.msg .bd p i { font-style: normal; color: var(--faint); }
+.msg .bd em { font: 900 13px/1.2 var(--font); font-style: normal; color: #f3ecff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.msg .bd em.g { color: #7ef0a8; }
+.msg .bd em.l { color: #ffa3b0; }
+.msg .bd .bd__tot { margin-top: 2px; padding-top: 4px; border-top: 1px solid rgba(242, 198, 95, 0.3); color: #fff; font-size: 12.5px; }
+.msg .bd .bd__tot em { font-size: 16px; }
+.msg.res.go .bd { animation: resin 0.5s var(--pop) both; }
+@container bj (max-height: 339px) {
+  .msg .bd { margin-top: 2px; padding: 3px 9px 4px; gap: 0; }
+  .msg .bd p { font-size: 9.5px; line-height: 1.2; }
+  .msg .bd em { font-size: 10.5px; }
+  .msg .bd .bd__tot em { font-size: 12px; }
+}
+.mrow__bd { grid-column: 1; margin: 0; font: 700 9px/1.3 var(--font); color: var(--dim); font-variant-numeric: tabular-nums; }
+.mrow__share { grid-row: 1 / -1; }
+
+/* --- Historique : partager et remettre à zéro, des pictogrammes compacts (cible au doigt agrandie, invisible) ---- */
+.hico { position: relative; width: 26px; height: 26px; border-radius: 7px; }
+.hico::after { content: ''; position: absolute; inset: -6px; }
+@media (pointer: coarse) { .hico, .hsess__reset, .mrow__share { width: 32px; height: 32px; min-height: 32px; } }
+
+/* --- Le salon : une ligne par table — numéro, joueurs et état, l'œil pour regarder, Rejoindre ------------------ */
+.trow { grid-template-columns: 62px auto minmax(0, 1fr) auto auto; gap: 8px; }
+.tph b { color: #fff; font-weight: 900; }
+.trow .dots { justify-self: center; }
+.trow .eye { width: 30px; height: 30px; }
+.trow .eye .ico { width: 16px; height: 16px; }
+.tfull { font: 800 10.5px var(--font); color: var(--faint); white-space: nowrap; }
+@container bj (max-width: 420px) {
+  .trow { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .trow .dots { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+}
+@media (pointer: coarse) {
+  .trow .dots { display: none; } /* au doigt, des pastilles de 14 px : Rejoindre choisit la place */
+  .trow .btn, .trow .eye { height: 38px; }
+  .trow .eye { width: 38px; }
+  .trow { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+}
+
+/* --- Au doigt : des languettes plus confortables ; le centre ne passe plus dessous ------------------------------ */
+@media (pointer: coarse) {
+  .htab, .rtab { width: 40px; height: 48px; padding: 0 11px; }
+  .htab .ico, .rtab .ico { width: 18px; height: 18px; }
+  .stake small { font-size: 8.5px; }
+  .act small { font-size: 9.5px; }
+}
+@container bj (max-width: 420px) { .spot { padding: 0 32px; } }
+@media (pointer: coarse) { @container bj (max-width: 420px) { .spot { padding: 0 46px; } } }
+
+/* --- Portrait (téléphone) : la banque plus grande, ses paris en arc quand la largeur le permet, ma place en large -- */
+.felt.has-hero .dealer .cards.big { --cw: clamp(46px, 8.2cqh, 64px); }
+.felt.has-hero .dealer > .tot { height: 30px; min-width: 40px; padding: 0 10px; border-radius: 15px; font-size: 18px; }
+.felt.has-hero .sides.harc { height: 82px; }
+.felt.has-hero .sides.harc .sides__arc { height: 100%; }
+.felt.has-hero .sides.harc .sides__arc text { font-size: 8.5px; }
+.felt.has-hero .sides.harc .side { width: var(--bw, 44px); height: 40px; border-radius: 10px; }
+.felt.has-hero .sides.harc .side > b { font-size: 14px; }
+.felt.has-hero .sides.harc .side > small { font-size: 7.5px; letter-spacing: 0; }
+.felt.has-hero .msg b { font-size: 17px; }
+.felt.has-hero .msg small { font-size: 12px; }
+.felt.has-hero .seats .seat .nm { font-size: 10.5px; }
+/* Ma place : l'avatar, mon nom et ma mise sur le côté ; mes cartes (ou mon cercle de mise) au centre, en grand. */
+.felt.has-hero .myseat .seat { flex: 0 1 340px; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'pl hand' 'bet hand'; align-items: center; column-gap: 14px; row-gap: 5px; padding: 12px 14px 10px; --mw: clamp(34px, 6.4cqh, 54px); --av: 34px; }
+.felt.has-hero .myseat .seat .hand { grid-area: hand; }
+.felt.has-hero .myseat .seat .pl { grid-area: pl; align-self: end; flex-direction: column; gap: 3px; }
+.felt.has-hero .myseat .seat .bet { grid-area: bet; align-self: start; }
+.felt.has-hero .myseat .seat .hand.multi { gap: 8px; }
+.felt.has-hero .myseat .seat .hand.multi .cards { --fit: calc((100cqw - (var(--k, 2) - 1) * 8px) / var(--k, 2) - 4px); }
+.felt.has-hero .myseat .seat .hand.multi .cards.mini { --cw: min(var(--mw) * 0.78, var(--fit) / (1 + (var(--n, 2) - 1) * 0.26)); }
+.felt.has-hero .myseat .seat .hand.multi .subhand { padding-top: 4px; }
+.felt.has-hero .myseat .seat .hand.multi .subhand.cur::before { content: 'à jouer'; position: absolute; left: 50%; top: -11px; z-index: 6; transform: translateX(-50%); padding: 0 6px; border-radius: 6px; font: 900 8px/13px var(--font); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: #052a15; background: linear-gradient(180deg, #a2f8c4, #34c477); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45); }
+
+/* --- Jeton libre : les valeurs acceptées par le Core, sous le champ (jamais un arrondi silencieux) ------------- */
+.cuform { flex-wrap: wrap; max-width: 250px; }
+.cuform__h { flex-basis: 100%; font: 700 9px/1.3 var(--font); color: var(--dim); }
+/* Téléphone : le message éphémère au milieu du tapis, jamais sur les boutons d'action. */
+@container bj (max-width: 420px) { .toast { top: 44%; bottom: auto; } }
+
+/* Hauteur basse : le nom de la main seul (son état reste écrit sur la main à jouer, et la barre dit laquelle). */
+@container bj (max-height: 339px) { .sh:not(.cur) .sh__st { display: none; } }

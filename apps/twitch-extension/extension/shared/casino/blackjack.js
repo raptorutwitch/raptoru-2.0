@@ -10,13 +10,13 @@ import { Sfx } from './bj-sfx.js';
 import * as Frame from './frame.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('fr-FR').replace(/\s/g, ' ');
-/** Montant condensé façon table : 200 · 1K · 1K5 · 12K5 · 1M2. */
-function kfmt(n) {
+/** Montant condensé façon table, SANS arrondi (retour d'Antoni du 21/11 : 1 250 s'affichait « 1K2 ») :
+ * 200 · 1K · 1K25 · 12K5 · 1M2 ; trop de chiffres pour rester court → le montant exact. */
+export function kfmt(n) {
   if (n < 1000) return String(n);
   const [u, d] = n >= 1e6 ? [1e6, 'M'] : [1e3, 'K'];
-  const whole = Math.floor(n / u);
-  const rest = Math.floor((n % u) / (u / 10));
-  return whole >= 100 || !rest ? `${whole}${d}` : `${whole}${d}${rest}`;
+  const rest = String(n % u).padStart(String(u).length - 1, '0').replace(/0+$/, '');
+  return rest.length > 3 ? fmt(n) : `${Math.floor(n / u)}${d}${rest}`;
 }
 const signedTxt = (n) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0');
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -37,7 +37,8 @@ export function mainResult(p) {
   const kind = v.includes('even') ? 'even' : v.length <= 1 || v.every((x) => x === v[0]) ? v[0] : 'mixed';
   return { stake, paid, net: paid - stake, kind };
 }
-const KIND = { blackjack: 'Blackjack', even: 'Even money', win: 'Gagné', push: 'Égalité', lose: 'Perdu', bust: 'Busted' };
+// « Gain assuré » (retour d'Antoni du 21/11) : le libellé français de l'even money — un gain 1:1, jamais un « +0 ».
+const KIND = { blackjack: 'Blackjack', even: 'Gain assuré', win: 'Gagné', push: 'Égalité', lose: 'Perdu', bust: 'Bust' };
 /**
  * A9 : le bilan « Mes manches » depuis la remise à zéro — un compteur purement local (jamais une opération Wallet),
  * recalculé à partir des manches réelles du Core (`rounds`, les plus récentes en premier, chacune avec `created_at`
@@ -71,11 +72,15 @@ const ERR = {
   casino_full: 'Toutes les tables sont pleines.',
 };
 const why = (e, L) =>
-  e?.code === 'max_win'
+  e?.code === 'bad_main_bet'
+    ? `Mise principale : ${fmt(L?.mainMin ?? 100)} minimum, par pas de ${L?.step ?? 10}.`
+    : e?.code === 'bad_side_bet'
+      ? `Pari banque : ${fmt(L?.sideMin ?? 10)} minimum, par pas de ${L?.step ?? 10}.`
+      : e?.code === 'max_win'
     ? `Gain possible trop élevé (splits et doubles compris) : mise de ${fmt(Math.max(L?.mainMin ?? 100, e.max ?? 0))} au plus${e.max < (L?.mainMin ?? 100) ? ' — retire des paris banque' : ''}.`
     : e?.code === 'side_max_return'
-      ? `Paris banque : ${fmt(e.max)} de retour au plus par manche.`
-      : ERR[e?.code] ?? Frame.REFUSAL[e?.code] ?? 'Ça n’a pas marché : réessaie.';
+        ? `Paris banque : ${fmt(e.max)} de retour au plus par manche.`
+        : ERR[e?.code] ?? Frame.REFUSAL[e?.code] ?? 'Ça n’a pas marché : réessaie.';
 const SILENT = new Set(['stale_turn', 'no_decision_now']);
 
 const cardHTML = (c, k) =>
@@ -93,7 +98,7 @@ function stackHTML(amount) {
     }
   return discs.map((v, i) => `<i class="disc ${tone(v)}" style="--i:${i}"></i>`).join('');
 }
-const SEAT_HTML = '<span class="tag"></span><div class="hand"><span class="ms"></span><button type="button" class="sb" data-main hidden aria-label="Ma place : poser le jeton choisi"><span class="sb__stack"></span><b class="sb__amt"></b></button><span class="bustb">Busted</span></div><div class="pl"><span class="avw"></span><span class="nm"></span></div><div class="bet"></div><i class="tm"></i>';
+const SEAT_HTML = '<span class="tag"></span><div class="hand"><span class="ms"></span><button type="button" class="sb" data-main hidden aria-label="Ma place : poser le jeton choisi"><span class="sb__stack"></span><b class="sb__amt"></b></button></div><div class="pl"><span class="avw"></span><span class="nm"></span></div><div class="bet"></div><i class="tm"></i>';
 const totText = (h) => (h.cards.length ? (h.soft && h.total < 21 ? `${h.total - 10}/${h.total}` : String(h.total)) : '');
 
 /** Dans la case : « BJ » pour Blackjack (le nom complet au survol). Libellé seul : le pari reste `BJ`. */
@@ -116,9 +121,10 @@ const SVG = {
   split: '<path d="M12 21v-7M12 14 6 8M12 14l6-6M6 3v5h5M18 3v5h-5"/>',
   leave: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>',
   tables: '<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
-  share: '<path d="M12 14.5V3.5M7.5 8 12 3.5 16.5 8"/><path d="M5 12.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-6.5"/>',
-  reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4.2h4.2"/>',
+  share: '<circle cx="17.5" cy="5.5" r="2.5"/><circle cx="6.5" cy="12" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/><path d="m8.7 13.3 6.6 3.9M15.3 6.8l-6.6 3.9"/>',
+  reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4.2h4.2"/><ellipse cx="12" cy="12" rx="2" ry="2.9"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
 };
 const icon = (k) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${SVG[k]}</svg>`;
 let uidN = 0;
@@ -129,11 +135,11 @@ const RULES = [
   ['Blackjack', 'Approche <b>21</b> sans le dépasser et fais mieux que la banque. Un <b>blackjack</b>, c’est un As et une carte qui vaut 10, en 2 cartes : payé <b>3:2</b> (100 → +150). Une main gagnée est payée 1:1, une égalité te rend ta mise. Mise principale dès 100, par pas de 10.'],
   ['Valeur des cartes', 'De 2 à 10 : leur valeur. Valet, Dame et Roi valent <b>10</b>. L’As vaut <b>11</b>, ou <b>1</b> si 11 te ferait dépasser 21 : « 7/17 » veut dire que ta main vaut 7 ou 17.'],
   ['Tour de la banque', 'Elle joue après tous les joueurs : elle <b>tire jusqu’à 16</b> et <b>reste dès 17</b>, même un 17 avec un As. Si elle dépasse 21, toutes les mains encore en jeu gagnent. Avec un As ou une carte de 10 visible, elle regarde d’abord si elle a blackjack : si oui, la manche est réglée aussitôt.'],
-  ['Tirer / Rester', '<b>Tirer</b> : une carte de plus. <b>Rester</b> : tu gardes ta main. Au-delà de 21, ta main est perdue (busted), même si la banque saute ensuite. Sans réponse à temps, ta main reste.'],
+  ['Tirer / Rester', '<b>Tirer</b> : une carte de plus. <b>Rester</b> : tu gardes ta main. Au-delà de 21, ta main est perdue (bust), même si la banque saute ensuite. Sans réponse à temps, ta main reste.'],
   ['Doubler', 'Sur tes 2 premières cartes : ta mise double et tu reçois <b>une seule carte</b>, puis ta main s’arrête. Permis après un Split, sauf sur des As splittés.'],
-  ['Split', 'Deux cartes de même valeur (deux 8, ou un Roi et une Dame) : sépare-les en deux mains, chacune avec la même mise. Jusqu’à <b>4 mains</b>. As splittés : une seule carte chacun, ni nouveau Split ni Doubler. Un 21 fait après un Split n’est pas un blackjack (payé 1:1).'],
-  ['Assurance', 'Proposée quand la banque montre un <b>As</b>. Tu mises jusqu’à <b>la moitié</b> de ta mise principale ; elle paie <b>2:1 seulement si la banque a blackjack</b>, sinon tu la perds et ta main continue.<span class="ex">Exemple : mise 200, assurance 100. Banque blackjack : ta main perd 200, l’assurance gagne 200, bilan 0. Pas de blackjack : l’assurance perd 100, ta main se joue normalement.</span>Elle ne protège que du blackjack de la banque, jamais d’une défaite.'],
-  ['Even Money', 'Tu as un blackjack et la banque montre un As : avec <b>Even money</b>, ta main est payée <b>1:1</b>, quoi qu’ait la banque. Sans, tu gardes le 3:2… mais si la banque a aussi blackjack, c’est une égalité (mise rendue).'],
+  ['Split', 'Deux cartes de même valeur (deux 8, ou un Roi et une Dame) : sépare-les en deux mains, chacune avec la même mise. Chaque main reçoit <b>automatiquement sa 2ᵉ carte</b> : la main 1 tout de suite, la main 2 quand vient son tour. Tu joues ensuite <b>une main à la fois</b> (celle entourée) : Tirer, Rester et Doubler ne touchent qu’elle. Jusqu’à <b>4 mains</b>. As splittés : une seule carte chacun, ni nouveau Split ni Doubler. Un 21 fait après un Split n’est pas un blackjack (payé 1:1).'],
+  ['Assurance', 'Proposée quand la banque montre un <b>As</b>. Tu mises jusqu’à <b>la moitié</b> de ta mise principale ; elle paie <b>2:1 seulement si la banque a blackjack</b>, sinon tu la perds et ta main continue.<span class="ex">Exemple : mise 200, assurance 100. Banque blackjack : ta main perd 200, l’assurance rapporte +200 net (payée 2:1 : 300 rendus), bilan 0. Pas de blackjack : l’assurance perd 100, ta main se joue normalement.</span>Elle ne protège que du blackjack de la banque, jamais d’une défaite.'],
+  ['Gain assuré (Even money)', 'Tu as un blackjack et la banque montre un As. <b>Gain assuré</b> : ta main est payée <b>1:1 tout de suite</b> (mise 200 → +200), quoi qu’ait la banque. Sinon, tu gardes ta chance du <b>3:2</b> (+300)… mais si la banque a aussi blackjack, c’est une égalité (+0, mise rendue).'],
   ['Paris sur le score de la banque', `Avant la donne, en plus de ta main, parie sur le résultat final de la banque : ${SIDE_SPOTS.map((k) => `${SIDE_LABEL[k]} <b>${oddsText(k)}</b>`).join(' · ')}. « 11:2 » = 11 gagnés pour 2 misés (100 → +550). Dès 10 par pari.`],
   ['Quitter la table', 'Avant la donne, tu repars avec ta mise. En pleine manche, ta mise reste engagée : ta main est jouée par Rester et payée normalement au règlement.'],
 ];
@@ -253,14 +259,24 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       <header><b>Tables de blackjack</b><small>8 paquets · jusqu’à 10 joueurs · chacun contre la banque · mise dès 100</small><button type="button" class="btn rules-lnk" data-rules title="Règles du jeu" aria-label="Règles du jeu">${icon('rules')}Règles</button></header>
       <div class="tlist">${
         tables
-          .map(
-            (t) => `<div class="trow${t.id === my ? ' mine' : ''}"><span class="tno">Table ${t.no}</span><span class="dots" title="${spectator || my ? '' : 'Choisis ta place'}">${(t.taken ?? []).map((on, i) => `<button type="button" class="${on ? 'on' : ''}" ${!on && !spectator && !my ? `data-join="${t.id}" data-seat="${i}" title="Place ${i + 1}"` : 'disabled'}></button>`).join('')}</span><span class="tph">${t.players}/${t.seats} · ${PHASE[t.phase] ?? ''}</span>
-            ${t.id === my ? `<button type="button" class="btn go" data-open="${t.id}">Ma table</button>` : `<button type="button" class="btn" data-watch="${t.id}">Regarder</button>`}</div>`,
-          )
+          .map((t) => {
+            // Une ligne par table (retour d'Antoni du 21/11) : son numéro, ses joueurs, son état, l'œil pour regarder,
+            // Rejoindre sur la même ligne. Les petites places restent pour choisir la sienne (souris, grand écran).
+            const full = t.players >= t.seats;
+            const act =
+              t.id === my
+                ? `<button type="button" class="btn go" data-open="${t.id}">Ma table</button>`
+                : spectator || my
+                  ? ''
+                  : full
+                    ? '<span class="tfull">Complète</span>'
+                    : `<button type="button" class="btn go" data-join="${t.id}">Rejoindre</button>`;
+            return `<div class="trow${t.id === my ? ' mine' : ''}"><span class="tno">Table ${t.no}</span><span class="tph"><b>${t.players}/${t.seats}</b> · ${t.players ? PHASE[t.phase] ?? '' : 'libre'}</span><span class="dots" title="${spectator || my ? '' : 'Choisis ta place'}">${(t.taken ?? []).map((on, i) => `<button type="button" class="${on ? 'on' : ''}" ${!on && !spectator && !my ? `data-join="${t.id}" data-seat="${i}" title="Place ${i + 1}"` : 'disabled'}></button>`).join('')}</span>${t.id === my ? '' : `<button type="button" class="ic eye" data-watch="${t.id}" title="Regarder la table ${t.no} (spectateur)" aria-label="Regarder la table ${t.no}">${icon('eye')}</button>`}${act}</div>`;
+          })
           .join('') || '<p class="none">Aucune table ouverte pour l’instant.</p>'
       }</div>
-      ${spectator || my ? '' : '<button type="button" class="btn go wide" data-join="">Trouver une place</button>'}
-      <p class="fine">Touche une place libre pour t’y asseoir. Une table en pleine manche : tu joues la suivante.</p>`;
+      ${spectator || my ? '' : `<button type="button" class="btn go wide" data-join="">${tables.length ? 'Trouver une place' : 'Ouvrir une table'}</button>`}
+      <p class="fine">Seul contre la banque ou à plusieurs : la donne part dès que tous les joueurs assis sont prêts. Une table en pleine manche : tu joues la suivante. Une nouvelle table s’ouvre quand les autres sont complètes.</p>`;
   }
   let joining = false; // un double-clic sur « S'asseoir » (BJ-02/A3) : la même demande, jamais deux
   async function join(id, seat = null) {
@@ -377,6 +393,12 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     onTitle(`Blackjack · Table ${next.no}`);
     paint(prev, animate);
     if (animate) sounds(next);
+    // Split (retour d'Antoni du 21/11) : la 2ᵉ carte de chaque main est une règle du moteur, distribuée sans clic — on le dit.
+    const ev = next.last;
+    if (animate && me && ev?.seat === me.seat && me.hands.length > 1) {
+      if (ev.type === 'split') toast(`Split : tu joues la main ${ev.hand + 1} d’abord ; la main ${ev.hand + 2} recevra sa 2ᵉ carte à son tour.`);
+      else if (ev.type === 'card' && ev.auto && ev.hand > 0) toast(`Main ${ev.hand + 1} : sa 2ᵉ carte est distribuée automatiquement (règle du Split).`);
+    }
     if (animate && next.last?.type === 'peek') toast(me?.insurance?.stake ? `Pas de blackjack pour la banque : assurance perdue (−${fmt(me.insurance.stake)}), la main continue.` : 'Pas de blackjack pour la banque : la main continue.');
     if (animate && next.phase === 'settled' && prev?.phase !== 'settled') payFlights(next);
     log(next.last);
@@ -412,7 +434,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const me = mine();
     const fresh = [];
     bj.classList.toggle('is-spect', !me);
-    bj.classList.toggle('my-turn', !!(me && s.turn?.seat === me.seat && s.phase === 'players'));
+    bj.classList.toggle('my-turn', !!me && turnOf(s)?.seat === me.seat);
     $('.shoe small').textContent = s.shoe.shuffling ? '…' : String(s.shoe.size - s.shoe.dealt);
     $('.shoe').dataset.tip = s.shoe.shuffling ? 'Nouveau sabot : 8 paquets mélangés' : `Sabot : ${s.shoe.size - s.shoe.dealt} cartes sur ${s.shoe.size}|8 paquets · remélangé au dernier quart`;
     $('.shoe').classList.toggle('mixing', !!s.shoe.shuffling);
@@ -423,8 +445,8 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const dt = $('[data-tot="dealer"]');
     dt.textContent = s.dealer.cards.length ? (s.dealer.natural ? 'BJ' : s.dealer.total > 21 ? `${s.dealer.total} · bust` : String(s.dealer.total)) : '';
     dt.className = `tot${s.dealer.natural ? ' is-bj' : s.dealer.total > 21 ? ' bust' : ''}`;
-    paintSides(s, me);
     paintSeats(s, fresh);
+    paintSides(s, me); // après les places : l'arc du portrait dépend de .has-hero
     paintSpot(s, fresh, me);
     paintBar(s, me);
     if (felt.classList.contains('hist-open') && histTab === 'table') paintHistory();
@@ -446,16 +468,22 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const H = felt.clientHeight || 364;
     // Paysage compact (844×300 de l'audit) : la courbe ne tient plus sous les cartes de la banque à cette hauteur,
     // même avec une largeur confortable — la grille plate (déjà prévue pour le panneau étroit) s'en sort mieux.
-    const flat = W < 420 || H < 300;
+    // Portrait (téléphone, retour d'Antoni du 21/11) : les 7 cases gardent leur courbe sous la banque quand la largeur
+    // laisse au moins 40 px à chacune (au doigt) ; plus étroit, la grille compacte. Jamais des cases étirées.
+    const hero = felt.classList.contains('has-hero');
+    const bw = hero ? Math.min(48, Math.floor((W - 28 - 36) / 7)) : 0;
+    const flat = hero ? bw < 40 : W < 420 || H < 300;
     box.classList.toggle('flat', flat);
+    box.classList.toggle('harc', hero && !flat);
+    box.style.setProperty('--bw', `${bw}px`);
     // De l'air entre les cartes de la banque, les cases et leur titre (retour d'Antoni du 21/11) : la rangée descend
     // (bord 50, flèche 42 au lieu de 40/40), et suit l'échelle --kg comme les cartes qu'elle contourne.
     const kg = Number.parseFloat(getComputedStyle(felt).getPropertyValue('--kg')) || 1;
-    const span = Math.min(210 * kg, W / 2 - 41);
     // La rangée de la banque est plus basse en hauteur moyenne ou basse (bj.css) : l'arc et son titre s'y calent
     // toujours (sinon ils débordaient sur le centre, sous les mains d'un Split).
     const fit = Math.min(1, (box.clientHeight || 136 * kg) / (136 * kg));
-    const [yEdge, depth] = [50 * kg * fit, 42 * kg * fit];
+    const span = hero ? (W - 28 - bw) / 2 : Math.min(210 * kg, W / 2 - 41);
+    const [yEdge, depth] = hero ? [22, 14] : [50 * kg * fit, 42 * kg * fit];
     const cx = W / 2;
     felt.querySelectorAll('[data-side]').forEach((b, i) => {
       if (flat) return void ((b.style.left = ''), (b.style.top = ''));
@@ -464,7 +492,8 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       b.style.top = `${Math.round(yEdge + depth * (1 - u * u))}px`;
     });
     // Une parabole exacte = une courbe de Bézier quadratique (contrôle au double de la flèche).
-    const ty = yEdge + 33 * kg * fit; // le titre : sous les cases, avec de l'air
+    // Le titre : sous les cases, avec de l'air (retour d'Antoni du 21/11 : sur PC, il touchait presque les cases).
+    const ty = hero ? yEdge + 34 : yEdge + 39 * kg * fit;
     $('.sides__arc path').setAttribute('d', flat ? '' : `M${cx - span} ${ty} Q${cx} ${ty + 2 * depth} ${cx + span} ${ty}`);
     for (const b of felt.querySelectorAll('[data-side]')) {
       const k = b.dataset.side;
@@ -598,6 +627,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // (celle à jouer) est marquée `.cur` ; sans Split, c'est la même carte unique qu'avant.
     const hand = el.querySelector('.hand');
     hand.classList.toggle('multi', multi);
+    hand.style.setProperty('--k', String(Math.max(1, p.hands.length))); // bj.css : la largeur de chaque main
     const list = p.hands.length ? p.hands : [null];
     let subs = [...hand.querySelectorAll('.subhand')];
     while (subs.length < list.length) {
@@ -652,18 +682,25 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       // Le résultat de SA MAIN (sa couleur, son montant) ; les paris banque et l'assurance sont dans la bulle. Après
       // un Split aux verdicts opposés (BJ-07) : jamais « Égalité » — « 2 mains ±0 », le détail est au centre.
       const m = mainResult(p);
-      const cls = m.kind === 'mixed' ? (m.net > 0 ? 'win' : m.net < 0 ? 'lose' : 'push') : ({ blackjack: 'blackjack', even: 'win', win: 'win', push: 'push', lose: 'lose', bust: 'lose' }[m.kind] ?? 'push');
-      bet.className = `bet res ${cls}`;
-      const label = m.net > 0 ? `+${kfmt(m.net)}` : m.net < 0 ? `−${kfmt(-m.net)}` : m.kind === 'mixed' ? '±0' : 'Égalité';
-      bet.innerHTML = `${m.kind === 'blackjack' ? '<small>BJ</small>' : m.kind === 'mixed' ? `<small>${p.hands.length} mains</small>` : ''}${label}`;
-      const perHand = p.hands.length > 1 ? `${p.hands.map((hd, k) => `main ${k + 1} ${KIND[hd.verdict] ?? ''}`).join(' · ')} · ` : '';
       const extra = [...Object.entries(r.side ?? {}).map(([k, x]) => `pari ${SIDE_LABEL[k]} ${signedTxt(x.payout - x.stake)}`), ...(r.insurance ? [`assurance ${signedTxt(r.insurance.payout - r.insurance.stake)}`] : [])];
-      bet.title = `${perHand}bilan des mains ${signedTxt(m.net)}${extra.length ? ` · ${extra.join(' · ')} · total ${signedTxt(r.net)}` : ''}`;
+      const perHand = p.hands.length > 1 ? `${p.hands.map((hd, k) => `main ${k + 1} ${KIND[hd.verdict] ?? ''}`).join(' · ')} · ` : '';
+      bet.title = `${perHand}main ${signedTxt(m.net)}${extra.length ? ` · ${extra.join(' · ')} · bilan ${signedTxt(r.net)}` : ''}`;
+      if (extra.length) {
+        // Assurance ou paris banque (retour d'Antoni du 21/11 : « −5 000 » ici, « 0 » dans l'historique) : l'étiquette
+        // dit le BILAN de la manche, comme l'historique ; le détail (main, assurance, paris) est au centre et au survol.
+        bet.className = `bet res ${r.net > 0 ? 'win' : r.net < 0 ? 'lose' : 'push'}`;
+        bet.innerHTML = `<small>bilan</small>${r.net > 0 ? `+${kfmt(r.net)}` : r.net < 0 ? `−${kfmt(-r.net)}` : '±0'}`;
+      } else {
+        const cls = m.kind === 'mixed' ? (m.net > 0 ? 'win' : m.net < 0 ? 'lose' : 'push') : ({ blackjack: 'blackjack', even: 'win', win: 'win', push: 'push', lose: 'lose', bust: 'lose' }[m.kind] ?? 'push');
+        bet.className = `bet res ${cls}`;
+        const label = m.net > 0 ? `+${kfmt(m.net)}` : m.net < 0 ? `−${kfmt(-m.net)}` : m.kind === 'mixed' ? '±0' : 'Égalité';
+        bet.innerHTML = `${m.kind === 'blackjack' ? '<small>BJ</small>' : m.kind === 'mixed' ? `<small>${p.hands.length} mains</small>` : ''}${label}`;
+      }
     } else {
       bet.className = 'bet';
       bet.removeAttribute('title');
       bet.innerHTML = stake
-        ? `<i class="chipdot ${tone(stake)}"></i>${kfmt(stake)}${sides ? '<small title="Paris sur la banque">B</small>' : ''}${p.insurance?.stake ? `<small class="ins" title="Assurance ${fmt(p.insurance.stake)}">A</small>` : p.insurance?.even ? '<small class="ins" title="Even money">EM</small>' : ''}${s.phase === 'betting' && p.bet?.ready ? '<em title="Prêt">✓</em>' : ''}`
+        ? `<i class="chipdot ${tone(stake)}"></i>${kfmt(stake)}${sides ? '<small title="Paris sur la banque">B</small>' : ''}${p.insurance?.stake ? `<small class="ins" title="Assurance ${fmt(p.insurance.stake)}">A</small>` : p.insurance?.even ? '<small class="ins" title="Gain assuré (even money) : payé 1:1">1:1</small>' : ''}${s.phase === 'betting' && p.bet?.ready ? '<em title="Prêt">✓</em>' : ''}`
         : s.phase === 'betting' ? '<span class="muted">…</span>' : '';
     }
     // L'étiquette au-dessus de la place : JOUE (joueur actif), BUSTED, ou « parti ».
@@ -677,8 +714,18 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   }
 
   // --- Le centre : ce qui se passe ; pendant les décisions, le joueur actif ---------------------------------------
+  /** Le joueur dont c'est le tour — ou, entre deux décisions (une carte en route, la main suivante qui reçoit sa 2ᵉ
+   * carte), celui qui vient d'agir : le Core n'a pas encore rendu le tour, mais c'est toujours sa main qu'on regarde. */
+  function turnOf(s) {
+    if (s.phase !== 'players') return null;
+    if (s.turn) return { seat: s.turn.seat, hand: s.turn.hand, between: false };
+    const l = s.last;
+    const p = Number.isInteger(l?.seat) ? s.seats[l.seat] : null;
+    if (!p?.inRound || !p.hands.length) return null;
+    return { seat: l.seat, hand: Math.min(Number(l.hand) || 0, p.hands.length - 1), between: true };
+  }
   function paintSpot(s, fresh, me) {
-    const t = s.turn;
+    const tt = turnOf(s);
     let html = '';
     let key = '';
     const tally = `${s.ready}/${s.ready + s.waiting} prêt${s.ready > 1 ? 's' : ''}`;
@@ -695,22 +742,34 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       const inRound = s.seats.filter((x) => x?.inRound).length;
       key = `ins:${s.round}:${answered}:${me?.insurance ? 1 : 0}`;
       const mine = me?.inRound && me.insurance === null;
-      const nat = mine && me.hands[0]?.natural;
-      html = `<div class="msg ins"><b>${icon('shield')}Assurance ?</b><small>${mine ? (nat ? 'Tu as un blackjack : prends l’even money (+' + fmt(me.hands[0].stake) + ' garanti) ou tente le 3:2.' : `La banque montre un As : jusqu’à ${fmt(Math.floor(me.hands[0].stake / 2))}, payée 2:1 si elle a blackjack.`) : 'La banque montre un As : chacun peut s’assurer.'}</small><small class="tally">${answered}/${inRound} ont répondu</small></div>`;
+      const h0 = mine ? me.hands[0] : null;
+      const nat = !!h0?.natural;
+      const max = h0 ? Math.floor(h0.stake / 2) : 0;
+      // Retour d'Antoni du 21/11 : ce qu'on accepte réellement, en Jetons NETS (moteur du Core : assurance payée 2:1 =
+      // 3 × la mise d'assurance rendue ; gain assuré = la main payée 1:1 ; blackjack = 3:2).
+      const txt = !mine
+        ? 'La banque montre un As : chacun peut s’assurer.'
+        : nat
+          ? `Blackjack contre un As. Gain assuré (even money) : +${fmt(h0.stake)} quoi qu’il arrive. Ou le 3:2 : +${fmt(Math.floor((h0.stake * 5) / 2) - h0.stake)}, mais 0 si la banque a blackjack.`
+          : `La banque montre un As. Assurance ${fmt(max)} : +${fmt(2 * max)} net si elle a blackjack (ta mise est compensée), sinon perdue et ta main continue.`;
+      html = `<div class="msg ins"><b>${icon('shield')}${nat ? 'Gain assuré ?' : 'Assurance ?'}</b><small>${txt}</small><small class="tally">${answered}/${inRound} ont répondu</small></div>`;
     } else if (s.phase === 'shuffle') {
       key = 'shuffle';
       html = '<div class="msg"><b>Nouveau sabot</b><small>8 paquets mélangés</small></div>';
     } else if (s.phase === 'dealing') {
       key = `deal:${s.round}`;
       html = '';
-    } else if (t) {
-      const p = s.seats[t.seat];
-      key = `turn:${t.seat}:${t.hand}:${p.hands.length}:${s.roundId}`;
-      const who = `<div class="who${p.me ? ' me' : ''}">${avatarHTML(p, 'av big')}<div><b>${p.me ? 'À toi de jouer' : esc(p.name)}</b><span class="lbl">${p.me ? 'ton tour' : 'à son tour'}${p.hands.length > 1 ? ` · main ${t.hand + 1}/${p.hands.length}` : ''}</span><small class="st"></small></div></div>`;
+    } else if (tt) {
+      const p = s.seats[tt.seat];
+      // La clé ne dépend pas de la main jouée : passer de la main 1 à la main 2 (ou attendre la carte suivante) ne
+      // redessine rien — avant, le centre se vidait puis réapparaissait à chaque carte, et les deux mains semblaient
+      // recevoir une carte ensemble (retour d'Antoni du 21/11). Nom, main active et étiquettes se mettent à jour dessous.
+      key = `turn:${tt.seat}:${p.hands.length}:${s.roundId}`;
+      const who = `<div class="who${p.me ? ' me' : ''}">${avatarHTML(p, 'av big')}<div><b>${p.me ? 'À toi de jouer' : esc(p.name)}</b><span class="lbl"></span><small class="st"></small></div></div>`;
       // Après un Split, le centre montre TOUTES les mains du joueur, côte à côte et en grand : chacune son nom, ses
       // cartes, son total, sa mise ; celle à jouer entourée, les finies estompées — jamais confondu avec un Double.
       html = p.hands.length > 1
-        ? `${who}<div class="splithands" data-n="${p.hands.length}">${p.hands.map((hd, k) => `<div class="sh${k === t.hand ? ' cur' : ''}"><small class="sh__lbl">Main ${k + 1}${k === t.hand ? ' · à jouer' : ''}</small><div class="cards big" data-zone="spot${k}"></div><span class="sh__foot"><span class="tot" data-tot="spot${k}"></span><span class="sh__bet">${kfmt(hd.stake)}</span></span></div>`).join('')}</div>`
+        ? `${who}<div class="splithands" data-n="${p.hands.length}">${p.hands.map((hd, k) => `<div class="sh"><small class="sh__lbl"></small><div class="cards big" data-zone="spot${k}"></div><span class="sh__foot"><span class="tot" data-tot="spot${k}"></span><span class="sh__bet">${kfmt(hd.stake)}</span></span></div>`).join('')}</div>`
         : `${who}<div class="cards big" data-zone="spot"></div><span class="tot" data-tot="spot"></span>`;
     } else if (s.phase === 'dealer') {
       key = `dealer:${s.round}`;
@@ -723,33 +782,55 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       const bjMe = m?.kind === 'blackjack';
       // Après un Split, chaque main d'abord (son verdict), puis les à-côtés et le total : jamais « égalité » pour un
       // net nul issu de verdicts opposés (BJ-07) — « Bilan » à la place, le détail par main le rend vérifiable.
-      const HV = { blackjack: 'blackjack', even: 'even money', win: 'gagnée', push: 'à égalité', lose: 'perdue', bust: 'bust' };
+      const HV = { blackjack: 'blackjack', even: 'gain assuré', win: 'gagnée', push: 'à égalité', lose: 'perdue', bust: 'bust' };
       const handsLine = me && me.hands.length > 1 ? me.hands.map((hd, k) => `Main ${k + 1} ${HV[hd.verdict] ?? ''}`).join(' · ') : '';
-      const extra = r ? [...Object.entries(r.side ?? {}).map(([k, x]) => `pari ${SIDE_LABEL[k]} ${signedTxt(x.payout - x.stake)}`), ...(r.insurance ? [`assurance ${signedTxt(r.insurance.payout - r.insurance.stake)}`] : [])] : [];
-      html = `<div class="msg res${bjMe ? ' is-bj' : ''}"><b>${out}</b>${handsLine ? `<small class="handsline">${handsLine}</small>` : ''}${m ? `<span class="me ${m.net > 0 ? 'g' : m.net < 0 ? 'l' : ''}">${m.kind === 'mixed' ? (m.net ? `Bilan ${signedTxt(m.net)}` : 'Bilan ±0 · rien gagné, rien perdu') : `${KIND[m.kind] ?? ''}${m.net ? ` ${signedTxt(m.net)}` : ''}`}</span>${extra.length ? `<small>${extra.join(' · ')} · <b class="${r.net > 0 ? 'g' : r.net < 0 ? 'l' : ''}">total ${signedTxt(r.net)}</b></small>` : ''}` : ''}</div>`;
+      // Assurance ou paris banque (retour d'Antoni du 21/11) : jamais un seul montant ambigu — la main, chaque à-côté
+      // (son NET, jamais le paiement brut) et le bilan de la manche, tels que le Core les a réglés.
+      const rows = r ? [...Object.entries(r.side ?? {}).map(([k, x]) => [`Pari ${SIDE_LABEL[k]} ${x.payout ? 'gagné' : 'perdu'}`, x.payout - x.stake]), ...(r.insurance ? [[`Assurance ${r.insurance.payout ? 'gagnée' : 'perdue'}`, r.insurance.payout - r.insurance.stake]] : [])] : [];
+      const c = (n) => (n > 0 ? 'g' : n < 0 ? 'l' : '');
+      const jetons = (n) => (n ? `${signedTxt(n)} Jeton${Math.abs(n) > 1 ? 's' : ''}` : '0 Jeton');
+      const mainLbl = m && (m.kind === 'mixed' ? `${me.hands.length} mains` : HV[m.kind] ?? '');
+      html = `<div class="msg res${bjMe ? ' is-bj' : ''}"><b>${out}</b>${handsLine ? `<small class="handsline">${handsLine}</small>` : ''}${
+        !m
+          ? ''
+          : rows.length
+            ? `<div class="bd"><p><span>Main${mainLbl ? ` <i>${mainLbl}</i>` : ''}</span><em class="${c(m.net)}">${signedTxt(m.net)}</em></p>${rows.map(([l, n]) => `<p><span>${l}</span><em class="${c(n)}">${signedTxt(n)}</em></p>`).join('')}<p class="bd__tot"><span>Bilan</span><em class="${c(r.net)}">${jetons(r.net)}</em></p></div>`
+            : `<span class="me ${c(m.net)}">${m.kind === 'mixed' ? (m.net ? `Bilan ${signedTxt(m.net)}` : 'Bilan ±0 · rien gagné, rien perdu') : `${KIND[m.kind] ?? ''}${m.net ? ` ${signedTxt(m.net)}` : ''}`}</span>`
+      }</div>`;
     }
     if (spot.dataset.key !== key) {
       spot.dataset.key = key;
       spot.innerHTML = html;
       spot.classList.toggle('has-split', html.includes('splithands'));
-      spot.classList.toggle('is-me', !!(t && s.phase === 'players' && s.seats[t.seat]?.me));
+      spot.classList.toggle('is-me', !!tt && !!s.seats[tt.seat]?.me);
       spot.classList.remove('in');
       void spot.offsetWidth;
       spot.classList.add('in');
     }
-    if (t && s.phase === 'players') {
-      const p = s.seats[t.seat];
-      const zones = p.hands.length > 1 ? p.hands.map((h, k) => [h, k, `spot${k}`]) : [[p.hands[t.hand], t.hand, 'spot']];
+    if (tt) {
+      const p = s.seats[tt.seat];
+      const multi = p.hands.length > 1;
+      const lbl = spot.querySelector('.who .lbl');
+      if (lbl) lbl.textContent = `${p.me ? 'ton tour' : 'à son tour'}${multi ? ` · main ${tt.hand + 1}/${p.hands.length}` : ''}`;
+      const zones = multi ? p.hands.map((h, k) => [h, k, `spot${k}`]) : [[p.hands[tt.hand], tt.hand, 'spot']];
       for (const [h, k, z] of zones) {
         const el = spot.querySelector(`[data-zone="${z}"]`);
         if (!h || !el) continue;
         const fr = [];
-        cardsInto(el, h.cards, `sp${t.seat}:${s.roundId}:${k}`, fr);
+        cardsInto(el, h.cards, `sp${tt.seat}:${s.roundId}:${k}`, fr);
         fresh.push(...fr);
         const tot = spot.querySelector(`[data-tot="${z}"]`);
         tot.textContent = h.natural ? 'BJ' : h.total > 21 ? `${totText(h)} · bust` : totText(h);
         tot.className = `tot${h.total > 21 ? ' bust' : ''}`;
-        el.closest('.sh')?.classList.toggle('done', k !== t.hand && (h.done || k < t.hand));
+        const sh = el.closest('.sh');
+        if (!sh) continue;
+        // Une seule main active (entourée) ; les autres restent visibles, estompées une fois finies. Une main splittée
+        // qui n'a qu'une carte attend la sienne : le Core la lui donne quand vient son tour (règle du moteur).
+        const cur = k === tt.hand;
+        const done = !cur && (h.done || k < tt.hand);
+        sh.classList.toggle('cur', cur);
+        sh.classList.toggle('done', done);
+        sh.querySelector('.sh__lbl').innerHTML = `Main ${k + 1}<span class="sh__st">${cur ? ' · à jouer' : h.cards.length === 1 ? ' · attend sa 2ᵉ carte' : done ? ' · finie' : ''}</span>`;
       }
     }
   }
@@ -788,26 +869,33 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       const h = me.hands[0];
       const max = Math.floor(h.stake / 2);
       key = `ins:${s.round}:${pending}`;
+      // Gain assuré (even money) : libellé français, le montant garanti dessus ; l'autre choix dit ce qu'il garde (3:2).
+      const bjNet = Math.floor((h.stake * 5) / 2) - h.stake;
       html = h.natural
-        ? `<div class="acts two"><button type="button" class="act k-ins" data-ins="even"${pending ? ' disabled' : ''} title="Ton blackjack payé 1:1 tout de suite, quoi qu’ait la banque">${icon('shield')}<b>Even money</b><small>+${kfmt(h.stake)}</small></button><button type="button" class="act k-no" data-ins="0"${pending ? ' disabled' : ''} title="Garder la chance du 3:2 (égalité si la banque a blackjack)"><b>Non merci</b></button></div><i class="tmbar big"><i></i></i>`
-        : `<div class="acts two"><button type="button" class="act k-ins" data-ins="${max}"${pending || max > client.balance() ? ' disabled' : ''} title="Payée 2:1 si la banque a blackjack (+${fmt(max * 2)}), perdue sinon">${icon('shield')}<b>Assurer</b><small>${kfmt(max)}</small></button><button type="button" class="act k-no" data-ins="0"${pending ? ' disabled' : ''}><b>Non merci</b></button></div><i class="tmbar big"><i></i></i>`;
-    } else if (isMyTurn(s, me)) {
-      const h = me.hands[s.turn.hand];
+        ? `<div class="acts two"><button type="button" class="act k-ins" data-ins="even"${pending ? ' disabled' : ''} title="Even money : ton blackjack payé 1:1 (+${fmt(h.stake)}), quoi qu’ait la banque">${icon('shield')}<b>Gain assuré</b><small>+${kfmt(h.stake)}</small></button><button type="button" class="act k-no" data-ins="0"${pending ? ' disabled' : ''} title="Garder le 3:2 (+${fmt(bjNet)}) ; égalité (0) si la banque a blackjack"><b>Tenter le 3:2</b><small>+${kfmt(bjNet)} ou 0</small></button></div><i class="tmbar big"><i></i></i>`
+        : `<div class="acts two"><button type="button" class="act k-ins" data-ins="${max}"${pending || max > client.balance() ? ' disabled' : ''} title="Assurance de ${fmt(max)} : +${fmt(max * 2)} net si la banque a blackjack, perdue sinon">${icon('shield')}<b>Assurer</b><small>${kfmt(max)}</small></button><button type="button" class="act k-no" data-ins="0"${pending ? ' disabled' : ''}><b>Non merci</b></button></div><i class="tmbar big"><i></i></i>`;
+    } else if (isMyTurn(s, me) || turnOf(s)?.seat === me.seat) {
+      // Mon tour — ou l'instant entre deux de mes décisions (la carte tirée arrive, ma main suivante reçoit sa 2ᵉ
+      // carte) : les actions restent à leur place, en attente, au lieu de céder la barre à un texte puis de revenir.
+      const tt = turnOf(s);
+      const wait = tt.between;
+      const h = me.hands[tt.hand];
       const raw = { cards: h.cards.map((c) => c.id), stake: h.stake, fromSplit: h.fromSplit, splitAces: h.splitAces, done: h.done };
       const a = R.actions(raw, { handsCount: me.hands.length, balance: client.balance() });
-      key = `turn:${s.turn.token}:${pending}:${JSON.stringify(a)}`;
-      const b = (k, label, kb, extra = '') => `<button type="button" class="act k-${k}" data-act="${k}"${!a[k] || pending ? ' disabled' : ''} title="${label} (touche ${kb})">${icon(k)}<b>${label}</b>${extra}</button>`;
-      html = `${stakeHTML(engaged(me))}<div class="acts">${b('hit', 'Tirer', 'T')}${b('stand', 'Rester', 'R')}${b('double', 'Doubler', 'D', `<small>+${kfmt(h.stake)}</small>`)}${b('split', 'Split', 'S', `<small>+${kfmt(h.stake)}</small>`)}</div><i class="tmbar big"><i></i></i>`;
+      key = `turn:${s.turn?.token ?? 'wait'}:${pending}:${JSON.stringify(a)}:${tt.hand}`;
+      const multi = me.hands.length > 1;
+      const b = (k, label, kb, extra = '') => `<button type="button" class="act k-${k}${wait && a[k] ? ' soon' : ''}" data-act="${k}"${!a[k] || pending || wait ? ' disabled' : ''} title="${label}${multi ? ` (main ${tt.hand + 1})` : ''} — touche ${kb}">${icon(k)}<b>${label}</b>${extra}</button>`;
+      // Après un Split : la main que ces boutons jouent, écrite au-dessus d'eux (une seule à la fois).
+      html = `${multi ? `<span class="forhand">Main ${tt.hand + 1} sur ${me.hands.length}</span>` : ''}${stakeHTML(engaged(me))}<div class="acts" role="group" aria-label="${multi ? `Jouer la main ${tt.hand + 1} sur ${me.hands.length}` : 'Jouer ma main'}">${b('hit', 'Tirer', 'T')}${b('stand', 'Rester', 'R')}${b('double', 'Doubler', 'D', `<small>+${kfmt(h.stake)}</small>`)}${b('split', 'Split', 'S', `<small>+${kfmt(h.stake)}</small>`)}</div><i class="tmbar big"><i></i></i>`;
     } else {
       key = `info:${s.phase}:${s.turn?.token ?? ''}:${me.status}:${me.inRound}`;
       const who = s.turn ? s.seats[s.turn.seat] : null;
-      const VERD = { blackjack: 'Blackjack', even: 'Even money', win: 'Gagné', push: 'Égalité', lose: 'Perdu', bust: 'Busted' };
-      const one = (h) => (h.verdict ? VERD[h.verdict] : h.natural ? 'Blackjack' : h.total > 21 ? 'Busted' : String(h.total));
+      const one = (h) => (h.verdict ? KIND[h.verdict] : h.natural ? 'Blackjack' : h.total > 21 ? 'Bust' : String(h.total));
       const myLine = me.hands.length > 1 ? me.hands.map((h, k) => `main ${k + 1} ${one(h)}`).join(' · ') : me.hands.length ? one(me.hands[0]) : '';
       const text =
         me.status === 'left' ? (s.phase === 'settled' ? 'Tu as quitté la table : la manche est réglée, ta place se libère.' : 'Tu as quitté la table : ta mise reste engagée jusqu’au règlement.') :
         !me.inRound && s.phase !== 'betting' ? 'Tu rejoindras la manche suivante.' :
-        s.phase === 'insurance' ? (me.insurance?.even ? 'Even money pris : +' + fmt(me.hands[0].stake) + ' assurés' : me.insurance?.stake ? `Assurance prise : ${fmt(me.insurance.stake)}` : me.insurance ? 'Pas d’assurance' : 'Assurance proposée') :
+        s.phase === 'insurance' ? (me.insurance?.even ? `Gain assuré : +${fmt(me.hands[0].stake)} (payé au règlement)` : me.insurance?.stake ? `Assurance prise : ${fmt(me.insurance.stake)}` : me.insurance ? 'Pas d’assurance' : 'Assurance proposée') :
         s.phase === 'players' && who ? `Au tour de ${esc(who.name)}` :
         s.phase === 'dealer' ? 'La banque joue…' :
         s.phase === 'settled' ? 'Prochaine manche dans un instant' :
@@ -832,7 +920,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   // banque (score parié, misé, retour) ; le NET (payé − misé) est toujours signé, le retour brut jamais.
   const signed = (n) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '0');
   const cls = (n) => (n > 0 ? 'g' : n < 0 ? 'l' : 'e');
-  const VERDICT = { blackjack: 'blackjack', even: 'even money', win: 'gagné', push: 'égalité', lose: 'perdu', bust: 'busted' };
+  const VERDICT = { blackjack: 'blackjack', even: 'gain assuré', win: 'gagné', push: 'égalité', lose: 'perdu', bust: 'bust' };
   function paintHistory() {
     const list = [...(st?.history ?? [])].reverse();
     const meUser = client.user;
@@ -889,7 +977,11 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       .map((r) => {
         const old = Date.parse(r.created_at) < resetAt;
         const divider = old && !divided && resetAt ? ((divided = true), '<p class="mdiv">Avant la remise à zéro</p>') : '';
-        return `${divider}<article class="mrow${old ? ' old' : ''}"><p class="mrow__top"><span>${bankTxt(r.dealer)}</span><b class="${cls(r.net)}">${netTxt(r.net)}</b></p><p class="mrow__meta"><span>Table ${r.table ?? '?'} · manche ${r.round ?? '?'} · mise ${fmt(r.bet)}</span><time>${Frame.ago(Date.parse(r.created_at))}</time></p><button type="button" class="hico mrow__share" data-share="${r.round_id}"${r.shared ? ' disabled' : ''} title="${r.shared ? 'Déjà partagée dans le chat' : 'Partager dans le chat'}" aria-label="${r.shared ? 'Manche déjà partagée dans le chat' : 'Partager cette manche dans le chat'}">${icon(r.shared ? 'check' : 'share')}</button></article>`;
+        // Le détail (main, assurance, paris banque) quand la manche est encore dans l'historique de cette table : le
+        // Core ne le renvoie pas dans « Mes manches » (seulement le net et le total misé). Jamais recalculé ni inventé.
+        const det = st && r.table === st.no ? st.history.find((h) => h.round === r.round)?.players.find((p) => p.user === client.user) : null;
+        const parts = det ? [`main ${signed((det.mainPaid ?? 0) - (det.main ?? 0))}`, ...(det.insurance ? [`assurance ${signed(det.insurance.payout - det.insurance.stake)}`] : []), ...(det.side ?? []).map((x) => `pari ${SIDE_LABEL[x.spot]} ${signed(x.payout - x.stake)}`)] : [];
+        return `${divider}<article class="mrow${old ? ' old' : ''}"><p class="mrow__top"><span>${bankTxt(r.dealer)}</span><b class="${cls(r.net)}">${netTxt(r.net)}</b></p>${parts.length > 1 ? `<p class="mrow__bd">${parts.join(' · ')}</p>` : ''}<p class="mrow__meta"><span>Table ${r.table ?? '?'} · manche ${r.round ?? '?'} · misé ${fmt(r.bet)}</span><time>${Frame.ago(Date.parse(r.created_at))}</time></p><button type="button" class="hico mrow__share" data-share="${r.round_id}"${r.shared ? ' disabled' : ''} title="${r.shared ? 'Déjà partagée dans le chat' : 'Partager dans le chat'}" aria-label="${r.shared ? 'Manche déjà partagée dans le chat' : 'Partager cette manche dans le chat'}">${icon(r.shared ? 'check' : 'share')}</button></article>`;
       })
       .join('');
     $('.hist__list').innerHTML = head + (rows || '<p class="none">Aucune manche terminée pour l’instant.</p>');
@@ -1164,7 +1256,12 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     typing = true;
     const f = document.createElement('form');
     f.className = 'cuform';
-    f.innerHTML = `<input inputmode="numeric" placeholder="ex. 250" aria-label="Montant du jeton libre" value="${custom ?? ''}"><button type="submit" class="btn go">OK</button>`;
+    // Les valeurs acceptées, celles du Core (retour d'Antoni du 21/11 : le montant semblait arrondi au hasard) : par pas
+    // de `step`, mise principale dès `mainMin`, jusqu'au plafond de gain (splits et doubles compris). Jamais arrondi
+    // en silence : un montant hors pas est refusé avec les deux valeurs voisines.
+    const lim = L() ?? { step: 10, mainMin: 100, sideMin: 10 };
+    const top = betProblem({ main: 1e12 }, lim)?.max;
+    f.innerHTML = `<input inputmode="numeric" placeholder="ex. 250" aria-label="Montant du jeton libre" aria-describedby="${uid}-cuh" value="${custom ?? ''}"><button type="submit" class="btn go">OK</button><small id="${uid}-cuh" class="cuform__h">Par pas de ${lim.step} · mise principale ${fmt(lim.mainMin)}${top ? ` à ${fmt(top)}` : ' minimum'} · pari banque dès ${fmt(lim.sideMin)}</small>`;
     bar.append(f);
     const input = f.querySelector('input');
     input.focus();
@@ -1174,9 +1271,11 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
       typing = false;
       f.remove();
       if (ok && input.value.trim()) {
-        const raw = Number(String(input.value).replace(/[\s\u202f]/g, '').replace(/k$/i, '000'));
-        const v = Math.floor(raw / 10) * 10;
-        if (!Number.isFinite(raw) || v < 10) toast('Jeton libre : 10 minimum, en multiples de 10.', true);
+        const m = /^(\d+(?:[.,]\d+)?)(k?)$/i.exec(String(input.value).replace(/[\s\u202f]/g, ''));
+        const v = m ? Math.round(Number(m[1].replace(',', '.')) * (m[2] ? 1000 : 1)) : NaN;
+        const lo = Math.floor(v / lim.step) * lim.step;
+        if (!Number.isSafeInteger(v) || v < lim.step) toast(`Jeton libre : ${lim.step} minimum, par pas de ${lim.step}.`, true);
+        else if (v !== lo) toast(`Par pas de ${lim.step} : ${fmt(lo)} ou ${fmt(lo + lim.step)} ?`, true);
         else {
           custom = v;
           chip = v;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  kfmt,
   mainResult,
   sessionSummary,
 } from '../extension/shared/casino/blackjack.js';
@@ -92,5 +93,16 @@ describe('sessionSummary — "Mes manches" (A9): a local counter, never a Wallet
       net: 0,
     });
     expect(rounds).toHaveLength(1); // the source history is untouched
+  });
+});
+
+describe('kfmt — table amounts, never rounded (Antoni 21/11: 1 250 showed as « 1K2 »)', () => {
+  it('keeps every significant digit, short when it can', () => {
+    expect(
+      [100, 1000, 1200, 1250, 12500, 125000, 125500, 1250000].map(kfmt),
+    ).toEqual(['100', '1K', '1K2', '1K25', '12K5', '125K', '125K5', '1M25']);
+  });
+  it('falls back to the exact amount when a short form would need too many digits', () => {
+    expect(kfmt(1234560)).toBe('1 234 560'); // fmt(): fine no-break spaces
   });
 });
