@@ -9,7 +9,7 @@
 import { CasinoError } from '../errors.js';
 
 /** The ids the Core accepts. Their pictures live in the extension (assets/casino/reactions/reactions.js). */
-export const REACTION_IDS = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'] as const;
+export const REACTION_IDS = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'] as const;
 export const REACTION_KEEP_MS = 10_000;
 export const REACTION_KEEP_N = 16;
 export const REACTION_GAP_MS = 1_500;

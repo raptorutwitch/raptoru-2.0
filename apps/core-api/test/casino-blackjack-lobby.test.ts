@@ -288,7 +288,7 @@ describe('blackjack: reactions (service, PGlite)', () => {
     expect(spect.reactions).toMatchObject({
       on: true,
       dealer: true,
-      ids: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'],
+      ids: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'],
       seq: r.n,
       list: [
         {
@@ -303,6 +303,11 @@ describe('blackjack: reactions (service, PGlite)', () => {
     );
     core.clock.advance(REACTION_GAP_MS);
     expect(await code(core.blackjack.react(CH, V(0), { r: 'r4' }))).toBe('ok');
+    // The seventh (Antoni's animated ptn): its id only — the picture is the extension's.
+    expect(await code(core.blackjack.react(CH, V(1), { r: 'r7' }))).toBe('ok');
+    expect(await code(core.blackjack.react(CH, V(1), { r: 'r8' }))).toBe(
+      'bad_reaction',
+    );
     expect(await tokens(core)).toBe(before);
     const rows = await core.db.query<{ n: number }>(
       `select count(*)::int as n from lab_wallet_ledger where channel_id = $1 and viewer_id = $2`,
