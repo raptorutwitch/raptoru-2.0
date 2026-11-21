@@ -1,37 +1,42 @@
 /* Blackjack — les réactions (shared/casino/bj-reactions.js, docs/CASINO.md § 18) : le bouton « Réagir » de la barre, la
-   bulle de choix, l'émote qui apparaît au-dessus d'une place, le repère d'une réaction hors du carrousel, la bulle de la
-   banque. Rien ne couvre durablement les cartes, les scores ou les boutons : tout disparaît seul, sans capter le toucher. */
+   bulle de choix, les émotes qui s'envolent au-dessus des places (et de la banque), le repère d'une réaction hors du
+   carrousel. Rien ne capte le toucher ni ne couvre les commandes : tout s'efface seul. */
 
-/* La barre : le bouton à côté de Quitter */
-.btn.rxb { flex: none; width: 34px; height: 32px; padding: 0; color: #ffe08a; background: rgba(255, 201, 77, 0.1); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.4); }
+/* La barre : un petit bouton plein, dans la famille des boutons du Blackjack (comme Quitter), un pictogramme de smiley. */
+.btn.rxb { flex: none; width: 34px; height: 32px; padding: 0; color: #f3ecff; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(205, 185, 255, 0.24); }
 .btn.rxb .ico { width: 17px; height: 17px; }
-.btn.rxb:hover:not(:disabled) { color: #fff3c4; background: rgba(255, 201, 77, 0.2); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.75); }
+.btn.rxb:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 0 0 1px rgba(205, 185, 255, 0.42); }
 @media (pointer: coarse) { .btn.rxb { width: 40px; height: 36px; } }
 @container bj (max-width: 560px) { .btn.rxb { width: 38px; } }
 
-/* La bulle de choix : les 7 émotes (une rangée sur PC ; 4 + 3 centrées sur un écran étroit, jamais un panneau plus grand
-   que nécessaire), et « Masquer les réactions » (pour soi seulement). Une émote animée s'anime aussi ici. */
-.rx-pal { position: absolute; z-index: 45; display: grid; gap: 6px; padding: 7px; border-radius: 14px; background: linear-gradient(180deg, #2a1a40, #1a1029); box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.45), 0 10px 24px rgba(0, 0, 0, 0.6); animation: rxpal 0.16s ease-out; }
+/* La bulle de choix : les 7 émotes (une rangée sur PC ; 4 + 3 centrées sur un écran étroit), une petite croix et le
+   masquage (pour soi seulement) sur le côté. Elle reste ouverte après chaque envoi ; un clic ailleurs la ferme. Une émote
+   animée s'anime aussi ici. Le rythme épuisé : les émotes s'estompent un instant (.dry). */
+.rx-pal { --rxc: 40px; position: absolute; z-index: 45; display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 14px; background: linear-gradient(180deg, #2a1a40, #1a1029); box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.4), 0 10px 24px rgba(0, 0, 0, 0.6); animation: rxpal 0.16s ease-out; }
 @keyframes rxpal { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
-.rx-pal { --rxc: 40px; }
 .rx-pal__row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
-.rx-pick { width: var(--rxc); height: var(--rxc); display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, 0.05); transition: transform 0.12s, background 0.12s; }
-.rx-pick:hover, .rx-pick:focus-visible { background: rgba(255, 201, 77, 0.18); transform: translateY(-2px) scale(1.08); outline: none; }
-.rx-pick:active { transform: scale(0.94); }
+.rx-pick { width: var(--rxc); height: var(--rxc); display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, 0.05); transition: transform 0.12s, background 0.12s, opacity 0.2s; }
+.rx-pick:hover, .rx-pick:focus-visible { background: rgba(255, 201, 77, 0.16); transform: translateY(-2px) scale(1.06); outline: none; }
+.rx-pick:active { transform: scale(0.92); }
 .rx-pick__img { width: calc(var(--rxc) - 10px); height: calc(var(--rxc) - 10px); object-fit: contain; pointer-events: none; }
-.rx-mute { justify-self: center; min-height: 24px; padding: 0 10px; border-radius: 7px; font: 800 9.5px/1 var(--font); color: var(--dim); }
-.rx-mute:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.rx-pal.dry .rx-pick { opacity: 0.4; cursor: default; transform: none; }
+.rx-pal__side { display: grid; gap: 4px; align-self: stretch; align-content: space-between; padding-left: 4px; border-left: 1px solid rgba(214, 170, 255, 0.14); }
+.rx-mini { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: var(--dim); }
+.rx-mini svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.rx-mini:hover, .rx-mini:focus-visible { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .rx-mute[aria-pressed='true'] { color: #ffb066; }
-@media (pointer: coarse) { .rx-pal { --rxc: 48px; } .rx-mute { min-height: 34px; font-size: 11px; } }
+@media (pointer: coarse) { .rx-pal { --rxc: 48px; } .rx-mini { width: 32px; height: 32px; } .rx-mini svg { width: 15px; height: 15px; } }
 @container bj (max-width: 420px) { .rx-pal__row { width: calc(4 * var(--rxc) + 12px); } }
 
-/* L'émote au-dessus d'une place : elle surgit, monte un peu, s'efface (2,6 s) ; l'image garde sa propre animation. */
+/* L'émote qui s'envole (bj-reactions.js float : Web Animations) : l'ancre (0 × 0) au pied de l'émote ; l'image, telle
+   quelle, garde sa propre animation (GIF, WebP). Un nuage : plusieurs à la fois, chacune sa trajectoire. */
 .rxl { position: absolute; inset: 0; z-index: 26; pointer-events: none; overflow: hidden; }
-.rx { position: absolute; width: 0; height: 0; }
-.rx__img, .rx .glyph { position: absolute; left: -18px; bottom: 0; width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55)); animation: rxup 2.6s cubic-bezier(0.2, 0.8, 0.25, 1) both; }
+.rx { position: absolute; width: 0; height: 0; will-change: transform, opacity; }
+.rx__img, .rx .glyph { position: absolute; left: -18px; bottom: 0; width: 36px; height: 36px; object-fit: contain; transform-origin: 50% 100%; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55)); }
 .glyph { display: grid; place-items: center; font-size: 28px; line-height: 1; }
-@keyframes rxup { 0% { opacity: 0; transform: translateY(8px) scale(0.4); } 12% { opacity: 1; transform: translateY(0) scale(1.12); } 22% { transform: scale(1); } 78% { opacity: 1; transform: translateY(-14px); } 100% { opacity: 0; transform: translateY(-22px) scale(0.9); } }
 @container bj (max-width: 420px) { .rx__img, .rx .glyph { left: -21px; width: 42px; height: 42px; } }
+/* La banque : une émote seule, un peu plus petite, à côté de ses cartes. */
+.rx--dealer .rx__img, .rx--dealer .glyph { left: -16px; width: 32px; height: 32px; }
 
 /* Une réaction d'un joueur hors du carrousel visible : un repère sur le bord ; le toucher fait défiler jusqu'à lui. */
 .rx-edge { position: absolute; z-index: 27; display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 6px; transform: translateY(-50%); font: 900 16px/1 var(--font); color: var(--gold-2); background: rgba(20, 12, 32, 0.92); box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.5), 0 4px 10px rgba(0, 0, 0, 0.5); animation: rxedge 0.25s ease-out; }
@@ -40,14 +45,3 @@
 .rx-edge__img, .rx-edge .glyph { width: 24px; height: 24px; object-fit: contain; font-size: 18px; }
 @keyframes rxedge { from { opacity: 0; } }
 @media (pointer: coarse) { .rx-edge { height: 42px; padding: 0 9px; } .rx-edge__img, .rx-edge .glyph { width: 28px; height: 28px; } }
-
-/* La banque réagit : une petite bulle à côté de ses cartes (dessous quand la place manque), puis elle s'en va. */
-.rx-dealer { position: absolute; z-index: 7; display: flex; align-items: center; gap: 6px; max-width: 190px; padding: 4px 10px 4px 4px; border-radius: 16px 16px 4px 16px; font: 800 10.5px/1.25 var(--font); color: #fff3c4; background: rgba(20, 12, 32, 0.92); box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.55), 0 6px 14px rgba(0, 0, 0, 0.5); pointer-events: none; animation: rxdeal 3.2s ease-out both; }
-.rx-dealer.below { border-radius: 4px 16px 16px 16px; }
-.rx-dealer__img, .rx-dealer .glyph { flex: none; width: 26px; height: 26px; object-fit: contain; font-size: 20px; }
-@keyframes rxdeal { 0% { opacity: 0; transform: scale(0.85); } 8% { opacity: 1; transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .rx__img, .rx .glyph { animation: rxfade 2.6s linear both; }
-  .rx-dealer { animation: rxfade 3.2s linear both; }
-  @keyframes rxfade { 0%, 100% { opacity: 0; } 10%, 85% { opacity: 1; } }
-}

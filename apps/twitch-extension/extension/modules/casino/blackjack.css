@@ -173,7 +173,7 @@
 /* Bust : la place désaturée, ses cartes et sa mise toujours lisibles ; un seul signal, le score rouge « 24 · bust »
    (retour d'Antoni du 21/11 : le ruban BUSTED posé sur ce score faisait doublon). */
 .seat.busted { background: rgba(0, 0, 0, 0.22); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
-.seat.busted .cards, .seat.busted .pl, .seat.busted .bet:not(.res) { filter: grayscale(0.9) brightness(0.82); }
+.seat.busted .card, .seat.busted .pl, .seat.busted .bet:not(.res) { filter: grayscale(0.9) brightness(0.82); }
 .seat.busted .bet.res { filter: none; }
 /* Les piles de jetons pendant les mises (les autres) */
 .seat .ms { position: absolute; left: 50%; bottom: 0; width: 22px; height: 24px; transform: translateX(-50%); pointer-events: none; }
@@ -876,3 +876,11 @@
 .btn.newt .ico { width: 14px; height: 14px; }
 .btn.newt:hover:not(:disabled) { background: rgba(255, 201, 77, 0.2); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.8); }
 @media (pointer: coarse) { .lacts .btn { height: 40px; } }
+
+/* --- Bust (mandat d'Antoni du 22/11) : le ruban diagonal « BUST » posé sur la main — un seul mot, le score à côté reste
+   un nombre rouge (jamais « BUSTED » sur « 24 · bust »). Il suit la taille des cartes (--cw) : places, centre, pile du
+   Split, banque, petites fenêtres. Les cartes restent reconnaissables (coins visibles, ruban étroit). ------------- */
+.cards { position: relative; }
+.cards.is-bust::after { content: 'BUST'; position: absolute; left: 50%; top: 52%; z-index: 4; transform: translate(-50%, -50%) rotate(-17deg); padding: 0.22em 0.75em 0.18em; border-radius: 3px; font: 900 max(7px, calc(var(--cw) * 0.33)) / 1 var(--font); letter-spacing: 0.16em; color: #fff; white-space: nowrap; pointer-events: none; background: linear-gradient(180deg, rgba(232, 74, 96, 0.96), rgba(150, 22, 46, 0.96)); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 2px 6px rgba(0, 0, 0, 0.55); animation: bustin 0.3s var(--pop, ease-out) both; }
+@keyframes bustin { from { opacity: 0; transform: translate(-50%, -50%) rotate(-17deg) scale(1.6); } }
+@media (prefers-reduced-motion: reduce) { .cards.is-bust::after { animation: none; } }

@@ -8,6 +8,9 @@ import {
   DEALER,
 } from '../extension/assets/casino/reactions/reactions.js';
 import {
+  BURST,
+  REFILL_MS,
+  createBucket,
   pickDealerReaction,
   unit,
 } from '../extension/shared/casino/bj-reactions.js';
@@ -67,14 +70,48 @@ describe('reactions manifest', () => {
     expect(g.length).toBeGreaterThan(100_000);
   });
 
-  it('every bank situation points to a real reaction, with a probability and lines (all configurable)', () => {
+  it('every bank situation points to a real reaction with a probability (both configurable) — an emote only, no text', () => {
     const ids = new Set(REACTIONS.map((r) => r.id));
+    expect(Object.keys(DEALER).sort()).toEqual([
+      'big_win',
+      'blackjack',
+      'bust',
+      'dealer_bj',
+      'dealer_bust',
+      'dealer_win',
+    ]);
     for (const [kind, d] of Object.entries(DEALER)) {
       expect(ids.has(d.r), kind).toBe(true);
       expect(d.chance).toBeGreaterThanOrEqual(0);
       expect(d.chance).toBeLessThanOrEqual(0.6);
-      expect(d.lines.length).toBeGreaterThan(0);
+      expect(d.lines, kind).toBeUndefined();
     }
+  });
+});
+
+describe('the reactions’ pace (the Core’s: reactions.ts), mirrored for an immediate answer', () => {
+  it('a burst of 5, then one more every 2 s; never more than 5 saved up', () => {
+    const b = createBucket();
+    expect([BURST, REFILL_MS]).toEqual([5, 2000]);
+    let t = 1_000_000;
+    for (let k = 0; k < 5; k++) expect(b.take(t)).toBe(true);
+    expect(b.take(t)).toBe(false);
+    expect(b.wait(t)).toBe(2000);
+    t += 1999;
+    expect(b.take(t)).toBe(false);
+    t += 1;
+    expect(b.take(t)).toBe(true);
+    t += 60_000; // a long pause refills to 5, not more
+    for (let k = 0; k < 5; k++) expect(b.take(t)).toBe(true);
+    expect(b.take(t)).toBe(false);
+  });
+
+  it('a refusal from the Core empties it for exactly the time the Core asked', () => {
+    const b = createBucket();
+    b.empty(500, 1500);
+    expect(b.wait(500)).toBe(1500);
+    expect(b.take(1999)).toBe(false);
+    expect(b.take(2000)).toBe(true);
   });
 });
 
@@ -126,11 +163,10 @@ describe('pickDealerReaction', () => {
 
   it('the emote comes from the configurable association; a probability of 0 silences a situation', () => {
     const s = settled({ outcome: 'BUST' });
-    const always = { dealer_bust: { r: 'r6', chance: 1, lines: ['Hop'] } };
+    const always = { dealer_bust: { r: 'r6', chance: 1 } };
     expect(pickDealerReaction(s, 100, always)).toEqual({
       kind: 'dealer_bust',
       r: 'r6',
-      line: 'Hop',
     });
     expect(
       pickDealerReaction(s, 100, {

@@ -146,7 +146,7 @@ export function mountBook(D, ctx) {
   let plateLocked = false;
   let lastWin = '';
   // (un récapitulatif déjà affiché n'est jamais réécrit : la puce survolée ou choisie le resterait plus)
-  const paintPlate = () => !plateLocked && !(plate.querySelector('.lrecap') && lastWin.includes('lrecap')) && (plate.innerHTML = lastWin);
+  const paintPlate = () => !plateLocked && (plate.innerHTML = lastWin);
   function popPlate() {
     plate.classList.remove('pop', 'old');
     void plate.offsetWidth;
@@ -468,7 +468,7 @@ export function mountBook(D, ctx) {
   };
   // Plusieurs combinaisons : une puce par ligne dans la plaque, à survoler ou toucher pour la voir (reels.js explorer).
   // (tours gratuits : le symbole extensible paie aussi en dehors des combinaisons marquées — jamais « rien ce tour »)
-  const lineEx = View.explorer(view, { plate, root: body, on, lines: T().lines, label: lineLabel, unsure: () => !!inFree, idle: () => !busy });
+  const lineEx = View.explorer(view, { root: body, on, lines: T().lines, unsure: () => !!inFree, idle: () => !busy });
   // The winning combinations one by one; Rapide: all at once; Passer: the end state.
   async function presentLines(r, { x, steps, credit, kick = true, pace = 0 }) {
     if (!credit) return;
@@ -478,8 +478,8 @@ export function mountBook(D, ctx) {
     const paint = (v, k) => (plate.innerHTML = `<b>+${fmt(v)}</b><small>${k || times(x)}</small>`);
     const lineSteps = steps.filter((st) => st.kind === 'line');
     plate.title = steps.map((st) => `${lineLabel(st)} +${fmt(st.win)}`).join(' · ');
-    const recap = lineEx.html(steps);
-    const summary = !recap && lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : times(x);
+    lineEx.track(steps);
+    const summary = lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : times(x);
     popPlate();
     let shownV = 0;
     if (fast()) {
@@ -508,7 +508,7 @@ export function mountBook(D, ctx) {
     if (kick && !Pr.skipped && level >= 4) await mega(credit, x, shownV, fast());
     else if (kick && !Pr.skipped && level === 3 && !fast()) await boom(credit, x, shownV);
     view.settle();
-    plate.innerHTML = `<b>+${fmt(credit)}</b><small>${summary}</small>${recap}`;
+    plate.innerHTML = `<b>+${fmt(credit)}</b><small>${summary}</small>`;
     lastWin = plate.innerHTML;
     Audio.win(Math.min(3, level));
     plateLocked = false;

@@ -22,22 +22,22 @@ export const REACTIONS = [
   { id: 'r7', label: 'ptn', src: 'ptn.gif', glyph: '😱' },
 ];
 
-// La banque réagit de temps en temps (bj-reactions.js pickDealerReaction) : au plus une fois par manche, la même chez
-// tous les viewers, jamais une IA. Pour chaque situation : l'émote (`r`, un identifiant ci-dessus), sa probabilité
-// (`chance`, 0 = jamais) et quelques phrases courtes, tirées au sort. Tout se modifie ici.
+// La banque réagit de temps en temps (bj-reactions.js pickDealerReaction) d'une émote seule, sans texte : au plus une
+// fois par manche, la même chez tous les viewers, jamais une IA. Pour chaque situation : l'émote (`r`, un identifiant
+// ci-dessus) et sa probabilité (`chance`, 0 = jamais). Tout se modifie ici.
 export const DEALER = {
   // La banque a blackjack : elle savoure.
-  dealer_bj: { r: 'r5', chance: 0.6, lines: ['Blackjack pour la maison.', 'La maison a le dernier mot… cette fois.'] },
+  dealer_bj: { r: 'r5', chance: 0.6 },
   // Un joueur fait blackjack : on célèbre.
-  blackjack: { r: 'r7', chance: 0.6, lines: ['Joli blackjack !', 'Blackjack, bien joué.', 'Ça, c’est une main !'] },
+  blackjack: { r: 'r7', chance: 0.6 },
   // Un gros gain (au moins 10 fois la mise minimum) : la banque est attendrie.
-  big_win: { r: 'r2', chance: 0.5, lines: ['Belle manche !', 'Pitié pour la banque…'] },
+  big_win: { r: 'r2', chance: 0.5 },
   // La banque saute.
-  dealer_bust: { r: 'r3', chance: 0.35, lines: ['Aïe, la banque saute !', 'Trop de cartes pour moi…'] },
+  dealer_bust: { r: 'r3', chance: 0.35 },
   // Un joueur dépasse 21 : réaction amusée.
-  bust: { r: 'r6', chance: 0.2, lines: ['Ça arrive aux meilleurs.', 'Une carte de trop…'] },
+  bust: { r: 'r6', chance: 0.2 },
   // La banque gagne contre tout le monde.
-  dealer_win: { r: 'r4', chance: 0.2, lines: ['La maison gagne.', 'Trop facile.'] },
+  dealer_win: { r: 'r4', chance: 0.2 },
 };
 
 /** L'adresse d'une image (chemin relatif à ce dossier ; le paquet de l'extension la sert à côté). */
