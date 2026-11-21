@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Casino — banc responsive</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e0b16;
+        --panel: #17121f;
+        --line: #2c2438;
+        --text: #ece6f5;
+        --muted: #a497b8;
+        --accent: #b98aff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 12px 18px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+      h1 {
+        margin: 0 8px 2px 0;
+        font-size: 16px;
+      }
+      label {
+        display: grid;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      select,
+      button,
+      input {
+        min-height: 32px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #221a2e;
+        color: var(--text);
+        font: inherit;
+      }
+      input[type='number'] {
+        width: 76px;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover,
+      select:hover {
+        border-color: var(--accent);
+      }
+      .note {
+        flex-basis: 100%;
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .note.over {
+        color: #ff9ab0;
+        font-weight: 700;
+      }
+      main {
+        padding: 16px;
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      figcaption strong {
+        font-size: 14px;
+      }
+      figcaption span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      figcaption a {
+        margin-left: auto;
+        color: var(--accent);
+        font-size: 12px;
+      }
+      .frame-wrap {
+        position: relative;
+        display: inline-block;
+        border: 1px solid var(--line);
+        background: #000;
+      }
+      .frame-wrap::after {
+        content: attr(data-size);
+        position: absolute;
+        left: 4px;
+        bottom: 4px;
+        padding: 2px 6px;
+        border-radius: 5px;
+        font: 700 11px/1.4 system-ui;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.55);
+        pointer-events: none;
+      }
+      iframe {
+        display: block;
+        border: 0;
+      }
+    </style>
+    <script type="module" src="casino-bench.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>Casino · banc responsive</h1>
+      <label
+        >Jeu
+        <select id="game"></select
+      ></label>
+      <label
+        >État
+        <select id="state"></select
+      ></label>
+      <label
+        >Taille
+        <select id="size"></select
+      ></label>
+      <label>Largeur <input type="number" id="w" min="200" max="2000" /></label>
+      <label>Hauteur <input type="number" id="h" min="150" max="1400" /></label>
+      <button type="button" id="reload">Recharger</button>
+      <p class="note" id="note"></p>
+    </header>
+    <main>
+      <figure>
+        <figcaption>
+          <strong id="cap-game"></strong><span id="cap-size"></span
+          ><a id="open" target="_blank" rel="noopener">ouvrir seul ↗</a>
+        </figcaption>
+        <div class="frame-wrap" id="wrap">
+          <iframe id="frame" title="Casino — banc"></iframe>
+        </div>
+      </figure>
+    </main>
+  </body>
+</html>

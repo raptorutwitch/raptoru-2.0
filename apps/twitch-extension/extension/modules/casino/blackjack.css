@@ -32,14 +32,16 @@
 
 /* La banque : ses cartes exactement sur l'axe du tapis ; le total à côté, hors de l'axe */
 .dealer { position: absolute; left: 50%; top: 8px; z-index: 2; transform: translateX(-50%); }
-.dealer::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: 150px; height: 74px; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(closest-side, rgba(10, 4, 18, 0.42), transparent); pointer-events: none; }
+.dealer::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: calc(150 * var(--g)); height: calc(74 * var(--g)); transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(closest-side, rgba(10, 4, 18, 0.42), transparent); pointer-events: none; }
 .dealer > .tot { position: absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
 .dealer .cards:empty::before { content: ''; width: var(--cw); height: calc(var(--cw) * 1.4); border-radius: 5px; box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.28); }
 
 /* --- Les cartes ---------------------------------------------------------------------------------------------- */
 .cards { display: flex; align-items: center; --cw: 34px; --ov: 0.56; }
-.cards.big { --cw: 34px; }
-.dealer .cards.big { --cw: 38px; }
+/* Les tailles « qui décident de la place » (cartes, places, jetons, barre) suivent --g, la même échelle que le reste
+   de l'extension (app/layout.js, clamp 0,85-1,15) : cohérent, et aucun nouveau système d'échelle propre au Casino. */
+.cards.big { --cw: calc(34 * var(--g)); }
+.dealer .cards.big { --cw: calc(38 * var(--g)); }
 .cards.mini { --cw: var(--mw, 20px); --ov: 0.5; height: calc(var(--cw) * 1.4); }
 .cards .card + .card { margin-left: calc(var(--cw) * -1 * (var(--ov) + max(0, var(--n, 2) - 4) * 0.07)); }
 .card { position: relative; flex: none; width: var(--cw); height: calc(var(--cw) * 1.4); border-radius: calc(var(--cw) * 0.13); color: #1d1729; background: linear-gradient(170deg, #ffffff, #efe9f6); box-shadow: 0 0 0 0.5px rgba(30, 10, 50, 0.35), 0 1px 0 rgba(0, 0, 0, 0.25), 0 3px 7px rgba(0, 0, 0, 0.5); }
@@ -124,7 +126,7 @@
 
 /* --- Les places : sur l'arc du feutre, légères ------------------------------------------------------------- */
 .seats { grid-row: 3; position: relative; z-index: 1; width: 100%; display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: var(--gap, 8px); padding: 12px 14px 6px; }
-.seat { position: relative; flex: 0 0 var(--sw, 80px); min-width: 0; display: grid; justify-items: center; gap: 2px; padding: 6px 2px 4px; border-radius: 12px; background: linear-gradient(180deg, rgba(8, 3, 16, 0.1), rgba(8, 3, 16, 0.28)); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.07); transform: translateY(var(--lift, 0)); transition: box-shadow 0.25s, background 0.25s, opacity 0.3s, flex-basis 0.35s; }
+.seat { position: relative; flex: 0 0 var(--sw, 80px); min-width: 0; display: grid; justify-items: center; gap: 2px; padding: 6px 2px 4px; border-radius: 12px; background: linear-gradient(180deg, rgba(8, 3, 16, 0.1), rgba(8, 3, 16, 0.28)); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.07); transform: translateY(var(--lift, 0)) scale(var(--turnscale, 1)); transition: box-shadow 0.25s, background 0.25s, opacity 0.3s, flex-basis 0.35s, transform 0.22s var(--pop, ease-out); }
 .seat .hand { position: relative; display: flex; justify-content: center; align-items: flex-end; width: 100%; min-height: calc(var(--mw, 20px) * 1.4); }
 .seat .tot { position: absolute; right: 1px; bottom: 0; z-index: 2; height: 15px; min-width: 18px; padding: 0 4px; font-size: 9.5px; }
 /* BLACKJACK naturel : une pastille dorée à la taille du texte, centrée au-dessus des cartes (pas sur leur coin). */
@@ -169,7 +171,10 @@
 .seat .tm { position: absolute; left: 8px; right: 8px; bottom: 1px; height: 2px; border-radius: 2px; background: #ffb066; transform-origin: left; transform: scaleX(var(--p, 1)); opacity: 0; transition: opacity 0.3s; }
 .seat .tm.show { opacity: 1; }
 /* Le joueur actif : sa place s'éclaire, une étiquette verte « JOUE » se pose dessus */
-.seat.turn { z-index: 2; background: linear-gradient(180deg, rgba(126, 240, 168, 0.1), rgba(126, 240, 168, 0.04)); box-shadow: inset 0 0 0 1.5px rgba(126, 240, 168, 0.85), 0 0 16px rgba(126, 240, 168, 0.3); }
+/* La place active prend un peu plus de place visuellement (Lot B § 3) : un transform ne dérange jamais le flex des
+   voisines (leur taille réelle ne bouge pas, rien ne saute), juste un agrandissement doux, sans toucher aux cartes
+   Split (chaque .subhand garde sa propre mise en page, inchangée). */
+.seat.turn { z-index: 2; --turnscale: 1.08; background: linear-gradient(180deg, rgba(126, 240, 168, 0.1), rgba(126, 240, 168, 0.04)); box-shadow: inset 0 0 0 1.5px rgba(126, 240, 168, 0.85), 0 0 16px rgba(126, 240, 168, 0.3); }
 .seat.me.turn { background: linear-gradient(180deg, rgba(255, 201, 77, 0.12), rgba(255, 201, 77, 0.05)); box-shadow: inset 0 0 0 1.5px var(--gold), 0 0 16px rgba(255, 201, 77, 0.4); }
 .seat .tag:empty { display: none; }
 .seat .tag { position: absolute; left: 50%; top: -8px; z-index: 4; transform: translateX(-50%); height: 13px; padding: 0 6px; border-radius: 7px; font: 900 7.5px/13px var(--font); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5); }
@@ -192,7 +197,7 @@
 .disc { position: absolute; left: 0; bottom: calc(var(--i) * 3px); width: 30px; height: 10px; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, var(--cc) 0 46%, transparent 47%), repeating-conic-gradient(var(--cc) 0 20deg, #fff 20deg 40deg); box-shadow: 0 2px 0 color-mix(in srgb, var(--cc) 50%, #000), 0 2px 4px rgba(0, 0, 0, 0.55); }
 .seat .ms .disc { width: 22px; height: 8px; bottom: calc(var(--i) * 2.5px); }
 /* MA place pendant les mises : le cercle où poser mes jetons */
-.sb { position: relative; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; background: radial-gradient(circle, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.22)); box-shadow: inset 0 0 0 1.5px rgba(242, 198, 95, 0.8), inset 0 0 0 4px rgba(0, 0, 0, 0.2); transition: scale 0.12s, box-shadow 0.2s; }
+.sb { position: relative; width: calc(40 * var(--g)); height: calc(40 * var(--g)); border-radius: 50%; cursor: pointer; background: radial-gradient(circle, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.22)); box-shadow: inset 0 0 0 1.5px rgba(242, 198, 95, 0.8), inset 0 0 0 4px rgba(0, 0, 0, 0.2); transition: scale 0.12s, box-shadow 0.2s; }
 .sb[hidden] { display: none; }
 .sb:not(.has)::before { content: '+'; position: absolute; inset: 0; display: grid; place-items: center; font: 900 17px/1 var(--font); color: rgba(242, 198, 95, 0.85); }
 .sb:not(.has):not(:disabled) { animation: invite 1.4s ease-in-out infinite alternate; }
@@ -261,11 +266,13 @@
 .hsess { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 1px 4px; padding: 6px 8px; border-radius: 9px; background: rgba(255, 255, 255, 0.035); font: 700 9.5px/1.3 var(--font); color: var(--dim); }
 .hsess b { font-weight: 900; }
 .hist__list { overflow: auto; overscroll-behavior: contain; padding: 0 7px 9px; display: grid; align-content: start; gap: 4px; scrollbar-width: thin; scrollbar-color: rgba(242, 198, 95, 0.3) transparent; }
-.hr.mine { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 7px; padding: 6px 8px; }
+/* Chaque case explicitement placée (ligne ET colonne) : un item sans ligne fixée (seulement sa colonne) passe avant
+   un item totalement libre dans l'ordre de placement automatique de la grille, et prenait la case du titre. */
+.hr.mine { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 2px 7px; padding: 6px 8px; }
 .hr.mine.old { opacity: 0.55; }
-.hr.mine .hround { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3px 7px; padding: 0; }
-.hr.mine .hsum { grid-column: 1 / 2; margin: 0; }
-.hshare { grid-row: 1 / 3; width: 24px; height: 24px; }
+.hr.mine .hround { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3px 7px; padding: 0; min-width: 0; }
+.hr.mine .hsum { grid-column: 1; grid-row: 2; margin: 0; min-width: 0; }
+.hshare { grid-column: 2; grid-row: 1 / 3; width: 24px; height: 24px; }
 .hshare:disabled { opacity: 0.35; }
 .hr { border-radius: 9px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px rgba(214, 170, 255, 0.1); }
 .hr.open { background: rgba(255, 255, 255, 0.055); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.28); }
@@ -297,10 +304,10 @@
 .hist .none { color: var(--faint); margin: 8px 3px; }
 
 /* --- La barre ----------------------------------------------------------------------------------------------- */
-.bar { position: relative; height: 44px; margin: 5px; padding: 0 7px; display: flex; align-items: center; gap: 7px; border-radius: 11px; background: var(--well); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(214, 170, 255, 0.12); }
+.bar { position: relative; height: calc(44 * var(--g)); margin: 5px; padding: 0 7px; display: flex; align-items: center; gap: 7px; border-radius: 11px; background: var(--well); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(214, 170, 255, 0.12); }
 .bar .tmbar.big { position: absolute; left: 10px; right: 10px; top: 2px; height: 2px; }
 .chips { display: flex; align-items: center; gap: 4px; }
-.chip { position: relative; width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--ci); font: 900 8.5px/1 var(--font); letter-spacing: -0.03em; background: radial-gradient(circle, var(--cc) 0 52%, transparent 53%), repeating-conic-gradient(var(--cc) 0 22deg, #fff 22deg 45deg); box-shadow: 0 2px 0 color-mix(in srgb, var(--cc) 50%, #000), 0 3px 4px rgba(0, 0, 0, 0.55); transition: transform 0.14s var(--pop), filter 0.14s; }
+.chip { position: relative; width: calc(28 * var(--g)); height: calc(28 * var(--g)); flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--ci); font: 900 8.5px/1 var(--font); letter-spacing: -0.03em; background: radial-gradient(circle, var(--cc) 0 52%, transparent 53%), repeating-conic-gradient(var(--cc) 0 22deg, #fff 22deg 45deg); box-shadow: 0 2px 0 color-mix(in srgb, var(--cc) 50%, #000), 0 3px 4px rgba(0, 0, 0, 0.55); transition: transform 0.14s var(--pop), filter 0.14s; }
 .chip::after { content: ''; position: absolute; inset: 4.5px; border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--ci) 35%, transparent); pointer-events: none; }
 .chip:hover:not(:disabled) { transform: translateY(-2px); }
 .chip.on { transform: translateY(-3px) scale(1.07); box-shadow: 0 2px 0 color-mix(in srgb, var(--cc) 50%, #000), 0 0 0 2px #fff, 0 0 10px rgba(255, 255, 255, 0.5); }
@@ -383,6 +390,12 @@
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.bad { box-shadow: 0 0 0 1px rgba(255, 120, 140, 0.55), 0 8px 20px rgba(0, 0, 0, 0.6); }
 
+/* Mode plat (panneau étroit OU hauteur basse, JS : paintSides) : indépendant de tout container, sinon le JS peut
+   poser la classe sans qu'aucune feuille ne la mette en page (hors des deux cas prévus ci-dessous). */
+.sides.flat .sides__arc { display: none; }
+.sides.flat { display: flex; flex-wrap: wrap; justify-content: center; align-content: start; gap: 5px; padding: 64px 26px 0; }
+.sides.flat .side { position: relative; flex: 0 0 calc((100% - 15px) / 4); width: auto; height: 27px; transform: none; }
+
 /* --- Panneau étroit : les scores en grille sous la banque, places sur 2 rangées --------------------------- */
 @container bj (max-width: 420px) {
   .felt { grid-template-rows: 128px minmax(0, 1fr) auto; }
@@ -397,9 +410,6 @@
   .dealer { top: 6px; }
   .dealer .cards.big { --cw: 36px; }
   .sides { height: 128px; }
-  .sides__arc { display: none; }
-  .sides.flat { display: flex; flex-wrap: wrap; justify-content: center; align-content: start; gap: 5px; padding: 64px 26px 0; }
-  .sides.flat .side { position: relative; flex: 0 0 calc((100% - 15px) / 4); width: auto; height: 27px; transform: none; }
   .state b, .state small { white-space: normal; }
   .bar { height: auto; min-height: 44px; flex-wrap: wrap; padding: 6px 7px; row-gap: 5px; }
   .bar .chips { width: 100%; justify-content: space-between; }
@@ -408,6 +418,32 @@
   .acts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trow { grid-template-columns: 54px minmax(0, 1fr) auto; }
   .trow .dots { grid-column: 1 / -1; }
+}
+
+/* --- Hauteur basse (vidéo zoomée, paysage compact) : le vrai bloquant de l'audit du 21/11 — le feutre a 116-128 px
+   fixes tout en haut (banque + paris) avant même les places ; à moins de 320 px de haut, ÇA ne descend plus assez
+   pour montrer les places (overflow: clip les avalait silencieusement). On réduit ce bloc, jamais les places. --- */
+@container bj (max-height: 320px) {
+  .felt { grid-template-rows: 58px minmax(0, 1fr) auto; }
+  .felt::before { height: 320px; }
+  .shoe { display: none; } /* le détail du sabot, seul à être purement décoratif ici */
+  .dealer { top: 1px; }
+  .dealer .cards.big { --cw: 22px; }
+  .dealer > .tot { height: 15px; min-width: 20px; font-size: 9px; }
+  .sides, .sides__arc { height: 58px; }
+  .sides:not(.flat) .side { width: 38px; height: 20px; }
+  .sides:not(.flat) .side > b { font-size: 9px; }
+  .sides:not(.flat) .side > small { display: none; }
+  .sides.flat { padding: 28px 8px 0; gap: 3px; }
+  .sides.flat .side { height: 16px; }
+  .side > small { display: none; }
+  .htab, .rtab, .qtab { top: 4px; height: 24px; padding-top: 6px; }
+  .qtab { top: 30px; }
+  .msg b { font-size: 12px; }
+  .msg small { font-size: 9px; }
+  .rules, .hist { --rw: 100%; --hw: 100%; } /* le panneau prend tout l'écran : pas de place pour 232/256 px à côté */
+  .chip { width: 24px; height: 24px; }
+  .sb { width: 32px; height: 32px; }
 }
 
 /* --- Extension (Casino V1) : la table dans le corps du module ; avatar de secours ; annonce facultative ---------- */

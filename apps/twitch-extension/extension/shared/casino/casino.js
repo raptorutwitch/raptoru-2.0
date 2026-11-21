@@ -9,7 +9,7 @@ import * as Frame from './frame.js';
 import { createFollower } from './follow.js';
 import { createWalletSync } from './wallet-sync.js';
 
-const LOADERS = {
+export const LOADERS = {
   slot: () => import('./slot.js').then((m) => m.mountSlot),
   roulette: () => import('./roulette.js').then((m) => m.mountRoulette),
   book: () => import('./book.js').then((m) => m.mountBook),
@@ -90,7 +90,7 @@ function constructed(D, href) {
   return p;
 }
 /** Only the open game's sheet stays in the shadow root (the shared one always, first). */
-async function useSheets(D, game) {
+export async function useSheets(D, game) {
   const hrefs = [SHEETS.base, ...(game in SHEETS && game !== 'base' ? [SHEETS[game]].flat() : [])];
   if (CAN_ADOPT) {
     const list = await Promise.all(hrefs.map((h) => constructed(D, h)));
@@ -105,8 +105,8 @@ async function useSheets(D, game) {
   await Promise.all(hrefs.map((h) => sheet(D, h)));
 }
 
-/** A casino screen: its shadow root and its body. */
-function shell(document) {
+/** A casino screen: its shadow root and its body (exported for the responsive bench, test/responsive/casino-*). */
+export function shell(document) {
   const host = document.createElement('div');
   host.className = 'cz-host';
   // A game has no "empty" area where a double-click should reach Twitch's fullscreen helper (audit UI-03).
