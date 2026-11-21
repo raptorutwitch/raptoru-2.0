@@ -9,8 +9,9 @@ import {
 } from '../src/casino/blackjack/lobby.js';
 import {
   REACTION_BURST,
-  REACTION_GAP_MS,
   REACTION_KEEP_MS,
+  REACTION_KEEP_N,
+  REACTION_REFILL_MS,
   TableReactions,
 } from '../src/casino/blackjack/reactions.js';
 import { CasinoError } from '../src/casino/service.js';
@@ -133,27 +134,32 @@ describe('reactions (reactions.ts)', () => {
     expect(r.seq('other')).toBe(0);
   });
 
-  it('one reaction per 1.5 s per viewer, 8 per 30 s at most', () => {
+  it('a burst of 5 at once, then one more every 2 s; never more than 5 saved up; each viewer his own bucket', () => {
+    expect([REACTION_BURST, REACTION_REFILL_MS]).toEqual([5, 2000]);
     const r = new TableReactions();
-    r.push('t', 'u', 0, 'r1', 0);
+    let t = 1_000_000;
+    for (let k = 0; k < 5; k++) r.push('t', 'u', 0, 'r1', t);
     let err: unknown;
     try {
-      r.push('t', 'u', 0, 'r2', REACTION_GAP_MS - 1);
+      r.push('t', 'u', 0, 'r2', t + 500);
     } catch (e) {
       err = e;
     }
     expect(err).toMatchObject({
       code: 'react_rate',
       status: 429,
-      details: { retry_in_ms: 1 },
+      details: { retry_in_ms: 1500 },
     });
-    let t = 0;
-    for (let k = 1; k < REACTION_BURST; k++)
-      r.push('t', 'u', 0, 'r1', (t += REACTION_GAP_MS));
-    expect(() => r.push('t', 'u', 0, 'r1', (t += REACTION_GAP_MS))).toThrow(
-      'react_rate',
-    );
-    expect(() => r.push('t', 'other', 1, 'r1', t)).not.toThrow(); // another viewer: his own pace
+    t += 2000; // one token back
+    r.push('t', 'u', 0, 'r1', t);
+    expect(() => r.push('t', 'u', 0, 'r1', t)).toThrow('react_rate');
+    expect(() => r.push('t', 'other', 1, 'r1', t)).not.toThrow(); // another viewer: his own bucket
+    t += 60_000; // a long pause: 5 again, not more
+    for (let k = 0; k < 5; k++) r.push('t', 'u', 0, 'r3', t);
+    expect(() => r.push('t', 'u', 0, 'r3', t)).toThrow('react_rate');
+    // A table keeps up with a whole cloud of emotes (its last 32).
+    for (let k = 0; k < 40; k++) r.push('busy', `v${k}`, k % 10, 'r1', t);
+    expect(r.view('busy', t).list.length).toBe(REACTION_KEEP_N);
   });
 });
 
@@ -298,10 +304,13 @@ describe('blackjack: reactions (service, PGlite)', () => {
         },
       ],
     });
+    // A burst: 4 more at once (5 in all) pass; the 6th waits for a token (2 s), without any other consequence.
+    for (const id of ['r4', 'r5', 'r1', 'r2'])
+      expect(await code(core.blackjack.react(CH, V(0), { r: id }))).toBe('ok');
     expect(await code(core.blackjack.react(CH, V(0), { r: 'r4' }))).toBe(
       'react_rate',
     );
-    core.clock.advance(REACTION_GAP_MS);
+    core.clock.advance(REACTION_REFILL_MS);
     expect(await code(core.blackjack.react(CH, V(0), { r: 'r4' }))).toBe('ok');
     // The seventh (Antoni's animated ptn): its id only — the picture is the extension's.
     expect(await code(core.blackjack.react(CH, V(1), { r: 'r7' }))).toBe('ok');
