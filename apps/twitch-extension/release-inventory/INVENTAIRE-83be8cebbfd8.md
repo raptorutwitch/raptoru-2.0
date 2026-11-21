@@ -1,25 +1,25 @@
-# Inventaire de l'emballage de Production — source 8d85e9b77df4
+# Inventaire de l'emballage de Production — source 83be8cebbfd8
 
-Écart : **18 commits** de l'extension depuis `PUBLISHED` = `be1744e75f63` (version « Released » de la console Twitch,
+Écart : **19 commits** de l'extension depuis `PUBLISHED` = `be1744e75f63` (version « Released » de la console Twitch,
 prouvée par Antoni le 20/11/2026). C'est l'inventaire `ffd96677bf64` (9 commits, validé le 20/11, ZIP préparé pour le
 Hosted Test : 76875d47e728) **plus les corrections post-live du Casino du 21/11** : lots A et B (PR #99, #100), la
 reprise des machines à faible hauteur (PR #102), la passe corrective de nuit (PR #103), la passe de composition
 responsive, essayée dans le vrai cadre de l'extension (PR #105), et la passe corrective après les essais interactifs
 d'Antoni (PR #107 : Split main par main, assurance et gain assuré, lignes gagnantes, téléphone), et la passe « tables,
-Split, réactions et UX » (PR #109, #110, #112 : pile du Split, cartouche, languettes, gains explorés sur les rouleaux,
-téléphone et paysage).
+Split, réactions et UX » (PR #109, #110, #112, #114 : pile du Split, cartouche, languettes, gains explorés sur les rouleaux,
+téléphone et paysage, les 7 réactions définitives).
 
 Préparé par l'agent le 2026-11-21. **Non validé** : la ligne de validation appartient à Antoni ; tant qu'elle manque,
 l'emballage de Production refuse d'écrire le ZIP (`npm run package:production -w @raptoru/twitch-extension -- --shell v2`).
 Le ZIP est **complet**, pas un différentiel : toute l'extension du commit emballé. Il remplace le ZIP 76875d47e728
-(et les inventaires 03d49a2c9da1, 1ee8ad9aed0e, 866e6d6efaaa et ecaa5841eb61, jamais validés, que celui-ci remplace).
+(et les inventaires 03d49a2c9da1, 1ee8ad9aed0e, 866e6d6efaaa, ecaa5841eb61 et 8d85e9b77df4, jamais validés, que celui-ci remplace).
 Aucun changement côté Core, bot ni Studio : le Core en Production (`1f05b97c`, relevé en lecture seule le 21/11) a
 exactement le même code Casino (`apps/core-api/src`, schémas et migrations inchangés depuis ce commit).
 Le ZIP contient aussi l'interface des nouvelles tables et des réactions (PR #109), **éteinte** avec ce Core : elle
 n'apparaît que lorsqu'un Core qui les annonce est déployé (évolution du Core préparée à part, non déployée, sur GO
 d'Antoni ; docs/CASINO.md § 18.8).
 
-## Nouveau depuis le ZIP 76875d47e728 — 9
+## Nouveau depuis le ZIP 76875d47e728 — 10
 
 - e9e667db 2026-11-21 fix(casino): Blackjack post-live Lot A — Split display, navigation, Auto pacing, Mes manches (#99)
   - Blackjack, Split : chaque main a ses propres cartes, son total et sa mise ; la main à jouer est entourée. Deux
@@ -114,6 +114,13 @@ d'Antoni ; docs/CASINO.md § 18.8).
 - 8d85e9b7 2026-11-21 fix(casino): Blackjack — la pile du Split s'étale en largeur sur les tables de hauteur moyenne (#112)
   - Blackjack, Split à 3 ou 4 mains sur PC (651 × 434) et en vidéo zoomée : la pile s'étale vers la droite au lieu de
     monter sur les paris banque.
+- 83be8ceb 2026-11-21 feat(casino): Blackjack — les 7 réactions définitives d'Antoni (5 emojis Discord via Twemoji, ICANT, ptn animé) (#114)
+  - Réactions du Blackjack (toujours éteintes avec le Core actuel) : les 7 choisies par Antoni, dans son ordre — 🙂, 😳,
+    😡, 😎, 😉 (les emojis de Discord : Twemoji, déjà embarqué, licence CC-BY 4.0), puis ses émotes ICANT et ptn
+    (animée). Les visuels provisoires sont retirés.
+  - Bulle de choix : une rangée de 7 sur PC, 4 + 3 au téléphone ; une émote animée s'anime partout.
+  - Réactions de la banque : chaque situation a son émote, modifiable (blackjack d'un joueur → ptn, la banque saute →
+    colère, un bust → ICANT…), toujours au plus une par manche.
 
 ## Déjà dans l'inventaire ffd96677bf64 (validé le 20/11) — 9
 
