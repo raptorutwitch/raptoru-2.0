@@ -142,10 +142,27 @@ export const CASINO_SETTINGS = {
   bj_announce: {
     label: 'Blackjack : proposer l’annonce d’une nouvelle table',
     unit: '0 / 1',
-    default: 1,
+    // Désactivée par défaut depuis l'ouverture libre des tables (mandat d'Antoni du 21/11, docs/CASINO.md § 18).
+    default: 0,
     min: 0,
     max: 1,
     help: 'le joueur qui ouvre une table peut, d’un clic, faire annoncer la table par LeCroupier_ (jamais automatique).',
+  },
+  bj_reactions: {
+    label: 'Blackjack : réactions des joueurs (émotes)',
+    unit: '0 / 1',
+    default: 1,
+    min: 0,
+    max: 1,
+    help: 'un joueur assis peut faire apparaître une émote au-dessus de sa place (6 émotes fixes, aucun texte libre, une toutes les 2 s au plus). 0 : le bouton disparaît des tables.',
+  },
+  bj_dealer_reactions: {
+    label: 'Blackjack : réactions de la banque',
+    unit: '0 / 1',
+    default: 1,
+    min: 0,
+    max: 1,
+    help: 'de temps en temps, une courte bulle de la banque (blackjack, banque qui saute, gros gain…), au plus une par manche, jamais à chaque manche. Aucune IA.',
   },
   bj_announce_gap_s: {
     label: 'Blackjack : délai minimum entre deux annonces de table',
@@ -369,6 +386,8 @@ export class CasinoService {
       bj_side_max_return: v('bj_side_max_return'),
       bj_announce: v('bj_announce') === 1,
       bj_announce_gap_s: v('bj_announce_gap_s'),
+      bj_reactions: v('bj_reactions') === 1,
+      bj_dealer_reactions: v('bj_dealer_reactions') === 1,
       slot_min_bet: slotMin,
       slot_max_bet: Math.max(slotMin, slotMax),
       roulette_max_total: rouletteMax,

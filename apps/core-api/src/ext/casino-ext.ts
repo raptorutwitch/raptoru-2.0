@@ -64,7 +64,7 @@ export async function casinoExt(
       if (!/^[0-9a-f-]{36}$/.test(table))
         return { status: 400, body: { ok: false, error: 'invalid_table' } };
       return await ok(
-        `${base}/bj/state?table=${table}&after=${num('after', -1)}&wait_ms=${num('wait_ms')}${who ? `&${who}` : ''}`,
+        `${base}/bj/state?table=${table}&after=${num('after', -1)}&wait_ms=${num('wait_ms')}${qs.has('rx') ? `&rx=${num('rx', -1)}` : ''}${who ? `&${who}` : ''}`,
       );
     }
     if (!viewer)
@@ -101,7 +101,7 @@ export async function casinoExt(
     }
     // Blackjack intents: the verified viewer + the intent's fields only (the Core validates each one).
     const bjMatch =
-      /^\/casino\/bj\/(join|bet|clear|act|insure|leave|announce|rig)$/.exec(
+      /^\/casino\/bj\/(join|bet|clear|act|insure|leave|announce|rig|react)$/.exec(
         path,
       );
     if (method === 'POST' && bjMatch) {
@@ -118,6 +118,8 @@ export async function casinoExt(
         'stake',
         'even',
         'rig',
+        'new_table',
+        'r',
       ])
         if (b[k] !== undefined) pick[k] = b[k];
       return await ok(`${base}/bj/${bjMatch[1]}`, { viewer, ...pick });

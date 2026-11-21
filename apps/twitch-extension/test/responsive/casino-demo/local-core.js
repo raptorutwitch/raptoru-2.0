@@ -21,6 +21,12 @@ import {
   actions as handActions,
   basicStrategy,
 } from '../../../../core-api/src/casino/blackjack/rules.ts';
+import * as Lobby from '../../../../core-api/src/casino/blackjack/lobby.ts';
+import {
+  REACTION_IDS,
+  TableReactions,
+  isReactionId,
+} from '../../../../core-api/src/casino/blackjack/reactions.ts';
 
 const ME = '42'; // the demo session's twitch_user_id (shared/demo-data.js)
 const MY_NAME = 'Toi (démo)';
@@ -33,7 +39,9 @@ const LIMITS = Object.freeze({
   bj_main_min: 100,
   bj_max_win: 1_000_000,
   bj_side_max_return: 100_000,
-  bj_announce: true,
+  bj_announce: false,
+  bj_reactions: true,
+  bj_dealer_reactions: true,
   bj_announce_gap_s: 600,
   slot_min_bet: 20,
   slot_max_bet: 10_000,
@@ -357,6 +365,9 @@ const BOT_NAMES = [
 ];
 const isBot = (u) => u.startsWith('bot-');
 const botPlan = new Map(); // bot user → time of its next move
+// The players' reactions: the Core's own in-memory store (reactions.ts), its pace and ids.
+const reactions = new TableReactions();
+const players = (t) => t.seats.filter(Boolean).length;
 
 function ctx() {
   return {
@@ -425,7 +436,10 @@ function mutate(t, fn) {
         mine: true,
       });
   }
-  if (t.seq !== seq) wake(t);
+  if (t.seq !== seq) {
+    t.lastChange = Date.now();
+    wake(t);
+  }
   return res;
 }
 
@@ -436,7 +450,11 @@ const seatedAt = (u) =>
 
 function tablesView() {
   const mine = seatedAt(ME);
+  const p = Lobby.createPolicy(
+    tables.map((t) => ({ no: t.no, players: players(t) })),
+  );
   return {
+    create: { allowed: p.allowed, reason: p.reason, cap: p.cap, open: p.open },
     tables: tables.map((t) => ({
       id: t.id,
       no: t.no,
@@ -470,22 +488,29 @@ function join(body) {
       resumed: true,
       created: false,
     };
-  const count = (t) => t.seats.filter(Boolean).length;
+  const count = players;
   let target = body?.table_id
     ? tables.find((t) => t.id === body.table_id)
     : null;
   if (body?.table_id && !target) throw refuse('no_table', {}, 404);
   if (target && count(target) >= BJ.TABLE_SEATS) throw refuse('table_full');
-  if (!target)
+  let reused = false;
+  // « + Nouvelle table » : la politique du Core (lobby.ts), telle quelle.
+  if (!body?.table_id && body?.new_table === true) {
+    const p = Lobby.createPolicy(
+      tables.map((t) => ({ no: t.no, players: count(t) })),
+    );
+    if (!p.allowed) throw refuse(p.reason, { cap: p.cap, open: p.open });
+    target = tables.find((t) => t.no === p.reuse) ?? null;
+    reused = !!target;
+  } else if (!target)
     target = tables
       .filter((t) => count(t) < BJ.TABLE_SEATS)
       .sort((a, b) => count(b) - count(a) || a.no - b.no)[0];
   let created = false;
   if (!target) {
-    target = BJ.newTable(crypto.randomUUID(), tables.length + 1, (n) =>
-      rng.int(n),
-    );
-    tables.push(target);
+    if (tables.length >= Lobby.MAX_TABLES) throw refuse('casino_full');
+    target = newDemoTable();
     created = true;
   }
   const seat = body?.seat ?? null;
@@ -496,8 +521,69 @@ function join(body) {
     seat: r.seat,
     nextRound: r.nextRound,
     created,
+    ...(reused ? { reused } : {}),
     no: target.no,
   };
+}
+function newDemoTable() {
+  const t = BJ.newTable(
+    crypto.randomUUID(),
+    Lobby.nextTableNo(tables.map((x) => x.no)),
+    (n) => rng.int(n),
+  );
+  t.lastChange = Date.now();
+  tables.push(t);
+  tables.sort((a, b) => a.no - b.no);
+  return t;
+}
+/** Another table, with `n` simulated players who play by themselves (lobby, spectator, navigation between tables). */
+function otherTable(n) {
+  const t = newDemoTable();
+  for (let k = 0; k < n; k++) {
+    const name = BOT_NAMES[(t.no * 3 + k) % BOT_NAMES.length];
+    mutate(t, (x, c) =>
+      BJ.sit(
+        x,
+        c,
+        `bot-${name}-${t.no}`,
+        name,
+        null,
+        ((k * 2) % 10) + (k >= 5 ? 1 : 0),
+      ),
+    );
+  }
+  return t;
+}
+/** The local twin of the Core's sweep (lobby.ts closable); `now`: the bench can jump past the 10 minutes. */
+function sweep(now = Date.now()) {
+  const gone = Lobby.closable(
+    tables.map((t) => ({
+      id: t.id,
+      no: t.no,
+      players: players(t),
+      since: t.lastChange ?? 0,
+      pending: !!t.next,
+    })),
+    now,
+  );
+  for (const id of gone) {
+    const [t] = tables.splice(
+      tables.findIndex((x) => x.id === id),
+      1,
+    );
+    reactions.drop(id);
+    wake(t);
+  }
+  return gone.length;
+}
+/** A simulated player reacts (its own pace applies: reactions.ts). */
+function botReact(t, s, r = REACTION_IDS[rng.int(REACTION_IDS.length)]) {
+  try {
+    reactions.push(t.id, s.user, t.seats.indexOf(s), r, Date.now());
+    wake(t);
+  } catch {
+    /* too soon for that player */
+  }
 }
 
 function fillBots(t) {
@@ -518,6 +604,18 @@ function fillBots(t) {
 /** The simulated players: bet then PRÊT during the betting, decline the insurance, basic strategy at their turn. */
 function botsMove(t) {
   const now = Date.now();
+  // Une manche réglée : de temps en temps un joueur fictif réagit (une émote au-dessus de sa place).
+  if (t.phase === 'settled' && t.reactedRound !== t.round) {
+    t.reactedRound = t.round;
+    const bots = t.seats.filter(
+      (s) => s && isBot(s.user) && s.status === 'seated',
+    );
+    if (bots.length && rng.int(3) === 0)
+      setTimeout(
+        () => botReact(t, bots[rng.int(bots.length)]),
+        400 + rng.int(900),
+      );
+  }
   const due = (u, ms) => {
     if (!botPlan.has(u)) botPlan.set(u, now + ms * (0.6 + Math.random() * 0.8));
     if (botPlan.get(u) > now) return false;
@@ -562,7 +660,12 @@ function botsMove(t) {
   }
 }
 
+let lastSweep = 0;
 setInterval(() => {
+  if (Date.now() - lastSweep > 5000) {
+    lastSweep = Date.now();
+    sweep();
+  }
   for (const t of tables) {
     mutate(t, (x, c) => {
       for (let k = 0; k < 20 && BJ.runDue(x, c); k++);
@@ -575,8 +678,11 @@ async function bjState(query) {
   const t = tables.find((x) => x.id === query.get('table'));
   if (!t) throw refuse('no_table', {}, 404);
   const after = Number(query.get('after') ?? -1);
+  const rx = query.has('rx')
+    ? Number(query.get('rx'))
+    : Number.MAX_SAFE_INTEGER;
   const ms = Math.min(Math.max(Number(query.get('wait_ms')) || 0, 0), 20_000);
-  if (ms > 0 && t.seq <= after)
+  if (ms > 0 && t.seq <= after && reactions.seq(t.id) <= rx)
     await new Promise((ok) => {
       const set = waiters.get(t.id) ?? new Set();
       const done = () => {
@@ -589,7 +695,15 @@ async function bjState(query) {
       waiters.set(t.id, set);
     });
   const c = ctx();
-  return { state: BJ.view(t, ME, c) };
+  return {
+    state: BJ.view(t, ME, c),
+    reactions: {
+      on: LIMITS.bj_reactions,
+      dealer: LIMITS.bj_dealer_reactions,
+      ids: [...REACTION_IDS],
+      ...reactions.view(t.id, Date.now()),
+    },
+  };
 }
 
 function bj(action, body) {
@@ -600,6 +714,17 @@ function bj(action, body) {
     return mutate(t, (x, c) => BJ.leave(x, c, ME));
   }
   if (action === 'announce') return { ok: true, announced: true };
+  if (action === 'react') {
+    if (!isReactionId(body?.r)) throw refuse('bad_reaction', {}, 400);
+    if (!t) throw refuse('not_seated');
+    try {
+      const n = reactions.push(t.id, ME, BJ.seatOf(t, ME), body.r, Date.now());
+      wake(t);
+      return { ok: true, n };
+    } catch (e) {
+      throw refuse(e.code ?? 'react_rate', e.details ?? {}, e.status ?? 429);
+    }
+  }
   if (!t) throw refuse('not_seated');
   if (action === 'bet')
     return mutate(t, (x, c) => {
@@ -712,9 +837,10 @@ export async function casinoDemoCall(method, rawPath, body, key) {
   }
   if (method === 'GET' && path === '/casino/bj/tables') return tablesView();
   if (method === 'GET' && path === '/casino/bj/state') return bjState(query);
-  const bjm = /^\/casino\/bj\/(join|bet|clear|act|insure|leave|announce)$/.exec(
-    path,
-  );
+  const bjm =
+    /^\/casino\/bj\/(join|bet|clear|act|insure|leave|announce|react)$/.exec(
+      path,
+    );
   if (method === 'POST' && bjm) {
     await wait(60);
     return bj(bjm[1], body);
@@ -772,6 +898,22 @@ window.__casinoDemo = {
   },
   balance(n) {
     balance = Math.max(0, Math.floor(Number(n) || 0));
+  },
+  /** Another table with `n` simulated players (default 3); its number. */
+  table(n = 3) {
+    return otherTable(Math.max(0, Math.min(10, Number(n) || 0))).no;
+  },
+  /** A simulated player at the viewer's table reacts now (`r`: r1 … r6, else at random). */
+  react(r) {
+    const t = seatedAt(ME);
+    const bots = t?.seats.filter((s) => s && isBot(s.user)) ?? [];
+    if (!bots.length) return false;
+    botReact(t, bots[rng.int(bots.length)], isReactionId(r) ? r : undefined);
+    return true;
+  },
+  /** Close the empty tables now, as the Core does after 10 minutes. */
+  sweep() {
+    return sweep(Date.now() + Lobby.EMPTY_CLOSE_MS);
   },
   get state() {
     return {

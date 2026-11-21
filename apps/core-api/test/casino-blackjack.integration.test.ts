@@ -206,4 +206,70 @@ describe.skipIf(!isLocal)('blackjack, real Postgres, two Cores', () => {
     // Nothing created or lost: the players' Jetons + what the house kept = what the players had.
     expect((await sum()) + (await house())).toBe(before);
   });
+
+  // « + Nouvelle table » (§ 18) under the lobby lock, from two Cores at once, on channels of their own.
+  const open = async (ch: string) => {
+    await settingsOf(a).set(ch, 'casino.open', 1, 'test');
+    await a.query(
+      `insert into lab_stream_sessions (session_id, channel_id, started_at, source, started_by)
+       values (gen_random_uuid(), $1, $2, 'simulated', 'test')`,
+      [ch, clock.now()],
+    );
+  };
+  const tablesOf = (ch: string) =>
+    a.query<{
+      table_no: number;
+      state: { seats: ({ user: string } | null)[] };
+    }>(
+      'select table_no, state from casino_bj_tables where channel_id = $1 order by table_no',
+      [ch],
+    );
+
+  it('7 « new table » at once from two Cores: tables 1 to 5, one player each, the others refused (tables_cap) — never a duplicate number', async () => {
+    const ch = '900552';
+    await open(ch);
+    const [A, B] = [bj(a), bj(b)];
+    const out = await Promise.allSettled(
+      P.slice(0, 7).map((p, i) =>
+        (i % 2 ? A : B).join(ch, p, { new_table: true }),
+      ),
+    );
+    const ok = out.filter((r) => r.status === 'fulfilled');
+    expect(ok).toHaveLength(5);
+    expect(
+      out
+        .filter((r) => r.status === 'rejected')
+        .map((r) => (r as PromiseRejectedResult).reason.code),
+    ).toEqual(['tables_cap', 'tables_cap']);
+    const t = await tablesOf(ch);
+    expect(
+      t.map((x) => [x.table_no, x.state.seats.filter(Boolean).length]),
+    ).toEqual([
+      [1, 1],
+      [2, 1],
+      [3, 1],
+      [4, 1],
+      [5, 1],
+    ]);
+  });
+
+  it('the same viewer asks twice at once (two tabs, two Cores): one table; two sweeps at once close an empty table once', async () => {
+    const ch = '900553';
+    await open(ch);
+    const [A, B] = [bj(a), bj(b)];
+    const [x, y] = await Promise.all([
+      A.join(ch, P[8]!, { new_table: true }),
+      B.join(ch, P[8]!, { new_table: true }),
+    ]);
+    expect([x.created, y.created].sort()).toEqual([false, true]);
+    expect(x.table).toBe(y.table);
+    // A second table, emptied, then closed by both Cores' sweeps at the same time: no error, closed once.
+    await A.join(ch, P[9]!, { new_table: true });
+    await A.leave(ch, P[9]!);
+    expect(await tablesOf(ch)).toHaveLength(2);
+    clock.advance(11 * 60_000);
+    const closed = await Promise.all([A.sweep(), B.sweep()]);
+    expect(closed.reduce((s, n) => s + n, 0)).toBeGreaterThanOrEqual(1);
+    expect((await tablesOf(ch)).map((t) => t.table_no)).toEqual([1]);
+  });
 });

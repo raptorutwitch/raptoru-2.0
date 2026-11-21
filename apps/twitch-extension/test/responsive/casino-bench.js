@@ -161,6 +161,7 @@ function demoControls() {
   $('d-roulette').hidden = game !== 'roulette';
   $('d-bj').hidden = game !== 'blackjack';
   $('d-bots').hidden = game !== 'blackjack';
+  $('d-multi').hidden = game !== 'blackjack';
 }
 function applyDemo() {
   const demo = $('frame').contentWindow?.__casinoDemo;
@@ -181,6 +182,25 @@ $('frame').addEventListener('load', () => {
 });
 for (const id of ['next-slot', 'next-roulette', 'next-bj', 'bots'])
   $(id).addEventListener('change', applyDemo);
+// Plusieurs tables, leurs joueurs fictifs, leurs réactions (la politique et le magasin de réactions du Core).
+const demo = () => $('frame').contentWindow?.__casinoDemo;
+$('bj-table').addEventListener('click', () => {
+  const no = demo()?.table(3);
+  $('note').textContent = no
+    ? `Table ${no} ouverte avec 3 joueurs fictifs : reviens au salon (Tables) pour la voir, la regarder ou la rejoindre.`
+    : 'Démo pas encore prête.';
+});
+$('bj-react').addEventListener('click', () => {
+  $('note').textContent = demo()?.react()
+    ? 'Un joueur fictif de ta table réagit.'
+    : 'Assieds-toi à une table avec au moins un joueur fictif.';
+});
+$('bj-sweep').addEventListener('click', () => {
+  const n = demo()?.sweep() ?? 0;
+  const s = n > 1 ? 's' : '';
+  $('note').textContent =
+    `${n} table${s} vide${s} fermée${s} (le Core le fait après 10 minutes ; la plus petite table reste).`;
+});
 $('refill').addEventListener('click', () => {
   $('frame').contentWindow?.__casinoDemo?.balance(50_000);
   $('note').textContent =

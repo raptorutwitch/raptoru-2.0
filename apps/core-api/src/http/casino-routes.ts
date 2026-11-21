@@ -32,6 +32,8 @@ const BjBody = z.strictObject({
   stake: z.unknown().optional(),
   even: z.unknown().optional(),
   rig: z.unknown().optional(),
+  new_table: z.unknown().optional(),
+  r: z.unknown().optional(),
 });
 const Progress = z.strictObject({
   viewer: Viewer,
@@ -52,6 +54,12 @@ const waitOf = (url: URL) => {
 const afterOf = (url: URL) => {
   const n = Number(url.searchParams.get('after') ?? -1);
   return Number.isSafeInteger(n) ? n : 0;
+};
+/** Blackjack: the screen's last reaction (absent: an older screen, woken by the table's states only). */
+const rxOf = (url: URL) => {
+  const raw = url.searchParams.get('rx');
+  const n = Number(raw);
+  return raw !== null && Number.isSafeInteger(n) ? n : Number.MAX_SAFE_INTEGER;
 };
 const Share = z.strictObject({ viewer: Viewer, round_id: z.unknown() });
 
@@ -129,11 +137,16 @@ export function casinoRoutes(
             viewerOf(url),
             afterOf(url),
             waitOf(url),
+            rxOf(url),
           ),
         ),
     },
     bj('join', (ch, b) =>
-      blackjack.join(ch, b.viewer, { table_id: b.table_id, seat: b.seat }),
+      blackjack.join(ch, b.viewer, {
+        table_id: b.table_id,
+        seat: b.seat,
+        new_table: b.new_table,
+      }),
     ),
     bj('bet', (ch, b) =>
       blackjack.bet(ch, b.viewer, {
@@ -159,6 +172,7 @@ export function casinoRoutes(
     ),
     bj('leave', (ch, b) => blackjack.leave(ch, b.viewer)),
     bj('announce', (ch, b) => blackjack.announce(ch, b.viewer, b.table_id)),
+    bj('react', (ch, b) => blackjack.react(ch, b.viewer, { r: b.r })),
     bj('rig', (ch, b) => blackjack.rig(ch, b.viewer, b.rig)),
     {
       method: 'GET',

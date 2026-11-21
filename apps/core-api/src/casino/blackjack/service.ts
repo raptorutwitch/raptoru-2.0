@@ -34,7 +34,16 @@ import {
   type TableView,
   type Timing,
 } from './engine.js';
+import {
+  closable,
+  createPolicy,
+  EMPTY_CLOSE_MS,
+  MAX_TABLES,
+  nextTableNo,
+  type CreatePolicy,
+} from './lobby.js';
 import type { BlackjackLimits } from './paytable.js';
+import { isReactionId, REACTION_IDS, TableReactions } from './reactions.js';
 
 // Blackjack (docs/CASINO.md § 12) — the Core's multiplayer tables. One row per table (`casino_bj_tables`): its whole
 // state (seats, hands, the shoe, the pending step), changed ONLY under that row's lock, in one transaction with the
@@ -44,14 +53,20 @@ import type { BlackjackLimits } from './paytable.js';
 // - Timers: each table saves its one pending step (`next_at`); `tick()` runs the due ones (every 250 ms in the Core).
 //   After a restart they run late: a past decision is a STAND, a past insurance a « no », betting closes with the ready.
 // - Tables: created on demand under the channel's lobby lock (two first players at once → ONE table n°1); up to
-//   MAX_TABLES; a full table (10) opens the next one. An empty table keeps its identity and runs no step.
+//   MAX_TABLES; a full table (10) opens the next one. « New table » (§ 18, lobby.ts): anyone may open one to play alone,
+//   within a ceiling that follows the crowd, never two empty tables. An empty table runs no step; one empty for
+//   10 min closes (sweep, under the lobby lock), except the channel's lowest-numbered table.
+// - Reactions (§ 18, reactions.ts): allowed ids only, in memory, joined to the table's state (the long-poll also answers
+//   for a new reaction: `rx`). No Jetons, no text.
 // - One player = one table at a time (checked under the lobby lock).
 // - Presence: the screen polls its table; a player unseen for PRESENT_MS counts as disconnected (never blocks a deal,
 //   auto-declines insurance; never seen for 90 s outside a round = seat freed). In memory: one Core process (Production).
 // - Results are paid once per round and written to casino_rounds (game 'blackjack', one row per player).
 
-export const MAX_TABLES = 8;
+export { MAX_TABLES };
 const PRESENT_MS = 25_000;
+/** How often the ticker looks for durably empty tables to close. */
+const SWEEP_MS = 60_000;
 const WAIT_MAX_MS = 20_000;
 /** A table creator may announce it in the chat within this delay, once. */
 const ANNOUNCE_WINDOW_MS = 600_000;
@@ -66,6 +81,7 @@ export interface TableRow {
   created_by_name: string | null;
   created_at: Date;
   announced_at: Date | null;
+  updated_at: Date;
 }
 type Move = { user: string; amount: number; key: string; why: string };
 
@@ -74,7 +90,9 @@ export class BlackjackService {
   timing: Timing = TIMING;
   private readonly seen = new Map<string, number>();
   private readonly waiters = new Map<string, Set<() => void>>();
+  private readonly reactions = new TableReactions();
   private ticking = false;
+  private lastSweep = 0;
 
   constructor(
     private readonly db: Db,
@@ -100,14 +118,7 @@ export class BlackjackService {
   }
 
   async limits(q: Queryable, channelId: string): Promise<BlackjackLimits> {
-    const l = await this.casino.limits(q, channelId);
-    return {
-      step: 10,
-      mainMin: l.bj_main_min,
-      sideMin: 10,
-      maxWin: l.bj_max_win,
-      sideMaxReturn: l.bj_side_max_return,
-    };
+    return bjLimits(await this.casino.limits(q, channelId));
   }
 
   // --- Reading ------------------------------------------------------------------------------------------------------
@@ -141,17 +152,29 @@ export class BlackjackService {
         round: r.state.round,
       })),
       mine: mine?.table_id ?? null,
+      // « + Nouvelle table » (§ 18): what a request would do now (the extension shows the button only when present).
+      create: (({ allowed, reason, cap, open }) => ({
+        allowed,
+        reason,
+        cap,
+        open,
+      }))(policyOf(rows)),
     };
   }
 
-  /** A table's view for this viewer (null: a spectator). Long-poll: waits up to `waitMs` for a state after `after`. */
+  /**
+   * A table's view for this viewer (null: a spectator). Long-poll: waits up to `waitMs` for a state after `after` — or
+   * for a reaction after `rx` (a screen that does not send `rx` is woken by states only, as before). The recent
+   * reactions and the switches come with every answer (`reactions`: the extension shows « Réagir » only then).
+   */
   async state(
     channelId: string,
     tableId: string,
     viewer: CasinoViewer | null,
     after = -1,
     waitMs = 0,
-  ): Promise<{ state: TableView }> {
+    rx = Number.MAX_SAFE_INTEGER,
+  ) {
     if (!/^[0-9a-f-]{36}$/.test(tableId))
       throw new CasinoError(400, 'invalid_table');
     if (viewer) this.touch(channelId, viewer.id);
@@ -167,7 +190,7 @@ export class BlackjackService {
     };
     let r = await read();
     const wait = Math.min(Math.max(waitMs, 0), WAIT_MAX_MS);
-    if (wait > 0 && r.state.seq <= after) {
+    if (wait > 0 && r.state.seq <= after && this.reactions.seq(tableId) <= rx) {
       await new Promise<void>((ok) => {
         const set = this.waiters.get(tableId) ?? new Set();
         const done = () => {
@@ -181,10 +204,23 @@ export class BlackjackService {
       });
       r = await read();
     }
-    return { state: await this.viewOf(channelId, r, viewer?.id ?? null) };
+    const lim = await this.casino.limits(this.db, channelId);
+    return {
+      state: await this.viewOf(r, viewer?.id ?? null, bjLimits(lim), channelId),
+      reactions: {
+        on: lim.bj_reactions,
+        dealer: lim.bj_dealer_reactions,
+        ids: lim.bj_reactions ? [...REACTION_IDS] : [],
+        ...this.reactions.view(tableId, this.clock.now().getTime()),
+      },
+    };
   }
-  private async viewOf(channelId: string, r: TableRow, viewer: string | null) {
-    const L = await this.limits(this.db, channelId);
+  private async viewOf(
+    r: TableRow,
+    viewer: string | null,
+    L: BlackjackLimits,
+    channelId: string,
+  ): Promise<TableView> {
     const v = view(r.state, viewer, {
       now: this.clock.now().getTime(),
       T: this.timing,
@@ -342,12 +378,14 @@ export class BlackjackService {
   }
 
   // --- The lobby: sit down (creating the first table if needed, atomically) ------------------------------------------
+  // `new_table: true` (§ 18): a table of one's own — a new one within the policy's ceiling, or the empty one if there is.
   async join(
     channelId: string,
     viewer: CasinoViewer,
-    req: { table_id?: unknown; seat?: unknown },
+    req: { table_id?: unknown; seat?: unknown; new_table?: unknown },
   ) {
     const tableId = req.table_id == null ? null : String(req.table_id);
+    const wantNew = req.new_table === true && tableId === null;
     if (tableId !== null && !/^[0-9a-f-]{36}$/.test(tableId))
       throw new CasinoError(400, 'invalid_table');
     const seat = req.seat == null ? null : Number(req.seat);
@@ -396,9 +434,16 @@ export class BlackjackService {
           };
         }
         await this.assertOpen(q, channelId, viewer);
-        const count = (r: TableRow) => r.state.seats.filter(Boolean).length;
+        const count = playersOf;
         let target: TableRow | undefined;
-        if (tableId) {
+        let reused = false;
+        if (wantNew) {
+          const p = policyOf(rows);
+          if (!p.allowed)
+            throw new CasinoError(409, p.reason!, { cap: p.cap, open: p.open });
+          target = rows.find((r) => r.table_no === p.reuse);
+          reused = !!target;
+        } else if (tableId) {
           target = rows.find((r) => r.table_id === tableId);
           if (!target) throw new CasinoError(404, 'no_table');
           if (count(target) >= TABLE_SEATS)
@@ -413,9 +458,7 @@ export class BlackjackService {
         if (!target) {
           if (rows.length >= MAX_TABLES)
             throw new CasinoError(409, 'casino_full');
-          const no = rows.length
-            ? Math.max(...rows.map((r) => r.table_no)) + 1
-            : 1;
+          const no = nextTableNo(rows.map((r) => r.table_no));
           const id = randomUUID();
           const now = this.clock.now();
           target = (
@@ -452,6 +495,7 @@ export class BlackjackService {
           seat: r.seat,
           nextRound: r.nextRound,
           created,
+          ...(reused ? { reused } : {}),
           no: target.table_no,
         };
       });
@@ -563,6 +607,32 @@ export class BlackjackService {
   }
 
   /**
+   * A reaction (§ 18): one of the allowed ids, from a viewer SEATED at a table; every screen following that table gets
+   * it with the state. No Jetons, no text; the streamer's switch (casino.bj_reactions), the moderation block and the
+   * per-viewer pace (reactions.ts) apply. Never written to the database.
+   */
+  async react(channelId: string, viewer: CasinoViewer, req: { r?: unknown }) {
+    if (!isReactionId(req.r)) throw new CasinoError(400, 'bad_reaction');
+    this.touch(channelId, viewer.id);
+    const lim = await this.casino.limits(this.db, channelId);
+    if (!lim.bj_reactions) throw new CasinoError(409, 'reactions_off');
+    const t = this.where(await this.rows(this.db, channelId), viewer.id);
+    if (!t) throw new CasinoError(409, 'not_seated');
+    const now = this.clock.now();
+    if (await activeBlock(this.db, channelId, viewer.id, 'all', now))
+      throw new CasinoError(409, 'viewer_blocked');
+    const n = this.reactions.push(
+      t.table_id,
+      viewer.id,
+      seatOf(t.state, viewer.id),
+      req.r,
+      now.getTime(),
+    );
+    this.wake(t.table_id);
+    return { ok: true, n };
+  }
+
+  /**
    * The table's creator may tell the chat (once, within 10 min of the creation, explicit click only). LeCroupier_ posts
    * through the existing message queue; at most one table announcement per channel every `bj_announce_gap_s`.
    */
@@ -641,6 +711,9 @@ export class BlackjackService {
     if (this.ticking) return 0;
     this.ticking = true;
     try {
+      await this.sweep().catch((e: Error) =>
+        console.error('[casino] blackjack sweep failed', e.message),
+      );
       const due = await this.db.query<{ table_id: string; channel_id: string }>(
         'select table_id, channel_id from casino_bj_tables where next_at <= $1 order by next_at limit 20',
         [this.clock.now()],
@@ -659,6 +732,52 @@ export class BlackjackService {
     } finally {
       this.ticking = false;
     }
+  }
+
+  /**
+   * Close the durably empty tables (lobby.ts closable: 10 min empty, no pending step, never the lowest-numbered one), at
+   * most once a minute, each channel under its lobby lock (a join waits, then sees the table gone or still there). The
+   * table's rounds stay in casino_rounds; a spectator still on it gets « no_table » and goes back to the lobby.
+   */
+  async sweep() {
+    const now = this.clock.now().getTime();
+    if (now - this.lastSweep < SWEEP_MS) return 0;
+    this.lastSweep = now;
+    const channels = await this.db.query<{ channel_id: string }>(
+      `select distinct channel_id from casino_bj_tables
+       where next_at is null and updated_at <= $1`,
+      [new Date(now - EMPTY_CLOSE_MS)],
+    );
+    let closed = 0;
+    for (const { channel_id: ch } of channels) {
+      const ids = await this.db.tx(async (q) => {
+        await q.query('select pg_advisory_xact_lock(hashtext($1))', [
+          `casino:bj:lobby:${ch}`,
+        ]);
+        const gone = closable(
+          (await this.rows(q, ch)).map((r) => ({
+            id: r.table_id,
+            no: r.table_no,
+            players: playersOf(r),
+            since: new Date(r.updated_at).getTime(),
+            pending: !!r.state.next,
+          })),
+          now,
+        );
+        if (gone.length)
+          await q.query(
+            'delete from casino_bj_tables where channel_id = $1 and table_id = any($2::uuid[]) and next_at is null',
+            [ch, gone],
+          );
+        return gone;
+      });
+      for (const id of ids) {
+        this.reactions.drop(id);
+        this.wake(id);
+      }
+      closed += ids.length;
+    }
+    return closed;
   }
 
   /** Studio: the tables, their players and round. */
@@ -680,6 +799,24 @@ export class BlackjackService {
     }));
   }
 }
+
+/** The table's limits, from the casino's settings (one read of them serves the view and the reactions' switches). */
+function bjLimits(l: {
+  bj_main_min: number;
+  bj_max_win: number;
+  bj_side_max_return: number;
+}): BlackjackLimits {
+  return {
+    step: 10,
+    mainMin: l.bj_main_min,
+    sideMin: 10,
+    maxWin: l.bj_max_win,
+    sideMaxReturn: l.bj_side_max_return,
+  };
+}
+const playersOf = (r: TableRow) => r.state.seats.filter(Boolean).length;
+const policyOf = (rows: TableRow[]): CreatePolicy =>
+  createPolicy(rows.map((r) => ({ no: r.table_no, players: playersOf(r) })));
 
 function mapped(e: unknown): unknown {
   if (e instanceof CasinoError) return e;
