@@ -500,7 +500,9 @@ img.sym { object-fit: contain; }
 /* --- Téléphone / panneau étroit (≤ 520 px de large) : la cabine se réagence au lieu de rétrécir (retour d'Antoni du
    21/11 : « injouable sur téléphone »). Les rouleaux sur toute la largeur, la mise dessous, puis UNE rangée de jeu :
    Derniers gains (ouvre l'historique) · Rapide / Auto / Son · Lancer, tout au pouce. Les deux machines. --------- */
-@container body (max-width: 520px) {
+/* (Jusqu'au 4:3 seulement depuis le 21/11 : en paysage franc et étroit — vidéo zoomée 452 × 301 — la cabine de PC,
+   colonne de jeu à droite, garde une vitre 4 fois plus grande que cette pile.) */
+@container body (max-width: 520px) and (max-aspect-ratio: 4/3) {
   .cab { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto; grid-template-areas: 'stage' 'bet' 'side'; row-gap: 6px; padding: 6px 6px 7px 4px; }
   .slot-body.is-watch .cab { grid-template-areas: 'stage' 'side'; grid-template-rows: minmax(0, 1fr) auto; }
   .side { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) auto auto; grid-auto-flow: column; align-items: center; gap: 8px; padding: 6px 7px; }
@@ -592,7 +594,7 @@ img.sym { object-fit: contain; }
   .cof .spin__cap svg { width: 24px; height: 24px; }
 }
 /* Portrait moyen (≈ 390 × 560 sous la vidéo) : la vitre prend la hauteur libre en montrant un peu plus les voisins. */
-@container body (max-width: 560px) and (orientation: portrait) and (min-height: 440px) and (max-height: 599px) {
+@container body (max-width: 560px) and (orientation: portrait) and (min-height: 380px) and (max-height: 599px) {
   .window { --peek: 0.45; max-width: calc(100cqh * 3 / 2.2); aspect-ratio: 3 / 2.2; }
 }
 /* Panneau étroit (318 px) : « Derniers gains » garde sa place à côté des trois boutons et de Lancer. */
@@ -601,3 +603,7 @@ img.sym { object-fit: contain; }
   .side .tgl__cap { width: 34px; height: 34px; }
   .side .tgl__cap svg { width: 16px; height: 16px; }
 }
+/* Au doigt : la rangée de mise garde des touches de 44 px (elle se tassait à 16 px sous la vidéo, 390 × 560), la
+   languette « Gains » et « Derniers gains » s'élargissent un peu. */
+@container body (max-width: 520px) and (max-aspect-ratio: 4/3) { .betbar { min-height: 44px; } }
+@media (pointer: coarse) { .notch { width: 30px; } .board { min-height: 34px; } }

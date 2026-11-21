@@ -343,9 +343,6 @@
 .ic.k-undo { --k: 255, 196, 107; }
 .ic.k-clear { --k: 255, 143, 160; }
 .ic.k-rebet { --k: 111, 224, 200; }
-.sum { display: grid; gap: 2px; margin-left: auto; text-align: right; }
-.sum b { font: 900 13px/1 var(--font); color: var(--gold-2); font-variant-numeric: tabular-nums; }
-.sum small { font: 700 9px/1 var(--font); color: var(--faint); font-variant-numeric: tabular-nums; }
 .btn { height: 30px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 9px; font: 900 11.5px/1 var(--font); color: #efe6ff; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(205, 185, 255, 0.22); white-space: nowrap; transition: background 0.12s, box-shadow 0.12s, transform 0.1s; }
 .btn .ico { width: 13px; height: 13px; }
 .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(205, 185, 255, 0.4); }
@@ -445,9 +442,7 @@
 @container bj (max-width: 560px) {
   .bar { height: auto; min-height: 44px; flex-wrap: wrap; padding: 6px 7px; row-gap: 5px; }
   .bar .chips { order: -1; width: 100%; justify-content: space-between; }
-  .btn.quit span { display: none; } /* étroit : la porte seule (son nom reste dans aria-label et title) */
   .btn.quit { width: 38px; padding: 0; }
-  .sum { margin-left: 0; }
   .btn.ready { margin-left: auto; }
 }
 
@@ -666,4 +661,44 @@
   .dealer .cards.big { --cw: 30px; }
   .sides.flat { padding-top: 58px; }
   .sides.flat .sides__t { top: 45px; }
+}
+/* Étroit (panneau 318, et le centre du téléphone quand un AUTRE joueur splitte) : les mains côte à côte sans leur
+   nom (la main à jouer est entourée), total et mise en colonne à côté des cartes — elles tiennent dans le centre. */
+@container bj (max-width: 420px) {
+  .splithands { gap: 6px; }
+  .sh { grid-template-columns: auto auto; grid-template-areas: 'cards foot'; column-gap: 6px; padding: 5px 7px; }
+  .sh__lbl { display: none; }
+  .sh__foot { flex-direction: column; gap: 3px; }
+  .splithands[data-n='3'] .cards.big, .splithands[data-n='4'] .cards.big { --cw: 24px; }
+}
+/* Au doigt : la croix des panneaux à 36 px. Paysage bas (téléphone en paysage, ≥ 600 px de large) : les 7 paris banque
+   sur UNE rangée (au lieu de 2 rangées de 16 px), et au doigt languettes, jetons et actions à 32-34 px. */
+@media (pointer: coarse) { .rules header .ic, .hist header .ic { width: 36px; height: 36px; } }
+@container bj (max-height: 339px) and (min-width: 600px) {
+  .sides.flat .side { flex-basis: calc((100% - 30px) / 7); }
+  .felt .sides.flat .side { height: 26px; }
+}
+@media (pointer: coarse) {
+  @container bj (max-height: 339px) and (min-width: 600px) { .felt .sides.flat .side { height: 30px; } }
+  @container bj (max-height: 339px) {
+    .htab, .rtab { height: 34px; }
+    .bar .act, .bar .btn, .bar .btn.quit { height: 34px; }
+    .bar .chip { width: 32px; height: 32px; }
+  }
+}
+/* Un panneau ouvert en plein écran (étroit) : l'autre languette ne passe pas par-dessus. */
+.felt.hist-open .rtab { opacity: 0; pointer-events: none; }
+/* Grand format (théâtre, plein écran : table ≥ 700 × 480 px) : l'espace en plus sert à lire — cartes de la banque, du
+   centre et des places, noms et mises plus grands, à proportion de la hauteur réelle (l'arc des paris ne bouge pas). */
+@container bj (min-width: 700px) and (min-height: 480px) {
+  .dealer .cards.big { --cw: clamp(42px, 7.6cqh, 52px); }
+  .spot .cards.big { --cw: clamp(40px, 7.6cqh, 56px); }
+  .spot .who b { font-size: 16px; }
+  .spot .av.big { --av: 44px; }
+  .msg b { font-size: 18px; }
+  .msg small { font-size: 12px; }
+  .seats .seat { --mw: clamp(25px, 4.8cqh, 34px); --av: 22px; }
+  .seat .nm { font-size: 12px; }
+  .seat .bet { min-height: 17px; font-size: 10.5px; line-height: 17px; }
+  .seat .tot { height: 17px; font-size: 10.5px; }
 }

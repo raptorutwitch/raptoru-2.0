@@ -10,7 +10,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const DEMO_CORE = join(HERE, '..', 'out', 'casino-demo-core.js');
 
 export async function buildDemoCore() {
-  const esbuild = createRequire(join(HERE, '../../../../../package.json'))('esbuild');
+  const esbuild = createRequire(join(HERE, '../../../../../package.json'))(
+    'esbuild',
+  );
   await esbuild.build({
     entryPoints: [join(HERE, 'local-core.js')],
     outfile: DEMO_CORE,
@@ -23,9 +25,13 @@ export async function buildDemoCore() {
       {
         name: 'node-crypto-stand-in',
         setup(b) {
-          b.onResolve({ filter: /^node:crypto$/ }, () => ({ path: 'node-crypto', namespace: 'stand-in' }));
+          b.onResolve({ filter: /^node:crypto$/ }, () => ({
+            path: 'node-crypto',
+            namespace: 'stand-in',
+          }));
           b.onLoad({ filter: /.*/, namespace: 'stand-in' }, () => ({
-            contents: 'export const randomInt = (a, b) => a + Math.floor(Math.random() * (b - a));',
+            contents:
+              'export const randomInt = (a, b) => a + Math.floor(Math.random() * (b - a));',
             loader: 'js',
           }));
         },

@@ -503,3 +503,149 @@ Le prototype validé (`prototypes/casino-emotes`, versionné) est la deuxième m
 - **Mise** : `book_min_bet` 20, `book_max_bet` 1 000 par défaut, en multiples de 10. Le gain d'un tour est payé jusqu'au
   « gain maximum par partie » (`max_win`, 1 000 000), marqué « plafonné » au joueur. Effet mesuré par simulation
   (3 millions de tours) : voir CASINO_V1_INTEGRATION.md § RTP et plafond.
+
+## 14. Post-live du 21/11 — lots A et B (PR #99, #100)
+
+Corrections du premier retour des viewers (audit `_recherches/casino-audit-2026-11-21`, hors dépôt). **Extension
+seule** : aucune règle, cote, mise ni limite du Core modifiée ; le Core en Production (`1f05b97c`) suffit.
+
+- **Split, règles réelles du moteur** (`blackjack/rules.ts`, `actions()`) : 4 mains au plus ; re-split permis sur une
+  nouvelle paire de même valeur ; As splittés : une carte chacun, jamais de re-split ni de double, et un 21 obtenu ainsi
+  n'est pas un blackjack ; doubler après un Split est permis (sauf sur As splittés). Chaque main est réglée et payée
+  sur sa propre clé (test de bout en bout : `casino-blackjack.test.ts` « split »).
+- **Affichage** : une place montre toutes ses mains (cartes, total, mise ; la main à jouer entourée) ; des verdicts
+  opposés donnent « Partagé » et le détail par main, jamais « Égalité ».
+- **Quitter** (décision d'Antoni du 21/11, comportement du Core inchangé) : sans mise engagée, la place se libère ;
+  avec une mise engagée, le joueur quitte l'écran mais sa main reste en jeu (RESTER à l'échéance) et est réglée
+  normalement ; il la retrouve s'il revient pendant la manche. Rien n'est confisqué.
+- **Mes manches** : onglet de l'Historique (route existante `/casino/history?game=blackjack`), Partager (route
+  existante `/casino/share`, mêmes protections). « Remettre à zéro » ne déplace qu'un point de départ dans le
+  navigateur du viewer (`casino:bj:session`) : jamais une opération du Wallet.
+- **Machines** : Auto suit un budget local qui reproduit le quota du Core (`shared/casino/rate-pace.js`) ; un 429
+  pendant Auto met en pause au lieu d'arrêter.
+- **Responsive** : `--g` (échelle commune de l'extension) sur les tailles qui décident de la place ; Blackjack réorganisé
+  sous 320 px de haut (`@container bj`) ; vitre des machines à proportions fixes.
+
+**Banc visuel** (données fictives locales, aucun appel au Core ni à Twitch, aucun débit) :
+
+- `npm run casino:bench -w @raptoru/twitch-extension` : ouvre une page où choisir le jeu, l'état (table vide, pleine,
+  mon tour, Split, Split mixte, blackjack de la banque, spectateur, Règles, Mes manches ; gains et erreur des machines)
+  et la taille (vidéo zoomée, panneau, référence, plein écran, mobile portrait et paysage, ou libre).
+- `npm run test:casino-responsive -w @raptoru/twitch-extension -- [--games blackjack,slot] [--quick] [--shots]` :
+  chaque jeu × état × taille, contrôles coupés ou hors champ, erreurs JS ; captures dans
+  `apps/twitch-extension/test/responsive/out/shots/<tag>/` (hors Git).
+- Limites : Chromium n'est pas le client Twitch (contrôle final dans l'extension réelle) ; un historique qui défile et
+  la languette « Gains » (qui dépasse de 3 px par design) sont signalés sans être des défauts.
+
+## 15. Passe corrective de nuit du 21/11 (PR #102, #103)
+
+Toujours **extension seule** : aucune règle, cote, mise, limite ni route du Core modifiée ; le Core en Production
+(`1f05b97c`) suffit, aucun déploiement Core / Coolify.
+
+- **Blackjack — Historique** : une petite languette horloge (elle s'élargit au survol ; icône seule au toucher) ;
+  panneau à deux onglets Cette table / Mes manches ; Mes manches = une carte « Bilan de la session » (net, nombre de
+  manches, depuis quand, bouton « Remettre le bilan à zéro » confirmé) puis une carte par manche (score de la banque,
+  gain ou perte, table · manche · mise, heure discrète, « Partager dans le chat »).
+- **Blackjack — Quitter** : bouton explicite (porte) dans la barre du bas avec les autres actions, icône seule en
+  panneau étroit ; confirmation seulement si une mise est engagée (elle reste engagée jusqu'au règlement : décision
+  d'Antoni) ; un double appui n'envoie qu'une demande.
+- **Blackjack — Split** : au tour du joueur, toutes ses mains au centre, côte à côte (« Main k · à jouer » entourée,
+  mains finies estompées) ; ma place un peu plus grande, les autres en retrait ; bilan mixte « Main 1 perdue · Main 2
+  gagnée » puis « Bilan ±0 · rien gagné, rien perdu ».
+- **Blackjack — téléphone / panneau étroit** : paris sur le score de la banque en grille sous la banque ; places en
+  carrousel glissable (plus de 3 joueurs) recentré sur le joueur dont c'est le tour ; jetons sur leur propre ligne ;
+  cibles au doigt (`pointer: coarse`). Hauteur basse (≤ 380 px, dont l'application Twitch en paysage) : banque et
+  paris compacts, les places ne sont plus avalées.
+- **Machines (Slot + Book)** : sous 520 px de large, rouleaux en pleine largeur, mise dessous, puis une rangée
+  Derniers gains · Rapide / Auto / Son · Lancer. La plaque nomme ce qui paie (« +40 Haut · 3 × Cerise (dont 1
+  WILD) » ; Book : « dont 1 BONUS ») pendant le dévoilement, Rapide compris, et après ; la table des gains nomme les 10
+  lignes, dit que seules elles paient (de gauche à droite depuis le 1er rouleau), le rôle du WILD et « un gain par
+  ligne ». Tout est lu dans le tour du Core, jamais recalculé. Audit des gains (21/11) : le +80 signalé est
+  correct, aucun écart entre le calcul du Core et l'affichage ; le défaut était l'explication, corrigée ici.
+- **Roulette** : le tapis validé est conservé (ses cases deviennent hautes, faciles au doigt) ; sous 520 px, la barre du
+  bas se réagence (derniers numéros · jetons glissables · Annuler / Effacer / Reposer / Doubler + Lancer) au lieu de se
+  chevaucher ; la roue passe au-dessus du résultat ; mises posées et libellés plus petits.
+- **Banc** : matrice étendue à 844×300 et à deux estimations de l'application Twitch (360×480 portrait, 300×340
+  compact) en mode tactile ; machines et roulette réellement lancées dans le banc (grilles et tirages au format du
+  Core).
+
+## 16. Composition responsive et banc interactif en cadre réel (21/11, après essai d'Antoni)
+
+Toujours **extension seule** (le Core en Production `1f05b97c` suffit : aucune règle, cote, mise, limite, route ni
+protection modifiée). Retour d'Antoni sur le banc : les débordements étaient corrigés, pas la façon d'occuper
+l'espace ; et le banc ne montrait ni le vrai cadre de Raptoru Live ni de vraies parties.
+
+**Banc** (`npm run casino:bench -w @raptoru/twitch-extension`, http://127.0.0.1:4472/) :
+
+- **Extension complète** (par défaut) : les vraies pages de l'extension (`video_component.html`, `panel.html`,
+  `mobile.html`, shell v2) en mode démo — en-tête Raptoru Live, module Mini-jeux, ‹ retour fonctionnel, solde fictif
+  dans l'en-tête — pour chaque surface et format réels (largeur ET hauteur). Elles jouent contre un **Core local**
+  (`test/responsive/casino-demo/local-core.js`) qui exécute les **moteurs du Core eux-mêmes**
+  (`apps/core-api/src/casino/{slot,book,roulette,coffre}.ts`, `blackjack/engine.ts`, compilés pour le navigateur par
+  esbuild au lancement) avec des Jetons fictifs en mémoire de la page (50 000 au départ) : mêmes tirages, règles et
+  règlements, mêmes réponses que les routes. Aucun appel au Core, à Twitch ni au Wallet ; marqué « Démo locale ».
+  - Machines : vraie mise, Lancer, Rapide, Auto (arrêt compris), gains et table des gains ; « Prochain tirage »
+    choisit la SORTE du résultat suivant (perte, une ligne, WILD/BONUS, plusieurs lignes, gros gain, Coffre / tours
+    gratuits) en retirant avec le vrai moteur jusqu'à en obtenir une — jamais un résultat inventé.
+  - Roulette : jetons, mises posées et retirées, tirage animé, résultat ; « Prochain numéro » au choix.
+  - Blackjack : salon, s'asseoir, miser, PRÊT, donne, Tirer / Rester / Doubler / Split, assurance et even money,
+    règlement, historique, quitter et revenir ; « Joueurs fictifs » (0 à 9, stratégie de base) et « Prochaine donne »
+    (paire, As-As, 11, blackjack, banque As…) via le `rig` du moteur.
+- **Jeu isolé** : l'ancien banc (un jeu seul sur des états figés), signalé comme non représentatif du cadre réel.
+
+**Contrôle de composition** (`npm run test:casino-compose -w @raptoru/twitch-extension`) : dans le cadre réel, chaque
+jeu est JOUÉ sur 9 formats (vidéo 651×434, 452×301, 1053×702 ; panneau 318×496 ; téléphone 390×844, 360×780, 430×932,
+390×560, 844×390 en tactile) ; à chaque étape il mesure l'occupation de la zone par ce qui compte, le plus grand vide
+horizontal, la distance du jeu à sa commande principale, les cibles tactiles sous 32 px et les débordements, et
+enregistre une capture (`test/responsive/out/casino-compose/`, rapport `RAPPORT.md`). L'ancienne matrice
+anti-débordement (`test:casino-responsive`, jeu isolé) reste en place.
+
+**Trouvé grâce au cadre réel** :
+
+- **Mobile (`mobile.html`, l'application Twitch) : le Casino faisait 0 px de haut.** La page grandit avec son contenu
+  (`min-height`) : la hauteur « 100 % » du Mini-jeux ne se résolvait pas et l'écran du Casino (taille fixe, container
+  `size`) retombait à 0. Corrigé (`arcade.css` : la colonne flex du module donne sa hauteur au jeu ; `casino.css` :
+  `#body` épinglé à la boîte de l'hôte). Vaut aussi pour `panel.html`.
+- **Blackjack à 651×434** : l'en-tête laisse ≈ 373 px à la table ; le mode « hauteur basse » (≤ 380 px) s'y
+  appliquait (banque à 22 px, arc des paris débordant sur le centre). Seuils : hauteur basse ≤ 339 px, nouvelle
+  hauteur moyenne 340-399 px (rangée de la banque 112 px) ; l'arc se cale sur la hauteur réelle de sa rangée.
+
+**Compositions** :
+
+- **Roulette, portrait** (≤ 560 px de large et plus haute que large) : le MÊME tapis debout, comme une vraie table
+  verticale — 0 en haut, 12 rangées de 1·2·3, les 2:1 en bas, douzaines puis chances simples sur la droite. Chaque case
+  porte sa place horizontale et verticale (`roulette.js` `at()`) : toutes les mises existantes restent possibles, au
+  même endroit logique. De haut en bas : derniers numéros · tapis (cases ≈ 70 × 40 px, jamais étirées) · jetons ·
+  Annuler / Effacer / Reposer / Doubler + LANCER (avec la mise totale). Le tapis horizontal validé reste celui du PC et
+  du paysage. En portrait court (≈ 390 × 560, panneau), le tapis garde des cases d'au moins 30 px et défile dans son
+  cadre ; le numéro sorti est ramené en vue.
+- **Machines, portrait haut** (≥ 600 px) : une borne verticale centrée d'un bloc — « Derniers gains » en fronton (4
+  derniers résultats côte à côte), la vitre en pleine largeur, plus haute parce qu'elle montre davantage les symboles
+  voisins (`--peek`, relu par `reels.js` : symboles jamais déformés), la mise juste dessous, Rapide · Auto · Son à
+  gauche du gros LANCER. Portrait moyen (≈ 390 × 560) : la vitre prend la hauteur libre. Le Coffre est empilé
+  (jackpots · coffre · relances et gain · Le Coffre / Rapide / Auto / Passer + gros bouton) au lieu de sa colonne de
+  150 px qui écrasait le coffre en bandes et coupait le bouton. Les deux machines.
+- **Blackjack, portrait** (étroit et ≥ 430 px de tapis) : de haut en bas, la banque en grand (cartes ≈ 7 % de la
+  hauteur), ses paris en grille sous un titre visible (cases ≈ 40 px), le centre (ce qui se passe, la main de qui joue),
+  les autres joueurs (carrousel au doigt, recentré à chaque tour sans gêner le défilement entre deux tours), puis **ma
+  place en grand** juste au-dessus des commandes : mes cartes, ma mise, mon cercle de mise ; mes mains splittées y
+  restent. À mon tour, le centre dit seulement « À toi de jouer » (et le temps).
+- **Blackjack, barre** : « Mise en cours » (petite zone dorée, distincte) remplace « reste 49 900 » — le solde est
+  dans l'en-tête ; Quitter = la porte rouge seule, séparée des jetons, `title` « Quitter la table » et `aria-label`
+  (au toucher : sans mise engagée on quitte tout de suite, avec une mise engagée une confirmation l'explique ; la règle
+  validée ne change pas).
+- **Blackjack, panneaux** : languettes Règles / Historique centrées sur le bord vertical du tapis, collées au bord
+  (icône seule ; le libellé s'ouvre au survol sur PC). Historique : « Partager dans le chat » et « Remettre le bilan à
+  zéro » deviennent de petits pictogrammes (partage dans le coin de la carte ; flèche de remise à zéro, toujours
+  confirmée ; `title` + `aria-label` ; aucune donnée réelle effacée). Règles : un **accordéon** de 10 rubriques
+  (Blackjack, Valeur des cartes, Tour de la banque, Tirer / Rester, Doubler, Split, Assurance avec un exemple chiffré,
+  Even Money, Paris sur le score de la banque — cotes lues dans la grille —, Quitter la table), textes courts relus
+  contre `rules.ts`, `engine.ts` et `paytable.ts`.
+- **Blackjack, Split (PC)** : le nom de chaque main à côté de son total (une rangée de moins) : les mains ne recouvrent
+  plus le titre des paris.
+- **Paysage franc et étroit** (vidéo zoomée 452 × 301, 377 × 251) : les dispositions « téléphone » (pile verticale)
+  ne s'appliquent plus qu'aux cadres d'au plus 4:3 ; au-delà, machines et roulette gardent la composition de PC
+  resserrée (vitre ≈ 4 fois plus grande, rangées du tapis ≈ 30 px au lieu de 10).
+- **Tactile** : touches de mise ≥ 44 px, languettes latérales 30 px, « Derniers gains », son, Rapide et Passer ≥ 32 px,
+  croix des panneaux 36 px ; Blackjack en paysage téléphone : les 7 paris banque sur une rangée de 30 px (au lieu de
+  2 rangées de 16), jetons et actions 32-34 px.

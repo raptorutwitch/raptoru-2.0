@@ -10,7 +10,7 @@
 // window.__casinoDemo (the bench page's controls): next({ game, kind }) forces the next result's KIND by drawing again
 // with the real engine until it matches (never an invented result); bots(n) seats n simulated players (basic strategy)
 // at the viewer's table; balance(n) sets the fictitious balance.
-/* global window, setTimeout, clearTimeout, setInterval, location, crypto */
+/* global window, document, setTimeout, clearTimeout, setInterval, location, crypto, structuredClone, URLSearchParams, CSS */
 import * as Slot from '../../../../core-api/src/casino/slot.ts';
 import { generateCoffre } from '../../../../core-api/src/casino/coffre.ts';
 import { floatFrom } from '../../../../core-api/src/casino/rng.ts';
@@ -56,7 +56,12 @@ const BJ_LIMITS = {
 let balance = START;
 const rounds = []; // this viewer's rounds, newest first (publicView shape)
 const replies = new Map(); // idempotency key → answer (a resent intent replays it)
-const forced = { slot: 'random', book: 'random', roulette: 'random', blackjack: 'random' };
+const forced = {
+  slot: 'random',
+  book: 'random',
+  roulette: 'random',
+  blackjack: 'random',
+};
 let session = null;
 
 // --- Errors in the client's shape (shared/api.js: code, status, details = the JSON body) --------------------------------
@@ -134,8 +139,12 @@ function spinSlot(bet) {
   const kind = forced.slot;
   const want = {
     loss: (r) => r.ev.total === 0 && r.ev.scatter.count < 3,
-    line: (r) => r.ev.lines.length === 1 && !r.ev.lines[0].wilds?.length && r.ev.scatter.count < 3,
-    wild: (r) => r.ev.lines.some((l) => l.wilds?.length) && r.ev.scatter.count < 3,
+    line: (r) =>
+      r.ev.lines.length === 1 &&
+      !r.ev.lines[0].wilds?.length &&
+      r.ev.scatter.count < 3,
+    wild: (r) =>
+      r.ev.lines.some((l) => l.wilds?.length) && r.ev.scatter.count < 3,
     lines: (r) => r.ev.lines.length >= 2 && r.ev.scatter.count < 3,
     big: (r) => r.ev.total >= 15 * bet && r.ev.scatter.count < 3,
     bonus: (r) => r.ev.scatter.count >= 3,
@@ -162,11 +171,15 @@ function spinBook(bet) {
   const kind = forced.book;
   let r;
   if (kind === 'bonus') r = Book.playRound(rng, bet, { bonus: 3 });
-  else if (kind === 'bigbonus') r = Book.playRound(rng, bet, { bonus: 3, big: true });
+  else if (kind === 'bigbonus')
+    r = Book.playRound(rng, bet, { bonus: 3, big: true });
   else {
     const want = {
       loss: (x) => x.payout === 0,
-      line: (x) => x.base.eval.lines.length === 1 && !x.base.eval.lines[0].wilds?.length && !x.feature,
+      line: (x) =>
+        x.base.eval.lines.length === 1 &&
+        !x.base.eval.lines[0].wilds?.length &&
+        !x.feature,
       wild: (x) => x.base.eval.lines.some((l) => l.wilds?.length) && !x.feature,
       lines: (x) => x.base.eval.lines.length >= 2 && !x.feature,
     }[kind];
@@ -178,11 +191,22 @@ function spinBook(bet) {
 
 function spinRoulette(bets) {
   const shape = R.rouletteError(bets, Number.MAX_SAFE_INTEGER);
-  if (shape) throw refuse(shape, { max: LIMITS.roulette_max_total, step: R.BET_STEP }, 400);
+  if (shape)
+    throw refuse(
+      shape,
+      { max: LIMITS.roulette_max_total, step: R.BET_STEP },
+      400,
+    );
   const lim = R.rouletteLimit(bets, balance, LIMITS);
-  if (lim.refusal) throw refuse(lim.refusal, { max: LIMITS.roulette_max_total, max_win: lim.cap, balance });
+  if (lim.refusal)
+    throw refuse(lim.refusal, {
+      max: LIMITS.roulette_max_total,
+      max_win: lim.cap,
+      balance,
+    });
   const bet = R.stakeOf(bets);
-  if (balance < bet) throw refuse('insufficient_tokens', { balance, needed: bet });
+  if (balance < bet)
+    throw refuse('insufficient_tokens', { balance, needed: bet });
   const n = Number.isInteger(forced.roulette) ? forced.roulette : null;
   const pocket = n === null ? rng.int(R.ORDER.length) : R.ORDER.indexOf(n);
   const number = R.ORDER[pocket];
@@ -205,12 +229,20 @@ function spin(game, body, key) {
   if (game === 'roulette') row = spinRoulette(body?.bets ?? {});
   else {
     const bet = body?.bet;
-    if (typeof bet !== 'number' || !Number.isSafeInteger(bet) || (game === 'book' && bet % 10))
+    if (
+      typeof bet !== 'number' ||
+      !Number.isSafeInteger(bet) ||
+      (game === 'book' && bet % 10)
+    )
       throw refuse('invalid_bet', {}, 400);
-    const [min, max] = game === 'book' ? [LIMITS.book_min_bet, LIMITS.book_max_bet] : [LIMITS.slot_min_bet, LIMITS.slot_max_bet];
+    const [min, max] =
+      game === 'book'
+        ? [LIMITS.book_min_bet, LIMITS.book_max_bet]
+        : [LIMITS.slot_min_bet, LIMITS.slot_max_bet];
     if (bet < min) throw refuse('below_min', { min });
     if (bet > max) throw refuse('above_max', { max });
-    if (balance < bet) throw refuse('insufficient_tokens', { balance, needed: bet });
+    if (balance < bet)
+      throw refuse('insufficient_tokens', { balance, needed: bet });
     row = game === 'book' ? spinBook(bet) : spinSlot(bet);
   }
   const out = { round: structuredClone(row), balance, replayed: false };
@@ -220,7 +252,8 @@ function spin(game, body, key) {
 
 function lightView(r) {
   const o = r.outcome ?? {};
-  const best = r.game === 'slot' ? o.lines.slice().sort((a, b) => b.win - a.win)[0] : null;
+  const best =
+    r.game === 'slot' ? o.lines.slice().sort((a, b) => b.win - a.win)[0] : null;
   return {
     round_id: r.round_id,
     game: r.game,
@@ -234,14 +267,33 @@ function lightView(r) {
       ? {
           best: best ? { symbol: best.symbol, count: best.count } : null,
           lines: o.lines.length,
-          coffre: o.coffre ? { k: o.coffre.k, total: o.coffre.total, win: o.coffre.win, full: o.coffre.full, jackpots: o.coffre.jackpots } : null,
+          coffre: o.coffre
+            ? {
+                k: o.coffre.k,
+                total: o.coffre.total,
+                win: o.coffre.win,
+                full: o.coffre.full,
+                jackpots: o.coffre.jackpots,
+              }
+            : null,
         }
       : {}),
     ...(r.game === 'roulette' ? { number: o.number, color: o.color } : {}),
     ...(r.game === 'book'
-      ? { lines: o.base.eval.lines.length, feature: o.feature ? { symbol: o.feature.symbol, games: o.feature.games, win: o.feature.total } : null }
+      ? {
+          lines: o.base.eval.lines.length,
+          feature: o.feature
+            ? {
+                symbol: o.feature.symbol,
+                games: o.feature.games,
+                win: o.feature.total,
+              }
+            : null,
+        }
       : {}),
-    ...(r.game === 'blackjack' ? { table: o.table, round: o.round, dealer: o.outcome } : {}),
+    ...(r.game === 'blackjack'
+      ? { table: o.table, round: o.round, dealer: o.outcome }
+      : {}),
   };
 }
 
@@ -292,7 +344,17 @@ function casinoState() {
 const tables = []; // TableState[] (engine.ts), in table order
 const waiters = new Map(); // table id → Set(resolve)
 let botsWanted = 0;
-const BOT_NAMES = ['Lucie', 'Marco', 'Nadia', 'Hugo', 'Inès', 'Tom', 'Sacha', 'Jade', 'Yanis'];
+const BOT_NAMES = [
+  'Lucie',
+  'Marco',
+  'Nadia',
+  'Hugo',
+  'Inès',
+  'Tom',
+  'Sacha',
+  'Jade',
+  'Yanis',
+];
 const isBot = (u) => u.startsWith('bot-');
 const botPlan = new Map(); // bot user → time of its next move
 
@@ -305,7 +367,11 @@ function ctx() {
     balance: (u) => (isBot(u) ? 1e9 : balance),
     debit: (u, amount) => {
       if (isBot(u)) return;
-      if (balance < amount) throw new BJ.BjError('insufficient_tokens', { balance, needed: amount });
+      if (balance < amount)
+        throw new BJ.BjError('insufficient_tokens', {
+          balance,
+          needed: amount,
+        });
       balance -= amount;
     },
     credit: (u, amount) => {
@@ -344,7 +410,14 @@ function mutate(t, fn) {
         raw_payout: p.staked + p.net,
         capped: false,
         net: p.net,
-        outcome: { table: t.no, table_id: t.id, round: last.round, outcome: last.outcome, dealer: last.dealer, player: p },
+        outcome: {
+          table: t.no,
+          table_id: t.id,
+          round: last.round,
+          outcome: last.outcome,
+          dealer: last.dealer,
+          player: p,
+        },
         created_at: new Date().toISOString(),
         progress_step: 0,
         finished: true,
@@ -356,7 +429,10 @@ function mutate(t, fn) {
   return res;
 }
 
-const seatedAt = (u) => tables.find((t) => t.seats.some((s) => s?.user === u && s.status === 'seated'));
+const seatedAt = (u) =>
+  tables.find((t) =>
+    t.seats.some((s) => s?.user === u && s.status === 'seated'),
+  );
 
 function tablesView() {
   const mine = seatedAt(ME);
@@ -377,24 +453,51 @@ function tablesView() {
 
 function join(body) {
   const mine = seatedAt(ME);
-  if (mine) return { table: mine.id, seat: BJ.seatOf(mine, ME), already: true, created: false };
-  const left = tables.find((t) => t.seats.some((s) => s?.user === ME && s.status === 'left'));
-  if (left) return { table: left.id, seat: mutate(left, (t) => BJ.resume(t, ME)), resumed: true, created: false };
+  if (mine)
+    return {
+      table: mine.id,
+      seat: BJ.seatOf(mine, ME),
+      already: true,
+      created: false,
+    };
+  const left = tables.find((t) =>
+    t.seats.some((s) => s?.user === ME && s.status === 'left'),
+  );
+  if (left)
+    return {
+      table: left.id,
+      seat: mutate(left, (t) => BJ.resume(t, ME)),
+      resumed: true,
+      created: false,
+    };
   const count = (t) => t.seats.filter(Boolean).length;
-  let target = body?.table_id ? tables.find((t) => t.id === body.table_id) : null;
+  let target = body?.table_id
+    ? tables.find((t) => t.id === body.table_id)
+    : null;
   if (body?.table_id && !target) throw refuse('no_table', {}, 404);
   if (target && count(target) >= BJ.TABLE_SEATS) throw refuse('table_full');
-  if (!target) target = tables.filter((t) => count(t) < BJ.TABLE_SEATS).sort((a, b) => count(b) - count(a) || a.no - b.no)[0];
+  if (!target)
+    target = tables
+      .filter((t) => count(t) < BJ.TABLE_SEATS)
+      .sort((a, b) => count(b) - count(a) || a.no - b.no)[0];
   let created = false;
   if (!target) {
-    target = BJ.newTable(crypto.randomUUID(), tables.length + 1, (n) => rng.int(n));
+    target = BJ.newTable(crypto.randomUUID(), tables.length + 1, (n) =>
+      rng.int(n),
+    );
     tables.push(target);
     created = true;
   }
   const seat = body?.seat ?? null;
   const r = mutate(target, (t, c) => BJ.sit(t, c, ME, MY_NAME, null, seat));
   fillBots(target);
-  return { table: target.id, seat: r.seat, nextRound: r.nextRound, created, no: target.no };
+  return {
+    table: target.id,
+    seat: r.seat,
+    nextRound: r.nextRound,
+    created,
+    no: target.no,
+  };
 }
 
 function fillBots(t) {
@@ -402,11 +505,14 @@ function fillBots(t) {
   for (let k = bots.length; k < botsWanted; k++) {
     const free = t.seats.indexOf(null);
     if (free < 0) break;
-    const name = BOT_NAMES.find((n) => !t.seats.some((s) => s?.name === n)) ?? `Joueur ${k + 1}`;
+    const name =
+      BOT_NAMES.find((n) => !t.seats.some((s) => s?.name === n)) ??
+      `Joueur ${k + 1}`;
     mutate(t, (x, c) => BJ.sit(x, c, `bot-${name}`, name, null, free));
   }
   // Fewer wanted: the extra bots leave (between rounds their seat frees at once; in a round, after it).
-  for (const s of t.seats.filter((x) => x && isBot(x.user)).slice(botsWanted)) mutate(t, (x, c) => BJ.leave(x, c, s.user));
+  for (const s of t.seats.filter((x) => x && isBot(x.user)).slice(botsWanted))
+    mutate(t, (x, c) => BJ.leave(x, c, s.user));
 }
 
 /** The simulated players: bet then PRÊT during the betting, decline the insurance, basic strategy at their turn. */
@@ -422,14 +528,24 @@ function botsMove(t) {
     if (!s || !isBot(s.user) || s.status !== 'seated') return;
     if (t.phase === 'betting' && !s.bet?.ready && due(s.user, 1800)) {
       const main = 100 * (1 + rng.int(5));
-      const side = rng.int(3) === 0 ? { [['d17', 'd18', 'd19', 'd20', 'd21', 'bust'][rng.int(6)]]: 50 } : {};
+      const side =
+        rng.int(3) === 0
+          ? { [['d17', 'd18', 'd19', 'd20', 'd21', 'bust'][rng.int(6)]]: 50 }
+          : {};
       try {
-        mutate(t, (x, c) => BJ.placeBets(x, c, s.user, { main, side, ready: true }));
+        mutate(t, (x, c) =>
+          BJ.placeBets(x, c, s.user, { main, side, ready: true }),
+        );
       } catch {
         /* a refused bot bet: it simply waits for the next round */
       }
     }
-    if (t.phase === 'insurance' && s.inRound && s.ins === null && due(s.user, 1200))
+    if (
+      t.phase === 'insurance' &&
+      s.inRound &&
+      s.ins === null &&
+      due(s.user, 1200)
+    )
       mutate(t, (x, c) => BJ.insure(x, c, s.user, { stake: 0 }));
   });
   const turn = t.turn;
@@ -488,14 +604,28 @@ function bj(action, body) {
   if (action === 'bet')
     return mutate(t, (x, c) => {
       if (forced.blackjack !== 'random') x.rig = rigFor(x, forced.blackjack);
-      return BJ.placeBets(x, c, ME, { main: body?.main, side: body?.side ?? {}, ready: body?.ready === true });
+      return BJ.placeBets(x, c, ME, {
+        main: body?.main,
+        side: body?.side ?? {},
+        ready: body?.ready === true,
+      });
     });
   if (action === 'clear') return mutate(t, (x, c) => BJ.clearBets(x, c, ME));
   if (action === 'act')
-    return mutate(t, (x, c) => BJ.act(x, c, ME, { type: body?.type, token: body?.token, actionId: body?.action_id }));
+    return mutate(t, (x, c) =>
+      BJ.act(x, c, ME, {
+        type: body?.type,
+        token: body?.token,
+        actionId: body?.action_id,
+      }),
+    );
   if (action === 'insure')
     return mutate(t, (x, c) =>
-      BJ.insure(x, c, ME, { stake: body?.stake ?? 0, even: body?.even === true, actionId: body?.action_id }),
+      BJ.insure(x, c, ME, {
+        stake: body?.stake ?? 0,
+        even: body?.even === true,
+        actionId: body?.action_id,
+      }),
     );
   throw refuse('not_available', {}, 404);
 }
@@ -520,14 +650,18 @@ export async function casinoDemoCall(method, rawPath, body, key) {
   const [path, qs = ''] = String(rawPath).split('?');
   const query = new URLSearchParams(qs);
   if (path === '/session' || path === '/state') return sessionPayload();
-  if (method === 'GET' && path === '/modules/v3') return structuredClone(HOST_MODULES);
+  if (method === 'GET' && path === '/modules/v3')
+    return structuredClone(HOST_MODULES);
   if (method === 'GET' && path === '/casino/state') return casinoState();
   if (method === 'GET' && path === '/casino/history') return history(query);
   const round = /^\/casino\/rounds\/([^/]+)$/.exec(path);
   if (method === 'GET' && round) {
     const r = rounds.find((x) => x.round_id === decodeURIComponent(round[1]));
     if (!r) throw refuse('round_not_found', {}, 404);
-    return { round: { ...structuredClone(r), phase: 'done' }, server_now: new Date().toISOString() };
+    return {
+      round: { ...structuredClone(r), phase: 'done' },
+      server_now: new Date().toISOString(),
+    };
   }
   if (method === 'GET' && path === '/casino/live') {
     await wait(Math.min(Number(query.get('wait_ms')) || 0, 20_000));
@@ -535,25 +669,40 @@ export async function casinoDemoCall(method, rawPath, body, key) {
   }
   if (method === 'GET' && path === '/casino/watch') {
     await wait(Math.min(Number(query.get('wait_ms')) || 0, 20_000));
-    return { events: [], cursor: Number(query.get('after')) || 0, reset: false };
+    return {
+      events: [],
+      cursor: Number(query.get('after')) || 0,
+      reset: false,
+    };
   }
   const game = /^\/casino\/(slot|book|roulette)\/spin$/.exec(path);
   if (method === 'POST' && game) {
     await wait(120); // a network's worth: the screens' pending states are visible, never instant
     return spin(game[1], body, key);
   }
-  if (method === 'POST' && (path === '/casino/progress' || path === '/casino/draft' || path === '/casino/presence'))
+  if (
+    method === 'POST' &&
+    (path === '/casino/progress' ||
+      path === '/casino/draft' ||
+      path === '/casino/presence')
+  )
     return { ok: true };
   if (method === 'POST' && path === '/casino/share') {
     const r = rounds.find((x) => x.round_id === body?.round_id);
     if (!r) throw refuse('round_not_found', {}, 404);
     const already = r.shared;
     r.shared = true;
-    return { shared: true, already, text: 'Démo locale : rien n’est envoyé dans le chat.' };
+    return {
+      shared: true,
+      already,
+      text: 'Démo locale : rien n’est envoyé dans le chat.',
+    };
   }
   if (method === 'GET' && path === '/casino/bj/tables') return tablesView();
   if (method === 'GET' && path === '/casino/bj/state') return bjState(query);
-  const bjm = /^\/casino\/bj\/(join|bet|clear|act|insure|leave|announce)$/.exec(path);
+  const bjm = /^\/casino\/bj\/(join|bet|clear|act|insure|leave|announce)$/.exec(
+    path,
+  );
   if (method === 'POST' && bjm) {
     await wait(60);
     return bj(bjm[1], body);
@@ -574,8 +723,18 @@ if (wanted)
       }
       return null;
     };
-    (await find(() => [...document.querySelectorAll('.rh-all__item')].find((b) => b.textContent.includes('Mini-jeux'))))?.click();
-    (await find(() => document.querySelector(`[data-game="${CSS.escape(wanted)}"]`)))?.click();
+    (
+      await find(() =>
+        [...document.querySelectorAll('.rh-all__item')].find((b) =>
+          b.textContent.includes('Mini-jeux'),
+        ),
+      )
+    )?.click();
+    (
+      await find(() =>
+        document.querySelector(`[data-game="${CSS.escape(wanted)}"]`),
+      )
+    )?.click();
   })();
 // Framed by the bench page (which says « Démo locale » around it): the environment badge would hide the header's title.
 if (window.top !== window) {
@@ -588,7 +747,8 @@ window.__casinoDemo = {
   /** `kind`: slot/book random|loss|line|wild|lines|big|bonus (book: bigbonus too); roulette a number or 'random';
    *  blackjack random|pair|aces|blackjack|insurance|even|double|dealer_bust (the viewer's next deal). */
   next(game, kind) {
-    forced[game] = game === 'roulette' && kind !== 'random' ? Number(kind) : kind;
+    forced[game] =
+      game === 'roulette' && kind !== 'random' ? Number(kind) : kind;
   },
   get forced() {
     return { ...forced };
@@ -602,6 +762,11 @@ window.__casinoDemo = {
     balance = Math.max(0, Math.floor(Number(n) || 0));
   },
   get state() {
-    return { balance, tables: tables.length, rounds: rounds.length, bots: botsWanted };
+    return {
+      balance,
+      tables: tables.length,
+      rounds: rounds.length,
+      bots: botsWanted,
+    };
   },
 };

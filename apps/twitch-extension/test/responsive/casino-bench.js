@@ -13,16 +13,36 @@ const GAMES = {
   roulette: { label: 'Roulette', tile: 'casino_roulette' },
 };
 const FROZEN = {
-  blackjack: ['empty', 'several', 'full', 'myTurn', 'blackjackHand', 'split2', 'splitMixed', 'dealerBlackjack', 'spectator'],
+  blackjack: [
+    'empty',
+    'several',
+    'full',
+    'myTurn',
+    'blackjackHand',
+    'split2',
+    'splitMixed',
+    'dealerBlackjack',
+    'spectator',
+  ],
   slot: ['resting', 'lineWin', 'bigWin', 'loss', 'error'],
   book: ['resting', 'lineWin', 'bigWin', 'loss', 'error'],
   roulette: ['red7', 'black22', 'loss'],
 };
-const BJ_OPEN = { Règles: 'rules', 'Historique — Cette table': 'hist', 'Historique — Mes manches': 'histmine' };
+const BJ_OPEN = {
+  Règles: 'rules',
+  'Historique — Cette table': 'hist',
+  'Historique — Mes manches': 'histmine',
+};
 const SURFACES = {
-  video: { label: 'Composant vidéo (PC)', page: 'video_component.html?anchor=component' },
+  video: {
+    label: 'Composant vidéo (PC)',
+    page: 'video_component.html?anchor=component',
+  },
   panel: { label: 'Panneau sous le stream', page: 'panel.html?anchor=panel' },
-  mobile: { label: 'Mobile (application Twitch)', page: 'mobile.html?anchor=panel&platform=mobile' },
+  mobile: {
+    label: 'Mobile (application Twitch)',
+    page: 'mobile.html?anchor=panel&platform=mobile',
+  },
 };
 // [label, w, h] per surface — width AND real height (the frame Twitch gives the extension).
 const SIZES = {
@@ -77,12 +97,15 @@ for (const [v, l] of NEXT_SLOT) opt($('next-slot'), v, l);
 opt($('next-roulette'), 'random', 'aléatoire');
 for (let n = 0; n <= 36; n++) opt($('next-roulette'), String(n), String(n));
 for (const [v, l] of NEXT_BJ) opt($('next-bj'), v, l);
-for (const n of [0, 1, 2, 3, 4, 5, 6, 9]) opt($('bots'), String(n), n ? `${n}` : 'aucun');
+for (const n of [0, 1, 2, 3, 4, 5, 6, 9])
+  opt($('bots'), String(n), n ? `${n}` : 'aucun');
 
 const params = new URLSearchParams(window.location.search);
 let mode = params.get('mode') === 'isolated' ? 'isolated' : 'full';
 $('game').value = GAMES[params.get('g')] ? params.get('g') : 'blackjack';
-$('surface').value = SURFACES[params.get('surface')] ? params.get('surface') : 'video';
+$('surface').value = SURFACES[params.get('surface')]
+  ? params.get('surface')
+  : 'video';
 $('bots').value = params.get('bots') ?? '3';
 
 function fillStates() {
@@ -90,7 +113,8 @@ function fillStates() {
   sel.innerHTML = '';
   for (const id of FROZEN[$('game').value]) opt(sel, id, id);
   if ($('game').value === 'blackjack')
-    for (const [label, v] of Object.entries(BJ_OPEN)) opt(sel, `open:${v}`, `→ ouvrir : ${label}`);
+    for (const [label, v] of Object.entries(BJ_OPEN))
+      opt(sel, `open:${v}`, `→ ouvrir : ${label}`);
 }
 function fillSizes() {
   const sel = $('size');
@@ -100,7 +124,8 @@ function fillSizes() {
   for (const s of groups) {
     const og = document.createElement('optgroup');
     og.label = SURFACES[s].label;
-    for (const [label, w, h] of SIZES[s]) og.append(new window.Option(label, `${w}x${h}`));
+    for (const [label, w, h] of SIZES[s])
+      og.append(new window.Option(label, `${w}x${h}`));
     sel.append(og);
   }
 }
@@ -108,15 +133,19 @@ fillStates();
 fillSizes();
 if (params.get('s')) $('state').value = params.get('s');
 const [pw, ph] = (params.get('sz') ?? $('size').value).split('x').map(Number);
-if ([...$('size').options].some((o) => o.value === `${pw}x${ph}`)) $('size').value = `${pw}x${ph}`;
+if ([...$('size').options].some((o) => o.value === `${pw}x${ph}`))
+  $('size').value = `${pw}x${ph}`;
 $('w').value = Number(params.get('w')) || pw;
 $('h').value = Number(params.get('h')) || ph;
 
 function src() {
   const game = $('game').value;
-  if (mode === 'full') return `/casino-v2/${SURFACES[$('surface').value].page}&casinoGame=${GAMES[game].tile}`;
+  if (mode === 'full')
+    return `/casino-v2/${SURFACES[$('surface').value].page}&casinoGame=${GAMES[game].tile}`;
   const raw = $('state').value;
-  const [state, open] = raw.startsWith('open:') ? ['several', raw.slice(5)] : [raw, ''];
+  const [state, open] = raw.startsWith('open:')
+    ? ['several', raw.slice(5)]
+    : [raw, ''];
   return `/demo/casino-harness.html?game=${game}&state=${state}${open ? `&open=${open}` : ''}`;
 }
 
@@ -146,7 +175,8 @@ $('frame').addEventListener('load', () => {
     if (mode !== 'full' || applyDemo() || ++k > 50) window.clearInterval(t);
   }, 100);
 });
-for (const id of ['next-slot', 'next-roulette', 'next-bj', 'bots']) $(id).addEventListener('change', applyDemo);
+for (const id of ['next-slot', 'next-roulette', 'next-bj', 'bots'])
+  $(id).addEventListener('change', applyDemo);
 $('refill').addEventListener('click', () => {
   $('frame').contentWindow?.__casinoDemo?.balance(50_000);
   $('note').textContent =
@@ -162,7 +192,8 @@ function show() {
   frame.height = h;
   frame.src = url;
   $('open').href = url;
-  $('wrap').dataset.size = `${w} × ${h}${mode === 'full' ? ` · ${SURFACES[$('surface').value].label}` : ' · jeu isolé'}`;
+  $('wrap').dataset.size =
+    `${w} × ${h}${mode === 'full' ? ` · ${SURFACES[$('surface').value].label}` : ' · jeu isolé'}`;
   $('wrap').dataset.mode = mode;
   $('cap-game').textContent =
     mode === 'full'
@@ -205,7 +236,10 @@ const setMode = (m) => {
 $('mode-full').addEventListener('click', () => setMode('full'));
 $('mode-isolated').addEventListener('click', () => setMode('isolated'));
 $('game').addEventListener('change', () => (fillStates(), show()));
-$('surface').addEventListener('change', () => (fillSizes(), pickSize(), show()));
+$('surface').addEventListener(
+  'change',
+  () => (fillSizes(), pickSize(), show()),
+);
 $('state').addEventListener('change', show);
 $('size').addEventListener('change', () => (pickSize(), show()));
 $('reload').addEventListener('click', show);

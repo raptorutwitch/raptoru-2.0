@@ -625,7 +625,10 @@ export function mountRoulette(D, ctx) {
   };
   function markMat(r) {
     mat.classList.add('done');
-    mat.querySelector(`[data-n="${r.number}"]`)?.classList.add('hit');
+    const hit = mat.querySelector(`[data-n="${r.number}"]`);
+    hit?.classList.add('hit');
+    // A mat that scrolls (short portrait, roulette.css): the winning number brought into view.
+    if (hit && mat.scrollHeight > mat.clientHeight + 2) mat.scrollTo({ top: hit.offsetTop - (mat.clientHeight - hit.offsetHeight) / 2, behavior: 'smooth' });
     const won = new Map(r.wins.map((w) => [w.id, w.gross]));
     for (const id of Object.keys(r.bets)) {
       const el = mat.querySelector(`[data-spot="${id}"]`);

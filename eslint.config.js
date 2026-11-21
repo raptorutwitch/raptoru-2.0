@@ -10,6 +10,8 @@ export default defineConfig(
       'apps/studio/desktop/stage/**',
       'apps/studio/desktop/release/**',
       'apps/studio/server/bonk-overlay/bonk-v3-core.js',
+      // Responsive bench outputs (git-ignored): screenshots, reports, the casino demo's bundled local Core.
+      'apps/twitch-extension/test/responsive/out/**',
       // Local UX prototypes (untracked, never versioned).
       'prototypes/**',
     ],

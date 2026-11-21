@@ -313,7 +313,9 @@
    cases deviennent hautes, faciles au doigt) ; c'est la barre du bas qui se réagence au lieu de se chevaucher :
    1) derniers numéros + son, 2) les jetons sur toute la largeur (glissables s'ils ne tiennent pas),
    3) Annuler · Effacer · Reposer · Doubler, puis Lancer. ---------------------------------------------------------- */
-@container body (max-width: 520px) {
+/* (Jusqu'au 4:3 seulement depuis le 21/11 : en paysage franc et étroit — vidéo zoomée — cette pile écrasait le tapis
+   à 10 px par rangée ; voir le bloc « paysage étroit » plus bas.) */
+@container body (max-width: 520px) and (max-aspect-ratio: 4/3) {
   .rt { grid-template-rows: minmax(0, 1fr) auto; row-gap: 6px; padding: 6px 6px 6px 7px; }
   .bar { position: relative; grid-template-columns: minmax(0, 1fr) 118px; grid-template-rows: 24px 50px 48px; grid-template-areas: 'hist hist' 'chips chips' 'tray go'; gap: 6px; }
   .left { display: contents; }
@@ -337,7 +339,7 @@
   .wover .banner { padding: 9px 10px 8px; gap: 4px; }
   .wover .banner .np { min-width: 42px; height: 42px; font-size: 20px; }
 }
-@container body (max-width: 340px) {
+@container body (max-width: 340px) and (max-aspect-ratio: 4/3) {
   .spot.side, .spot.col { font-size: 9px; letter-spacing: 0; }
   .spot { font-size: 11.5px; }
   .spot .dia { width: 11px; height: 11px; }
@@ -410,4 +412,41 @@
   .act__lbl { font-size: 8px; letter-spacing: -0.02em; }
   .act__cap { width: 24px; height: 24px; }
   .spot.side, .spot.col { font-size: 10px; }
+}
+/* Au doigt : la languette des paiements et celle de la mise rapide s'élargissent un peu. */
+@media (pointer: coarse) { .notch { width: 30px; } .notch.qk { right: -18px; } .notch:not(.qk) { left: -18px; } }
+/* Portrait court (≈ 390 × 560, panneau 318 × 496) : plutôt que des cases de 20 px, le tapis garde des cases d'au
+   moins 30 px et défile au doigt dans son cadre (le numéro sorti est ramené en vue : roulette.js markMat). */
+@container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) {
+  .mat { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; background-attachment: local; grid-template-rows: 36px repeat(12, minmax(30px, 1fr)) 30px; }
+  .mat::-webkit-scrollbar { display: none; }
+}
+/* Paysage étroit (vidéo zoomée : 452 × 301, 377 × 251) : le tapis horizontal et la barre de PC, resserrés — les jetons
+   défilent dans leur bac, le tapis garde toute la hauteur que la barre ne prend pas. */
+@container body (max-width: 520px) and (min-aspect-ratio: 401/300) {
+  .bar { grid-template-columns: minmax(0, 1fr) 92px 104px; column-gap: 6px; }
+  .chips { justify-content: flex-start; gap: 5px; padding: 0 6px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .mat { grid-template-columns: 26px repeat(12, minmax(0, 1fr)) 28px; }
+  .spot { font-size: 12.5px; }
+  .spot.zero { font-size: 15px; }
+  .spot.side, .spot.col { font-size: 10.5px; }
+  .act__lbl { font-size: 9px; }
+  .launch .t { font-size: 14px; }
+}
+@container body (max-width: 520px) and (min-aspect-ratio: 401/300) and (max-height: 250px) {
+  .rt { grid-template-rows: minmax(0, 1fr) 84px; row-gap: 5px; padding: 5px 5px 5px 6px; }
+  .mat { grid-template-rows: repeat(3, minmax(0, 1fr)) 21px 22px; }
+}
+/* Au doigt : derniers numéros, son, Rapide et Passer à 32 px au moins ; en paysage, les rangées des chances simples et
+   des douzaines à 30 px. */
+@media (pointer: coarse) {
+  .board, .snd { height: 32px; }
+  .snd { width: 34px; }
+  .fastsw { width: 32px; height: 32px; }
+  .wover .skip { height: 36px; }
+  .left { grid-template-rows: 32px minmax(0, 1fr); }
+  @container body (orientation: landscape) { .mat { grid-template-rows: repeat(3, minmax(0, 1fr)) 30px 30px; } }
+  @container body (max-width: 560px) and (orientation: portrait) { .rt { grid-template-rows: 32px minmax(0, 1fr) 52px 54px; } }
+  @container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) { .rt { grid-template-rows: 32px minmax(0, 1fr) 46px 48px; } }
 }
