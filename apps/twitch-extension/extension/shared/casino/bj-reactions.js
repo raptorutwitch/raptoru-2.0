@@ -98,8 +98,10 @@ export function createReactions({ root, felt, seatsEl, seatEl, send, toast, pref
     const n = document.createElement('span');
     n.className = 'rx';
     n.innerHTML = imgHTML(r, 'rx__img');
-    n.style.left = `${b.left - fr.left + b.width / 2}px`;
-    n.style.top = `${Math.max(4, b.top - fr.top - 4)}px`;
+    // Ma grande place du téléphone (sous le carrousel) : l'émote dans sa partie droite, jamais sur la place d'au-dessus.
+    const hero = !!el.closest('.myseat');
+    n.style.left = `${hero ? b.right - fr.left - 34 : b.left - fr.left + b.width / 2}px`;
+    n.style.top = `${hero ? b.top - fr.top + b.height / 2 + 21 : Math.max(4, b.top - fr.top - 4)}px`;
     layer.append(n);
     onSeat.set(seat, n);
     setTimeout(() => (n.remove(), onSeat.get(seat) === n && onSeat.delete(seat)), SHOW_MS);
