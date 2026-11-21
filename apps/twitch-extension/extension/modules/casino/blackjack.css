@@ -827,8 +827,9 @@
 .felt.hist-open .tabs > .htab, .bj.rules-open .tabs > .rtab { color: #2a1600; background: linear-gradient(90deg, #ffe69a, var(--gold)); }
 .rules { left: auto; right: 0; transform: translateX(101%); box-shadow: -1px 0 0 rgba(242, 198, 95, 0.3), -12px 0 26px rgba(0, 0, 0, 0.55); }
 .bj.rules-open .rules { transform: none; }
-@container bj (max-width: 420px) { .felt.hist-open .tabs, .bj.rules-open .tabs { opacity: 0; } .felt.hist-open .tabs > *, .bj.rules-open .tabs > * { pointer-events: none; } }
-@container bj (max-height: 339px) { .felt.hist-open .tabs, .bj.rules-open .tabs { opacity: 0; } .felt.hist-open .tabs > *, .bj.rules-open .tabs > * { pointer-events: none; } }
+/* (plein écran : le groupe reste à sa place, caché — jamais poussé hors du tapis) */
+@container bj (max-width: 420px) { .felt.hist-open .tabs, .bj.rules-open .tabs { right: 0; opacity: 0; } .felt.hist-open .tabs > *, .bj.rules-open .tabs > * { pointer-events: none; } }
+@container bj (max-height: 339px) { .felt.hist-open .tabs, .bj.rules-open .tabs { right: 0; opacity: 0; } .felt.hist-open .tabs > *, .bj.rules-open .tabs > * { pointer-events: none; } }
 
 /* --- F : paris sur la banque au téléphone (portrait) — 4 + 3 grandes cases, symétriques, sous leur titre --------- */
 .felt.has-hero .sides.flat { padding: 22px 16px 0; gap: 8px; }
