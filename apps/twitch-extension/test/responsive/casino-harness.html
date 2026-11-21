@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Casino — banc</title>
+    <!-- Les jetons --kg/--g/--t de l'extension (app/layout.js) : la même échelle que le reste de Raptoru Live,
+         sinon calc(N * var(--g)) perdrait sa valeur ici (jeton jamais défini) sans que ça se voie en production. -->
+    <link rel="stylesheet" href="app/css/tokens.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0712;
+        overflow: hidden;
+      }
+    </style>
+    <script type="module" src="casino-harness.js"></script>
+  </head>
+  <body></body>
+</html>

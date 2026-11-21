@@ -431,7 +431,10 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // L'arc : 7 cases identiques, droites, symétriques autour de l'axe de la banque, sur une parabole qui passe sous
     // ses cartes (les bords remontent à leur hauteur) ; le titre suit la même courbe, dessous. Panneau étroit : grille.
     const W = felt.clientWidth || 547;
-    const flat = W < 420;
+    const H = felt.clientHeight || 364;
+    // Paysage compact (844×300 de l'audit) : la courbe ne tient plus sous les cartes de la banque à cette hauteur,
+    // même avec une largeur confortable — la grille plate (déjà prévue pour le panneau étroit) s'en sort mieux.
+    const flat = W < 420 || H < 300;
     box.classList.toggle('flat', flat);
     const span = Math.min(210, W / 2 - 41);
     const [yEdge, depth] = [40, 40];
@@ -473,7 +476,11 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const W = felt.clientWidth || 547;
     const narrow = W < 420;
     const perRow = narrow ? (n > 6 ? 5 : n > 4 ? 3 : n) : n;
-    const max = narrow ? (n <= 3 ? 96 : 60) : n <= 2 ? 128 : n <= 3 ? 116 : n <= 5 ? 92 : n <= 7 ? 70 : 50;
+    // La place grandit un peu sur un grand écran (plein écran 1080p : rien ne grandissait, audit UI-02) avec la même
+    // échelle --kg que le reste de l'extension (clamp 0,85-1,15) : le plafond ci-dessous suit --kg, la largeur réelle
+    // (ligne suivante) continue de protéger les petites tailles.
+    const kg = Number.parseFloat(getComputedStyle(felt).getPropertyValue('--kg')) || 1;
+    const max = (narrow ? (n <= 3 ? 96 : 60) : n <= 2 ? 128 : n <= 3 ? 116 : n <= 5 ? 92 : n <= 7 ? 70 : 50) * kg;
     const gap = n >= 9 ? 4 : 8;
     const sw = Math.floor(Math.min(max, (W - 28 - gap * (perRow - 1)) / perRow));
     seatsEl.style.setProperty('--sw', `${sw}px`);

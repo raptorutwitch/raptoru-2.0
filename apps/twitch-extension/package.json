@@ -10,6 +10,8 @@
     "test:lab-module": "node test/responsive/lab-module.mjs",
     "test:music-stability": "node test/responsive/music-stability.mjs",
     "lab:compare": "node test/responsive/compare-shells.mjs",
+    "casino:bench": "node test/responsive/casino-bench.mjs",
+    "test:casino-responsive": "node test/responsive/casino-matrix.mjs",
     "test:grey-screen": "node test/responsive/grey-screen.mjs",
     "package": "node scripts/package.mjs",
     "package:production": "node scripts/package.mjs --target production",
