@@ -883,7 +883,7 @@ Deux livraisons séparées :
   la ferment). L'émote part aussitôt au-dessus de sa place, chez tous les joueurs **et les spectateurs**.
 - **L'envol** (22/11, « une petite émote remplie d'hélium ») : elle grandit avec un petit rebond pendant qu'elle
   commence déjà à monter ; la montée est continue (aucun arrêt, aucune accélération brutale), dérive un peu à gauche ou
-  à droite et s'efface sur le dernier tiers (≈ 3 s). Plusieurs émotes coexistent (un petit nuage, 6 au plus par place),
+  à droite et s'efface pendant la fin de sa montée (≈ 3 s), avant d'atteindre le centre de la table. Plusieurs émotes coexistent (un petit nuage, 6 au plus par place),
   chacune sa trajectoire et sa durée. Les GIF et WebP animés gardent leur animation ; mouvement réduit : un fondu sur
   place. Les spectateurs ne réagissent pas eux-mêmes en
   V1 (pas de place où l'afficher, moins de bruit). Rien ne capte le toucher ni ne masque durablement cartes, scores
