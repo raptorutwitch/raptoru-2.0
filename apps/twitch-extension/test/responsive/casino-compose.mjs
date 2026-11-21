@@ -162,10 +162,11 @@ function measure({ keys, touch }) {
     if (r.width < 2 || r.height < 2) return false;
     for (let e = el; e && e !== body; e = e.parentElement) {
       const cs = getComputedStyle(e);
+      // (an element caught at the start of its fade-in — the centre redrawn when a player becomes ready — is there)
       if (
         cs.display === 'none' ||
         cs.visibility === 'hidden' ||
-        Number(cs.opacity) === 0
+        (Number(cs.opacity) === 0 && !e.getAnimations?.().length)
       )
         return false;
     }
