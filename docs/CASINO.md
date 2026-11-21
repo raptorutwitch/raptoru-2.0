@@ -779,3 +779,148 @@ couleur, la place est grisée.
 
 L'en-tête de Raptoru Live affiche brièvement le mouvement du solde (« +7,5K » au règlement : la mise rendue et le
 gain). C'est un indicateur commun à tous les modules, laissé tel quel. Le résultat de la manche, lui, est au centre.
+
+## 18. Tables, Split, réactions et UX (mandat d'Antoni du 21/11, nuit)
+
+Deux livraisons séparées :
+
+- **Extension seule** (fusionnée) : la pile du Split, le cartouche, la place discrète, les languettes groupées,
+  l'exploration directe des gains des machines, le téléphone et le paysage. Elle contient aussi l'interface des
+  nouvelles tables et des réactions, **éteinte** tant que le Core ne l'annonce pas (§ 18.8).
+- **Core** (branche `feat/casino-bj-tables-reactions-core`, PR séparée, **ni fusionnée ni déployée**) : la politique
+  des tables, la fermeture des tables vides, la transmission des réactions, deux réglages. Aucune migration.
+
+### 18.1 Split : les mains en pile (2 à 4)
+
+- Au centre, les mains du joueur dont c'est le tour sont **empilées** comme des fiches : celle à jouer au premier
+  plan, nette, avec son score et sa mise ; les autres derrière, décalées et estompées. Chacune dépasse d'une bande qui
+  dit « Main 2 · 15 ✓ », « Main 3 · … » (attend sa 2ᵉ carte) ou « bust ». On voit toujours combien de mains existent.
+- Quand une main finit, elle glisse hors de la pile et repasse derrière ; la suivante avance (0,56 s). **Mouvement
+  réduit** (réglage du système) : un simple fondu.
+- Paysage bas (844 × 390) : la pile s'étale en largeur (« M2 », « M3 » sur les bandes), la hauteur manquant.
+- Rien ne change dans les règles : Tirer, Rester et Doubler ne touchent que la main au premier plan (le Core), la
+  2ᵉ carte d'une main splittée arrive à son tour (§ 17). Les messages sur le Split ne s'affichent qu'une fois par
+  manche.
+
+### 18.2 Qui joue : un cartouche ; la place discrète
+
+- Le badge « À toi de jouer » + « Ton tour · Main 1/2 » + l'étiquette au-dessus des actions sont remplacés par **un
+  cartouche dans le coin haut gauche** du tapis : avatar, « À toi » ou le pseudo, « Main 1/2 » après un Split, les
+  secondes restantes. Téléphone : en haut à gauche du centre.
+- La place du joueur dont la main est au centre devient **discrète** : pseudo, avatar, liseré, cartes en petit ; ni
+  score, ni mise, ni étiquette (déjà au centre). Elle redevient complète dès que sa main quitte le centre.
+- Téléphone : à mon tour, ma main passe au centre en grand (score et mise sur la plaque) et ma place devient une
+  bande « Toi ». Le carrousel et la mise en évidence du joueur actif sont conservés.
+
+### 18.3 Règles et Historique
+
+- Les deux languettes sont l'une au-dessus de l'autre sur le **bord droit**, à mi-hauteur (Règles, puis Historique).
+- **Un seul panneau à la fois** : ouvrir l'un ferme l'autre. Le panneau des Règles s'ouvre maintenant à droite, comme
+  l'Historique ; le groupe de languettes se colle au bord du panneau ouvert (la languette active en or).
+- PC : le nom apparaît au survol. Téléphone : languettes 40 × 48, aucun survol nécessaire ; un panneau plein écran a
+  sa croix.
+
+### 18.4 Machines : explorer les gains directement sur les rouleaux
+
+- Survoler (souris) un symbole d'une combinaison **payée** montre sa ligne : les symboles comptés par le Core sont
+  **cernés** (double liseré clair et or), les autres nettement assombris, le gain en pastille (« Haut +350 »).
+- Un clic ou un toucher la fixe. Si plusieurs lignes payées passent par ce symbole, chaque nouveau clic montre la
+  suivante (« 1/2 », « 2/2 »). Un symbole qui n'a rien payé, ou ailleurs : retour au tour.
+- Jamais pendant le tour ni la présentation des gains (la vitre garde « Passer »). Aucun tracé de ligne permanent ; un
+  alignement qui ne paie pas n'est jamais mis en évidence. La puce du récapitulatif correspondante s'éclaire.
+- Les puces du récapitulatif restent (résumé) ; la table des gains garde le tracé d'une ligne sur demande.
+
+### 18.5 Téléphone et paysage
+
+- **Portrait** : les 7 paris banque en **4 + 3** grandes cases symétriques sous leur titre (≈ 80 × 46 px, police 16)
+  au lieu d'un arc de 7 cases de 44 px. Le cercle de mise est **au centre de ma place** (avatar et mise sur le côté).
+- **Paysage bas mais large** (table ≥ 600 px de large et ≤ 339 px de haut : 844 × 390) : la banque plus grande
+  (cartes 34 px), ses paris en **arc large et peu profond** de part et d'autre (cotes lisibles) au lieu d'une rangée
+  plate ; le titre de l'arc cède sa place au centre ; dix places de 70 px au lieu de 50 ; le message éphémère dans la
+  zone libre à gauche.
+
+### 18.6 Nouvelles tables (Core, `lobby.ts`)
+
+**Politique** :
+
+- **« + Nouvelle table »** dans le salon : une table pour jouer seul contre la banque, même si d'autres ont des places.
+  Elle reste **publique** et rejoignable ; jamais verrouillée pour son créateur.
+- **Un joueur, une table** : un joueur assis qui demande une nouvelle table reste à la sienne.
+- **Jamais deux tables vides** : demander une nouvelle table quand une table est vide installe le joueur à cette table
+  (« La table 3 était libre : tu y es seul contre la banque »). Ouvrir puis quitter ne peut donc pas empiler des tables.
+- **Plafond qui suit la foule** : **5 tables**, **+1 par table d'au moins 6 joueurs**, **8 au plus** (`MAX_TABLES`,
+  inchangé). Au plafond, le bouton est grisé avec la raison au survol, et la requête est refusée (`tables_cap`).
+  « Trouver une place » ouvre toujours une table quand toutes sont complètes (comportement existant).
+- **Fermeture** : une table vide depuis **10 minutes**, sans étape en attente, est fermée (balayage chaque minute, sous
+  le verrou du salon) ; **la plus petite table reste toujours**. Ses manches restent dans `casino_rounds`. Un
+  spectateur encore dessus revient au salon (« Cette table vient de fermer »). Le numéro libéré est repris par la
+  table suivante.
+- **Annonce dans le chat** : jamais automatique ; la proposition (un clic du créateur) est désormais **désactivée par
+  défaut** (`casino.bj_announce` = 0). Si Antoni l'avait déjà réglée dans Studio, sa valeur enregistrée reste.
+- Le salon se met à jour seul (toutes les 6 s tant qu'il est à l'écran).
+
+**Contrat** (additif, tolérant) :
+
+- `GET /casino/bj/tables` → `create: { allowed, reason: null | 'tables_cap' | 'casino_full', cap, open }`.
+- `POST /casino/bj/join` accepte `new_table: true` → `{ table, seat, created, reused?, no }`, ou 409 `tables_cap`
+  (`cap`, `open`).
+
+**Vérifié** :
+
+- la politique (tests unitaires) ;
+- le service sur PGlite : nouvelle table, réutilisation de la table vide, plafond puis plafond relevé, un joueur une
+  table, fermeture après 10 min mais pas avant, jamais la plus petite ni une table dont la manche est en attente,
+  numéro repris, aucun Jeton déplacé ;
+- **vrai PostgreSQL, deux Cores** : 7 demandes simultanées → tables 1 à 5, deux refus, jamais un numéro en double ; le
+  même viewer depuis deux onglets → une table ; deux balayages simultanés → la table fermée une fois.
+
+### 18.7 Réactions (Core `reactions.ts`, extension `bj-reactions.js`)
+
+- Un joueur **assis** touche « Réagir » (à côté de Quitter) : une bulle de **6 émotes**. L'émote apparaît 2,6 s
+  au-dessus de sa place, chez tous les joueurs **et les spectateurs**. Les spectateurs ne réagissent pas eux-mêmes en
+  V1 (pas de place où l'afficher, moins de bruit). Rien ne capte le toucher ni ne masque durablement cartes, scores
+  ou boutons.
+- **Téléphone, carrousel** : une réaction d'un joueur hors écran affiche un repère sur le bord (‹ émote, ou émote ›) ;
+  le toucher fait défiler jusqu'à sa place. Jamais de défilement automatique.
+- **La banque réagit parfois** : au règlement, au plus une bulle par manche (blackjack de la banque 60 %, blackjack
+  d'un joueur 60 %, gros gain ≥ 10 × la mise minimum 50 %, banque qui saute 35 %, un bust 20 % ; ≈ 1 manche sur 4).
+  Choix **déterministe** à partir de la table et de la manche : tous les viewers voient la même. Phrases fixes
+  courtes, **aucune IA** (la personnalité de LeCroupier_ reste suspendue).
+- **Sécurité** :
+  - seulement les identifiants `r1` … `r6`, jamais de texte libre ; aucun Jeton ; rien en base ;
+  - une réaction toutes les 1,5 s par viewer, 8 par 30 s au plus (`react_rate`) ; un viewer bloqué par la modération
+    ne réagit pas ;
+  - transmission en mémoire dans le Core (comme la présence), jointe à l'état de la table ; le long-poll répond aussi
+    pour une nouvelle réaction (`rx`) ;
+  - reconnexion : une réaction de plus de 3,5 s n'est jamais rejouée.
+- **Arrêt** : `casino.bj_reactions` (joueurs) et `casino.bj_dealer_reactions` (banque), à 1 par défaut, dans Studio ›
+  Casino (avec la prochaine version de Studio ; avant, seulement par l'API des réglages). Chaque viewer peut aussi
+  « Masquer les réactions » pour lui seul (bulle de choix).
+- **Remplacer les émotes** : déposer les fichiers (PNG, GIF ou WebP animé, carré, 112 px conseillé) dans
+  `apps/twitch-extension/extension/assets/casino/reactions/` et changer leur ligne `src` dans `reactions.js` du même
+  dossier. Rien d'autre : identifiants, transmission et animations ne bougent pas ; une image animée garde son
+  animation (affichée telle quelle). Les 6 visuels actuels sont **provisoires** (SVG dessinés, dont un cœur animé).
+
+**Contrat** :
+
+- `GET /casino/bj/state?…&rx=<n>` → en plus de `state`, `reactions: { on, dealer, ids, seq, list: [{ n, seat, r,
+age_ms }] }`.
+- `POST /casino/bj/react { r }` → `{ ok, n }`, ou 400 `bad_reaction`, 409 `not_seated` / `reactions_off` /
+  `viewer_blocked`, 429 `react_rate` (`retry_in_ms`).
+
+### 18.8 Mise en service sans incompatibilité
+
+1. **Le ZIP de l'extension** (avec l'inventaire et la ligne d'Antoni) : contre le Core actuel (`1f05b97c`), aucun
+   bouton « Nouvelle table » ni « Réagir », aucune réaction de la banque : le Core ne les annonce pas. Tout le reste
+   (pile, cartouche, languettes, machines, téléphone) fonctionne.
+2. **Sur GO d'Antoni** : fusionner la PR du Core → CI de `main` → `plan` → déploiement du Core (aucune migration, bot
+   inchangé). Dès le déploiement, les viewers qui ont ce ZIP voient « + Nouvelle table » et « Réagir » : pas de
+   nouveau ZIP.
+3. Facultatif : une version de Studio pour les deux interrupteurs (sinon valeurs par défaut : réactions activées).
+4. **Retour arrière** : redéployer le Core précédent ; les boutons disparaissent seuls (ils suivent ce qu'annonce le
+   Core). Les tables ouvertes restent (lignes existantes, lues normalement).
+
+**Démo locale** (`npm run casino:bench -w @raptoru/twitch-extension`, sur la branche du Core) : « + Table fictive »,
+« Réaction d'un joueur fictif », « Fermer les tables vides » ; les joueurs fictifs réagissent parfois au règlement.
+« Quatre 8 (Split jusqu'à 4 mains) » est dans « Prochaine donne » partout. Le banc de `main` (extension seule) n'a ni
+nouvelles tables ni réactions, comme le Core actuel.

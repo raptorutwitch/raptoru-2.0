@@ -291,7 +291,15 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
 
   const wins = () => lastSteps;
   const exploring = () => !!shownExplore;
-  return { renderStatic, relayout, spin, skip, isRunning, markWins, focus, settle, explore, exploring, wins, showWins, clearWins, markLanded };
+  /** La case [rouleau, rangée] sous `target` (une des 3 rangées visibles), ou null — rouleaux en mouvement compris. */
+  function cellAt(target) {
+    const cell = target?.closest?.('.cell');
+    if (!cell || running) return null;
+    const r = tapes.indexOf(cell.parentElement);
+    const row = [...cell.parentElement.children].indexOf(cell) - 1;
+    return r >= 0 && row >= 0 && row < cfg.rows ? [r, row] : null;
+  }
+  return { el: reelsEl, renderStatic, relayout, spin, skip, isRunning, markWins, focus, settle, explore, exploring, wins, showWins, clearWins, markLanded, cellAt };
 }
 
 /** La miniature d'une ligne (5 rouleaux × 3 rangées) : table des gains et récapitulatif ; sa couleur vient de `--c`. */
@@ -315,25 +323,34 @@ const LINES_NOTE = 'Les 10 lignes. Chacune paie ses symboles identiques qui se s
  * seulement : les combinaisons et leurs gains sont ceux du Core (markWins), jamais recalculés.
  * `label(step)` : le texte (déjà échappé) de la machine, « Bosse · 3 × Cerise (dont 1 WILD) ».
  */
-function explorer(view, { plate, root, on, lines, label, unsure = () => false }) {
+function explorer(view, { plate, root, on, lines, label, unsure = () => false, idle = () => true }) {
   let steps = null;
-  let pin = -1; // la puce choisie (clic, toucher) ; -2 : une ligne montrée depuis la table des gains
+  let pin = -1; // la puce choisie (clic, toucher) ; -2 : une ligne de la table des gains ; -3 : un symbole des rouleaux
+  let at = null; // le symbole exploré sur les rouleaux [rouleau, rangée]
+  let k = 0; // laquelle de ses combinaisons est montrée
   const pathOf = (li) => lines[li]?.rows.map((row, r) => [r, row]) ?? null;
   const nameOf = (li) => lines[li]?.name ?? `Ligne ${li + 1}`;
-  const show = (i) => {
+  // Seulement les symboles COMPTÉS d'une combinaison payée (mandat du 21/11, E : jamais un alignement qui ne paie pas,
+  // aucun tracé permanent) ; le tracé de la ligne entière reste pour la table des gains (probe).
+  const show = (i, extra = '') => {
     const st = steps?.[i];
     if (!st || view.wins() !== steps || view.isRunning()) return; // une puce d'un tour qui n'est plus sur les rouleaux
-    const line = st.kind === 'line';
-    view.explore(line ? pathOf(st.line) : null, st.cells, `${line ? nameOf(st.line) : 'BONUS'} +${fmtN(st.win)}`);
+    view.explore(null, st.cells, `${st.kind === 'line' ? nameOf(st.line) : 'BONUS'} +${fmtN(st.win)}${extra}`);
+    lit(i);
   };
+  const lit = (i) => plate.querySelectorAll('[data-lstep]').forEach((b) => b.classList.toggle('lit', Number(b.dataset.lstep) === i));
   const pressed = () => plate.querySelectorAll('[data-lstep]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.lstep) === pin)));
-  const back = () => view.exploring() && view.explore(null);
+  const back = () => {
+    lit(-1);
+    if (view.exploring()) view.explore(null);
+  };
   const clear = () => {
     pin = -1;
+    at = null;
     pressed();
     back();
   };
-  const rest = () => (pin >= 0 ? show(pin) : pin === -1 && back());
+  const rest = () => (pin >= 0 ? show(pin) : pin === -3 && at ? showAt() : pin === -1 && back());
   const chip = (e) => e.target.closest?.('[data-lstep]');
   on(plate, 'pointerover', (e) => e.pointerType === 'mouse' && chip(e) && show(Number(chip(e).dataset.lstep)));
   on(plate, 'pointerout', (e) => e.pointerType === 'mouse' && chip(e) && !chip(e).contains(e.relatedTarget) && rest());
@@ -345,11 +362,53 @@ function explorer(view, { plate, root, on, lines, label, unsure = () => false })
     e.stopPropagation(); // jamais « Passer » (un toucher sur la vitre)
     const i = Number(b.dataset.lstep);
     pin = pin === i ? -1 : i;
+    at = null;
     pressed();
     if (pin === i) show(i);
     else back();
   });
   on(root, 'click', (e) => pin !== -1 && !e.target.closest?.('[data-lstep], [data-line]') && clear());
+
+  // --- Directement sur les rouleaux (mandat du 21/11, E) : survoler (souris) un symbole d'une combinaison payée montre
+  // sa ligne — ses symboles comptés cernés, les autres assombris, son gain en pastille. Un clic ou un toucher la fixe ;
+  // plusieurs lignes passent par ce symbole : chaque nouveau clic montre la suivante (« 2/3 » dans la pastille). Un
+  // symbole qui n'a rien payé, ou ailleurs : retour au tour. Jamais pendant un tour (la vitre garde « Passer »).
+  const through = ([r, row]) => (steps ?? []).flatMap((st, i) => (st.cells.some(([a, b]) => a === r && b === row) ? [i] : []));
+  const ready = () => idle() && !!steps && view.wins() === steps && !view.isRunning();
+  const showAt = () => {
+    const list = through(at);
+    const n = list.length;
+    show(list[k % n], n > 1 ? ` · ${(k % n) + 1}/${n}` : '');
+  };
+  const same = (pos) => !!at && !!pos && at[0] === pos[0] && at[1] === pos[1];
+  on(view.el, 'pointerover', (e) => {
+    if (e.pointerType !== 'mouse' || pin !== -1 || !ready()) return;
+    const pos = view.cellAt(e.target);
+    if (!pos || same(pos) || !through(pos).length) return;
+    at = pos;
+    k = 0;
+    showAt();
+  });
+  on(view.el, 'pointerout', (e) => {
+    if (e.pointerType !== 'mouse' || pin !== -1 || !at) return;
+    const to = view.cellAt(e.relatedTarget);
+    if (same(to)) return; // (d'un enfant à l'autre du même symbole)
+    at = null;
+    back();
+  });
+  on(view.el, 'click', (e) => {
+    if (!ready()) return;
+    const pos = view.cellAt(e.target);
+    const n = pos ? through(pos).length : 0;
+    if (!n) return void (pin !== -1 && (e.stopPropagation(), clear()));
+    e.stopPropagation();
+    if (!same(pos)) [at, k] = [pos, 0];
+    else if (n > 1) k += 1;
+    else if (pin === -3) return clear(); // une seule ligne, déjà fixée : la relâcher
+    pin = -3;
+    pressed();
+    showAt();
+  });
   /** Une des 10 lignes sur les rouleaux (table des gains) : son tracé ; si elle a payé ce tour, ses symboles et son gain. */
   const probe = (li) => {
     if (view.isRunning() || !pathOf(li)) return;
@@ -365,8 +424,9 @@ function explorer(view, { plate, root, on, lines, label, unsure = () => false })
     html(list) {
       steps = list;
       pin = -1;
+      at = null;
       if (list.length < 2) return '';
-      return `<span class="lrecap" role="group" aria-label="Lignes gagnantes : survole ou touche une ligne pour la voir">${list
+      return `<span class="lrecap" role="group" aria-label="Lignes gagnantes : survole ou touche une ligne, ou un symbole gagnant sur les rouleaux">${list
         .map((st, i) => {
           const line = st.kind === 'line';
           const txt = `${label(st)} : +${fmtN(st.win)}`;

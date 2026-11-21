@@ -119,7 +119,11 @@ const SCENARIOS = {
     },
     { wait: 300, shot: 'salon' },
     { click: '[data-join]', wait: 1500 },
-    { click: '[data-ann=no]', wait: 400 },
+    // (la proposition d'annoncer la table n'apparaît que si le Core la propose : casino.bj_announce)
+    {
+      js: 'document.querySelector(".cz-host")?.shadowRoot?.querySelector("[data-ann=no]")?.click()',
+      wait: 400,
+    },
     { click: '[data-chip="100"]', wait: 150 },
     { click: '.seat.me [data-main]', wait: 150 },
     { click: '.seat.me [data-main]', wait: 150 },
