@@ -633,7 +633,7 @@ anti-débordement (`test:casino-responsive`, jeu isolé) reste en place.
 - **Blackjack, barre** : « Mise en cours » (petite zone dorée, distincte) remplace « reste 49 900 » — le solde est
   dans l'en-tête ; Quitter = la porte rouge seule, séparée des jetons, `title` « Quitter la table » et `aria-label`
   (au toucher : sans mise engagée on quitte tout de suite, avec une mise engagée une confirmation l'explique ; la règle
-  validée ne change pas).
+  validée ne change pas ; après le règlement, plus de confirmation ni de mise dite « engagée »).
 - **Blackjack, panneaux** : languettes Règles / Historique centrées sur le bord vertical du tapis, collées au bord
   (icône seule ; le libellé s'ouvre au survol sur PC). Historique : « Partager dans le chat » et « Remettre le bilan à
   zéro » deviennent de petits pictogrammes (partage dans le coin de la carte ; flèche de remise à zéro, toujours
