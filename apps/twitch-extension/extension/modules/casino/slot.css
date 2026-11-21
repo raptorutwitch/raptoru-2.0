@@ -525,8 +525,31 @@ img.sym { object-fit: contain; }
 .plate b { flex: none; }
 .plate small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .plines span { flex-basis: 100%; margin-bottom: 3px; text-transform: none; letter-spacing: 0; line-height: 1.35; }
-.pline { margin: 0; display: grid; justify-items: center; gap: 2px; width: 40px; }
-.pline figcaption { font: 700 7.5px/1.1 var(--font); color: var(--dim); text-align: center; }
+.pline { margin: 0; display: grid; justify-items: center; gap: 2px; width: 40px; padding: 3px 0 2px; border-radius: 6px; }
+.pline small { font: 700 7.5px/1.1 var(--font); color: var(--dim); text-align: center; }
+.pline:hover, .pline:focus-visible { background: rgba(255, 255, 255, 0.07); }
+
+/* --- Explorer les lignes (retour d'Antoni du 21/11, reels.js explorer) : dans la plaque d'un tour à plusieurs
+   combinaisons, une puce par ligne (sa miniature, son gain) ; survol, focus ou toucher → la ligne sur les rouleaux : ses
+   5 cases en pointillés, ses symboles comptés au premier plan, son nom et son gain en pastille ; le reste s'estompe. */
+.plate .lrecap { display: flex; align-items: center; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; pointer-events: auto; }
+.plate .lrecap::-webkit-scrollbar { display: none; }
+.lchip { flex: none; height: 20px; display: flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 201, 77, 0.35); transition: background 0.15s, box-shadow 0.15s; }
+.lchip svg { width: 22px; height: 11px; }
+.lchip rect { fill: rgba(0, 0, 0, 0.35); }
+.lchip polyline { fill: none; stroke: var(--c, var(--gold)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.plate .lchip b { font: 900 11px/1 var(--font); color: #ffe7a8; text-shadow: none; animation: none; }
+.lchip em { font: 900 8px/1 var(--font); font-style: normal; letter-spacing: 0.06em; color: #2a1600; background: var(--gold); padding: 2px 3px; border-radius: 3px; }
+.lchip:hover, .lchip:focus-visible, .lchip[aria-pressed='true'] { background: rgba(255, 201, 77, 0.22); box-shadow: inset 0 0 0 1.5px rgba(255, 222, 140, 0.95); }
+.lchip:focus-visible { outline: none; }
+.cell.path { outline: 1.5px dashed rgba(255, 244, 214, 0.7); outline-offset: -6px; border-radius: 12px; }
+/* (l'opacité en plus du filtre : les émotes de la machine à émotes animent leur `filter`, qui l'emporterait) */
+.reels.explore .cell:not(.focus):not(.path) .sym { filter: saturate(0.5) brightness(0.45); opacity: 0.55; }
+.reels.explore .cell.path:not(.focus) .sym { filter: saturate(0.7) brightness(0.7); opacity: 0.8; }
+.reels.explore .cell:not(.focus)::before, .reels.explore .cell:not(.focus)::after { opacity: 0.25; }
+/* Une vitre étroite (téléphone) : le multiplicateur cède sa place aux puces. */
+@container (max-width: 400px) { .plate:has(.lrecap) small { display: none; } .plate:has(.lrecap) { padding: 0 6px 0 10px; } }
+@media (pointer: coarse) { .lchip { height: 30px; padding: 0 9px 0 6px; } .plate:has(.lrecap) { height: 36px; padding-left: 12px; } .pline { min-height: 34px; } }
 
 /* --- Portrait haut (téléphone ≈ 390 × 844 : ≤ 560 px de large, au moins 600 px de haut) — refonte du 21/11 (retour
    d'Antoni : une bande de rouleaux au milieu, un grand vide au-dessus, les commandes loin en bas). Une vraie borne

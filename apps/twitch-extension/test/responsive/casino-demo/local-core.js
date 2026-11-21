@@ -641,6 +641,12 @@ function rigFor(t, kind) {
     even: { seats: { [seat]: [1, 10] }, dealer: [1, 7] },
     double: { seats: { [seat]: [6, 5] }, dealer: [6, 10], then: [10] },
     dealer_bust: { seats: { [seat]: [10, 6] }, dealer: [6, 10], then: [10] },
+    bust: { seats: { [seat]: [10, 6] }, dealer: [10, 7], then: [10] },
+    many: {
+      seats: { [seat]: [2, 3] },
+      dealer: [6, 10],
+      then: [2, 2, 2, 3, 1, 1, 2],
+    },
   };
   return rigs[kind] ?? null;
 }
@@ -745,7 +751,7 @@ if (window.top !== window) {
 
 window.__casinoDemo = {
   /** `kind`: slot/book random|loss|line|wild|lines|big|bonus (book: bigbonus too); roulette a number or 'random';
-   *  blackjack random|pair|aces|blackjack|insurance|even|double|dealer_bust (the viewer's next deal). */
+   *  blackjack random|pair|aces|blackjack|insurance|even|double|dealer_bust|bust|many (the viewer's next deal). */
   next(game, kind) {
     forced[game] =
       game === 'roulette' && kind !== 'random' ? Number(kind) : kind;

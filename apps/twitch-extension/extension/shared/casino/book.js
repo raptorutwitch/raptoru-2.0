@@ -145,7 +145,8 @@ export function mountBook(D, ctx) {
   // --- Plate, last wins ---------------------------------------------------------------------------------------------
   let plateLocked = false;
   let lastWin = '';
-  const paintPlate = () => !plateLocked && (plate.innerHTML = lastWin);
+  // (un récapitulatif déjà affiché n'est jamais réécrit : la puce survolée ou choisie le resterait plus)
+  const paintPlate = () => !plateLocked && !(plate.querySelector('.lrecap') && lastWin.includes('lrecap')) && (plate.innerHTML = lastWin);
   function popPlate() {
     plate.classList.remove('pop', 'old');
     void plate.offsetWidth;
@@ -465,6 +466,9 @@ export function mountBook(D, ctx) {
     if (!sym || !st.count) return name;
     return `${name} · ${st.count} × ${esc(sym)}${st.wilds?.length ? ` (dont ${st.wilds.length} BONUS)` : ''}`;
   };
+  // Plusieurs combinaisons : une puce par ligne dans la plaque, à survoler ou toucher pour la voir (reels.js explorer).
+  // (tours gratuits : le symbole extensible paie aussi en dehors des combinaisons marquées — jamais « rien ce tour »)
+  const lineEx = View.explorer(view, { plate, root: body, on, lines: T().lines, label: lineLabel, unsure: () => !!inFree });
   // The winning combinations one by one; Rapide: all at once; Passer: the end state.
   async function presentLines(r, { x, steps, credit, kick = true, pace = 0 }) {
     if (!credit) return;
@@ -474,7 +478,8 @@ export function mountBook(D, ctx) {
     const paint = (v, k) => (plate.innerHTML = `<b>+${fmt(v)}</b><small>${k || times(x)}</small>`);
     const lineSteps = steps.filter((st) => st.kind === 'line');
     plate.title = steps.map((st) => `${lineLabel(st)} +${fmt(st.win)}`).join(' · ');
-    const summary = lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : lineSteps.length > 1 ? `${lineSteps.length} lignes · ${times(x)}` : times(x);
+    const recap = lineEx.html(steps);
+    const summary = !recap && lineSteps.length === 1 && level < 3 ? lineLabel(lineSteps[0]) : times(x);
     popPlate();
     let shownV = 0;
     if (fast()) {
@@ -503,7 +508,7 @@ export function mountBook(D, ctx) {
     if (kick && !Pr.skipped && level >= 4) await mega(credit, x, shownV, fast());
     else if (kick && !Pr.skipped && level === 3 && !fast()) await boom(credit, x, shownV);
     view.settle();
-    plate.innerHTML = `<b>+${fmt(credit)}</b><small>${summary}</small>`;
+    plate.innerHTML = `<b>+${fmt(credit)}</b><small>${summary}</small>${recap}`;
     lastWin = plate.innerHTML;
     Audio.win(Math.min(3, level));
     plateLocked = false;
@@ -952,20 +957,15 @@ export function mountBook(D, ctx) {
       .map((id) => `<tr><td>${symbolHTML(BY_ID[id])}</td>${[5, 4, 3, 2].map((k) => `<td${k === 2 && pays[id][2] ? ' class="two"' : ''}>${val(id, k)}</td>`).join('')}</tr>`)
       .join('');
     const sc = (k) => compact(T().scatter_pays[k] * bet);
-    const lines = T()
-      .lines.map((l, i) => {
-        const pts = l.rows.map((row, r) => `${r * 6 + 3},${row * 5 + 2.5}`).join(' ');
-        return `<figure class="pline" style="--c:${View.LINE_COLORS[i % View.LINE_COLORS.length]}"><svg viewBox="0 0 30 15"><rect width="30" height="15" rx="2.5"/><polyline points="${pts}"/></svg><figcaption>${esc(l.name ?? String(i + 1))}</figcaption></figure>`;
-      })
-      .join('');
+    const lines = T().lines.map(View.plineHTML).join('');
     return `<table class="ptab"><thead><tr><th></th><th>×5</th><th>×4</th><th>×3</th><th>×2</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="prule">${symbolHTML(BY_ID.bonus)}<p><b>BONUS = WILD</b> : il remplace tous les symboles sur une ligne. N’importe où, 3 · 4 · 5 BONUS paient <b>${sc(3)} · ${sc(4)} · ${sc(5)}</b> et donnent <b>10 tours gratuits</b>.</p></div>
       <div class="prule"><span class="prule__ico">↔</span><p><b>Tours gratuits</b> : un symbole est tiré au hasard et devient <b>extensible</b>. S’il est sur assez de rouleaux (2 pour les 4 forts, 3 pour les autres, voisins ou non), ces rouleaux se remplissent et il paie sur les <b>10 lignes</b>, en plus des gains normaux. 3 BONUS : +10 tours.</p></div>
       <p class="pcap">Gains de ligne de gauche à droite, une ligne = un gain. Mise ${fmt(bet)} = 10 lignes à ${fmt(bet / 10)}. Gain maximum par partie : ${fmt(casino.limits.max_win)}.</p>
-      <div class="plines"><span>Les 10 lignes · de gauche à droite, à partir du 1er rouleau. Seules ces lignes paient (le nom de la ligne s’affiche sur la plaque quand elle paie).</span>${lines}</div>
+      <div class="plines"><span>${View.LINES_NOTE}</span>${lines}</div>
       <label class="pvol"><span>Volume</span><input type="range" min="0" max="100" value="${Math.round(Audio.volume * 100)}" data-vol aria-label="Volume des sons"></label>`;
   }
-  const openPaytable = () => Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(inFree ? inFree.bet : s.bet)}</small>`, render: paytableHTML });
+  const openPaytable = () => Frame.drawer({ side: 'left', width: 236, title: `Table des gains<small>mise ${compact(inFree ? inFree.bet : s.bet)}</small>`, render: paytableHTML, onClick: lineEx.paytableClick });
 
   // --- Commands ---------------------------------------------------------------------------------------------------------
   on(body, 'click', (e) => {

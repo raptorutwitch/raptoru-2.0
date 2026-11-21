@@ -4,6 +4,7 @@
 // Chaque rouleau fait défiler la vraie bande (les symboles qui précèdent l'arrêt tiré), accélère, file avec un flou,
 // freine, dépasse un peu et revient (rebond amorti). Arrêts successifs 1 → 5 ; « rapide » : presque simultanés.
 // Deux BONUS déjà tombés : les rouleaux suivants ralentissent (suspense), le résultat restant celui tiré.
+import { esc } from './frame.js';
 
 const PROFILES = {
   normal: { accel: 260, firstStop: 1050, gap: 290, decel: 420, settle: 320, over: 0.34, windup: 0.16, vmin: 0.021, anticipation: 850 },
@@ -51,7 +52,8 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
     if (running) return;
     PEEK = readPeek();
     tapes.forEach((t) => place(t, 1));
-    if (shownFocus) focus(shownFocus); // repositionne la pastille
+    if (shownExplore) explore(...shownExplore);
+    else if (shownFocus) focus(shownFocus); // repositionne la pastille
   }
 
   function spin(result, opts = {}) {
@@ -178,7 +180,7 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
     t.textContent = text;
     reelsEl.append(t);
     const box = reelsEl.getBoundingClientRect();
-    const w = t.getBoundingClientRect().width;
+    const w = t.offsetWidth; // (sa largeur de mise en page : l'animation d'entrée la rétrécit au départ)
     t.style.left = `${Math.max(w / 2 + 2, Math.min(box.width - w / 2 - 2, x))}px`;
     t.style.top = `${Math.min(box.height - 10, y + Math.min(h * 0.42, reels[0].clientWidth * 0.5))}px`;
   }
@@ -195,6 +197,8 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
    * exactement le gain du tour (engine/slots.js : lignes + dispersion). Elles ne font qu'être MONTRÉES.
    */
   let shownFocus = null;
+  let shownExplore = null;
+  let lastSteps = null; // les combinaisons du tour sur les rouleaux (null : aucun tour marqué, ou des rouleaux relancés)
   function markWins(result) {
     clearWins();
     const ev = result.eval;
@@ -203,6 +207,7 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
       .sort((a, b) => a.win - b.win || a.line - b.line);
     // V8 : les BONUS ne paient plus directement (ils ouvrent le Coffre) : pas d'étape « BONUS +0 », mais ils s'éclairent
     if (ev.scatter.count >= 3 && ev.scatter.win > 0) steps.push({ kind: 'scatter', cells: ev.scatter.cells, win: ev.scatter.win });
+    lastSteps = steps;
     if (!steps.length && ev.scatter.count < 3) return { steps, wildMax: 0 };
     reelsEl.classList.add('has-win');
     ev.lines.forEach((w) => mark(w.cells, 'win'));
@@ -248,6 +253,21 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
     reelsEl.classList.remove('seq');
     reelsEl.querySelectorAll('.ltag').forEach((t) => t.remove());
   }
+  /**
+   * Explorer une ligne (récapitulatif de la plaque, table des gains) : ses 5 cases tracées (`path`), ses symboles
+   * comptés au premier plan (`counted`, s'il y en a), `text` en pastille. `explore(null)` : retour à l'état du tour.
+   */
+  function explore(path, counted = null, text = '') {
+    settle();
+    unmark('path');
+    shownExplore = path || counted?.length ? [path, counted, text] : null;
+    reelsEl.classList.toggle('explore', !!shownExplore);
+    if (!shownExplore) return;
+    if (path) mark(path, 'path');
+    if (counted?.length) focus({ cells: counted }, { tag: false });
+    const [reel, row] = (counted?.length ? counted : path).at(-1);
+    if (text) tag(reel, row, text);
+  }
   /** Tout d'un coup (revoir, Rapide) : marquer et montrer l'état final. */
   function showWins(result) {
     const m = markWins(result);
@@ -256,8 +276,10 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
   }
   function clearWins() {
     shownFocus = null;
-    reelsEl.classList.remove('has-win', 'seq');
-    ['win', 'focus', 'scatter-win', 'landed', 'wild-hit', 'wild-multi'].forEach(unmark);
+    shownExplore = null;
+    lastSteps = null;
+    reelsEl.classList.remove('has-win', 'seq', 'explore');
+    ['win', 'focus', 'scatter-win', 'landed', 'wild-hit', 'wild-multi', 'path'].forEach(unmark);
     reelsEl.querySelectorAll('.wildtag, .ltag').forEach((t) => t.remove());
   }
   function markLanded(reel) {
@@ -267,7 +289,100 @@ function create(rootEl, cfg, { audio, symbolHTML }) {
     }
   }
 
-  return { renderStatic, relayout, spin, skip, isRunning, markWins, focus, settle, showWins, clearWins, markLanded };
+  const wins = () => lastSteps;
+  const exploring = () => !!shownExplore;
+  return { renderStatic, relayout, spin, skip, isRunning, markWins, focus, settle, explore, exploring, wins, showWins, clearWins, markLanded };
 }
 
-export const ArcadeSlotsView = { create, LINE_COLORS };
+/** La miniature d'une ligne (5 rouleaux × 3 rangées) : table des gains et récapitulatif ; sa couleur vient de `--c`. */
+const lineSVG = (rows) => `<svg viewBox="0 0 30 15" aria-hidden="true"><rect width="30" height="15" rx="2.5"/><polyline points="${rows.map((row, r) => `${r * 6 + 3},${row * 5 + 2.5}`).join(' ')}"/></svg>`;
+const lineColor = (i) => LINE_COLORS[i % LINE_COLORS.length];
+const fmtN = (n) => Math.round(n).toLocaleString('fr-FR').replace(/[\s  ]/g, ' ');
+/** Table des gains : une des 10 lignes (miniature + nom), un bouton qui la montre sur les rouleaux (`explorer.probe`). */
+const plineHTML = (l, i) => {
+  const name = esc(l.name ?? `Ligne ${i + 1}`);
+  return `<button type="button" class="pline" data-line="${i}" style="--c:${lineColor(i)}" title="Voir la ligne « ${name} » sur les rouleaux" aria-label="Ligne ${name} : la voir sur les rouleaux">${lineSVG(l.rows)}<small>${name}</small></button>`;
+};
+// Exact au Core (slot.ts / book.ts evaluate) : une ligne paie ses symboles identiques qui se suivent depuis le 1er rouleau.
+const LINES_NOTE = 'Les 10 lignes. Chacune paie ses symboles identiques qui se suivent depuis le 1er rouleau, à gauche. Ailleurs, des symboles identiques ne rapportent rien (une diagonale qui ne part pas du 1er rouleau, par exemple). Touche une ligne pour la voir sur les rouleaux.';
+
+/**
+ * Explorer les lignes d'un tour (retour d'Antoni du 21/11), pour les deux machines. La plaque d'un tour à plusieurs
+ * combinaisons porte une puce par combinaison (sa ligne en miniature, son gain) : survol (souris), focus (clavier) ou
+ * toucher → la ligne s'éclaire sur les rouleaux (ses 5 cases tracées, les symboles comptés, son nom et son gain), les
+ * autres symboles s'estompent. Toucher à nouveau, ou ailleurs : retour au tour. `probe(i)` montre n'importe laquelle
+ * des 10 lignes (table des gains) — pour voir que des symboles identiques hors de ces lignes ne paient pas. Affichage
+ * seulement : les combinaisons et leurs gains sont ceux du Core (markWins), jamais recalculés.
+ * `label(step)` : le texte (déjà échappé) de la machine, « Bosse · 3 × Cerise (dont 1 WILD) ».
+ */
+function explorer(view, { plate, root, on, lines, label, unsure = () => false }) {
+  let steps = null;
+  let pin = -1; // la puce choisie (clic, toucher) ; -2 : une ligne montrée depuis la table des gains
+  const pathOf = (li) => lines[li]?.rows.map((row, r) => [r, row]) ?? null;
+  const nameOf = (li) => lines[li]?.name ?? `Ligne ${li + 1}`;
+  const show = (i) => {
+    const st = steps?.[i];
+    if (!st || view.wins() !== steps || view.isRunning()) return; // une puce d'un tour qui n'est plus sur les rouleaux
+    const line = st.kind === 'line';
+    view.explore(line ? pathOf(st.line) : null, st.cells, `${line ? nameOf(st.line) : 'BONUS'} +${fmtN(st.win)}`);
+  };
+  const pressed = () => plate.querySelectorAll('[data-lstep]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.lstep) === pin)));
+  const back = () => view.exploring() && view.explore(null);
+  const clear = () => {
+    pin = -1;
+    pressed();
+    back();
+  };
+  const rest = () => (pin >= 0 ? show(pin) : pin === -1 && back());
+  const chip = (e) => e.target.closest?.('[data-lstep]');
+  on(plate, 'pointerover', (e) => e.pointerType === 'mouse' && chip(e) && show(Number(chip(e).dataset.lstep)));
+  on(plate, 'pointerout', (e) => e.pointerType === 'mouse' && chip(e) && !chip(e).contains(e.relatedTarget) && rest());
+  on(plate, 'focusin', (e) => chip(e) && show(Number(chip(e).dataset.lstep)));
+  on(plate, 'focusout', (e) => chip(e) && rest());
+  on(plate, 'click', (e) => {
+    const b = chip(e);
+    if (!b) return;
+    e.stopPropagation(); // jamais « Passer » (un toucher sur la vitre)
+    const i = Number(b.dataset.lstep);
+    pin = pin === i ? -1 : i;
+    pressed();
+    if (pin === i) show(i);
+    else back();
+  });
+  on(root, 'click', (e) => pin !== -1 && !e.target.closest?.('[data-lstep], [data-line]') && clear());
+  /** Une des 10 lignes sur les rouleaux (table des gains) : son tracé ; si elle a payé ce tour, ses symboles et son gain. */
+  const probe = (li) => {
+    if (view.isRunning() || !pathOf(li)) return;
+    const won = view.wins();
+    const st = won?.find((x) => x.kind === 'line' && x.line === li);
+    pin = -2;
+    pressed();
+    // « rien ce tour » seulement quand c'est sûr : un tour marqué sur les rouleaux, sans gain hors lignes (`unsure`).
+    view.explore(pathOf(li), st?.cells ?? null, st ? `${nameOf(li)} +${fmtN(st.win)}` : won && !unsure() ? `${nameOf(li)} · rien ce tour` : nameOf(li));
+  };
+  return {
+    /** Les puces d'un tour (les `steps` de markWins, tels quels) ; '' s'il n'y a qu'une combinaison. */
+    html(list) {
+      steps = list;
+      pin = -1;
+      if (list.length < 2) return '';
+      return `<span class="lrecap" role="group" aria-label="Lignes gagnantes : survole ou touche une ligne pour la voir">${list
+        .map((st, i) => {
+          const line = st.kind === 'line';
+          const txt = `${label(st)} : +${fmtN(st.win)}`;
+          return `<button type="button" class="lchip" data-lstep="${i}" aria-pressed="false" title="${txt}" aria-label="${txt}"${line ? ` style="--c:${lineColor(st.line)}"` : ''}>${line ? lineSVG(lines[st.line]?.rows ?? []) : '<em>BONUS</em>'}<b>+${fmtN(st.win)}</b></button>`;
+        })
+        .join('')}</span>`;
+    },
+    probe,
+    /** Le `onClick` de la table des gains : une ligne touchée ferme la table et se montre sur les rouleaux. */
+    paytableClick(e, dr) {
+      const b = e.target.closest?.('[data-line]');
+      if (!b) return;
+      dr.close();
+      probe(Number(b.dataset.line));
+    },
+  };
+}
+
+export const ArcadeSlotsView = { create, LINE_COLORS, lineSVG, plineHTML, LINES_NOTE, explorer };
