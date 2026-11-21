@@ -103,7 +103,7 @@ const rand = (a, b) => a + Math.random() * (b - a);
  * trajectoire et sa propre durée (un nuage, jamais une pile au même endroit). Mouvement réduit : un fondu sur place.
  * `n` : l'ancre (0 × 0) posée au pied de l'émote ; son image garde sa propre animation (GIF, WebP).
  */
-function float(n, { rise = rand(52, 70), drift = rand(-16, 16), ms = rand(2700, 3300) } = {}) {
+function float(n, { rise = rand(32, 44), drift = rand(-16, 16), ms = rand(2700, 3300) } = {}) {
   const img = n.firstElementChild;
   const done = () => n.remove();
   if (reducedMotion() || typeof n.animate !== 'function') {
@@ -112,12 +112,12 @@ function float(n, { rise = rand(52, 70), drift = rand(-16, 16), ms = rand(2700, 
     return;
   }
   // La montée : une seule courbe douce sur toute la durée (vitesse déjà là au départ, à peine ralentie à la fin) ; la
-  // dérive en S ; le fondu sur le dernier tiers.
+  // dérive en S ; le fondu pendant la fin de la montée (dès un peu plus de la moitié : jamais jusque sur le centre).
   n.animate(
     [
       { transform: 'translate(0, 0)', opacity: 1 },
       { transform: `translate(${(drift * 0.35).toFixed(1)}px, ${(-rise * 0.3).toFixed(1)}px)`, opacity: 1, offset: 0.3 },
-      { transform: `translate(${(drift * 0.8).toFixed(1)}px, ${(-rise * 0.66).toFixed(1)}px)`, opacity: 1, offset: 0.64 },
+      { transform: `translate(${(drift * 0.7).toFixed(1)}px, ${(-rise * 0.55).toFixed(1)}px)`, opacity: 1, offset: 0.55 },
       { transform: `translate(${drift.toFixed(1)}px, ${(-rise).toFixed(1)}px)`, opacity: 0 },
     ],
     { duration: ms, easing: 'cubic-bezier(0.3, 0.45, 0.55, 1)', fill: 'forwards' },
@@ -188,7 +188,7 @@ export function createReactions({ root, felt, seatsEl, seatEl, mySeat = () => nu
     layer.append(n);
     cloud.push(n);
     onSeat.set(seat, cloud);
-    float(n, hero ? { rise: rand(40, 54) } : undefined);
+    float(n, hero ? { rise: rand(30, 40) } : undefined);
     return n;
   }
   /** Le repère d'une réaction hors écran (carrousel) : un toucher fait défiler jusqu'à sa place — jamais automatiquement. */
@@ -336,7 +336,7 @@ export function createReactions({ root, felt, seatsEl, seatEl, mySeat = () => nu
       n.style.left = `${Math.max(24, b.left - fr.left - 26)}px`;
       n.style.top = `${b.bottom - fr.top}px`;
       layer.append(n);
-      float(n, { rise: rand(34, 46), drift: rand(-10, 4) });
+      float(n, { rise: rand(26, 34), drift: rand(-10, 4) });
     },
     destroy() {
       close();
