@@ -1,25 +1,26 @@
-# Inventaire de l'emballage de Production — source 83be8cebbfd8
+# Inventaire de l'emballage de Production — source 2411c992b26b
 
-Écart : **19 commits** de l'extension depuis `PUBLISHED` = `be1744e75f63` (version « Released » de la console Twitch,
+Écart : **20 commits** de l'extension depuis `PUBLISHED` = `be1744e75f63` (version « Released » de la console Twitch,
 prouvée par Antoni le 20/11/2026). C'est l'inventaire `ffd96677bf64` (9 commits, validé le 20/11, ZIP préparé pour le
 Hosted Test : 76875d47e728) **plus les corrections post-live du Casino du 21/11** : lots A et B (PR #99, #100), la
 reprise des machines à faible hauteur (PR #102), la passe corrective de nuit (PR #103), la passe de composition
 responsive, essayée dans le vrai cadre de l'extension (PR #105), et la passe corrective après les essais interactifs
 d'Antoni (PR #107 : Split main par main, assurance et gain assuré, lignes gagnantes, téléphone), et la passe « tables,
-Split, réactions et UX » (PR #109, #110, #112, #114 : pile du Split, cartouche, languettes, gains explorés sur les rouleaux,
-téléphone et paysage, les 7 réactions définitives).
+Split, réactions et UX » (PR #109, #110, #112, #114, #115 : pile du Split, cartouche, languettes, gains explorés sur les rouleaux,
+téléphone et paysage, les 7 réactions définitives, la dernière passe du 22/11).
 
-Préparé par l'agent le 2026-11-21. **Non validé** : la ligne de validation appartient à Antoni ; tant qu'elle manque,
+Préparé par l'agent le 2026-11-22. **Non validé** : la ligne de validation appartient à Antoni ; tant qu'elle manque,
 l'emballage de Production refuse d'écrire le ZIP (`npm run package:production -w @raptoru/twitch-extension -- --shell v2`).
 Le ZIP est **complet**, pas un différentiel : toute l'extension du commit emballé. Il remplace le ZIP 76875d47e728
-(et les inventaires 03d49a2c9da1, 1ee8ad9aed0e, 866e6d6efaaa, ecaa5841eb61 et 8d85e9b77df4, jamais validés, que celui-ci remplace).
-Aucun changement côté Core, bot ni Studio : le Core en Production (`1f05b97c`, relevé en lecture seule le 21/11) a
-exactement le même code Casino (`apps/core-api/src`, schémas et migrations inchangés depuis ce commit).
-Le ZIP contient aussi l'interface des nouvelles tables et des réactions (PR #109), **éteinte** avec ce Core : elle
-n'apparaît que lorsqu'un Core qui les annonce est déployé (évolution du Core préparée à part, non déployée, sur GO
-d'Antoni ; docs/CASINO.md § 18.8).
+(et les inventaires 03d49a2c9da1, 1ee8ad9aed0e, 866e6d6efaaa, ecaa5841eb61, 8d85e9b77df4 et 83be8cebbfd8, jamais validés, que celui-ci remplace).
+Compatibilité avec le Core (vérifiée dans les deux sens, contrat additif) :
 
-## Nouveau depuis le ZIP 76875d47e728 — 10
+- avec le Core en Production (`1f05b97c`, relevé en lecture seule le 22/11) : tout fonctionne ; « + Nouvelle table »
+  et les réactions restent **éteintes** (ce Core ne les annonce pas) ;
+- avec le Core de la PR #111 (nouvelles tables, réactions, rythme 5 puis 1 toutes les 2 s ; aucune migration, bot
+  inchangé ; déploiement sur GO d'Antoni) : elles s'allument sans nouveau ZIP (docs/CASINO.md § 18.8).
+
+## Nouveau depuis le ZIP 76875d47e728 — 11
 
 - e9e667db 2026-11-21 fix(casino): Blackjack post-live Lot A — Split display, navigation, Auto pacing, Mes manches (#99)
   - Blackjack, Split : chaque main a ses propres cartes, son total et sa mise ; la main à jouer est entourée. Deux
@@ -121,6 +122,12 @@ d'Antoni ; docs/CASINO.md § 18.8).
   - Bulle de choix : une rangée de 7 sur PC, 4 + 3 au téléphone ; une émote animée s'anime partout.
   - Réactions de la banque : chaque situation a son émote, modifiable (blackjack d'un joueur → ptn, la banque saute →
     colère, un bust → ICANT…), toujours au plus une par manche.
+- 2411c992 2026-11-22 feat(casino): dernière passe — gains explorés sur les rouleaux seuls, réactions « hélium », bulle qui reste ouverte, banque en émote, ruban BUST (#115)
+  - Machines à fruits et à émotes : plus de rangée de pastilles sous les rouleaux ; la plaque garde le gain total, les
+    combinaisons s'explorent directement sur les rouleaux.
+  - Réactions du Blackjack (éteintes avec le Core actuel) : envol continu « hélium », plusieurs à la fois, bulle qui
+    reste ouverte, 5 d'affilée puis 1 toutes les 2 s ; la banque réagit d'une émote seule.
+  - Blackjack : ruban diagonal « BUST » sur la main dépassée, le score en nombre rouge.
 
 ## Déjà dans l'inventaire ffd96677bf64 (validé le 20/11) — 9
 

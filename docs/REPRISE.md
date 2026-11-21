@@ -19,11 +19,11 @@ installé, extension publique be1744e75f63 (prouvée par Antoni dans la console 
 Casino V1 (4 jeux) : Core déployé, CASINO_EXTENSION=on, casino.open=1, 4 jeux ouverts, refusé hors live
 (stream_offline). L'extension publique NE contient PAS le Casino. Post-live du 21/11 : lots A + B, machines à faible
 hauteur, passe de nuit, passe de composition, passe corrective et passe « tables, Split, réactions » fusionnées (PR #99, #100,
-#102, #103, #105, #107, #109, #110, #112, #114 ; extension seule, Core inchangé) ; ZIP suivant 83be8cebbfd8 PAS ENCORE ÉCRIT : son
-inventaire (19 commits) attend la ligne d'Antoni (remplacera
+#102, #103, #105, #107, #109, #110, #112, #114, #115 ; extension seule, Core inchangé) ; ZIP suivant 2411c992b26b PAS ENCORE ÉCRIT : son
+inventaire (20 commits) attend la ligne d'Antoni (remplacera
 76875d47e728). Banc : npm run casino:bench -w @raptoru/twitch-extension — par défaut la VRAIE extension (en-tête,
-Mini-jeux) jouable en démo locale (CASINO.md § 14-18). Évolution du Core « nouvelles tables + réactions » prête sur la branche
-feat/casino-bj-tables-reactions-core (PR séparée, NI fusionnée NI déployée : GO d'Antoni ; § 18.8) ; test:casino-compose mesure la composition dans ce cadre.
+Mini-jeux) jouable en démo locale (CASINO.md § 14-18). Évolution du Core « nouvelles tables + réactions » : PR #111
+(aucune migration, bot inchangé) ; son DÉPLOIEMENT attend le GO explicite d'Antoni (§ 18.8 ; retour arrière : Core 1f05b97c) ; test:casino-compose mesure la composition dans ce cadre.
 Ne pas dire « Casino disponible pour tous ».
 Niveaux : restauration WizeBot EXÉCUTÉE le 20/11 (432 comptes, définitive, NE JAMAIS LA REJOUER) ; badges tous les
 25 niveaux ; anciennes annulations bloquées (Core 410 + Studio) ; rattachements WizeBot futurs non compressés.
@@ -166,8 +166,8 @@ non-testeurs, [CASINO.md](CASINO.md) § 6) et le Casino refuse hors live. D'où 
 
 0. **Antoni (21/11)** : essayer le banc (`npm run casino:bench -w @raptoru/twitch-extension`, mode « Extension
    complète ») ou regarder les captures (`Documents\Raptoru 2.0 - Livraisons\2026-11-21-casino-tables-reactions`), puis
-   ajouter sa ligne à `apps/twitch-extension/release-inventory/INVENTAIRE-83be8cebbfd8.md` ; l'agent écrit alors le ZIP
-   `83be8cebbfd8` (`package:production -- --shell v2`) et donne son SHA-256. Il remplace `76875d47e728`.
+   ajouter sa ligne à `apps/twitch-extension/release-inventory/INVENTAIRE-2411c992b26b.md` ; l'agent écrit alors le ZIP
+   `2411c992b26b` (`package:production -- --shell v2`) et donne son SHA-256. Il remplace `76875d47e728`.
 1. **Antoni** : vérifier ce ZIP en Hosted Test, **hors live**, sur un compte testeur (affichage, état « hors live »,
    navigation), y compris dans l'**application** Twitch du téléphone (portrait et paysage) : console › vue mobile
    activée pour cette version ; jamais le navigateur mobile, où Twitch n'affiche aucune extension.
