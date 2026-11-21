@@ -770,9 +770,6 @@
 .sh__tag i { font-style: normal; color: var(--gold-2); }
 .sh.bust .sh__tag i { color: #ff8f9c; }
 .sh.cur .sh__tag, .sh__tag:empty { display: none; }
-/* Hauteur moyenne : la pile grandit vers le haut — posée en bas du centre, ses bandes ne montent jamais sur le titre des
-   paris banque. (Grand format : centrée, la place ne manque pas.) */
-@container bj (max-height: 479px) { .spot.has-split { align-self: end; margin-bottom: 4px; } }
 @media (prefers-reduced-motion: reduce) { .hstack > .sh, .hstack > .sh > .cards, .hstack > .sh > .sh__foot { transition: opacity 0.15s; } }
 /* Hauteur basse : le score et la mise à côté des cartes (une rangée de moins). */
 @container bj (max-height: 339px) {
@@ -844,7 +841,6 @@
   .felt { grid-template-rows: 98px minmax(0, 1fr) auto; }
   .sides, .sides__arc { height: 98px; }
   .sides__arc text { display: none; } /* (son nom reste lu par les lecteurs d'écran : .sides__t) — la place va au centre */
-  .spot.has-split { margin-bottom: 2px; }
   .dealer { top: 4px; }
   .dealer .cards.big { --cw: 34px; }
   .dealer > .tot { height: 22px; min-width: 30px; font-size: 13px; }
@@ -854,15 +850,17 @@
   .sides__arc text { font-size: 7px; }
   .spot .cards.big { --cw: 30px; }
 }
-/* Hauteur basse : la consigne de mise se tait (le titre suffit) ; le message éphémère passe en haut, sur les paris banque
-   (verrouillés pendant le jeu), jamais sur les places ni sur les cartes en jeu. */
-@container bj (max-height: 339px) { .msg small.hint { display: none; } .toast { top: 36px; bottom: auto; } }
-/* Paysage large : le message éphémère dans la zone libre à gauche de l'arc (jamais sur la banque ni sur les places) ;
-   la pile du Split s'étale en largeur (la hauteur manque, pas la largeur) : chaque main derrière dépasse sur la droite,
-   son numéro et son score dans la bande qui dépasse. */
+/* Hauteur basse : la consigne de mise se tait (le titre suffit). */
+@container bj (max-height: 339px) { .msg small.hint { display: none; } }
+/* Paysage large : le message éphémère dans la zone libre à gauche de l'arc (jamais sur la banque ni sur les places). */
 @container bj (max-height: 339px) and (min-width: 600px) {
-  .toast { left: 12px; top: 34px; max-width: min(185px, calc(50% - 230px)); transform: translateY(8px); text-align: left; }
+  .toast { left: 12px; top: 34px; bottom: auto; max-width: min(185px, calc(50% - 230px)); transform: translateY(8px); text-align: left; }
   .toast.show { transform: none; }
+}
+/* Table de hauteur moyenne ou basse mais assez large (PC 651 × 434, paysage 844 × 390) : la pile du Split s'étale en
+   largeur — la hauteur manque, pas la largeur ; chaque main derrière dépasse sur la droite, son numéro et son score
+   dans la bande qui dépasse (« M2 », « 17 ✓ »). Les bandes ne montent jamais sur les paris banque. */
+@container bj (max-height: 479px) and (min-width: 380px) {
   .hstack { padding: 0 calc((var(--n, 2) - 1) * 46px) 0 0; }
   .hstack > .sh { transform: translate(calc(var(--d, 0) * 46px), calc(var(--d, 0) * -3px)); }
   .sh__tag { left: auto; right: 2px; top: 50%; height: auto; max-height: none; flex-direction: column; gap: 2px; padding: 3px 4px; font-size: 8.5px; transform: translateY(-50%); }

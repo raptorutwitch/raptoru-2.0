@@ -797,7 +797,8 @@ Deux livraisons séparées :
   dit « Main 2 · 15 ✓ », « Main 3 · … » (attend sa 2ᵉ carte) ou « bust ». On voit toujours combien de mains existent.
 - Quand une main finit, elle glisse hors de la pile et repasse derrière ; la suivante avance (0,56 s). **Mouvement
   réduit** (réglage du système) : un simple fondu.
-- Paysage bas (844 × 390) : la pile s'étale en largeur (« M2 », « M3 » sur les bandes), la hauteur manquant.
+- Table de hauteur moyenne ou basse (PC 651 × 434, paysage 844 × 390) : la pile s'étale en largeur (« M2 », « M3 » sur
+  les bandes), la hauteur manquant ; grand format et téléphone en portrait : en hauteur.
 - Rien ne change dans les règles : Tirer, Rester et Doubler ne touchent que la main au premier plan (le Core), la
   2ᵉ carte d'une main splittée arrive à son tour (§ 17). Les messages sur le Split ne s'affichent qu'une fois par
   manche.
