@@ -1,14 +1,17 @@
 // Casino V1 — les réactions à la table de Blackjack (docs/CASINO.md § 18). Un viewer assis choisit une émote dans une
 // petite bulle (qui reste ouverte : on peut en envoyer plusieurs) ; elle s'envole au-dessus de sa place, chez tous les
 // joueurs et les spectateurs, comme une petite émote remplie d'hélium. Aucun texte libre, aucun Jeton : seulement les
-// identifiants que le Core accepte (r1 … r7), transmis par le Core avec l'état de la table (long-poll), à son rythme
+// identifiants que le Core accepte (r1 … r13, s1 … s9), transmis par le Core avec l'état de la table (long-poll), à son rythme
 // (rafale de 5, puis une toutes les 2 s : reactions.ts, recopié ici pour un retour immédiat). Les visuels et les
 // réactions de la banque sont dans assets/casino/reactions/reactions.js : les changer ne touche jamais ce fichier.
+// Deux pages (mandat du 22/11) : les 10 classiques pour tous ; une petite flèche ouvre celle des abonnés de la chaîne,
+// montrée seulement quand le Core annonce l'abonnement (`sub: 'yes'`, avec leurs identifiants) — il le revérifie à
+// chaque envoi (sub_only, sub_unknown). Les émotes des abonnés s'envolent chez tout le monde, comme les autres.
 //
 // Activé seulement si le Core l'annonce (`reactions` dans la réponse de l'état de la table) : un Core qui ne connaît pas
 // les réactions n'affiche ni bouton ni bulle. La banque réagit parfois (pickDealerReaction) d'une émote seule : un choix
 // déterministe à partir de la manche, le même chez tous les viewers — jamais une IA, jamais à chaque manche.
-import { REACTIONS, DEALER, assetUrl } from '../../assets/casino/reactions/reactions.js';
+import { REACTIONS, PAGES, DEALER, assetUrl } from '../../assets/casino/reactions/reactions.js';
 
 const BY_ID = new Map(REACTIONS.map((r) => [r.id, r]));
 const FRESH_MS = 3500; // plus vieille : jamais rejouée (reconnexion, onglet revenu au premier plan)
@@ -19,6 +22,8 @@ export const REFILL_MS = 2000;
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const ICON = {
   close: '<path d="M7 7l10 10M17 7 7 17"/>',
+  next: '<path d="M9 5l7 7-7 7"/>',
+  prev: '<path d="M15 5l-7 7 7 7"/>',
   mute: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
   sound: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 7a7 7 0 0 1 0 10"/>',
 };
@@ -86,11 +91,14 @@ export function createBucket(burst = BURST, refill = REFILL_MS) {
 
 // Les images des réactions chargées une fois, dès que le Core les annonce : une émote reçue s'affiche sans délai (le GIF
 // animé pèse ≈ 0,5 Mo). Toujours affichées par <img> : un GIF ou un WebP animé garde son animation et sa transparence.
-let preloaded = false;
-function preload() {
-  if (preloaded || typeof Image !== 'function') return;
-  preloaded = true;
-  for (const r of REACTIONS) new Image().src = assetUrl(r.src);
+const preloaded = new Set(); // celles des abonnés : seulement pour un abonné (les autres les chargent à leur premier envol)
+function preload(ids) {
+  if (typeof Image !== 'function') return;
+  for (const r of REACTIONS) {
+    if (!ids.has(r.id) || preloaded.has(r.id)) continue;
+    preloaded.add(r.id);
+    new Image().src = assetUrl(r.src);
+  }
 }
 const imgHTML = (r, cls) => `<img class="${cls}" src="${esc(assetUrl(r.src))}" alt="${esc(r.label ?? '')}" draggable="false" data-glyph="${esc(r.glyph ?? '')}">`;
 const reducedMotion = () => !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -217,31 +225,62 @@ export function createReactions({ root, felt, seatsEl, seatEl, mySeat = () => nu
   // --- La bulle de choix (au-dessus du bouton de la barre) : elle reste ouverte après chaque envoi -------------------
   let pal = null;
   let dryT = null;
+  let page = 1; // la page de la bulle : 1 (classiques) ou 2 (abonnés) ; gardée tant que l'écran vit
+  const subOk = () => caps?.sub === 'yes' && PAGES[1].some((id) => !PAGES[0].includes(id) && caps.ids?.includes(id));
   function close() {
     clearTimeout(dryT);
     pal?.remove();
     pal = null;
   }
   const muteHTML = () => `<button type="button" class="rx-mini rx-mute" data-rx-mute aria-pressed="${muted()}" title="${muted() ? 'Afficher les réactions' : 'Masquer les réactions (pour toi seulement)'}" aria-label="${muted() ? 'Afficher les réactions' : 'Masquer les réactions pour toi'}">${ico(muted() ? 'mute' : 'sound')}</button>`;
+  /** Les émotes d'une page (celles que le Core accepte) et la flèche vers l'autre page (un abonné seulement). */
+  function rowHTML() {
+    const ids = new Set(caps?.ids ?? []);
+    if (page === 2 && !subOk()) page = 1;
+    // Un Core d'avant le 22/11 (r1 … r7 seulement, le temps de son déploiement) : ses 7 réactions, jamais une page à moitié vide.
+    const list = page === 1 && !ids.has('r8') ? ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'] : PAGES[page - 1];
+    const picks = list.filter((id) => ids.has(id) && BY_ID.has(id))
+      .map((id) => BY_ID.get(id))
+      .map((r) => `<button type="button" class="rx-pick" data-rx="${esc(r.id)}" title="${esc(r.label)}" aria-label="Réagir : ${esc(r.label)}">${imgHTML(r, 'rx-pick__img')}</button>`)
+      .join('');
+    const flip = subOk()
+      ? `<button type="button" class="rx-page" data-rx-page title="${page === 1 ? 'Réactions des abonnés' : 'Réactions classiques'}" aria-label="${page === 1 ? 'Voir les réactions des abonnés' : 'Revenir aux réactions classiques'}">${ico(page === 1 ? 'next' : 'prev')}</button>`
+      : '';
+    return `<div class="rx-pal__row">${picks}</div>${flip}`;
+  }
+  function render() {
+    if (!pal) return;
+    const focusPage = !!pal.querySelector('[data-rx-page]') && pal.querySelector('[data-rx-page]') === pal.getRootNode().activeElement;
+    pal.classList.toggle('subs', page === 2);
+    pal.querySelector('.rx-pal__main').innerHTML = rowHTML();
+    if (focusPage) pal.querySelector('[data-rx-page]')?.focus({ preventScroll: true });
+    dry();
+  }
+  function place(btn) {
+    const rb = root.getBoundingClientRect();
+    const bb = btn.getBoundingClientRect();
+    pal.style.left = `${Math.max(6, Math.min(rb.width - pal.offsetWidth - 6, bb.left - rb.left + bb.width / 2 - pal.offsetWidth / 2))}px`;
+    pal.style.bottom = `${rb.bottom - bb.top + 8}px`;
+  }
   function open(btn) {
     if (pal) return close();
     pal = document.createElement('div');
     pal.className = 'rx-pal';
     pal.setAttribute('role', 'dialog');
     pal.setAttribute('aria-label', 'Réagir');
-    const ids = new Set(caps?.ids ?? []);
-    pal.innerHTML = `<div class="rx-pal__row">${REACTIONS.filter((r) => ids.has(r.id))
-      .map((r) => `<button type="button" class="rx-pick" data-rx="${esc(r.id)}" title="${esc(r.label)}" aria-label="Réagir : ${esc(r.label)}">${imgHTML(r, 'rx-pick__img')}</button>`)
-      .join('')}</div><div class="rx-pal__side"><button type="button" class="rx-mini" data-rx-close title="Fermer" aria-label="Fermer">${ico('close')}</button>${muteHTML()}</div>`;
+    pal.innerHTML = `<div class="rx-pal__main"></div><div class="rx-pal__side"><button type="button" class="rx-mini" data-rx-close title="Fermer" aria-label="Fermer">${ico('close')}</button>${muteHTML()}</div>`;
     root.append(pal);
-    const rb = root.getBoundingClientRect();
-    const bb = btn.getBoundingClientRect();
-    pal.style.left = `${Math.max(6, Math.min(rb.width - pal.offsetWidth - 6, bb.left - rb.left + bb.width / 2 - pal.offsetWidth / 2))}px`;
-    pal.style.bottom = `${rb.bottom - bb.top + 8}px`;
+    render();
+    place(btn);
     pal.querySelector('[data-rx]')?.focus({ preventScroll: true });
     dry();
     pal.addEventListener('click', (e) => {
       if (e.target.closest('[data-rx-close]')) return close();
+      if (e.target.closest('[data-rx-page]')) {
+        // Une page à l'autre sans fermer la bulle ; elle garde sa place (la largeur des deux pages est la même).
+        page = page === 1 ? 2 : 1;
+        return render();
+      }
       const m = e.target.closest('[data-rx-mute]');
       if (m) {
         prefs.get().muted = !muted();
@@ -280,10 +319,17 @@ export function createReactions({ root, felt, seatsEl, seatEl, mySeat = () => nu
         bucket.empty(Date.now(), Number(e?.details?.retry_in_ms) || REFILL_MS);
         return dry();
       }
-      toast(e?.code === 'reactions_off' ? 'Les réactions sont désactivées pour l’instant.' : 'Réaction non envoyée.', true);
+      toast(
+        e?.code === 'reactions_off' ? 'Les réactions sont désactivées pour l’instant.'
+        : e?.code === 'sub_only' ? 'Réaction réservée aux abonnés de la chaîne.'
+        : e?.code === 'sub_unknown' ? 'Ton abonnement n’a pas pu être vérifié pour l’instant : réessaie un peu plus tard.'
+        : 'Réaction non envoyée.',
+        true,
+      );
     }
   }
-  root.addEventListener('click', (e) => pal && !e.target.closest('.rx-pal, [data-rx-open]') && close(), { signal });
+  // Un clic ailleurs ferme la bulle. Son chemin, pas sa cible : la flèche des pages est remplacée pendant son propre clic.
+  root.addEventListener('click', (e) => pal && !e.composedPath().some((n) => n === pal || n?.matches?.('[data-rx-open]')) && close(), { signal });
   root.addEventListener('keydown', (e) => e.key === 'Escape' && pal && close(), { signal });
 
   return {
@@ -302,9 +348,11 @@ export function createReactions({ root, felt, seatsEl, seatEl, mySeat = () => nu
     },
     /** Ce que le Core a joint à l'état : les réactions récentes (jamais rejouées), et ses réglages. */
     receive(R) {
+      const hadSub = subOk();
       caps = R ?? null;
       if (!caps?.on) close();
-      else preload();
+      else preload(new Set(caps.ids ?? []));
+      if (pal && hadSub !== subOk()) render(); // l'abonnement vient d'être confirmé ou a pris fin : la flèche suit
       const list = Array.isArray(R?.list) ? R.list : [];
       const first = !primed;
       primed = !!R;

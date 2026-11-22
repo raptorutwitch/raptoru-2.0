@@ -43,7 +43,14 @@ import {
   type CreatePolicy,
 } from './lobby.js';
 import type { BlackjackLimits } from './paytable.js';
-import { isReactionId, REACTION_IDS, TableReactions } from './reactions.js';
+import { resolveTiers } from '../../loyalty/tiers.js';
+import {
+  isReactionId,
+  isSubReactionId,
+  REACTION_IDS,
+  SUB_REACTION_IDS,
+  TableReactions,
+} from './reactions.js';
 
 // Blackjack (docs/CASINO.md § 12) — the Core's multiplayer tables. One row per table (`casino_bj_tables`): its whole
 // state (seats, hands, the shoe, the pending step), changed ONLY under that row's lock, in one transaction with the
@@ -205,12 +212,20 @@ export class BlackjackService {
       r = await read();
     }
     const lim = await this.casino.limits(this.db, channelId);
+    // The subscribers' page (22/11): only a viewer the Core knows as a subscriber receives its ids; `sub` lets the screen
+    // tell « not a subscriber » from « not verifiable right now » (no fresh Twitch snapshot). A spectator without a
+    // shared identity: null. A screen that does not know `sub` ignores it and the ids it has no picture for.
+    const sub =
+      viewer && lim.bj_reactions ? await this.subStatus(viewer.id) : null;
     return {
       state: await this.viewOf(r, viewer?.id ?? null, bjLimits(lim), channelId),
       reactions: {
         on: lim.bj_reactions,
         dealer: lim.bj_dealer_reactions,
-        ids: lim.bj_reactions ? [...REACTION_IDS] : [],
+        ids: lim.bj_reactions
+          ? [...REACTION_IDS, ...(sub === 'yes' ? SUB_REACTION_IDS : [])]
+          : [],
+        sub,
         ...this.reactions.view(tableId, this.clock.now().getTime()),
       },
     };
@@ -621,6 +636,16 @@ export class BlackjackService {
     const now = this.clock.now();
     if (await activeBlock(this.db, channelId, viewer.id, 'all', now))
       throw new CasinoError(409, 'viewer_blocked');
+    // A subscribers' reaction: checked here at every send, never trusted from the screen. Refused before the pace (a
+    // refusal never costs a reaction).
+    if (isSubReactionId(req.r)) {
+      const sub = await this.subStatus(viewer.id);
+      if (sub !== 'yes')
+        throw new CasinoError(
+          403,
+          sub === 'unknown' ? 'sub_unknown' : 'sub_only',
+        );
+    }
     const n = this.reactions.push(
       t.table_id,
       viewer.id,
@@ -630,6 +655,18 @@ export class BlackjackService {
     );
     this.wake(t.table_id);
     return { ok: true, n };
+  }
+
+  /**
+   * Is this viewer a subscriber of the channel? The Loyalty engine's own cache (loyalty/tiers.ts): Twitch's events
+   * (subscribe, gift, end) and its complete Helix snapshots, paid and gifted subscriptions alike (Twitch counts a gift
+   * as a subscription for its duration). Absent with a stale snapshot: `unknown`, never guessed either way.
+   */
+  private async subStatus(viewerId: string): Promise<'yes' | 'no' | 'unknown'> {
+    const t = (await resolveTiers(this.db, [viewerId], this.clock.now())).get(
+      viewerId,
+    );
+    return t === 'unknown' ? 'unknown' : t === 'none' ? 'no' : 'yes';
   }
 
   /**

@@ -9,24 +9,34 @@
 @media (pointer: coarse) { .btn.rxb { width: 40px; height: 36px; } }
 @container bj (max-width: 560px) { .btn.rxb { width: 38px; } }
 
-/* La bulle de choix : les 7 émotes (une rangée sur PC ; 4 + 3 centrées sur un écran étroit), une petite croix et le
-   masquage (pour soi seulement) sur le côté. Elle reste ouverte après chaque envoi ; un clic ailleurs la ferme. Une émote
-   animée s'anime aussi ici. Le rythme épuisé : les émotes s'estompent un instant (.dry). */
-.rx-pal { --rxc: 40px; position: absolute; z-index: 45; display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 14px; background: linear-gradient(180deg, #2a1a40, #1a1029); box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.4), 0 10px 24px rgba(0, 0, 0, 0.6); animation: rxpal 0.16s ease-out; }
+/* La bulle de choix : 10 émotes par page (une rangée sur PC ; 2 rangées de 5 sur une table étroite ou au toucher), la
+   petite flèche des abonnés au bout de la rangée (un abonné seulement), une petite croix et le masquage (pour soi
+   seulement) sur le côté. Elle reste ouverte après chaque envoi et d'une page à l'autre ; un clic ailleurs la ferme. Une
+   émote animée s'anime aussi ici. Le rythme épuisé : les émotes s'estompent un instant (.dry). La page des abonnés : un
+   liseré doré un peu plus franc, même taille, même place. */
+.rx-pal { --rxc: 34px; position: absolute; z-index: 45; display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 13px; background: linear-gradient(180deg, #2a1a40, #1a1029); box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.4), 0 10px 24px rgba(0, 0, 0, 0.6); animation: rxpal 0.16s ease-out; transition: box-shadow 0.18s; }
+.rx-pal.subs { background: linear-gradient(180deg, #33204a, #1d1130); box-shadow: 0 0 0 1.5px rgba(255, 207, 102, 0.85), 0 0 14px rgba(255, 190, 70, 0.22), 0 10px 24px rgba(0, 0, 0, 0.6); }
 @keyframes rxpal { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
-.rx-pal__row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
-.rx-pick { width: var(--rxc); height: var(--rxc); display: grid; place-items: center; border-radius: 10px; background: rgba(255, 255, 255, 0.05); transition: transform 0.12s, background 0.12s, opacity 0.2s; }
+.rx-pal__main { display: flex; align-items: stretch; gap: 3px; }
+.rx-pal__row { display: flex; flex-wrap: nowrap; justify-content: center; gap: 3px; animation: rxpage 0.14s ease-out; }
+@keyframes rxpage { from { opacity: 0.2; transform: translateX(4px); } }
+.rx-pick { width: var(--rxc); height: var(--rxc); display: grid; place-items: center; border-radius: 9px; background: rgba(255, 255, 255, 0.05); transition: transform 0.12s, background 0.12s, opacity 0.2s; }
 .rx-pick:hover, .rx-pick:focus-visible { background: rgba(255, 201, 77, 0.16); transform: translateY(-2px) scale(1.06); outline: none; }
 .rx-pick:active { transform: scale(0.92); }
-.rx-pick__img { width: calc(var(--rxc) - 10px); height: calc(var(--rxc) - 10px); object-fit: contain; pointer-events: none; }
+.rx-pick__img { width: calc(var(--rxc) - 8px); height: calc(var(--rxc) - 8px); object-fit: contain; pointer-events: none; }
 .rx-pal.dry .rx-pick { opacity: 0.4; cursor: default; transform: none; }
+/* La flèche des abonnés : fine, dorée, toute la hauteur de la rangée. */
+.rx-page { flex: none; width: 18px; display: grid; place-items: center; border-radius: 7px; color: #ffd36b; background: rgba(255, 201, 77, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 207, 102, 0.3); }
+.rx-page svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.rx-page:hover, .rx-page:focus-visible { color: #fff; background: rgba(255, 201, 77, 0.24); outline: none; }
 .rx-pal__side { display: grid; gap: 4px; align-self: stretch; align-content: space-between; padding-left: 4px; border-left: 1px solid rgba(214, 170, 255, 0.14); }
 .rx-mini { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: var(--dim); }
 .rx-mini svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .rx-mini:hover, .rx-mini:focus-visible { color: #fff; background: rgba(255, 255, 255, 0.08); }
 .rx-mute[aria-pressed='true'] { color: #ffb066; }
-@media (pointer: coarse) { .rx-pal { --rxc: 48px; } .rx-mini { width: 32px; height: 32px; } .rx-mini svg { width: 15px; height: 15px; } }
-@container bj (max-width: 420px) { .rx-pal__row { width: calc(4 * var(--rxc) + 12px); } }
+/* Une table étroite (vidéo réduite, téléphone) : 2 rangées de 5, jamais plus large que la table. */
+@container bj (max-width: 540px) { .rx-pal__row { flex-wrap: wrap; width: calc(5 * var(--rxc) + 12px); } }
+@media (pointer: coarse) { .rx-pal { --rxc: 42px; } .rx-pal__row { flex-wrap: wrap; width: calc(5 * var(--rxc) + 12px); } .rx-page { width: 26px; } .rx-mini { width: 32px; height: 32px; } .rx-mini svg { width: 15px; height: 15px; } }
 
 /* L'émote qui s'envole (bj-reactions.js float : Web Animations) : l'ancre (0 × 0) au pied de l'émote ; l'image, telle
    quelle, garde sa propre animation (GIF, WebP). Un nuage : plusieurs à la fois, chacune sa trajectoire. */

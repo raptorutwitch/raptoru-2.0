@@ -878,9 +878,10 @@ Deux livraisons séparées :
 
 ### 18.7 Réactions (Core `reactions.ts`, extension `bj-reactions.js`)
 
-- Un joueur **assis** touche « Réagir » (petit bouton plein à côté de Quitter) : une bulle de **7 émotes** (une rangée
-  sur PC, 4 + 3 au téléphone, au doigt), qui **reste ouverte** après chaque envoi (une petite croix ou un clic ailleurs
-  la ferment). L'émote part aussitôt au-dessus de sa place, chez tous les joueurs **et les spectateurs**.
+- Un joueur **assis** touche « Réagir » (petit bouton plein à côté de Quitter) : une bulle de **10 émotes** (une rangée
+  sur PC ; 2 rangées de 5 sur une table étroite ou au doigt), qui **reste ouverte** après chaque envoi et d'une page à
+  l'autre (une petite croix ou un clic ailleurs la ferment). Un **abonné** de la chaîne voit au bout de la rangée une
+  petite flèche dorée vers la **page des abonnés** (§ 18.7.1). L'émote part aussitôt au-dessus de sa place, chez tous les joueurs **et les spectateurs**.
 - **L'envol** (22/11, « une petite émote remplie d'hélium ») : elle grandit avec un petit rebond pendant qu'elle
   commence déjà à monter ; la montée est continue (aucun arrêt, aucune accélération brutale), dérive un peu à gauche ou
   à droite et s'efface pendant la fin de sa montée (≈ 3 s), avant d'atteindre le centre de la table. Plusieurs émotes coexistent (un petit nuage, 6 au plus par place),
@@ -905,7 +906,8 @@ Deux livraisons séparées :
   | La banque gagne contre tous                    | Lunettes de soleil | 20 %        |
 
 - **Sécurité** :
-  - seulement les identifiants `r1` … `r7`, jamais de texte libre ; aucun Jeton ; rien en base ;
+  - seulement les identifiants `r1` … `r13` et `s1` … `s9` (abonnés, § 18.7.1), jamais de texte libre ; aucun Jeton ;
+    rien en base ;
   - **rythme** (22/11) : un réservoir de 5 jetons par viewer, un de plus toutes les 2 s — une rafale de 5, puis 1 toutes
     les 2 s, jamais plus de 5 en réserve ; appliqué **par le Core** (refus `react_rate` avec `retry_in_ms`, en mémoire,
     sans conséquence économique), recopié dans l'extension pour un retour immédiat (les émotes s'estompent un instant
@@ -916,30 +918,69 @@ Deux livraisons séparées :
 - **Arrêt** : `casino.bj_reactions` (joueurs) et `casino.bj_dealer_reactions` (banque), à 1 par défaut, dans Studio ›
   Casino (avec la prochaine version de Studio ; avant, seulement par l'API des réglages). Chaque viewer peut aussi
   masquer les réactions pour lui seul (petite icône dans la bulle de choix).
-- **Les 7 réactions** (choix d'Antoni du 21/11, dans cet ordre ; le Core ne transmet que l'identifiant) :
+- **Les 10 réactions classiques** (choix d'Antoni du 22/11, dans cet ordre, pour tous ; le Core ne transmet que
+  l'identifiant, jamais réutilisé pour une autre image) :
 
-  | Id   | Réaction           | Visuel                                                       |
-  | ---- | ------------------ | ------------------------------------------------------------ |
-  | `r1` | Sourire            | 🙂 Twemoji `1f642`                                           |
-  | `r2` | Visage attendri    | 😳 Twemoji `1f633`                                           |
-  | `r3` | Colère             | 😡 Twemoji `1f621`                                           |
-  | `r4` | Lunettes de soleil | 😎 Twemoji `1f60e`                                           |
-  | `r5` | Sourire en coin    | 😉 Twemoji `1f609`                                           |
-  | `r6` | ICANT              | `ICANT.png` (émote d'Antoni, fixe)                           |
-  | `r7` | ptn                | `ptn.gif` (émote d'Antoni, animée : 75 images, transparente) |
-  - Les cinq emojis sont ceux de Discord : Discord affiche le jeu **Twemoji**, déjà embarqué dans l'extension
-    (`assets/twemoji`, version 17.0.3, SVG nets). Licence des visuels **CC-BY 4.0** : redistribution permise avec
-    attribution (`assets/twemoji/readme.txt`, `license-graphics.txt`). Ils ont été identifiés sur la capture fournie
-    par Antoni : le 2ᵉ est 😳 (_flushed_) et le 5ᵉ 😉 (_wink_), comme sur la capture.
-  - ICANT.png et ptn.gif sont les fichiers d'Antoni tels quels (128 × 128, transparents) : jamais réencodés, le GIF
-    garde toutes ses images. Une émote est toujours affichée par une image (`<img>`) : elle s'anime dans la bulle de
-    choix, au-dessus des places, dans le repère hors écran et dans la bulle de la banque. Un WebP animé futur
-    fonctionne de la même façon. Les 7 images sont chargées une fois, dès que le Core annonce les réactions.
+  | Ordre | Id    | Réaction           | Visuel                                                       |
+  | ----- | ----- | ------------------ | ------------------------------------------------------------ |
+  | 1     | `r1`  | Sourire            | 🙂 Twemoji `1f642`                                           |
+  | 2     | `r8`  | Sourire avec sueur | 😅 Twemoji `1f605`                                           |
+  | 3     | `r9`  | Pleurs             | 😭 Twemoji `1f62d`                                           |
+  | 4     | `r2`  | Visage rougissant  | 😳 Twemoji `1f633`                                           |
+  | 5     | `r10` | Salut              | 🫡 Twemoji `1fae1`                                           |
+  | 6     | `r3`  | Colère             | 😡 Twemoji `1f621`                                           |
+  | 7     | `r11` | Câlin              | 🤗 Twemoji `1f917`                                           |
+  | 8     | `r12` | Surprise           | 😮 Twemoji `1f62e`                                           |
+  | 9     | `r13` | Crâne              | 💀 Twemoji `1f480`                                           |
+  | 10    | `r7`  | ptn                | `ptn.gif` (émote d'Antoni, animée : 75 images, transparente) |
+  - Les neuf emojis sont ceux de Discord : Discord affiche le jeu **Twemoji**, déjà embarqué dans l'extension
+    (`assets/twemoji`, version 17.0.3, SVG nets) — jamais le rendu natif de Windows ou du navigateur. Licence des
+    visuels **CC-BY 4.0** : redistribution permise avec attribution (`assets/twemoji/readme.txt`,
+    `license-graphics.txt`).
+  - Le premier choix du 21/11 (`r4` 😎, `r5` 😉, `r6` ICANT) n'est plus proposé mais reste accepté et affiché : un écran
+    pas encore à jour, et la banque (tableau ci-dessus, inchangé).
+  - ptn.gif est le fichier d'Antoni tel quel (128 × 128, transparent) : jamais réencodé, le GIF garde toutes ses images.
+    Une émote est toujours affichée par une image (`<img>`) : elle s'anime dans la bulle de choix, au-dessus des places,
+    dans le repère hors écran et dans la bulle de la banque. Les images proposées sont chargées une fois, dès que le
+    Core annonce les réactions.
+  - **Versions mêlées** : un Core d'avant le 22/11 n'annonce que `r1` … `r7` — la nouvelle extension propose alors ces
+    7-là ; une extension d'avant le 22/11 face au nouveau Core propose ses 7 et ignore les émotes qu'elle ne connaît pas.
+
+#### 18.7.1 La page des abonnés (mandat du 22/11)
+
+- **Qui** : un viewer **abonné à la chaîne** (Twitch, tout palier, abonnement payé **ou offert** : Twitch compte un
+  abonnement offert comme un abonnement pendant sa durée). La flèche n'apparaît qu'à lui ; les classiques restent à
+  tous ; aucun Jeton.
+- **Les 10** : les 9 émotes d'Antoni (dossier « Emote a donner pour le blackjack/Update », réduites de ≈ 2 000 px à
+  128 × 128 PNG, 15 à 37 Ko chacune, dans `assets/casino/reactions/subs/`) et ptn, sur les deux pages :
+
+  | Id   | Émote        | Fichier d'origine        |
+  | ---- | ------------ | ------------------------ |
+  | `s1` | Aigri        | `Aigri v3.png`           |
+  | `s2` | Cheh         | `Cheh.png`               |
+  | `s3` | VNR          | `Emote VNR.png`          |
+  | `s4` | Flex Megumin | `Flex megumin.png`       |
+  | `s5` | GasmRem      | `GasmRem.png`            |
+  | `s6` | Happy        | `HappyFinal2.png`        |
+  | `s7` | Raptor Sadge | `Raptor sadge Fixed.png` |
+  | `s8` | SpiritEel    | `SpiritEel.png`          |
+  | `s9` | Grumpy       | `grumpy.png`             |
+
+- **Vérification par le Core**, jamais par l'écran : le cache d'abonnements du moteur de Fidélité
+  (`loyalty/tiers.ts resolveTiers` : événements Twitch abonnement / offert / fin, et instantanés Helix complets) — le
+  même que le mini-profil. À chaque réaction `s…` : `403 sub_only` (non abonné) ou `403 sub_unknown` (absent du cache
+  et aucun instantané de moins de 36 h : jamais deviné) ; refusée **avant** le rythme (un refus ne coûte rien). L'état
+  de la table indique `reactions.sub` (`yes` / `no` / `unknown`, `null` pour un spectateur anonyme) et n'ajoute les
+  identifiants `s…` qu'à un abonné. Un abonnement qui prend fin : refusé dès l'envoi suivant, la flèche disparaît à la
+  réponse suivante.
+- Les émotes des abonnés s'envolent **chez tout le monde**, comme les classiques.
+- **Banc d'essai** : « Abonnement (réactions subs) » : Abonné / Non abonné / Inconnu.
 
 - **Remplacer une émote** : déposer le fichier (PNG, GIF ou WebP animé, transparent, carré, 112 à 128 px) dans
   `apps/twitch-extension/extension/assets/casino/reactions/` et changer sa ligne `src` dans `reactions.js` du même
   dossier. Rien d'autre : identifiants, protocole, rythme, logique, animations d'apparition et Core ne bougent pas.
-  Ajouter une 8ᵉ réaction demanderait en plus son identifiant dans le Core (`reactions.ts`).
+  Ajouter une réaction demande en plus son identifiant dans le Core (`reactions.ts`) et sa place dans `PAGES`
+  (`reactions.js`).
 
 **Contrat** :
 
