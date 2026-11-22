@@ -585,6 +585,47 @@ Toujours **extension seule** : aucune règle, cote, mise, limite ni route du Cor
 - **Banc** : « lecteur normal (520×347) » est le format par défaut ; petit (452×301), très petit (390×260), référence
   (651×434), grande fenêtre (760×507), plein écran (1053×702).
 
+### 16.0.1 Application Twitch mobile (23/11, captures Android d'Antoni)
+
+- **Ce que reçoit l'extension** : dans l'application, `mobile.html?platform=mobile` s'affiche **à la place du chat**
+  (sous la vidéo 16:9, le bandeau de la chaîne et les onglets) — environ **393 × 484** sur un Android courant,
+  360 × 409 sur un petit, 360 × 269 sur un ancien 360 × 640. Le banc donnait à la page **l'écran entier** (390 × 844) :
+  aucun problème mobile n'y apparaissait. Dimensions **estimées** : Twitch ne documente ni la taille ni l'agencement
+  (« Do not assume any specific aspect ratio or dimension », dev.twitch.tv/docs/extensions/designing).
+- **Causes** :
+  - _Machine à sous (et les autres machines)_ : la hauteur du jeu n'avait qu'une source, la place laissée par la page
+    (colonne flex partant de `min-height: 100vh`). Selon la hauteur reçue : 0 px → jeu absent, cadre vide ; zone basse
+    (plus large que 4:3, ex. 357 × 244) → cabine de PC à colonne de 150 px, Lancer et montant de la mise hors cadre ;
+    zone ≤ 320 px → page figée à `100vh` sans défilement (shell-panel.css, m17), jeu coupé ; zone trop haute → contenu
+    centré sous la partie visible. Reproduit dans le banc (ancien 360 × 640) ; la capture d'Antoni n'a pas été reçue
+    ici, la cause exacte sur son téléphone reste à confirmer sur l'appareil.
+  - _TTS_ : hauteurs fixes pensées pour 844 px (aperçu 170 px, carte tirée 300 px, message sur 4 lignes) : sous la
+    vidéo, l'aperçu prenait la place et les personnages passaient sous le paiement.
+  - _Random Ban_ : bandeau « Mini-jeux · Random Ban et les jeux du stream » répété, barre sur deux rangées, viseur d'au
+    moins 210 px : Lancer sous la ligne de flottaison.
+- **Correctifs** (shell v2, surface mobile seulement ; PC, panneau et composant vidéo inchangés) :
+  `modules/arcade/arcade.css` — hauteur d'un jeu du Casino bornée par la **largeur** (au moins 75 % de la largeur,
+  entre 240 et 340 px : toujours la cabine portrait ; au plus 1,2 × la largeur) et défilement autorisé sur une zone très
+  basse ; Random Ban compacté (bandeau retiré, barre sur une rangée quand il n'y a pas de charges, viseur 110–210 px
+  selon la hauteur visible). `modules/tts/tts.css` — message, aperçu et carte tirée suivent la hauteur visible
+  (plafonds = anciennes valeurs, grand écran inchangé). Fonctions, coûts et parcours inchangés.
+- **Bonk (trouvé en passant, tous supports)** : un échec de lecture du catalogue d'emotes redessinait Bonk, dont le
+  rendu relançait aussitôt la lecture — une boucle de requêtes `/emotes` à la vitesse du réseau tant que le Core répond
+  en erreur (dans le banc, réponse immédiate : page figée). Après un échec, plus de nouvel essai automatique avant 15 s
+  (`shared/emote-access.js`, test `test/emote-access.test.js`) ; un rechargement explicite redemande tout de suite.
+- **Paysage** (guidelines Twitch 3.4 : « Mobile Extensions must display all elements within the stream chat viewport
+  in both portrait and landscape views », dev.twitch.tv/docs/extensions/guidelines-and-policies ; RFC 0003 et blog
+  Twitch 2018 : les extensions occupent la zone du chat) : l'extension vit **dans la zone du chat**. En paysage avec le
+  chat ouvert à côté de la vidéo, elle est présente et fonctionne (banc : 367 × 349). En **plein écran paysage**, aucun
+  point d'accès aux extensions n'est documenté et `isFullScreen` n'est pas envoyé sur mobile
+  (dev.twitch.tv/docs/extensions/reference) : limite de l'application Twitch, pas de notre frontend, sans contournement
+  autorisé. Le viewer quitte le plein écran (ou ouvre le chat) pour utiliser l'extension.
+- **Banc** : surface « Mobile » = un **téléphone dessiné comme l'application** (barre d'état, vidéo 16:9, bandeau de la
+  chaîne, onglets Chat / Raptoru Live, barre de navigation) ; l'iframe reçoit la zone restante et défile pour de vrai.
+  Pixel 7/8 (par défaut), petit Android, grand Android, ancien 360 × 640, iPhone, paysage chat ouvert, paysage plein
+  écran (sans extension), zone seule. « Accueil — tous les modules » ouvre le Hub (TTS V2, Random Ban et Mini-jeux avec
+  des données fictives). Ces captures ne remplacent pas un essai sur un vrai téléphone.
+
 Toujours **extension seule** (le Core en Production `1f05b97c` suffit : aucune règle, cote, mise, limite, route ni
 protection modifiée). Retour d'Antoni sur le banc : les débordements étaient corrigés, pas la façon d'occuper
 l'espace ; et le banc ne montrait ni le vrai cadre de Raptoru Live ni de vraies parties.

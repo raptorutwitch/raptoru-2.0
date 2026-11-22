@@ -9,6 +9,9 @@ import { errorLabel } from './api.js';
 import { RUNTIME } from './runtime-config.js';
 
 const EMOTE_CATALOG_REFRESH_MS = 10 * 60 * 1000;
+// After a failed catalog read, drawing Bonk again does not retry before this delay (23/11: each failure redrew Bonk,
+// whose draw retried at once — a request loop as fast as the network while the Core answered in error).
+export const EMOTE_RETRY_AFTER_ERROR_MS = 15_000;
 export const EMOTE_AUTH_POLL_INTERVAL_MS = 2_000;
 export const EMOTE_AUTH_TIMEOUT_MS = 90_000;
 export const EMOTE_AUTH_POPUP_GRACE_MS = 5_000;
@@ -140,6 +143,7 @@ export function createEmoteAccess({ document, window: win, client, getState, app
   let emoteCatalogLoadedAt = 0;
   let emoteLoading = false;
   let emoteError = null;
+  let emoteFailedAt = 0;
   let emoteCatalogGeneration = 0;
   let emoteForceReloadPending = false;
   let emoteAuthorizationStarting = false;
@@ -320,8 +324,10 @@ export function createEmoteAccess({ document, window: win, client, getState, app
         };
         emoteCatalogKey = requestKey;
         emoteCatalogLoadedAt = Date.now();
+        emoteFailedAt = 0;
       }
     } catch {
+      emoteFailedAt = Date.now();
       if (generation === emoteCatalogGeneration) {
         emoteError = 'Impossible de charger le catalogue d’emotes pour le moment.';
       }
@@ -418,7 +424,8 @@ export function createEmoteAccess({ document, window: win, client, getState, app
     const state = getState();
     const key = emoteCatalogStateKey(state?.emotes, state?.twitch_user_id);
     const expired = !emoteCatalogLoadedAt || Date.now() - emoteCatalogLoadedAt >= EMOTE_CATALOG_REFRESH_MS;
-    if (state?.emotes?.connected && (!emoteCatalog || emoteCatalogKey !== key || expired) && !emoteLoading) {
+    const resting = emoteFailedAt && Date.now() - emoteFailedAt < EMOTE_RETRY_AFTER_ERROR_MS;
+    if (state?.emotes?.connected && (!emoteCatalog || emoteCatalogKey !== key || expired) && !emoteLoading && !resting) {
       queueMicrotask(loadEmotes);
     } else if (!emoteLoading && !emoteSyncTimer && twitchEmotesStatus() === 'syncing') {
       queueMicrotask(followEmoteSync);

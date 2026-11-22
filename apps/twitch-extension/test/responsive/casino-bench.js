@@ -7,6 +7,8 @@
 //    the extension's real space (no header, the whole frame is the game).
 /* global document, window, URLSearchParams */
 const GAMES = {
+  // The Hub (TTS, Soundboard, Tombola, Mini-jeux · Random Ban, Bonk…): every module, without opening a game.
+  hub: { label: 'Accueil — tous les modules', tile: '' },
   blackjack: { label: 'Blackjack', tile: 'casino_blackjack' },
   slot: { label: 'Machine à fruits', tile: 'casino_slot' },
   book: { label: 'Machine à émotes', tile: 'casino_book' },
@@ -65,12 +67,19 @@ const SIZES = {
     ['panel court (318×300)', 318, 300],
     ['pop-out (400×700)', 400, 700],
   ],
+  // Twitch app (portrait): the extension only gets the CHAT area below the 16:9 video, the channel bar and the
+  // tabs — never the whole screen (23/11: the bench used to give it 390 × 844 and hid every mobile problem). `p` =
+  // a phone drawn as the app shows it (the iframe = the area left, it scrolls for real), `l` = landscape with the
+  // chat panel open, `f` = landscape full screen (no extension), no letter = the extension area alone.
   mobile: [
-    ['téléphone standard (390×844)', 390, 844],
-    ['petit téléphone (360×780)', 360, 780],
-    ['grand téléphone (430×932)', 430, 932],
-    ['sous la vidéo, estimé (390×560)', 390, 560],
-    ['paysage (844×390)', 844, 390],
+    ['Android courant — Pixel 7/8 (393 × 873)', 'p', 393, 873],
+    ['petit Android (360 × 780)', 'p', 360, 780],
+    ['grand Android (412 × 915)', 'p', 412, 915],
+    ['petit écran ancien (360 × 640)', 'p', 360, 640],
+    ['iPhone 13/14 (390 × 844)', 'p', 390, 844],
+    ['paysage, chat ouvert (873 × 393)', 'l', 873, 393],
+    ['paysage plein écran (873 × 393)', 'f', 873, 393],
+    ['zone seule, sous la vidéo (393 × 484)', 'z', 393, 484],
   ],
 };
 const NEXT_SLOT = [
@@ -120,7 +129,7 @@ $('bots').value = params.get('bots') ?? '0';
 function fillStates() {
   const sel = $('state');
   sel.innerHTML = '';
-  for (const id of FROZEN[$('game').value]) opt(sel, id, id);
+  for (const id of FROZEN[$('game').value] ?? []) opt(sel, id, id);
   if ($('game').value === 'blackjack')
     for (const [label, v] of Object.entries(BJ_OPEN))
       opt(sel, `open:${v}`, `→ ouvrir : ${label}`);
@@ -133,28 +142,39 @@ function fillSizes() {
   for (const s of groups) {
     const og = document.createElement('optgroup');
     og.label = SURFACES[s].label;
-    for (const [label, w, h] of SIZES[s])
-      og.append(new window.Option(label, `${w}x${h}`));
+    for (const row of SIZES[s]) {
+      const [label, kind, w, h] =
+        row.length === 4 ? row : [row[0], 'z', row[1], row[2]];
+      og.append(
+        new window.Option(label, `${kind === 'z' ? '' : kind}${w}x${h}`),
+      );
+    }
     sel.append(og);
   }
 }
 fillStates();
 fillSizes();
 if (params.get('s')) $('state').value = params.get('s');
-const [pw, ph] = (params.get('sz') ?? $('size').value).split('x').map(Number);
-if ([...$('size').options].some((o) => o.value === `${pw}x${ph}`))
-  $('size').value = `${pw}x${ph}`;
+const wanted = params.get('sz') ?? $('size').value;
+if ([...$('size').options].some((o) => o.value === wanted))
+  $('size').value = wanted;
+const [pw, ph] = $('size')
+  .value.replace(/^[plf]/, '')
+  .split('x')
+  .map(Number);
 $('w').value = Number(params.get('w')) || pw;
 $('h').value = Number(params.get('h')) || ph;
 
 function src() {
   const game = $('game').value;
   if (mode === 'full')
-    return `/casino-v2/${SURFACES[$('surface').value].page}&casinoGame=${GAMES[game].tile}`;
+    return `/casino-v2/${SURFACES[$('surface').value].page}${GAMES[game].tile ? `&casinoGame=${GAMES[game].tile}` : ''}`;
   const raw = $('state').value;
   const [state, open] = raw.startsWith('open:')
     ? ['several', raw.slice(5)]
     : [raw, ''];
+  if (!FROZEN[game])
+    return `/demo/casino-harness.html?game=blackjack&state=several`; // the Hub has no isolated view
   return `/demo/casino-harness.html?game=${game}&state=${state}${open ? `&open=${open}` : ''}`;
 }
 
@@ -214,23 +234,70 @@ $('refill').addEventListener('click', () => {
     'Solde fictif remis à 50 000 : l’en-tête se met à jour à la prochaine lecture de session (quelques secondes).';
 });
 
+// Twitch app chrome, in CSS px: estimated from the Android app, not documented by Twitch (docs/CASINO.md § 16.0.1).
+const CHROME = { status: 24, channel: 52, tabs: 44, nav: 48, side: 0.42 };
+/** Draws the phone around the frame; returns the extension area [w, h] ([0, 0] in landscape full screen), or null. */
+function phone(kind, W, H) {
+  const box = $('phone');
+  box.hidden = !kind;
+  if (!kind) return null;
+  box.dataset.kind = kind;
+  box.style.width = `${W + 20}px`;
+  box.style.height = `${H + 20}px`;
+  if (kind === 'p') {
+    box.style.setProperty('--video-h', `${Math.round((W * 9) / 16)}px`);
+    return [
+      W,
+      H -
+        CHROME.status -
+        Math.round((W * 9) / 16) -
+        CHROME.channel -
+        CHROME.tabs -
+        CHROME.nav,
+    ];
+  }
+  if (kind === 'l') {
+    const side = Math.max(300, Math.round(W * CHROME.side));
+    box.style.setProperty('--video-w', `${W - side}px`);
+    return [side, H - CHROME.tabs];
+  }
+  return [0, 0];
+}
+
 function show() {
   const url = src();
-  const w = Number($('w').value) || 563;
-  const h = Number($('h').value) || 376;
+  const kind =
+    mode === 'full' && $('surface').value === 'mobile'
+      ? (/^[plf]/.exec($('size').value)?.[0] ?? '')
+      : '';
+  let w = Number($('w').value) || 563;
+  let h = Number($('h').value) || 376;
+  const area = phone(kind, w, h);
+  const screen = area ? `écran ${w} × ${h} → ` : '';
+  if (area) [w, h] = area;
+  (area ? $('phone-slot') : $('main-slot')).append($('wrap'));
+  $('wrap').classList.toggle('in-phone', !!area);
   const frame = $('frame');
+  frame.hidden = !w;
   frame.width = w;
   frame.height = h;
-  frame.src = url;
+  frame.src = w ? url : 'about:blank';
+  $('phone-note').textContent = !area
+    ? ''
+    : kind === 'f'
+      ? 'Plein écran paysage : l’application Twitch n’y affiche pas les extensions (aucun point d’accès documenté). Le viewer quitte le plein écran ou repasse en portrait.'
+      : 'Barre d’état, vidéo 16:9, bandeau de chaîne, onglets et barre de navigation : dimensions estimées de l’application Android (non documentées par Twitch). L’extension défile dans sa zone comme dans l’application ; seul un vrai téléphone fait foi.';
   $('open').href = url;
   $('wrap').dataset.size =
-    `${w} × ${h}${mode === 'full' ? ` · ${SURFACES[$('surface').value].label}` : ' · jeu isolé'}`;
+    `${screen}${w} × ${h}${mode === 'full' ? ` · ${SURFACES[$('surface').value].label}` : ' · jeu isolé'}`;
   $('wrap').dataset.mode = mode;
   $('cap-game').textContent =
     mode === 'full'
       ? `${GAMES[$('game').value].label} — démo interactive`
       : `${GAMES[$('game').value].label} — état figé « ${$('state').value} »`;
-  $('cap-size').textContent = `${w} × ${h}`;
+  $('cap-size').textContent = w
+    ? `${screen}zone d’extension ${w} × ${h}`
+    : `${screen}pas d’extension`;
   $('mode-full').setAttribute('aria-pressed', String(mode === 'full'));
   $('mode-isolated').setAttribute('aria-pressed', String(mode === 'isolated'));
   $('surface-wrap').hidden = mode !== 'full';
@@ -254,7 +321,9 @@ function show() {
 }
 
 const pickSize = () => {
-  const [w, h] = $('size').value.split('x');
+  const [w, h] = $('size')
+    .value.replace(/^[plf]/, '')
+    .split('x');
   $('w').value = w;
   $('h').value = h;
 };

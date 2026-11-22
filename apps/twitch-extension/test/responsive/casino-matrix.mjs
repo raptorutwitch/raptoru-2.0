@@ -62,6 +62,9 @@ const SIZES = [
   // Zone de l'extension sous la vidéo dans l'application Twitch (estimations : la taille exacte dépend du téléphone).
   ['app Twitch portrait (est.)', 360, 480],
   ['app Twitch compact (est.)', 300, 340],
+  ['app Android, zone sous la vidéo (23/11)', 393, 484],
+  ['app ancien 360×640, zone (23/11)', 360, 269],
+  ['app paysage, chat ouvert (23/11)', 367, 349],
 ];
 /** Phone-sized rows run as a touch device (pointer: coarse), like the real app. */
 const TOUCH = (label) => label.startsWith('mobile') || label.startsWith('app ');
