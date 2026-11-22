@@ -14,16 +14,16 @@ Plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). 
 Le Core décide (données, Jetons, règles), le bot LeCroupier_ parle à Twitch, Raptoru Studio (Electron, PC d'Antoni)
 pilote OBS, l'extension Twitch et raptoru.fr parlent aux viewers. SAMMI abandonné. Dépôt public : aucun secret.
 
-Production (relevé du 20/11, 16:00 UTC) : Core 1f05b97c, bot 2c04a5db (un seul bot actif), Studio 0.1.42 publié ET
+Production (relevé du 22/11, 00:40 UTC) : Core a94d1081 (Casino : nouvelles tables + réactions), bot 2c04a5db (un seul bot actif), Studio 0.1.42 publié ET
 installé, extension publique be1744e75f63 (prouvée par Antoni dans la console Twitch le 20/11).
 Casino V1 (4 jeux) : Core déployé, CASINO_EXTENSION=on, casino.open=1, 4 jeux ouverts, refusé hors live
 (stream_offline). L'extension publique NE contient PAS le Casino. Post-live du 21/11 : lots A + B, machines à faible
 hauteur, passe de nuit, passe de composition, passe corrective et passe « tables, Split, réactions » fusionnées (PR #99, #100,
-#102, #103, #105, #107, #109, #110, #112, #114, #115 ; extension seule, Core inchangé) ; ZIP suivant 2411c992b26b PAS ENCORE ÉCRIT : son
-inventaire (20 commits) attend la ligne d'Antoni (remplacera
-76875d47e728). Banc : npm run casino:bench -w @raptoru/twitch-extension — par défaut la VRAIE extension (en-tête,
-Mini-jeux) jouable en démo locale (CASINO.md § 14-18). Évolution du Core « nouvelles tables + réactions » : PR #111
-(aucune migration, bot inchangé) ; son DÉPLOIEMENT attend le GO explicite d'Antoni (§ 18.8 ; retour arrière : Core 1f05b97c) ; test:casino-compose mesure la composition dans ce cadre.
+#102, #103, #105, #107, #109, #110, #112, #114, #115). Core a94d1081 DÉPLOYÉ le 22/11 00:39 UTC (PR #111 : nouvelles
+tables, réactions 5 puis 1 toutes les 2 s ; aucune migration ; retour arrière : Core 1f05b97c). ZIP suivant ÉCRIT le 22/11
+(inventaire 2411c992b26b validé par Antoni, 20 commits) : raptoru-live-PRODUCTION-d09fd03aa844-depuis-be1744e-20-commits-shell-v2.zip, SHA-256 1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039,
+NON téléversé (Antoni : Hosted Test ; remplace 76875d47e728). Banc : npm run casino:bench -w @raptoru/twitch-extension — par défaut la VRAIE extension (en-tête,
+Mini-jeux) jouable en démo locale (CASINO.md § 14-18). test:casino-compose mesure la composition dans ce cadre.
 Ne pas dire « Casino disponible pour tous ».
 Niveaux : restauration WizeBot EXÉCUTÉE le 20/11 (432 comptes, définitive, NE JAMAIS LA REJOUER) ; badges tous les
 25 niveaux ; anciennes annulations bloquées (Core 410 + Studio) ; rattachements WizeBot futurs non compressés.
@@ -116,14 +116,14 @@ l'extension se prouve dans la console Twitch (Antoni) ou en live par F12 › `sh
 | Élément                      | Valeur                                                                                                                                                                         | Preuve                            |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
 | `origin/main`                | `5ebf395e` (PR #95) ; dernier code `1f05b97c` (PR #94)                                                                                                                         | `git log`                         |
-| Core                         | **`1f05b97c`**, déployé le 20/11 15:47 UTC (déploiement `v647t4hullbip5ezaqzx7khq`), `/health` et `/ready` OK ; aucune migration depuis Casino V1                              | `coolify-deploy.mjs status core`  |
+| Core                         | **`a94d1081`** (22/11 00:39 UTC, déploiement `5wucyqh9ekhb8i3ehgllxldu`, PR #111), `/health` et `/ready` OK ; avant : `1f05b97c` (20/11) ; aucune migration depuis Casino V1   | `coolify-deploy.mjs status core`  |
 | Bot                          | **`2c04a5db`** (16/11), actif, seul bail                                                                                                                                       | `status bot`                      |
 | Studio                       | **0.1.42 publié (Latest) et installé** (`build-info.json` : 0.1.42, `1f05b97c`)                                                                                                | lu le 20/11                       |
 | Extension publique           | **`be1744e75f63`** (shell v2, 95 commits depuis `0bf7907` : Level Up V2, mini-profil, Commandes V2.1, Mini-jeux V5, Music Hub), prouvée par Antoni le 20/11                    | `apps/twitch-extension/PUBLISHED` |
 | Extension Hosted Test        | ZIP `raptoru-live-PRODUCTION-2e2eaf3ae34a-depuis-be1744e-8-commits-shell-v2.zip`, SHA-256 `df177a48…f1436868` (Casino, 8 commits), inventaire `298e940290ab` validé par Antoni | `Worktrees\agent\…\release\`      |
 | Drapeaux du Core             | `CASINO_EXTENSION=on`, `MUSIC_HUB_EXTENSION=on`                                                                                                                                | API Coolify, lecture seule, 20/11 |
 | Dernière sauvegarde manuelle | 20/11 15:28:18 UTC, `success`, 12 310 947 octets (avant le déploiement `1f05b97c`)                                                                                             | API Coolify                       |
-| Retour arrière Core          | `node scripts/coolify-deploy.mjs deploy core 18a4b04828b1f214bb6122214d4dfc142a1d396f --rollback --go`                                                                         | livraison du 20/11                |
+| Retour arrière Core          | `node scripts/coolify-deploy.mjs deploy core 1f05b97c2c0133c1f222ff97d2003e218e9313ab --rollback --go`                                                                         | livraison du 22/11                |
 
 ### 5.2 Casino V1 : développé et déployé côté Core ; ni essayé en réel, ni public
 
@@ -164,10 +164,9 @@ l'extension se prouve dans la console Twitch (Antoni) ou en live par F12 › `sh
 Le Hosted Test ne permet **pas** un essai avec de vrais viewers sur `raptoru_` en live (il retire l'extension aux
 non-testeurs, [CASINO.md](CASINO.md) § 6) et le Casino refuse hors live. D'où l'ordre :
 
-0. **Antoni (21/11)** : essayer le banc (`npm run casino:bench -w @raptoru/twitch-extension`, mode « Extension
-   complète ») ou regarder les captures (`Documents\Raptoru 2.0 - Livraisons\2026-11-21-casino-tables-reactions`), puis
-   ajouter sa ligne à `apps/twitch-extension/release-inventory/INVENTAIRE-2411c992b26b.md` ; l'agent écrit alors le ZIP
-   `2411c992b26b` (`package:production -- --shell v2`) et donne son SHA-256. Il remplace `76875d47e728`.
+0. **Fait (22/11)** : ligne d'Antoni dans `INVENTAIRE-2411c992b26b.md`, Core `a94d1081` déployé, ZIP écrit et vérifié :
+   `raptoru-live-PRODUCTION-d09fd03aa844-depuis-be1744e-20-commits-shell-v2.zip`, SHA-256 `1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039`
+   (`Worktrees\agent\apps\twitch-extension\release\`). Il remplace `76875d47e728`.
 1. **Antoni** : vérifier ce ZIP en Hosted Test, **hors live**, sur un compte testeur (affichage, état « hors live »,
    navigation), y compris dans l'**application** Twitch du téléphone (portrait et paysage) : console › vue mobile
    activée pour cette version ; jamais le navigateur mobile, où Twitch n'affiche aucune extension.
