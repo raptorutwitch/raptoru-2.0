@@ -22,8 +22,8 @@ export const REFILL_MS = 2000;
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const ICON = {
   close: '<path d="M7 7l10 10M17 7 7 17"/>',
-  next: '<path d="M9 5l7 7-7 7"/>',
-  prev: '<path d="M15 5l-7 7 7 7"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
   mute: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
   sound: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 7a7 7 0 0 1 0 10"/>',
 };
@@ -46,17 +46,27 @@ export function pickDealerReaction(s, mainMin = 100, cfg = DEALER) {
   const players = s.seats.filter((p) => p?.result);
   if (!players.length) return null;
   const hands = players.flatMap((p) => p.hands ?? []);
+  const big = 10 * mainMin;
+  const won = (h) => h.verdict === 'win' || h.verdict === 'blackjack' || h.verdict === 'even';
   const kind =
     s.outcome === 'BJ' ? 'dealer_bj'
     : hands.some((h) => h.verdict === 'blackjack') ? 'blackjack'
-    : players.some((p) => p.result.net >= 10 * mainMin) ? 'big_win'
+    : players.some((p) => p.result.net >= big) ? 'big_win'
+    : players.some((p) => p.result.net <= -big) ? 'big_loss'
     : s.outcome === 'BUST' ? 'dealer_bust'
+    : hands.some((h) => h.doubled && won(h)) ? 'double_win'
+    : hands.some((h) => h.doubled && (h.verdict === 'lose' || h.verdict === 'bust')) ? 'double_lose'
+    : hands.some((h) => h.fromSplit) ? 'split'
     : hands.some((h) => h.verdict === 'bust') ? 'bust'
+    : hands.length && hands.every((h) => h.verdict === 'push') ? 'push'
+    : players.some((p) => p.result.net > 0) ? 'win'
     : players.every((p) => p.result.net < 0) ? 'dealer_win'
     : null;
   const c = kind && cfg[kind];
-  if (!c || !BY_ID.has(c.r) || unit(`${s.table}:${s.round}:${kind}`) >= (c.chance ?? 0)) return null;
-  return { kind, r: c.r };
+  if (!c || unit(`${s.table}:${s.round}:${kind}`) >= (c.chance ?? 0)) return null;
+  const ids = (Array.isArray(c.r) ? c.r : [c.r]).filter((id) => BY_ID.has(id));
+  if (!ids.length) return null;
+  return { kind, r: ids[Math.floor(unit(`${s.table}:${s.round}:pick`) * ids.length)] };
 }
 
 /**
@@ -233,27 +243,40 @@ export function createReactions({ root, felt, seatsEl, seatEl, mySeat = () => nu
     pal = null;
   }
   const muteHTML = () => `<button type="button" class="rx-mini rx-mute" data-rx-mute aria-pressed="${muted()}" title="${muted() ? 'Afficher les réactions' : 'Masquer les réactions (pour toi seulement)'}" aria-label="${muted() ? 'Afficher les réactions' : 'Masquer les réactions pour toi'}">${ico(muted() ? 'mute' : 'sound')}</button>`;
-  /** Les émotes d'une page (celles que le Core accepte) et la flèche vers l'autre page (un abonné seulement). */
+  /**
+   * Les émotes (celles que le Core accepte), en deux étages superposés à la même place : les classiques (1) et, pour un
+   * abonné, les siennes (2). Le petit ascenseur haut/bas fait glisser la liste d'un étage à l'autre ; la bulle ne change ni
+   * de taille ni de place.
+   */
+  const rowOf = (list, n) => `<div class="rx-pal__row" data-fl="${n}">${list.filter((id) => (caps?.ids ?? []).includes(id) && BY_ID.has(id))
+    .map((id) => BY_ID.get(id))
+    .map((r) => `<button type="button" class="rx-pick" data-rx="${esc(r.id)}" title="${esc(r.label)}" aria-label="Réagir : ${esc(r.label)}">${imgHTML(r, 'rx-pick__img')}</button>`)
+    .join('')}</div>`;
   function rowHTML() {
     const ids = new Set(caps?.ids ?? []);
     if (page === 2 && !subOk()) page = 1;
-    // Un Core d'avant le 22/11 (r1 … r7 seulement, le temps de son déploiement) : ses 7 réactions, jamais une page à moitié vide.
-    const list = page === 1 && !ids.has('r8') ? ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'] : PAGES[page - 1];
-    const picks = list.filter((id) => ids.has(id) && BY_ID.has(id))
-      .map((id) => BY_ID.get(id))
-      .map((r) => `<button type="button" class="rx-pick" data-rx="${esc(r.id)}" title="${esc(r.label)}" aria-label="Réagir : ${esc(r.label)}">${imgHTML(r, 'rx-pick__img')}</button>`)
-      .join('');
-    const flip = subOk()
-      ? `<button type="button" class="rx-page" data-rx-page title="${page === 1 ? 'Réactions des abonnés' : 'Réactions classiques'}" aria-label="${page === 1 ? 'Voir les réactions des abonnés' : 'Revenir aux réactions classiques'}">${ico(page === 1 ? 'next' : 'prev')}</button>`
-      : '';
-    return `<div class="rx-pal__row">${picks}</div>${flip}`;
+    // Un Core d'avant le 22/11 (r1 … r7 seulement, le temps de son déploiement) : ses 7 réactions, jamais un étage à moitié vide.
+    if (!ids.has('r8')) return `<div class="rx-floors">${rowOf(['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'], 1)}</div>`;
+    if (!subOk()) return `<div class="rx-floors">${rowOf(PAGES[0], 1)}</div>`;
+    return `<div class="rx-floors">${rowOf(PAGES[0], 1)}${rowOf(PAGES[1], 2)}</div><div class="rx-lift" role="group" aria-label="Étages de réactions">`
+      + `<button type="button" data-rx-page="1" title="Réactions classiques" aria-label="Réactions classiques">${ico('up')}</button>`
+      + `<button type="button" data-rx-page="2" title="Réactions des abonnés" aria-label="Réactions des abonnés">${ico('down')}</button></div>`;
+  }
+  /** L'étage affiché : la liste glisse (CSS), l'étage caché n'est ni cliquable ni atteignable au clavier. */
+  function floor() {
+    if (!pal) return;
+    pal.classList.toggle('subs', page === 2);
+    pal.querySelector('.rx-floors')?.setAttribute('data-at', String(page));
+    for (const r of pal.querySelectorAll('.rx-pal__row')) r.inert = Number(r.dataset.fl) !== page;
+    for (const b of pal.querySelectorAll('[data-rx-page]')) {
+      b.disabled = Number(b.dataset.rxPage) === page;
+      b.setAttribute('aria-pressed', String(b.disabled));
+    }
   }
   function render() {
     if (!pal) return;
-    const focusPage = !!pal.querySelector('[data-rx-page]') && pal.querySelector('[data-rx-page]') === pal.getRootNode().activeElement;
-    pal.classList.toggle('subs', page === 2);
     pal.querySelector('.rx-pal__main').innerHTML = rowHTML();
-    if (focusPage) pal.querySelector('[data-rx-page]')?.focus({ preventScroll: true });
+    floor();
     dry();
   }
   function place(btn) {
@@ -276,10 +299,13 @@ export function createReactions({ root, felt, seatsEl, seatEl, mySeat = () => nu
     dry();
     pal.addEventListener('click', (e) => {
       if (e.target.closest('[data-rx-close]')) return close();
-      if (e.target.closest('[data-rx-page]')) {
-        // Une page à l'autre sans fermer la bulle ; elle garde sa place (la largeur des deux pages est la même).
-        page = page === 1 ? 2 : 1;
-        return render();
+      const lift = e.target.closest('[data-rx-page]');
+      if (lift) {
+        // D'un étage à l'autre sans fermer la bulle ni la redessiner : la liste glisse verticalement.
+        page = Number(lift.dataset.rxPage) === 2 && subOk() ? 2 : 1;
+        floor();
+        pal.querySelector(`[data-fl="${page}"] [data-rx]`)?.focus({ preventScroll: true });
+        return;
       }
       const m = e.target.closest('[data-rx-mute]');
       if (m) {
