@@ -233,6 +233,22 @@ describe('trigger: the chat message a module answers', () => {
   });
 });
 
+describe('trigger closed after the answer', () => {
+  it("a timer a module starts while answering writes later WITHOUT that message's trigger", async () => {
+    let later: unknown = 'not run';
+    await withTrigger({ message_id: 'v9', command: 'roue' }, async () => {
+      expect(currentTrigger()).toEqual({ message_id: 'v9', command: 'roue' });
+      setTimeout(
+        () =>
+          (later = withTriggerParams({ mode: 'announce', text: 'Level Up' })),
+        5,
+      );
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(later).toEqual({ mode: 'announce', text: 'Level Up' });
+  });
+});
+
 describe('command catalogue', () => {
   it('Commands V2 (aliases together), the modules, the bot, the discovered words: each word once', async () => {
     const db = {
