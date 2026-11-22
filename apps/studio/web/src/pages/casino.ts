@@ -258,7 +258,7 @@ export function mountCasinoPage(root: HTMLElement) {
     };
     patch(
       z('games'),
-      `${row('casino.slot_open', 'Machine à sous')}${row('casino.roulette_open', 'Roulette')}${row('casino.book_open', 'Machine à émotes')}${row('casino.blackjack_open', 'Blackjack')}${row('casino.announce', 'Annonces automatiques (GRAND, gros gains)')}${row('casino.bj_announce', 'Blackjack : proposer l’annonce d’une nouvelle table')}
+      `${row('casino.slot_open', 'Machine à sous')}${row('casino.roulette_open', 'Roulette')}${row('casino.book_open', 'Machine à émotes')}${row('casino.blackjack_open', 'Blackjack')}${row('casino.announce', 'Annonces automatiques (GRAND, gros gains)')}${row('casino.bj_announce', 'Blackjack : proposer l’annonce d’une nouvelle table')}${row('casino.bj_reactions', 'Blackjack : réactions des joueurs (émotes)')}${row('casino.bj_dealer_reactions', 'Blackjack : réactions de la banque')}
        ${state && !state.production_approved && state.availability.economy === 'canonical' ? '<p class="d-note">Ce Core n’autorise pas le Casino : variable CASINO_EXTENSION à off (le seul verrou qui ne se lève pas d’ici).</p>' : ''}`,
     );
   }
