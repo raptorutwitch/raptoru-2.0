@@ -1,0 +1,96 @@
+{
+  "schema": "raptoru.chaos.registry",
+  "version": 1,
+  "engine_limits": {
+    "min_duration_ms": 1000,
+    "max_duration_ms": 60000,
+    "max_active_effects": 8,
+    "max_queue": 16,
+    "queue_ttl_ms": 180000,
+    "max_rotation_deg_per_s": 520,
+    "max_transition_ms": 3000
+  },
+  "families": {
+    "orientation": { "label": "Orientation" },
+    "perception": { "label": "Perception" },
+    "lisibilite": { "label": "Lisibilité" },
+    "calque": { "label": "Calques" },
+    "diagnostic": { "label": "Diagnostic (interne)" }
+  },
+  "slots": {
+    "transform": { "label": "Transformation de l'image", "order": 10, "max_active": 1, "requires_capture": true },
+    "filter": { "label": "Filtre de l'image", "order": 20, "max_active": 3, "requires_capture": true },
+    "overlay": { "label": "Calque", "order": 90, "max_active": 4, "requires_capture": false }
+  },
+  "effects": [
+    {
+      "id": "flip",
+      "version": 1,
+      "label": "Écran retourné",
+      "description": "L'image du jeu tourne à 180°. La souris et le clavier restent normaux.",
+      "family": "orientation",
+      "slot": "transform",
+      "internal": false,
+      "on_conflict": "queue",
+      "gpu": { "primitive": "transform", "cost": "low", "passes": 1 },
+      "duration": { "default_ms": 10000 },
+      "params": [
+        { "id": "angle", "type": "number", "unit": "deg", "min": -180, "max": 180, "default": 180, "animatable": true, "neutral": 0, "exposed": false },
+        { "id": "fill", "type": "enum", "values": ["mirror", "black", "cover"], "default": "mirror", "label": "Coins pendant la rotation", "help": "mirror : prolongement flou et sombre de l'image tournée ; black : noir ; cover : l'image grossit pour couvrir l'écran." }
+      ],
+      "variants": [{ "id": "rotate180", "label": "180°", "params": { "angle": 180 } }],
+      "transitions": {
+        "in": { "kind": "ramp", "duration_ms": 550, "curve": "ease_in_out_sine", "kinds": ["ramp", "cut"] },
+        "out": { "kind": "ramp", "duration_ms": 550, "curve": "ease_in_out_sine", "kinds": ["ramp", "cut"] }
+      },
+      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "capture_lost", "error"]
+    },
+    {
+      "id": "diag.tint",
+      "version": 1,
+      "label": "Teinte de diagnostic",
+      "description": "Filtre de test : teinte l'image capturée (contrôle d'enchaînement des passes).",
+      "family": "diagnostic",
+      "slot": "filter",
+      "internal": true,
+      "on_conflict": "reject",
+      "gpu": { "primitive": "shader", "cost": "low", "passes": 1 },
+      "duration": { "default_ms": 5000 },
+      "params": [
+        { "id": "strength", "type": "number", "min": 0, "max": 1, "default": 0.5, "animatable": true, "neutral": 0 },
+        { "id": "color", "type": "color", "default": "#00ffff" }
+      ],
+      "variants": [],
+      "transitions": {
+        "in": { "kind": "ramp", "duration_ms": 200, "curve": "linear", "kinds": ["ramp", "cut"] },
+        "out": { "kind": "ramp", "duration_ms": 200, "curve": "linear", "kinds": ["ramp", "cut"] }
+      },
+      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "capture_lost", "error"]
+    },
+    {
+      "id": "diag.marker",
+      "version": 1,
+      "label": "Repère de diagnostic",
+      "description": "Calque de test sans capture : un cadre et un disque (contrôle de la couche de calques).",
+      "family": "diagnostic",
+      "slot": "overlay",
+      "internal": true,
+      "on_conflict": "reject",
+      "gpu": { "primitive": "overlay", "cost": "low", "passes": 1 },
+      "duration": { "default_ms": 5000 },
+      "params": [
+        { "id": "opacity", "type": "number", "min": 0, "max": 1, "default": 1, "animatable": true, "neutral": 0 },
+        { "id": "x", "type": "number", "min": 0, "max": 1, "default": 0.5 },
+        { "id": "y", "type": "number", "min": 0, "max": 1, "default": 0.5 },
+        { "id": "color", "type": "color", "default": "#ff00ff" },
+        { "id": "text", "type": "string", "max_length": 40, "default": "CHAOS" }
+      ],
+      "variants": [],
+      "transitions": {
+        "in": { "kind": "ramp", "duration_ms": 200, "curve": "ease_out_cubic", "kinds": ["ramp", "cut"] },
+        "out": { "kind": "ramp", "duration_ms": 200, "curve": "ease_in_cubic", "kinds": ["ramp", "cut"] }
+      },
+      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "error"]
+    }
+  ]
+}
