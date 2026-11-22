@@ -183,15 +183,15 @@ d'Antoni du 22/11 : modernisation maîtrisée + intégration complète dans Stud
 proportions, animations, lisibilité et qualité technique modernisées ; tout se règle dans Studio, avec
 prévisualisation et application en direct aux sources OBS). Détail : [CHATBOX.md](CHATBOX.md) § 4.
 
-| Étape                                                                          | État                                                                    |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Reconnaissance (OBS, CSS, JavaScript, comparatif, préservation)                | **faite** (20/11) : rapport privé, voir [CHATBOX.md](CHATBOX.md) § 1    |
-| Présentation des trois chatbox (paramètres exacts, critiques, options)         | **faite** (22/11) : présentation privée, [CHATBOX.md](CHATBOX.md) § 1   |
-| Direction de conception                                                        | **décidée** (22/11) : [CHATBOX.md](CHATBOX.md) § 4                      |
+| Étape                                                                          | État                                                                            |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Reconnaissance (OBS, CSS, JavaScript, comparatif, préservation)                | **faite** (20/11) : rapport privé, voir [CHATBOX.md](CHATBOX.md) § 1            |
+| Présentation des trois chatbox (paramètres exacts, critiques, options)         | **faite** (22/11) : présentation privée, [CHATBOX.md](CHATBOX.md) § 1           |
+| Direction de conception                                                        | **décidée** (22/11) : [CHATBOX.md](CHATBOX.md) § 4                              |
 | Architecture (bot → Core → Studio → pages OBS, sans nouvelle connexion Twitch) | **validée** (22/11) ; spécification complète ([CHATBOX.md](CHATBOX.md) § 5 à 9) |
-| Jalon 1 : prototype Lab et démonstration                                       | **en cours** ([CHATBOX.md](CHATBOX.md) § 10)                            |
-| Jalons 2 et 3 : vrai chat dans le Lab, prêt pour le live                       | à faire                                                                 |
-| Production et remplacement dans OBS, scène par scène                           | sur GO d'Antoni ; les sources StreamElements restent intactes jusque-là |
+| Jalon 1 : prototype Lab et démonstration                                       | **en cours** ([CHATBOX.md](CHATBOX.md) § 10)                                    |
+| Jalons 2 et 3 : vrai chat dans le Lab, prêt pour le live                       | à faire                                                                         |
+| Production et remplacement dans OBS, scène par scène                           | sur GO d'Antoni ; les sources StreamElements restent intactes jusque-là         |
 
 ## 3. Héritage et dettes
 
