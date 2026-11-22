@@ -22,9 +22,9 @@ ZIP PRÊT À PUBLIER, PAS téléversé (aucune preuve) : raptoru-live-PRODUCTION
 SHA-256 1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039 (inventaire 2411c992b26b validé par Antoni).
 L'extension publique NE contient PAS le Casino ; aucune partie réelle avec de vrais viewers. Ne pas dire « Casino
 disponible pour tous ». Gestes restants : Antoni (Hosted Test, revue Twitch) — § 5.4.
-CHATBOX RAPTORU : terminée en Lab le 23/11 (vrai chat bot → Core → Studio, catalogue des commandes, éditeur simplifié),
-branche locale feat/chatbox-lab non poussée ; installation pas à pas sur GO (docs/CHATBOX.md § 12). Sources OBS,
-StreamElements, Production : sans GO, rien. Chantier suivant : KO Overlay (contexte à demander à Antoni).
+CHATBOX RAPTORU : FUSIONNÉE le 23/11 (PR #118, main df3adb5e, CI verte), NON DÉPLOYÉE : mise en service sur GO
+d'Antoni (docs/CHATBOX.md § 12 : Core, bot CHATBOX_RELAY=true, Studio, 5 sources OBS masquées, essai en live). Sources
+OBS, StreamElements, Production : sans GO, rien. Chantier suivant : KO Overlay (contexte à demander à Antoni).
 Niveaux : restauration WizeBot du 20/11 définitive (NE JAMAIS LA REJOUER).
 Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Méthode : docs/AGENT_WORKFLOW.md § 0.
 ```
@@ -174,9 +174,9 @@ Les états ne se confondent pas (détail : [ROADMAP.md](ROADMAP.md) § 0.4) :
 
 1. Lire [CHATBOX.md](CHATBOX.md), puis la présentation et le rapport privés qu'il cite (§ 1) ; ne refaire ni la
    reconnaissance ni la présentation. Direction décidée par Antoni le 22/11 (CHATBOX.md § 4).
-2. Terminé en Lab le 23/11 (CHATBOX.md § 10.1, branche locale `feat/chatbox-lab`, worktree `agent`, non poussée).
-   Suite : la procédure d'installation (CHATBOX.md § 12), chaque étape sur GO d'Antoni. Ensuite : KO Overlay
-   (ROADMAP § 0.2, contexte à demander).
+2. Fusionnée le 23/11 (PR #118, `main` `df3adb5e`, CI verte), **non déployée**. Suite : la mise en service
+   (CHATBOX.md § 12), sur GO regroupé d'Antoni ; l'installateur Studio est construit sans être publié. Ensuite : KO
+   Overlay (ROADMAP § 0.2, contexte à demander).
 3. Aucune source OBS active, widget StreamElements ni Production modifiés sans autorisation explicite d'Antoni.
 
 **B. Casino jusqu'au public (gestes d'Antoni, en parallèle)**. Le Hosted Test ne permet **pas** un essai avec de vrais
