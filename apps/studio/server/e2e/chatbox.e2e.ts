@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { type Browser, expect, test, type Page } from '@playwright/test';
 
 // Chatbox Raptoru end to end (docs/CHATBOX.md): the OBS page Studio serves, fed by the simulator. Zero-width 7TV stacks,
 // roles (the Aouh case), filtered messages hidden on stream but explained in the preview, moderation, settings and
@@ -59,6 +59,21 @@ async function openPage(page: Page, token: string, q: Record<string, string>) {
   );
 }
 
+/** Every page a test opens is closed after it: an OBS page left open would keep animating and streaming for the
+ *  rest of the run (and slow the next specs down). */
+const pages: Page[] = [];
+const open = async (
+  browser: Browser,
+  opts?: Parameters<Browser['newPage']>[0],
+) => {
+  const p = await browser.newPage(opts);
+  pages.push(p);
+  return p;
+};
+test.afterEach(async () => {
+  await Promise.all(pages.splice(0).map((p) => p.context().close()));
+});
+
 const send = (page: Page, id: string) =>
   api<{ id: string }>(page, '/demo', { case: id });
 
@@ -66,19 +81,19 @@ test('Chatbox: the OBS page renders, filters, moderates and follows Studio witho
   browser,
 }) => {
   test.setTimeout(120_000);
-  const admin = await browser.newPage();
+  const admin = await open(browser);
   const view = await api<View>(admin, '');
   const token = view.demo.token;
   await api(admin, '/demo', { clear: true });
 
-  const live = await browser.newPage({
+  const live = await open(browser, {
     viewport: { width: 1920, height: 1080 },
   });
   await openPage(live, token, {
     profile: 'just-chatting',
     scene: 'just-chatting',
   });
-  const obs = await browser.newPage({
+  const obs = await open(browser, {
     viewport: { width: 1920, height: 1080 },
   });
   await openPage(obs, token, {
@@ -86,7 +101,7 @@ test('Chatbox: the OBS page renders, filters, moderates and follows Studio witho
     scene: 'just-chatting',
     feed: 'demo',
   });
-  const preview = await browser.newPage({
+  const preview = await open(browser, {
     viewport: { width: 1920, height: 1080 },
   });
   await openPage(preview, token, {
@@ -188,7 +203,7 @@ test('Chatbox: the OBS page renders, filters, moderates and follows Studio witho
   );
   react.presence.seconds = 1;
   await api(admin, '/profile', { profile: 'react', settings: react });
-  const ps5 = await browser.newPage({
+  const ps5 = await open(browser, {
     viewport: { width: 1920, height: 1080 },
   });
   await openPage(ps5, token, { profile: 'react', scene: 'ps5', feed: 'demo' });
@@ -245,7 +260,7 @@ test('Chatbox: the real chain — the Lab chat reaches the live OBS page through
   browser,
 }) => {
   test.setTimeout(120_000);
-  const admin = await browser.newPage();
+  const admin = await open(browser);
   const view = await api<
     View & {
       live: { linked: boolean };
@@ -271,7 +286,7 @@ test('Chatbox: the real chain — the Lab chat reaches the live OBS page through
   const solde = view.commands.find((c) => c.words.includes('solde'))!;
   expect(solde.words).toEqual(['solde', 'balance', 'compte']);
 
-  const live = await browser.newPage({
+  const live = await open(browser, {
     viewport: { width: 1920, height: 1080 },
   });
   await openPage(live, view.demo.token, {
@@ -306,11 +321,11 @@ test('Chatbox: the real chain — the Lab chat reaches the live OBS page through
 test('Chatbox: React and Dessin — a new message pushes the stack, never overlaps it (arrival, burst, deletion)', async ({
   browser,
 }) => {
-  const admin = await browser.newPage();
+  const admin = await open(browser);
   const view = await api<View>(admin, '');
   await api(admin, '/demo', { clear: true });
   for (const profile of ['react', 'dessin']) {
-    const page = await browser.newPage({
+    const page = await open(browser, {
       viewport: { width: 1920, height: 1080 },
     });
     await openPage(page, view.demo.token, { profile, feed: 'demo' });
@@ -335,6 +350,5 @@ test('Chatbox: React and Dessin — a new message pushes the stack, never overla
     await api(admin, '/demo', { delete: first.id });
     expect(await watch, `${profile}: overlap in px`).toBeLessThanOrEqual(1);
     await api(admin, '/demo', { clear: true });
-    await page.close();
   }
 });
