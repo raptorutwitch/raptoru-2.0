@@ -162,6 +162,7 @@ function demoControls() {
   $('d-bj').hidden = game !== 'blackjack';
   $('d-bots').hidden = game !== 'blackjack';
   $('d-multi').hidden = game !== 'blackjack';
+  $('d-sub').hidden = game !== 'blackjack';
 }
 function applyDemo() {
   const demo = $('frame').contentWindow?.__casinoDemo;
@@ -171,6 +172,7 @@ function applyDemo() {
   demo.next('roulette', $('next-roulette').value);
   demo.next('blackjack', $('next-bj').value);
   demo.bots($('bots').value);
+  demo.sub?.($('sub').value);
   return true;
 }
 $('frame').addEventListener('load', () => {
@@ -180,7 +182,7 @@ $('frame').addEventListener('load', () => {
     if (mode !== 'full' || applyDemo() || ++k > 50) window.clearInterval(t);
   }, 100);
 });
-for (const id of ['next-slot', 'next-roulette', 'next-bj', 'bots'])
+for (const id of ['next-slot', 'next-roulette', 'next-bj', 'bots', 'sub'])
   $(id).addEventListener('change', applyDemo);
 // Plusieurs tables, leurs joueurs fictifs, leurs réactions (la politique et le magasin de réactions du Core).
 const demo = () => $('frame').contentWindow?.__casinoDemo;

@@ -24,8 +24,10 @@ import {
 import * as Lobby from '../../../../core-api/src/casino/blackjack/lobby.ts';
 import {
   REACTION_IDS,
+  SUB_REACTION_IDS,
   TableReactions,
   isReactionId,
+  isSubReactionId,
 } from '../../../../core-api/src/casino/blackjack/reactions.ts';
 
 const ME = '42'; // the demo session's twitch_user_id (shared/demo-data.js)
@@ -577,7 +579,23 @@ function sweep(now = Date.now()) {
   return gone.length;
 }
 /** A simulated player reacts (its own pace applies: reactions.ts). */
-function botReact(t, s, r = REACTION_IDS[rng.int(REACTION_IDS.length)]) {
+// What the simulated players send: the reactions an up-to-date screen offers (both pages: they are subscribers).
+const BOT_IDS = [
+  'r1',
+  'r8',
+  'r9',
+  'r2',
+  'r10',
+  'r3',
+  'r11',
+  'r12',
+  'r13',
+  'r7',
+  ...SUB_REACTION_IDS,
+];
+// The demo viewer's subscription as the Core would know it (the bench's « Abonnement » control): yes | no | unknown.
+let subStatus = 'yes';
+function botReact(t, s, r = BOT_IDS[rng.int(BOT_IDS.length)]) {
   try {
     reactions.push(t.id, s.user, t.seats.indexOf(s), r, Date.now());
     wake(t);
@@ -700,7 +718,8 @@ async function bjState(query) {
     reactions: {
       on: LIMITS.bj_reactions,
       dealer: LIMITS.bj_dealer_reactions,
-      ids: [...REACTION_IDS],
+      ids: [...REACTION_IDS, ...(subStatus === 'yes' ? SUB_REACTION_IDS : [])],
+      sub: subStatus,
       ...reactions.view(t.id, Date.now()),
     },
   };
@@ -717,6 +736,12 @@ function bj(action, body) {
   if (action === 'react') {
     if (!isReactionId(body?.r)) throw refuse('bad_reaction', {}, 400);
     if (!t) throw refuse('not_seated');
+    if (isSubReactionId(body.r) && subStatus !== 'yes')
+      throw refuse(
+        subStatus === 'unknown' ? 'sub_unknown' : 'sub_only',
+        {},
+        403,
+      );
     try {
       const n = reactions.push(t.id, ME, BJ.seatOf(t, ME), body.r, Date.now());
       wake(t);
@@ -903,7 +928,13 @@ window.__casinoDemo = {
   table(n = 3) {
     return otherTable(Math.max(0, Math.min(10, Number(n) || 0))).no;
   },
-  /** A simulated player at the viewer's table reacts now (`r`: r1 … r6, else at random). */
+  /** The demo viewer's subscription (the subscribers' reactions): 'yes' | 'no' | 'unknown'. */
+  sub(v) {
+    subStatus = ['yes', 'no', 'unknown'].includes(v) ? v : 'yes';
+    const t = seatedAt(ME);
+    if (t) wake(t);
+  },
+  /** A simulated player at the viewer's table reacts now (`r`: a reaction id, else at random). */
   react(r) {
     const t = seatedAt(ME);
     const bots = t?.seats.filter((s) => s && isBot(s.user)) ?? [];

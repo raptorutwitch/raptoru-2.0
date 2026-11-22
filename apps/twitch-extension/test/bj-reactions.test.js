@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   REACTIONS,
+  PAGES,
   DEALER,
 } from '../extension/assets/casino/reactions/reactions.js';
 import {
@@ -36,30 +37,83 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ASSETS = join(HERE, '../extension/assets/casino/reactions');
 
 describe('reactions manifest', () => {
-  it('seven ids in Antoni’s order (r1 … r7, the ones the Core accepts), each with a packaged picture, a name and a fallback', () => {
-    expect(REACTIONS.map((r) => [r.id, r.label])).toEqual([
+  it('10 classic reactions in Antoni’s order of 22/11 (ptn last), each with a packaged picture, a name and a fallback', () => {
+    const page = (n) =>
+      PAGES[n - 1].map((id) => REACTIONS.find((r) => r.id === id));
+    expect(page(1).map((r) => [r.id, r.label])).toEqual([
       ['r1', 'Sourire'],
-      ['r2', 'Visage attendri'],
+      ['r8', 'Sourire avec sueur'],
+      ['r9', 'Pleurs'],
+      ['r2', 'Visage rougissant'],
+      ['r10', 'Salut'],
       ['r3', 'Colère'],
-      ['r4', 'Lunettes de soleil'],
-      ['r5', 'Sourire en coin'],
-      ['r6', 'ICANT'],
+      ['r11', 'Câlin'],
+      ['r12', 'Surprise'],
+      ['r13', 'Crâne'],
       ['r7', 'ptn'],
     ]);
+    // The nine emojis are Discord’s: the bundled Twemoji (licensed CC-BY 4.0, attribution in assets/twemoji).
+    expect(
+      page(1)
+        .slice(0, 9)
+        .map((r) => r.src.match(/svg\/(\w+)\.svg$/)?.[1]),
+    ).toEqual([
+      '1f642',
+      '1f605',
+      '1f62d',
+      '1f633',
+      '1fae1',
+      '1f621',
+      '1f917',
+      '1f62e',
+      '1f480',
+    ]);
+    // The subscribers’ page: Antoni’s 9 emotes + ptn (on both pages), 128 × 128 PNGs in the package.
+    expect(page(2).map((r) => r.id)).toEqual([
+      's1',
+      's2',
+      's3',
+      's4',
+      's5',
+      's6',
+      's7',
+      's8',
+      's9',
+      'r7',
+    ]);
+    for (const r of page(2).slice(0, 9)) {
+      const png = readFileSync(join(ASSETS, r.src));
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([128, 128]);
+      expect(png.length).toBeLessThan(50_000);
+    }
     for (const r of REACTIONS) {
       expect(r.src).toMatch(/^[\w./-]+\.(svg|png|gif|webp)$/);
       expect(existsSync(join(ASSETS, r.src))).toBe(true); // inside the extension package, never a remote URL
       expect(r.glyph).toBeTruthy();
     }
-    // The five Discord emojis are the bundled Twemoji (licensed CC-BY 4.0, attribution in assets/twemoji).
-    expect(
-      REACTIONS.slice(0, 5).every((r) =>
-        r.src.startsWith('../../twemoji/svg/'),
-      ),
-    ).toBe(true);
     expect(existsSync(join(ASSETS, '../../twemoji/license-graphics.txt'))).toBe(
       true,
     );
+  });
+
+  it('exactly the ids the Core accepts — the earlier ones (r4–r6) still shown when they arrive, never reused', () => {
+    const core = readFileSync(
+      join(HERE, '../../core-api/src/casino/blackjack/reactions.ts'),
+      'utf8',
+    );
+    const list = (name) =>
+      [
+        ...core
+          .slice(core.indexOf(name))
+          .split('] as const')[0]
+          .matchAll(/'(\w+)'/g),
+      ].map((m) => m[1]);
+    expect(REACTIONS.map((r) => r.id).sort()).toEqual(
+      [...list('REACTION_IDS = ['), ...list('SUB_REACTION_IDS = [')].sort(),
+    );
+    expect(
+      REACTIONS.filter((r) => !PAGES.flat().includes(r.id)).map((r) => r.id),
+    ).toEqual(['r4', 'r5', 'r6']);
   });
 
   it('the animated emote is the original GIF (every frame kept, transparent), never a still', () => {
