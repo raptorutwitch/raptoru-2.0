@@ -199,8 +199,10 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
   - ordonnanceur et transitions ;
   - capture partagée, rendu par passes et calques ;
   - gardien et arrêt d'urgence Ctrl+Maj+F11 ;
+  - couche Entrées : le retournement vise l'écran entier, Windows retourne l'affichage (vrai curseur, souris inversée,
+    clic juste) ([chaos/COUCHE_ENTREES.md](chaos/COUCHE_ENTREES.md)) ;
   - page Studio › Chaos et banc `npm run chaos:lab`.
-- **Tests** : 21 unitaires, 39 d'intégration, 10 Studio et 8 de bout en bout, tous verts. Un seul effet réel : le
+- **Tests** : 22 unitaires, 51 d'intégration, 10 Studio et 11 de bout en bout, tous verts. Un seul effet réel : le
   retournement.
 - **Prochaine étape** : test réel d'Antoni ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2), puis le lot 2
   (module payant, Core).

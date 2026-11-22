@@ -164,8 +164,22 @@ describe('API locale Studio › Chaos', () => {
       registry: { schema: 'raptoru.chaos.registry' },
     });
     expect((await call('/targets')).body).toMatchObject({
+      monitors: [{ device: String.raw`\\.\DISPLAY1`, primary: true }],
       windows: [{ hwnd: 42 }],
     });
+    const screen = await call('/test', {
+      effect: 'flip',
+      target: { kind: 'monitor', device: String.raw`\\.\DISPLAY2` },
+    });
+    expect(screen.status).toBe(200);
+    expect(screen.body).toMatchObject({
+      target: { kind: 'monitor', device: String.raw`\\.\DISPLAY2` },
+    });
+    const badScreen = await call('/test', {
+      effect: 'flip',
+      target: { kind: 'monitor', device: String.raw`C:\Windows` },
+    });
+    expect(badScreen.status).toBe(400);
     const ok = await call('/test', {
       effect: 'flip',
       target: { kind: 'window', hwnd: 42 },
@@ -222,7 +236,9 @@ describe('registre unique des effets', () => {
     expect(reg.effects.find((e) => e.id === 'flip')).toMatchObject({
       internal: false,
       slot: 'transform',
+      input: 'invert_xy',
     });
+    expect(reg.input_effects?.invert_xy.scope).toBe('monitor');
   });
 });
 
@@ -246,9 +262,15 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
       expect(d.implemented.sort()).toEqual(reg.effects.map((e) => e.id).sort());
       expect(await c.call('config.get')).toMatchObject({
         schema: 'raptoru.chaos.config',
-        version: 2,
+        version: 3,
+        engine: { default_mode: 'monitor' },
       });
-      expect(await c.call('targets.list')).toHaveProperty('windows');
+      const t = await c.call<{ monitors: { device: string }[] }>(
+        'targets.list',
+      );
+      expect(t).toHaveProperty('windows');
+      expect(t.monitors.length).toBeGreaterThan(0);
+      expect(t.monitors[0]!.device).toMatch(/^\\\\\.\\DISPLAY\d+$/);
       await c.stop();
       expect(c.state.status).toBe('stopped');
     }, 30_000);

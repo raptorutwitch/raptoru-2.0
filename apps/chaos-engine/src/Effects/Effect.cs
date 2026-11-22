@@ -47,6 +47,9 @@ namespace Raptoru.Chaos
 
     enum InstanceState { Created, Prepared, Running, Stopped, Disposed, Failed }
 
+    /// Couche Entrées d'une instance : aucune, à appliquer (après l'entrée animée), appliquée, rétablie.
+    enum InputPhase { None, Pending, Applied, Released }
+
     sealed class EffectInstance
     {
         public readonly Activation A;
@@ -54,6 +57,12 @@ namespace Raptoru.Chaos
         public InstanceState State = InstanceState.Created;
         public string Error;
         public long VisibleSince = -1;
+        // Couche Entrées (écran entier) : pendant l'effet, Windows tient l'écran retourné et le calque se retire
+        // (HandedOff : ni fenêtre ni capture) ; il revient juste avant la sortie pour le retour animé.
+        public InputPhase Input;
+        public string InputDevice;
+        public bool HoldsCapture, HandedOff;
+        public long ExitPrepAt = -1;
         public EffectInstance(Activation a, Effect impl) { A = a; Impl = impl; }
 
         /// Exécute une étape du cycle de vie ; une exception rend l'instance Failed sans rien propager.

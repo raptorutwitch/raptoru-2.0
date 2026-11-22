@@ -90,6 +90,8 @@ namespace Raptoru.Chaos
                 Eq(180.0, (double)f.Param("angle").Default, "angle par défaut");
                 True(f.Param("angle").Animatable && !f.Param("angle").Exposed, "angle animable non exposé");
                 True(r.Get("diag.marker").Internal && !r.Get("diag.marker").RequiresCapture, "repère interne sans capture");
+                Eq("invert_xy", f.Input, "le retournement inverse aussi la souris (couche Entrées)");
+                True(r.InputEffects.ContainsKey("invert_xy") && r.Get("diag.tint").Input == null, "transformation d'entrée déclarée, absente des diagnostics");
             });
             Case("registre invalide refusé (doublon, emplacement, défaut hors bornes, stop_all absent, schéma)", () =>
             {
@@ -108,6 +110,8 @@ namespace Raptoru.Chaos
                     J.Arr(fx(l, "flip"), "params").Cast<Dictionary<string, object>>().First(p => (string)p["id"] == "angle")["default"] = 999)));
                 Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => fx(l, "flip")["stop_conditions"] = new object[] { "duration" })));
                 Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => r["schema"] = "autre")));
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => fx(l, "flip")["input"] = "clavier_inverse")));
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => J.Obj(r, "input_effects")["souris_folle"] = J.Map("label", "x"))));
                 Registry.Parse(mutate((r, l) => { })); // le document non modifié reste valide
             });
 
@@ -191,6 +195,17 @@ namespace Raptoru.Chaos
                 var c = new Animator(new TransitionPlan { Kind = "cut" }, new TransitionPlan { Kind = "cut" });
                 c.Start(0); Near(1, c.Presence(0), 1e-9, "coupure : entier tout de suite"); c.BeginExit(5); True(c.Done(5), "coupure : fini tout de suite");
             });
+            Case("animateur : sortie retenue (écran rendu par Windows d'abord), puis retour complet sans saut", () =>
+            {
+                var a = new Animator(new TransitionPlan { Kind = "ramp", DurationMs = 400, Curve = "linear" }, new TransitionPlan { Kind = "ramp", DurationMs = 400, Curve = "linear" });
+                a.Start(0);
+                a.BeginExit(1000);
+                for (long t = 1000; t <= 1300; t += 50) a.HoldExit(t);
+                Near(1, a.Presence(1300), 1e-9, "retenue : présence entière");
+                True(!a.Done(1350), "pas fini pendant la retenue");
+                Near(0.5, a.Presence(1500), 1e-9, "retour animé depuis la fin de la retenue");
+                True(a.Done(1701), "retour complet");
+            });
 
             // ---------- Configuration ----------
             Case("configuration : validation des sections et préréglages", () =>
@@ -219,7 +234,12 @@ namespace Raptoru.Chaos
                     True(c2.Safety.SafeMode && c2.Safety.MaxDurationMs == 20000 && (string)c2.GetPreset("flip", "default").Params["fill"] == "cover", "relu à l'identique");
                     File.WriteAllText(p, "{\"version\":1,\"follow_foreground\":false,\"safe_mode\":true,\"max_duration_ms\":15000}");
                     var c3 = new ConfigStore(reg, p); c3.Load();
-                    True(!c3.Engine.FollowForeground && c3.Safety.SafeMode && c3.Safety.MaxDurationMs == 15000, "migration v1 → v2");
+                    True(!c3.Engine.FollowForeground && c3.Safety.SafeMode && c3.Safety.MaxDurationMs == 15000, "migration v1 → v3");
+                    Eq("monitor", c3.Engine.DefaultMode, "migration : écran entier par défaut");
+                    Eq("monitor", new ConfigStore(reg, null).Engine.DefaultMode, "défaut : écran entier");
+                    File.WriteAllText(p, "{\"schema\":\"raptoru.chaos.config\",\"version\":2,\"engine\":{\"default_mode\":\"window\",\"capture_linger_ms\":4000}}");
+                    var c6 = new ConfigStore(reg, p); c6.Load();
+                    True(c6.Engine.DefaultMode == "monitor" && c6.Engine.CaptureLingerMs == 4000 && File.Exists(p + ".v2.bak"), "migration v2 → v3 : écran entier, le reste conservé");
                     True(File.Exists(p + ".v1.bak"), "sauvegarde de l'ancienne version");
                     File.WriteAllText(p, "{ pas du json");
                     var c4 = new ConfigStore(reg, p); c4.Load();

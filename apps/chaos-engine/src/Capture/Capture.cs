@@ -71,14 +71,14 @@ namespace Raptoru.Chaos
         public long Dropped { get { return dropped; } }
         public long LastArrivalQpc { get { return Interlocked.Read(ref lastArrival); } }
 
-        public WgcCaptureSource(Gpu gpu, AutoResetEvent frameEvt, string key, IntPtr hwnd, bool monitor)
+        public WgcCaptureSource(Gpu gpu, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon)
         {
             this.gpu = gpu; this.frameEvt = frameEvt; Key = key;
             if (!GraphicsCaptureSession.IsSupported()) throw new CaptureError("capture_unsupported", "Windows.Graphics.Capture indisponible");
             var interop = (IGraphicsCaptureItemInterop)WindowsRuntimeMarshal.GetActivationFactory(typeof(GraphicsCaptureItem));
             Guid iid = Iid.GraphicsCaptureItem;
             IntPtr p;
-            try { p = monitor ? interop.CreateForMonitor(N.MonitorFromWindow(hwnd, 2), ref iid) : interop.CreateForWindow(hwnd, ref iid); }
+            try { p = hmon != IntPtr.Zero ? interop.CreateForMonitor(hmon, ref iid) : interop.CreateForWindow(hwnd, ref iid); }
             catch (COMException e) { throw new CaptureError("capture_denied", "Windows refuse la capture : 0x" + e.ErrorCode.ToString("X8")); }
             item = (GraphicsCaptureItem)Marshal.GetObjectForIUnknown(p);
             Marshal.Release(p);
@@ -190,13 +190,13 @@ namespace Raptoru.Chaos
         public int Count { get { return entries.Count; } }
         public IEnumerable<ICaptureSource> Sources { get { return entries.Values.Select(e => e.Source); } }
 
-        /// Ouvre (ou réutilise) la capture d'une cible. hwnd : la fenêtre (mode D) ou une fenêtre de l'écran visé (mode C).
-        public ICaptureSource Acquire(string key, IntPtr hwnd, bool monitor)
+        /// Ouvre (ou réutilise) la capture d'une cible : la fenêtre hwnd (mode D) ou l'écran hmon (mode C, hmon ≠ 0).
+        public ICaptureSource Acquire(string key, IntPtr hwnd, IntPtr hmon)
         {
             Entry e;
             if (entries.TryGetValue(key, out e) && !e.Source.Lost) { e.Refs++; Reused++; return e.Source; }
             if (e != null) { e.Source.Dispose(); entries.Remove(key); }
-            e = new Entry { Source = new WgcCaptureSource(gpu, frameEvt, key, hwnd, monitor), Refs = 1 };
+            e = new Entry { Source = new WgcCaptureSource(gpu, frameEvt, key, hwnd, hmon), Refs = 1 };
             entries[key] = e;
             Opened++;
             return e.Source;

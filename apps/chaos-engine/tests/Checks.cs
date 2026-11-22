@@ -1,7 +1,10 @@
 // Contrôles d'intégration du moteur Chaos (protocole v2, vrai processus, vrai GPU, vrai écran).
 // Les contrôles visuels utilisent une mire 400×240 jamais activée, sur l'écran secondaire s'il existe, et lisent les
 // pixels réellement composés par Windows (BitBlt CAPTUREBLT). Aucun plein écran, aucune entrée simulée.
-// Sortie : « ok » / « KO » par point, puis le total. Option : --quick (sans la mesure de 6 s).
+// L'écran entier (couche Entrées) se contrôle sur l'écran secondaire seulement : Windows le retourne quelques secondes,
+// l'orientation est relue par EnumDisplaySettings (une capture d'écran GDI le montre toujours à l'endroit).
+// Sortie : « ok » / « KO » par point, puis le total. Options : --quick (sans la mesure de 6 s), --no-screen (sans
+// retourner l'écran secondaire), --screen-only (seulement l'écran entier).
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -103,6 +106,7 @@ namespace Raptoru.Chaos
         [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint rop);
         [DllImport("ntdll.dll")] static extern int NtSuspendProcess(IntPtr h);
         [DllImport("ntdll.dll")] static extern int NtResumeProcess(IntPtr h);
+        [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr h, out uint code);
 
         static void Check(bool cond, string what, string detail)
         {
@@ -123,8 +127,8 @@ namespace Raptoru.Chaos
             Console.WriteLine("Contrôles du moteur Chaos — " + exe);
             try
             {
-                Protocol();
-                Visual(!args.Contains("--quick"));
+                if (!args.Contains("--screen-only")) { Protocol(); Visual(!args.Contains("--quick")); }
+                if (!args.Contains("--no-screen")) WholeScreen();
             }
             finally
             {
@@ -179,7 +183,8 @@ namespace Raptoru.Chaos
             var diag = e.Result("diagnostics");
             var g = J.Obj(diag, "guardian");
             int gpid = (int)J.Num(g, "pid", 0);
-            Check(gpid > 0, "gardien lancé", "pid " + gpid + ", raccourci " + S(g, "hotkey"));
+            int guardians = Process.GetProcessesByName("ChaosEngine").Count(p => { try { return p.Id != e.P.Id && p.StartTime >= e.P.StartTime; } catch (Exception) { return false; } });
+            Check(gpid > 0 && guardians == 1, "un seul gardien lancé", "pid " + gpid + ", raccourci " + S(g, "hotkey") + (guardians == 1 ? "" : ", " + guardians + " gardiens"));
             e.CloseStdin();
             bool exited = e.P.WaitForExit(2000);
             Thread.Sleep(300);
@@ -298,6 +303,7 @@ namespace Raptoru.Chaos
             var hit = N.GetAncestor(N.WindowFromPoint(new POINT { X = where.X + where.Width / 2, Y = where.Y + where.Height / 4 }), N.GA_ROOTOWNER);
             Check(hit == targetHwnd, "un clic traverse l'effet jusqu'à la fenêtre", "");
             Check(N.GetForegroundWindow() == fg, "aucun vol de focus", "");
+            Check(Screen.AllScreens.All(x => N.DisplayOrientation(x.DeviceName) == 0), "mode fenêtre : visuel seul, aucun écran retourné", "");
             var dup = Request(e, "flip-1", "flip");
             var status = e.Result("status");
             Check(J.Bool(dup, "ok", false) && J.Arr(status, "active").Count == 1, "demande rejouée (même request_id) : aucun doublon", "");
@@ -430,6 +436,143 @@ namespace Raptoru.Chaos
             Check(Num(diag, "surfaces_open") == 0 && Num(diag, "captures_open") == 0 && Num(diag, "pool_targets") == 0,
                 "au repos : aucune fenêtre, aucune capture, aucune cible GPU", "vidéo " + S(diag, "vram_mb") + " Mo");
             e.Kill();
+        }
+
+        // ---------- Écran entier : Windows retourne l'affichage (couche Entrées) ----------
+        static long WaitOrientation(string dev, int want, int ms)
+        {
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < ms) { if (N.DisplayOrientation(dev) == want) return sw.ElapsedMilliseconds; Thread.Sleep(2); }
+            return -1;
+        }
+        static Dictionary<string, object> ScreenRequest(EngineProc e, string id, string dev, Dictionary<string, object> extra = null)
+        {
+            var b = J.Map("request_id", id, "effect", "flip", "source", J.Map("kind", "test"), "target", J.Map("kind", "monitor", "device", dev));
+            if (extra != null) foreach (var kv in extra) b[kv.Key] = kv.Value;
+            return e.Call("effect.request", b);
+        }
+        static readonly Dictionary<string, object> Cuts = J.Map("transition", J.Map("in", J.Map("kind", "cut"), "out", J.Map("kind", "cut")));
+        static int Held(EngineProc e) { return J.Arr(J.Obj(e.Result("status"), "input"), "active").Count; }
+
+        static void WholeScreen()
+        {
+            var scr = Screen.AllScreens.FirstOrDefault(x => !x.Primary);
+            if (scr == null) { Info("un seul écran : retournement de l'écran entier non contrôlé (jamais sur l'écran principal)"); return; }
+            string dev = scr.DeviceName;
+            Console.WriteLine("Écran entier (" + dev + ", secondaire) : Windows retourne l'affichage, vrai curseur, souris inversée");
+            if (N.DisplayOrientation(dev) != 0) { Check(false, "écran secondaire à l'endroit avant le contrôle", "orientation " + N.DisplayOrientation(dev)); return; }
+            EngineProc e = null;
+            try
+            {
+                e = Engine();
+                if (e == null) return;
+                var mons = J.Arr(e.Result("targets.list"), "monitors").Cast<Dictionary<string, object>>().ToList();
+                Check(mons.Any(m => S(m, "device") == dev) && mons.Count == Screen.AllScreens.Length, "targets.list : les écrans sont proposés",
+                    string.Join(" · ", mons.Select(m => S(m, "label"))));
+                Check(S(J.Obj(e.Result("config.get"), "engine"), "default_mode") == "monitor", "cible par défaut : l'écran entier", "");
+
+                // 1. Cycle complet avec transitions : rotation animée → Windows retourne l'écran → retour animé.
+                var resp = ScreenRequest(e, "scr-1", dev, J.Map("duration_ms", 2500));
+                var view = J.Obj(resp, "result");
+                Check(S(J.Obj(view, "target"), "mode") == "C" && S(J.Obj(view, "target"), "input") == "invert_xy", "demande : écran entier, souris inversée déclarée", S(J.Obj(view, "target"), "title"));
+                var started = e.Event("effect.started", 3000, x => S(x, "request_id") == "scr-1");
+                long startedAt = started != null ? (long)J.Num(started, "_rx", 0) : 0;
+                long rot = WaitOrientation(dev, 2, 3000);
+                long rotAt = EngineProc.Clock.ElapsedMilliseconds;
+                Thread.Sleep(250);
+                var st = e.Result("status");
+                var surf = J.Arr(st, "surfaces").FirstOrDefault() as Dictionary<string, object>;
+                var held = J.Arr(J.Obj(st, "input"), "active").FirstOrDefault() as Dictionary<string, object>;
+                Check(started != null && rot >= 0 && held != null && S(held, "device") == dev && surf != null && !J.Bool(surf, "visible", true) && J.Obj(surf, "capture") == null,
+                    "après la rotation animée : Windows tient l'écran retourné, ni calque ni capture",
+                    "retourné " + (rotAt - startedAt) + " ms après le départ (rotation 550 ms), Windows " + S(held, "apply_ms") + " ms");
+                long backIn = WaitOrientation(dev, 0, 4000);
+                long backAt = EngineProc.Clock.ElapsedMilliseconds;
+                Thread.Sleep(150);
+                st = e.Result("status");
+                surf = J.Arr(st, "surfaces").FirstOrDefault() as Dictionary<string, object>;
+                bool animatedBack = surf != null && J.Bool(surf, "visible", false) && J.Arr(st, "active").Any(a => S(a as Dictionary<string, object>, "state") == "exiting");
+                var end = e.Event("effect.ended", 3000, x => S(x, "request_id") == "scr-1");
+                long endAt = end != null ? (long)J.Num(end, "_rx", 0) : 0;
+                Thread.Sleep(100);
+                bool slowFlag = J.Bool(e.Result("status"), "degraded", false) || e.Events("engine.degraded").Count > 0;
+                Check(backIn >= 0 && animatedBack && S(end, "reason") == "duration" && NoOverlayLeft() && Held(e) == 0 && !slowFlag,
+                    "fin : écran rendu par Windows, puis retour animé, rien ne reste, aucun faux « moteur ralenti »",
+                    "rendu " + (backAt - startedAt - 2500) + " ms après la fin prévue, retour animé " + (endAt - backAt) + " ms");
+
+                // 2. Un calque arrive pendant l'effet (le retournement est confié à Windows), puis STOP ALL.
+                ScreenRequest(e, "scr-2", dev, Cuts);
+                WaitOrientation(dev, 2, 3000);
+                Thread.Sleep(200);
+                e.Call("effect.request", J.Map("request_id", "mk-2", "effect", "diag.marker", "source", J.Map("kind", "test"),
+                    "target", J.Map("kind", "monitor", "device", dev), "transition", J.Map("in", J.Map("kind", "cut"))));
+                var mk = e.Event("effect.started", 3000, x => S(x, "request_id") == "mk-2");
+                Thread.Sleep(300);
+                st = e.Result("status");
+                Check(mk != null && N.DisplayOrientation(dev) == 2 && J.Arr(st, "active").Count == 2 && e.Events("effect.failed").Count == 0,
+                    "calque ajouté pendant l'effet : le retournement continue (Windows), le calque s'affiche", "");
+                e.Send("stop_all");
+                long back = WaitOrientation(dev, 0, 2000);
+                Thread.Sleep(100);
+                // L'orientation revient pendant l'appel à Windows (~110 ms) ; la fenêtre (cachée) est détruite juste après.
+                var waitGone = Stopwatch.StartNew();
+                while (!NoOverlayLeft() && waitGone.ElapsedMilliseconds < 1000) Thread.Sleep(5);
+                bool gone = NoOverlayLeft(); int still = Held(e);
+                Check(back >= 0 && back < 400 && gone && still == 0, "STOP ALL pendant l'effet : écran rétabli, fenêtre détruite", back + " ms (fenêtre " + waitGone.ElapsedMilliseconds + " ms plus tard)" + (gone ? "" : ", calque restant") + (still == 0 ? "" : ", écran encore tenu"));
+
+                // 3. Arrêt d'urgence (drapeau du gardien) pendant l'effet.
+                ScreenRequest(e, "scr-3", dev, Cuts);
+                WaitOrientation(dev, 2, 3000);
+                Thread.Sleep(200);
+                using (var mmf = MemoryMappedFile.OpenExisting("Local\\RaptoruChaos-" + e.P.Id))
+                using (var v = mmf.CreateViewAccessor(0, 64)) v.Write(12, 1);
+                back = WaitOrientation(dev, 0, 2000);
+                Check(back >= 0 && back < 400 && e.Event("engine.emergency_stop", 1000) != null, "arrêt d'urgence pendant l'effet : écran rétabli", back + " ms");
+
+                // 4. Écran rétabli hors de Chaos (Paramètres de Windows) : l'effet s'arrête de lui-même.
+                ScreenRequest(e, "scr-4", dev, Cuts);
+                WaitOrientation(dev, 2, 3000);
+                Thread.Sleep(200);
+                N.ResetDisplaySettings(dev, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+                var changed = e.Event("effect.ended", 2000, x => S(x, "request_id") == "scr-4");
+                Thread.Sleep(100);
+                Check(S(changed, "reason") == "display_changed" && N.DisplayOrientation(dev) == 0 && NoOverlayLeft(), "écran rétabli par Windows pendant l'effet : effet terminé", S(changed, "reason"));
+
+                // 5. Moteur gelé pendant l'effet (aucun calque visible) : le gardien le tue, Windows rétablit l'écran.
+                ScreenRequest(e, "scr-5", dev, Cuts);
+                WaitOrientation(dev, 2, 3000);
+                Thread.Sleep(300);
+                NtSuspendProcess(e.P.Handle);
+                back = WaitOrientation(dev, 0, 6000);
+                // Tué par le gardien, le processus porte son code de sortie (9) tout de suite. Suspendu par le contrôle
+                // alors qu'il tenait l'affichage, sa disparition complète peut traîner dans Windows : un vrai blocage ne
+                // suspend pas le processus, et c'est l'écran rétabli qui compte.
+                Thread.Sleep(200);
+                uint code; GetExitCodeProcess(e.P.Handle, out code);
+                NtResumeProcess(e.P.Handle);
+                Check(code == 9 && back >= 0, "moteur gelé pendant l'effet : le gardien le tue, Windows rétablit l'écran",
+                    "écran rétabli " + back + " ms après le gel" + (code == 9 ? "" : ", code de sortie " + code));
+                e.Kill();
+
+                // 6. Moteur tué brutalement pendant l'effet : Windows rétablit l'écran seul (mode temporaire du processus).
+                e = Engine();
+                if (e == null) return;
+                ScreenRequest(e, "scr-6", dev, Cuts);
+                WaitOrientation(dev, 2, 3000);
+                Thread.Sleep(300);
+                e.P.Kill();
+                back = WaitOrientation(dev, 0, 3000);
+                Check(back >= 0 && back < 1500 && e.P.WaitForExit(1000) && NoOverlayLeft(), "moteur tué pendant l'effet : Windows rétablit l'écran seul", back + " ms");
+            }
+            finally
+            {
+                if (e != null) e.Kill();
+                if (N.DisplayOrientation(dev) != 0)
+                {
+                    N.ResetDisplaySettings(dev, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+                    Check(false, "écran secondaire rétabli par le contrôle lui-même (secours)", "orientation " + N.DisplayOrientation(dev));
+                }
+            }
         }
     }
 }

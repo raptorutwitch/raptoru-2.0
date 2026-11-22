@@ -1,6 +1,7 @@
 // Parcours complet de la page Studio › Chaos dans un Chromium sans fenêtre, contre un Chaos Lab en marche
-// (npm run chaos:lab -- --no-open) : moteur prêt → choix de la mire → « Tester » → écran réellement retourné (pixels
-// lus à l'écran) → STOP ALL → écran normal → réglage des coins enregistré dans le moteur. Captures dans --out <dossier>.
+// (npm run chaos:lab -- --no-open) : moteur prêt → écran secondaire choisi → « Tester » → Windows retourne réellement
+// l'écran (orientation relue) → STOP ALL → écran rétabli ; puis, en diagnostic, la mire en fenêtre seule (pixels lus à
+// l'écran) → réglage des coins enregistré dans le moteur. Captures dans --out <dossier>.
 // Usage : tsx apps/studio/server/scripts/chaos-lab-e2e.ts [--out <dossier>] [--port 4120]
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -57,6 +58,31 @@ public static class P {
     encoding: 'utf8',
   }).trim();
 }
+/** Orientation d'un écran (0 normale, 2 = 180°), relue dans Windows (une capture GDI le montre toujours à l'endroit). */
+function orientation(device: string): number {
+  const ps = `
+Add-Type @'
+using System; using System.Runtime.InteropServices;
+public static class O {
+ [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct DM { [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string n; public short a, b, size, extra; public int fields, x, y, orient, fixedOut; public short c1, c2, c3, c4, c5; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string form; public short lp; public int bpp, w, h, fl, hz, i1, i2, i3, i4, r1, r2, pw, ph; }
+ [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettingsExW(string d, int m, ref DM dm, uint f);
+ public static int Get(string d) { var dm = new DM(); dm.size = (short)Marshal.SizeOf(dm); return EnumDisplaySettingsExW(d, -1, ref dm, 0) ? dm.orient : -1; } }
+'@
+[O]::Get('${device}')`;
+  return Number(
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', ps], {
+      encoding: 'utf8',
+    }).trim(),
+  );
+}
+async function waitOrientation(device: string, want: number, ms: number) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if (orientation(device) === want) return Date.now() - t0;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return -1;
+}
 const ORIGINAL = 'R,G,B,RG';
 const FLIPPED = 'RG,B,G,R';
 
@@ -72,6 +98,7 @@ const hwnd: number = await new Promise((resolve) =>
 );
 await new Promise((r) => setTimeout(r, 500));
 const browser = await chromium.launch();
+let screenDevice = '';
 try {
   const page = await browser.newPage({
     viewport: { width: 1360, height: 980 },
@@ -88,11 +115,59 @@ try {
 
   await page.locator('[data-refresh-targets]').click();
   await page.waitForTimeout(600);
-  const listed = await page.locator('[data-target] option').count();
+  const first = await page.locator('[data-target] option').first().innerText();
+  const screens = await page
+    .locator('[data-target] option[value^="mon:"]')
+    .evaluateAll((o) => o.map((x) => (x as HTMLOptionElement).value));
   check(
-    listed > 1,
-    'liste des fenêtres lue dans le moteur',
-    `${listed - 1} fenêtre(s)`,
+    first.startsWith('Écran du jeu au premier plan') && screens.length >= 1,
+    'cible par défaut : l’écran du jeu ; écrans lus dans le moteur',
+    `${screens.length} écran(s)`,
+  );
+
+  // Écran entier (comportement voulu) : sur l'écran secondaire seulement, jamais sur l'écran principal.
+  const targets = (await (
+    await page.request.get(`${BASE}/api/chaos/targets`, {
+      headers: { 'x-raptoru-studio': '1' },
+    })
+  ).json()) as { monitors: { device: string; primary: boolean }[] };
+  screenDevice = targets.monitors.find((m) => !m.primary)?.device ?? '';
+  if (screenDevice && orientation(screenDevice) === 0) {
+    await page.locator('[data-target]').selectOption(`mon:${screenDevice}`);
+    await page.locator('[data-test]').click();
+    const flipped = await waitOrientation(screenDevice, 2, 5000);
+    await page.locator('.cx-live .d-tag.ok').waitFor({ timeout: 5000 });
+    const live = await page.locator('.cx-live').innerText();
+    check(
+      flipped >= 0 && live.includes('souris inversée'),
+      '« Tester » sur l’écran secondaire : Windows retourne l’écran, la page dit « souris inversée »',
+      'orientation relue dans Windows (temps précis : chaos-checks)',
+    );
+    await page.screenshot({
+      path: join(OUT, '2-ecran-retourne.png'),
+      fullPage: true,
+    });
+    await page.locator('[data-stopall]').click();
+    const back = await waitOrientation(screenDevice, 0, 3000);
+    await page.getByText('Aucun effet en cours.').waitFor({ timeout: 5000 });
+    check(
+      back >= 0,
+      'STOP ALL depuis la page : écran rétabli',
+      'orientation relue dans Windows',
+    );
+  } else
+    console.log(
+      '  ··  un seul écran (ou déjà tourné) : essai écran entier non fait',
+    );
+
+  // Diagnostic : la fenêtre seule (visuel uniquement) sur la mire, lue aux pixels.
+  await page.getByRole('switch', { name: 'Afficher le diagnostic' }).click();
+  await page.waitForTimeout(300);
+  const listed = await page.locator('[data-target] optgroup option').count();
+  check(
+    listed >= 1,
+    'diagnostic : fenêtres lues dans le moteur (fenêtre seule)',
+    `${listed} fenêtre(s)`,
   );
   // La mire est une fenêtre outil (hors barre des tâches) : la liste l'écarte comme toute fenêtre outil. On l'ajoute au
   // sélecteur ; la demande suit ensuite le chemin réel (API Studio → moteur, qui valide la fenêtre).
@@ -107,7 +182,7 @@ try {
   await page.locator('[data-panel]').first().click();
   await page.locator('.d-work.is-open').waitFor({ timeout: 3000 });
   const follow = page.getByRole('switch', {
-    name: 'Seulement au premier plan',
+    name: 'Fenêtre seule : seulement au premier plan',
   });
   if (await follow.isChecked()) await follow.click();
   await page.waitForTimeout(900);
@@ -129,10 +204,13 @@ try {
   const during = screen(hwnd);
   check(
     during === FLIPPED,
-    '« Tester » depuis la page : la fenêtre est réellement retournée à l’écran',
+    '« Tester » (fenêtre seule) : la mire est réellement retournée à l’écran',
     during,
   );
-  await page.screenshot({ path: join(OUT, '2-en-cours.png'), fullPage: true });
+  await page.screenshot({
+    path: join(OUT, '3-fenetre-seule.png'),
+    fullPage: true,
+  });
 
   await page.locator('[data-stopall]').click();
   await page.getByText('Aucun effet en cours.').waitFor({ timeout: 5000 });
@@ -164,16 +242,16 @@ try {
   await page.waitForTimeout(450);
   await page
     .locator('.cx-stage')
-    .screenshot({ path: join(OUT, '3-apercu-rotation.png') });
+    .screenshot({ path: join(OUT, '4-apercu-rotation.png') });
   await page.locator('[data-fill="mirror"]').click();
   await page.waitForTimeout(500);
   await page.locator('[data-panel]').click();
   await page.waitForTimeout(400);
-  await page.screenshot({ path: join(OUT, '4-reglages.png'), fullPage: true });
+  await page.screenshot({ path: join(OUT, '5-reglages.png'), fullPage: true });
   await page.setViewportSize({ width: 760, height: 1100 });
   await page.waitForTimeout(300);
   await page.screenshot({
-    path: join(OUT, '5-fenetre-etroite.png'),
+    path: join(OUT, '6-fenetre-etroite.png'),
     fullPage: true,
   });
 } finally {
@@ -187,6 +265,10 @@ try {
   }).catch(() => null);
   await browser.close();
   target.kill();
+  if (screenDevice && orientation(screenDevice) !== 0) {
+    execFileSync(EXE, ['--restore-display']);
+    check(false, 'écran secondaire rétabli par le parcours lui-même (secours)');
+  }
 }
 console.log(`Total : ${ok} ok, ${ko} KO · captures : ${OUT}`);
 process.exit(ko ? 1 : 0);

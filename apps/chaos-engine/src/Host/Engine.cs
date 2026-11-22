@@ -1,5 +1,6 @@
-// Hôte du moteur : une boucle (fil de rendu) relie commandes → ordonnanceur → effets → captures → rendu → surfaces.
-// Au repos (aucun effet) : aucune fenêtre, aucune capture, cibles intermédiaires libérées ; la boucle attend.
+// Hôte du moteur : une boucle (fil de rendu) relie commandes → ordonnanceur → effets → captures → rendu → surfaces,
+// et la couche Entrées (src/Input) pour les effets qui transforment aussi la souris (retournement de l'écran entier).
+// Au repos (aucun effet) : aucune fenêtre, aucune capture, cibles intermédiaires libérées, aucun écran modifié.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -22,6 +23,7 @@ namespace Raptoru.Chaos
         public Surface S;
         public ICaptureSource Cap;
         public int CaptureUsers;
+        public string Device; // écran entier : nom Windows (couche Entrées) ; null en mode fenêtre
         public readonly List<EffectInstance> Effects = new List<EffectInstance>();
         public readonly SurfaceStats Stats = new SurfaceStats();
         public long FirstWaitAt = -1;
@@ -30,6 +32,9 @@ namespace Raptoru.Chaos
     sealed class EngineHost
     {
         const int NeverVisibleMs = 15000, FirstFrameMs = 3000;
+        // Couche Entrées : le calque revient PrewarmMs avant la fin prévue (retour animé sans attente) ; si la capture
+        // ne revient pas en ExitPrepMaxMs, l'écran est rétabli quand même (sécurité avant l'esthétique).
+        const int PrewarmMs = 400, ExitPrepMaxMs = 1500;
         readonly EngineOptions opt;
         readonly Stopwatch clock = Stopwatch.StartNew();
         readonly Registry reg;
@@ -37,6 +42,7 @@ namespace Raptoru.Chaos
         readonly Scheduler sched;
         readonly Telemetry tel = new Telemetry();
         readonly Server io;
+        readonly InputLayer input;
         readonly int selfPid = Process.GetCurrentProcess().Id;
         readonly System.Threading.AutoResetEvent frameEvt = new System.Threading.AutoResetEvent(false);
         readonly Dictionary<string, SurfaceEntry> surfaces = new Dictionary<string, SurfaceEntry>();
@@ -61,7 +67,8 @@ namespace Raptoru.Chaos
             cfg.Load();
             sched = new Scheduler(reg, () => Now, () => cfg.Safety);
             io = new Server(clock, opt.HeartbeatMs, opt.ParentPid, opt.Guardian);
-            io.BeforeQuit = reason => { sched.StopAll(reason); Publish(); };
+            input = new InputLayer(() => Now);
+            io.BeforeQuit = reason => { sched.StopAll(reason); Publish(); input.RevertAll(); };
         }
 
         public int Run()
@@ -109,13 +116,19 @@ namespace Raptoru.Chaos
                 while (N.PeekMessageW(out m, IntPtr.Zero, 0, 0, N.PM_REMOVE)) { N.TranslateMessage(ref m); N.DispatchMessageW(ref m); }
                 string line;
                 while (io.TryTake(out line)) Dispatch(line);
-                if (io.TakeEmergencyStop()) { sched.StopAll("emergency_hotkey"); io.Send(Protocol.Event("engine.emergency_stop", now, null)); }
+                if (io.TakeEmergencyStop())
+                {
+                    sched.StopAll("emergency_hotkey");
+                    Publish();
+                    input.RevertAll();
+                    io.Send(Protocol.Event("engine.emergency_stop", now, null));
+                }
                 sched.Tick();
                 Publish();
                 RenderAll(now);
                 Publish();
                 if (now >= nextHousekeeping) Housekeeping(now);
-                io.Beat(surfaces.Values.Count(s => s.S.Shown));
+                io.Beat(surfaces.Values.Count(s => s.S.Shown), input.Count);
             }
         }
 
@@ -144,6 +157,8 @@ namespace Raptoru.Chaos
             catch (CaptureError e) { tel.Error(e.Code); sched.MarkFailed(a.Req.RequestId, e.Code, e.Message); return; }
             catch (Exception e) { tel.Error("surface_error"); sched.MarkFailed(a.Req.RequestId, "surface_error", e.Message); return; }
             instances[a.Req.RequestId] = inst;
+            inst.HoldsCapture = a.Def.RequiresCapture;
+            if (a.Def.Input != null && a.Req.TargetDevice != null) { inst.Input = InputPhase.Pending; inst.InputDevice = a.Req.TargetDevice; }
             s.Effects.Add(inst);
             var ctx = new EffectContext { Gpu = gpu, Shaders = lib, Text = text, P = a.Req.Resolved };
             if (!inst.Guard("prepare", () => { inst.Impl.Prepare(ctx); inst.State = InstanceState.Prepared; }) ||
@@ -162,26 +177,33 @@ namespace Raptoru.Chaos
             {
                 ICaptureSource cap = null;
                 uint w, h;
-                if (a.Def.RequiresCapture) { cap = caps.Acquire(r.TargetKey, r.TargetHwnd, r.TargetMonitor); w = cap.Width; h = cap.Height; }
+                if (a.Def.RequiresCapture) { cap = caps.Acquire(r.TargetKey, r.TargetHwnd, r.TargetHmon); w = cap.Width; h = cap.Height; }
                 else
                 {
-                    RECT b = r.TargetMonitor ? N.MonitorRect(r.TargetHwnd) : N.FrameBounds(r.TargetHwnd);
+                    RECT b = r.TargetMonitor ? N.MonitorRectOf(r.TargetHmon) : N.FrameBounds(r.TargetHwnd);
                     w = (uint)Math.Max(16, b.Right - b.Left); h = (uint)Math.Max(16, b.Bottom - b.Top);
                 }
                 Surface surf;
-                try { surf = new Surface(gpu, r.TargetKey, r.TargetHwnd, r.TargetMonitor, w, h); }
+                try { surf = new Surface(gpu, r.TargetKey, r.TargetHwnd, r.TargetHmon, w, h); }
                 catch (Exception) { if (cap != null) caps.Release(r.TargetKey, Now); throw; }
-                s = new SurfaceEntry { S = surf, Cap = cap, CaptureUsers = cap != null ? 1 : 0, FirstWaitAt = Now };
+                s = new SurfaceEntry { S = surf, Cap = cap, CaptureUsers = cap != null ? 1 : 0, FirstWaitAt = Now, Device = r.TargetDevice };
                 surfaces[r.TargetKey] = s;
                 return s;
             }
-            if (a.Def.RequiresCapture)
-            {
-                if (s.Cap == null) { s.Cap = caps.Acquire(r.TargetKey, r.TargetHwnd, r.TargetMonitor); s.S.Resize(s.Cap.Width, s.Cap.Height); }
-                s.CaptureUsers++;
-            }
+            if (a.Def.RequiresCapture) TakeCapture(s, r);
             if (s.FirstWaitAt < 0) s.FirstWaitAt = Now;
             return s;
+        }
+
+        void TakeCapture(SurfaceEntry s, EffectRequest r)
+        {
+            if (s.Cap == null) { s.Cap = caps.Acquire(r.TargetKey, r.TargetHwnd, r.TargetHmon); s.S.Resize(s.Cap.Width, s.Cap.Height); }
+            s.CaptureUsers++;
+        }
+
+        void DropCapture(SurfaceEntry s, string key)
+        {
+            if (--s.CaptureUsers <= 0 && s.Cap != null) { caps.Release(key, Now); s.Cap = null; s.CaptureUsers = 0; }
         }
 
         void FinishInstance(Activation a)
@@ -189,12 +211,14 @@ namespace Raptoru.Chaos
             EffectInstance inst;
             if (!instances.TryGetValue(a.Req.RequestId, out inst)) return;
             instances.Remove(a.Req.RequestId);
+            // L'écran d'abord : quelle que soit la fin (durée, arrêt, STOP ALL, urgence, panne), il redevient normal.
+            if (inst.Input == InputPhase.Applied) { input.Revert(a.Req.RequestId); inst.Input = InputPhase.Released; }
             inst.Finish();
             SurfaceEntry s;
             if (!surfaces.TryGetValue(a.Req.TargetKey, out s)) return;
             if (inst.VisibleSince >= 0) a.VisibleMs = s.S.VisibleMs(Now) - inst.VisibleSince;
             s.Effects.Remove(inst);
-            if (a.Def.RequiresCapture && --s.CaptureUsers <= 0 && s.Cap != null) { caps.Release(a.Req.TargetKey, Now); s.Cap = null; s.CaptureUsers = 0; }
+            if (inst.HoldsCapture) DropCapture(s, a.Req.TargetKey);
             if (s.Effects.Count == 0)
             {
                 // Plus aucun effet sur cette cible : la fenêtre disparaît tout de suite.
@@ -221,6 +245,7 @@ namespace Raptoru.Chaos
                 foreach (var e in live) sched.Cancel(e.A.Req.RequestId, true, why);
                 return;
             }
+            if (StepInput(s, live, now)) { s.S.SetShown(false, now); return; }
             bool needsCapture = s.Cap != null;
             bool fresh = needsCapture && s.Cap.Acquire(now);
             if (needsCapture && !s.Cap.HasFrame)
@@ -238,8 +263,11 @@ namespace Raptoru.Chaos
             {
                 var fb = new FrameBuilder(s.S.Width, s.S.Height, needsCapture);
                 if (tel.Degraded) fb.LowQuality = true;
+                if (s.Device != null) fb.DisplayRotationRad = input.RotationDeg(s.Device) * Math.PI / 180;
                 foreach (var e in live)
                 {
+                    // Effet confié à Windows (écran retourné) : il n'a rien à dessiner, le calque sert aux autres effets.
+                    if (e.HandedOff) continue;
                     var a = e.A;
                     var f = new EffectFrame
                     {
@@ -255,6 +283,9 @@ namespace Raptoru.Chaos
                 }
                 if (needsCapture && fb.NeedsInputMips) { timer.Begin("capture:mips"); s.Cap.EnsureMips(); timer.End(); }
                 fb.Execute(gpu, lib, pool, timer, needsCapture ? s.Cap.Srv : IntPtr.Zero, s.S.BackBuffer, now, now / 1000f);
+                // Traitement = de l'arrivée de l'image à l'envoi du rendu ; l'attente du rafraîchissement (Present) n'en
+                // fait pas partie (sinon le repli de qualité se déclencherait à tort pendant les rotations).
+                if (fresh) s.Stats.Processing.Add((N.QpcNow() - s.Cap.LastArrivalQpc) * 1000.0 / N.QpcFreq());
                 int hr = s.S.Present(animating || overlayOnly);
                 if (hr < 0)
                 {
@@ -262,7 +293,6 @@ namespace Raptoru.Chaos
                     io.Send(Protocol.Event("engine.error", now, J.Map("code", "gpu_error", "message", "Present 0x" + hr.ToString("X8") + " : le moteur s'arrête (Studio le relance)")));
                     io.Quit("gpu_error", 4);
                 }
-                if (fresh) s.Stats.Processing.Add((N.QpcNow() - s.Cap.LastArrivalQpc) * 1000.0 / N.QpcFreq());
             }
             s.S.SetShown(want, now);
             foreach (var e in live)
@@ -276,6 +306,71 @@ namespace Raptoru.Chaos
             }
         }
 
+        // ---------- Couche Entrées ----------
+        /// Écran entier avec transformation d'entrée (retournement) :
+        ///   1. l'entrée visuelle tourne l'image (calque + capture, Windows inchangé) ;
+        ///   2. à sa fin, Windows retourne l'écran (vrai curseur, souris inversée, clic juste) et, si l'effet est seul sur
+        ///      l'écran, le calque se retire : ni fenêtre ni capture pendant l'effet ;
+        ///   3. avant la sortie, le calque revient (même image, compensée de la rotation de Windows), Windows rétablit
+        ///      l'écran, puis le retour est animé.
+        /// Le rendu compense toujours la rotation de Windows (FrameBuilder.DisplayRotationRad) : l'image ne saute pas.
+        /// Vrai si tous les effets de la surface ont passé la main à Windows (rien à dessiner).
+        bool StepInput(SurfaceEntry s, List<EffectInstance> live, long now)
+        {
+            foreach (var e in live)
+            {
+                var a = e.A;
+                if (e.Input == InputPhase.Pending && a.State == ActState.Active && a.Anim.Phase == AnimPhase.Steady)
+                {
+                    try { input.Apply(a.Req.RequestId, a.Def.Input, e.InputDevice); e.Input = InputPhase.Applied; }
+                    catch (InputError x)
+                    {
+                        e.Input = InputPhase.None;
+                        tel.Error(x.Code);
+                        io.Send(Protocol.Event("engine.error", now, J.Map("code", x.Code, "message", x.Message, "request_id", a.Req.RequestId)));
+                        sched.Cancel(a.Req.RequestId, false, x.Code);
+                        continue;
+                    }
+                }
+                if (e.Input != InputPhase.Applied) continue;
+                bool leaving = a.State == ActState.Exiting || a.EndAt - now <= PrewarmMs;
+                if (!e.HandedOff && !leaving && live.Count == 1)
+                {
+                    e.HandedOff = true;
+                    if (e.HoldsCapture) { e.HoldsCapture = false; DropCapture(s, a.Req.TargetKey); }
+                }
+                else if (e.HandedOff && leaving)
+                {
+                    e.HandedOff = false;
+                    e.ExitPrepAt = now;
+                    s.FirstWaitAt = now;
+                    if (!e.HoldsCapture)
+                    {
+                        try { TakeCapture(s, a.Req); e.HoldsCapture = true; }
+                        catch (Exception x)
+                        {
+                            tel.Error("capture_error");
+                            input.Revert(a.Req.RequestId);
+                            e.Input = InputPhase.Released;
+                            io.Send(Protocol.Event("engine.error", now, J.Map("code", "capture_error", "message", x.Message)));
+                            sched.Cancel(a.Req.RequestId, true, "capture_lost");
+                            continue;
+                        }
+                    }
+                }
+                if (a.State == ActState.Exiting && !e.HandedOff)
+                {
+                    if (e.ExitPrepAt < 0) e.ExitPrepAt = now;
+                    // Le calque affiche la même image que Windows : on peut rendre l'écran, le retour animé suit.
+                    bool ready = s.S.Shown && s.Cap != null && s.Cap.HasFrame;
+                    // Le retour animé part d'ici, une fois l'écran rendu (la remise en état prend ~110 ms) : aucun saut d'angle.
+                    if (ready || now - e.ExitPrepAt > ExitPrepMaxMs) { input.Revert(a.Req.RequestId); e.Input = InputPhase.Released; a.Anim.HoldExit(Now); }
+                    else a.Anim.HoldExit(now);
+                }
+            }
+            return live.All(e => e.HandedOff);
+        }
+
         // ---------- Entretien, télémétrie ----------
         void Housekeeping(long now)
         {
@@ -283,6 +378,13 @@ namespace Raptoru.Chaos
             caps.Trim(now, surfaces.Count == 0 ? cfg.Engine.CaptureLingerMs : cfg.Engine.CaptureLingerMs);
             pool.Trim(now, 3000);
             foreach (var s in surfaces.Values) s.S.KeepOnTop();
+            // Écran rétabli hors de Chaos (Paramètres de Windows, pilote, autre logiciel) : l'effet perd sa raison d'être.
+            foreach (var owner in input.TakeLost())
+            {
+                EffectInstance lost;
+                if (instances.TryGetValue(owner, out lost)) lost.Input = InputPhase.Released;
+                sched.Cancel(owner, true, "display_changed");
+            }
             timer.Collect((label, ms) => tel.Pass(label, ms));
             if (now >= nextTelemetry)
             {
@@ -350,7 +452,7 @@ namespace Raptoru.Chaos
             return J.Map("engine", "raptoru-chaos-engine", "version", Program.Version, "protocol", Protocol.Version, "registry_version", reg.Version,
                 "implemented", EffectCatalog.Implemented.ToArray(), "adapter", gpu != null ? gpu.Adapter : null, "pid", selfPid,
                 "config_path", opt.ConfigPath, "config_notes", cfg.LoadNotes.ToArray(), "ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs,
-                "shader_warm_ms", tel.ShaderWarmMs, "emergency_hotkey", "Ctrl+Maj+F11");
+                "shader_warm_ms", tel.ShaderWarmMs, "emergency_hotkey", "Ctrl+Maj+F11", "input_effects", reg.InputEffects.Keys.ToArray());
         }
 
         void Dispatch(string line)
@@ -383,11 +485,12 @@ namespace Raptoru.Chaos
                     d["shaders"] = J.Map("compiled", lib.Compiled, "from_disk", lib.FromDisk, "compile_ms", Math.Round(lib.CompileMs, 1));
                     d["pool_created"] = pool.Created; d["captures_opened"] = caps.Opened; d["captures_reused"] = caps.Reused;
                     d["guardian"] = J.Map("pid", io.GuardianPid, "restarts", io.GuardianRestarts, "hotkey", io.HotkeyState);
+                    d["input"] = input.Describe();
                     d["startup"] = J.Map("ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs, "shader_warm_ms", tel.ShaderWarmMs);
                     return d;
-                case "targets.list": return J.Map("windows", Targets.Windows(selfPid).ToArray());
+                case "targets.list": return J.Map("monitors", Targets.Monitors().ToArray(), "windows", Targets.Windows(selfPid).ToArray());
                 case "effect.request":
-                    var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def.RequiresCapture));
+                    var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def));
                     var a = sched.Submit(req);
                     return Protocol.View(a, Now);
                 case "effect.cancel":
@@ -426,6 +529,7 @@ namespace Raptoru.Chaos
                     "size", s.S.Width + "x" + s.S.Height, "capture", s.Cap != null ? s.Cap.Info() : null, "effects", s.Effects.Select(e => e.A.Req.RequestId).ToArray())).ToArray(),
                 "captures_open", caps.Count, "degraded", tel.Degraded,
                 "guardian", J.Map("pid", io.GuardianPid, "hotkey", io.HotkeyState),
+                "input", input.Describe(),
                 "config", cfg.ToJson());
         }
     }

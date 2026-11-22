@@ -28,6 +28,9 @@ namespace Raptoru.Chaos
         public Dictionary<string, object> TargetInfo = new Dictionary<string, object>();
         public IntPtr TargetHwnd;
         public bool TargetMonitor;
+        /// Écran entier : HMONITOR et nom Windows (\\.\DISPLAYn) ; null en mode fenêtre.
+        public IntPtr TargetHmon;
+        public string TargetDevice;
     }
 
     sealed class Activation

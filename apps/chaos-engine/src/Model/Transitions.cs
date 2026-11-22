@@ -82,6 +82,10 @@ namespace Raptoru.Chaos
 
         public void Cut() { Phase = AnimPhase.Done; }
 
+        /// Sortie demandée mais retenue (la couche Entrées rend l'écran avant le retour animé) : la présence reste où
+        /// elle est, l'animation de sortie partira de là quand on cessera de la retenir.
+        public void HoldExit(long now) { if (Phase == AnimPhase.Exiting) phaseAt = now; }
+
         public double Presence(long now)
         {
             switch (Phase)

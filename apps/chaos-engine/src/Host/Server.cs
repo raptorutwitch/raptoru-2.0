@@ -1,12 +1,13 @@
 // Entrées-sorties et chiens de garde de l'hôte. Toute sortie passe par Quit : TerminateProcess, donc Windows détruit
-// immédiatement les fenêtres des effets (restauration par construction, rien à défaire).
+// immédiatement les fenêtres des effets et rétablit l'écran retourné par la couche Entrées (mode temporaire lié au
+// processus) : restauration par construction, rien à défaire.
 //   - stdin fermé ou parent mort        → sortie ;
 //   - aucun message depuis heartbeatMs  → sortie (le client ne répond plus) ;
-//   - boucle de rendu figée > 2 s pendant qu'une fenêtre est visible (ou > 10 s) → sortie ;
-//   - gardien (processus séparé) : raccourci d'urgence et arrêt forcé si le moteur est figé (Guardian.cs).
+//   - boucle de rendu figée > 2 s pendant qu'une fenêtre est visible ou qu'un écran est retourné (sinon > 10 s) → sortie ;
+//   - gardien (processus séparé) : raccourci d'urgence et arrêt forcé si le moteur est figé (classe Guardian).
 // Mémoire partagée avec le gardien ("Local\RaptoruChaos-<pid>", 64 octets) :
 //   [0] tick de la dernière boucle (GetTickCount64) · [8] surfaces visibles · [12] arrêt d'urgence demandé ·
-//   [16] état du raccourci (0 inconnu, 1 actif, 2 indisponible) · [20] pid du gardien.
+//   [16] état du raccourci (0 inconnu, 1 actif, 2 indisponible) · [20] pid du gardien · [24] écrans retournés.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -29,7 +30,7 @@ namespace Raptoru.Chaos
         public readonly AutoResetEvent CommandEvt = new AutoResetEvent(false);
         StreamWriter stdout;
         long lastLine, lastLoop;
-        volatile int visible;
+        volatile int visible, inputs;
         bool quitting;
         MemoryMappedFile mmf;
         MemoryMappedViewAccessor view;
@@ -51,11 +52,13 @@ namespace Raptoru.Chaos
             int pid = Process.GetCurrentProcess().Id;
             mmf = MemoryMappedFile.CreateOrOpen(SharedName(pid), 64);
             view = mmf.CreateViewAccessor(0, 64);
-            Beat(0);
+            // Le gardien d'abord : le premier battement ne doit pas en lancer un second (deux gardiens se disputaient
+            // Ctrl+Maj+F11, et celui qui perdait pouvait afficher « raccourci indisponible »).
+            if (guardian) SpawnGuardian();
+            Beat(0, 0);
             Thread("stdin", ReadStdin);
             Thread("watchdog", Watchdog);
             if (parentPid > 0) Thread("parent", WatchParent);
-            if (guardian) SpawnGuardian();
         }
 
         static void Thread(string name, ThreadStart f) { new Thread(f) { IsBackground = true, Name = name }.Start(); }
@@ -70,13 +73,15 @@ namespace Raptoru.Chaos
 
         public bool TryTake(out string line) { return lines.TryDequeue(out line); }
 
-        /// Battement de la boucle de rendu (chien de garde interne et gardien).
-        public void Beat(int visibleSurfaces)
+        /// Battement de la boucle de rendu (chien de garde interne et gardien) : surfaces visibles, écrans retournés.
+        public void Beat(int visibleSurfaces, int heldInputs)
         {
             Interlocked.Exchange(ref lastLoop, clock.ElapsedMilliseconds);
             visible = visibleSurfaces;
+            inputs = heldInputs;
             view.Write(0, (long)N.GetTickCount64());
             view.Write(8, visibleSurfaces);
+            view.Write(24, heldInputs);
             long now = clock.ElapsedMilliseconds;
             if (guardian && now >= nextGuardianCheck)
             {
@@ -143,7 +148,7 @@ namespace Raptoru.Chaos
                 long now = clock.ElapsedMilliseconds;
                 if (heartbeatMs > 0 && now - Interlocked.Read(ref lastLine) > heartbeatMs) Quit("heartbeat", 0);
                 long gap = now - Interlocked.Read(ref lastLoop);
-                if ((visible > 0 && gap > LoopStallVisibleMs) || gap > LoopStallMs) Quit("render_stall", 3);
+                if (((visible > 0 || inputs > 0) && gap > LoopStallVisibleMs) || gap > LoopStallMs) Quit("render_stall", 3);
             }
         }
 
@@ -158,7 +163,8 @@ namespace Raptoru.Chaos
 
     /// Gardien : processus séparé, indépendant du moteur et de Studio.
     ///  - Ctrl+Maj+F11 (partout, même en jeu) : arrêt d'urgence ; si le moteur ne l'a pas exécuté en 700 ms, il est tué ;
-    ///  - moteur figé (aucun battement depuis 2,5 s) alors qu'une fenêtre est visible : il est tué ;
+    ///  - moteur figé (aucun battement depuis 2,5 s) alors qu'une fenêtre est visible ou qu'un écran est retourné : il
+    ///    est tué (Windows retire alors les fenêtres et rétablit l'écran) ;
     ///  - le gardien quitte avec le moteur.
     static class Guardian
     {
@@ -182,10 +188,11 @@ namespace Raptoru.Chaos
                 while (N.PeekMessageW(out m, IntPtr.Zero, 0, 0, N.PM_REMOVE))
                     if (m.message == N.WM_HOTKEY) { view.Write(12, 1); stopAt = (long)N.GetTickCount64(); }
                 long now = (long)N.GetTickCount64();
-                int vis = view.ReadInt32(8);
+                int vis = view.ReadInt32(8), held = view.ReadInt32(24);
                 long beat = view.ReadInt64(0);
-                if (vis > 0 && now - beat > 2500) { N.TerminateProcess(engine, 9); return 0; }
-                if (stopAt > 0 && vis == 0) stopAt = 0;
+                bool onScreen = vis > 0 || held > 0;
+                if (onScreen && now - beat > 2500) { N.TerminateProcess(engine, 9); return 0; }
+                if (stopAt > 0 && !onScreen) stopAt = 0;
                 if (stopAt > 0 && now - stopAt > 700) { N.TerminateProcess(engine, 9); return 0; }
             }
         }

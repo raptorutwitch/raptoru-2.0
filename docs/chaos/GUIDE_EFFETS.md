@@ -81,6 +81,10 @@ Règles :
 - **`exposed: false`** : réservé aux variantes. Le Core et l'extension ne peuvent pas le régler.
 - **`stop_all`** est obligatoire dans `stop_conditions`.
 - Une rotation en degrés (`unit: "deg"`) est automatiquement plafonnée à 520°/s.
+- **`input`** (facultatif) : la transformation d'entrée liée, appliquée quand la cible est l'écran entier. Aujourd'hui
+  seulement `invert_xy`, celle du retournement : Windows retourne l'écran, la souris est inversée, le clic tombe sous
+  le vrai curseur. La logique de l'effet n'a rien à faire : le moteur applique et rétablit l'orientation, et son rendu
+  compense la rotation de Windows. Limites et obligations : [COUCHE_ENTREES.md](COUCHE_ENTREES.md).
 
 ## 2. Écrire la logique visuelle
 

@@ -22,7 +22,9 @@ namespace Raptoru.Chaos
     sealed class EngineSettings
     {
         public bool FollowForeground = true;
-        public string DefaultMode = "window";
+        /// Cible d'une demande « premier plan » : monitor = l'écran entier du jeu (retournement + souris inversée,
+        /// comportement voulu), window = la fenêtre seule (visuel uniquement, diagnostic).
+        public string DefaultMode = "monitor";
         public int CaptureLingerMs = 2000, TelemetryIntervalMs = 1000;
         public string Quality = "auto"; // auto : repli de qualité si le lecteur ralentit ; high : jamais de repli
     }
@@ -36,7 +38,7 @@ namespace Raptoru.Chaos
     sealed class ConfigStore
     {
         public const string Schema = "raptoru.chaos.config";
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
         readonly Registry reg;
         readonly string path;
         public EngineSettings Engine = new EngineSettings();
@@ -83,6 +85,7 @@ namespace Raptoru.Chaos
         }
 
         /// Migrations successives. v1 = premier format interne (plat : follow_foreground, safe_mode, max_duration_ms).
+        /// v2 → v3 (22/11) : la cible par défaut devient l'écran entier (spécification du retournement).
         public static Dictionary<string, object> Migrate(Dictionary<string, object> root, int from)
         {
             if (from <= 1)
@@ -92,6 +95,13 @@ namespace Raptoru.Chaos
                     "engine", J.Map("follow_foreground", J.Bool(root, "follow_foreground", true)),
                     "safety", J.Map("safe_mode", J.Bool(root, "safe_mode", false), "max_duration_ms", J.Num(root, "max_duration_ms", 30000)),
                     "presets", new Dictionary<string, object>());
+            }
+            if (from <= 2)
+            {
+                var engine = J.Obj(root, "engine") ?? new Dictionary<string, object>();
+                engine["default_mode"] = "monitor";
+                root["engine"] = engine;
+                root["version"] = 3;
             }
             return root;
         }

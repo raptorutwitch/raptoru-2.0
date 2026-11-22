@@ -19,7 +19,8 @@ import { getJson, postJson } from '../http.js';
 // Studio › Chaos (docs/chaos/ARCHITECTURE_MOTEUR.md) : le moteur natif d'effets d'écran. La page lit tout du moteur
 // (registre, état, mesures) et ne décide rien : elle règle le retournement (préréglage « default »), lance des essais
 // locaux (source « studio », aucun Jeton), arrête tout, et montre ce que le moteur mesure. Arrêt d'urgence hors Studio :
-// Ctrl+Maj+F11 (gardien du moteur).
+// Ctrl+Maj+F11 (gardien du moteur). Le retournement vise l'écran entier : Windows retourne l'affichage (vrai curseur,
+// souris inversée, clic sous le curseur, docs/chaos/COUCHE_ENTREES.md) ; la fenêtre seule n'est qu'un diagnostic.
 
 interface Param {
   id: string;
@@ -42,6 +43,7 @@ interface EffectDef {
   family: string;
   slot: string;
   internal: boolean;
+  input?: string;
   params: Param[];
   duration: { default_ms: number };
   transitions: Record<
@@ -62,7 +64,12 @@ interface EffectView {
   effect: string;
   state: string;
   source: { kind: string; ref: string | null };
-  target: { title?: string; process?: string; mode?: string };
+  target: {
+    title?: string;
+    process?: string | null;
+    mode?: string;
+    input?: string | null;
+  };
   remaining_ms?: number;
   resolved: { duration_ms: number };
 }
@@ -95,6 +102,11 @@ interface Status {
   captures_open: number;
   degraded: boolean;
   guardian: { pid: number; hotkey: string };
+  input?: {
+    active: { device: string; owner: string; since_ms: number }[];
+    last_apply_ms: number;
+    last_revert_ms: number;
+  };
   config: Config;
 }
 interface Surf {
@@ -139,6 +151,13 @@ interface State {
   telemetry: Telemetry | null;
   events: Ev[];
 }
+interface Mon {
+  device: string;
+  label: string;
+  primary: boolean;
+  orientation: number;
+  foreground: boolean;
+}
 interface Win {
   hwnd: number;
   title: string;
@@ -166,6 +185,9 @@ const REASON: Record<string, string> = {
   studio_stop_all: 'STOP ALL',
   emergency_hotkey: 'arrêt d’urgence (Ctrl+Maj+F11)',
   target_lost: 'fenêtre fermée',
+  display_changed: 'écran rétabli hors de Chaos (Paramètres de Windows ?)',
+  input_unavailable: 'Windows refuse de retourner cet écran',
+  input_busy: 'écran déjà retourné par un autre effet',
   capture_lost: 'capture perdue',
   never_visible: 'la fenêtre n’est jamais passée au premier plan',
   no_frame: 'aucune image capturée (fenêtre protégée ?)',
@@ -173,7 +195,7 @@ const REASON: Record<string, string> = {
   replaced: 'remplacé',
   queue_ttl: 'attente trop longue',
   queue_full: 'file pleine',
-  same_effect_active: 'déjà en cours sur cette fenêtre',
+  same_effect_active: 'déjà en cours sur cette cible',
   slot_busy: 'emplacement occupé',
   capacity: 'trop d’effets en même temps',
   start_timeout: 'démarrage trop long',
@@ -218,9 +240,9 @@ export function mountChaosPage(root: HTMLElement) {
   p.body.innerHTML = `<div class="cx">
     <div class="cx__main">
       <section class="cx-card cx-stage">
-        <header><h2>Écran retourné</h2><span class="d-faint">Réglage utilisé par chaque retournement</span><span class="d-sp"></span><button type="button" class="d-btn ghost sm" data-replay>${ic('repeat')}Rejouer l’aperçu</button></header>
+        <header><h2>Écran retourné</h2><span class="d-faint">Tout l’écran · vrai curseur · souris inversée</span><span class="d-sp"></span><button type="button" class="d-btn ghost sm" data-replay>${ic('repeat')}Rejouer l’aperçu</button></header>
         <div class="cx-stage__row">
-          <div class="cx-screen" data-z="screen" aria-label="Aperçu du retournement"><div class="cx-screen__bg"></div><div class="cx-screen__fg"><b>▲</b><span>HAUT</span></div><i class="cx-screen__cursor" title="Le vrai curseur ne bouge pas"></i></div>
+          <div class="cx-screen" data-z="screen" aria-label="Aperçu du retournement"><div class="cx-screen__bg"></div><div class="cx-screen__fg"><b>▲</b><span>HAUT</span><i class="cx-screen__cursor" title="Le vrai curseur, retourné avec l’écran"></i></div></div>
           <div class="cx-stage__cfg" data-z="flipcfg"></div>
         </div>
       </section>
@@ -239,6 +261,7 @@ export function mountChaosPage(root: HTMLElement) {
   let st: State | null = null;
   let readError = '';
   let windows: Win[] = [];
+  let monitors: Mon[] = [];
   let targetSel = 'foreground';
   let effectSel = 'flip';
   let showDiag = false;
@@ -349,8 +372,9 @@ export function mountChaosPage(root: HTMLElement) {
     const durKey = String(flipDuration());
     patch(
       el,
-      `${row('Coins pendant la rotation', seg('data-fill', FILL, flipFill()), 'miroir noir zoom remplissage')}
-       <p class="d-faint cx-help">${flipFill() === 'mirror' ? 'Le prolongement flou et sombre de l’image déjà tournée : l’ancien écran n’apparaît jamais.' : flipFill() === 'black' ? 'Les coins découverts sont noirs.' : 'L’image grossit juste assez pour qu’aucun coin ne soit découvert.'}</p>
+      `<p class="cx-facts">Windows retourne <b>tout l’écran</b> : le vrai curseur reste le seul, la souris est <b>inversée</b> (haut ↔ bas, gauche ↔ droite) et le clic tombe sous le curseur.</p>
+       ${row('Coins pendant la rotation', seg('data-fill', FILL, flipFill()), 'miroir noir zoom remplissage')}
+       <p class="d-faint cx-help">${flipFill() === 'mirror' ? 'Le prolongement flou et sombre de l’image déjà tournée : l’ancien écran n’apparaît jamais.' : flipFill() === 'black' ? 'Les coins découverts sont noirs.' : 'L’image grossit juste assez pour qu’aucun coin ne soit découvert.'} Seulement pendant les rotations : écran retourné, Windows affiche l’image entière.</p>
        ${row('Durée', seg('data-dur', DURATIONS.some(([k]) => k === durKey) ? DURATIONS : [...DURATIONS, [durKey, secs(Number(durKey))]], durKey), 'temps')}
        ${row(
          'Entrée',
@@ -408,40 +432,72 @@ export function mountChaosPage(root: HTMLElement) {
       (e) => showDiag || !e.internal,
     );
     const ready = st?.engine.status === 'ready';
+    const opt = (value: string, label: string, disabled = false) =>
+      `<option value="${esc(value)}" ${value === targetSel ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${esc(label)}</option>`;
     const opts = [
-      `<option value="foreground" ${targetSel === 'foreground' ? 'selected' : ''}>Fenêtre au premier plan, dans 3 s (passe dans le jeu)</option>`,
-      ...windows.map(
-        (w) =>
-          `<option value="${w.hwnd}" ${String(w.hwnd) === targetSel ? 'selected' : ''} ${w.minimized ? 'disabled' : ''}>${esc(w.title.slice(0, 70))} — ${esc(w.process)} (${w.width}×${w.height})${w.minimized ? ' · réduite' : ''}</option>`,
+      opt(
+        'foreground',
+        'Écran du jeu au premier plan, dans 3 s (passe dans le jeu)',
       ),
+      ...monitors.map((m) =>
+        opt(
+          `mon:${m.device}`,
+          `${m.label}${m.orientation ? ` · déjà tourné de ${m.orientation}°` : ''}`,
+        ),
+      ),
+      showDiag && windows.length
+        ? `<optgroup label="Diagnostic : fenêtre seule (visuel uniquement, clics non alignés)">${windows
+            .map((w) =>
+              opt(
+                String(w.hwnd),
+                `${w.title.slice(0, 70)} — ${w.process} (${w.width}×${w.height})${w.minimized ? ' · réduite' : ''}`,
+                w.minimized,
+              ),
+            )
+            .join('')}</optgroup>`
+        : '',
     ].join('');
     patch(
       el,
       `<div class="cx-test">
         <label class="cx-test__f"><span class="d-lb">Effet</span><select data-effect>${effects.map((e) => `<option value="${esc(e.id)}" ${e.id === effectSel ? 'selected' : ''}>${esc(e.label)}${e.internal ? ' (diagnostic)' : ''}</option>`).join('')}</select></label>
-        <label class="cx-test__f cx-test__t"><span class="d-lb">Fenêtre</span><select data-target>${opts}</select></label>
-        <button type="button" class="d-ib" data-refresh-targets aria-label="Actualiser la liste des fenêtres" title="Actualiser">${ic('repeat')}</button>
+        <label class="cx-test__f cx-test__t"><span class="d-lb">Cible</span><select data-target>${opts}</select></label>
+        <button type="button" class="d-ib" data-refresh-targets aria-label="Actualiser la liste des écrans" title="Actualiser">${ic('repeat')}</button>
         <button type="button" class="d-btn pri" data-test ${ready && !countdown ? '' : 'disabled'}>${countdown ? `Dans ${countdown} s…` : `${ic('play')}Tester`}</button>
       </div>
-      <p class="d-faint cx-help">Le jeu doit être en <b>fenêtré sans bordure</b>. L’effet ne s’affiche que lorsque la fenêtre choisie est au premier plan. Arrêt d’urgence partout : <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>F11</kbd>.</p>`,
+      <p class="d-faint cx-help">Le jeu doit être en <b>fenêtré sans bordure</b> (le plein écran exclusif est refusé). Arrêt d’urgence partout : <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>F11</kbd> ; si le moteur s’arrête pour n’importe quelle raison, Windows remet l’écran à l’endroit.</p>`,
     );
   }
 
   async function loadTargets() {
     try {
-      windows = (await getJson<{ windows: Win[] }>('/api/chaos/targets'))
-        .windows;
+      const t = await getJson<{ windows: Win[]; monitors?: Mon[] }>(
+        '/api/chaos/targets',
+      );
+      windows = t.windows;
+      monitors = t.monitors ?? [];
     } catch {
       windows = [];
+      monitors = [];
     }
+    if (targetSel !== 'foreground' && !targetValid()) targetSel = 'foreground';
     paintTest();
   }
 
+  function targetValid() {
+    return targetSel.startsWith('mon:')
+      ? monitors.some((m) => `mon:${m.device}` === targetSel)
+      : showDiag && windows.some((w) => String(w.hwnd) === targetSel);
+  }
+
   async function test(btn: HTMLElement | null) {
+    // « Premier plan » : le moteur vise l'écran du jeu (default_mode = monitor).
     const target =
       targetSel === 'foreground'
         ? { kind: 'foreground' }
-        : { kind: 'window', hwnd: Number(targetSel) };
+        : targetSel.startsWith('mon:')
+          ? { kind: 'monitor', device: targetSel.slice(4) }
+          : { kind: 'window', hwnd: Number(targetSel) };
     const send = () =>
       run(
         btn,
@@ -479,7 +535,7 @@ export function mountChaosPage(root: HTMLElement) {
               const d = def(v.effect);
               return `<li><b>${esc(d?.label ?? v.effect)}</b>
                 <span class="d-tag ${v.state === 'active' ? 'ok' : v.state === 'queued' ? 'off' : 'warn'}">${esc(STATE[v.state] ?? v.state)}</span>
-                <span class="d-faint cx-live__t">${esc(v.target.process ?? '')} · mode ${esc(v.target.mode ?? '?')}${v.remaining_ms !== undefined ? ` · reste ${secs(v.remaining_ms)}` : ''}</span>
+                <span class="d-faint cx-live__t">${esc(v.target.mode === 'C' ? (v.target.title ?? 'écran entier') : `fenêtre seule · ${v.target.process ?? ''}`)}${v.target.input ? ' · souris inversée' : ''}${v.remaining_ms !== undefined ? ` · reste ${secs(v.remaining_ms)}` : ''}</span>
                 <span class="d-tag off">${esc(v.source.kind)}</span>
                 <button type="button" class="d-btn ghost sm" data-cancel="${esc(v.request_id)}">${ic('stop')}Arrêter</button></li>`;
             })
@@ -500,7 +556,7 @@ export function mountChaosPage(root: HTMLElement) {
             .map(
               (
                 e,
-              ) => `<li class="${e.internal ? 'is-diag' : ''}"><div class="cx-cat__h"><b>${esc(e.label)}</b><span class="d-tag">${esc(r.families[e.family]?.label ?? e.family)}</span>${impl.has(e.id) ? '' : '<span class="d-tag bad">non implémenté</span>'}</div>
+              ) => `<li class="${e.internal ? 'is-diag' : ''}"><div class="cx-cat__h"><b>${esc(e.label)}</b><span class="d-tag">${esc(r.families[e.family]?.label ?? e.family)}</span>${e.input ? '<span class="d-tag" title="Couche Entrées : écran entier">souris inversée</span>' : ''}${impl.has(e.id) ? '' : '<span class="d-tag bad">non implémenté</span>'}</div>
                 <p>${esc(e.description)}</p>
                 <p class="d-faint">${esc(r.slots[e.slot]?.label ?? e.slot)} · ${e.params.filter((x) => x.exposed !== false).length} réglage(s) · ${esc(e.gpu.primitive)} · v${e.version}</p></li>`,
             )
@@ -525,6 +581,8 @@ export function mountChaosPage(root: HTMLElement) {
           : '<span class="d-tag off">démarrage</span>';
     const surf = t?.surfaces?.[0];
     const passes = Object.entries(t?.passes ?? {});
+    const inp = st?.status?.input;
+    const held = inp?.active ?? [];
     patch(
       z('engine'),
       e.status === 'absent'
@@ -536,11 +594,14 @@ export function mountChaosPage(root: HTMLElement) {
           <dt>Arrêt d’urgence</dt><dd>Ctrl+Maj+F11 ${hot}</dd>
           <dt>Relances</dt><dd>${e.restarts}${e.lastExit ? ` · dernier arrêt : ${esc(REASON[e.lastExit.reason ?? ''] ?? e.lastExit.reason ?? `code ${e.lastExit.code}`)}` : ''}</dd>
           <dt>Captures ouvertes</dt><dd>${st?.status?.captures_open ?? 0}</dd>
+          <dt>Écran retourné</dt><dd>${held.length ? `${held.map((x) => esc(monitors.find((m) => m.device === x.device)?.label ?? x.device)).join(', ')} <span class="d-tag warn">par Windows</span>` : 'aucun'}${inp && inp.last_apply_ms >= 0 ? ` · bascule ${ms(inp.last_apply_ms)}${inp.last_revert_ms >= 0 ? `, retour ${ms(inp.last_revert_ms)}` : ''}` : ''}</dd>
           ${
-            surf
-              ? `<dt>Capture / affichage</dt><dd>${nb(surf.capture_fps)} / ${nb(surf.present_fps)}${NBSP}images/s${surf.dropped ? ` · ${surf.dropped}${NBSP}perdue(s)` : ''}</dd>
+            surf && !surf.visible && held.length
+              ? '<dt>Calque</dt><dd>retiré : Windows tient l’écran, aucune capture</dd>'
+              : surf
+                ? `<dt>Capture / affichage</dt><dd>${nb(surf.capture_fps)} / ${nb(surf.present_fps)}${NBSP}images/s${surf.dropped ? ` · ${surf.dropped}${NBSP}perdue(s)` : ''}</dd>
           <dt>Traitement</dt><dd>${ms(surf.processing_p50_ms)} (p95 ${ms(surf.processing_p95_ms)})${surf.black ? ' · <span class="d-tag warn">image noire</span>' : ''}</dd>`
-              : ''
+                : ''
           }
           ${passes.length ? `<dt>GPU par passe</dt><dd>${passes.map(([k, v]) => `${esc(k)} ${ms(v.p50_ms)}`).join(' · ')}</dd>` : ''}
           ${t ? `<dt>Processus</dt><dd>CPU ${nb(t.process.cpu_pct, 2)}${NBSP}% · ${nb(t.process.private_mb, 0)}${NBSP}Mo · vidéo ${nb(t.vram_mb, 0)}${NBSP}Mo</dd>` : ''}
@@ -588,7 +649,7 @@ export function mountChaosPage(root: HTMLElement) {
       `${grp(
         'Moteur',
         'gear',
-        `${row('Seulement quand la fenêtre est au premier plan', sw(c.engine.follow_foreground, 'data-cfg="engine.follow_foreground"', 'Seulement au premier plan'), 'focus alt tab')}
+        `${row('Fenêtre seule (diagnostic) : seulement au premier plan', sw(c.engine.follow_foreground, 'data-cfg="engine.follow_foreground"', 'Fenêtre seule : seulement au premier plan'), 'focus alt tab fenêtre')}
         ${row('Réduire la qualité si le moteur ralentit', sw(c.engine.quality === 'auto', 'data-quality', 'Réduire la qualité si le moteur ralentit'), 'repli performance qualité auto')}
         ${numrow('Garder la capture après un effet', fld('data-cfg-num="engine.capture_linger_ms" min="0" max="30000" step="500"', c.engine.capture_linger_ms, 'ms'), 'capture délai')}`,
       )}
@@ -719,6 +780,8 @@ export function mountChaosPage(root: HTMLElement) {
     else if (t.matches('[data-effect]')) effectSel = t.value;
     else if (t.matches('[data-diag]')) {
       showDiag = (t as HTMLInputElement).checked;
+      if (!showDiag && !targetValid() && targetSel !== 'foreground')
+        targetSel = 'foreground';
       paintCatalog();
       paintTest();
     } else if (t.matches('[data-in-ms]'))

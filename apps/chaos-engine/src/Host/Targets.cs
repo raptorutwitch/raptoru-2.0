@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Raptoru.Chaos
 {
@@ -29,11 +30,37 @@ namespace Raptoru.Chaos
             return list;
         }
 
-        /// spec : {kind:"window", hwnd} | {kind:"foreground"} | {kind:"monitor", hwnd?} ; mode par défaut pour « foreground ».
-        public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, bool needsCapture)
+        /// Écrans (cible par défaut du retournement) : nom Windows, position, taille, orientation, écran du premier plan.
+        public static List<Dictionary<string, object>> Monitors()
+        {
+            var list = new List<Dictionary<string, object>>();
+            IntPtr fgMon = N.MonitorFromWindow(N.GetForegroundWindow(), 2);
+            RECT primary = N.MonitorRect(N.GetDesktopWindow());
+            foreach (var m in N.Monitors())
+            {
+                RECT r = N.MonitorRectOf(m);
+                string dev = N.MonitorDevice(m);
+                bool isPrimary = r.Left == 0 && r.Top == 0;
+                list.Add(J.Map("device", dev, "label", MonitorLabel(r, primary, isPrimary), "primary", isPrimary, "x", r.Left, "y", r.Top,
+                    "width", r.Right - r.Left, "height", r.Bottom - r.Top, "orientation", Math.Max(0, N.DisplayOrientation(dev)) * 90,
+                    "foreground", m == fgMon));
+            }
+            return list.OrderByDescending(d => (bool)d["primary"]).ThenBy(d => (int)d["x"]).ToList();
+        }
+
+        static string MonitorLabel(RECT r, RECT primary, bool isPrimary)
+        {
+            string where = isPrimary ? "principal" : r.Right <= primary.Left ? "à gauche" : r.Left >= primary.Right ? "à droite" : r.Bottom <= primary.Top ? "au-dessus" : "en dessous";
+            return "Écran " + where + " · " + (r.Right - r.Left) + "×" + (r.Bottom - r.Top);
+        }
+
+        /// spec : {kind:"window", hwnd} | {kind:"foreground"} | {kind:"monitor", device? | hwnd?}.
+        /// « foreground » vise l'écran du jeu au premier plan (default_mode = monitor) ou sa fenêtre seule (window).
+        public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, EffectDef def)
         {
             string kind = J.Str(spec, "kind", "foreground");
-            IntPtr h;
+            bool foreground = kind == "foreground";
+            IntPtr h, hmon = IntPtr.Zero;
             switch (kind)
             {
                 case "window":
@@ -45,22 +72,42 @@ namespace Raptoru.Chaos
                     if (defaultMode == "monitor") kind = "monitor";
                     break;
                 case "monitor":
-                    h = J.Has(spec, "hwnd") ? new IntPtr((long)J.Num(spec, "hwnd", 0)) : N.GetDesktopWindow();
+                    if (J.Has(spec, "device"))
+                    {
+                        hmon = N.MonitorByDevice(J.Str(spec, "device", ""));
+                        if (hmon == IntPtr.Zero) throw new ProtocolError("no_monitor", "écran introuvable : " + J.Str(spec, "device", ""));
+                        h = N.GetDesktopWindow();
+                    }
+                    else h = J.Has(spec, "hwnd") ? new IntPtr((long)J.Num(spec, "hwnd", 0)) : N.GetDesktopWindow();
                     break;
                 default: throw new ProtocolError("invalid_target", "cible inconnue : " + kind);
             }
             if (h == IntPtr.Zero || !N.IsWindow(h)) throw new ProtocolError("no_window", "fenêtre cible introuvable");
             uint pid; N.GetWindowThreadProcessId(h, out pid);
-            if (pid == selfPid) throw new ProtocolError("invalid_target", "une fenêtre du moteur ne peut pas être une cible");
             bool monitor = kind == "monitor";
+            if (!monitor && pid == selfPid) throw new ProtocolError("invalid_target", "une fenêtre du moteur ne peut pas être une cible");
             if (!monitor && N.IsIconic(h)) throw new ProtocolError("target_minimized", "la fenêtre cible est réduite");
             int quns;
-            if (needsCapture && N.SHQueryUserNotificationState(out quns) == 0 && quns == N.QUNS_RUNNING_D3D_FULL_SCREEN)
-                throw new ProtocolError("exclusive_fullscreen", "un jeu est en plein écran exclusif : rien ne peut s'afficher au-dessus ; passer en fenêtré sans bordure");
+            if (def.RequiresCapture && N.SHQueryUserNotificationState(out quns) == 0 && quns == N.QUNS_RUNNING_D3D_FULL_SCREEN)
+                throw new ProtocolError("exclusive_fullscreen", "un jeu est en plein écran exclusif : rien ne peut s'afficher au-dessus et l'écran ne peut pas être retourné ; passer en fenêtré sans bordure");
             var t = new TargetRef { Kind = monitor ? "monitor" : "window", Hwnd = h };
-            t.Key = monitor ? "monitor:" + N.MonitorFromWindow(h, 2).ToInt64().ToString("x") : "window:" + h.ToInt64().ToString("x");
-            t.Info = J.Map("kind", t.Kind, "mode", monitor ? "C" : "D", "hwnd", h.ToInt64(), "process", ProcName(pid),
-                "title", monitor ? "écran" : N.WindowText(h), "follow_foreground", J.Bool(spec, "follow_foreground", true));
+            if (monitor)
+            {
+                if (hmon == IntPtr.Zero) hmon = N.MonitorFromWindow(h, 2);
+                t.Hmon = hmon;
+                t.Device = N.MonitorDevice(hmon);
+                if (t.Device == null) throw new ProtocolError("no_monitor", "écran introuvable");
+                RECT r = N.MonitorRectOf(hmon);
+                t.Key = "monitor:" + t.Device;
+                t.Info = J.Map("kind", "monitor", "mode", "C", "device", t.Device, "title", MonitorLabel(r, N.MonitorRect(N.GetDesktopWindow()), r.Left == 0 && r.Top == 0),
+                    "process", foreground ? ProcName(pid) : null, "input", def.Input, "follow_foreground", false);
+            }
+            else
+            {
+                t.Key = "window:" + h.ToInt64().ToString("x");
+                t.Info = J.Map("kind", "window", "mode", "D", "hwnd", h.ToInt64(), "process", ProcName(pid), "title", N.WindowText(h),
+                    "input", null, "follow_foreground", J.Bool(spec, "follow_foreground", true));
+            }
             return t;
         }
     }

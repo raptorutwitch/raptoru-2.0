@@ -31,12 +31,14 @@ namespace Raptoru.Chaos
         public uint Height { get { return h; } }
         public IntPtr BackBuffer { get { return rtv; } }
 
-        public Surface(Gpu gpu, string key, IntPtr target, bool monitorMode, uint width, uint height)
+        /// hmon ≠ 0 : l'écran entier (mode C) ; sinon la fenêtre target (mode D).
+        public Surface(Gpu gpu, string key, IntPtr target, IntPtr hmon, uint width, uint height)
         {
-            this.gpu = gpu; Key = key; Target = target; MonitorMode = monitorMode;
+            this.gpu = gpu; Key = key; Target = target; MonitorMode = hmon != IntPtr.Zero;
+            bool monitorMode = MonitorMode;
             TargetRoot = N.GetAncestor(target, N.GA_ROOTOWNER);
             if (TargetRoot == IntPtr.Zero) TargetRoot = target;
-            bounds = monitorMode ? N.MonitorRect(target) : N.FrameBounds(target);
+            bounds = monitorMode ? N.MonitorRectOf(hmon) : N.FrameBounds(target);
             w = width; h = height;
             hwnd = CreateWindow(bounds.Left, bounds.Top, (int)w, (int)h);
             if (monitorMode && !N.SetWindowDisplayAffinity(hwnd, N.WDA_EXCLUDEFROMCAPTURE))

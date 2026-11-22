@@ -1,6 +1,6 @@
 # Configuration du moteur Chaos
 
-Le fichier est `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 2. Il se règle dans Studio ›
+Le fichier est `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 3. Il se règle dans Studio ›
 Chaos (panneau Réglages et carte « Écran retourné »), ou par les commandes `config.*` et `preset.*`.
 
 ## 1. Cinq choses séparées
@@ -15,16 +15,16 @@ Chaos (panneau Réglages et carte « Écran retourné »), ou par les commandes 
 
 ## 2. Réglages
 
-| Réglage                        | Défaut   | Bornes                | Effet                                                                                      |
-| ------------------------------ | -------- | --------------------- | ------------------------------------------------------------------------------------------ |
-| `engine.follow_foreground`     | vrai     | —                     | l'effet ne s'affiche que si la fenêtre visée est au premier plan (Alt+Tab le masque)       |
-| `engine.capture_linger_ms`     | 2000     | 0 à 30 000            | garde la capture après un effet (pas de recréation à l'effet suivant)                      |
-| `engine.quality`               | `auto`   | `auto` ou `high`      | `auto` : remplissage flou remplacé par du noir si le moteur ralentit pendant 2 intervalles |
-| `engine.telemetry_interval_ms` | 1000     | 250 à 10 000          | fréquence de `engine.telemetry`                                                            |
-| `engine.default_mode`          | `window` | `window` ou `monitor` | mode d'une cible « premier plan »                                                          |
-| `safety.max_duration_ms`       | 30 000   | 1000 à 60 000         | durée maximale d'un effet                                                                  |
-| `safety.max_active_effects`    | 4        | 1 à 8                 | effets simultanés au plus                                                                  |
-| `safety.safe_mode`             | faux     | —                     | les rotations deviennent instantanées                                                      |
+| Réglage                        | Défaut    | Bornes                | Effet                                                                                                            |
+| ------------------------------ | --------- | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `engine.follow_foreground`     | vrai      | —                     | fenêtre seule (diagnostic) : l'effet ne s'affiche que si la fenêtre est au premier plan                          |
+| `engine.capture_linger_ms`     | 2000      | 0 à 30 000            | garde la capture après un effet (pas de recréation à l'effet suivant)                                            |
+| `engine.quality`               | `auto`    | `auto` ou `high`      | `auto` : remplissage flou remplacé par du noir si le moteur ralentit pendant 2 intervalles                       |
+| `engine.telemetry_interval_ms` | 1000      | 250 à 10 000          | fréquence de `engine.telemetry`                                                                                  |
+| `engine.default_mode`          | `monitor` | `monitor` ou `window` | cible « premier plan » : l'écran entier du jeu (retournement + souris inversée) ou sa fenêtre seule (diagnostic) |
+| `safety.max_duration_ms`       | 30 000    | 1000 à 60 000         | durée maximale d'un effet                                                                                        |
+| `safety.max_active_effects`    | 4         | 1 à 8                 | effets simultanés au plus                                                                                        |
+| `safety.safe_mode`             | faux      | —                     | les rotations deviennent instantanées                                                                            |
 
 ## 3. Validation, persistance, migration
 
@@ -35,6 +35,7 @@ Chaos (panneau Réglages et carte « Écran retourné »), ou par les commandes 
 - Valeur invalide dans le fichier : elle est ignorée et signalée (`hello.config_notes`) ; le reste est appliqué.
 - Version ancienne : migrée à la lecture, avec une sauvegarde `config.json.v<n>.bak`.
   - Migration v1 → v2 : du format plat aux sections.
+  - Migration v2 → v3 (22/11) : `engine.default_mode` passe à `monitor` (le retournement vise l'écran entier).
   - Une migration est une fonction de plus dans `ConfigStore.Migrate`.
 - Version plus récente que le moteur : refusée (`config_too_new`). Le moteur ne démarre pas plutôt que d'écraser.
 - Retour aux défauts : `config.reset` (`engine`, `safety`, `presets`, ou tout).

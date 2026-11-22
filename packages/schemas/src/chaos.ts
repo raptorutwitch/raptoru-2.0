@@ -95,9 +95,14 @@ export const chaosEffectRequestSchema = z
             follow_foreground: z.boolean().optional(),
           })
           .strict(),
+        // Écran entier (défaut du retournement : Windows retourne l'affichage, souris inversée, vrai curseur).
         z
           .object({
             kind: z.literal('monitor'),
+            device: z
+              .string()
+              .regex(/^\\\\\.\\DISPLAY\d{1,2}$/)
+              .optional(),
             hwnd: z.number().int().positive().optional(),
           })
           .strict(),
@@ -150,6 +155,7 @@ const transitionDef = z.object({
   curve: z.string().optional(),
   kinds: z.array(z.enum(['ramp', 'cut'])).optional(),
 });
+export const CHAOS_INPUT_EFFECTS = ['invert_xy'] as const;
 export const chaosEffectDefSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_.]{0,40}$/),
   version: z.number().int().positive(),
@@ -159,6 +165,8 @@ export const chaosEffectDefSchema = z.object({
   slot: z.string(),
   internal: z.boolean(),
   on_conflict: z.enum(CHAOS_POLICIES),
+  /** Transformation d'entrée (couche Entrées) appliquée quand la cible est l'écran entier. */
+  input: z.enum(CHAOS_INPUT_EFFECTS).optional(),
   gpu: z.object({
     primitive: z.string(),
     cost: z.string(),
@@ -194,6 +202,16 @@ export const chaosRegistrySchema = z.object({
     max_transition_ms: z.number().int().positive(),
   }),
   families: z.record(z.string(), z.object({ label: z.string() })),
+  input_effects: z
+    .record(
+      z.enum(CHAOS_INPUT_EFFECTS),
+      z.object({
+        label: z.string(),
+        description: z.string(),
+        scope: z.literal('monitor'),
+      }),
+    )
+    .optional(),
   slots: z.record(
     z.string(),
     z.object({

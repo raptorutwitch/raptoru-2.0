@@ -1,6 +1,6 @@
 {
   "schema": "raptoru.chaos.registry",
-  "version": 1,
+  "version": 2,
   "engine_limits": {
     "min_duration_ms": 1000,
     "max_duration_ms": 60000,
@@ -16,6 +16,13 @@
     "lisibilite": { "label": "Lisibilité" },
     "calque": { "label": "Calques" },
     "diagnostic": { "label": "Diagnostic (interne)" }
+  },
+  "input_effects": {
+    "invert_xy": {
+      "label": "Souris inversée (X et Y)",
+      "description": "Windows retourne l'affichage de l'écran : le vrai curseur reste unique, la souris est inversée (haut ↔ bas, gauche ↔ droite) et le clic tombe sous le curseur. Écran entier seulement.",
+      "scope": "monitor"
+    }
   },
   "slots": {
     "transform": {
@@ -42,11 +49,12 @@
       "id": "flip",
       "version": 1,
       "label": "Écran retourné",
-      "description": "L'image du jeu tourne à 180°. La souris et le clavier restent normaux.",
+      "description": "Tout l'écran se retourne à 180°. Le vrai curseur reste le seul curseur : la souris est inversée et le clic tombe sous le curseur.",
       "family": "orientation",
       "slot": "transform",
       "internal": false,
       "on_conflict": "queue",
+      "input": "invert_xy",
       "gpu": { "primitive": "transform", "cost": "low", "passes": 1 },
       "duration": { "default_ms": 10000 },
       "params": [
@@ -93,6 +101,7 @@
         "stop_all",
         "target_lost",
         "capture_lost",
+        "display_changed",
         "error"
       ]
     },

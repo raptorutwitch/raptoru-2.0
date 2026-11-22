@@ -3,6 +3,7 @@
 //   --guardian <pid du moteur>          (lancé par le moteur lui-même)
 //   --test-target [--x --y --w --h]     (mire des contrôles automatiques)
 //   --render-preview <dossier>          (aperçu hors écran des transitions en PNG : développement des shaders)
+//   --restore-display                   (secours : tous les écrans reviennent aux réglages enregistrés de Windows)
 //   --describe | --version
 // L'interface est la page Chaos de Raptoru Studio ; le moteur n'a pas de fenêtre de contrôle.
 using System;
@@ -20,7 +21,7 @@ namespace Raptoru.Chaos
 {
     static class Program
     {
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.0";
 
         [STAThread]
         static int Main(string[] args)
@@ -55,6 +56,10 @@ namespace Raptoru.Chaos
                         "implemented", EffectCatalog.Implemented.ToArray(), "mismatches", EffectCatalog.Mismatches(reg).ToArray())));
                     return EffectCatalog.Mismatches(reg).Count == 0 ? 0 : 1;
                 case "--version": Console.WriteLine(Version); return 0;
+                case "--restore-display":
+                    int rr = InputLayer.RestoreAllDisplays();
+                    Console.WriteLine(rr == 0 ? "écrans rétablis (réglages enregistrés de Windows)" : "échec, code " + rr);
+                    return rr == 0 ? 0 : 1;
                 default:
                     MessageBox.Show("Le moteur Chaos se pilote depuis Raptoru Studio (page Chaos) ou le banc Chaos Lab.\n\n" +
                         "Arrêt d'urgence à tout moment : Ctrl+Maj+F11.", "Raptoru Chaos " + Version);

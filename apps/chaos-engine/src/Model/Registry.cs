@@ -40,6 +40,8 @@ namespace Raptoru.Chaos
     sealed class EffectDef
     {
         public string Id, Label, Description, Family, SlotId, OnConflict = "queue", Primitive;
+        /// Transformation d'entrée liée (couche Entrées), appliquée quand la cible est un écran entier ; null = aucune.
+        public string Input;
         public int Version, DefaultDurationMs = 10000;
         public bool Internal;
         public SlotDef Slot;
@@ -60,6 +62,9 @@ namespace Raptoru.Chaos
 
     sealed class RegistryError : Exception { public RegistryError(string m) : base(m) { } }
 
+    /// Identifiants de la couche Entrées connus de la logique pure (la couche elle-même est dans src/Input).
+    static class InputLayerIds { public const string InvertXY = "invert_xy"; }
+
     sealed class Registry
     {
         public const string Schema = "raptoru.chaos.registry";
@@ -67,6 +72,8 @@ namespace Raptoru.Chaos
         public EngineLimits Limits = new EngineLimits();
         public Dictionary<string, SlotDef> Slots = new Dictionary<string, SlotDef>();
         public Dictionary<string, string> Families = new Dictionary<string, string>();
+        /// Transformations d'entrée connues (couche Entrées) : identifiant → libellé.
+        public Dictionary<string, string> InputEffects = new Dictionary<string, string>();
         public Dictionary<string, EffectDef> Effects = new Dictionary<string, EffectDef>();
         public string Json;
 
@@ -103,6 +110,11 @@ namespace Raptoru.Chaos
             }
             var fam = J.Obj(root, "families") ?? new Dictionary<string, object>();
             foreach (var kv in fam) reg.Families[kv.Key] = J.Str(kv.Value as Dictionary<string, object>, "label", kv.Key);
+            foreach (var kv in J.Obj(root, "input_effects") ?? new Dictionary<string, object>())
+            {
+                if (kv.Key != InputLayerIds.InvertXY) throw new RegistryError("transformation d'entrée inconnue du moteur : " + kv.Key);
+                reg.InputEffects[kv.Key] = J.Str(kv.Value as Dictionary<string, object>, "label", kv.Key);
+            }
             var slots = J.Obj(root, "slots") ?? new Dictionary<string, object>();
             foreach (var kv in slots)
             {
@@ -139,6 +151,8 @@ namespace Raptoru.Chaos
             if (!reg.Slots.TryGetValue(e.SlotId, out e.Slot)) throw new RegistryError(where + "emplacement inconnu " + e.SlotId);
             if (!new[] { "queue", "replace", "reject", "extend" }.Contains(e.OnConflict)) throw new RegistryError(where + "on_conflict invalide");
             e.Primitive = J.Str(J.Obj(o, "gpu"), "primitive", "");
+            e.Input = J.Str(o, "input", null);
+            if (e.Input != null && !reg.InputEffects.ContainsKey(e.Input)) throw new RegistryError(where + "transformation d'entrée inconnue " + e.Input);
             e.DefaultDurationMs = (int)J.Num(J.Obj(o, "duration"), "default_ms", 10000);
             if (e.DefaultDurationMs < reg.Limits.MinDurationMs || e.DefaultDurationMs > reg.Limits.MaxDurationMs) throw new RegistryError(where + "durée par défaut hors bornes");
             foreach (var po in J.Arr(o, "params")) e.Params.Add(ParseParam(po as Dictionary<string, object>, where));

@@ -17,19 +17,19 @@ Protocole **v2**. Les types TypeScript et les schémas zod sont dans `packages/s
 
 ## 2. Commandes
 
-| Commande                                     | Corps                                                           | Résultat                                                                              |
-| -------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `hello` / `ping`                             | —                                                               | identité, version, protocole, registre, carte graphique, temps de démarrage / horloge |
-| `describe`                                   | —                                                               | `registry` (le fichier entier), `implemented`, `primitives`, `curves`                 |
-| `status`                                     | —                                                               | effets actifs et en file (vues), surfaces, captures ouvertes, gardien, configuration  |
-| `diagnostics`                                | —                                                               | télémétrie complète, shaders, pool, gardien, démarrage                                |
-| `targets.list`                               | —                                                               | fenêtres proposables (hwnd, titre, processus, taille, réduite, premier plan)          |
-| `effect.request`                             | voir § 3                                                        | la vue de la demande (§ 4)                                                            |
-| `effect.cancel`                              | `request_id`, `immediate?`, `reason?`                           | `{canceled}`                                                                          |
-| `stop_all`                                   | `reason?`                                                       | `{stopped: n}` (file vidée, tout coupé sans transition)                               |
-| `config.get` / `config.set` / `config.reset` | `section` (`engine`, `safety` ; `presets` pour reset), `values` | la configuration                                                                      |
-| `preset.set` / `preset.delete`               | `effect`, `name`, `value` (params, `duration_ms`, `transition`) | la configuration                                                                      |
-| `shutdown`                                   | —                                                               | `{bye}`, puis STOP ALL et sortie                                                      |
+| Commande                                     | Corps                                                           | Résultat                                                                                                                                                  |
+| -------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello` / `ping`                             | —                                                               | identité, version, protocole, registre, carte graphique, temps de démarrage / horloge                                                                     |
+| `describe`                                   | —                                                               | `registry` (le fichier entier), `implemented`, `primitives`, `curves`                                                                                     |
+| `status`                                     | —                                                               | effets actifs et en file (vues), surfaces, captures ouvertes, gardien, `input`, configuration                                                             |
+| `diagnostics`                                | —                                                               | télémétrie complète, shaders, pool, gardien, démarrage                                                                                                    |
+| `targets.list`                               | —                                                               | `monitors` (device, libellé, principal, position, taille, orientation, premier plan) et `windows` (hwnd, titre, processus, taille, réduite, premier plan) |
+| `effect.request`                             | voir § 3                                                        | la vue de la demande (§ 4)                                                                                                                                |
+| `effect.cancel`                              | `request_id`, `immediate?`, `reason?`                           | `{canceled}`                                                                                                                                              |
+| `stop_all`                                   | `reason?`                                                       | `{stopped: n}` (file vidée, tout coupé sans transition)                                                                                                   |
+| `config.get` / `config.set` / `config.reset` | `section` (`engine`, `safety` ; `presets` pour reset), `values` | la configuration                                                                                                                                          |
+| `preset.set` / `preset.delete`               | `effect`, `name`, `value` (params, `duration_ms`, `transition`) | la configuration                                                                                                                                          |
+| `shutdown`                                   | —                                                               | `{bye}`, puis STOP ALL et sortie                                                                                                                          |
 
 Codes d'erreur courants :
 
@@ -38,7 +38,7 @@ Codes d'erreur courants :
   `invalid_policy`, `unknown_preset`, `unknown_variant` ;
 - paramètres et durée : `unknown_param`, `invalid_param`, `param_out_of_range`, `param_not_overridable`,
   `duration_out_of_range`, `invalid_transition` ;
-- cible : `no_window`, `target_minimized`, `exclusive_fullscreen`, `no_foreground`, `invalid_target` ;
+- cible : `no_window`, `no_monitor`, `target_minimized`, `exclusive_fullscreen`, `no_foreground`, `invalid_target` ;
 - autres : `unknown_request`, `invalid_config`, `config_too_new`.
 
 ## 3. Demande d'effet (`effect.request`)
@@ -54,10 +54,15 @@ Une demande sépare les éléments suivants :
 - **politique de conflit** : `policy` (`queue`, `replace`, `reject` ou `extend`) ;
 - **source** : `source.kind` et `source.ref` ;
 - **cible** : `target` ;
-  - `{kind:"window",hwnd}` (mode D) ;
-  - `{kind:"foreground"}` ;
-  - `{kind:"monitor",hwnd?}` (mode C) ;
-  - `follow_foreground?`.
+  - `{kind:"monitor",device}` : l'écran entier `\\.\DISPLAYn` (mode C, **comportement voulu du retournement** :
+    Windows retourne l'écran, souris inversée, voir [COUCHE_ENTREES.md](COUCHE_ENTREES.md)) ;
+  - `{kind:"monitor",hwnd?}` : l'écran qui contient cette fenêtre ;
+  - `{kind:"foreground"}` (défaut) : l'écran du jeu au premier plan (`default_mode` = `monitor`), ou sa fenêtre seule
+    (`window`) ;
+  - `{kind:"window",hwnd}` (mode D, diagnostic : image seule, souris normale, clics non alignés) ;
+  - `follow_foreground?` (fenêtre seule).
+- La vue de la demande dit ce qui sera fait : `target.mode` (`C` écran entier, `D` fenêtre), `target.input`
+  (`invert_xy` ou null), `target.title`.
 
 Sources possibles : `studio`, `core`, `extension`, `channel_points`, `test`.
 
@@ -70,26 +75,32 @@ Sources possibles : `studio`, `core`, `extension`, `channel_points`, `test`.
 
 `effect.<état>`, avec la vue complète de la demande :
 
-| Événement                           | Sens                                                                                                                                                                                 | Pour le futur Core             |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| `accepted`                          | va démarrer (ressources en préparation)                                                                                                                                              | —                              |
-| `queued`                            | en file (`position`, `blocked_by`)                                                                                                                                                   | afficher « en attente »        |
-| `started`                           | **première image réellement visible** (la durée court à partir de là)                                                                                                                | point de non-remboursement     |
-| `extended`                          | prolongé par une autre demande (`by`)                                                                                                                                                | —                              |
-| `ended`                             | terminé (`reason` : `duration`, `canceled`, `stop_all`, `emergency_hotkey`, `target_lost`, `capture_lost`, `never_visible`, `replaced`, `shutdown`…), avec `started` et `visible_ms` | rembourser si `started` = faux |
-| `failed`                            | échec (`reason`, `detail`)                                                                                                                                                           | rembourser si `started` = faux |
-| `canceled` / `expired` / `rejected` | annulé en file / attente trop longue / refusé (`reason`)                                                                                                                             | rembourser                     |
-| `merged` / `duplicate`              | absorbé par un prolongement / demande rejouée                                                                                                                                        | —                              |
+| Événement                           | Sens                                                                                                                                                                                                                         | Pour le futur Core             |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `accepted`                          | va démarrer (ressources en préparation)                                                                                                                                                                                      | —                              |
+| `queued`                            | en file (`position`, `blocked_by`)                                                                                                                                                                                           | afficher « en attente »        |
+| `started`                           | **première image réellement visible** (la durée court à partir de là)                                                                                                                                                        | point de non-remboursement     |
+| `extended`                          | prolongé par une autre demande (`by`)                                                                                                                                                                                        | —                              |
+| `ended`                             | terminé (`reason` : `duration`, `canceled`, `stop_all`, `emergency_hotkey`, `target_lost`, `capture_lost`, `display_changed`, `input_unavailable`, `never_visible`, `replaced`, `shutdown`…), avec `started` et `visible_ms` | rembourser si `started` = faux |
+| `failed`                            | échec (`reason`, `detail`)                                                                                                                                                                                                   | rembourser si `started` = faux |
+| `canceled` / `expired` / `rejected` | annulé en file / attente trop longue / refusé (`reason`)                                                                                                                                                                     | rembourser                     |
+| `merged` / `duplicate`              | absorbé par un prolongement / demande rejouée                                                                                                                                                                                | —                              |
 
 Événements du moteur :
 
 - `engine.ready`, `engine.telemetry`, `engine.degraded` et `engine.recovered` ;
-- `engine.emergency_stop`, `engine.error` et `engine.exit` (avec `reason`).
+- `engine.emergency_stop`, `engine.error` (dont `input_unavailable`, `input_busy` avec `request_id`) et
+  `engine.exit` (avec `reason`).
+
+État de la couche Entrées (`status.input`, `diagnostics.input`) : `primitive` (`display_orientation`), `active`
+(`owner` = request_id, `device`, `orientation`, `since_ms`, `apply_ms`), `last_apply_ms`, `last_revert_ms`.
 
 ## 5. Fichiers
 
-- **Registre** : schéma `raptoru.chaos.registry`, version. Voir `chaosRegistrySchema`.
-- **Configuration** : `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 2.
+- **Registre** : schéma `raptoru.chaos.registry`, version 2. Voir `chaosRegistrySchema`. `input_effects` déclare les
+  transformations d'entrée ; un effet s'y relie par `input`.
+- **Configuration** : `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 3 (v2 migrée : la cible par
+  défaut devient l'écran entier).
 - **Cache des shaders** : `<state-dir>/shader-cache/*.cso`, effaçable sans risque.
 - Studio garde un dossier par profil (`runtime/…/chaos`). Le Chaos Lab utilise `%LOCALAPPDATA%\Raptoru\Chaos\lab`.
 

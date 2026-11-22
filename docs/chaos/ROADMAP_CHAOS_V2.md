@@ -33,6 +33,12 @@ une fluidité intacte.
 > - Le retour d'Antoni sur le lot 1 est traité : l'ancien écran n'apparaît plus pendant la rotation, et le panneau
 >   Windows a été remplacé par la page Studio.
 > - Le lot 2 (module payant) n'est pas commencé.
+> - **Correctif de conception du 22/11** : le retournement vise l'écran entier. Windows retourne l'affichage (vrai
+>   curseur unique, souris inversée, clic sous le curseur) ; la couche Entrées est séparée du moteur visuel
+>   ([COUCHE_ENTREES.md](COUCHE_ENTREES.md), compatibilité et restauration). La fenêtre seule devient un diagnostic.
+>   Reste ouvert : les spectateurs (capture d'écran d'OBS) verraient la bascule sans les rotations animées, à
+>   vérifier (R5). Sur un écran à 144 Hz, les rotations tournent à environ 60 images/s (calées sur l'écran principal) :
+>   à revoir seulement si Antoni les trouve saccadées.
 > - Le texte ci-dessous décrit le prototype du lot 1 (`apps/chaos-presenter`, branche `feat/chaos-presenter-lot1`).
 >
 > **État au 22/11/2026 : prototype livré, test réel d'Antoni attendu.**

@@ -43,6 +43,11 @@
   font-size: 12px;
   line-height: 1.5;
 }
+.cx-facts {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
 .cx-inline {
   display: inline-flex;
   align-items: center;
@@ -50,7 +55,8 @@
   font-size: 12px;
 }
 
-/* Aperçu : un écran stylisé qui rejoue le réglage (rotation, coins, durées) ; le curseur, lui, ne bouge jamais. */
+/* Aperçu : un écran stylisé qui rejoue le réglage (rotation, coins, durées) ; le curseur tourne avec l'écran
+   (Windows retourne tout l'affichage, curseur compris). */
 .cx-stage__row {
   display: grid;
   grid-template-columns: minmax(220px, 340px) minmax(0, 1fr);

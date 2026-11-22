@@ -26,8 +26,8 @@ namespace Raptoru.Chaos
     /// Cible résolue par l'hôte (Win32) : clé stable et informations d'affichage.
     sealed class TargetRef
     {
-        public string Key, Kind;
-        public IntPtr Hwnd;
+        public string Key, Kind, Device;
+        public IntPtr Hwnd, Hmon;
         public Dictionary<string, object> Info = new Dictionary<string, object>();
     }
 
@@ -83,7 +83,7 @@ namespace Raptoru.Chaos
             {
                 RequestId = rid, Def = def, Variant = J.Str(b, "variant", null), PresetName = presetName, Policy = policy, Priority = (int)prio,
                 SourceKind = kind, SourceRef = J.Str(src, "ref", null), Resolved = resolved, TargetKey = target.Key, TargetInfo = target.Info,
-                TargetHwnd = target.Hwnd, TargetMonitor = target.Kind == "monitor"
+                TargetHwnd = target.Hwnd, TargetMonitor = target.Kind == "monitor", TargetHmon = target.Hmon, TargetDevice = target.Device
             };
         }
 

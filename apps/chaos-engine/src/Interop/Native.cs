@@ -1,6 +1,7 @@
 // Liaisons Windows (Win32, Direct3D 11, DXGI, DirectComposition) appelées par la table virtuelle COM.
 // Partagé par le lecteur et par chaos-checks.exe. Aucune dépendance au reste du lecteur.
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -65,6 +66,20 @@ namespace Raptoru.Chaos
     }
     [StructLayout(LayoutKind.Sequential)]
     struct MONITORINFO { public uint cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct MONITORINFOEX { public uint cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szDevice; }
+    /// DEVMODEW, variante affichage (220 octets).
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct DEVMODE
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+        public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra; public int dmFields;
+        public int dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+        public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+        public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     struct D3D11_TEXTURE2D_DESC
@@ -142,6 +157,7 @@ namespace Raptoru.Chaos
     delegate IntPtr BlobPtr(IntPtr self);                                                                             // 3 GetBufferPointer, 4 GetBufferSize
     delegate IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
     delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr l);
+    delegate bool MonitorEnumProc(IntPtr hmon, IntPtr hdc, ref RECT r, IntPtr data);
     delegate int DevCreateBlendState(IntPtr self, ref D3D11_BLEND_DESC d, out IntPtr state);                          // 20
     delegate void CtxSetBlendState(IntPtr self, IntPtr state, float[] factor, uint mask);                              // 35
     delegate void CtxClearRtv(IntPtr self, IntPtr rtv, float[] rgba);                                                 // 50
@@ -202,6 +218,12 @@ namespace Raptoru.Chaos
         [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
         [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
         [DllImport("user32.dll")] public static extern bool GetMonitorInfoW(IntPtr mon, ref MONITORINFO mi);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool GetMonitorInfoW(IntPtr mon, ref MONITORINFOEX mi);
+        [DllImport("user32.dll")] public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc cb, IntPtr data);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool EnumDisplaySettingsExW(string dev, int mode, ref DEVMODE dm, uint flags);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int ChangeDisplaySettingsExW(string dev, ref DEVMODE dm, IntPtr hwnd, uint flags, IntPtr param);
+        /// lpDevMode NULL + flags 0 : l'écran (ou tous si dev = null) revient aux réglages enregistrés de Windows.
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "ChangeDisplaySettingsExW")] public static extern int ResetDisplaySettings(string dev, IntPtr dm, IntPtr hwnd, uint flags, IntPtr param);
         [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
         [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowW(string cls, string name);
@@ -254,6 +276,44 @@ namespace Raptoru.Chaos
             var mi = new MONITORINFO(); mi.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
             GetMonitorInfoW(MonitorFromWindow(hwnd, 2), ref mi);
             return mi.rcMonitor;
+        }
+        public static RECT MonitorRectOf(IntPtr hmon)
+        {
+            var mi = new MONITORINFO(); mi.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFO));
+            GetMonitorInfoW(hmon, ref mi);
+            return mi.rcMonitor;
+        }
+        /// Nom Windows de l'écran (\\.\DISPLAYn), null si l'écran n'existe plus.
+        public static string MonitorDevice(IntPtr hmon)
+        {
+            var mi = new MONITORINFOEX(); mi.cbSize = (uint)Marshal.SizeOf(typeof(MONITORINFOEX));
+            return GetMonitorInfoW(hmon, ref mi) ? mi.szDevice : null;
+        }
+        public static List<IntPtr> Monitors()
+        {
+            var l = new List<IntPtr>();
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr m, IntPtr dc, ref RECT r, IntPtr d) => { l.Add(m); return true; }, IntPtr.Zero);
+            return l;
+        }
+        public static IntPtr MonitorByDevice(string device)
+        {
+            foreach (var m in Monitors()) if (string.Equals(MonitorDevice(m), device, StringComparison.OrdinalIgnoreCase)) return m;
+            return IntPtr.Zero;
+        }
+        public const int ENUM_CURRENT_SETTINGS = -1, ENUM_REGISTRY_SETTINGS = -2, DM_DISPLAYORIENTATION = 0x80;
+        public const uint CDS_FULLSCREEN = 0x4;
+        /// Mode d'affichage courant (ou enregistré) ; dmSize = 0 si l'écran est inconnu.
+        public static DEVMODE DisplayMode(string device, int which = ENUM_CURRENT_SETTINGS)
+        {
+            var dm = new DEVMODE(); dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+            if (!EnumDisplaySettingsExW(device, which, ref dm, 0)) dm.dmSize = 0;
+            return dm;
+        }
+        /// Orientation (0 normale, 1 = 90°, 2 = 180°, 3 = 270°), -1 si l'écran est inconnu.
+        public static int DisplayOrientation(string device, int which = ENUM_CURRENT_SETTINGS)
+        {
+            var dm = DisplayMode(device, which);
+            return dm.dmSize == 0 ? -1 : dm.dmDisplayOrientation;
         }
         public static string WindowText(IntPtr h) { var sb = new StringBuilder(256); GetWindowTextW(h, sb, 256); return sb.ToString(); }
         public static string ClassName(IntPtr h) { var sb = new StringBuilder(256); GetClassNameW(h, sb, 256); return sb.ToString(); }

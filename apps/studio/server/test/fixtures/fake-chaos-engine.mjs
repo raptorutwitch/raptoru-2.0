@@ -36,7 +36,16 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     case 'status':
       return res({ active, queued: [], surfaces: [] });
     case 'targets.list':
-      return res({ windows: [{ hwnd: 42, title: 'Jeu', process: 'jeu.exe' }] });
+      return res({
+        monitors: [
+          {
+            device: String.raw`\\.\DISPLAY1`,
+            label: 'Écran principal · 2560×1440',
+            primary: true,
+          },
+        ],
+        windows: [{ hwnd: 42, title: 'Jeu', process: 'jeu.exe' }],
+      });
     case 'effect.request':
       if (c.effect !== 'flip')
         return err('unknown_effect', `effet inconnu : ${c.effect}`);

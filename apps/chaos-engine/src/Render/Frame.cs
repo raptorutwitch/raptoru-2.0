@@ -95,6 +95,9 @@ namespace Raptoru.Chaos
         public string CurrentLabel = "effect";
         /// Repli de qualité (moteur ralenti) : remplissages flous remplacés par du noir, pas de mipmaps.
         public bool LowQuality;
+        /// Rotation que Windows applique déjà à l'écran (couche Entrées) : Transform la retranche, l'image affichée
+        /// reste celle que l'effet décrit, quelle que soit l'orientation de l'écran.
+        public double DisplayRotationRad;
         readonly List<FramePass> passes = new List<FramePass>();
         readonly List<KeyValuePair<string, Layer>> layers = new List<KeyValuePair<string, Layer>>();
 
@@ -110,6 +113,7 @@ namespace Raptoru.Chaos
             if (!HasCapture) throw new InvalidOperationException("Transform exige une capture (registre : emplacement à capture)");
             var p = new FramePass { Label = CurrentLabel, Shader = "transform" };
             if (LowQuality && fill == "mirror") fill = "black";
+            rotationRad -= DisplayRotationRad;
             double c = Math.Abs(Math.Cos(rotationRad)), s = Math.Abs(Math.Sin(rotationRad));
             bool axisAligned = s < 1e-6 || c < 1e-6 && Width == Height;
             bool uncovered = !axisAligned || Math.Abs(scaleX) < 1 || Math.Abs(scaleY) < 1 || tx != 0 || ty != 0;
@@ -160,6 +164,9 @@ namespace Raptoru.Chaos
                     gpu.Draw(lib.VsFull, lib.Pixel("transform"), inputSrv, u, 3);
                 }
             }
+            // L'image de la fenêtre n'est rendue par Windows qu'à son rafraîchissement (écran entier surtout) : la vider
+            // d'abord place cette attente hors des mesures GPU des passes, qui ne mesurent alors que leur coût réel.
+            if (passes.Count > 0) gpu.Clear(outRtv, 0, 0, 0, 0);
             for (int i = 0; i < passes.Count; i++)
             {
                 var p = passes[i];
