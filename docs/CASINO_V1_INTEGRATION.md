@@ -58,11 +58,25 @@ plafond de gain par tour : ×1 000 (mise max 1 000, gain max 1 000 000, réglage
   `CASINO_EXTENSION=on`, `casino.open=1`, les 4 jeux ouverts. Le Core refuse hors live (`stream_offline`). Inchangé
   après le déploiement des correctifs niveaux (Core `1f05b97c`).
 
+## Post-live et mise en service finale (21–22/11/2026)
+
+- **21/11** : passes post-live sur les retours d'Antoni (PR #99, #100, #102, #103, #105, #107, #109, #110, #112,
+  #114) : Split en pile, gains explorés sur les rouleaux, téléphone et paysage, 7 réactions, banc interactif dans le vrai
+  cadre de l'extension. Détail : [CASINO.md](CASINO.md) § 14–18.
+- **22/11** : dernière passe (PR #115 : plus de pastilles sous les machines, réactions « hélium », bulle qui reste
+  ouverte, croupier en émote seule, ruban BUST, doubles-clics vérifiés) ; Core des nouvelles tables et réactions
+  (PR #111, anti-spam 5 puis 1 toutes les 2 s, aucune migration) **déployé** : `a94d1081`, 00:39 UTC, GO d'Antoni,
+  sain, bot `2c04a5db` inchangé ; retour arrière `1f05b97c`.
+- **ZIP prêt à publier, non téléversé** : `raptoru-live-PRODUCTION-d09fd03aa844-depuis-be1744e-20-commits-shell-v2.zip`,
+  SHA-256 `1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039`, inventaire `2411c992b26b` validé par
+  Antoni (PR #113, `main` `302db793`).
+- **Le développement du Casino V1 est terminé.** Reste la publication et l'essai réel : [ROADMAP.md](ROADMAP.md) § 0.4.
+
 ## Restent (gestes d'Antoni)
 
-**État au 20/11** : points 1 à 4 faits (Studio 0.1.42 installé). L'extension publique (`be1744e75f63`) ne contient pas
-le Casino ; la suite (essai hors live en Hosted Test, choix de `CASINO_EXTENSION` avant la publication, revue Twitch,
-essai réel en live) est dans [REPRISE.md](REPRISE.md) § 5.4. Liste d'origine :
+**État au 22/11** : points 1 à 4 faits (Studio 0.1.42 installé). L'extension publique (`be1744e75f63`) ne contient pas
+le Casino ; la suite (téléversement du ZIP `d09fd03aa844`, essai hors live en Hosted Test, choix de `CASINO_EXTENSION`
+avant la publication, revue Twitch, essai réel en live) est dans [REPRISE.md](REPRISE.md) § 5.4 B. Liste d'origine :
 
 1. Installer Studio 0.1.41 (« Rechercher une mise à jour »).
 2. Extension : relire `apps/twitch-extension/release-inventory/INVENTAIRE-298e940290ab.md`, y écrire la ligne
