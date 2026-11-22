@@ -20,9 +20,9 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.1 À faire maintenant (ordre réel)
 
-1. **Chatbox Raptoru : fusionnée le 23/11 (PR #118, `main` `df3adb5e`), à mettre en service** (§ 2.4,
-   [CHATBOX.md](CHATBOX.md) § 12) : sur GO d'Antoni, Core puis bot (`CHATBOX_RELAY=true`), Studio, cinq sources OBS
-   masquées, essai en live scène par scène ; les sources StreamElements restent jusqu'à sa décision.
+1. **Chatbox Raptoru : en service masquée le 22/11** (§ 2.4, [CHATBOX.md](CHATBOX.md) § 12) : Core et bot `df3adb5e`
+   (`CHATBOX_RELAY=true`), Studio 0.1.43 publiée, cinq sources OBS masquées ; reste : Antoni installe 0.1.43, essai en
+   live et bascule scène par scène sur son GO ; les sources StreamElements restent jusqu'à sa décision.
 2. **Casino V1 jusqu'au public** (gestes d'Antoni, en parallèle ; détail : [REPRISE.md](REPRISE.md) § 5.4 B) :
    téléverser le ZIP `d09fd03aa844` en Hosted Test hors live → choix de l'accès (`CASINO_EXTENSION=testers:<ids>`
    recommandé, ou `on`) → revue Twitch → publication, `PUBLISHED` mis à jour → essai réel en live → corrections des
@@ -30,7 +30,7 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.2 Ensuite (déjà décidé ou demandé)
 
-0. **KO Overlay : prochain chantier après les Chatbox** (décision d'Antoni du 23/11). Aucun contexte trouvé le 23/11
+0. **KO Overlay : prochain chantier après les Chatbox** (décision d'Antoni du 22/11). Aucun contexte trouvé le 22/11
    (dépôt, docs, collection OBS active, dossiers d'overlays, mémoire) : à la reprise, demander à Antoni ce que fait
    l'overlay, ses scènes, son déclencheur et les fichiers ou sources existants, avant toute conception.
 1. **Chaos V2, lot 0** (mesures, sans code), puis lot 1 (lecteur natif, flip seul) : § 2.0. Priorité majeure décidée
@@ -187,16 +187,17 @@ d'Antoni du 22/11 : modernisation maîtrisée + intégration complète dans Stud
 proportions, animations, lisibilité et qualité technique modernisées ; tout se règle dans Studio, avec
 prévisualisation et application en direct aux sources OBS). Détail : [CHATBOX.md](CHATBOX.md) § 4.
 
-| Étape                                                                          | État                                                                             |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Reconnaissance (OBS, CSS, JavaScript, comparatif, préservation)                | **faite** (20/11) : rapport privé, voir [CHATBOX.md](CHATBOX.md) § 1             |
-| Présentation des trois chatbox (paramètres exacts, critiques, options)         | **faite** (22/11) : présentation privée, [CHATBOX.md](CHATBOX.md) § 1            |
-| Direction de conception                                                        | **décidée** (22/11) : [CHATBOX.md](CHATBOX.md) § 4                               |
-| Architecture (bot → Core → Studio → pages OBS, sans nouvelle connexion Twitch) | **validée** (22/11) ; spécification complète ([CHATBOX.md](CHATBOX.md) § 5 à 9)  |
-| Jalon 1 : prototype Lab et démonstration                                       | **livré** (22/11), validé visuellement par Antoni le 23/11                       |
-| Jalons 2 et 3 : vrai chat dans le Lab, prêt pour le live                       | **livrés en Lab** (23/11) ([CHATBOX.md](CHATBOX.md) § 10)                        |
-| Fusion dans `main`                                                             | **faite** (23/11) : PR #118, `df3adb5e`, CI verte                                |
-| Production et remplacement dans OBS, scène par scène                           | sur GO d'Antoni ([CHATBOX.md](CHATBOX.md) § 12) ; StreamElements gardé jusque-là |
+| Étape                                                                          | État                                                                               |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Reconnaissance (OBS, CSS, JavaScript, comparatif, préservation)                | **faite** (20/11) : rapport privé, voir [CHATBOX.md](CHATBOX.md) § 1               |
+| Présentation des trois chatbox (paramètres exacts, critiques, options)         | **faite** (22/11) : présentation privée, [CHATBOX.md](CHATBOX.md) § 1              |
+| Direction de conception                                                        | **décidée** (22/11) : [CHATBOX.md](CHATBOX.md) § 4                                 |
+| Architecture (bot → Core → Studio → pages OBS, sans nouvelle connexion Twitch) | **validée** (22/11) ; spécification complète ([CHATBOX.md](CHATBOX.md) § 5 à 9)    |
+| Jalon 1 : prototype Lab et démonstration                                       | **livré** (22/11), validé visuellement par Antoni le 22/11                         |
+| Jalons 2 et 3 : vrai chat dans le Lab, prêt pour le live                       | **livrés en Lab** (22/11) ([CHATBOX.md](CHATBOX.md) § 10)                          |
+| Fusion dans `main`                                                             | **faite** (22/11) : PR #118, `df3adb5e`, CI verte                                  |
+| Production                                                                     | **faite** (22/11) : Core et bot `df3adb5e`, Studio 0.1.43, sources OBS masquées    |
+| Essai en live et remplacement dans OBS, scène par scène                        | sur GO d'Antoni ([CHATBOX.md](CHATBOX.md) § 12.2) ; StreamElements gardé jusque-là |
 
 ## 3. Héritage et dettes
 

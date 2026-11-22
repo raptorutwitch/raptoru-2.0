@@ -1,8 +1,8 @@
 # Chatbox Raptoru : chantier (remplacer les trois chatbox StreamElements)
 
-**État au 23/11/2026 : fusionné dans `main` (PR #118, `df3adb5e`, CI verte), non déployé ; mise en service sur GO
-d'Antoni (§ 12).** Aucune source OBS active, aucun widget StreamElements ni la Production ne sont touchés sans autorisation
-explicite d'Antoni. Ce fichier est le point d'entrée du chantier ; il ne remplace pas le rapport de reconnaissance ni
+**État au 22/11/2026 : en service, masqué** — Core et bot `df3adb5e` (`CHATBOX_RELAY=true`), Studio 0.1.43 publiée, cinq
+sources OBS ajoutées **masquées** ; essai en live et bascule sur GO d'Antoni (§ 12.2). Aucune source OBS active, aucun
+widget StreamElements ni la Production ne sont touchés sans autorisation explicite d'Antoni. Ce fichier est le point d'entrée du chantier ; il ne remplace pas le rapport de reconnaissance ni
 la présentation (§ 1).
 
 ## 1. Sources (hors Git, privées)
@@ -150,7 +150,7 @@ persistantes, éditées dans Studio ; aucune IA, aucune liste de phrases.
 - Par défaut : Nightbot et StreamElements masqués (modifiables) ; LeCroupier_ suit le catalogue du § 6.3 ; les
   viewers sont visibles.
 
-### 6.2 Commandes (catalogue complet, demande d'Antoni du 23/11)
+### 6.2 Commandes (catalogue complet, demande d'Antoni du 22/11)
 
 - Une commande, c'est `!` suivi d'une lettre ou d'un chiffre (`!song`, `!Roue`) ; `!!!!!`, `!?!?`, `! salut` ne le
   sont jamais (jamais masqués comme commandes).
@@ -286,12 +286,12 @@ fondu du haut ; plafond de messages ; emplacements.
 
 | Jalon                                           | État                                                                                        |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **1. Prototype Lab et démonstration**           | **livré** (22/11), essayé par Antoni le 23/11 : direction graphique validée                 |
-| **2. Le vrai chat dans le Lab**                 | **livré** (23/11) : bot, relais du Core, flux Studio, catalogue, rôles, modération, reprise |
-| **3. Prêt pour le live**                        | **livré en Lab** (23/11) : animations corrigées, éditeur simplifié, performances mesurées   |
+| **1. Prototype Lab et démonstration**           | **livré** (22/11), essayé par Antoni le 22/11 : direction graphique validée                 |
+| **2. Le vrai chat dans le Lab**                 | **livré** (22/11) : bot, relais du Core, flux Studio, catalogue, rôles, modération, reprise |
+| **3. Prêt pour le live**                        | **livré en Lab** (22/11) : animations corrigées, éditeur simplifié, performances mesurées   |
 | **4. Production (autorisation à chaque étape)** | **prête, non faite** : code dans `main` (`df3adb5e`), procédure § 12                        |
 
-### 10.1 Ce qui est livré (PR #118, fusionnée le 23/11 : `main` `df3adb5e`)
+### 10.1 Ce qui est livré (PR #118, fusionnée le 22/11 : `main` `df3adb5e`)
 
 - **Bot** (`apps/twitch-bot/src/chatbox-forward.ts`, drapeau `CHATBOX_RELAY`, **éteint par défaut**) : sur la connexion
   EventSub existante, chaque message (couleur, badges, fragments d'emotes, réponse, message mis en avant, premier
@@ -313,7 +313,7 @@ fondu du haut ; plafond de messages ; emplacements.
   du chat partagé) ; Studio 52 (dont reprise du flux, redémarrage du Core, aucun doublon) ; e2e
   `e2e/chatbox.e2e.ts` (3 : page et réglages en direct, chaîne réelle Lab → Core → Studio → page, chevauchement à
   chaque image sur React et Dessin).
-- **Performances** (23/11, GPU réel RTX 3070 / D3D11, 5 pages plein cadre ouvertes, chat à 22 messages/s pendant 8 s) :
+- **Performances** (22/11, GPU réel RTX 3070 / D3D11, 5 pages plein cadre ouvertes, chat à 22 messages/s pendant 8 s) :
   intervalle médian 16,6 ms, 95e centile 18,5–19,4 ms, 4 à 6 images au-delà de 34 ms sur ~530 par page (pic 94 ms à
   l'arrivée de nouvelles images d'emotes) ; OBS rend à 30 images/s (33 ms) : marge confortable.
 
@@ -324,7 +324,7 @@ fondu du haut ; plafond de messages ; emplacements.
 
 ## 12. Mise en service (chaque étape sur GO d'Antoni)
 
-Versions en Production relevées le 23/11 (lecture seule) : Core `a94d1081`, bot `2c04a5db`, Studio installé 0.1.42.
+Versions en Production relevées le 22/11 (lecture seule) : Core `a94d1081`, bot `2c04a5db`, Studio installé 0.1.42.
 Depuis ces versions, `main` n'apporte au Core et au bot que la Chatbox ; à Studio, la Chatbox et la partie Studio du
 Casino déjà fusionnée (`a94d1081`). Rien de plus récent n'est écrasé.
 
@@ -333,13 +333,21 @@ Casino déjà fusionnée (`a94d1081`). Rien de plus récent n'est écrasé.
 | 1. Core                   | `node scripts/coolify-deploy.mjs deploy core <sha de main> --go` (hors live ; aucune migration) | `deploy core a94d10812c8b48bffbbbaa76a2249c0ae9e34a0b --rollback --go` |
 | 2. Variable du bot        | Coolify, application `raptoru-bot` : `CHATBOX_RELAY=true` (nouvelle, sans secret)               | la passer à `false` (ou la retirer) puis redéployer le bot             |
 | 3. Bot, **après le Core** | `node scripts/coolify-deploy.mjs deploy bot <sha de main> --go`                                 | `deploy bot 2c04a5db58fe4d05b3e0cbc2ab5257e3aa841346 --rollback --go`  |
-| 4. Studio                 | `npm run studio:release` (version suivante, publiée) ; Antoni installe                          | réinstaller 0.1.42 (releases GitHub)                                   |
-| 5. Sources OBS            | Antoni, § 12.1 (nouvelles sources **masquées**)                                                 | supprimer les nouvelles sources ; les anciennes n'ont pas bougé        |
+| 4. Studio                 | workflow « Studio — construire / publier » (publish=public) ; Antoni installe                   | réinstaller 0.1.42 (releases GitHub)                                   |
+| 5. Sources OBS            | § 12.1 (nouvelles sources **masquées**)                                                         | supprimer les nouvelles sources ; les anciennes n'ont pas bougé        |
 | 6. Essai en live          | Antoni, § 12.2, scène par scène                                                                 | afficher l'ancienne source, masquer la nouvelle                        |
 
 - Ordre obligatoire : Core avant bot (un bot `CHATBOX_RELAY=true` devant un Core ancien ne perd que les événements
   Chatbox, une ligne de journal par minute ; les jeux du chat ne sont jamais touchés).
 - `CHATBOX_RELAY=false` (défaut) : le nouveau bot se comporte exactement comme l'ancien.
+- **Fait le 22/11 (GO d'Antoni)** : étapes 1 à 3 hors live (Core 14:10 UTC, déploiement `4jae1tmush9ronyffbl9wvbb` ; variable
+  créée par l'API Coolify ; bot 14:13 UTC, `zsvjcrakgroe5i3xeuobvcbp`, EventSub bot et diffuseur OK) ; étape 4 :
+  0.1.43 publiée (workflow `45031697021`, `main` `8f428a37`) ; étape 5 : les cinq sources ajoutées par l'agent, OBS
+  fermé, dans la collection active (`Twitch_Dofus.codex-backup-20260919-144407.json`, sauvegarde
+  `….avant-chatbox-raptoru-2026-11-22.bak` à côté) : masquées, verrouillées, juste au-dessus des anciennes, 1920 × 1080,
+  0,0, échelle 1 ; anciennes sources inchangées (vérifié). La clé des adresses est
+  `apps/studio/server/.runtime/production/chatbox/chatbox-token` (hors Git), lue par Studio 0.1.43 au démarrage.
+  Étape 6 : à faire.
 - Les réglages du Lab et de la démonstration ne passent pas en Production : Studio Production démarre sur « Modernisée »
   et les règles par défaut ; Antoni règle profils, emplacements, commandes dans Studio (Modules → Chatbox).
 
@@ -370,7 +378,7 @@ rester décoché (comme les anciennes).
 4. Scène par scène. Les sources StreamElements restent en place jusqu'à la décision d'Antoni (ni désactivées ni
    supprimées par l'agent).
 
-## 13. Limites connues (réelles, vérifiées le 23/11)
+## 13. Limites connues (réelles, vérifiées le 22/11)
 
 - **`/me`** : EventSub (connexion du bot) ne signale pas un message `/me` (aucun champ, aucun type documenté) : il
   s'affiche comme un message normal, sans italique. Les anciens widgets le recevaient par StreamElements (IRC).
