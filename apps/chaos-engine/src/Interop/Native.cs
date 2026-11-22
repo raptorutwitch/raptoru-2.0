@@ -315,6 +315,41 @@ namespace Raptoru.Chaos
             var dm = DisplayMode(device, which);
             return dm.dmSize == 0 ? -1 : dm.dmDisplayOrientation;
         }
+
+        /// Jeux connus. Un jeu absent de la liste est repéré par sa fenêtre qui couvre un écran entier.
+        static readonly string[] KnownGames =
+        {
+            "Overwatch", "Dofus", "DofusRetro", "VALORANT-Win64-Shipping", "FortniteClient-Win64-Shipping", "cs2",
+            "League of Legends", "RocketLeague", "GTA5", "eldenring", "RainbowSix", "Phasmophobia", "Lethal Company"
+        };
+
+        /// Garde des essais visibles (mire, calque, rotation, banc) : raison lisible si un jeu ou une application plein
+        /// écran est actif, null sinon. Incident du 22/11 : des rotations d'essai sur l'autre écran ont fait tomber
+        /// Overwatch à 17 images/s. Aucun essai visible ne se lance alors sans l'accord explicite d'Antoni.
+        public static string GameActivity()
+        {
+            foreach (var name in KnownGames)
+                if (System.Diagnostics.Process.GetProcessesByName(name).Length > 0) return "jeu en cours : " + name + ".exe";
+            int quns;
+            if (SHQueryUserNotificationState(out quns) == 0 && (quns == 2 || quns == 3 || quns == 4))
+                return quns == 3 ? "application Direct3D en plein écran exclusif" : quns == 4 ? "mode présentation de Windows" : "application plein écran au premier plan";
+            var screens = Monitors().ConvertAll(MonitorRectOf);
+            string full = null;
+            EnumWindows((h, l) =>
+            {
+                if (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h)) return true;
+                if ((GetWindowLongW(h, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT)) != 0) return true;
+                string cls = ClassName(h);
+                if (cls == "Progman" || cls == "WorkerW") return true;
+                RECT r = FrameBounds(h);
+                if (!screens.Exists(m => m.Left == r.Left && m.Top == r.Top && m.Right == r.Right && m.Bottom == r.Bottom)) return true;
+                uint pid; GetWindowThreadProcessId(h, out pid);
+                try { full = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName + ".exe"; } catch (Exception) { full = "?"; }
+                return false;
+            }, IntPtr.Zero);
+            return full != null ? "fenêtre plein écran : " + full : null;
+        }
+
         public static string WindowText(IntPtr h) { var sb = new StringBuilder(256); GetWindowTextW(h, sb, 256); return sb.ToString(); }
         public static string ClassName(IntPtr h) { var sb = new StringBuilder(256); GetClassNameW(h, sb, 256); return sb.ToString(); }
         public static bool IsCloaked(IntPtr h) { int v; return DwmGetWindowAttribute(h, DWMWA_CLOAKED, out v, 4) == 0 && v != 0; }

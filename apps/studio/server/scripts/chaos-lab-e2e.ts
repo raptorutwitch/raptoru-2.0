@@ -2,7 +2,8 @@
 // (npm run chaos:lab -- --no-open) : moteur prêt → écran secondaire choisi → « Tester » → Windows retourne réellement
 // l'écran (orientation relue) → STOP ALL → écran rétabli ; puis, en diagnostic, la mire en fenêtre seule (pixels lus à
 // l'écran) → réglage des coins enregistré dans le moteur. Captures dans --out <dossier>.
-// Usage : tsx apps/studio/server/scripts/chaos-lab-e2e.ts [--out <dossier>] [--port 4120]
+// Usage : tsx apps/studio/server/scripts/chaos-lab-e2e.ts [--out <dossier>] [--port 4120] [--autorise-pendant-un-jeu]
+// Garde : refuse de tourner si un jeu ou une application plein écran est actif (essais visibles), sauf accord d'Antoni.
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,8 +24,23 @@ const arg = (k: string, d: string) =>
   args.includes(k) ? args[args.indexOf(k) + 1]! : d;
 const OUT = arg('--out', join(tmpdir(), 'chaos-lab-e2e'));
 const BASE = `http://127.0.0.1:${arg('--port', '4120')}`;
-const EXE = join(ROOT, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe');
+const EXE =
+  process.env.CHAOS_ENGINE_EXE ??
+  join(ROOT, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe');
 mkdirSync(OUT, { recursive: true });
+
+// Incident du 22/11 : des rotations d'essai ont fait tomber Overwatch à 17 images/s. Aucun essai visible pendant un jeu.
+try {
+  execFileSync(EXE, ['--game-check'], { encoding: 'utf8' });
+} catch (e) {
+  const why = String((e as { stdout?: string }).stdout ?? '').trim();
+  if (!args.includes('--autorise-pendant-un-jeu')) {
+    console.log(
+      `Parcours NON lancé : ${why || 'jeu détecté'} (accord d’Antoni : --autorise-pendant-un-jeu).`,
+    );
+    process.exit(2);
+  }
+}
 
 let ok = 0;
 let ko = 0;

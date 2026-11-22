@@ -136,10 +136,14 @@ natif qui ne vit que pendant un effet, vu par la capture d'écran d'OBS, et un m
   - le runtime isolé des effets ;
   - la télémétrie, le gardien et l'arrêt d'urgence ;
   - la page Studio › Chaos et le banc Chaos Lab.
-- Un seul effet réel : le retournement **de l'écran entier** (correctif du 22/11) : Windows retourne l'affichage,
-  vrai curseur unique, souris inversée, clic sous le curseur ([chaos/COUCHE_ENTREES.md](chaos/COUCHE_ENTREES.md)).
-- Tests : 22 unitaires, 51 d'intégration sur le vrai écran (écran secondaire retourné par Windows compris), 10 côté
-  Studio, 11 de bout en bout dans la page.
+- Un seul effet réel : le retournement.
+  - Par défaut : le calque sur la fenêtre du jeu.
+  - L'écran entier retourné par Windows (souris inversée) est **expérimental et coupé** depuis l'incident du 22/11 :
+    Overwatch à 17 images/s pendant les bascules
+    ([chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md](chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md)).
+  - Décision attendue d'Antoni sur le candidat sans bascule (curseur affiché par le calque).
+- Tests : 23 unitaires ; 51 d'intégration avant l'incident (17 sans écran depuis) ; 10 côté Studio ; 11 de bout en
+  bout. Un banc de comparaison existe, jamais lancé.
 - **Pas encore prouvé en jeu**, ni dans un Studio installé (aucune release) : test réel d'Antoni
   ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2).
 

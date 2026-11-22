@@ -8,9 +8,12 @@ de Studio. Il pilote :
 - des calques ;
 - une fenêtre DirectComposition traversable, qui ne prend jamais le focus.
 
-Un seul effet réel existe : **le retournement à 180°** de l'écran entier. Windows retourne lui-même l'affichage :
-le vrai curseur reste le seul, la souris est inversée et le clic tombe sous le curseur (couche Entrées,
-[COUCHE_ENTREES.md](../../docs/chaos/COUCHE_ENTREES.md)).
+Un seul effet réel existe : **le retournement à 180°**.
+
+- Par défaut, c'est un calque sur la fenêtre du jeu, sans changement d'affichage.
+- En option **expérimentale, coupée par défaut**, Windows retourne l'écran entier (souris inversée,
+  [COUCHE_ENTREES.md](../../docs/chaos/COUCHE_ENTREES.md)). Chaque bascule perturbe tout le PC :
+  [ETUDE_PERFORMANCES_RETOURNEMENT.md](../../docs/chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md).
 
 - Architecture : [docs/chaos/ARCHITECTURE_MOTEUR.md](../../docs/chaos/ARCHITECTURE_MOTEUR.md)
 - Contrats : [CONTRATS_MOTEUR.md](../../docs/chaos/CONTRATS_MOTEUR.md)
@@ -33,8 +36,9 @@ npm run chaos:lab
 1. La page s'ouvre dans le navigateur. Le moteur démarre tout seul (« Moteur prêt »).
 2. **Écran retourné** : règle les coins (Miroir flou, Noir ou Zoom), la durée et les rotations d'entrée et de sortie.
    « Rejouer l'aperçu » montre le résultat.
-3. **Tester sur ce PC** : choisis un écran, ou « Écran du jeu au premier plan, dans 3 s », clique « Tester » puis
-   passe dans le jeu (fenêtré sans bordure ; le plein écran exclusif est refusé).
+3. **Tester sur ce PC** : « Fenêtre du jeu au premier plan, dans 3 s » (ou une fenêtre de la liste), clique
+   « Tester » puis passe dans le jeu (fenêtré sans bordure ; le plein écran exclusif est refusé). La méthode « Windows
+   (expérimental) » se choisit dans la carte « Écran retourné », jamais en direct.
 4. **Arrêter** :
    - **Ctrl+Maj+F11**, partout, même en jeu ;
    - ou **STOP ALL** dans la page ;
@@ -49,8 +53,10 @@ L'ancien panneau du lot 1 (`ChaosPresenter.exe`) doit être fermé : il tient le
 
 ```bat
 build.cmd                         :: moteur + tests (compilateur C# de Windows, rien à installer)
-bin\chaos-unit.exe                :: 22 tests de logique pure
-bin\chaos-checks.exe [--quick]    :: 51 contrôles d'intégration : mire puis écran secondaire retourné (environ 1 min 30)
+bin\chaos-unit.exe                :: 23 tests de logique pure
+bin\chaos-checks.exe [--quick]    :: contrôles d'intégration : mire puis écran secondaire retourné (garde de jeu)
+bin\chaos-bench.exe               :: banc de comparaison des méthodes (visible : seulement avec l'accord d'Antoni)
+bin\ChaosEngine.exe --game-check  :: la garde : un jeu ou un plein écran est-il actif ?
 bin\ChaosEngine.exe --restore-display   :: secours : écrans remis aux réglages enregistrés de Windows
 bin\ChaosEngine.exe --bench-gpu   :: coût GPU par passe en 1440p, hors écran
 bin\ChaosEngine.exe --render-preview <dossier>   :: planche des transitions (PNG)

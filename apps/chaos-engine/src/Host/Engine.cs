@@ -158,7 +158,9 @@ namespace Raptoru.Chaos
             catch (Exception e) { tel.Error("surface_error"); sched.MarkFailed(a.Req.RequestId, "surface_error", e.Message); return; }
             instances[a.Req.RequestId] = inst;
             inst.HoldsCapture = a.Def.RequiresCapture;
-            if (a.Def.Input != null && a.Req.TargetDevice != null) { inst.Input = InputPhase.Pending; inst.InputDevice = a.Req.TargetDevice; }
+            // Couche Entrées expérimentale : seulement si activée au moment de la demande (vue : target.input).
+            if (a.Def.Input != null && a.Req.TargetDevice != null && J.Str(a.Req.TargetInfo, "input", null) != null)
+            { inst.Input = InputPhase.Pending; inst.InputDevice = a.Req.TargetDevice; }
             s.Effects.Add(inst);
             var ctx = new EffectContext { Gpu = gpu, Shaders = lib, Text = text, P = a.Req.Resolved };
             if (!inst.Guard("prepare", () => { inst.Impl.Prepare(ctx); inst.State = InstanceState.Prepared; }) ||
@@ -212,7 +214,12 @@ namespace Raptoru.Chaos
             if (!instances.TryGetValue(a.Req.RequestId, out inst)) return;
             instances.Remove(a.Req.RequestId);
             // L'écran d'abord : quelle que soit la fin (durée, arrêt, STOP ALL, urgence, panne), il redevient normal.
-            if (inst.Input == InputPhase.Applied) { input.Revert(a.Req.RequestId); inst.Input = InputPhase.Released; }
+            if (inst.Input == InputPhase.Applied)
+            {
+                input.Revert(a.Req.RequestId);
+                inst.Input = InputPhase.Released;
+                InputEvent("restored", a, inst.InputDevice, input.LastRevertMs);
+            }
             inst.Finish();
             SurfaceEntry s;
             if (!surfaces.TryGetValue(a.Req.TargetKey, out s)) return;
@@ -322,7 +329,12 @@ namespace Raptoru.Chaos
                 var a = e.A;
                 if (e.Input == InputPhase.Pending && a.State == ActState.Active && a.Anim.Phase == AnimPhase.Steady)
                 {
-                    try { input.Apply(a.Req.RequestId, a.Def.Input, e.InputDevice); e.Input = InputPhase.Applied; }
+                    try
+                    {
+                        input.Apply(a.Req.RequestId, a.Def.Input, e.InputDevice);
+                        e.Input = InputPhase.Applied;
+                        InputEvent("applied", a, e.InputDevice, input.LastApplyMs);
+                    }
                     catch (InputError x)
                     {
                         e.Input = InputPhase.None;
@@ -364,11 +376,24 @@ namespace Raptoru.Chaos
                     // Le calque affiche la même image que Windows : on peut rendre l'écran, le retour animé suit.
                     bool ready = s.S.Shown && s.Cap != null && s.Cap.HasFrame;
                     // Le retour animé part d'ici, une fois l'écran rendu (la remise en état prend ~110 ms) : aucun saut d'angle.
-                    if (ready || now - e.ExitPrepAt > ExitPrepMaxMs) { input.Revert(a.Req.RequestId); e.Input = InputPhase.Released; a.Anim.HoldExit(Now); }
+                    if (ready || now - e.ExitPrepAt > ExitPrepMaxMs)
+                    {
+                        input.Revert(a.Req.RequestId);
+                        e.Input = InputPhase.Released;
+                        a.Anim.HoldExit(Now);
+                        InputEvent("restored", a, e.InputDevice, input.LastRevertMs);
+                    }
                     else a.Anim.HoldExit(now);
                 }
             }
             return live.All(e => e.HandedOff);
+        }
+
+        /// Bascule d'affichage (couche Entrées) : horodatée pour les bancs de mesure et le journal de Studio.
+        void InputEvent(string state, Activation a, string device, long ms)
+        {
+            io.Send(Protocol.Event("engine.input", Now, J.Map("state", state, "request_id", a.Req.RequestId, "device", device, "call_ms", ms,
+                "qpc", N.QpcNow(), "qpc_freq", N.QpcFreq())));
         }
 
         // ---------- Entretien, télémétrie ----------
@@ -382,7 +407,11 @@ namespace Raptoru.Chaos
             foreach (var owner in input.TakeLost())
             {
                 EffectInstance lost;
-                if (instances.TryGetValue(owner, out lost)) lost.Input = InputPhase.Released;
+                if (instances.TryGetValue(owner, out lost))
+                {
+                    lost.Input = InputPhase.Released;
+                    InputEvent("lost", lost.A, lost.InputDevice, -1);
+                }
                 sched.Cancel(owner, true, "display_changed");
             }
             timer.Collect((label, ms) => tel.Pass(label, ms));
@@ -452,7 +481,8 @@ namespace Raptoru.Chaos
             return J.Map("engine", "raptoru-chaos-engine", "version", Program.Version, "protocol", Protocol.Version, "registry_version", reg.Version,
                 "implemented", EffectCatalog.Implemented.ToArray(), "adapter", gpu != null ? gpu.Adapter : null, "pid", selfPid,
                 "config_path", opt.ConfigPath, "config_notes", cfg.LoadNotes.ToArray(), "ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs,
-                "shader_warm_ms", tel.ShaderWarmMs, "emergency_hotkey", "Ctrl+Maj+F11", "input_effects", reg.InputEffects.Keys.ToArray());
+                "shader_warm_ms", tel.ShaderWarmMs, "emergency_hotkey", "Ctrl+Maj+F11", "input_effects", reg.InputEffects.Keys.ToArray(),
+                "input_effects_enabled", cfg.Engine.InputEffects);
         }
 
         void Dispatch(string line)
@@ -490,7 +520,7 @@ namespace Raptoru.Chaos
                     return d;
                 case "targets.list": return J.Map("monitors", Targets.Monitors().ToArray(), "windows", Targets.Windows(selfPid).ToArray());
                 case "effect.request":
-                    var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def));
+                    var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def, cfg.Engine.InputEffects));
                     var a = sched.Submit(req);
                     return Protocol.View(a, Now);
                 case "effect.cancel":

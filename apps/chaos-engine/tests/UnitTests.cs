@@ -195,6 +195,24 @@ namespace Raptoru.Chaos
                 var c = new Animator(new TransitionPlan { Kind = "cut" }, new TransitionPlan { Kind = "cut" });
                 c.Start(0); Near(1, c.Presence(0), 1e-9, "coupure : entier tout de suite"); c.BeginExit(5); True(c.Done(5), "coupure : fini tout de suite");
             });
+            Case("banc : cadence par phase, à-coups, pire fenêtre de 250 ms ; relevés PresentMon v1 et v2", () =>
+            {
+                long f = 1000000, t = 0;
+                var frames = new List<long>();
+                for (int i = 0; i < 1000; i++) { t += f / 250; frames.Add(t); }
+                t += f * 60 / 1000; frames.Add(t); // une image de 60 ms (chute à 17 i/s)
+                for (int i = 0; i < 250; i++) { t += f / 250; frames.Add(t); }
+                var all = BenchStats.Summarize("x", frames, f, 0, t + 1, -1);
+                Near(4, all.MedianMs, 0.01, "médiane"); Near(60, all.MaxMs, 0.01, "pire image"); Eq(1, all.Hitches, "un à-coup");
+                True(all.WorstWindowFps < 240 && all.WorstWindowFps > 150, "le creux se voit sur 250 ms (" + all.WorstWindowFps + ")");
+                var calm = BenchStats.Summarize("y", frames, f, 0, f * 3, 4);
+                True(calm.Hitches == 0 && Math.Abs(calm.Fps - 250) < 2, "phase calme : 250 i/s, aucun à-coup");
+                bool qpc;
+                var v2 = BenchStats.ParsePresentMon("Application,ProcessID,PresentMode,CPUStartQPC,MsBetweenPresents\nOverwatch.exe,1,Hardware: Independent Flip,1000,4.1\nobs64.exe,2,Composed: Flip,1100,16\nOverwatch.exe,1,Composed: Flip,2000,60\n", "Overwatch.exe", out qpc);
+                True(qpc && v2.Count == 2 && v2[1].Mode == "Composed: Flip" && v2[0].Time == 1000, "PresentMon v2 (QPC, filtré par processus)");
+                var v1 = BenchStats.ParsePresentMon("Application,ProcessID,TimeInSeconds,msBetweenPresents\nx.exe,1,0.5,4\n", null, out qpc);
+                True(!qpc && v1.Count == 1 && v1[0].Time == 0.5, "PresentMon v1 (secondes)");
+            });
             Case("animateur : sortie retenue (écran rendu par Windows d'abord), puis retour complet sans saut", () =>
             {
                 var a = new Animator(new TransitionPlan { Kind = "ramp", DurationMs = 400, Curve = "linear" }, new TransitionPlan { Kind = "ramp", DurationMs = 400, Curve = "linear" });
@@ -234,12 +252,18 @@ namespace Raptoru.Chaos
                     True(c2.Safety.SafeMode && c2.Safety.MaxDurationMs == 20000 && (string)c2.GetPreset("flip", "default").Params["fill"] == "cover", "relu à l'identique");
                     File.WriteAllText(p, "{\"version\":1,\"follow_foreground\":false,\"safe_mode\":true,\"max_duration_ms\":15000}");
                     var c3 = new ConfigStore(reg, p); c3.Load();
-                    True(!c3.Engine.FollowForeground && c3.Safety.SafeMode && c3.Safety.MaxDurationMs == 15000, "migration v1 → v3");
-                    Eq("monitor", c3.Engine.DefaultMode, "migration : écran entier par défaut");
-                    Eq("monitor", new ConfigStore(reg, null).Engine.DefaultMode, "défaut : écran entier");
-                    File.WriteAllText(p, "{\"schema\":\"raptoru.chaos.config\",\"version\":2,\"engine\":{\"default_mode\":\"window\",\"capture_linger_ms\":4000}}");
+                    True(!c3.Engine.FollowForeground && c3.Safety.SafeMode && c3.Safety.MaxDurationMs == 15000, "migration v1 → v4");
+                    True(c3.Engine.DefaultMode == "window" && !c3.Engine.InputEffects, "migration : calque sur la fenêtre, bascule Windows coupée");
+                    var fresh = new ConfigStore(reg, null).Engine;
+                    True(fresh.DefaultMode == "window" && !fresh.InputEffects, "défauts : calque sur la fenêtre, bascule Windows (expérimentale) coupée");
+                    File.WriteAllText(p, "{\"schema\":\"raptoru.chaos.config\",\"version\":3,\"engine\":{\"default_mode\":\"monitor\",\"capture_linger_ms\":4000}}");
                     var c6 = new ConfigStore(reg, p); c6.Load();
-                    True(c6.Engine.DefaultMode == "monitor" && c6.Engine.CaptureLingerMs == 4000 && File.Exists(p + ".v2.bak"), "migration v2 → v3 : écran entier, le reste conservé");
+                    True(c6.Engine.DefaultMode == "window" && !c6.Engine.InputEffects && c6.Engine.CaptureLingerMs == 4000 && File.Exists(p + ".v3.bak"),
+                        "migration v3 → v4 : retour au calque, le reste conservé");
+                    c6.SetEngine(J.Map("input_effects", true, "default_mode", "monitor"));
+                    c6.Save();
+                    var c7 = new ConfigStore(reg, p); c7.Load();
+                    True(c7.Engine.InputEffects && c7.Engine.DefaultMode == "monitor", "bascule Windows activable explicitement (enregistrée)");
                     True(File.Exists(p + ".v1.bak"), "sauvegarde de l'ancienne version");
                     File.WriteAllText(p, "{ pas du json");
                     var c4 = new ConfigStore(reg, p); c4.Load();

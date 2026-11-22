@@ -56,7 +56,7 @@ namespace Raptoru.Chaos
 
         /// spec : {kind:"window", hwnd} | {kind:"foreground"} | {kind:"monitor", device? | hwnd?}.
         /// « foreground » vise l'écran du jeu au premier plan (default_mode = monitor) ou sa fenêtre seule (window).
-        public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, EffectDef def)
+        public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, EffectDef def, bool inputEffects)
         {
             string kind = J.Str(spec, "kind", "foreground");
             bool foreground = kind == "foreground";
@@ -100,7 +100,7 @@ namespace Raptoru.Chaos
                 RECT r = N.MonitorRectOf(hmon);
                 t.Key = "monitor:" + t.Device;
                 t.Info = J.Map("kind", "monitor", "mode", "C", "device", t.Device, "title", MonitorLabel(r, N.MonitorRect(N.GetDesktopWindow()), r.Left == 0 && r.Top == 0),
-                    "process", foreground ? ProcName(pid) : null, "input", def.Input, "follow_foreground", false);
+                    "process", foreground ? ProcName(pid) : null, "input", inputEffects ? def.Input : null, "follow_foreground", false);
             }
             else
             {

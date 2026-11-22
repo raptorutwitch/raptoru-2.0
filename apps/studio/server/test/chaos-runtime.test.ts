@@ -17,7 +17,9 @@ import { ChaosRuntime } from '../src/chaos/runtime.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const FAKE = join(here, 'fixtures', 'fake-chaos-engine.mjs');
 const ROOT = join(here, '..', '..', '..', '..');
-const REAL = join(ROOT, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe');
+const REAL =
+  process.env.CHAOS_ENGINE_EXE ??
+  join(ROOT, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe');
 const fake =
   (env: Record<string, string> = {}) =>
   (args: string[]) =>
@@ -262,8 +264,8 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
       expect(d.implemented.sort()).toEqual(reg.effects.map((e) => e.id).sort());
       expect(await c.call('config.get')).toMatchObject({
         schema: 'raptoru.chaos.config',
-        version: 3,
-        engine: { default_mode: 'monitor' },
+        version: 4,
+        engine: { default_mode: 'window', input_effects: false },
       });
       const t = await c.call<{ monitors: { device: string }[] }>(
         'targets.list',

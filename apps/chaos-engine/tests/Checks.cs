@@ -5,6 +5,9 @@
 // l'orientation est relue par EnumDisplaySettings (une capture d'écran GDI le montre toujours à l'endroit).
 // Sortie : « ok » / « KO » par point, puis le total. Options : --quick (sans la mesure de 6 s), --no-screen (sans
 // retourner l'écran secondaire), --screen-only (seulement l'écran entier).
+// GARDE : aucun essai visible (mire, calque, rotation) si un jeu ou une application plein écran est actif (incident du
+// 22/11 : Overwatch à 17 images/s pendant les rotations d'essai). Seul Antoni peut lever la garde :
+// --autorise-pendant-un-jeu. Code de sortie 2 si des essais visibles n'ont pas été lancés.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -94,7 +97,8 @@ namespace Raptoru.Chaos
 
     static class Checks
     {
-        static int ok, ko;
+        static int ok, ko, skipped;
+        static bool allowDuringGame;
         static string exe, state;
         static Rectangle where;
         static Process target;
@@ -127,16 +131,28 @@ namespace Raptoru.Chaos
             Console.WriteLine("Contrôles du moteur Chaos — " + exe);
             try
             {
-                if (!args.Contains("--screen-only")) { Protocol(); Visual(!args.Contains("--quick")); }
-                if (!args.Contains("--no-screen")) WholeScreen();
+                allowDuringGame = args.Contains("--autorise-pendant-un-jeu");
+                if (!args.Contains("--screen-only")) { Protocol(); if (VisualAllowed("mire et calques")) Visual(!args.Contains("--quick")); }
+                if (!args.Contains("--no-screen") && VisualAllowed("écran entier retourné par Windows")) WholeScreen();
             }
             finally
             {
                 if (target != null) try { target.Kill(); } catch (Exception) { }
                 try { Directory.Delete(state, true); } catch (Exception) { }
             }
-            Console.WriteLine("Total : " + ok + " ok, " + ko + " KO");
-            return ko == 0 ? 0 : 1;
+            Console.WriteLine("Total : " + ok + " ok, " + ko + " KO" + (skipped > 0 ? " — essais visibles NON lancés (" + skipped + " série(s)) : garde de jeu" : ""));
+            return ko > 0 ? 1 : skipped > 0 ? 2 : 0;
+        }
+
+        /// Garde : un jeu ou une application plein écran est actif → l'essai visible n'est pas lancé.
+        static bool VisualAllowed(string what)
+        {
+            string game = N.GameActivity();
+            if (game == null) return true;
+            if (allowDuringGame) { Info("garde levée par --autorise-pendant-un-jeu (" + game + ")"); return true; }
+            skipped++;
+            Console.WriteLine("  --  " + what + " : NON lancé, " + game + " (aucun essai visible pendant un jeu ; accord d'Antoni : --autorise-pendant-un-jeu)");
+            return false;
         }
 
         static EngineProc Engine(string extra = "")
@@ -469,7 +485,14 @@ namespace Raptoru.Chaos
                 var mons = J.Arr(e.Result("targets.list"), "monitors").Cast<Dictionary<string, object>>().ToList();
                 Check(mons.Any(m => S(m, "device") == dev) && mons.Count == Screen.AllScreens.Length, "targets.list : les écrans sont proposés",
                     string.Join(" · ", mons.Select(m => S(m, "label"))));
-                Check(S(J.Obj(e.Result("config.get"), "engine"), "default_mode") == "monitor", "cible par défaut : l'écran entier", "");
+                var eng = J.Obj(e.Result("config.get"), "engine");
+                Check(S(eng, "default_mode") == "window" && !J.Bool(eng, "input_effects", true), "par défaut : calque sur la fenêtre, bascule Windows coupée (expérimentale)", "");
+                var off = J.Obj(ScreenRequest(e, "scr-off", dev, Cuts), "result");
+                Check(J.Obj(off, "target") != null && J.Obj(off, "target")["input"] == null, "bascule coupée : l'écran entier n'est qu'un calque (aucune bascule d'affichage)", "");
+                e.Call("stop_all");
+                Thread.Sleep(200);
+                Check(N.DisplayOrientation(dev) == 0 && e.Events("engine.input").Count == 0, "bascule coupée : l'orientation de l'écran ne change jamais", "");
+                e.Call("config.set", J.Map("section", "engine", "values", J.Map("input_effects", true)));
 
                 // 1. Cycle complet avec transitions : rotation animée → Windows retourne l'écran → retour animé.
                 var resp = ScreenRequest(e, "scr-1", dev, J.Map("duration_ms", 2500));
@@ -500,6 +523,7 @@ namespace Raptoru.Chaos
                     "fin : écran rendu par Windows, puis retour animé, rien ne reste, aucun faux « moteur ralenti »",
                     "rendu " + (backAt - startedAt - 2500) + " ms après la fin prévue, retour animé " + (endAt - backAt) + " ms");
 
+                if (!VisualAllowed("suite de l'écran entier")) return;
                 // 2. Un calque arrive pendant l'effet (le retournement est confié à Windows), puis STOP ALL.
                 ScreenRequest(e, "scr-2", dev, Cuts);
                 WaitOrientation(dev, 2, 3000);
@@ -520,6 +544,7 @@ namespace Raptoru.Chaos
                 bool gone = NoOverlayLeft(); int still = Held(e);
                 Check(back >= 0 && back < 400 && gone && still == 0, "STOP ALL pendant l'effet : écran rétabli, fenêtre détruite", back + " ms (fenêtre " + waitGone.ElapsedMilliseconds + " ms plus tard)" + (gone ? "" : ", calque restant") + (still == 0 ? "" : ", écran encore tenu"));
 
+                if (!VisualAllowed("suite de l'écran entier")) return;
                 // 3. Arrêt d'urgence (drapeau du gardien) pendant l'effet.
                 ScreenRequest(e, "scr-3", dev, Cuts);
                 WaitOrientation(dev, 2, 3000);
@@ -529,6 +554,7 @@ namespace Raptoru.Chaos
                 back = WaitOrientation(dev, 0, 2000);
                 Check(back >= 0 && back < 400 && e.Event("engine.emergency_stop", 1000) != null, "arrêt d'urgence pendant l'effet : écran rétabli", back + " ms");
 
+                if (!VisualAllowed("suite de l'écran entier")) return;
                 // 4. Écran rétabli hors de Chaos (Paramètres de Windows) : l'effet s'arrête de lui-même.
                 ScreenRequest(e, "scr-4", dev, Cuts);
                 WaitOrientation(dev, 2, 3000);
@@ -538,6 +564,7 @@ namespace Raptoru.Chaos
                 Thread.Sleep(100);
                 Check(S(changed, "reason") == "display_changed" && N.DisplayOrientation(dev) == 0 && NoOverlayLeft(), "écran rétabli par Windows pendant l'effet : effet terminé", S(changed, "reason"));
 
+                if (!VisualAllowed("suite de l'écran entier")) return;
                 // 5. Moteur gelé pendant l'effet (aucun calque visible) : le gardien le tue, Windows rétablit l'écran.
                 ScreenRequest(e, "scr-5", dev, Cuts);
                 WaitOrientation(dev, 2, 3000);
@@ -554,6 +581,7 @@ namespace Raptoru.Chaos
                     "écran rétabli " + back + " ms après le gel" + (code == 9 ? "" : ", code de sortie " + code));
                 e.Kill();
 
+                if (!VisualAllowed("suite de l'écran entier")) return;
                 // 6. Moteur tué brutalement pendant l'effet : Windows rétablit l'écran seul (mode temporaire du processus).
                 e = Engine();
                 if (e == null) return;

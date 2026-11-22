@@ -4,6 +4,7 @@
 //   --test-target [--x --y --w --h]     (mire des contrôles automatiques)
 //   --render-preview <dossier>          (aperçu hors écran des transitions en PNG : développement des shaders)
 //   --restore-display                   (secours : tous les écrans reviennent aux réglages enregistrés de Windows)
+//   --game-check                        (garde des essais visibles : code 1 et la raison si un jeu est actif)
 //   --describe | --version
 // L'interface est la page Chaos de Raptoru Studio ; le moteur n'a pas de fenêtre de contrôle.
 using System;
@@ -56,15 +57,25 @@ namespace Raptoru.Chaos
                         "implemented", EffectCatalog.Implemented.ToArray(), "mismatches", EffectCatalog.Mismatches(reg).ToArray())));
                     return EffectCatalog.Mismatches(reg).Count == 0 ? 0 : 1;
                 case "--version": Console.WriteLine(Version); return 0;
+                case "--game-check":
+                    string game = N.GameActivity();
+                    Out(game ?? "aucun jeu ni plein écran détecté");
+                    return game == null ? 0 : 1;
                 case "--restore-display":
                     int rr = InputLayer.RestoreAllDisplays();
-                    Console.WriteLine(rr == 0 ? "écrans rétablis (réglages enregistrés de Windows)" : "échec, code " + rr);
+                    Out(rr == 0 ? "écrans rétablis (réglages enregistrés de Windows)" : "échec, code " + rr);
                     return rr == 0 ? 0 : 1;
                 default:
                     MessageBox.Show("Le moteur Chaos se pilote depuis Raptoru Studio (page Chaos) ou le banc Chaos Lab.\n\n" +
                         "Arrêt d'urgence à tout moment : Ctrl+Maj+F11.", "Raptoru Chaos " + Version);
                     return 0;
             }
+        }
+
+        /// Sortie texte en UTF-8 (le moteur est une application sans console : Console.OutputEncoding y échoue).
+        static void Out(string line)
+        {
+            using (var o = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false))) o.WriteLine(line);
         }
 
         static int IntArg(string[] a, string name, int def)

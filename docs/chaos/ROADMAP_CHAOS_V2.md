@@ -39,6 +39,10 @@ une fluidité intacte.
 >   Reste ouvert : les spectateurs (capture d'écran d'OBS) verraient la bascule sans les rotations animées, à
 >   vérifier (R5). Sur un écran à 144 Hz, les rotations tournent à environ 60 images/s (calées sur l'écran principal) :
 >   à revoir seulement si Antoni les trouve saccadées.
+> - **Incident du 22/11 au soir** : chaque bascule d'orientation a fait tomber Overwatch, sur l'autre écran, à environ
+>   17 images/s. La méthode Windows est **expérimentale et coupée** ; le défaut redevient le calque sur la fenêtre.
+>   Candidat sans bascule (calque + curseur affiché par le calque), banc de comparaison et décision attendue :
+>   [ETUDE_PERFORMANCES_RETOURNEMENT.md](ETUDE_PERFORMANCES_RETOURNEMENT.md).
 > - Le texte ci-dessous décrit le prototype du lot 1 (`apps/chaos-presenter`, branche `feat/chaos-presenter-lot1`).
 >
 > **État au 22/11/2026 : prototype livré, test réel d'Antoni attendu.**

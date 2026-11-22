@@ -54,12 +54,13 @@ Une demande sépare les éléments suivants :
 - **politique de conflit** : `policy` (`queue`, `replace`, `reject` ou `extend`) ;
 - **source** : `source.kind` et `source.ref` ;
 - **cible** : `target` ;
-  - `{kind:"monitor",device}` : l'écran entier `\\.\DISPLAYn` (mode C, **comportement voulu du retournement** :
-    Windows retourne l'écran, souris inversée, voir [COUCHE_ENTREES.md](COUCHE_ENTREES.md)) ;
+  - `{kind:"monitor",device}` : l'écran entier `\\.\DISPLAYn` (mode C). Si `engine.input_effects` est activé
+    (expérimental), Windows retourne l'écran et la souris est inversée ([COUCHE_ENTREES.md](COUCHE_ENTREES.md)) ;
+    sinon, ce n'est qu'un calque, invisible dans la capture d'écran d'OBS ;
   - `{kind:"monitor",hwnd?}` : l'écran qui contient cette fenêtre ;
-  - `{kind:"foreground"}` (défaut) : l'écran du jeu au premier plan (`default_mode` = `monitor`), ou sa fenêtre seule
-    (`window`) ;
-  - `{kind:"window",hwnd}` (mode D, diagnostic : image seule, souris normale, clics non alignés) ;
+  - `{kind:"foreground"}` (défaut) : la fenêtre du jeu au premier plan (`default_mode` = `window`, défaut), ou son
+    écran entier (`monitor`) ;
+  - `{kind:"window",hwnd}` (mode D, calque par défaut : image retournée, souris normale, clics au point symétrique) ;
   - `follow_foreground?` (fenêtre seule).
 - La vue de la demande dit ce qui sera fait : `target.mode` (`C` écran entier, `D` fenêtre), `target.input`
   (`invert_xy` ou null), `target.title`.
@@ -89,6 +90,8 @@ Sources possibles : `studio`, `core`, `extension`, `channel_points`, `test`.
 Événements du moteur :
 
 - `engine.ready`, `engine.telemetry`, `engine.degraded` et `engine.recovered` ;
+- `engine.input` : bascule d'affichage de la couche Entrées (`state` = `applied`, `restored` ou `lost`, `device`,
+  `request_id`, `call_ms`, `qpc` et `qpc_freq` pour aligner une mesure externe) ;
 - `engine.emergency_stop`, `engine.error` (dont `input_unavailable`, `input_busy` avec `request_id`) et
   `engine.exit` (avec `reason`).
 
@@ -99,7 +102,8 @@ Sources possibles : `studio`, `core`, `extension`, `channel_points`, `test`.
 
 - **Registre** : schéma `raptoru.chaos.registry`, version 2. Voir `chaosRegistrySchema`. `input_effects` déclare les
   transformations d'entrée ; un effet s'y relie par `input`.
-- **Configuration** : `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 3 (v2 migrée : la cible par
+- **Configuration** : `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 4 (v3 migrée : retour au
+  calque sur la fenêtre, `input_effects` coupé). Avant : version 3 (v2 migrée : la cible par
   défaut devient l'écran entier).
 - **Cache des shaders** : `<state-dir>/shader-cache/*.cso`, effaçable sans risque.
 - Studio garde un dossier par profil (`runtime/…/chaos`). Le Chaos Lab utilise `%LOCALAPPDATA%\Raptoru\Chaos\lab`.

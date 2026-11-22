@@ -22,9 +22,13 @@ namespace Raptoru.Chaos
     sealed class EngineSettings
     {
         public bool FollowForeground = true;
-        /// Cible d'une demande « premier plan » : monitor = l'écran entier du jeu (retournement + souris inversée,
-        /// comportement voulu), window = la fenêtre seule (visuel uniquement, diagnostic).
-        public string DefaultMode = "monitor";
+        /// Cible d'une demande « premier plan » : window = la fenêtre du jeu (calque, vu par la capture d'écran d'OBS),
+        /// monitor = l'écran entier.
+        public string DefaultMode = "window";
+        /// Couche Entrées (EXPÉRIMENTAL, docs/chaos/COUCHE_ENTREES.md) : sur un écran entier, Windows retourne
+        /// l'affichage (vrai curseur, souris inversée). Coupée par défaut depuis l'incident du 22/11 : chaque bascule
+        /// d'orientation reconfigure l'affichage de tout le PC (Overwatch à 17 images/s sur l'autre écran).
+        public bool InputEffects;
         public int CaptureLingerMs = 2000, TelemetryIntervalMs = 1000;
         public string Quality = "auto"; // auto : repli de qualité si le lecteur ralentit ; high : jamais de repli
     }
@@ -38,7 +42,7 @@ namespace Raptoru.Chaos
     sealed class ConfigStore
     {
         public const string Schema = "raptoru.chaos.config";
-        public const int CurrentVersion = 3;
+        public const int CurrentVersion = 4;
         readonly Registry reg;
         readonly string path;
         public EngineSettings Engine = new EngineSettings();
@@ -86,6 +90,8 @@ namespace Raptoru.Chaos
 
         /// Migrations successives. v1 = premier format interne (plat : follow_foreground, safe_mode, max_duration_ms).
         /// v2 → v3 (22/11) : la cible par défaut devient l'écran entier (spécification du retournement).
+        /// v3 → v4 (22/11, incident de performances) : retour au calque sur la fenêtre par défaut ; la bascule
+        /// d'orientation par Windows devient une option expérimentale (input_effects), coupée.
         public static Dictionary<string, object> Migrate(Dictionary<string, object> root, int from)
         {
             if (from <= 1)
@@ -102,6 +108,14 @@ namespace Raptoru.Chaos
                 engine["default_mode"] = "monitor";
                 root["engine"] = engine;
                 root["version"] = 3;
+            }
+            if (from <= 3)
+            {
+                var engine = J.Obj(root, "engine") ?? new Dictionary<string, object>();
+                engine["default_mode"] = "window";
+                engine["input_effects"] = false;
+                root["engine"] = engine;
+                root["version"] = 4;
             }
             return root;
         }
@@ -135,6 +149,7 @@ namespace Raptoru.Chaos
             {
                 FollowForeground = J.Bool(v, "follow_foreground", Engine.FollowForeground),
                 DefaultMode = J.Str(v, "default_mode", Engine.DefaultMode),
+                InputEffects = J.Bool(v, "input_effects", Engine.InputEffects),
                 CaptureLingerMs = (int)J.Num(v, "capture_linger_ms", Engine.CaptureLingerMs),
                 TelemetryIntervalMs = (int)J.Num(v, "telemetry_interval_ms", Engine.TelemetryIntervalMs),
                 Quality = J.Str(v, "quality", Engine.Quality)
@@ -193,7 +208,7 @@ namespace Raptoru.Chaos
             var presets = new Dictionary<string, object>();
             foreach (var eff in Presets) presets[eff.Key] = eff.Value.ToDictionary(kv => kv.Key, kv => (object)kv.Value.ToJson());
             return J.Map("schema", Schema, "version", CurrentVersion,
-                "engine", J.Map("follow_foreground", Engine.FollowForeground, "default_mode", Engine.DefaultMode, "capture_linger_ms", Engine.CaptureLingerMs,
+                "engine", J.Map("follow_foreground", Engine.FollowForeground, "default_mode", Engine.DefaultMode, "input_effects", Engine.InputEffects, "capture_linger_ms", Engine.CaptureLingerMs,
                                 "telemetry_interval_ms", Engine.TelemetryIntervalMs, "quality", Engine.Quality),
                 "safety", J.Map("max_duration_ms", Safety.MaxDurationMs, "max_active_effects", Safety.MaxActiveEffects, "safe_mode", Safety.SafeMode),
                 "presets", presets);

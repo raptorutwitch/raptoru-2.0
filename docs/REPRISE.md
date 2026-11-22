@@ -199,11 +199,16 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
   - ordonnanceur et transitions ;
   - capture partagée, rendu par passes et calques ;
   - gardien et arrêt d'urgence Ctrl+Maj+F11 ;
-  - couche Entrées : le retournement vise l'écran entier, Windows retourne l'affichage (vrai curseur, souris inversée,
-    clic juste) ([chaos/COUCHE_ENTREES.md](chaos/COUCHE_ENTREES.md)) ;
+  - couche Entrées **expérimentale, coupée** : Windows retourne l'écran entier (souris inversée), mais chaque bascule
+    perturbe tout le PC (incident du 22/11 : Overwatch à 17 images/s,
+    [chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md](chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md)) ;
   - page Studio › Chaos et banc `npm run chaos:lab`.
-- **Tests** : 22 unitaires, 51 d'intégration, 10 Studio et 11 de bout en bout, tous verts. Un seul effet réel : le
-  retournement.
+- **Tests** : 23 unitaires ; 51 d'intégration avant l'incident, puis 17 sans écran ; 10 Studio ; 11 de bout en
+  bout. Un seul effet réel : le retournement (calque par défaut).
+- **Règle** : aucun essai visible (mire, calque, rotation, banc) pendant qu'un jeu tourne. La garde le refuse ;
+  `--autorise-pendant-un-jeu` seulement sur accord d'Antoni.
+- **Décision attendue** : candidat « calque + curseur affiché par le calque » (étude § 8), puis le banc avec son
+  accord.
 - **Prochaine étape** : test réel d'Antoni ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2), puis le lot 2
   (module payant, Core).
 - **Rien n'est poussé, fusionné ni publié** : aucun Studio installé ne contient la page.

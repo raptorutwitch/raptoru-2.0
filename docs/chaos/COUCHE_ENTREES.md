@@ -1,5 +1,10 @@
 # Moteur Chaos : couche Entrées (souris inversée du retournement)
 
+> **Statut au 22/11 au soir : expérimental, coupé par défaut.** Pendant mes essais, chaque bascule d'orientation a fait
+> tomber Overwatch, qui tournait sur l'autre écran, à environ 17 images/s : elle reconfigure l'affichage de tout le PC.
+> Cette méthode ne s'active que sur décision explicite (Studio › Chaos › Méthode « Windows (expérimental) »), jamais en
+> direct. Analyse, comparaison et candidat sans bascule : [ETUDE_PERFORMANCES_RETOURNEMENT.md](ETUDE_PERFORMANCES_RETOURNEMENT.md).
+
 22/11/2026. Spécification d'Antoni pour le retournement à 180° :
 
 - l'effet vise l'écran entier ;
@@ -82,6 +87,9 @@ En dernier recours, le réglage Windows fonctionne toujours : Paramètres › Af
   écran ou se réduirait. Il faut passer le jeu en fenêtré sans bordure ;
 - un écran déjà retourné par un autre effet (`input_busy`) ;
 - un écran que Windows refuse de retourner (`input_unavailable`, rare : pilote).
+
+**Observé (22/11)** : chaque bascule perturbe **tous** les jeux, même sur un autre écran (Overwatch à environ
+17 images/s pendant des bascules d'essai en rafale). C'est la limite qui rend la méthode expérimentale.
 
 **Attendu mais pas vérifiable ici** (essais R2 à R6 de [PROCEDURE_TESTS.md](PROCEDURE_TESTS.md)) :
 
