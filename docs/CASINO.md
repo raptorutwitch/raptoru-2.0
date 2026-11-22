@@ -571,6 +571,20 @@ Toujours **extension seule** : aucune règle, cote, mise, limite ni route du Cor
 
 ## 16. Composition responsive et banc interactif en cadre réel (21/11, après essai d'Antoni)
 
+### 16.0 Échelle uniforme du composant vidéo (22/11 au soir, régression vue en live)
+
+- **Constat** (captures d'Antoni) : dans un lecteur Twitch normal, l'iframe du composant fait ≈ **520 × 347** (console :
+  hauteur cible 60 %, format 3:2, « Dimensions automatiques » désactivées). Sous 651 × 434, le Blackjack basculait vers
+  ses dispositions compactes (paris en barres, boutons étirés). Le banc ouvrait par défaut 651 × 434 et les essais
+  validés étaient faits en plein écran (1053 × 702) : il ne montrait pas ce que voient la plupart des viewers.
+- **Correctif** (`extension/app/fit.js`) : tant qu'un écran du Casino est affiché, le composant vidéo est réduit d'un
+  bloc (CSS `zoom` sur la page) vers la composition de référence 651 × 434 — échelle = min(L/651, H/434), jamais
+  au-dessus de 1 (pas d'agrandissement en plein écran), arrêtée à 0,6 (en dessous, les dispositions compactes
+  reprennent). `app/layout.js` mesure la composition (la fenêtre ÷ le zoom). Le menu et les autres modules gardent leur
+  adaptation (plusieurs mesurent la fenêtre en `vh`). Panneau et mobile : inchangés.
+- **Banc** : « lecteur normal (520×347) » est le format par défaut ; petit (452×301), très petit (390×260), référence
+  (651×434), grande fenêtre (760×507), plein écran (1053×702).
+
 Toujours **extension seule** (le Core en Production `1f05b97c` suffit : aucune règle, cote, mise, limite, route ni
 protection modifiée). Retour d'Antoni sur le banc : les débordements étaient corrigés, pas la façon d'occuper
 l'espace ; et le banc ne montrait ni le vrai cadre de Raptoru Live ni de vraies parties.

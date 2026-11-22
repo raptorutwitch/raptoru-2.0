@@ -61,8 +61,11 @@ export function startLayout(root = document.documentElement) {
   let current = null;
   const listeners = new Set();
   const apply = () => {
-    const w = Math.round(root.clientWidth);
-    const h = Math.round(root.clientHeight || window.innerHeight);
+    // Under the video component's uniform scale (app/fit.js: CSS zoom on <html>), the root reports the window's size:
+    // the composition is that size divided by the zoom.
+    const z = parseFloat(root.style.zoom) || 1;
+    const w = Math.round(root.clientWidth / z);
+    const h = Math.round((root.clientHeight || window.innerHeight) / z);
     if (!w || !h) return;
     const next = computeLayout({ w, h, prev: current?.profile });
     if (current && current.w === w && current.h === h) return;
@@ -80,6 +83,7 @@ export function startLayout(root = document.documentElement) {
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(apply) : null;
   if (ro) ro.observe(root);
   else window.addEventListener('resize', apply);
+  window.addEventListener('raptoru:scale', apply); // app/fit.js changed the zoom: same window, new composition
   started = {
     surface,
     current: () => current,

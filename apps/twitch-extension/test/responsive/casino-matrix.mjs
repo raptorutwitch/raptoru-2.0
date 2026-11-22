@@ -44,6 +44,7 @@ const GAMES = {
 // [label, w, h] — the Lot B mandate's explicit minimum (§ 9): very small, compact, standard, large, fullscreen,
 // portrait/landscape, mobile-realistic. Shares its numbers with test/responsive/matrix.mjs and casino-bench.js.
 const SIZES = [
+  ['lecteur Twitch normal (mesuré 22/11)', 520, 347],
   ['zoom 150 %', 377, 251],
   ['zoom 125 %', 452, 301],
   ['panel court', 318, 300],
