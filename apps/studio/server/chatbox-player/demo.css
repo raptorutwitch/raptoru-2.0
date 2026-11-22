@@ -1,0 +1,152 @@
+@font-face {
+  font-family: 'Figtree';
+  font-weight: 300 900;
+  src: url('fonts/figtree-latin-wght-normal.woff2') format('woff2');
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #0b0c0f;
+  color: #e9eaee;
+  font:
+    500 14px/1.35 'Figtree',
+    'Segoe UI',
+    sans-serif;
+}
+
+.bar {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #23252c;
+  background: #111317;
+}
+
+.note {
+  color: #9aa0ad;
+}
+
+.group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.lb {
+  color: #9aa0ad;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+button {
+  padding: 6px 11px;
+  border: 1px solid #2b2e36;
+  border-radius: 8px;
+  background: #181a20;
+  color: #e9eaee;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #454955;
+}
+
+button.on {
+  border-color: #f2c14e;
+  background: #2a2414;
+  color: #ffd98a;
+}
+
+.stage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 28px;
+  min-height: calc(100vh - 64px);
+  padding: 24px;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.col h2 {
+  margin: 0;
+  color: #c9ccd4;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.col h2 small {
+  margin-left: 8px;
+  color: #7f8592;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  outline: 1px dashed rgba(255, 255, 255, 0.16);
+}
+
+.frame iframe {
+  display: block;
+  border: 0;
+  background: transparent;
+  transform-origin: 0 0;
+}
+
+/* Test backgrounds: a dark scene, a bright drawing canvas, a busy game frame. */
+.bg-dark .frame {
+  background: radial-gradient(
+    120% 80% at 30% 20%,
+    #26303f 0%,
+    #10141b 60%,
+    #07090c 100%
+  );
+}
+
+.bg-light .frame {
+  background:
+    radial-gradient(
+      40% 30% at 70% 30%,
+      rgba(255, 200, 120, 0.6),
+      transparent 70%
+    ),
+    linear-gradient(160deg, #fbf7ef 0%, #efe9dd 55%, #e4ddd0 100%);
+}
+
+.bg-busy .frame {
+  background:
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.18) 0 14px,
+      transparent 14px 46px
+    ),
+    radial-gradient(60% 40% at 20% 30%, #ffcf4a 0%, transparent 70%),
+    radial-gradient(50% 45% at 80% 60%, #3fd1ff 0%, transparent 70%),
+    radial-gradient(45% 40% at 40% 85%, #ff4f8b 0%, transparent 70%),
+    linear-gradient(135deg, #2b7a3d, #6a3fb5);
+}

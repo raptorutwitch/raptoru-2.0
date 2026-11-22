@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chatbox Raptoru — démonstration</title>
+    <link rel="stylesheet" href="demo.css" />
+    <script type="module" src="demo.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <strong>Chatbox Raptoru · démonstration</strong>
+      <span class="note"
+        >Simulateur seulement : rien n’est envoyé à OBS ni à Twitch.</span
+      >
+      <div class="group" data-group="scenario"></div>
+      <div class="group" data-group="preset">
+        <span class="lb">Préset</span>
+        <button type="button" data-preset="modernisee" class="on">
+          Modernisée
+        </button>
+        <button type="button" data-preset="origine">Origine</button>
+        <button type="button" data-preset="">Réglages enregistrés</button>
+      </div>
+      <div class="group" data-group="bg">
+        <span class="lb">Fond</span>
+        <button type="button" data-bg="dark" class="on">Sombre</button>
+        <button type="button" data-bg="light">Lumineux</button>
+        <button type="button" data-bg="busy">Chargé</button>
+      </div>
+      <div class="group" data-group="view">
+        <span class="lb">Vue</span>
+        <button type="button" data-view="all" class="on">Trois profils</button>
+        <button type="button" data-view="just-chatting">
+          Comparer Just Chatting
+        </button>
+        <button type="button" data-view="react">Comparer React</button>
+        <button type="button" data-view="dessin">Comparer Dessin</button>
+      </div>
+      <label class="group"
+        ><input type="checkbox" data-explain /> Montrer les messages
+        filtrés</label
+      >
+    </header>
+    <main class="stage bg-dark" id="stage"></main>
+  </body>
+</html>

@@ -40,6 +40,45 @@ process.on('unhandledRejection', (e) => fatal('unhandledRejection', e));
 process.env.STUDIO_SERVER_NO_LISTEN = '1';
 process.env.PORT = String(port);
 const { chainRelays, createStudioServer } = await import('../src/index.js');
+const { createChatboxHost } = await import('../src/chatbox/host.js');
+/** The 7TV / BTTV / FFZ answers the chatbox e2e expects: a base emote, two zero-width ones, a BTTV emote. */
+const chatboxEmoteFixture = (url: string): unknown => {
+  const item = (alias: string, id: string, zw: boolean) => ({
+    alias,
+    flags: { zeroWidth: zw },
+    emote: { id, flags: { animated: false } },
+  });
+  if (url.endsWith('/emote-sets/global')) return { id: 'global' };
+  if (url.endsWith('/gql'))
+    return {
+      data: {
+        users: {
+          userByConnection: {
+            style: {
+              activeEmoteSet: {
+                emotes: {
+                  items: [
+                    item('199Pray', 'pray', false),
+                    item('199Jail', 'jail', true),
+                    item('199Sparkles', 'sparkles', true),
+                  ],
+                },
+              },
+            },
+          },
+        },
+        emoteSets: { emoteSet: { emotes: { items: [] } } },
+      },
+    };
+  if (url.endsWith('/emotes/global')) return [];
+  if (url.includes('/users/twitch/'))
+    return {
+      channelEmotes: [{ code: 'KEKW', id: 'kekw', imageType: 'png' }],
+      sharedEmotes: [],
+    };
+  if (url.endsWith('/set/global')) return { default_sets: [], sets: {} };
+  return { sets: {} };
+};
 const { createTestLab } = await import('../src/test-lab/test-lab.js');
 const { miniGamesRelay } = await import('../src/mini-games/relay.js');
 const { casinoRelay } = await import('../src/casino/relay.js');
@@ -376,6 +415,16 @@ const studio = createStudioServer({
   }),
   // Commands V2 in Studio (configuration, the sound action), through the same cockpit.
   commands: commandsRelay(labCore, CHANNEL),
+  // Chatbox Raptoru (docs/CHATBOX.md): its pages and editor; the emote providers answered locally (no network).
+  chatbox: await createChatboxHost({
+    dir: join(dir, 'chatbox'),
+    playerDir: join(import.meta.dirname, '..', 'chatbox-player'),
+    origin,
+    channelId: '83603689',
+    guard: (req) =>
+      req.headers['x-raptoru-studio'] === '1' ? null : 'missing_studio_header',
+    fetcher: async (url) => chatboxEmoteFixture(url),
+  }),
 });
 
 // The specs' own door to the Lab Core (a simulated live, fixtures): a test-only shim speaking their /v1/lab/* vocabulary,

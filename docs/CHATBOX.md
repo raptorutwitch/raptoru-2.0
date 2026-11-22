@@ -274,16 +274,33 @@ fondu du haut ; plafond de messages ; emplacements.
 
 ## 10. Jalons
 
-| Jalon                                           | Contenu                                                                                                                                                                                         | État             |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| **1. Prototype Lab et démonstration**           | moteur porté ; page OBS ; trois profils × Origine / Modernisée ; réglages persistants appliqués en direct ; règles de visibilité ; simulateur et démonstration ; écran Studio                   | **en cours**     |
-| **2. Le vrai chat dans le Lab**                 | bot (champs, suppressions, clear, ses messages marqués) ; classement par le Core (commandes, familles, rôle d'équipe) ; relais et flux Studio / Lab ; badges Helix ; catalogue réel du Croupier | à faire          |
-| **3. Prêt pour le live**                        | messages spéciaux réels ; charge (cinq sources, chat rapide) ; latence ; rechargement après mise à jour ; recette d'Antoni                                                                      | à faire          |
-| **4. Production (autorisation à chaque étape)** | déploiement Core et bot, release de Studio ; nouvelles sources **masquées** à côté des anciennes ; essai en live ; bascule scène par scène                                                      | sur autorisation |
+| Jalon                                           | Contenu                                                                                                                                                                                         | État                                           |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **1. Prototype Lab et démonstration**           | moteur porté ; page OBS ; trois profils × Origine / Modernisée ; réglages persistants appliqués en direct ; règles de visibilité ; simulateur et démonstration ; écran Studio                   | **livré en Lab (23/11), à essayer par Antoni** |
+| **2. Le vrai chat dans le Lab**                 | bot (champs, suppressions, clear, ses messages marqués) ; classement par le Core (commandes, familles, rôle d'équipe) ; relais et flux Studio / Lab ; badges Helix ; catalogue réel du Croupier | à faire                                        |
+| **3. Prêt pour le live**                        | messages spéciaux réels ; charge (cinq sources, chat rapide) ; latence ; rechargement après mise à jour ; recette d'Antoni                                                                      | à faire                                        |
+| **4. Production (autorisation à chaque étape)** | déploiement Core et bot, release de Studio ; nouvelles sources **masquées** à côté des anciennes ; essai en live ; bascule scène par scène                                                      | sur autorisation                               |
 
 Tests à chaque jalon : unitaires (moteur, visibilité, réglages, Core, bot), matrice de parité, e2e de la page et de
 l'écran (application en direct, persistance après redémarrage), captures. Classe C
 ([AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) § 3) : ni Jetons, ni droits, ni migration.
+
+### 10.1 Jalon 1 : ce qui est livré (branche locale `feat/chatbox-lab`, worktree `agent`)
+
+- **Studio** : module `apps/studio/server/src/chatbox/` (réglages et présets `settings.ts`, visibilité `visibility.ts`,
+  stockage `store.ts`, catalogues d'emotes `emotes.ts`, simulateur `demo.ts` et `parity.ts`, serveur `host.ts`) ; page
+  OBS, moteur porté, démonstration et polices dans `apps/studio/server/chatbox-player/` ; écran
+  `apps/studio/web/src/pages/chatbox.ts` (Modules → Chatbox : Apparence, Visibilité, Démonstration).
+- **Branchement** : `src/index.ts` (création, routage, arrêt), registre et `main.ts` du web, `stage.mjs` (paquet),
+  `eslint.config.js` (pages navigateur), pile e2e. Aucun changement du Core, du bot ni de la base.
+- **Essayer sans fermer le Studio installé** : `npm run chatbox:demo` dans le worktree `agent` (port 4486, données dans
+  `.lab-data/chatbox-demo`) ; la console donne l'adresse de la démonstration et de l'écran Chatbox. Ou `npm run
+studio:lab` (Studio installé fermé) → Modules → Chatbox.
+- **Tests** : 47 unitaires (moteur et parité, visibilité et rôles, stockage et redémarrage, serveur et flux) ; e2e
+  `e2e/chatbox.e2e.ts` sur la pile Lab (piles zero-width, rôles, filtrage, modération, réglages et emplacements appliqués
+  sans rechargement, présets, disparition) ; vérifié dans Chromium : démonstration, écran Studio, panneau de réglages.
+- **Pas encore** : le vrai chat (jalon 2 : les pages OBS `live` restent vides) ; les familles réelles du Croupier
+  (jalon 2) ; l'image de la scène derrière l'aperçu ; la mesure de charge dans OBS (jalon 3).
 
 Risques connus : les GIF Twitch (balise expérimentale des widgets) ne sont pas prouvés dans EventSub, vérification au
 jalon 2 sur un vrai message ; l'affichage dépendra du VPS et de Studio (recours : les sources StreamElements).

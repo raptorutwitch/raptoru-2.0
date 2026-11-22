@@ -174,7 +174,8 @@ Les états ne se confondent pas (détail : [ROADMAP.md](ROADMAP.md) § 0.4) :
 
 1. Lire [CHATBOX.md](CHATBOX.md), puis la présentation et le rapport privés qu'il cite (§ 1) ; ne refaire ni la
    reconnaissance ni la présentation. Direction décidée par Antoni le 22/11 (CHATBOX.md § 4).
-2. Jalon en cours : CHATBOX.md § 10 (prototype Lab sur la branche `feat/chatbox-lab`, worktree `agent`).
+2. Jalon 1 livré en Lab (CHATBOX.md § 10.1, branche locale `feat/chatbox-lab`, worktree `agent`, non poussée) : Antoni
+   l'essaie avec `npm run chatbox:demo` ; ensuite le jalon 2 (le vrai chat par le bot et le Core).
 3. Aucune source OBS active, widget StreamElements ni Production modifiés sans autorisation explicite d'Antoni.
 
 **B. Casino jusqu'au public (gestes d'Antoni, en parallèle)**. Le Hosted Test ne permet **pas** un essai avec de vrais
