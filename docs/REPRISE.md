@@ -190,7 +190,16 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
    remboursements, spectateurs, blackjack à plusieurs, nouvelles tables, réactions, téléphone).
 5. Corriger **uniquement** les problèmes observés.
 
-**C. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (Chaos V2 lot 0, validations réelles en attente, finitions Studio).
+**C. Chaos V2 (« Chaos Overlay », nommé aussi « KO Overlay » par Antoni)** : le prototype du lot 1 a été livré le 22/11.
+
+- **Où** : branche locale `feat/chaos-presenter-lot1`, worktree `Raptoru 2.0 - Worktrees\chaos-v2`,
+  [apps/chaos-presenter](../apps/chaos-presenter/README.md).
+- **Quoi** : lecteur natif C# (retournement à 180°, capture sans curseur) et panneau de test ; 26 contrôles verts.
+- **Prochaine étape** : test réel d'Antoni (R1–R6 du README). Ensuite : choisir C# ou Rust, mesures du lot 0, puis
+  lot 2 (module payant).
+- **Rien n'est poussé ni intégré à Studio.**
+
+**D. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (validations réelles en attente, finitions Studio).
 
 ## 6. Comment reprendre dans une nouvelle session
 

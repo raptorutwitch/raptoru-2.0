@@ -25,6 +25,24 @@ quelle cadence réelle avait la copie V1 (E5).
 **But** : prouver sur le vrai PC le point le plus risqué. Un retournement à 180°, un seul vrai curseur, aucun carré,
 une fluidité intacte.
 
+> **État au 22/11/2026 : prototype livré, test réel d'Antoni attendu.** Il est dans
+> [`apps/chaos-presenter/`](../../apps/chaos-presenter/README.md), sur la branche locale `feat/chaos-presenter-lot1`.
+>
+> - **Livré** : lecteur autonome (mode D, et mode C en secours) et panneau de test avec les raccourcis
+>   `Ctrl+Maj+F10` / `F11`, à la place du bouton Studio prévu plus bas.
+> - **26 contrôles automatiques verts sur le PC** : aucun flash, clic traversant, focus intact, arrêt mesuré à l'écran en
+>   10 à 35 ms, tous les chemins d'arrêt.
+> - **Mesuré en 2560×1440** : 0,15 à 0,21 ms de GPU par image, 0,3 à 0,4 ms de traitement (médiane), 0,2 à 0,4 % de
+>   CPU.
+> - **Écarts au plan** :
+>   - le lecteur est en **C# (.NET Framework 4.8, compilateur fourni par Windows)**, pas en Rust : l'installation de
+>     Rust a été refusée par le garde-fou de l'agent ;
+>   - il n'est pas encore branché à Studio ;
+>   - seul le 180° existe (pas de miroir ni de vertical) ;
+>   - la bascule animée dure 0,55 s pour respecter le plafond de 520°/s.
+> - **Reste à prouver**, uniquement par Antoni : R1 à R5 (curseur unique en jeu, Dofus, Overwatch, jeu d'horreur, OBS)
+>   et les critères de fluidité ci-dessous avec PresentMon.
+
 - **Outillage** : Rust + `windows-rs`, build dans la CI Windows, exécutable embarqué par `studio:release`.
 - **Lecteur** :
   - capture WGC d'une fenêtre (mode D) ou d'un écran (mode C), sans curseur ni bordure ;

@@ -29,8 +29,9 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.2 Ensuite (déjà décidé ou demandé)
 
-1. **Chaos V2, lot 0** (mesures, sans code), puis lot 1 (lecteur natif, flip seul) : § 2.0. Priorité majeure décidée
-   le 10/11, non commencée.
+1. **Chaos V2 (« Chaos Overlay »)** : prototype du lot 1 (lecteur natif, retournement seul) livré le 22/11 en local
+   (`apps/chaos-presenter`, branche `feat/chaos-presenter-lot1`) ; **test réel d'Antoni attendu** (R1–R6 du README)
+   avant le lot 2. Le lot 0 (mesures PresentMon) reste à faire : § 2.0.
 2. **Validations réelles en attente** (temps d'Antoni, en live) : premier vrai tirage de la Roue du Sub V3 ; « Envoyer
    une vraie annonce test » de Level Up ; commande d'Aouh (expressions, latence, édition déléguée) ; parcours viewer de
    Music Hub ; effets OBS après OBS 33.
@@ -45,7 +46,7 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 | **En Production, public, validation réelle restante**    | extension `be1744e75f63` (Level Up V2 et son interrupteur de son, mini-profil, Commandes V2.1 « Mes commandes modifiables », Mini-jeux V5, Music Hub) · Roue du Sub V3 · progression restaurée · Studio 0.1.42                                                                            |
 | **Déployé côté Core, prêt à publier, pas encore public** | **Casino V1** : Core `a94d1081` ; ZIP `d09fd03aa844` construit et vérifié, **téléversement non prouvé** ; revue Twitch et essai réel à faire (§ 0.4)                                                                                                                                      |
 | **Recherche faite, à concevoir**                         | **Chatbox Raptoru** (remplacement des 3 chatbox StreamElements) : § 2.4, [CHATBOX.md](CHATBOX.md)                                                                                                                                                                                         |
-| **Étudié, prêt à implémenter**                           | Chaos V2 lots 0 et 1 ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md))                                                                                                                                                                                                             |
+| **Étudié, prêt à implémenter**                           | Chaos V2 lot 0 (mesures) et lots 2 à 5 ; **lot 1 : prototype livré en local, test réel d'Antoni attendu** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md))                                                                                                                        |
 | **Backlog**                                              | finitions Studio (§ 2.2) · dettes (§ 3) · idées XP et modules (§ 4)                                                                                                                                                                                                                       |
 | **Bloqué par du contenu d'Antoni**                       | Défis (catalogue) · cosmétiques (catalogue vide)                                                                                                                                                                                                                                          |
 | **En pause ou suspendu** (ne pas relancer sans demande)  | § 6                                                                                                                                                                                                                                                                                       |
@@ -101,7 +102,7 @@ Colonnes : état réel · ce qui reste · document. « Public » = dans l'extens
 | **TTS et `!tts`**                                                                                                   | En Production, rétabli après OBS 33 (Antoni)                                                                                                                                                                                 | lecture avant la fin du reveal (dette) ; second lecteur `Navigateur web 2`                                                                            | —                                                                                                                                        |
 | **Tombola V2**                                                                                                      | En Production ; annonce groupée validée (23/10)                                                                                                                                                                              | Tombola V1 inaccessible (`raffle_v2` forcé)                                                                                                           | [tombola-v2-parity.md](tombola-v2-parity.md)                                                                                             |
 | **Notifications et activité** (Studio, alertes Twitch V2)                                                           | En Production (`ALERTS_MODE`) ; notifications de Studio                                                                                                                                                                      | vrai don et sous-types réels ; Studio : textes qui se chevauchent, notifications répétitives à regrouper, états normaux présentés comme des incidents | [TWITCH_ALERTS_PARITY_2026-10.md](TWITCH_ALERTS_PARITY_2026-10.md)                                                                       |
-| **Overlays OBS et Chaos**                                                                                           | Lecteurs d'overlays de Studio en Production ; **Chaos V1** fermé avec Halloween (02/11) ; **Chaos V2 en conception**, rien construit                                                                                         | Chaos V2 lots 0 à 5 (§ 2.0) ; couper les fenêtres plein écran permanentes                                                                             | [chaos/ARCHITECTURE_CHAOS_V2.md](chaos/ARCHITECTURE_CHAOS_V2.md), [chaos/AUDIT_CHAOS_V1.md](chaos/AUDIT_CHAOS_V1.md)                     |
+| **Overlays OBS et Chaos**                                                                                           | Lecteurs d'overlays de Studio en Production ; **Chaos V1** fermé avec Halloween (02/11) ; **Chaos V2** : prototype du lot 1 en local (22/11), hors Studio                                                                    | Chaos V2 lots 0 à 5 (§ 2.0) ; couper les fenêtres plein écran permanentes                                                                             | [chaos/ARCHITECTURE_CHAOS_V2.md](chaos/ARCHITECTURE_CHAOS_V2.md), [chaos/AUDIT_CHAOS_V1.md](chaos/AUDIT_CHAOS_V1.md)                     |
 | **Chatbox OBS** (Just Chatting, React, Dessin)                                                                      | En service chez **StreamElements** (3 overlays : `Boîte de chat`, `ChatReact`, `Chatbox Dessin`) ; reconnaissance faite le 20/11 ; **priorité de développement** depuis le 22/11, rien de spécifié                           | revue des caractéristiques avec Antoni, spécification, moteur partagé + 3 profils (§ 2.4)                                                             | [CHATBOX.md](CHATBOX.md) (+ rapport privé hors Git)                                                                                      |
 | **Mini-jeux et arcade** (Random Ban V5, Sniper, Jeu des mots, Roulette, Slot, Duel du chat)                         | En Production ; Mini-jeux V5 et anti-spoil (PR #67, 13–14/11) **publics** ; jeux du chat en live seulement                                                                                                                   | Duel : annonce et soldes réels non revérifiés ; 6 anciennes rédemptions Random Ban non régularisées                                                   | [mini-jeux/LIVRAISON_V5.md](mini-jeux/LIVRAISON_V5.md), [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md), [WORD_GAME_PARITY.md](WORD_GAME_PARITY.md) |
 | **Casino V1** (machine à fruits + Coffre du Raptor, roulette, machine à émotes, blackjack multijoueur, spectateurs) | **Terminé, Core `a94d1081` déployé, ouvert par réglage** (`CASINO_EXTENSION=on`, `casino.open=1`, 4 jeux), refusé hors live ; **pas dans l'extension publique** ; ZIP `d09fd03aa844` prêt, non téléversé ; fonctions : § 0.4 | § 0.4 ; aucun essai réel avec de vrais viewers                                                                                                        | [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md), [CASINO.md](CASINO.md) § 12–18                                                     |
@@ -119,19 +120,26 @@ Colonnes : état réel · ce qui reste · document. « Public » = dans l'extens
 
 ### 2.0 Chaos V2 : priorité majeure suivante, après les Chatbox (en conception)
 
-La recherche est terminée, et rien n'est construit ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Un retournement local
-propre, avec un seul vrai curseur, est **possible pour le curseur Windows** grâce à une capture native WGC ; le rendu
-de bout en bout n'est pas encore prouvé. Architecture recommandée : un lecteur natif qui ne vit que pendant un effet,
-vu par la capture d'écran d'OBS, et un module `chaos` du socle payé en Jetons.
+La recherche est terminée ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Un retournement local propre, avec un seul vrai
+curseur, est **possible pour le curseur Windows** grâce à une capture native WGC. Architecture recommandée : un lecteur
+natif qui ne vit que pendant un effet, vu par la capture d'écran d'OBS, et un module `chaos` du socle payé en Jetons.
 
-| Lot | Contenu                                                                                   | Prérequis                   |
-| --- | ----------------------------------------------------------------------------------------- | --------------------------- |
-| 0   | mesures PresentMon ; couper les fenêtres V1 permanentes ; choisir la fréquence de l'écran | GO d'Antoni, 45 min         |
-| 1   | lecteur natif, flip seul, bouton de test (Rust, CI)                                       | lot 0 ; GO ; outillage Rust |
-| 2   | module `chaos` payant dans le Lab (file, remboursements, extension, Studio)               | lot 1 accepté ; prix (Q2)   |
-| 3   | catalogue enrichi                                                                         | lot 2                       |
-| 4   | Production                                                                                | GO dédiés                   |
-| 5   | repère placé par un viewer                                                                | lots 1–4                    |
+**22/11 : le prototype du lot 1 existe** ([apps/chaos-presenter](../apps/chaos-presenter/README.md)).
+
+- C'est un lecteur autonome et un panneau de test, écrits en C# et non en Rust (installation de Rust refusée par le
+  garde-fou de l'agent).
+- Le rendu de bout en bout est prouvé sur une mire par 26 contrôles automatiques : aucun flash, clic traversant, arrêt
+  en 10 à 35 ms.
+- **Pas encore prouvé en jeu** : le test réel d'Antoni décide de la suite.
+
+| Lot | Contenu                                                                                   | Prérequis                  |
+| --- | ----------------------------------------------------------------------------------------- | -------------------------- |
+| 0   | mesures PresentMon ; couper les fenêtres V1 permanentes ; choisir la fréquence de l'écran | GO d'Antoni, 45 min        |
+| 1   | lecteur natif, flip seul, panneau de test — **prototype livré le 22/11 (C#)**             | test réel d'Antoni (R1–R6) |
+| 2   | module `chaos` payant dans le Lab (file, remboursements, extension, Studio)               | lot 1 accepté ; prix (Q2)  |
+| 3   | catalogue enrichi                                                                         | lot 2                      |
+| 4   | Production                                                                                | GO dédiés                  |
+| 5   | repère placé par un viewer                                                                | lots 1–4                   |
 
 Critères et risques : [chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md). Arbitrages :
 [chaos/QUESTIONS_OUVERTES_CHAOS_V2.md](chaos/QUESTIONS_OUVERTES_CHAOS_V2.md).
