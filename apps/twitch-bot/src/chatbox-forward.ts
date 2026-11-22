@@ -22,6 +22,7 @@ export type ChatboxEvent =
         | { t: 'emote'; id: string; text: string }
         | { t: 'mention'; text: string }
         | { t: 'cheer'; text: string; bits: number }
+        | { t: 'gif'; url: string; text: string }
       )[];
       action?: boolean;
       kind?: 'chat' | 'announcement' | 'highlighted' | 'first';
@@ -67,6 +68,13 @@ function fragments(
         text,
       };
     if (f.type === 'mention') return { t: 'mention' as const, text };
+    // Twitch's GIFs (EventSub `gif` fragment: id + url, « must not be modified »): shown as the old widgets did.
+    if (f.type === 'gif' && /^https:\/\//.test(str((f.gif as Raw | null)?.url)))
+      return {
+        t: 'gif' as const,
+        url: str((f.gif as Raw).url).slice(0, 500),
+        text,
+      };
     if (f.type === 'cheermote')
       return {
         t: 'cheer' as const,
@@ -151,11 +159,15 @@ export function chatboxEvent(
     };
   }
   if (type === 'channel.chat.notification') {
-    // Announcements only (V1): subscriptions and raids are the alerts' (no duplicate by default).
-    if (e.notice_type !== 'announcement') return null;
+    // Announcements only (V1), the shared chat's too: subscriptions and raids are the alerts' (no duplicate).
+    const shared = e.notice_type === 'shared_chat_announcement';
+    if (e.notice_type !== 'announcement' && !shared) return null;
     const u = user(e);
     if (!u.id || !str(e.message_id)) return null;
-    const color = str((e.announcement as Raw | null)?.color).toLowerCase();
+    const color = str(
+      ((shared ? e.shared_chat_announcement : e.announcement) as Raw | null)
+        ?.color,
+    ).toLowerCase();
     return {
       type: 'msg',
       message_id: str(e.message_id),

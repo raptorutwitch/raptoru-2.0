@@ -185,3 +185,46 @@ describe('chatbox forwarder', () => {
     );
   });
 });
+
+describe('Twitch GIFs and shared-chat announcements (EventSub reference, 23/11)', () => {
+  it('a `gif` fragment keeps its URL unchanged (Twitch requires it)', () => {
+    const e = chatboxEvent(
+      'channel.chat.message',
+      {
+        ...base,
+        message: {
+          text: 'regarde [GIF]',
+          fragments: [
+            { type: 'text', text: 'regarde ' },
+            {
+              type: 'gif',
+              text: '[GIF]',
+              gif: { id: 'g1', url: 'https://media.example/abc.gif?x=1' },
+            },
+          ],
+        },
+      },
+      o,
+    );
+    expect(e).toMatchObject({
+      fragments: [
+        { t: 'text', text: 'regarde ' },
+        { t: 'gif', url: 'https://media.example/abc.gif?x=1', text: '[GIF]' },
+      ],
+    });
+  });
+
+  it('a shared-chat announcement is an announcement, with its colour', () => {
+    expect(
+      chatboxEvent(
+        'channel.chat.notification',
+        {
+          ...base,
+          notice_type: 'shared_chat_announcement',
+          shared_chat_announcement: { color: 'GREEN' },
+        },
+        o,
+      ),
+    ).toMatchObject({ kind: 'announcement', accent: 'green' });
+  });
+});

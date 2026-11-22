@@ -59,8 +59,8 @@ const STATIC: Record<string, string> = {
   'demo.js': 'text/javascript; charset=utf-8',
 };
 const FONT = /^fonts\/([a-z0-9-]+\.woff2|OFL-[A-Za-z]+\.txt)$/;
-const IMG_SRC =
-  "'self' data: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com https://cdn.jsdelivr.net https://*.giphy.com";
+// Images over https only: emote CDNs, Twemoji, badge images, and Twitch's GIFs (an URL Twitch gives, to use unchanged).
+const IMG_SRC = "'self' data: https:";
 const CSP = {
   player: `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src ${IMG_SRC}; font-src 'self'; connect-src 'self'; frame-ancestors 'self'`,
   demo: "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-src 'self'; connect-src 'self'; frame-ancestors 'self'",
