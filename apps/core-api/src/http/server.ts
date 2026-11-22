@@ -95,6 +95,9 @@ import { ModuleStatsService } from '../module-stats/service.js';
 import type { CosmeticShopService } from '../cosmetics/service.js';
 import type { ProgressionService } from '../progression/service.js';
 import { wordGameCockpitEvents } from './word-game-routes.js';
+import { chatboxRoutes } from './chatbox-routes.js';
+import type { ChatboxRelay } from '../chatbox/relay.js';
+import type { Queryable } from '../db/db.js';
 import { studioAdminRoutes } from './studio-admin-routes.js';
 import { botInstanceRoutes } from './bot-instance-routes.js';
 import type { BotInstanceService } from '../bot-instance/service.js';
@@ -187,7 +190,12 @@ export interface AppDeps {
    * Chat games of the main Core (lot 8): /v1/bot/chat, /v1/bot/stream, /v1/bot/commands/<channel>/steps/* for the
    * production bot (bot secret), the cockpit's channel only.
    */
-  chatIngress?: { router: LabChatRouter; games: ChatGames };
+  chatIngress?: {
+    router: LabChatRouter;
+    games: ChatGames;
+    /** Chatbox Raptoru (docs/CHATBOX.md): the relay of the chat to Studio, memory only. */
+    chatbox?: { relay: ChatboxRelay; db: Queryable };
+  };
 }
 
 type Auth =
@@ -362,6 +370,16 @@ function routes({
     ...(studioInstallations ? studioAdminRoutes(studioInstallations) : []),
     ...(botInstances
       ? botInstanceRoutes(botInstances, !!studioInstallations)
+      : []),
+    // Chatbox Raptoru: the bot's chat events, Studio's stream and command catalogue (before the cockpit's catch-all GET).
+    ...(chatIngress?.chatbox && cockpit?.channelId
+      ? chatboxRoutes({
+          relay: chatIngress.chatbox.relay,
+          db: chatIngress.chatbox.db,
+          channelId: cockpit.channelId,
+          reserved: chatIngress.games.reserved,
+          studio: !!studioInstallations,
+        })
       : []),
     // Lot 9: the Jeu des mots wins for Studio's local OBS sound (before the cockpit's catch-all GET).
     ...(studioInstallations && cockpit && chatIngress

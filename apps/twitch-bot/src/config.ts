@@ -174,6 +174,9 @@ const Env = TwitchApp.extend({
   // Real Twitch alerts (subs, resubs, gifts, raids, cheers, follows) → /v1/bot/alerts/events: off (default) /
   // test (logged, never sent) / active (durable outbox, then Core: alert queue + Roue du Sub).
   ALERTS_MODE: z.enum(ALERTS_MODES).default('off'),
+  // Chatbox Raptoru (docs/CHATBOX.md § 5.1): the chat's display events (+ moderation, announcements, LeCroupier_'s own
+  // messages) → /v1/bot/chatbox on this same connection. OFF by default: nothing more is subscribed or sent.
+  CHATBOX_RELAY: Flag,
   // Follows: moderator:read:followers on LeCroupier_'s token (channel.follow v2).
   ALERTS_FOLLOW: Flag,
   ALERTS_OUTBOX_FILE: z.string().min(1).default('.alerts-outbox.json'),

@@ -41,6 +41,7 @@ process.env.STUDIO_SERVER_NO_LISTEN = '1';
 process.env.PORT = String(port);
 const { chainRelays, createStudioServer } = await import('../src/index.js');
 const { createChatboxHost } = await import('../src/chatbox/host.js');
+const { cockpitEvents } = await import('../src/prod-transport/production.js');
 /** The 7TV / BTTV / FFZ answers the chatbox e2e expects: a base emote, two zero-width ones, a BTTV emote. */
 const chatboxEmoteFixture = (url: string): unknown => {
   const item = (alias: string, id: string, zw: boolean) => ({
@@ -424,6 +425,12 @@ const studio = createStudioServer({
     guard: (req) =>
       req.headers['x-raptoru-studio'] === '1' ? null : 'missing_studio_header',
     fetcher: async (url) => chatboxEmoteFixture(url),
+    // The real chain: the Lab Core's relayed chat (simulated messages) and its command catalogue, through the cockpit.
+    core: {
+      call: labCore,
+      events: cockpitEvents(transport),
+      channelId: CHANNEL,
+    },
   }),
 });
 

@@ -40,7 +40,7 @@ export interface ChatboxMessage {
   /** Set by the Core: the first word is a Raptoru command or alias (registry + modules' reserved words). */
   command?: { name: string; known: boolean };
   /** Set by the Core for LeCroupier_'s own messages: the family of the cmd_steps step that sent it (null: none). */
-  croupier?: { family: string | null };
+  croupier?: { family: string | null; command?: string | null };
 }
 
 export const Rules = z.strictObject({
@@ -67,6 +67,19 @@ export const Rules = z.strictObject({
     external: z.array(z.string().regex(/^[\p{Ll}\p{N}_]{1,40}$/u)).max(300),
     /** `!word` that nobody recognises: never removed on the mere presence of « ! » by default. */
     unknown: z.enum(['hide', 'normal']),
+    /**
+     * Per command of the catalogue (its key; its aliases share it): the viewer's command message, and LeCroupier_'s
+     * answer to it — set independently; absent = the defaults above / the Croupier's catalogue.
+     */
+    rules: z
+      .record(
+        z.string().regex(/^[\w:.-]{1,120}$/),
+        z.strictObject({
+          message: z.enum(['hide', 'normal']).optional(),
+          reply: Mode.optional(),
+        }),
+      )
+      .default({}),
   }),
   croupier: z.strictObject({
     /** A message of LeCroupier_ that no step explains (direct bot message, typed by hand). */
@@ -108,6 +121,11 @@ export function familyInfo(family: string): {
 } {
   const [origin = '', kind = '', ...rest] = family.split(':');
   const what = rest.join(':');
+  if (origin === 'bot')
+    return {
+      category: 'commands',
+      label: 'Réponses directes du bot (Daily, Jetons)',
+    };
   if (origin === 'commands') {
     if (kind === 'refusal')
       return {
@@ -129,7 +147,10 @@ export function familyInfo(family: string): {
   }
   const label: Record<string, [CroupierCategory, string]> = {
     word_game: ['games', 'Jeu des mots'],
-    mini_game: ['games', 'Mini-jeux (roulette, slot, duel…)'],
+    mini_game: [
+      'games',
+      'Jeux et interactions du chat (mini-jeux, !rb, !tts, caution…)',
+    ],
     raffle: ['raffle', 'Tombola'],
     sub_wheel: ['sub_wheel', 'Roue du Sub'],
     music: ['music', 'Musique'],
@@ -151,7 +172,7 @@ export const DEFAULT_RULES: Rules = {
     { id: null, login: 'nightbot', mode: 'hide' },
     { id: null, login: 'streamelements', mode: 'hide' },
   ],
-  commands: { raptoru: 'hide', external: [], unknown: 'normal' },
+  commands: { raptoru: 'hide', external: [], unknown: 'normal', rules: {} },
   // LeCroupier_: ordinary messages and technical feedback hidden; Antoni allows the families he picks.
   croupier: {
     fallback: 'hide',
@@ -216,7 +237,18 @@ const SPECIAL_LABEL: Record<string, string> = {
   raid: 'Raid',
 };
 
-export function decide(m: ChatboxMessage, rules: Rules): Decision {
+/** A command of the catalogue, found by any of its words (its aliases share its setting). */
+export interface CommandRef {
+  key: string;
+  label: string;
+}
+export type CommandLookup = (word: string) => CommandRef | null;
+
+export function decide(
+  m: ChatboxMessage,
+  rules: Rules,
+  lookup: CommandLookup = () => null,
+): Decision {
   const login = m.user.login.toLowerCase();
   const account = rules.accounts.find((a) =>
     a.id ? a.id === m.user.id : a.login === login,
@@ -234,6 +266,19 @@ export function decide(m: ChatboxMessage, rules: Rules): Decision {
     };
   const special = m.type && m.type !== 'chat' ? m.type : null;
   if (m.croupier) {
+    // LeCroupier_'s answer to a command: that command's own setting first (whatever module answered).
+    const answered = m.croupier.command ? lookup(m.croupier.command) : null;
+    const reply = answered
+      ? rules.commands.rules[answered.key]?.reply
+      : undefined;
+    if (answered && reply)
+      return {
+        mode: reply,
+        reason: `réponse du Croupier à ${answered.label}`,
+        ...(reply === 'highlight'
+          ? { label: special === 'announcement' ? 'Annonce' : answered.label }
+          : {}),
+      };
     const family = m.croupier.family;
     if (!family)
       return {
@@ -265,6 +310,13 @@ export function decide(m: ChatboxMessage, rules: Rules): Decision {
   }
   const name = commandName(messageText(m));
   if (name) {
+    const known = lookup(name);
+    if (known) {
+      const mode =
+        rules.commands.rules[known.key]?.message ?? rules.commands.raptoru;
+      return { mode, reason: `commande ${known.label} (!${name})` };
+    }
+    // The simulator's own flag (no Core: no catalogue).
     if (m.command?.known)
       return {
         mode: rules.commands.raptoru,

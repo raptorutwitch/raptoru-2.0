@@ -125,10 +125,12 @@ export function cockpitClient(core: CoreCall): LabCoreCall {
   };
 }
 
-/** `/v1/lab/word-game/<channel>/events` → the same stream under /v1/studio/cockpit on the Production Core. */
+/** `/v1/lab/word-game|chatbox/<channel>/events` → the same streams under /v1/studio/cockpit on the Production Core. */
 export function cockpitEvents(core: ProdCoreCall): LabCoreEvents {
   return (path, signal) =>
-    /^\/v1\/lab\/word-game\/\d{1,32}\/events$/.test(path)
+    /^\/v1\/lab\/word-game\/\d{1,32}\/events$/.test(path) ||
+    // Chatbox Raptoru (docs/CHATBOX.md § 5.1): the relayed chat, with Studio's position in it (boot, after).
+    /^\/v1\/lab\/chatbox\/\d{1,32}\/events(\?[\w=&%.-]*)?$/.test(path)
       ? core.events(
           `/v1/studio/cockpit/${path.slice('/v1/lab/'.length)}`,
           signal,

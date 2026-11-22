@@ -16,6 +16,11 @@ import {
 } from './settings.js';
 import { ChatboxError, ChatboxStore } from './store.js';
 import {
+  type CatalogCommand,
+  ChatboxUpstream,
+  type CoreLink,
+} from './upstream.js';
+import {
   type ChatboxMessage,
   CROUPIER_CATEGORIES,
   decide,
@@ -77,7 +82,11 @@ export class ChatboxHost {
     { id: string; login: string; name: string; feed: Feed; at: number }
   >();
   private readonly heartbeat: ReturnType<typeof setInterval>;
+  private readonly catalogTimer: ReturnType<typeof setInterval> | null = null;
+  /** Every word of every known command → its catalogue entry (aliases share it). */
+  private byWord = new Map<string, CatalogCommand>();
   readonly demo: DemoRunner;
+  readonly upstream: ChatboxUpstream | null;
 
   constructor(
     private readonly d: {
@@ -91,9 +100,24 @@ export class ChatboxHost {
       /** Studio's API checks (same host, Studio header): an error code, or null. */
       guard: (req: IncomingMessage) => string | null;
       now?: () => number;
+      /** The Core (Lab or Production cockpit): the real chat and the command catalogue. Absent: simulator only. */
+      core?: CoreLink | null;
     },
   ) {
     this.demo = new DemoRunner((e) => this.ingest('demo', e), d.now);
+    this.upstream = d.core
+      ? new ChatboxUpstream({
+          core: d.core,
+          emit: (e) => this.ingest('live', e),
+          reset: (messages) => this.resetLive(messages),
+          wanted: () => [...this.clients].some((c) => c.feed === 'live'),
+        })
+      : null;
+    if (this.upstream) {
+      void this.refreshCatalog();
+      this.catalogTimer = setInterval(() => void this.refreshCatalog(), 60_000);
+      this.catalogTimer.unref?.();
+    }
     this.heartbeat = setInterval(() => {
       for (const c of this.clients) c.res.write(': hb\n\n');
     }, HEARTBEAT_MS);
@@ -102,6 +126,8 @@ export class ChatboxHost {
 
   stop() {
     clearInterval(this.heartbeat);
+    if (this.catalogTimer) clearInterval(this.catalogTimer);
+    this.upstream?.stop();
     this.demo.stop();
     for (const c of this.clients) c.res.end();
     this.clients.clear();
@@ -175,8 +201,32 @@ export class ChatboxHost {
     return {
       ...m,
       role: roleOf(m.user),
-      decision: decide(m, this.d.store.state.rules),
+      decision: decide(
+        m,
+        this.d.store.state.rules,
+        (w) => this.byWord.get(w) ?? null,
+      ),
     };
+  }
+
+  /** The command catalogue read again; a change re-decides what every page shows. */
+  async refreshCatalog(force = false) {
+    if (!this.upstream) return;
+    const commands = await this.upstream.catalog(force);
+    const next = new Map<string, CatalogCommand>();
+    for (const c of commands)
+      for (const w of c.words) next.set(w.toLowerCase(), c);
+    const changed = [...next.keys()].join() !== [...this.byWord.keys()].join();
+    this.byWord = next;
+    if (changed) this.pushRules();
+  }
+
+  /** The Core restarted (or Studio was away too long): its chat as it stands replaces the live history. */
+  private resetLive(messages: ChatboxMessage[]) {
+    this.history.live = messages.slice(-HISTORY_MAX);
+    for (const c of this.clients)
+      if (c.feed === 'live')
+        this.send(c, 'history', { messages: this.historyFor(c) });
   }
 
   private historyFor(c: Client) {
@@ -318,7 +368,12 @@ export class ChatboxHost {
       });
       res.write('retry: 2000\n\n');
       this.clients.add(c);
-      res.on('close', () => this.clients.delete(c));
+      res.on('close', () => {
+        this.clients.delete(c);
+        if (![...this.clients].some((x) => x.feed === 'live'))
+          this.upstream?.stop();
+      });
+      if (c.feed === 'live') this.upstream?.ensure();
       this.send(c, 'hello', {
         build: this.d.build,
         settings,
@@ -372,6 +427,14 @@ export class ChatboxHost {
         status: this.d.emotes.status,
       },
       repaired: this.d.store.repaired,
+      live: {
+        linked: !!this.upstream,
+        connected: this.upstream?.connected ?? false,
+        lastEventAt: this.upstream?.lastEventAt ?? null,
+        catalogError: this.upstream?.catalogError ?? null,
+        pages: [...this.clients].filter((c) => c.feed === 'live').length,
+      },
+      commands: this.upstream?.commands ?? [],
     };
   }
 
@@ -384,8 +447,10 @@ export class ChatboxHost {
     if (refused) return this.json(res, 403, { error: refused });
     const path = url.pathname.slice('/api/chatbox'.length) || '/';
     try {
-      if (req.method === 'GET' && path === '/')
+      if (req.method === 'GET' && path === '/') {
+        await this.refreshCatalog().catch(() => {});
         return this.json(res, 200, this.view());
+      }
       if (req.method !== 'POST')
         return this.json(res, 405, { error: 'method_not_allowed' });
       const b = await body(req);
@@ -478,6 +543,8 @@ export async function createChatboxHost(o: {
   guard: (req: IncomingMessage) => string | null;
   /** Tests: the emote providers' answers without the network. */
   fetcher?: (url: string, init?: RequestInit) => Promise<unknown>;
+  /** The Core (real chat + command catalogue); absent: simulator only. */
+  core?: CoreLink | null;
 }) {
   const store = await ChatboxStore.open(o.dir);
   let host: ChatboxHost | null = null;
@@ -494,6 +561,7 @@ export async function createChatboxHost(o: {
     origin: o.origin,
     build: `${process.env.npm_package_version ?? 'dev'}-${Date.now().toString(36)}`,
     guard: o.guard,
+    core: o.core ?? null,
   });
   const stop = host.stop.bind(host);
   host.stop = () => {

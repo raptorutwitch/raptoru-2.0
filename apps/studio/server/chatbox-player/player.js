@@ -287,33 +287,65 @@ function markLatest() {
   let latest = null;
   for (const el of log.children) {
     el.classList.remove('latest');
-    if (
-      !el.classList.contains('is-hidden') &&
-      !el.classList.contains('leaving')
-    )
-      latest = el;
+    if (!el.classList.contains('is-hidden') && !el.dataset.leaving) latest = el;
   }
   latest?.classList.add('latest');
 }
 
-/** FLIP: the messages already shown glide to their new place instead of jumping. */
+const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+/**
+ * FLIP with the Web Animations API: every message is measured where it is SEEN (a move in progress included), the
+ * change happens, then each one glides from there to its new place. A running move is replaced, a running entrance
+ * finished first, so a burst never jumps. Returns nothing: the newcomer (if any) travels with the stack (add()).
+ */
 function glide(change, ms) {
   const before = new Map(
     [...log.children].map((el) => [el, el.getBoundingClientRect().top]),
   );
+  for (const el of before.keys())
+    for (const a of el.getAnimations()) {
+      if (a.id === 'enter') a.finish();
+      else if (a.id === 'move') a.cancel();
+    }
   change();
   const z = P.zoom || 1;
+  let lift = 0;
   for (const [el, top] of before) {
     if (!el.isConnected) continue;
     const delta = (top - el.getBoundingClientRect().top) / z;
     if (Math.abs(delta) < 0.5) continue;
-    el.style.transition = 'none';
-    el.style.transform = `translateY(${delta}px)`;
-    requestAnimationFrame(() => {
-      el.style.transition = `transform ${ms}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-      el.style.transform = '';
-    });
+    lift = Math.max(lift, delta);
+    el.animate(
+      [{ transform: `translateY(${delta}px)` }, { transform: 'none' }],
+      {
+        duration: ms,
+        easing: EASE,
+      },
+    ).id = 'move';
   }
+  // The largest move (a message still rising when the next one came): the newcomer starts at least that low.
+  return lift;
+}
+
+function enter(el, ms, lift = 0) {
+  const z = P.zoom || 1;
+  const gap = Number.parseFloat(getComputedStyle(log).rowGap) || 0;
+  const from = Math.max(
+    el.getBoundingClientRect().height / z + gap + S.enter.distance,
+    lift,
+  );
+  const r = `${S.card.radius}px`;
+  const first = {
+    transform: `translateY(${from}px)`,
+    opacity: S.enter.style === 'unfold' ? 0.35 : 0,
+  };
+  const last = { transform: 'none', opacity: 1 };
+  if (S.enter.style === 'unfold') {
+    first.clipPath = `inset(0 0 100% 0 round ${r})`;
+    last.clipPath = `inset(0 0 0 0 round ${r})`;
+  }
+  el.animate([first, last], { duration: ms, easing: EASE }).id = 'enter';
 }
 
 function wake(at = Date.now()) {
@@ -341,33 +373,39 @@ function add(m) {
   const now = Date.now();
   arrivals.push(now);
   while (arrivals.length && now - arrivals[0] > 1000) arrivals.shift();
-  const burst = arrivals.length >= 4;
-  const ms = Math.round(S.enter.duration * (burst ? 0.4 : 1));
+  // A burst: shorter moves, never skipped (every message still slides in with the others).
+  const ms = Math.round(S.enter.duration * (arrivals.length >= 4 ? 0.45 : 1));
   const el = build_(m);
-  el.style.setProperty('--enter-ms', `${ms}ms`);
-  el.classList.add('entering');
-  el.addEventListener('animationend', () => el.classList.remove('entering'), {
-    once: true,
-  });
-  glide(() => {
+  const lift = glide(() => {
     log.append(el);
     enforceLimit();
     trimOverflow();
   }, ms);
+  if (ms > 0) enter(el, ms, lift);
   markLatest();
   topFade();
   if (m.decision?.mode !== 'hide') wake();
 }
 
+/** Moderation: the message fades where it is, then the others close the gap (no overlap, no jump). */
 function removeWhere(test) {
-  const gone = [...log.children].filter(test);
+  const gone = [...log.children].filter(
+    (el) => test(el) && !el.dataset.leaving,
+  );
   if (!gone.length) return;
-  for (const el of gone) el.classList.add('leaving');
+  for (const el of gone) {
+    el.dataset.leaving = '1';
+    el.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(0.98)' }], {
+      duration: 200,
+      easing: 'ease',
+      fill: 'forwards',
+    });
+  }
   setTimeout(() => {
     glide(() => gone.forEach((el) => el.remove()), 320);
     markLatest();
     topFade();
-  }, 220);
+  }, 200);
 }
 
 function reset(messages) {

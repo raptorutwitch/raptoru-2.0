@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 // Chatbox Raptoru end to end (docs/CHATBOX.md): the OBS page Studio serves, fed by the simulator. Zero-width 7TV stacks,
@@ -126,7 +130,7 @@ test('Chatbox: the OBS page renders, filters, moderates and follows Studio witho
   await expect(obs.locator('.msg', { hasText: '!roue' })).toHaveCount(0);
   await expect(
     preview.locator('.msg.is-hidden', { hasText: '!roue' }).locator('.why'),
-  ).toContainText('commande Raptoru !roue');
+  ).toContainText('commande Roue du Sub (!roue)');
   // The demo never reaches a live page.
   expect(await live.locator('.msg').count()).toBe(0);
 
@@ -201,4 +205,136 @@ test('Chatbox: the OBS page renders, filters, moderates and follows Studio witho
   });
   await api(admin, '/preset/apply', { profile: 'react', preset: 'modernisee' });
   await api(admin, '/placement/reset', { scene: 'just-chatting' });
+});
+
+// --- The real chain and the animations -------------------------------------------------------------------------------
+
+const PORT = Number(process.env.E2E_PORT ?? 4399);
+const CHANNEL = '900100';
+/** The specs' door to the Lab Core (e2e/core-lab-stack.ts): its simulated chat goes through the real router. */
+const labCore = async (path: string, body?: unknown) => {
+  const { url, secret } = JSON.parse(
+    readFileSync(join(tmpdir(), `raptoru-e2e-core-${PORT}.json`), 'utf8'),
+  ) as { url: string; secret: string };
+  const r = await fetch(url + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {
+      authorization: `Bearer ${secret}`,
+      'content-type': 'application/json',
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
+  return r.json() as Promise<Record<string, unknown>>;
+};
+const chat = (text: string) =>
+  labCore('/v1/lab/chat', {
+    channel_id: CHANNEL,
+    message_id: randomUUID(),
+    text,
+    chatter: {
+      id: '57099012',
+      login: 'chatbox_e2e',
+      display_name: 'Chatbox_E2E',
+      role: 'viewer',
+    },
+    source: 'simulator',
+  });
+
+test('Chatbox: the real chain — the Lab chat reaches the live OBS page through the Core, filtered by the command catalogue', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const admin = await browser.newPage();
+  const view = await api<
+    View & {
+      live: { linked: boolean };
+      commands: { key: string; words: string[]; module: string }[];
+      rules: Loose;
+    }
+  >(admin, '');
+  expect(view.live.linked).toBe(true);
+  // Every command the project knows: Commands V2, the modules' words, the bot's own (Daily, Jetons), aliases together.
+  const words = view.commands.flatMap((c) => c.words);
+  for (const w of [
+    'roue',
+    'rb',
+    'tts',
+    'fxcam',
+    'song',
+    'daily',
+    'solde',
+    'caution',
+    'votekick',
+  ])
+    expect(words, w).toContain(w);
+  const solde = view.commands.find((c) => c.words.includes('solde'))!;
+  expect(solde.words).toEqual(['solde', 'balance', 'compte']);
+
+  const live = await browser.newPage({
+    viewport: { width: 1920, height: 1080 },
+  });
+  await openPage(live, view.demo.token, {
+    profile: 'just-chatting',
+    scene: 'just-chatting',
+  });
+  await expect
+    .poll(
+      async () =>
+        (await api<{ live: { connected: boolean } }>(admin, '')).live.connected,
+    )
+    .toBe(true);
+  await chat('Bonjour la chaîne 🔥');
+  await chat('!roue');
+  await chat('!!!!!');
+  await expect(
+    live.locator('.msg', { hasText: 'Bonjour la chaîne' }),
+  ).toHaveCount(1);
+  await expect(live.locator('.msg', { hasText: '!!!!!' })).toHaveCount(1);
+  await expect(live.locator('.msg', { hasText: '!roue' })).toHaveCount(0);
+
+  // One command shown from now on (its aliases with it): the page re-decides at once, no reload.
+  const roue = view.commands.find((c) => c.words.includes('roue'))!;
+  const rules = structuredClone(view.rules);
+  rules.commands.rules[roue.key] = { message: 'normal' };
+  await api(admin, '/rules', { rules });
+  await expect(live.locator('.msg', { hasText: '!roue' })).toHaveCount(1);
+  rules.commands.rules = {};
+  await api(admin, '/rules', { rules });
+});
+
+test('Chatbox: React and Dessin — a new message pushes the stack, never overlaps it (arrival, burst, deletion)', async ({
+  browser,
+}) => {
+  const admin = await browser.newPage();
+  const view = await api<View>(admin, '');
+  await api(admin, '/demo', { clear: true });
+  for (const profile of ['react', 'dessin']) {
+    const page = await browser.newPage({
+      viewport: { width: 1920, height: 1080 },
+    });
+    await openPage(page, view.demo.token, { profile, feed: 'demo' });
+    // Every animation frame for 2.5 s: two neighbours never overlap (the stack moves as one block).
+    const watch = page.evaluate(async () => {
+      let worst = 0;
+      const end = performance.now() + 2500;
+      while (performance.now() < end) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const r = [...document.querySelectorAll('#log > .msg')].map((e) =>
+          e.getBoundingClientRect(),
+        );
+        for (let i = 1; i < r.length; i++)
+          worst = Math.max(worst, r[i - 1]!.bottom - r[i]!.top);
+      }
+      return worst;
+    });
+    const first = await send(admin, 'P01');
+    await page.waitForTimeout(150);
+    for (const c of ['P02', 'P05', 'P07', 'P12d']) await send(admin, c);
+    await page.waitForTimeout(500);
+    await api(admin, '/demo', { delete: first.id });
+    expect(await watch, `${profile}: overlap in px`).toBeLessThanOrEqual(1);
+    await api(admin, '/demo', { clear: true });
+    await page.close();
+  }
 });

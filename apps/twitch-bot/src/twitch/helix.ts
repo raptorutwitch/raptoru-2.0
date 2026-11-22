@@ -191,12 +191,15 @@ export function createHelix(auth: HelixAuth, fetchImpl: typeof fetch = fetch) {
       broadcasterId: string,
       senderId: string,
       message: string,
-    ): Promise<void> {
-      await request('POST', '/chat/messages', {
+    ): Promise<string | null> {
+      const res = await request('POST', '/chat/messages', {
         broadcaster_id: broadcasterId,
         sender_id: senderId,
         message,
       });
+      // The chatbox ties the bot's own answer to its command by this id (chatbox-forward.ts OwnAnswers).
+      const row = (res.data ?? [])[0] as { message_id?: string } | undefined;
+      return row?.message_id ?? null;
     },
 
     /**

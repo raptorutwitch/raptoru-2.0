@@ -1611,6 +1611,15 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       playerDir: join(REPO_ROOT, 'apps', 'studio', 'server', 'chatbox-player'),
       origin: `http://${host}:${port}`,
       channelId: BUILT_IN_PRODUCTION.channelId,
+      // The real chat and the command catalogue from the profile's Core (main Core: Lab or Production cockpit).
+      core:
+        labCore && transport
+          ? {
+              call: labCore,
+              events: transport.cockpitEvents,
+              channelId: cockpitChannel,
+            }
+          : null,
       guard: (req) =>
         !sameHost(req)
           ? 'forbidden_host'

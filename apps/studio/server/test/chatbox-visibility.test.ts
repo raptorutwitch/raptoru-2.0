@@ -223,3 +223,55 @@ describe('roles (the Aouh case)', () => {
     expect(roleOf(user(['subscriber']))).toBeNull();
   });
 });
+
+describe('command catalogue rules (docs/CHATBOX.md § 6.2)', () => {
+  const rb = { key: 'module:rb', label: 'Random Ban' };
+  const solde = { key: 'module:solde', label: 'Solde de Jetons' };
+  const catalogue = new Map([
+    ['rb', rb],
+    ['solde', solde],
+    ['balance', solde],
+    ['compte', solde],
+  ]);
+  const lookup = (w: string) => catalogue.get(w) ?? null;
+  const viewer = (text: string) => ({
+    ...msg('P01'),
+    fragments: [{ t: 'text' as const, text }],
+  });
+  const croupier = (command: string | null) => ({
+    ...msg('C03'),
+    croupier: { family: 'mini_game:action', command },
+  });
+
+  it('a known command is hidden by default, any of its aliases follows the same setting', () => {
+    expect(decide(viewer('!rb'), rules(), lookup)).toMatchObject({
+      mode: 'hide',
+      reason: 'commande Random Ban (!rb)',
+    });
+    const shown = rules(
+      (r) => (r.commands.rules['module:solde'] = { message: 'normal' }),
+    );
+    for (const w of ['!solde', '!balance', '!compte @duc'])
+      expect(decide(viewer(w), shown, lookup).mode).toBe('normal');
+    expect(decide(viewer('!!!!!'), rules(), lookup).mode).toBe('normal');
+  });
+
+  it("the viewer's message and LeCroupier_'s answer are set independently", () => {
+    const r = rules(
+      (x) =>
+        (x.commands.rules['module:rb'] = {
+          message: 'hide',
+          reply: 'highlight',
+        }),
+    );
+    expect(decide(viewer('!rb'), r, lookup).mode).toBe('hide');
+    expect(decide(croupier('rb'), r, lookup)).toMatchObject({
+      mode: 'highlight',
+      reason: 'réponse du Croupier à Random Ban',
+    });
+    // No answer setting: the Croupier's catalogue decides (everything hidden by default).
+    expect(decide(croupier('solde'), r, lookup).mode).toBe('hide');
+    const games = rules((x) => (x.croupier.categories.games = 'normal'));
+    expect(decide(croupier('solde'), games, lookup).mode).toBe('normal');
+  });
+});
