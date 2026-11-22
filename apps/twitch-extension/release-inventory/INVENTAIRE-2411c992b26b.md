@@ -9,8 +9,8 @@ d'Antoni (PR #107 : Split main par main, assurance et gain assuré, lignes gagna
 Split, réactions et UX » (PR #109, #110, #112, #114, #115 : pile du Split, cartouche, languettes, gains explorés sur les rouleaux,
 téléphone et paysage, les 7 réactions définitives, la dernière passe du 22/11).
 
-Préparé par l'agent le 2026-11-22. **Non validé** : la ligne de validation appartient à Antoni ; tant qu'elle manque,
-l'emballage de Production refuse d'écrire le ZIP (`npm run package:production -w @raptoru/twitch-extension -- --shell v2`).
+Préparé par l'agent le 2026-11-22. **Validé par Antoni le 2026-11-22** (sa ligne exacte, en fin de fichier) ; ZIP
+écrit par l'emballage de Production (`npm run package:production -w @raptoru/twitch-extension -- --shell v2`).
 Le ZIP est **complet**, pas un différentiel : toute l'extension du commit emballé. Il remplace le ZIP 76875d47e728
 (et les inventaires 03d49a2c9da1, 1ee8ad9aed0e, 866e6d6efaaa, ecaa5841eb61, 8d85e9b77df4 et 83be8cebbfd8, jamais validés, que celui-ci remplace).
 Compatibilité avec le Core (vérifiée dans les deux sens, contrat additif) :
@@ -141,4 +141,4 @@ Compatibilité avec le Core (vérifiée dans les deux sens, contrat additif) :
 - 22310e85 2026-11-17 fix(casino): security review — shares only while the casino plays, the wallet cap before the draw, strict ids
 - 91839307 2026-11-17 feat(casino): extension, Studio and Lab — the slot machine with the Coffre, the roulette, spectators
 
-La ligne de validation d'Antoni s'ajoute ci-dessous, telle quelle, après son contrôle.
+Validé par Antoni : oui
