@@ -45,15 +45,20 @@ const SURFACES = {
   },
 };
 // [label, w, h] per surface — width AND real height (the frame Twitch gives the extension).
+// Video component (console Twitch « Paramètres de taille des éléments vidéo », 22/11 : hauteur cible 65 % (60 %
+// avant), format 3:2, « Dimensions automatiques » désactivées) : the iframe is 3:2 at 65 % of the player's height.
+// Measured on Antoni's captures of 22/11 at 60 %: ≈ 520×347 in a normal player (1080p screen, chat open), ≈ 760×507 in
+// a big window; × 65/60 here. The normal player is the DEFAULT: what most viewers see. 651×434 is the COMPOSITION
+// reference: below it the Casino is scaled down as one block (extension/app/fit.js).
 const SIZES = {
   video: [
-    ['75 % — référence (651×434)', 651, 434],
-    ['65 % — réglage de la chaîne (565×376)', 565, 376],
-    ['zoom navigateur 125 % (452×301)', 452, 301],
-    ['zoom navigateur 150 % (377×251)', 377, 251],
-    ['3:2 (750×500)', 750, 500],
-    ['mode théâtre 1080p (867×578)', 867, 578],
-    ['plein écran 1080p (1053×702)', 1053, 702],
+    ['lecteur normal — par défaut (563×376)', 563, 376],
+    ['petit lecteur (490×326)', 490, 326],
+    ['très petit lecteur (390×260)', 390, 260],
+    ['lecteur normal à 60 %, avant le 22/11 (520×347)', 520, 347],
+    ['référence de composition (651×434)', 651, 434],
+    ['grande fenêtre / mode théâtre (823×549)', 823, 549],
+    ['plein écran 1080p (1141×761)', 1141, 761],
   ],
   panel: [
     ['panel (318×496)', 318, 496],
@@ -211,8 +216,8 @@ $('refill').addEventListener('click', () => {
 
 function show() {
   const url = src();
-  const w = Number($('w').value) || 651;
-  const h = Number($('h').value) || 434;
+  const w = Number($('w').value) || 563;
+  const h = Number($('h').value) || 376;
   const frame = $('frame');
   frame.width = w;
   frame.height = h;
