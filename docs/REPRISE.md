@@ -23,7 +23,8 @@ SHA-256 1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039 (invent
 L'extension publique NE contient PAS le Casino ; aucune partie réelle avec de vrais viewers. Ne pas dire « Casino
 disponible pour tous ». Gestes restants : Antoni (Hosted Test, revue Twitch) — § 5.4.
 PRIORITÉ DE DÉVELOPPEMENT : remplacer les 3 chatbox StreamElements (Just Chatting, React, Dessin) par une chatbox
-Raptoru. Reconnaissance faite le 20/11, rien de spécifié ni de développé : docs/CHATBOX.md (+ rapport privé hors Git).
+Raptoru. Direction décidée le 22/11 (modernisation maîtrisée + tout dans Studio) ; architecture proposée, à valider
+par Antoni avant le jalon 1 ; rien de développé : docs/CHATBOX.md (+ rapport et présentation privés hors Git).
 Niveaux : restauration WizeBot du 20/11 définitive (NE JAMAIS LA REJOUER).
 Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Méthode : docs/AGENT_WORKFLOW.md § 0.
 ```
@@ -171,12 +172,10 @@ Les états ne se confondent pas (détail : [ROADMAP.md](ROADMAP.md) § 0.4) :
 
 **A. Développement (agent, avec Antoni) : les Chatbox** — [CHATBOX.md](CHATBOX.md).
 
-1. Lire [CHATBOX.md](CHATBOX.md) et le rapport privé
-   `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\_recherches\chatbox-2026-11-20\RECONNAISSANCE_CHATBOX.md`
-   (source principale ; ne pas refaire la reconnaissance).
-2. Revoir avec Antoni les caractéristiques de chaque variante : garder, rendre réglable, changer (CHATBOX.md § 5).
-3. Ensuite seulement : spécification, puis développement en Lab. Aucune scène OBS, source ni overlay StreamElements
-   modifié sans GO.
+1. Lire [CHATBOX.md](CHATBOX.md), puis la présentation et le rapport privés qu'il cite (§ 1) ; ne refaire ni la
+   reconnaissance ni la présentation. Direction décidée par Antoni le 22/11 (CHATBOX.md § 4).
+2. Obtenir les réponses d'Antoni à la proposition d'architecture et de jalons (CHATBOX.md § 5 à 7).
+3. Ensuite seulement : jalon 1 en Lab. Aucune scène OBS, source ni overlay StreamElements modifié sans GO.
 
 **B. Casino jusqu'au public (gestes d'Antoni, en parallèle)**. Le Hosted Test ne permet **pas** un essai avec de vrais
 viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) § 6) et le Casino refuse hors live.

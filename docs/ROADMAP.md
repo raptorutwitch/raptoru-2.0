@@ -20,9 +20,9 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.1 À faire maintenant (ordre réel)
 
-1. **Chatbox Raptoru : priorité de développement** (décidée le 22/11, § 2.4, [CHATBOX.md](CHATBOX.md)) : revoir avec
-   Antoni les caractéristiques des trois chatbox StreamElements (garder, rendre réglable, changer), puis spécifier,
-   puis développer en Lab. Reconnaissance faite le 20/11 ; rien de spécifié ni de développé.
+1. **Chatbox Raptoru : priorité de développement** (§ 2.4, [CHATBOX.md](CHATBOX.md)) : direction décidée le 22/11
+   (modernisation maîtrisée + tout dans Studio) ; proposition d'architecture et de jalons à valider par Antoni
+   (CHATBOX.md § 7), puis jalon 1 en Lab. Rien de développé.
 2. **Casino V1 jusqu'au public** (gestes d'Antoni, en parallèle ; détail : [REPRISE.md](REPRISE.md) § 5.4 B) :
    téléverser le ZIP `d09fd03aa844` en Hosted Test hors live → choix de l'accès (`CASINO_EXTENSION=testers:<ids>`
    recommandé, ou `on`) → revue Twitch → publication, `PUBLISHED` mis à jour → essai réel en live → corrections des
@@ -176,22 +176,22 @@ Triage : [CLEANUP_LATER.md](CLEANUP_LATER.md) § 2. Carte : [WORKSPACES.md](WORK
 | `feat/cosmetic-shop` (PR #44) ; `docs/*` (PR #34, #36, #38, #40, #48)      | dépassés                              | à fermer sur accord                |
 | testeurs de l'extension en libre-service (Core `446e945c`, site `96b009f`) | file semi-automatique, locale         | activation sur GO                  |
 
-### 2.4 Chatbox Raptoru : priorité de développement (décidée le 22/11, à concevoir)
+### 2.4 Chatbox Raptoru : priorité de développement (direction décidée le 22/11)
 
 Remplacer progressivement les trois chatbox StreamElements d'OBS (`Boîte de chat` : Just Chatting et Waiting screen ;
-`ChatReact` : PS5 et Fullscreen ; `Chatbox Dessin` : Dessin) par une chatbox propre à Raptoru 2.0, en gardant leurs
-particularités importantes. Orientations, pas des spécifications : un moteur partagé, trois profils visuels, des
-paramètres par scène, une source navigateur OBS, des emotes animées cohérentes (Twitch, 7TV avec superposition, BTTV,
-FFZ, GIF, emojis), un rendu fiable à plusieurs résolutions, une configuration dans Studio si pertinente, une
-prévisualisation locale.
+`ChatReact` : PS5 et Fullscreen ; `Chatbox Dessin` : Dessin) par une chatbox propre à Raptoru 2.0. **Décision
+d'Antoni du 22/11 : modernisation maîtrisée + intégration complète dans Studio** (identité et comportements gardés ;
+proportions, animations, lisibilité et qualité technique modernisées ; tout se règle dans Studio, avec
+prévisualisation et application en direct aux sources OBS). Détail : [CHATBOX.md](CHATBOX.md) § 4.
 
-| Étape                                                                     | État                                                                 |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Reconnaissance (OBS, CSS, JavaScript, comparatif, préservation)           | **faite** (20/11) : rapport privé, voir [CHATBOX.md](CHATBOX.md) § 1 |
-| Revue des caractéristiques avec Antoni (garder, rendre réglable, changer) | **prochaine étape**                                                  |
-| Source des messages, bots masqués, événements affichés                    | à décider ([CHATBOX.md](CHATBOX.md) § 5)                             |
-| Spécification, puis développement en Lab avec prévisualisation            | après la revue                                                       |
-| Remplacement dans OBS, scène par scène                                    | sur GO d'Antoni ; les chatbox StreamElements restent jusque-là       |
+| Étape                                                                          | État                                                                    |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Reconnaissance (OBS, CSS, JavaScript, comparatif, préservation)                | **faite** (20/11) : rapport privé, voir [CHATBOX.md](CHATBOX.md) § 1    |
+| Présentation des trois chatbox (paramètres exacts, critiques, options)         | **faite** (22/11) : présentation privée, [CHATBOX.md](CHATBOX.md) § 1   |
+| Direction de conception                                                        | **décidée** (22/11) : [CHATBOX.md](CHATBOX.md) § 4                      |
+| Architecture (bot → Core → Studio → pages OBS, sans nouvelle connexion Twitch) | **proposée**, à valider par Antoni ([CHATBOX.md](CHATBOX.md) § 5 à 7)   |
+| Jalons 1 à 3 en Lab (page OBS, écran Studio, prêt pour le live)                | après la validation                                                     |
+| Production et remplacement dans OBS, scène par scène                           | sur GO d'Antoni ; les sources StreamElements restent intactes jusque-là |
 
 ## 3. Héritage et dettes
 
