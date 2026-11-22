@@ -1,7 +1,7 @@
 # Chatbox Raptoru : chantier (remplacer les trois chatbox StreamElements)
 
-**État au 23/11/2026 : terminé en Lab (jalons 1 à 3, § 10), prêt à installer ; rien en Production sans le GO
-d'Antoni (procédure § 12).** Aucune source OBS active, aucun widget StreamElements ni la Production ne sont touchés sans autorisation
+**État au 23/11/2026 : fusionné dans `main` (PR #118, `df3adb5e`, CI verte), non déployé ; mise en service sur GO
+d'Antoni (§ 12).** Aucune source OBS active, aucun widget StreamElements ni la Production ne sont touchés sans autorisation
 explicite d'Antoni. Ce fichier est le point d'entrée du chantier ; il ne remplace pas le rapport de reconnaissance ni
 la présentation (§ 1).
 
@@ -289,9 +289,9 @@ fondu du haut ; plafond de messages ; emplacements.
 | **1. Prototype Lab et démonstration**           | **livré** (22/11), essayé par Antoni le 23/11 : direction graphique validée                 |
 | **2. Le vrai chat dans le Lab**                 | **livré** (23/11) : bot, relais du Core, flux Studio, catalogue, rôles, modération, reprise |
 | **3. Prêt pour le live**                        | **livré en Lab** (23/11) : animations corrigées, éditeur simplifié, performances mesurées   |
-| **4. Production (autorisation à chaque étape)** | **prête, non faite** : procédure § 12                                                       |
+| **4. Production (autorisation à chaque étape)** | **prête, non faite** : code dans `main` (`df3adb5e`), procédure § 12                        |
 
-### 10.1 Ce qui est livré (branche locale `feat/chatbox-lab`, worktree `agent`, non poussée)
+### 10.1 Ce qui est livré (PR #118, fusionnée le 23/11 : `main` `df3adb5e`)
 
 - **Bot** (`apps/twitch-bot/src/chatbox-forward.ts`, drapeau `CHATBOX_RELAY`, **éteint par défaut**) : sur la connexion
   EventSub existante, chaque message (couleur, badges, fragments d'emotes, réponse, message mis en avant, premier
