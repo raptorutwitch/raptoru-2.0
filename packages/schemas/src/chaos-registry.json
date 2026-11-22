@@ -91,6 +91,25 @@
         "out": { "kind": "ramp", "duration_ms": 200, "curve": "ease_in_cubic", "kinds": ["ramp", "cut"] }
       },
       "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "error"]
+    },
+    {
+      "id": "diag.fault",
+      "version": 1,
+      "label": "Panne simulée",
+      "description": "Effet de test : lève une erreur à l'étape choisie (contrôle d'isolement des effets).",
+      "family": "diagnostic",
+      "slot": "overlay",
+      "internal": true,
+      "on_conflict": "reject",
+      "gpu": { "primitive": "overlay", "cost": "low", "passes": 0 },
+      "duration": { "default_ms": 5000 },
+      "params": [
+        { "id": "phase", "type": "enum", "values": ["prepare", "start", "render"], "default": "render" },
+        { "id": "after_ms", "type": "number", "min": 0, "max": 10000, "default": 300 }
+      ],
+      "variants": [],
+      "transitions": { "in": { "kind": "cut", "kinds": ["cut"] }, "out": { "kind": "cut", "kinds": ["cut"] } },
+      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "error"]
     }
   ]
 }

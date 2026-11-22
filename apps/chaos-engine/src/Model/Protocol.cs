@@ -13,6 +13,7 @@ namespace Raptoru.Chaos
     sealed class ProtocolError : Exception
     {
         public readonly string Code;
+        public string Id; // identifiant de corrélation, quand il a pu être lu
         public ProtocolError(string code, string message) : base(message) { Code = code; }
     }
 
@@ -46,17 +47,17 @@ namespace Raptoru.Chaos
         {
             Dictionary<string, object> d;
             try { d = J.Parse(line); } catch (Exception) { throw new ProtocolError("bad_json", "ligne JSON illisible"); }
-            int v = (int)J.Num(d, "v", 0);
-            if (v != Version) throw new ProtocolError("unsupported_version", "protocole v" + Version + " attendu (reçu v" + v + ")");
-            string name = J.Str(d, "cmd", null);
-            if (name == null || !Commands.Contains(name)) throw new ProtocolError("unknown_command", "commande inconnue : " + (name ?? "?"));
             string id = J.Str(d, "id", null);
             if (id != null && !IdRe.IsMatch(id)) throw new ProtocolError("bad_id", "identifiant de corrélation invalide");
+            int v = (int)J.Num(d, "v", 0);
+            if (v != Version) throw new ProtocolError("unsupported_version", "protocole v" + Version + " attendu (reçu v" + v + ")") { Id = id };
+            string name = J.Str(d, "cmd", null);
+            if (name == null || !Commands.Contains(name)) throw new ProtocolError("unknown_command", "commande inconnue : " + (name ?? "?")) { Id = id };
             return new Command { Id = id, Name = name, Body = d };
         }
 
         /// Construit une demande validée. resolveTarget transforme la cible demandée en cible réelle (ou lève ProtocolError).
-        public static EffectRequest BuildRequest(Dictionary<string, object> b, Registry reg, ConfigStore cfg, Func<Dictionary<string, object>, string, TargetRef> resolveTarget)
+        public static EffectRequest BuildRequest(Dictionary<string, object> b, Registry reg, ConfigStore cfg, Func<Dictionary<string, object>, EffectDef, TargetRef> resolveTarget)
         {
             string rid = J.Str(b, "request_id", null);
             if (rid == null || !IdRe.IsMatch(rid)) throw new ProtocolError("bad_request_id", "request_id obligatoire (1 à 80 caractères A-Z a-z 0-9 _ . : -)");
@@ -77,12 +78,12 @@ namespace Raptoru.Chaos
             // Les sources externes (Core, extension, points de chaîne) ne règlent jamais un paramètre non exposé.
             bool trusted = kind == "studio" || kind == "test";
             var resolved = Params.Resolve(def, J.Str(b, "variant", null), preset, J.Obj(b, "params"), dur, J.Obj(b, "transition"), reg.Limits, cfg.Safety, trusted);
-            string mode = def.RequiresCapture ? cfg.Engine.DefaultMode : "monitor";
-            var target = resolveTarget(J.Obj(b, "target") ?? J.Map("kind", "foreground"), mode);
+            var target = resolveTarget(J.Obj(b, "target") ?? J.Map("kind", "foreground"), def);
             return new EffectRequest
             {
                 RequestId = rid, Def = def, Variant = J.Str(b, "variant", null), PresetName = presetName, Policy = policy, Priority = (int)prio,
-                SourceKind = kind, SourceRef = J.Str(src, "ref", null), Resolved = resolved, TargetKey = target.Key, TargetInfo = target.Info
+                SourceKind = kind, SourceRef = J.Str(src, "ref", null), Resolved = resolved, TargetKey = target.Key, TargetInfo = target.Info,
+                TargetHwnd = target.Hwnd, TargetMonitor = target.Kind == "monitor"
             };
         }
 

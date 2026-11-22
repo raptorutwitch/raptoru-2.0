@@ -36,6 +36,7 @@ namespace Raptoru.Chaos
         public static readonly Guid DCompDevice = new Guid("C37EA93A-E7AA-450D-B16F-9746CB0407F3");
         public static readonly Guid D3D11Multithread = new Guid("9B7E4E00-342C-4106-A19F-4F2704F689F0");
         public static readonly Guid GraphicsCaptureItem = new Guid("79C3F95B-31F7-4EC2-A464-632EF5D30760");
+        public static readonly Guid DxgiAdapter3 = new Guid("645967A4-1392-4310-A798-8053CE3E93FD");
     }
 
     [ComImport, Guid("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -141,6 +142,25 @@ namespace Raptoru.Chaos
     delegate IntPtr BlobPtr(IntPtr self);                                                                             // 3 GetBufferPointer, 4 GetBufferSize
     delegate IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
     delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr l);
+    delegate int DevCreateBlendState(IntPtr self, ref D3D11_BLEND_DESC d, out IntPtr state);                          // 20
+    delegate void CtxSetBlendState(IntPtr self, IntPtr state, float[] factor, uint mask);                              // 35
+    delegate void CtxClearRtv(IntPtr self, IntPtr rtv, float[] rgba);                                                 // 50
+    delegate int Adapter3QueryVideoMemory(IntPtr self, uint node, int group, out DXGI_QUERY_VIDEO_MEMORY_INFO info);   // 14 (IDXGIAdapter3)
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct D3D11_RENDER_TARGET_BLEND_DESC
+    {
+        public int BlendEnable, SrcBlend, DestBlend, BlendOp, SrcBlendAlpha, DestBlendAlpha, BlendOpAlpha;
+        public byte RenderTargetWriteMask;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct D3D11_BLEND_DESC
+    {
+        public int AlphaToCoverageEnable, IndependentBlendEnable;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)] public D3D11_RENDER_TARGET_BLEND_DESC[] RenderTarget;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct DXGI_QUERY_VIDEO_MEMORY_INFO { public ulong Budget, CurrentUsage, AvailableForReservation, CurrentReservation; }
 
     static class N
     {
@@ -197,6 +217,11 @@ namespace Raptoru.Chaos
         [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int v, int size);
         [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);
         [DllImport("kernel32.dll")] public static extern IntPtr GetModuleHandleW(IntPtr name);
+        [DllImport("kernel32.dll")] public static extern ulong GetTickCount64();
+        [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
+        [DllImport("user32.dll")] public static extern int GetMessageW(out MSG m, IntPtr h, uint min, uint max);
+        [DllImport("user32.dll")] public static extern bool PostThreadMessageW(uint thread, uint msg, IntPtr w, IntPtr l);
+        [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
         [DllImport("kernel32.dll")] public static extern bool QueryPerformanceCounter(out long v);
         [DllImport("kernel32.dll")] public static extern bool QueryPerformanceFrequency(out long v);
         [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();

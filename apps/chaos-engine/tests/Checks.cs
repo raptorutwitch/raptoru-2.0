@@ -1,7 +1,7 @@
-// Contrôles automatiques du lecteur Chaos (lot 1). Sortie : « ok » / « KO » par point, puis le total.
-// Les contrôles visuels utilisent une mire 400×240 (jamais activée) sur l'écran secondaire s'il existe, et lisent les
-// pixels réellement composés par Windows (BitBlt CAPTUREBLT). Options : --with-monitor (mode C, retourne tout
-// l'écran de la mire 1,5 s), --bench-ms <n> (durée de la mesure, 8000 par défaut).
+// Contrôles d'intégration du moteur Chaos (protocole v2, vrai processus, vrai GPU, vrai écran).
+// Les contrôles visuels utilisent une mire 400×240 jamais activée, sur l'écran secondaire s'il existe, et lisent les
+// pixels réellement composés par Windows (BitBlt CAPTUREBLT). Aucun plein écran, aucune entrée simulée.
+// Sortie : « ok » / « KO » par point, puis le total. Option : --quick (sans la mesure de 6 s).
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,74 +9,100 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
-using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 namespace Raptoru.Chaos
 {
-    sealed class Child
+    sealed class EngineProc
     {
-        static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
         public static readonly Stopwatch Clock = Stopwatch.StartNew();
         public Process P;
-        readonly BlockingCollection<Dictionary<string, object>> queue = new BlockingCollection<Dictionary<string, object>>();
+        readonly BlockingCollection<Dictionary<string, object>> events = new BlockingCollection<Dictionary<string, object>>();
+        readonly ConcurrentDictionary<string, Dictionary<string, object>> responses = new ConcurrentDictionary<string, Dictionary<string, object>>();
         public readonly List<Dictionary<string, object>> All = new List<Dictionary<string, object>>();
         System.Threading.Timer pings;
+        int seq;
 
-        public static Child Start(string exe, string args)
+        public static EngineProc Start(string exe, string args)
         {
-            var c = new Child();
+            var e = new EngineProc();
             var psi = new ProcessStartInfo(exe, args) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8 };
-            c.P = Process.Start(psi);
-            c.P.OutputDataReceived += (s, e) =>
+            e.P = Process.Start(psi);
+            e.P.OutputDataReceived += (s, a) =>
             {
-                if (e.Data == null) return;
+                if (a.Data == null) return;
                 Dictionary<string, object> d;
-                try { d = Json.Deserialize<Dictionary<string, object>>(e.Data); } catch (Exception) { return; }
+                try { d = J.Parse(a.Data); } catch (Exception) { return; }
                 d["_rx"] = Clock.ElapsedMilliseconds;
-                lock (c.All) c.All.Add(d);
-                c.queue.Add(d);
+                lock (e.All) e.All.Add(d);
+                if (J.Str(d, "type", "") == "response") e.responses[J.Str(d, "id", "")] = d;
+                else e.events.Add(d);
             };
-            c.P.BeginOutputReadLine();
-            return c;
+            e.P.BeginOutputReadLine();
+            return e;
         }
 
-        public void Send(Dictionary<string, object> d) { SendRaw(Json.Serialize(d)); }
-        public void SendRaw(string s) { try { P.StandardInput.WriteLine(s); P.StandardInput.Flush(); } catch (Exception) { } }
-        public void StartPings() { pings = new System.Threading.Timer(_ => SendRaw("{\"cmd\":\"ping\"}"), null, 0, 400); }
-        public void StopPings() { if (pings != null) pings.Dispose(); pings = null; }
-        public void CloseStdin() { try { P.StandardInput.Close(); } catch (Exception) { } }
-
-        public Dictionary<string, object> Wait(string ev, int ms)
+        public void Raw(string line) { try { P.StandardInput.WriteLine(line); P.StandardInput.Flush(); } catch (Exception) { } }
+        /// Ligne brute dont la réponse n'a pas d'identifiant utilisable (JSON illisible, mauvaise version…).
+        public Dictionary<string, object> RawCall(string line, int ms = 2000)
+        {
+            Dictionary<string, object> r;
+            responses.TryRemove("", out r);
+            Raw(line);
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < ms) { if (responses.TryRemove("", out r)) return r; Thread.Sleep(2); }
+            return null;
+        }
+        public string Send(string cmd, Dictionary<string, object> body = null)
+        {
+            string id = "c" + Interlocked.Increment(ref seq);
+            var d = body != null ? new Dictionary<string, object>(body) : new Dictionary<string, object>();
+            d["v"] = 2; d["id"] = id; d["cmd"] = cmd;
+            Raw(J.Write(d));
+            return id;
+        }
+        public Dictionary<string, object> Call(string cmd, Dictionary<string, object> body = null, int ms = 3000)
+        {
+            string id = Send(cmd, body);
+            var sw = Stopwatch.StartNew();
+            Dictionary<string, object> r;
+            while (sw.ElapsedMilliseconds < ms) { if (responses.TryRemove(id, out r)) return r; Thread.Sleep(2); }
+            return null;
+        }
+        public Dictionary<string, object> Result(string cmd, Dictionary<string, object> body = null) { return J.Obj(Call(cmd, body), "result"); }
+        public Dictionary<string, object> Event(string name, int ms, Func<Dictionary<string, object>, bool> where = null)
         {
             var sw = Stopwatch.StartNew();
             Dictionary<string, object> e;
-            while (queue.TryTake(out e, Math.Max(0, ms - (int)sw.ElapsedMilliseconds))) if (Checks.S(e, "ev") == ev) return e;
+            while (events.TryTake(out e, Math.Max(0, ms - (int)sw.ElapsedMilliseconds)))
+                if (J.Str(e, "event", "") == name && (where == null || where(e))) return e;
             return null;
         }
-        public Dictionary<string, object> Poll(string ev)
-        {
-            Dictionary<string, object> e;
-            while (queue.TryTake(out e)) if (Checks.S(e, "ev") == ev) return e;
-            return null;
-        }
-        public Dictionary<string, object> Last(string ev) { lock (All) return All.LastOrDefault(e => Checks.S(e, "ev") == ev); }
-        public List<Dictionary<string, object>> Every(string ev) { lock (All) return All.Where(e => Checks.S(e, "ev") == ev).ToList(); }
-        public void Kill() { StopPings(); try { if (!P.HasExited) P.Kill(); } catch (Exception) { } }
+        public List<Dictionary<string, object>> Events(string name) { lock (All) return All.Where(e => J.Str(e, "event", "") == name).ToList(); }
+        public void Pings(int ms) { pings = new System.Threading.Timer(_ => Send("ping"), null, 0, ms); }
+        public void Kill() { if (pings != null) pings.Dispose(); try { if (!P.HasExited) P.Kill(); } catch (Exception) { } }
+        public void CloseStdin() { if (pings != null) pings.Dispose(); try { P.StandardInput.Close(); } catch (Exception) { } }
     }
 
     static class Checks
     {
         static int ok, ko;
-        static string exe;
+        static string exe, state;
         static Rectangle where;
+        static Process target;
+        static IntPtr targetHwnd;
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        public static string S(Dictionary<string, object> e, string k) { return e != null && e.ContainsKey(k) && e[k] != null ? Convert.ToString(e[k], Inv) : ""; }
-        static double D(Dictionary<string, object> e, string k) { try { return Convert.ToDouble(e[k], Inv); } catch (Exception) { return double.NaN; } }
+        [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+        [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+        [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint rop);
+        [DllImport("ntdll.dll")] static extern int NtSuspendProcess(IntPtr h);
+        [DllImport("ntdll.dll")] static extern int NtResumeProcess(IntPtr h);
 
         static void Check(bool cond, string what, string detail)
         {
@@ -84,144 +110,146 @@ namespace Raptoru.Chaos
             Console.WriteLine((cond ? "  ok  " : "  KO  ") + what + (string.IsNullOrEmpty(detail) ? "" : " — " + detail));
         }
         static void Info(string s) { Console.WriteLine("  ··  " + s); }
+        static string S(Dictionary<string, object> d, string k) { return J.Str(d, k, ""); }
+        static Dictionary<string, object> Err(Dictionary<string, object> r) { return J.Obj(r, "error"); }
 
         static int Main(string[] args)
         {
             N.SetProcessDpiAwarenessContext(new IntPtr(-4));
-            exe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ChaosPresenter.exe");
-            bool withMonitor = args.Contains("--with-monitor");
-            int benchMs = 8000;
-            for (int i = 0; i + 1 < args.Length; i++) if (args[i] == "--bench-ms") int.TryParse(args[i + 1], out benchMs);
             Console.OutputEncoding = Encoding.UTF8;
-            Console.WriteLine("Contrôles Chaos lot 1 — " + exe);
-
-            Protocol();
-            Visual(benchMs, withMonitor);
-
+            exe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ChaosEngine.exe");
+            state = Path.Combine(Path.GetTempPath(), "chaos-checks-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            Directory.CreateDirectory(state);
+            Console.WriteLine("Contrôles du moteur Chaos — " + exe);
+            try
+            {
+                Protocol();
+                Visual(!args.Contains("--quick"));
+            }
+            finally
+            {
+                if (target != null) try { target.Kill(); } catch (Exception) { }
+                try { Directory.Delete(state, true); } catch (Exception) { }
+            }
             Console.WriteLine("Total : " + ok + " ok, " + ko + " KO");
             return ko == 0 ? 0 : 1;
         }
 
-        static Dictionary<string, object> Play(Child c, long hwnd, int maxMs, int transitionMs, bool follow, string mode)
+        static EngineProc Engine(string extra = "")
         {
-            var p = new Dictionary<string, object> { { "hwnd", hwnd }, { "mode", mode }, { "transition_ms", transitionMs }, { "follow_foreground", follow } };
-            var d = new Dictionary<string, object> { { "cmd", "play" }, { "id", "chk-" + Child.Clock.ElapsedMilliseconds }, { "effect", "flip" }, { "variant", "rotate180" }, { "max_ms", maxMs }, { "params", p } };
-            c.Send(d);
-            return d;
+            var e = EngineProc.Start(exe, "--serve --state-dir \"" + state + "\" --heartbeat-ms 2000" + extra);
+            var r = e.Event("engine.ready", 8000);
+            if (r == null) { Check(false, "moteur prêt", "pas d'engine.ready"); e.Kill(); return null; }
+            e.Pings(500);
+            return e;
         }
 
-        static Child Serve(string extra)
+        static Dictionary<string, object> Request(EngineProc e, string id, string effect, Dictionary<string, object> extra = null)
         {
-            var c = Child.Start(exe, "--serve" + extra);
-            if (c.Wait("ready", 5000) == null) { Check(false, "lecteur prêt", "pas d'événement ready en 5 s"); c.Kill(); return null; }
-            return c;
+            var b = J.Map("request_id", id, "effect", effect, "source", J.Map("kind", "test"), "target", J.Map("kind", "window", "hwnd", targetHwnd.ToInt64(), "follow_foreground", false));
+            if (extra != null) foreach (var kv in extra) b[kv.Key] = kv.Value;
+            return e.Call("effect.request", b);
         }
 
-        // ---------- Protocole et arrêts (aucune fenêtre affichée) ----------
+        // ---------- Protocole, configuration, arrêts (aucune fenêtre) ----------
         static void Protocol()
         {
-            Console.WriteLine("Protocole et arrêts");
-            var c = Child.Start(exe, "--serve");
-            var r = c.Wait("ready", 5000);
-            Check(r != null, "lecteur prêt", r == null ? "aucun ready" : "en " + S(r, "ready_ms") + " ms · GPU " + S(r, "adapter"));
-            if (r == null) { c.Kill(); return; }
-            c.SendRaw("{pas du json");
-            var err = c.Wait("error", 1000);
-            Check(S(err, "reason") == "bad_json", "JSON invalide refusé sans planter", S(err, "reason"));
-            long t0 = Child.Clock.ElapsedMilliseconds;
-            c.CloseStdin();
-            bool exited = c.P.WaitForExit(1000);
-            var ex = c.Wait("exit", 300);
-            Check(exited && S(ex, "reason") == "stdin_closed", "stdin fermé → le lecteur quitte", (Child.Clock.ElapsedMilliseconds - t0) + " ms, " + S(ex, "reason"));
+            Console.WriteLine("Protocole, configuration, arrêts");
+            var sw = Stopwatch.StartNew();
+            var e = EngineProc.Start(exe, "--serve --state-dir \"" + state + "\" --heartbeat-ms 2000");
+            var ready = e.Event("engine.ready", 8000);
+            Check(ready != null, "moteur prêt", ready == null ? "" : "en " + S(ready, "ready_ms") + " ms (GPU " + S(ready, "gpu_init_ms") + " ms, shaders " + S(ready, "shader_warm_ms") + " ms) · " + S(ready, "adapter"));
+            if (ready == null) { e.Kill(); return; }
+            e.Pings(500);
+            var hello = e.Result("hello");
+            Check(hello != null && S(hello, "protocol") == "2" && J.Strs(hello, "implemented").Contains("flip"), "hello : protocole 2, implémentations", string.Join(",", J.Strs(hello, "implemented")));
+            var desc = e.Result("describe");
+            var regEffects = J.Arr(J.Obj(desc, "registry"), "effects").Select(o => S(o as Dictionary<string, object>, "id")).ToList();
+            Check(regEffects.Contains("flip") && regEffects.Count == J.Strs(desc, "implemented").Count, "describe : le registre partagé = les implémentations", string.Join(",", regEffects));
+            Check(S(Err(e.RawCall("{pas du json")), "code") == "bad_json", "JSON invalide : erreur, pas de plantage", "");
+            Check(S(Err(e.RawCall("{\"v\":1,\"cmd\":\"ping\"}")), "code") == "unsupported_version", "protocole v1 refusé", "");
+            Check(S(Err(e.Call("format_disque")), "code") == "unknown_command", "commande inconnue refusée", "");
+            Check(S(Err(e.Call("effect.request", J.Map("request_id", "x", "effect", "nope"))), "code") == "unknown_effect", "effet inconnu refusé", "");
+            Check(S(Err(e.Call("effect.request", J.Map("request_id", "x", "effect", "diag.tint", "source", J.Map("kind", "extension")))), "code") == "internal_effect", "effet de diagnostic refusé à l'extension", "");
+            Check(S(Err(e.Call("effect.request", J.Map("request_id", "x", "effect", "flip", "params", J.Map("fill", "arc-en-ciel")))), "code") == "invalid_param", "paramètre invalide refusé", "");
+            Check(S(Err(e.Call("effect.request", J.Map("request_id", "x", "effect", "flip", "target", J.Map("kind", "window", "hwnd", 0x7FFFFFF0)))), "code") == "no_window", "fenêtre inexistante refusée", "");
+            Check(S(Err(e.Call("config.set", J.Map("section", "safety", "values", J.Map("max_duration_ms", 999999)))), "code") == "invalid_config", "configuration hors bornes refusée", "");
+            var cfg = J.Obj(e.Call("preset.set", J.Map("effect", "flip", "name", "default", "value", J.Map("params", J.Map("fill", "black"), "duration_ms", 4000))), "result");
+            Check(cfg != null && File.Exists(Path.Combine(state, "config.json")), "préréglage enregistré sur disque", "");
+            var diag = e.Result("diagnostics");
+            var g = J.Obj(diag, "guardian");
+            int gpid = (int)J.Num(g, "pid", 0);
+            Check(gpid > 0, "gardien lancé", "pid " + gpid + ", raccourci " + S(g, "hotkey"));
+            e.CloseStdin();
+            bool exited = e.P.WaitForExit(2000);
+            Thread.Sleep(300);
+            bool guardianGone = true; try { guardianGone = Process.GetProcessById(gpid).HasExited; } catch (Exception) { }
+            Check(exited && S(e.Event("engine.exit", 500), "reason") == "stdin_closed" && guardianGone, "stdin fermé → moteur et gardien terminés", "");
 
-            c = Serve("");
-            if (c != null)
+            e = Engine();
+            if (e != null)
             {
-                c.SendRaw("{\"cmd\":\"ping\"}");
-                t0 = Child.Clock.ElapsedMilliseconds;
-                exited = c.P.WaitForExit(4000);
-                long dt = Child.Clock.ElapsedMilliseconds - t0;
-                ex = c.Wait("exit", 300);
-                Check(exited && S(ex, "reason") == "heartbeat" && dt >= 1800 && dt <= 3000, "plus de battement → arrêt de sécurité en ~2 s", dt + " ms, " + S(ex, "reason"));
-                c.Kill();
+                var p = J.Obj(J.Obj(J.Obj(e.Result("config.get"), "presets"), "flip"), "default");
+                Check(S(J.Obj(p, "params"), "fill") == "black", "préréglage relu après redémarrage", "");
+                e.Call("config.reset", J.Map("section", "presets"));
+                e.Kill();
             }
-
+            e = EngineProc.Start(exe, "--serve --state-dir \"" + state + "\" --heartbeat-ms 1500");
+            e.Event("engine.ready", 8000);
+            sw.Restart();
+            bool hb = e.P.WaitForExit(5000);
+            Check(hb && S(e.Event("engine.exit", 500), "reason") == "heartbeat", "client muet → arrêt de sécurité", sw.ElapsedMilliseconds + " ms (battement 1,5 s)");
             var parent = Process.Start(new ProcessStartInfo("cmd.exe", "/c ping -n 60 127.0.0.1 >nul") { UseShellExecute = false, CreateNoWindow = true });
-            c = Serve(" --parent " + parent.Id);
-            if (c != null)
+            e = Engine(" --parent " + parent.Id);
+            if (e != null)
             {
-                c.StartPings();
-                Thread.Sleep(300);
-                t0 = Child.Clock.ElapsedMilliseconds;
                 parent.Kill();
-                exited = c.P.WaitForExit(2000);
-                ex = c.Wait("exit", 300);
-                Check(exited && S(ex, "reason") == "parent_exit", "parent mort → le lecteur quitte", (Child.Clock.ElapsedMilliseconds - t0) + " ms, " + S(ex, "reason"));
-                c.Kill();
-            }
-            try { parent.Kill(); } catch (Exception) { }
-
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                Play(c, 0x7FFFFFF0, 3000, 0, false, "window");
-                var f = c.Wait("failed", 2000);
-                Check(S(f, "reason") == "no_window" && c.P.WaitForExit(1000), "fenêtre inexistante → échec propre", S(f, "reason"));
-                c.Kill();
-            }
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                c.Send(new Dictionary<string, object> { { "cmd", "play" }, { "id", "x" }, { "effect", "blur" }, { "max_ms", 3000 }, { "params", new Dictionary<string, object> { { "hwnd", 1 } } } });
-                var f = c.Wait("failed", 2000);
-                Check(S(f, "reason") == "unsupported_effect", "effet inconnu refusé (seul le retournement existe)", S(f, "reason"));
-                c.Kill();
+                Check(e.P.WaitForExit(2000) && S(e.Event("engine.exit", 500), "reason") == "parent_exit", "parent mort → moteur terminé", "");
+                e.Kill();
             }
         }
 
-        // ---------- Contrôles visuels sur la mire ----------
-        static Child target;
-        static IntPtr targetHwnd;
-
-        static bool StartTarget()
+        // ---------- Mire et lecture de l'écran ----------
+        static bool StartTarget(int w = 400, int h = 240)
         {
             var scr = Screen.AllScreens.FirstOrDefault(s => !s.Primary) ?? Screen.PrimaryScreen;
             var wa = scr.WorkingArea;
-            target = Child.Start(exe, string.Format(Inv, "--test-target --x {0} --y {1} --w 400 --h 240", wa.Right - 440, wa.Bottom - 280));
-            var t = target.Wait("target", 5000);
-            if (t == null) return false;
-            targetHwnd = new IntPtr(Convert.ToInt64(t["hwnd"], Inv));
+            var psi = new ProcessStartInfo(exe, string.Format(Inv, "--test-target --x {0} --y {1} --w {2} --h {3}", wa.Right - 560, wa.Bottom - 320, w, h))
+            { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true };
+            target = Process.Start(psi);
+            string line = target.StandardOutput.ReadLine();
+            if (line == null) return false;
+            targetHwnd = new IntPtr((long)J.Num(J.Parse(line), "hwnd", 0));
             Thread.Sleep(400);
-            RECT r = N.FrameBounds(targetHwnd);
-            where = new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+            Bounds();
             return true;
         }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
-        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
-        [System.Runtime.InteropServices.DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint rop);
+        static void Bounds() { RECT r = N.FrameBounds(targetHwnd); where = new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top); }
 
         static readonly Color[] Original = { Color.Red, Color.Lime, Color.Blue, Color.Yellow };
         static readonly Color[] Flipped = { Color.Yellow, Color.Blue, Color.Lime, Color.Red };
 
-        static string Classify()
+        static Color[] Sample()
         {
             using (var bmp = new Bitmap(where.Width, where.Height))
             {
-                using (var g = Graphics.FromImage(bmp))
+                using (var gr = Graphics.FromImage(bmp))
                 {
-                    IntPtr dst = g.GetHdc(), src = GetDC(IntPtr.Zero);
-                    BitBlt(dst, 0, 0, where.Width, where.Height, src, where.X, where.Y, 0x00CC0020 | 0x40000000); // SRCCOPY | CAPTUREBLT
-                    ReleaseDC(IntPtr.Zero, src); g.ReleaseHdc(dst);
+                    IntPtr dst = gr.GetHdc(), src = GetDC(IntPtr.Zero);
+                    BitBlt(dst, 0, 0, where.Width, where.Height, src, where.X, where.Y, 0x00CC0020 | 0x40000000);
+                    ReleaseDC(IntPtr.Zero, src); gr.ReleaseHdc(dst);
                 }
-                var px = new[] { bmp.GetPixel(where.Width / 5, where.Height / 5), bmp.GetPixel(where.Width * 4 / 5, where.Height / 5),
-                                 bmp.GetPixel(where.Width / 5, where.Height * 4 / 5), bmp.GetPixel(where.Width * 4 / 5, where.Height * 4 / 5) };
-                if (Same(px, Original)) return "original";
-                if (Same(px, Flipped)) return "flipped";
-                return "other(" + string.Join(" ", px.Select(c => c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2"))) + ")";
+                return new[] { bmp.GetPixel(where.Width / 5, where.Height / 5), bmp.GetPixel(where.Width * 4 / 5, where.Height / 5),
+                               bmp.GetPixel(where.Width / 5, where.Height * 4 / 5), bmp.GetPixel(where.Width * 4 / 5, where.Height * 4 / 5),
+                               bmp.GetPixel(where.Width / 2, where.Height / 2 - (int)(0.08 * where.Height)) };
             }
+        }
+        static string Classify(Color[] px = null)
+        {
+            px = px ?? Sample();
+            if (Same(px, Original)) return "original";
+            if (Same(px, Flipped)) return "flipped";
+            return "other(" + string.Join(" ", px.Take(4).Select(c => c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2"))) + ")";
         }
         static bool Same(Color[] a, Color[] b)
         {
@@ -235,228 +263,173 @@ namespace Raptoru.Chaos
             return -1;
         }
         static bool NoOverlayLeft() { return N.FindWindowW(N.OverlayClass, null) == IntPtr.Zero; }
+        static int Num(Dictionary<string, object> d, string k) { return (int)J.Num(d, k, -1); }
 
-        static void Visual(int benchMs, bool withMonitor)
+        static void Visual(bool bench)
         {
-            Console.WriteLine("Retournement sur la mire (écran " + (Screen.AllScreens.Length > 1 ? "secondaire" : "principal") + ")");
-            if (!StartTarget()) { Check(false, "mire affichée", "pas de fenêtre-mire"); return; }
-            if (where.Width < 50 || where.Height < 50)
-            {
-                RECT wr; N.GetWindowRect(targetHwnd, out wr);
-                Check(false, "mire affichée", "bornes " + where + ", GetWindowRect " + wr.Left + "," + wr.Top + "," + wr.Right + "," + wr.Bottom + ", visible " + N.IsWindowVisible(targetHwnd));
-                target.Kill(); return;
-            }
-            string first = Classify();
-            Check(first == "original", "mire visible et lisible à l'écran", first + " @ " + where);
-            if (first != "original") { target.Kill(); return; }
+            Console.WriteLine("Retournement et moteur sur la mire (écran " + (Screen.AllScreens.Length > 1 ? "secondaire" : "principal") + ")");
+            if (!StartTarget()) { Check(false, "mire affichée", ""); return; }
+            Check(Classify() == "original", "mire visible et lisible", Classify() + " @ " + where);
 
-            // 1. Premier plan exigé : la mire n'est pas au premier plan → rien ne s'affiche.
-            var c = Serve("");
-            if (c != null)
+            // 1. Retournement de bout en bout : registre → validation → ordonnancement → capture → rendu → présentation.
+            var e = Engine();
+            if (e == null) return;
+            IntPtr fg = N.GetForegroundWindow();
+            long sent = EngineProc.Clock.ElapsedMilliseconds;
+            var resp = Request(e, "flip-1", "flip", J.Map("transition", J.Map("in", J.Map("kind", "cut"), "out", J.Map("kind", "cut"))));
+            var seen = new List<string>();
+            Dictionary<string, object> st = null;
+            long flipAt = -1;
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 3000)
             {
-                c.StartPings();
-                Play(c, targetHwnd.ToInt64(), 5000, 0, true, "window");
-                Thread.Sleep(1200);
-                Check(c.Last("started") == null && Classify() == "original", "fenêtre pas au premier plan → effet masqué (jamais par-dessus une autre appli)", Classify());
-                c.Send(new Dictionary<string, object> { { "cmd", "stop_all" } });
-                c.P.WaitForExit(1000); c.Kill();
+                string k = Classify();
+                if (seen.Count == 0 || seen[seen.Count - 1] != k) seen.Add(k);
+                if (k == "flipped" && flipAt < 0) flipAt = EngineProc.Clock.ElapsedMilliseconds - sent;
+                if (st == null) st = e.Event("effect.started", 0, x => S(x, "request_id") == "flip-1");
+                if (st != null && flipAt >= 0 && EngineProc.Clock.ElapsedMilliseconds - sent > flipAt + 300) break;
+                Thread.Sleep(3);
             }
+            Check(J.Bool(resp, "ok", false) && st != null && flipAt >= 0, "retournement : accepté, démarré, visible", "écran retourné " + flipAt + " ms après la demande");
+            Check(seen.All(k => k == "original" || k == "flipped") && seen.LastOrDefault() == "flipped", "aucune image parasite (coupure franche)", string.Join(" → ", seen));
+            IntPtr overlay = N.FindWindowW(N.OverlayClass, null);
+            int need = N.WS_EX_TOPMOST | N.WS_EX_TRANSPARENT | N.WS_EX_LAYERED | N.WS_EX_NOACTIVATE | N.WS_EX_TOOLWINDOW | N.WS_EX_NOREDIRECTIONBITMAP;
+            Check((N.GetWindowLongW(overlay, N.GWL_EXSTYLE) & need) == need, "fenêtre traversable, jamais activée", "");
+            var hit = N.GetAncestor(N.WindowFromPoint(new POINT { X = where.X + where.Width / 2, Y = where.Y + where.Height / 4 }), N.GA_ROOTOWNER);
+            Check(hit == targetHwnd, "un clic traverse l'effet jusqu'à la fenêtre", "");
+            Check(N.GetForegroundWindow() == fg, "aucun vol de focus", "");
+            var dup = Request(e, "flip-1", "flip");
+            var status = e.Result("status");
+            Check(J.Bool(dup, "ok", false) && J.Arr(status, "active").Count == 1, "demande rejouée (même request_id) : aucun doublon", "");
+            var q = Request(e, "flip-2", "flip");
+            var queued = e.Event("effect.queued", 1000, x => S(x, "request_id") == "flip-2");
+            Check(queued != null && S(queued, "blocked_by") == "same_effect_active", "même effet sur la même cible : mis en file", "");
 
-            // 2. Retournement instantané : pas de flash, clics traversants, focus intact, arrêt immédiat.
-            c = Serve("");
-            if (c != null)
+            // 2. Deux effets compatibles, une seule capture.
+            var tint = Request(e, "tint-1", "diag.tint", J.Map("duration_ms", 2000, "params", J.Map("strength", 0.5), "transition", J.Map("in", J.Map("kind", "cut"))));
+            e.Event("effect.started", 2000, x => S(x, "request_id") == "tint-1");
+            Thread.Sleep(150);
+            var px = Sample();
+            status = e.Result("status");
+            Check(Num(status, "captures_open") == 1 && J.Arr(status, "surfaces").Count == 1 && px[0].R < 190 && px[0].G > 200,
+                "retournement + filtre : enchaînés sur UNE capture", "captures " + Num(status, "captures_open") + ", pixel haut-gauche " + px[0].R + "," + px[0].G + "," + px[0].B);
+            var tEnd = e.Event("effect.ended", 3000, x => S(x, "request_id") == "tint-1");
+            Thread.Sleep(100);
+            Check(S(tEnd, "reason") == "duration" && Classify() == "flipped", "fin du filtre seul : le retournement continue", "");
+
+            // 3. Panne d'un effet isolée.
+            Request(e, "fault-1", "diag.fault", J.Map("params", J.Map("phase", "render", "after_ms", 200)));
+            var fail = e.Event("effect.failed", 3000, x => S(x, "request_id") == "fault-1");
+            Thread.Sleep(100);
+            Check(S(fail, "reason") == "effect_error" && Classify() == "flipped" && J.Arr(e.Result("status"), "active").Any(a => S(a as Dictionary<string, object>, "request_id") == "flip-1"),
+                "effet en panne arrêté seul, le retournement continue", S(fail, "detail"));
+
+            // 4. Changement de taille de la cible.
+            N.SetWindowPos(targetHwnd, N.HWND_TOPMOST, where.X - 80, where.Y - 30, 480, 270, N.SWP_NOACTIVATE);
+            Thread.Sleep(600);
+            Bounds();
+            Check(Classify() == "flipped" && where.Width == 480, "cible redimensionnée et déplacée : l'effet suit", where.ToString());
+
+            // 5. STOP ALL : tout s'arrête, la file aussi, écran normal immédiatement.
+            long t0 = EngineProc.Clock.ElapsedMilliseconds;
+            e.Send("stop_all");
+            long back = WaitScreen("original", 2000);
+            Thread.Sleep(100);
+            status = e.Result("status");
+            Check(back >= 0 && back < 150 && J.Arr(status, "active").Count == 0 && J.Arr(status, "queued").Count == 0 && NoOverlayLeft(),
+                "STOP ALL : écran normal, file vidée, fenêtre détruite", back + " ms (mesuré à l'écran)");
+            Thread.Sleep(2300);
+            status = e.Result("status");
+            Check(Num(status, "captures_open") == 0, "au repos : capture arrêtée après le délai de garde", "");
+
+            // 6. Bascule animée puis arrêt pendant la transition (retour depuis la position courante).
+            Request(e, "anim-1", "flip");
+            e.Event("effect.started", 3000, x => S(x, "request_id") == "anim-1");
+            Thread.Sleep(200);
+            string mid = Classify();
+            t0 = EngineProc.Clock.ElapsedMilliseconds;
+            e.Send("effect.cancel", J.Map("request_id", "anim-1"));
+            var end = e.Event("effect.ended", 2000, x => S(x, "request_id") == "anim-1");
+            long dt = EngineProc.Clock.ElapsedMilliseconds - t0;
+            Thread.Sleep(80);
+            Check(mid.StartsWith("other") && end != null && dt < 450 && Classify() == "original", "arrêt pendant la rotation : retour fluide depuis l'angle atteint", "à 200 ms : " + mid + " ; retour en " + dt + " ms");
+
+            // 7. Calque sans capture.
+            Request(e, "marker-1", "diag.marker", J.Map("transition", J.Map("in", J.Map("kind", "cut"))));
+            e.Event("effect.started", 3000, x => S(x, "request_id") == "marker-1");
+            Thread.Sleep(150);
+            px = Sample();
+            status = e.Result("status");
+            var surf = J.Arr(status, "surfaces").FirstOrDefault() as Dictionary<string, object>;
+            Check(surf != null && J.Obj(surf, "capture") == null && px[4].R > 180 && px[4].G < 90 && px[4].B > 180 && Classify(px) == "original",
+                "calque seul : affiché sans capture (la surface n'en a pas)", "anneau " + px[4].R + "," + px[4].G + "," + px[4].B);
+            e.Send("stop_all");
+            Thread.Sleep(200);
+
+            // 8. Mesure.
+            if (bench)
             {
-                c.StartPings();
-                IntPtr fgBefore = N.GetForegroundWindow();
-                long sent = Child.Clock.ElapsedMilliseconds;
-                Play(c, targetHwnd.ToInt64(), 6000, 0, false, "window");
-                var seen = new List<string>();
-                Dictionary<string, object> st = null;
-                long stRx = -1, firstFlipAt = -1;
-                var sw = Stopwatch.StartNew();
-                while (sw.ElapsedMilliseconds < 4000)
+                Request(e, "bench", "flip", J.Map("duration_ms", 7000, "transition", J.Map("in", J.Map("kind", "cut"))));
+                e.Event("effect.ended", 10000, x => S(x, "request_id") == "bench");
+                var tels = e.Events("engine.telemetry").Where(x => J.Arr(x, "surfaces").Count > 0).Skip(1).ToList();
+                if (tels.Count > 0)
                 {
-                    string k = Classify();
-                    if (seen.Count == 0 || seen[seen.Count - 1] != k) seen.Add(k);
-                    if (k == "flipped" && firstFlipAt < 0) firstFlipAt = Child.Clock.ElapsedMilliseconds - sent;
-                    if (st == null) { st = c.Poll("started"); if (st != null) stRx = Child.Clock.ElapsedMilliseconds; }
-                    if (st != null && Child.Clock.ElapsedMilliseconds - stRx > 400) break;
-                    Thread.Sleep(3);
+                    Func<string, double> avg = k => tels.Select(x => J.Num(J.Arr(x, "surfaces")[0] as Dictionary<string, object>, k, -1)).Where(v => v >= 0).DefaultIfEmpty(-1).Average();
+                    var last = tels.Last();
+                    var passes = J.Obj(last, "passes") ?? new Dictionary<string, object>();
+                    Info(string.Format(Inv, "mesure {0} s (mire {1}) : capture {2:0.#} i/s, présentation {3:0.#} i/s, traitement p50 {4:0.###} ms / p95 {5:0.###} ms, GPU {6}, CPU {7} %, mémoire {8} Mo, vidéo {9} Mo",
+                        tels.Count, S(J.Arr(last, "surfaces")[0] as Dictionary<string, object>, "size"), avg("capture_fps"), avg("present_fps"), avg("processing_p50_ms"), avg("processing_p95_ms"),
+                        string.Join(", ", passes.Select(kv => kv.Key + " " + S(kv.Value as Dictionary<string, object>, "p50_ms") + " ms")),
+                        S(J.Obj(last, "process"), "cpu_pct"), S(J.Obj(last, "process"), "private_mb"), S(last, "vram_mb")));
+                    Check(avg("capture_fps") > 30 && avg("present_fps") > 30, "mesure réalisée (télémétrie du moteur)", "");
                 }
-                Check(st != null, "effet démarré", st == null ? "pas de started" : "started en " + S(st, "started_ms") + " ms (1re image " + S(st, "first_frame_ms") +
-                    " ms, préparation " + S(st, "setup_ms") + " ms), écran retourné " + firstFlipAt + " ms après l'ordre · bordure " + S(st, "border") + " (" + S(st, "border_access") + ")");
-                Check(seen.All(k => k == "original" || k == "flipped") && seen.LastOrDefault() == "flipped", "aucune image intermédiaire (pas de flash noir ni d'image vide)", string.Join(" → ", seen));
-                if (st != null)
-                {
-                    var overlay = new IntPtr(Convert.ToInt64(st["overlay_hwnd"], Inv));
-                    int exs = N.GetWindowLongW(overlay, N.GWL_EXSTYLE);
-                    int need = N.WS_EX_TOPMOST | N.WS_EX_TRANSPARENT | N.WS_EX_LAYERED | N.WS_EX_NOACTIVATE | N.WS_EX_TOOLWINDOW | N.WS_EX_NOREDIRECTIONBITMAP;
-                    Check((exs & need) == need, "fenêtre traversable, jamais activée, hors barre des tâches", "styles 0x" + exs.ToString("X8"));
-                    var center = new POINT { X = where.X + where.Width / 2, Y = where.Y + where.Height / 4 };
-                    IntPtr hit = N.GetAncestor(N.WindowFromPoint(center), N.GA_ROOTOWNER);
-                    Check(hit == targetHwnd, "un clic au milieu de l'effet atteint la fenêtre dessous", "WindowFromPoint → " + (hit == overlay ? "la fenêtre Chaos (KO)" : hit == targetHwnd ? "la mire" : "0x" + hit.ToInt64().ToString("X")));
-                    Check(N.GetForegroundWindow() == fgBefore, "le premier plan n'a pas changé (aucun vol de focus)", "");
-                    uint aff; N.GetWindowDisplayAffinity(overlay, out aff);
-                    Check(aff == 0, "mode D : la fenêtre n'est pas exclue des captures (OBS la voit)", "affinité " + aff);
-                    Play(c, targetHwnd.ToInt64(), 3000, 0, false, "window");
-                    var busy = c.Wait("failed", 1000);
-                    Check(S(busy, "reason") == "busy", "un deuxième effet dans le même lecteur est refusé", S(busy, "reason"));
-                    var stats = c.Wait("stats", 1500);
-                    if (stats != null) Info("mesure : capture " + S(stats, "capture_fps") + " i/s, affichage " + S(stats, "present_fps") + " i/s, traitement " + S(stats, "lat_p50_ms") + " ms, GPU " + S(stats, "gpu_ms") + " ms, CPU " + S(stats, "cpu_pct") + " %, composition " + S(stats, "comp_hz") + " Hz");
-                    long t0 = Child.Clock.ElapsedMilliseconds;
-                    c.Send(new Dictionary<string, object> { { "cmd", "stop_all" } });
-                    long back = WaitScreen("original", 2000);
-                    bool exited = c.P.WaitForExit(1000);
-                    var en = c.Wait("ended", 300);
-                    Check(back >= 0 && back <= 150, "ARRÊT : écran normal en moins de 150 ms", back + " ms (mesuré à l'écran)");
-                    Check(exited && S(en, "reason") == "stopped" && !N.IsWindow(overlay), "le lecteur et sa fenêtre ont disparu", "fin " + (Child.Clock.ElapsedMilliseconds - t0) + " ms, " + S(en, "reason"));
-                }
-                c.Kill();
+                else Check(false, "mesure réalisée", "aucune télémétrie");
             }
 
-            // 3. Bascule animée puis fin par la durée.
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                Play(c, targetHwnd.ToInt64(), 2000, 550, false, "window");
-                var st = c.Wait("started", 3000);
-                long stRx = Child.Clock.ElapsedMilliseconds;
-                Thread.Sleep(250);
-                string mid = Classify();
-                long full = WaitScreen("flipped", 1500);
-                var en = c.Wait("ended", 5000);
-                long dt = Child.Clock.ElapsedMilliseconds - stRx;
-                bool exited = c.P.WaitForExit(1000);
-                Check(st != null && mid.StartsWith("other") && full >= 0, "bascule animée : image en rotation puis retournée", "à 250 ms : " + mid + " ; retournée après " + (250 + full) + " ms");
-                Check(S(en, "reason") == "duration" && dt >= 2300 && dt <= 3300 && exited && Classify() == "original" && NoOverlayLeft(),
-                    "fin automatique à la durée (2 s + 0,55 s de retour), écran normal", dt + " ms, " + S(en, "reason"));
-                c.Kill();
-            }
+            // 9. Arrêt d'urgence (même chemin que le raccourci du gardien : drapeau partagé).
+            Request(e, "urg", "flip", J.Map("transition", J.Map("in", J.Map("kind", "cut"))));
+            e.Event("effect.started", 3000);
+            WaitScreen("flipped", 1000);
+            using (var mmf = MemoryMappedFile.OpenExisting("Local\\RaptoruChaos-" + e.P.Id))
+            using (var v = mmf.CreateViewAccessor(0, 64)) v.Write(12, 1);
+            back = WaitScreen("original", 2000);
+            Check(back >= 0 && back < 200 && e.Event("engine.emergency_stop", 500) != null, "arrêt d'urgence : écran normal", back + " ms");
 
-            // 4. Durée plafonnée à 60 s.
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                Play(c, targetHwnd.ToInt64(), 999999, 0, false, "window");
-                var st = c.Wait("started", 3000);
-                Check(S(st, "duration_ms") == "60000", "durée demandée de 1 000 s plafonnée à 60 s", S(st, "duration_ms"));
-                c.Send(new Dictionary<string, object> { { "cmd", "stop_all" } });
-                c.P.WaitForExit(1000); c.Kill();
-            }
+            // 10. Moteur figé : le gardien le tue, Windows retire la fenêtre.
+            Request(e, "gel", "flip", J.Map("transition", J.Map("in", J.Map("kind", "cut"))));
+            e.Event("effect.started", 3000);
+            WaitScreen("flipped", 1000);
+            t0 = EngineProc.Clock.ElapsedMilliseconds;
+            NtSuspendProcess(e.P.Handle);
+            back = WaitScreen("original", 6000);
+            bool killed = e.P.WaitForExit(1000);
+            if (!killed) NtResumeProcess(e.P.Handle);
+            Check(killed && back >= 0 && NoOverlayLeft(), "moteur gelé : le gardien le termine, écran normal", (EngineProc.Clock.ElapsedMilliseconds - t0) + " ms");
+            e.Kill();
 
-            // 5. Mesure : cadence, latence, GPU, CPU sur la mire animée à ~60 i/s.
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                Play(c, targetHwnd.ToInt64(), benchMs, 0, false, "window");
-                c.Wait("ended", benchMs + 4000);
-                var all = c.Every("stats").Skip(1).ToList(); // la 1re seconde contient le démarrage
-                if (all.Count > 0)
-                {
-                    Func<string, string> avg = k => { var v = all.Select(e => D(e, k)).Where(x => x >= 0 && !double.IsNaN(x)).ToList(); return v.Count == 0 ? "—" : v.Average().ToString("0.##", Inv); };
-                    var en = c.Last("ended");
-                    Info("mesure " + (all.Count) + " s : capture " + avg("capture_fps") + " i/s, affichage " + avg("present_fps") + " i/s, composition " + avg("comp_hz") +
-                        " Hz, traitement médian " + S(en, "lat_p50_ms") + " ms (p95 " + S(en, "lat_p95_ms") + "), GPU " + S(en, "gpu_ms") + " ms/image, CPU " + avg("cpu_pct") + " % (" + avg("cpu_ms_per_s") + " ms/s)");
-                    Check(true, "mesure réalisée", "");
-                }
-                else Check(false, "mesure réalisée", "aucune statistique");
-                c.Kill();
-            }
+            // 11. Moteur tué brutalement pendant un effet.
+            e = Engine();
+            if (e == null) return;
+            Request(e, "kill", "flip", J.Map("transition", J.Map("in", J.Map("kind", "cut"))));
+            e.Event("effect.started", 3000);
+            WaitScreen("flipped", 1000);
+            e.P.Kill();
+            back = WaitScreen("original", 2000);
+            Check(back >= 0 && back < 200 && e.P.WaitForExit(1000) && NoOverlayLeft(), "moteur tué : écran normal immédiatement", back + " ms");
 
-            // 5 bis. Mesure en résolution réelle : capture de l'écran principal, rendu complet dans une fenêtre jamais montrée.
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                var p = new Dictionary<string, object> { { "hwnd", N.GetDesktopWindow().ToInt64() }, { "mode", "monitor" }, { "transition_ms", 0 }, { "follow_foreground", false }, { "hidden", true } };
-                c.Send(new Dictionary<string, object> { { "cmd", "play" }, { "id", "bench-1440" }, { "effect", "flip" }, { "variant", "rotate180" }, { "max_ms", 10000 }, { "params", p } });
-                Thread.Sleep(6200);
-                c.Send(new Dictionary<string, object> { { "cmd", "stop_all" } });
-                var en = c.Wait("ended", 2000);
-                var all = c.Every("stats").Skip(1).ToList();
-                if (all.Count > 0 && en != null)
-                {
-                    Func<string, string> avg = k => { var v = all.Select(e => D(e, k)).Where(x => x >= 0 && !double.IsNaN(x)).ToList(); return v.Count == 0 ? "—" : v.Average().ToString("0.##", Inv); };
-                    Info("mesure écran principal " + S(all[0], "size") + " (" + all.Count + " s, rien affiché) : capture " + avg("capture_fps") + " i/s (Windows n'envoie que les images qui changent), composition " + avg("comp_hz") +
-                        " Hz, traitement médian " + S(en, "lat_p50_ms") + " ms (p95 " + S(en, "lat_p95_ms") + "), GPU " + S(en, "gpu_ms") + " ms/image, CPU " + avg("cpu_pct") + " % (" + avg("cpu_ms_per_s") + " ms/s)");
-                    Check(true, "mesure en 1440p réalisée sans rien afficher", "");
-                }
-                else Check(false, "mesure en 1440p réalisée sans rien afficher", en == null ? "pas de fin" : "aucune statistique");
-                c.Kill();
-            }
-
-            // 6. Le lecteur tué brutalement : Windows retire la fenêtre, rien à restaurer.
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                Play(c, targetHwnd.ToInt64(), 10000, 0, false, "window");
-                var st = c.Wait("started", 3000);
-                WaitScreen("flipped", 1000);
-                long t0 = Child.Clock.ElapsedMilliseconds;
-                c.P.Kill();
-                long back = WaitScreen("original", 2000);
-                bool gone = c.P.WaitForExit(2000) && NoOverlayLeft();
-                Check(st != null && back >= 0 && back <= 200 && gone, "lecteur tué (plantage simulé) → écran normal immédiatement",
-                    back + " ms" + (st == null ? ", pas démarré" : "") + (gone ? "" : ", fenêtre encore présente"));
-                c.Kill();
-            }
-
-            // 7. Mode C (écran entier) : exclu des captures, donc invisible à la lecture de l'écran.
-            if (withMonitor)
-            {
-                c = Serve("");
-                if (c != null)
-                {
-                    c.StartPings();
-                    Play(c, targetHwnd.ToInt64(), 1500, 0, false, "monitor");
-                    var st = c.Wait("started", 3000);
-                    uint aff = 0;
-                    if (st != null) N.GetWindowDisplayAffinity(new IntPtr(Convert.ToInt64(st["overlay_hwnd"], Inv)), out aff);
-                    string k = Classify();
-                    var en = c.Wait("ended", 4000);
-                    Check(st != null && aff == N.WDA_EXCLUDEFROMCAPTURE && k == "original" && S(en, "reason") == "duration",
-                        "mode C : écran entier retourné, exclu des captures (la lecture d'écran voit l'original)", "affinité 0x" + aff.ToString("X") + ", capture " + k);
-                    c.Kill();
-                }
-            }
-
-            // 8. Fenêtre cible fermée pendant l'effet.
-            c = Serve("");
-            if (c != null)
-            {
-                c.StartPings();
-                Play(c, targetHwnd.ToInt64(), 10000, 0, false, "window");
-                var st = c.Wait("started", 3000);
-                long t0 = Child.Clock.ElapsedMilliseconds;
-                target.Kill();
-                var en = c.Wait("ended", 2000);
-                bool exited = c.P.WaitForExit(1000);
-                Check(st != null && S(en, "reason") == "target_lost" && exited && NoOverlayLeft(), "fenêtre cible fermée → effet arrêté", (Child.Clock.ElapsedMilliseconds - t0) + " ms, " + S(en, "reason"));
-                c.Kill();
-            }
+            // 12. Cible fermée pendant l'effet, puis retour au repos sans fuite.
+            e = Engine();
+            if (e == null) return;
+            Request(e, "lost", "flip", J.Map("transition", J.Map("in", J.Map("kind", "cut"))));
+            e.Event("effect.started", 3000);
             target.Kill();
-
-            // 9. Chemin complet du panneau (invisible) : lancement du lecteur, battements, JSON, journal, fin par la durée.
-            if (!StartTarget()) { Check(false, "panneau → lecteur", "mire non relancée"); return; }
-            string journal = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "chaos-journal.txt");
-            long before = File.Exists(journal) ? new FileInfo(journal).Length : 0;
-            string png = Path.Combine(Path.GetTempPath(), "chaos-panel-selftest.png");
-            var panel = Process.Start(new ProcessStartInfo(exe, "--panel-selftest " + targetHwnd.ToInt64() + " \"" + png + "\"") { UseShellExecute = false });
-            long flip = WaitScreen("flipped", 4000);
-            long backAt = flip >= 0 ? WaitScreen("original", 4000) : -1;
-            bool closed = panel.WaitForExit(10000);
-            string tail = "";
-            if (File.Exists(journal))
-                using (var fs = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                { fs.Seek(before, SeekOrigin.Begin); tail = new StreamReader(fs, Encoding.UTF8).ReadToEnd(); }
-            Check(flip >= 0 && backAt >= 0 && closed && tail.Contains("PANEL play") && tail.Contains("\"ev\":\"ended\"") && tail.Contains("\"reason\":\"duration\"") && NoOverlayLeft(),
-                "panneau → lecteur : retournement lancé par le panneau, fini à la durée, journalisé", "retourné après " + flip + " ms, revenu après " + backAt + " ms ; état du panneau : " + png);
-            if (!closed) try { panel.Kill(); } catch (Exception) { }
-            target.Kill();
+            var lost = e.Event("effect.ended", 2000, x => S(x, "request_id") == "lost");
+            Thread.Sleep(3500);
+            var diag = e.Result("diagnostics");
+            Check(S(lost, "reason") == "target_lost" && NoOverlayLeft(), "fenêtre cible fermée : effet terminé", S(lost, "reason"));
+            Check(Num(diag, "surfaces_open") == 0 && Num(diag, "captures_open") == 0 && Num(diag, "pool_targets") == 0,
+                "au repos : aucune fenêtre, aucune capture, aucune cible GPU", "vidéo " + S(diag, "vram_mb") + " Mo");
+            e.Kill();
         }
     }
 }

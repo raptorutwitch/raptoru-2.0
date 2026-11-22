@@ -26,6 +26,8 @@ namespace Raptoru.Chaos
         public EffectDef Def;
         public ResolvedParams Resolved;
         public Dictionary<string, object> TargetInfo = new Dictionary<string, object>();
+        public IntPtr TargetHwnd;
+        public bool TargetMonitor;
     }
 
     sealed class Activation

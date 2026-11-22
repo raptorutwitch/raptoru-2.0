@@ -1,7 +1,17 @@
-// Point d'entrée : sans argument = panneau de test ; --serve = lecteur ; --test-target = fenêtre-mire des contrôles.
+// Point d'entrée de ChaosEngine.exe.
+//   --serve [--parent <pid>] [--config <fichier>] [--state-dir <dossier>] [--heartbeat-ms <n>] [--no-guardian]
+//   --guardian <pid du moteur>          (lancé par le moteur lui-même)
+//   --test-target [--x --y --w --h]     (mire des contrôles automatiques)
+//   --render-preview <dossier>          (aperçu hors écran des transitions en PNG : développement des shaders)
+//   --describe | --version
+// L'interface est la page Chaos de Raptoru Studio ; le moteur n'a pas de fenêtre de contrôle.
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
@@ -10,54 +20,217 @@ namespace Raptoru.Chaos
 {
     static class Program
     {
-        public const string Version = "0.1.0-lot1";
+        public const string Version = "0.2.0";
 
         [STAThread]
         static int Main(string[] args)
         {
             string mode = args.Length > 0 ? args[0] : "";
-            if (mode == "--serve")
+            N.SetProcessDpiAwarenessContext(new IntPtr(-4)); // pixels physiques
+            switch (mode)
             {
-                N.SetProcessDpiAwarenessContext(new IntPtr(-4)); // pixels physiques
-                return new Presenter().Run(IntArg(args, "--parent", 0));
+                case "--serve":
+                    var opt = new EngineOptions
+                    {
+                        ParentPid = IntArg(args, "--parent", 0), HeartbeatMs = IntArg(args, "--heartbeat-ms", 3000),
+                        Guardian = !args.Contains("--no-guardian"), StateDir = StrArg(args, "--state-dir", null)
+                    };
+                    opt.ConfigPath = StrArg(args, "--config", opt.StateDir != null ? Path.Combine(opt.StateDir, "config.json") : ConfigStore.DefaultPath());
+                    try { return new EngineHost(opt).Run(); }
+                    catch (Exception e)
+                    {
+                        var o = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true };
+                        o.WriteLine(J.Write(Protocol.Event("engine.error", 0, J.Map("code", e is RegistryError ? "registry_invalid" : e is ConfigError ? ((ConfigError)e).Code : "startup", "message", e.Message))));
+                        return 2;
+                    }
+                case "--guardian": return Guardian.Run(int.Parse(args[1]));
+                case "--test-target":
+                    Application.Run(new TestTarget(IntArg(args, "--x", 100), IntArg(args, "--y", 100), IntArg(args, "--w", 400), IntArg(args, "--h", 240)));
+                    return 0;
+                case "--render-preview": return Preview.Run(args.Length > 1 ? args[1] : ".");
+                case "--bench-gpu": return Preview.Bench(IntArg(args, "--w", 2560), IntArg(args, "--h", 1440), IntArg(args, "--frames", 600));
+                case "--describe":
+                    var reg = Registry.Embedded();
+                    Console.WriteLine(J.Write(J.Map("registry_version", reg.Version, "effects", reg.Effects.Keys.ToArray(),
+                        "implemented", EffectCatalog.Implemented.ToArray(), "mismatches", EffectCatalog.Mismatches(reg).ToArray())));
+                    return EffectCatalog.Mismatches(reg).Count == 0 ? 0 : 1;
+                case "--version": Console.WriteLine(Version); return 0;
+                default:
+                    MessageBox.Show("Le moteur Chaos se pilote depuis Raptoru Studio (page Chaos) ou le banc Chaos Lab.\n\n" +
+                        "Arrêt d'urgence à tout moment : Ctrl+Maj+F11.", "Raptoru Chaos " + Version);
+                    return 0;
             }
-            if (mode == "--test-target")
-            {
-                N.SetProcessDpiAwarenessContext(new IntPtr(-4));
-                Application.Run(new TestTarget(IntArg(args, "--x", 100), IntArg(args, "--y", 100), IntArg(args, "--w", 400), IntArg(args, "--h", 240)));
-                return 0;
-            }
-            if (mode == "--version") { Console.WriteLine(Version); return 0; }
-            N.SetProcessDPIAware();
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            if (mode == "--panel-snapshot" && args.Length > 1)
-            {
-                // Contrôle de mise en page : le panneau est dessiné dans une image, sans jamais apparaître à l'écran.
-                var shot = new Panel { Opacity = 0, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-30000, -30000) };
-                shot.Shown += (s, e) =>
-                {
-                    using (var bmp = new Bitmap(shot.Width, shot.Height)) { shot.DrawToBitmap(bmp, new Rectangle(Point.Empty, shot.Size)); bmp.Save(args[1]); }
-                    shot.Close();
-                };
-                Application.Run(shot);
-                return 0;
-            }
-            if (mode == "--panel-selftest" && args.Length > 2)
-            {
-                var p = new Panel();
-                p.SelfTest(new IntPtr(long.Parse(args[1])), args[2]);
-                Application.Run(p);
-                return 0;
-            }
-            Application.Run(new Panel());
-            return 0;
         }
 
         static int IntArg(string[] a, string name, int def)
         {
             for (int i = 0; i + 1 < a.Length; i++) if (a[i] == name) { int v; if (int.TryParse(a[i + 1], out v)) return v; }
             return def;
+        }
+        static string StrArg(string[] a, string name, string def)
+        {
+            for (int i = 0; i + 1 < a.Length; i++) if (a[i] == name) return a[i + 1];
+            return def;
+        }
+    }
+
+    /// Aperçu hors écran : la vraie chaîne de rendu (FrameBuilder, shaders, pool) appliquée à une image de test, écrite
+    /// en PNG (planche contact). Aucune fenêtre, aucune capture : sert à vérifier un shader ou une transition.
+    static class Preview
+    {
+        const uint W = 480, H = 270;
+
+        public static int Run(string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var gpu = new Gpu();
+            var lib = new ShaderLibrary(gpu, null);
+            var pool = new TexturePool(gpu);
+            var timer = new GpuTimer(gpu);
+            var text = new TextRaster(gpu);
+            var src = gpu.Texture(W, H, 0, 0x8 | 0x20, 0x1, 0, 0);
+            var srcSrv = gpu.Srv(src);
+            Upload(gpu, src, Pattern());
+            gpu.GenerateMips(srcSrv);
+            var outTex = gpu.Texture(W, H, 1, 0x8 | 0x20, 0, 0, 0);
+            var outRtv = gpu.Rtv(outTex);
+            var staging = gpu.Texture(W, H, 1, 0, 0, 3, 0x20000);
+            var rows = new List<KeyValuePair<string, List<Bitmap>>>();
+            foreach (var fill in new[] { "mirror", "black", "cover" })
+            {
+                var row = new List<Bitmap>();
+                foreach (var deg in new[] { 0, 30, 60, 90, 120, 150, 180 })
+                {
+                    var fb = new FrameBuilder(W, H, true);
+                    fb.Transform(deg * Math.PI / 180, 1, 1, 0, 0, fill);
+                    row.Add(Render(gpu, lib, pool, timer, fb, srcSrv, outTex, outRtv, staging));
+                }
+                rows.Add(new KeyValuePair<string, List<Bitmap>>("flip fill=" + fill, row));
+            }
+            var chain = new FrameBuilder(W, H, true);
+            chain.Transform(Math.PI, 1, 1, 0, 0, "mirror");
+            chain.Filter("tint", new[] { 0f, 1f, 1f, 0.5f });
+            var marker = new DiagMarkerEffect();
+            marker.Prepare(new EffectContext { Gpu = gpu, Shaders = lib, Text = text });
+            var reg = Registry.Embedded();
+            var mp = Params.Resolve(reg.Get("diag.marker"), null, null, null, null, null, reg.Limits, new SafetyConfig(), true);
+            marker.Render(chain, new EffectFrame { P = mp, Presence = 1, Width = W, Height = H, ElapsedMs = 500 });
+            rows.Add(new KeyValuePair<string, List<Bitmap>>("chaîne flip + teinte + calques", new List<Bitmap> { Render(gpu, lib, pool, timer, chain, srcSrv, outTex, outRtv, staging) }));
+            string sheet = Path.Combine(dir, "chaos-preview.png");
+            Contact(rows, sheet);
+            Console.WriteLine(sheet);
+            return 0;
+        }
+
+        /// Banc GPU reproductible, hors écran : la chaîne réelle à la résolution donnée (sans capture ni présentation).
+        /// Mesure le temps GPU par passe : retournement exact, rotation avec coins flous (mipmaps), avec coins noirs,
+        /// et retournement + filtre + calques. Ne mesure PAS un jeu ni la latence ressentie.
+        public static int Bench(int w, int h, int frames)
+        {
+            var gpu = new Gpu();
+            var lib = new ShaderLibrary(gpu, null);
+            lib.Warm();
+            var pool = new TexturePool(gpu);
+            var timer = new GpuTimer(gpu);
+            var text = new TextRaster(gpu);
+            uint uw = (uint)w, uh = (uint)h;
+            var src = gpu.Texture(uw, uh, 0, 0x8 | 0x20, 0x1, 0, 0);
+            var srcSrv = gpu.Srv(src);
+            var outTex = gpu.Texture(uw, uh, 1, 0x8 | 0x20, 0, 0, 0);
+            var outRtv = gpu.Rtv(outTex);
+            var reg = Registry.Embedded();
+            var marker = new DiagMarkerEffect();
+            marker.Prepare(new EffectContext { Gpu = gpu, Shaders = lib, Text = text });
+            var mp = Params.Resolve(reg.Get("diag.marker"), null, null, null, null, null, reg.Limits, new SafetyConfig(), true);
+            var results = new Dictionary<string, object>();
+            var scenarios = new[] { "flip_180_exact", "flip_rotating_mirror", "flip_rotating_black", "flip_tint_layers" };
+            foreach (var sc in scenarios)
+            {
+                var per = new Dictionary<string, Samples>();
+                Action<string, double> add = (label, ms) => { Samples s; if (!per.TryGetValue(label, out s)) per[label] = s = new Samples(); s.Add(ms); };
+                var cpu = System.Diagnostics.Stopwatch.StartNew();
+                for (int i = 0; i < frames; i++)
+                {
+                    double angle = sc == "flip_180_exact" || sc == "flip_tint_layers" ? Math.PI : Math.PI * (i % 60) / 60.0;
+                    var fb = new FrameBuilder(uh == 0 ? 1 : uw, uh, true);
+                    fb.CurrentLabel = sc;
+                    fb.Transform(angle, 1, 1, 0, 0, sc == "flip_rotating_black" ? "black" : "mirror");
+                    if (sc == "flip_tint_layers")
+                    {
+                        fb.Filter("tint", new[] { 0f, 1f, 1f, 0.5f });
+                        marker.Render(fb, new EffectFrame { P = mp, Presence = 1, Width = uw, Height = uh, ElapsedMs = i * 16 });
+                    }
+                    if (fb.NeedsInputMips) gpu.GenerateMips(srcSrv);
+                    fb.Execute(gpu, lib, pool, timer, srcSrv, outRtv, i, i / 60f);
+                    timer.Collect(add);
+                }
+                double cpuMs = cpu.Elapsed.TotalMilliseconds / frames;
+                System.Threading.Thread.Sleep(200);
+                timer.Collect(add);
+                results[sc] = J.Map("passes", per.ToDictionary(kv => kv.Key, kv => (object)J.Map("gpu_ms_p50", kv.Value.P(50), "gpu_ms_p95", kv.Value.P(95), "gpu_ms_max", kv.Value.P(100), "samples", kv.Value.Count)),
+                    "cpu_submit_ms_per_frame", Math.Round(cpuMs, 3));
+            }
+            Console.WriteLine(J.Write(J.Map("resolution", w + "x" + h, "frames_per_scenario", frames, "adapter", gpu.Adapter, "vram_mb", gpu.VideoMemoryMB(), "scenarios", results,
+                "note", "GPU par passe (horodatages), hors capture et hors présentation ; ne mesure pas un jeu.")));
+            return 0;
+        }
+
+        static Bitmap Render(Gpu gpu, ShaderLibrary lib, TexturePool pool, GpuTimer timer, FrameBuilder fb, IntPtr srcSrv, IntPtr outTex, IntPtr outRtv, IntPtr staging)
+        {
+            fb.Execute(gpu, lib, pool, timer, srcSrv, outRtv, 0, 0);
+            gpu.Copy(staging, outTex, 0, 0, W, H);
+            var px = gpu.ReadBack(staging, W, H);
+            var bmp = new Bitmap((int)W, (int)H, PixelFormat.Format32bppArgb);
+            var data = bmp.LockBits(new Rectangle(0, 0, (int)W, (int)H), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            for (int y = 0; y < H; y++) Marshal.Copy(px, (int)(y * W * 4), new IntPtr(data.Scan0.ToInt64() + (long)y * data.Stride), (int)(W * 4));
+            bmp.UnlockBits(data);
+            return bmp;
+        }
+
+        /// Image de test : quatre quadrants, une grille, une flèche vers le haut, le mot HAUT.
+        static byte[] Pattern()
+        {
+            using (var bmp = new Bitmap((int)W, (int)H, PixelFormat.Format32bppArgb))
+            {
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.FillRectangle(Brushes.Firebrick, 0, 0, W / 2, H / 2); g.FillRectangle(Brushes.SeaGreen, W / 2, 0, W / 2, H / 2);
+                    g.FillRectangle(Brushes.RoyalBlue, 0, H / 2, W / 2, H / 2); g.FillRectangle(Brushes.Goldenrod, W / 2, H / 2, W / 2, H / 2);
+                    using (var pen = new Pen(Color.FromArgb(90, 255, 255, 255))) for (int i = 0; i < W; i += 30) { g.DrawLine(pen, i, 0, i, H); if (i < H) g.DrawLine(pen, 0, i, W, i); }
+                    g.FillPolygon(Brushes.White, new[] { new Point((int)W / 2, 20), new Point((int)W / 2 - 30, 70), new Point((int)W / 2 + 30, 70) });
+                    using (var f = new Font("Segoe UI", 28, FontStyle.Bold)) g.DrawString("HAUT", f, Brushes.White, W / 2 - 50, 80);
+                }
+                var data = bmp.LockBits(new Rectangle(0, 0, (int)W, (int)H), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                var bytes = new byte[W * H * 4];
+                for (int y = 0; y < H; y++) Marshal.Copy(new IntPtr(data.Scan0.ToInt64() + (long)y * data.Stride), bytes, (int)(y * W * 4), (int)(W * 4));
+                bmp.UnlockBits(data);
+                return bytes;
+            }
+        }
+
+        static void Upload(Gpu gpu, IntPtr tex, byte[] bgra)
+        {
+            var t = gpu.TextureWithData(W, H, bgra);
+            gpu.Copy(tex, t, 0, 0, W, H);
+            Com.Release(ref t);
+        }
+
+        static void Contact(List<KeyValuePair<string, List<Bitmap>>> rows, string file)
+        {
+            int cols = rows.Max(r => r.Value.Count), tw = (int)W / 2, th = (int)H / 2, pad = 6, label = 22;
+            using (var sheet = new Bitmap(cols * (tw + pad) + pad, rows.Count * (th + label + pad) + pad))
+            using (var g = Graphics.FromImage(sheet))
+            using (var f = new Font("Segoe UI", 11))
+            {
+                g.Clear(Color.FromArgb(30, 30, 36));
+                for (int r = 0; r < rows.Count; r++)
+                {
+                    int y = pad + r * (th + label + pad);
+                    g.DrawString(rows[r].Key, f, Brushes.Gainsboro, pad, y);
+                    for (int c = 0; c < rows[r].Value.Count; c++) g.DrawImage(rows[r].Value[c], pad + c * (tw + pad), y + label, tw, th);
+                }
+                sheet.Save(file, ImageFormat.Png);
+            }
         }
     }
 

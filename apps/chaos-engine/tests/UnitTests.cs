@@ -325,7 +325,7 @@ namespace Raptoru.Chaos
             Case("protocole : demande d'effet validée (identifiant, effet, source, interne, priorité, préréglage, cible)", () =>
             {
                 var cfg = new ConfigStore(reg, null);
-                Func<Dictionary<string, object>, string, TargetRef> target = (t, mode) => new TargetRef { Key = "window:1", Kind = "window" };
+                Func<Dictionary<string, object>, EffectDef, TargetRef> target = (t, d) => new TargetRef { Key = "window:1", Kind = "window" };
                 Func<Dictionary<string, object>, string> code = b => Throws<ProtocolError>(() => Protocol.BuildRequest(b, reg, cfg, target));
                 Eq("bad_request_id", code(J.Map("effect", "flip")), "request_id");
                 Eq("unknown_effect", code(J.Map("request_id", "r", "effect", "nope")), "effet");
