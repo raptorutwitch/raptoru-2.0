@@ -1,6 +1,6 @@
 // Composant vidéo : une échelle uniforme pour le Casino (choix d'Antoni du 22/11, docs/CASINO.md § 6). Twitch donne au
-// composant une iframe de 3:2 à 60 % de la hauteur du lecteur (console : « Dimensions automatiques » désactivées) :
-// ≈ 520 × 347 dans un lecteur normal, ≈ 1053 × 702 en plein écran 1080p. Tant qu'un écran du Casino est affiché
+// composant une iframe de 3:2 à 65 % de la hauteur du lecteur (console : hauteur cible 65 % depuis le 22/11, 60 %
+// avant ; « Dimensions automatiques » désactivées) : ≈ 563 × 376 dans un lecteur normal, ≈ 1141 × 761 en plein écran. Tant qu'un écran du Casino est affiché
 // (.cz-host) et que l'iframe est plus petite que la référence (651 × 434, la disposition validée), la page entière est
 // réduite d'un bloc (CSS zoom) au lieu de basculer vers les dispositions compactes : même interface, juste plus petite.
 // Au-dessus de la référence, rien ne change (pas d'agrandissement). Sous MIN, l'échelle s'arrête et les dispositions

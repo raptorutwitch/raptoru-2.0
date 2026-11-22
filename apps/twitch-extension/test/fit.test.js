@@ -8,7 +8,8 @@ describe('uniform scale of the video component (Casino)', () => {
     expect([BASE_W, BASE_H]).toEqual([651, 434]);
     expect(scaleFor(651, 434)).toBe(1);
     expect(scaleFor(1053, 702)).toBe(1);
-    expect(scaleFor(520, 347)).toBeCloseTo(0.8, 2); // a normal Twitch player (Antoni's captures of 22/11)
+    expect(scaleFor(563, 376)).toBeCloseTo(0.865, 2); // a normal Twitch player, component at 65 % (22/11)
+    expect(scaleFor(520, 347)).toBeCloseTo(0.8, 2); // the same at 60 % (Antoni's captures of 22/11)
     expect(scaleFor(452, 301)).toBeCloseTo(0.694, 2);
     expect(scaleFor(200, 133)).toBe(MIN);
   });
