@@ -23,8 +23,8 @@ SHA-256 1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039 (invent
 L'extension publique NE contient PAS le Casino ; aucune partie réelle avec de vrais viewers. Ne pas dire « Casino
 disponible pour tous ». Gestes restants : Antoni (Hosted Test, revue Twitch) — § 5.4.
 PRIORITÉ DE DÉVELOPPEMENT : remplacer les 3 chatbox StreamElements (Just Chatting, React, Dessin) par une chatbox
-Raptoru. Direction décidée le 22/11 (modernisation maîtrisée + tout dans Studio) ; architecture proposée, à valider
-par Antoni avant le jalon 1 ; rien de développé : docs/CHATBOX.md (+ rapport et présentation privés hors Git).
+Raptoru. Architecture validée et spécification complète le 22/11 ; jalon 1 (prototype Lab + démonstration) en cours :
+docs/CHATBOX.md (+ rapport et présentation privés hors Git). Sources OBS, StreamElements, Production : sans GO, rien.
 Niveaux : restauration WizeBot du 20/11 définitive (NE JAMAIS LA REJOUER).
 Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Méthode : docs/AGENT_WORKFLOW.md § 0.
 ```
@@ -174,8 +174,8 @@ Les états ne se confondent pas (détail : [ROADMAP.md](ROADMAP.md) § 0.4) :
 
 1. Lire [CHATBOX.md](CHATBOX.md), puis la présentation et le rapport privés qu'il cite (§ 1) ; ne refaire ni la
    reconnaissance ni la présentation. Direction décidée par Antoni le 22/11 (CHATBOX.md § 4).
-2. Obtenir les réponses d'Antoni à la proposition d'architecture et de jalons (CHATBOX.md § 5 à 7).
-3. Ensuite seulement : jalon 1 en Lab. Aucune scène OBS, source ni overlay StreamElements modifié sans GO.
+2. Jalon en cours : CHATBOX.md § 10 (prototype Lab sur la branche `feat/chatbox-lab`, worktree `agent`).
+3. Aucune source OBS active, widget StreamElements ni Production modifiés sans autorisation explicite d'Antoni.
 
 **B. Casino jusqu'au public (gestes d'Antoni, en parallèle)**. Le Hosted Test ne permet **pas** un essai avec de vrais
 viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) § 6) et le Casino refuse hors live.

@@ -20,9 +20,8 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.1 À faire maintenant (ordre réel)
 
-1. **Chatbox Raptoru : priorité de développement** (§ 2.4, [CHATBOX.md](CHATBOX.md)) : direction décidée le 22/11
-   (modernisation maîtrisée + tout dans Studio) ; proposition d'architecture et de jalons à valider par Antoni
-   (CHATBOX.md § 7), puis jalon 1 en Lab. Rien de développé.
+1. **Chatbox Raptoru : priorité de développement** (§ 2.4, [CHATBOX.md](CHATBOX.md)) : architecture validée et
+   spécification complète le 22/11 ; jalon 1 (prototype Lab et démonstration) en cours.
 2. **Casino V1 jusqu'au public** (gestes d'Antoni, en parallèle ; détail : [REPRISE.md](REPRISE.md) § 5.4 B) :
    téléverser le ZIP `d09fd03aa844` en Hosted Test hors live → choix de l'accès (`CASINO_EXTENSION=testers:<ids>`
    recommandé, ou `on`) → revue Twitch → publication, `PUBLISHED` mis à jour → essai réel en live → corrections des
@@ -189,8 +188,9 @@ prévisualisation et application en direct aux sources OBS). Détail : [CHATBOX.
 | Reconnaissance (OBS, CSS, JavaScript, comparatif, préservation)                | **faite** (20/11) : rapport privé, voir [CHATBOX.md](CHATBOX.md) § 1    |
 | Présentation des trois chatbox (paramètres exacts, critiques, options)         | **faite** (22/11) : présentation privée, [CHATBOX.md](CHATBOX.md) § 1   |
 | Direction de conception                                                        | **décidée** (22/11) : [CHATBOX.md](CHATBOX.md) § 4                      |
-| Architecture (bot → Core → Studio → pages OBS, sans nouvelle connexion Twitch) | **proposée**, à valider par Antoni ([CHATBOX.md](CHATBOX.md) § 5 à 7)   |
-| Jalons 1 à 3 en Lab (page OBS, écran Studio, prêt pour le live)                | après la validation                                                     |
+| Architecture (bot → Core → Studio → pages OBS, sans nouvelle connexion Twitch) | **validée** (22/11) ; spécification complète ([CHATBOX.md](CHATBOX.md) § 5 à 9) |
+| Jalon 1 : prototype Lab et démonstration                                       | **en cours** ([CHATBOX.md](CHATBOX.md) § 10)                            |
+| Jalons 2 et 3 : vrai chat dans le Lab, prêt pour le live                       | à faire                                                                 |
 | Production et remplacement dans OBS, scène par scène                           | sur GO d'Antoni ; les sources StreamElements restent intactes jusque-là |
 
 ## 3. Héritage et dettes

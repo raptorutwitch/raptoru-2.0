@@ -1,8 +1,9 @@
 # Chatbox Raptoru : chantier (remplacer les trois chatbox StreamElements)
 
-**État au 22/11/2026 : direction décidée par Antoni (§ 4) ; proposition d'architecture et de découpage rédigée
-(§ 5 à 7), à valider par Antoni avant toute implémentation. Rien de développé.** Ce fichier est le point d'entrée du
-chantier ; il ne remplace pas le rapport de reconnaissance ni la présentation (§ 1).
+**État au 22/11/2026 : architecture validée par Antoni, spécification complète (§ 4 à 9), prototype Lab en cours
+(§ 10).** Aucune source OBS active, aucun widget StreamElements ni la Production ne sont touchés sans autorisation
+explicite d'Antoni. Ce fichier est le point d'entrée du chantier ; il ne remplace pas le rapport de reconnaissance ni
+la présentation (§ 1).
 
 ## 1. Sources (hors Git, privées)
 
@@ -14,9 +15,11 @@ chantier ; il ne remplace pas le rapport de reconnaissance ni la présentation (
 | Overlay local non retenu (même projet)    | `Chatbox Twitch\public\`                                                                                              | version antérieure, **pas une référence visuelle** (autres valeurs)                               |
 | Collection OBS lue                        | collection active « Twitch Dofus » (canvas 1920 × 1080)                                                               | relue le 22/11, rien modifié                                                                      |
 
-Ne pas déplacer ces fichiers. Ne jamais les copier tels quels dans le dépôt (il est public). Le portage du moteur
-d'emotes (§ 5.4) attend l'accord d'Antoni ; code relu le 22/11 : aucun secret, seulement des API publiques (7TV,
-BTTV, FFZ, Twemoji).
+Ne pas déplacer ces fichiers. Le moteur d'emotes des widgets est **porté** dans le dépôt (accord d'Antoni du 22/11),
+réécrit pour le nouveau contrat de messages ; code relu : aucun secret, seulement des API publiques (7TV, BTTV, FFZ,
+Twemoji). Licences : le code des widgets est celui d'Antoni ; polices Figtree et Barlow Condensed sous SIL Open Font
+License (fichier de licence fourni avec les polices) ; images Twemoji sous CC-BY 4.0 (attribution dans la page) ; les
+images d'emotes restent chez leurs fournisseurs (affichées comme dans tout client de chat, jamais copiées).
 
 ## 2. Les trois chatbox en service
 
@@ -26,10 +29,7 @@ BTTV, FFZ, Twemoji).
 | React         | `ChatReact`      | Scène PS5, Scène Fullscreen   | `streamelements-react`   | fond noir 18 % (le flou CSS est sans effet dans OBS), rôles en couleur, dernier message en avant, disparaît 10 s après le dernier message, dépliage ; texte ≈ 21 px |
 | Dessin        | `Chatbox Dessin` | Scène Dessin                  | `streamelements-compact` | cartes noires, barre de couleur selon le rôle, disparaît 15 s après le dernier message, dépliage ; agrandie par OBS ; texte ≈ 24 px                                 |
 
-Capacités communes à préserver : emotes Twitch, **7TV** (y compris les emotes superposées), BTTV, FFZ, GIF et emotes
-animées, emojis, filtrage des commandes `!`, messages supprimés par la modération (message, timeout, ban), couleurs et
-distinctions des rôles. La collection active garde un autre overlay StreamElements (`Sponso`, masqué) : hors
-périmètre.
+La collection active garde un autre overlay StreamElements (`Sponso`, masqué) : hors périmètre.
 
 ## 3. Précautions
 
@@ -37,147 +37,258 @@ périmètre.
   afficher, les recopier ni les committer (ni ici, ni dans un rapport, un journal ou un commit).
 - Le code réellement collé chez StreamElements n'a pas été relu : les copies locales ne font pas foi avant
   vérification ; la comparaison côte à côte en Lab révélera les écarts.
-- Aucune modification de scène, de source OBS, d'overlay StreamElements ni de chatbox active sans GO d'Antoni. Les
-  sources StreamElements restent **intactes** jusqu'à la validation explicite de chaque remplaçante, scène par scène.
+- **Interdit sans autorisation explicite d'Antoni** : modifier les sources OBS actives, les widgets StreamElements, la
+  Production. Les sources StreamElements restent **intactes** jusqu'à la validation explicite de chaque remplaçante,
+  scène par scène.
+- Masquer un message dans la chatbox n'agit **jamais** sur Twitch (ni ban, ni timeout, ni suppression) : l'interface
+  le dit en toutes lettres.
+- Aucun contenu de message n'est écrit sur disque ni dans un journal (Core et Studio : mémoire seulement).
 
-## 4. Décision du 22/11 (Antoni)
+## 4. Décisions d'Antoni (22/11)
 
-**Modernisation maîtrisée + intégration complète dans Raptoru Studio.**
+**Direction : modernisation maîtrisée + intégration complète dans Raptoru Studio.** Garder l'identité et les
+comportements particuliers des trois chatbox ; moderniser proportions, animations, lisibilité et qualité technique ;
+**tout se gère depuis Studio** (plus jamais de HTML ou de CSS chez StreamElements).
 
-- Garder l'identité et les comportements particuliers des trois chatbox ; moderniser les proportions, les animations,
-  la lisibilité et la qualité technique.
-- **Tout se gère depuis Studio** : plus jamais de HTML ou de CSS à modifier ni de code à téléverser chez
-  StreamElements.
+Validé après la proposition d'architecture :
 
-Objectifs :
+- Architecture **bot Twitch existant → Core → Raptoru Studio → overlays OBS** ; une seule infrastructure partagée ;
+  aucune seconde connexion Twitch ; jamais une connexion par profil.
+- Trois profils indépendants (Just Chatting, React, Dessin), un éditeur visuel dans Studio, des réglages persistants
+  appliqués immédiatement aux overlays.
+- Présets « Origine » et « Modernisée » ; **préset initial : Modernisée**, bascule instantanée sur Origine pour
+  comparer.
+- Portage du moteur d'emotes des anciens widgets, après vérification des licences et des fichiers copiés (§ 1).
+- Annonces Twitch et messages mis en avant dès la V1.
+- Organisation des sources OBS laissée à l'agent (cinq pages plein cadre retenues, § 5.2) ; exigences : proportions
+  fidèles, messages nets, configuration intuitive, **aucune régression** sur les scènes existantes.
+- Démonstration manipulable des trois chatbox **avant toute installation** ; fonctionnement en Lab hors live, sans
+  toucher la Production.
+- Pas d'IA pour le filtrage.
 
-1. Un moteur de chat partagé par les trois overlays, sur l'infrastructure Twitch existante de Raptoru.
-2. Trois profils graphiques indépendants : Just Chatting, React, Dessin.
-3. Un écran Chatbox dans Studio, avec modification visuelle des paramètres.
-4. Une prévisualisation en direct avec des messages et des emotes fictifs.
-5. Des réglages indépendants par profil : polices, tailles, couleurs, dimensions, espacement, opacité, badges, emotes,
-   animations, durée de présence et disparition.
-6. Les réglages enregistrés s'appliquent tout seuls aux sources OBS déjà installées, sans rechargement manuel ni
-   nouvelle publication.
-7. Des présets, dont le retour aux valeurs d'origine.
-8. Emotes Twitch, 7TV (superpositions comprises), BTTV, FFZ et GIF animés.
-9. Modération : suppression de messages, timeout, ban, clear.
-10. Les anciennes sources StreamElements restent intactes jusqu'à la validation explicite des remplaçantes.
-
-Contraintes : réutiliser le bot et le Core s'ils fournissent les événements ; pas de seconde connexion Twitch ni de
-service inutile ; jamais une connexion par profil ; réglages persistants après un redémarrage de Studio ou d'OBS ; un
-profil se modifie sans toucher les deux autres ; prévisualisation hors live ; pas de refonte générale de Studio.
-
-## 5. Proposition d'architecture (22/11, à valider par Antoni)
+## 5. Architecture
 
 ### 5.1 Chemin des messages : aucune nouvelle connexion Twitch
 
 ```text
 Twitch EventSub ── connexion existante du bot (jeton LeCroupier_)
-  → bot (VPS) : POST /v1/bot/chat, déjà envoyé pour chaque message, + champs d'affichage
-                + suppressions et clear (3 abonnements de plus, même connexion)
-  → Core (VPS) : relais chatbox EN MÉMOIRE (derniers événements, curseur) → flux SSE /v1/studio/chatbox/…
-  → Studio (PC) : UNE connexion au Core pour les trois profils, tampon local, catalogues d'emotes
+  → bot (VPS) : POST /v1/bot/chat, déjà envoyé pour chaque message, + champs d'affichage ;
+                suppressions et clear (3 abonnements de plus, même connexion) ; ses propres messages, marqués
+  → Core (VPS) : classe chaque message (commande connue, famille du Croupier, rôle d'équipe) ;
+                 relais chatbox EN MÉMOIRE (derniers événements, curseur) → flux SSE /v1/studio/chatbox/…
+  → Studio (PC) : UNE connexion au Core pour les trois profils ; règles de visibilité ; tampon local ; catalogues
   → pages OBS (une par scène), flux local sur le port 4100
 ```
 
 - **Bot** : ajoute au message déjà transmis ce que l'affichage demande (couleur, fragments emotes / mentions /
-  cheermotes, badges avec leur version, type de message : annonce, message mis en avant, premier message ; réponse).
-  S'abonne, sur sa connexion existante, à `channel.chat.message_delete`, `channel.chat.clear_user_messages` et
-  `channel.chat.clear` (scope `user:read:chat`, déjà présent) et les transmet. Il ne transmet pas ses propres
-  messages aujourd'hui : il les transmettra marqués si LeCroupier_ doit s'afficher (§ 7), sans que les jeux les voient.
-- **Core** : un relais **en mémoire seulement** (aucune table, aucune migration, aucun journal du contenu des
-  messages) : les quelque 200 derniers événements par chaîne avec un numéro de séquence ; un flux SSE pour Studio sur
-  le jeton d'installation (modèle : flux du Jeu des mots, `http/word-game-routes.ts`) ; le même sous `/v1/lab/…` (le
-  simulateur de chat du Lab alimente le même routeur). Images des badges : catalogue Helix (badges globaux et de la
-  chaîne) avec le jeton d'application que le Core sait déjà obtenir (modèle : `raffle-lab/avatars.ts`), en cache ;
-  l'adresse de l'image voyage avec le message.
-- **Studio** : un module `chatbox` qui n'écoute le Core que si une page OBS ou la prévisualisation est ouverte
-  (modèle : `level-up/runtime.ts`), garde un tampon local (historique pour une page rechargée) et pousse aux pages par
-  un flux local (modèle : `/level-up/events`). Les catalogues 7TV, BTTV et FFZ sont chargés **une seule fois** par
-  Studio (toutes les 10 min, cache disque pour redémarrer sans réseau) et servis aux pages.
+  cheermotes, badges avec leur version, type de message : annonce avec sa couleur, message mis en avant, premier
+  message ; réponse). S'abonne, sur sa connexion existante, à `channel.chat.message_delete`,
+  `channel.chat.clear_user_messages` et `channel.chat.clear` (scope `user:read:chat`, déjà présent). Transmet ses
+  propres messages **marqués** : les jeux ne les voient jamais, seule la chatbox les reçoit.
+- **Core** : classe, puis relaie **en mémoire seulement** (aucune table, aucune migration) les quelque 200 derniers
+  événements par chaîne, avec un numéro de séquence ; flux SSE pour Studio sur le jeton d'installation (modèle : flux
+  du Jeu des mots, `http/word-game-routes.ts`) ; le même sous `/v1/lab/…` (le simulateur de chat du Lab alimente le
+  même routeur). Badges : catalogue Helix (globaux et chaîne) avec le jeton d'application que le Core sait déjà
+  obtenir (modèle : `raffle-lab/avatars.ts`), en cache.
+- **Studio** : un module `chatbox` qui n'écoute le Core que si une page est ouverte (modèle : `level-up/runtime.ts`),
+  applique les règles de visibilité (§ 6), garde un tampon local (historique pour une page rechargée) et pousse aux
+  pages par un flux local. Catalogues 7TV, BTTV et FFZ chargés **une seule fois** par Studio (toutes les 10 min, cache
+  disque) et servis aux pages.
+- **Deux flux séparés** : `live` (le vrai chat, pour OBS) et `demo` (le simulateur, pour la prévisualisation et la
+  démonstration). Le simulateur n'écrit jamais dans le flux `live` d'une page OBS de Production.
 - **Panne** : si le Core, le VPS ou Studio s'arrête, les pages gardent l'affichage et se reconnectent seules ; les
-  sources StreamElements, masquées mais intactes, restent le recours tant qu'Antoni le veut.
-- Latence attendue : quelques centaines de millisecondes (Twitch → VPS → PC), invisible à côté du délai du stream ;
-  mesurée au jalon 1.
+  sources StreamElements, masquées mais intactes, restent le recours.
 
 ### 5.2 Les pages OBS
 
-- Une page unique servie par Studio (dossier statique, comme `level-up-player`), choisie par l'adresse : profil +
-  scène. L'adresse est stable : installée une fois dans OBS, elle ne change plus.
+- Une page unique servie par Studio (dossier statique `apps/studio/server/chatbox-player/`), choisie par l'adresse :
+  profil + scène. Adresse stable (jeton dans le fragment `#`, comme les effets) : installée une fois, elle ne change
+  plus.
 - **Source plein cadre 1920 × 1080 à l'échelle 1 ; la boîte est placée par Studio.** Position, taille et apparence se
-  règlent dans Studio ; le rendu est net (plus d'agrandissement par OBS) ; OBS ne garde que l'ordre des calques. Source
-  à verrouiller dans OBS, comme le Level Up et les effets (déjà plein cadre).
-- **Un emplacement par scène** : Just Chatting, Waiting screen, PS5, Fullscreen, Dessin, soit cinq sources pour trois
-  profils. L'emplacement (position, taille) appartient à la scène ; l'apparence, au profil.
+  règlent dans Studio ; rendu net (plus d'agrandissement par OBS) ; OBS ne garde que l'ordre des calques. Source à
+  verrouiller dans OBS, comme le Level Up et les effets.
+- **Un emplacement par scène** : Just Chatting, Waiting screen, PS5, Fullscreen, Dessin (cinq sources, trois
+  profils). L'emplacement appartient à la scène ; l'apparence, au profil. Valeurs de départ = les zones affichées
+  d'aujourd'hui (présentation § 2), donc aucune régression de placement.
 - Réglages enregistrés → poussés par le flux et appliqués **sans rechargement**. Après une mise à jour de Studio, une
-  page ancienne se recharge seule (modèle : correctif « page périmée » des effets, `effects/player.ts`).
-- Une page (re)chargée reçoit les derniers messages ; l'option OBS « arrêter la source quand elle n'est pas visible »
-  devient possible (une seule chatbox active à la fois), à mesurer au jalon 3.
+  page ancienne se recharge seule.
 
 ### 5.3 Profils, présets, persistance
 
-- Trois profils indépendants, chacun avec **tous** ses réglages : polices ; tailles (pseudo, texte, emotes, emotes
-  seules, badges) ; couleurs (texte, fond, bord, rôles) ; carte (opacité, arrondi, marges, espacement, ombre du
-  texte) ; barres de rôle ; mise en avant du dernier message ; apparition (style, durée) ; présence (permanente ou
-  « disparaît après N s », barre de décompte, fondu) ; fondu du haut ; plafond de messages ; filtres (commandes `!`,
-  bots) ; emplacements de ses scènes.
-- Présets : **« Origine »** par profil, en lecture seule, le rendu StreamElements actuel converti en pixels d'écran
-  (présentation § 2) ; **« Modernisée »**, la proposition de l'agent (ombre du texte, contraste des pseudos, animations
-  plus courtes, polices locales), réglée avec Antoni dans la prévisualisation ; présets nommés enregistrables. Retour à
-  l'origine à tout moment.
-- Persistance : un fichier JSON par profil dans le dossier de données de Studio (écriture atomique, schéma partagé
-  `packages/schemas/src/chatbox.ts`), relu au démarrage ; compris dans les sauvegardes des données de Studio
-  ([BACKUPS.md](BACKUPS.md) § 0.2).
-- Polices : celles fournies avec Studio (Figtree, Barlow Condensed…) et toute police installée sur le PC.
+- Trois profils indépendants, chacun avec **tous** ses réglages (§ 9.2). Modifier un profil ne touche jamais les deux
+  autres.
+- Présets par profil : **« Origine »** (lecture seule) = le rendu StreamElements actuel, converti en pixels d'écran ;
+  **« Modernisée »** (lecture seule, préset initial) = la direction artistique du § 8 ; **présets personnels**
+  enregistrables, renommables, supprimables. « Revenir à l'origine » à tout moment ; comparaison Origine / Modernisée
+  sur les mêmes messages.
+- Persistance : un fichier JSON versionné dans le dossier de données de Studio (écriture atomique ; un fichier abîmé
+  est mis de côté et réparé champ par champ depuis le préset, modèle `spotify/music-overlays.ts`) ; relu au
+  démarrage ; compris dans les sauvegardes des données de Studio ([BACKUPS.md](BACKUPS.md) § 0.2).
 
 ### 5.4 Moteur d'affichage
 
-- Porté du code des widgets `streamelements-*` (accord d'Antoni requis, § 1) : fragments Twitch (emotes animées
-  comprises), 7TV avec emotes superposées, BTTV, FFZ, Twemoji, emotes seules agrandies, `/me`, coupe des pseudos,
-  modération (message, viewer, clear). Leurs tests sont repris.
-- Une seule mécanique réglée par profil (fondu du haut, emotes seules, barres de rôle) ; animations sans hauteur
-  animée, allégées en rafale ; contraste minimum des pseudos.
-- Le même fichier sert dans OBS et dans la prévisualisation : rendu identique.
+- Porté des widgets : fragments Twitch (emotes animées comprises), 7TV / BTTV / FFZ par nom, emotes **zero-width**
+  empilées sur l'emote précédente, Twemoji (graphèmes composés), emotes seules agrandies avec réduction progressive,
+  `/me`, coupe des pseudos et des mots trop longs, modération.
+- Animations par `transform` et `opacity` seulement (la pile glisse par la technique FLIP, jamais en animant la
+  hauteur) ; allégées en rafale.
+- Le même fichier sert dans OBS, dans la prévisualisation de Studio et dans la démonstration : rendu identique.
 
-### 5.5 Écran Chatbox dans Studio
+## 6. Visibilité : un vrai gestionnaire dans Studio
 
-- Nouvel écran dans ses propres fichiers (`chatbox*.ts`) ; le fichier central ne fait que le brancher.
-- Les trois profils ; pour le profil choisi, la **prévisualisation en direct** (la vraie page dans un cadre)
-  par-dessus une image de la scène, avec la boîte déplaçable et redimensionnable ; les réglages groupés ;
-  « Enregistrer » (appliqué tout de suite dans OBS), « Annuler », « Revenir à l'origine », présets ; l'adresse à coller
-  dans OBS pour chaque scène.
-- Simulateur intégré, hors live et sans Core : messages fictifs avec emotes Twitch, 7TV (superposées comprises), BTTV,
-  FFZ, GIF, rôles, `/me`, rafale, suppression, timeout, clear.
-- Pas de console ni de tableau de bord.
+Ordre de décision (le premier qui s'applique gagne) : **modération** (message supprimé, viewer exclu, clear : retiré
+partout) → **règle de compte** → **famille du Croupier** → **type spécial** → **commande** → **affiché normalement**.
+Trois comportements partout : **masquer**, **normal**, **mettre en avant**. Règles globales aux trois profils,
+persistantes, éditées dans Studio ; aucune IA, aucune liste de phrases.
 
-## 6. Découpage proposé : trois jalons utilisables en Lab, puis la Production sur GO
+### 6.1 Comptes
 
-| Jalon                                   | Contenu                                                                                                                                                        | Utilisable à la fin                                                                             | Production             |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------- |
-| **1. Le chat arrive dans une page OBS** | bot (champs, suppressions, clear) ; relais Core et flux Studio / Lab ; module Studio ; page OBS avec le moteur porté et les présets « Origine »                | la page en Lab, alimentée par le simulateur de chat, côte à côte avec les copies StreamElements | code prêt, non déployé |
-| **2. Tout se règle dans Studio**        | écran Chatbox ; prévisualisation et simulateur ; tous les réglages ; présets ; emplacements ; persistance ; application en direct                              | régler les trois profils dans Studio et les voir changer dans la page OBS sans la recharger     | non                    |
-| **3. Prêt pour le live**                | messages spéciaux (annonces, mis en avant, réponses, premier message) ; préset « Modernisée » réglé avec Antoni ; charge (cinq sources, chat rapide) ; latence | recette complète en Lab                                                                         | non                    |
-| **4. Production (GO à chaque étape)**   | déploiement Core et bot, release de Studio ; Antoni ajoute les nouvelles sources **masquées** à côté des anciennes ; essai en live ; bascule scène par scène   | chatbox Raptoru en service, sources StreamElements gardées jusqu'à la décision d'Antoni         | oui                    |
+- Une règle par compte Twitch, reconnue par son **identifiant stable** (jamais par le pseudo seul : un pseudo
+  saisi est résolu en identifiant par le Core, Helix avec le jeton d'application, `twitchAppLoginLookup`).
+- Comportement : masquer, normal (exception : toujours affiché, même si une autre règle masquerait), mettre en avant.
+- Ajout depuis la liste des comptes vus récemment (un clic) ou par pseudo.
+- Par défaut : Nightbot et StreamElements masqués (modifiables) ; LeCroupier_ suit le catalogue du § 6.3 ; les
+  viewers sont visibles.
 
-Tests à chaque jalon : unitaires (bot, Core, Studio), tests repris des widgets, e2e de la page et de l'écran
-(application en direct, persistance après redémarrage), captures. Classe C ([AGENT_WORKFLOW.md](AGENT_WORKFLOW.md)
-§ 3) : ni Jetons, ni droits, ni migration.
+### 6.2 Commandes
 
-## 7. À confirmer par Antoni avant l'implémentation
+- Une commande, c'est `!` suivi d'une lettre ou d'un chiffre (`!song`, `!Roue`) ; `!!!!!`, `!?!?`, `! salut` ne le
+  sont jamais.
+- **Commande Raptoru reconnue** = le premier mot est un nom ou un alias du registre (Commandes V2, désactivées
+  comprises) ou un mot réservé d'un module (Tombola, mini-jeux, Roue du Sub, TTS…, `commands/reserved.ts`) : le Core
+  la marque ; **masquée par défaut**.
+- **Commandes externes** (Nightbot, StreamElements…) : une liste éditable dans Studio, masquées si listées.
+- **Commande inconnue** : politique réglable, **affichée par défaut** (jamais supprimée sur la seule présence de `!`).
 
-1. L'architecture du § 5.1 (bot → Core → Studio → pages), sans nouvelle connexion Twitch.
-2. Sources OBS plein cadre, boîte placée par Studio, une source par scène (cinq).
-3. Le portage du moteur d'emotes des widgets dans le dépôt public.
-4. LeCroupier_ : masqué, affiché, ou affiché sauf ses réponses aux commandes (Nightbot et StreamElements masqués).
-5. Présets « Origine » et « Modernisée » ; lequel est actif au premier essai.
-6. Abonnements et raids hors V1 (les alertes existent) ; messages spéciaux du chat (annonces, mis en avant) en V1.
+### 6.3 Catalogue des messages du Croupier
+
+- Tous les messages de LeCroupier_ qui viennent du Core passent par la file `cmd_steps` : origine (`commands`,
+  `word_game`, `mini_game`, `raffle`, `sub_wheel`, `music`, `module:<nom>`), nature (`reply`, `refusal`, `action`),
+  commande d'origine, et, après l'envoi, l'**identifiant Twitch du message** (`twitch_message_id`). Le Core rattache
+  l'écho du message au pas qui l'a émis par cet identifiant (repli pour les annonces, que Twitch renvoie sans
+  identifiant : le texte exact qu'il vient d'émettre, dans une fenêtre de quelques secondes).
+- **Famille** = `params.family` quand l'émetteur la déclare (ajoutée au fil des modules), sinon `origine:nature`,
+  et pour une commande `commands:<nature>:<commande>`. Chaque famille a un libellé clair en français et une catégorie :
+  Réponses aux commandes · Refus et erreurs · Jeux du chat · Tombola · Roue du Sub · Musique · Level Up · Casino ·
+  Annonces · Autres.
+- Studio montre le catalogue par catégorie, avec le dernier exemple vu de chaque famille ; on règle une catégorie
+  entière ou une famille seule (la famille l'emporte).
+- **Repli** : un message de LeCroupier_ qui ne se rattache à aucun pas (envoi direct du bot, message tapé à la main)
+  va dans « Non catégorisé », avec son propre réglage.
+- **Par défaut** : tout masqué (messages ordinaires et retours techniques) ; Antoni autorise ou met en avant les
+  familles qu'il choisit.
+
+### 6.4 Messages spéciaux
+
+| Type                                    | Défaut          | Remarque                                                                   |
+| --------------------------------------- | --------------- | -------------------------------------------------------------------------- |
+| Annonce Twitch (`/announce`)            | mettre en avant | la couleur choisie dans Twitch donne l'accent                              |
+| Message mis en avant (points de chaîne) | mettre en avant |                                                                            |
+| Premier message d'un viewer             | normal          |                                                                            |
+| Messages spéciaux du Croupier           | selon § 6.3     | une famille réglée « mettre en avant »                                     |
+| Anniversaires du bot                    | selon § 6.3     | n'existent pas dans le code aujourd'hui ; ils deviendront une famille      |
+| Abonnements, raids                      | masquer         | phase suivante ; déjà couverts par les alertes : pas de doublon par défaut |
+
+### 6.5 Rôles et barres de couleur (cas Aouh)
+
+- Rôle = la source autorisée la plus haute : badge Twitch `broadcaster` → **rouge** ; badge `moderator` **ou**
+  `lead_moderator` **ou** rôle d'équipe Raptoru (`supermod`, `moderator`, table d'équipe de `lab-moderation`, joint
+  par le Core) → **vert** ; badge `vip` → **rose**. Priorité : broadcaster > modération > VIP.
+- Cause probable du cas Aouh : les widgets ne reconnaissent que le badge `moderator` ; un Lead Moderator Twitch porte
+  `lead_moderator` à la place (le bot le gère déjà, `chatRole`). La règle ci-dessus couvre aussi un rôle Raptoru sans
+  badge Twitch. Aucune exception par pseudo. À confirmer sur un vrai message d'Aouh au jalon 2.
+- Les badges coexistent et s'affichent tous ; la couleur du pseudo reste celle de Twitch (palette de secours si
+  absente ; lisibilité des pseudos très sombres réglable, éteinte dans Origine).
+
+## 7. Parité historique : aucun downgrade
+
+Matrice de parité : chaque ligne est un cas de test réutilisable (`apps/studio/server/src/chatbox/parity.ts`) et un
+message de la démonstration. Valeurs Origine (code des widgets ; à l'écran : présentation § 2).
+
+| N°  | Caractéristique                                                      | Just Chatting                        | React                             | Dessin                            |
+| --- | -------------------------------------------------------------------- | ------------------------------------ | --------------------------------- | --------------------------------- |
+| P01 | Emotes Twitch statiques et animées                                   | oui                                  | oui                               | oui                               |
+| P02 | 7TV, BTTV, FFZ par nom (chaîne et globales)                          | oui                                  | oui                               | oui                               |
+| P03 | 7TV zero-width empilées sur l'emote précédente (plusieurs couches)   | oui                                  | oui                               | oui                               |
+| P04 | GIF et WebP animés                                                   | oui                                  | oui                               | oui                               |
+| P05 | Emojis Unicode en Twemoji (drapeaux, séquences ZWJ, teintes)         | oui                                  | oui                               | oui                               |
+| P06 | Message d'emotes seules agrandi (une pile zero-width compte pour 1)  | 120, puis 104 / 92 / 82 / 74 / 68 px | 60 px, jamais agrandi             | 58 px, − 2,5 px par emote, min 48 |
+| P07 | Emote dans le texte · badges                                         | 44 · 25 px                           | 60 · 32 px                        | 46 · 22 px                        |
+| P08 | Pseudo · message (police, taille, graisse)                           | Figtree 26/800 · Figtree 34/500      | Barlow C. 32/800 · Figtree 34/500 | Barlow C. 22/800 · Figtree 23/600 |
+| P09 | `/me` en italique, couleur éclaircie                                 | oui                                  | oui                               | oui                               |
+| P10 | Pseudo coupé « … », mots trop longs coupés si nécessaire             | oui                                  | oui                               | oui                               |
+| P11 | Couleur Twitch du pseudo, palette de secours (8 couleurs)            | oui                                  | oui                               | oui                               |
+| P12 | Barre de rôle (rouge / vert / rose), largeur                         | aucune                               | 6 px                              | 4 px                              |
+| P13 | Dernier message en avant                                             | non                                  | anciens à 88 %                    | non                               |
+| P14 | Apparition                                                           | glissement 34 px, 620 ms             | dépliage 40 px, 1 300 ms          | dépliage 20 px, 1 300 ms          |
+| P15 | Présence                                                             | permanente                           | 10 s, fondu 800 ms, barre 4 px    | 15 s, fondu 800 ms, barre 2 px    |
+| P16 | Fondu du haut                                                        | 5 % fixe                             | dès 630 px, jusqu'à 200 px        | de 600 à 650 px, jusqu'à 50 px    |
+| P17 | Plafond ; les plus anciens qui débordent sortent par le haut         | 50                                   | 50                                | 65                                |
+| P18 | Modération : message, viewer (timeout, ban), clear (nouveau)         | oui                                  | oui                               | oui                               |
+| P19 | Commandes : Raptoru masquées, `!!!` visibles (remplace « tout `!` ») | oui                                  | oui                               | oui                               |
+| P20 | Carte : fond, bord, arrondi                                          | noir 85 %, 8,5 %, 14                 | noir 18 %, 2 px 8 %, 16           | noir 65 % (× 91 % OBS), 6 %, 10   |
+
+« Modernisée » garde chaque ligne (les valeurs changent, la caractéristique reste) ; la démonstration montre les deux
+présets sur les mêmes messages.
+
+## 8. Direction artistique (préset « Modernisée »)
+
+Liberté graphique donnée par Antoni ; contraintes : pas de grosses cartes violettes ni de néons ; moderne et
+professionnel ; animations fluides ; messages nets et lisibles ; fonds discrets sans voile grisâtre ni faux flou ;
+emotes qui ressortent ; hiérarchie claire pseudo / badges / message ; annonces traitées avec élégance ; propre sur fond
+lumineux, sombre ou chargé ; **la transparence du fond ne rend jamais le texte ni les emotes transparents**.
+
+- **Principe commun** : le texte porte sa propre lisibilité (ombre portée courte et dense, contour fin optionnel), le
+  fond n'est qu'un appui. Fonds en noir chaud légèrement bleuté, opacité réglable sur le fond seul. Rôles en barre fine
+  arrondie. Pseudo au-dessus du message, badges alignés sur le pseudo.
+- **Just Chatting, permanente et confortable** : colonne de cartes pleines, très lisibles, généreuses ; barre de rôle
+  discrète (nouvelle) ; emotes seules en grand ; glissement court.
+- **React, légère, transparente et temporaire** : pas de carte pleine ; un dégradé sombre ajusté au contenu, qui
+  s'efface vers la droite ; texte à forte ombre ; dernier message plein, les autres atténués **sur le fond seulement** ;
+  disparition après 10 s de calme avec barre de décompte fine.
+- **Dessin, compacte et discrète** : cartes serrées, petites, sombres ; barre de rôle fine ; disparition après 15 s.
+- **Mise en avant** : un accent (couleur de l'annonce, sinon couleur du profil) en barre plus large et léger halo à
+  gauche, une étiquette courte en capitales espacées (« Annonce », « Mis en avant », nom de la famille du Croupier).
+
+## 9. Studio : contrôle complet
+
+### 9.1 Écran Chatbox
+
+- Un écran dédié (fichiers `chatbox*.ts`, le fichier central ne fait que le brancher), dans « Modules ».
+- Pour le profil choisi : **prévisualisation fidèle** (la vraie page) sur un fond au choix (sombre, lumineux, chargé,
+  image de la scène), réglages groupés, « Enregistrer » (appliqué tout de suite dans OBS), « Annuler », présets,
+  emplacements de ses scènes (position, taille) et l'adresse OBS de chaque scène.
+- Gestionnaire de visibilité (§ 6) : comptes, commandes, catalogue du Croupier, messages spéciaux.
+- Simulateur intégré, hors live et sans Core : scénarios représentatifs (rafale, emotes empilées, rôles, commandes,
+  Croupier, annonces, modération) ; les messages filtrés restent visibles dans la prévisualisation, barrés, avec la
+  raison, pour comprendre les règles.
+- **Démonstration** : les trois profils côte à côte, mêmes messages, bascule Origine / Modernisée.
+
+### 9.2 Réglages d'un profil
+
+Typographie (police du pseudo et du message, tailles, graisses, interligne) ; carte (fond, opacité du fond, bord,
+arrondi, marges, espacement, largeur pleine ou ajustée, ombre du texte) ; badges (taille) ; emotes (taille dans le
+texte, agrandissement des emotes seules : maximum, minimum, réduction) ; rôles (largeur de barre, couleurs) ; dernier
+message en avant ; apparition (style, durée, distance) ; présence (permanente ou durée, fondu, barre de décompte) ;
+fondu du haut ; plafond de messages ; emplacements.
+
+## 10. Jalons
+
+| Jalon                                           | Contenu                                                                                                                                                                                         | État             |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| **1. Prototype Lab et démonstration**           | moteur porté ; page OBS ; trois profils × Origine / Modernisée ; réglages persistants appliqués en direct ; règles de visibilité ; simulateur et démonstration ; écran Studio                   | **en cours**     |
+| **2. Le vrai chat dans le Lab**                 | bot (champs, suppressions, clear, ses messages marqués) ; classement par le Core (commandes, familles, rôle d'équipe) ; relais et flux Studio / Lab ; badges Helix ; catalogue réel du Croupier | à faire          |
+| **3. Prêt pour le live**                        | messages spéciaux réels ; charge (cinq sources, chat rapide) ; latence ; rechargement après mise à jour ; recette d'Antoni                                                                      | à faire          |
+| **4. Production (autorisation à chaque étape)** | déploiement Core et bot, release de Studio ; nouvelles sources **masquées** à côté des anciennes ; essai en live ; bascule scène par scène                                                      | sur autorisation |
+
+Tests à chaque jalon : unitaires (moteur, visibilité, réglages, Core, bot), matrice de parité, e2e de la page et de
+l'écran (application en direct, persistance après redémarrage), captures. Classe C
+([AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) § 3) : ni Jetons, ni droits, ni migration.
 
 Risques connus : les GIF Twitch (balise expérimentale des widgets) ne sont pas prouvés dans EventSub, vérification au
-jalon 1 sur un vrai message (les emotes animées, elles, sont couvertes) ; l'affichage dépend du VPS et de Studio
-(recours : les sources StreamElements).
+jalon 2 sur un vrai message ; l'affichage dépendra du VPS et de Studio (recours : les sources StreamElements).
 
-## 8. Reprise
+## 11. Reprise
 
 - Lire ce fichier, puis la présentation et le rapport (§ 1). Ne refaire ni la reconnaissance ni la présentation.
-- Prochaine étape : les réponses d'Antoni au § 7, puis le jalon 1 dans le worktree `agent`.
+- Prototype : worktree `agent`, branche `feat/chatbox-lab` ; journal du jalon en cours au § 10.
