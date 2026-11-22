@@ -1,7 +1,8 @@
-// Chatbox Raptoru — Studio's screen (docs/CHATBOX.md § 9): the three profiles, their presets, a faithful preview (the
-// real OBS page on the simulator's feed, filtered messages shown struck with their rule), every setting, each scene's
-// placement moved by hand, the visibility manager and the demonstration. A saved setting reaches the OBS sources at
-// once; nothing here touches OBS, StreamElements or Twitch.
+// Chatbox Raptoru — Studio's screen (docs/CHATBOX.md § 9). Simple first: the presets up front, the preview in the
+// middle (the real OBS page on the simulator's feed), six essential settings beside it; the placement and every
+// advanced setting folded, nothing removed. « Ce qui s'affiche »: the command catalogue (every command the project
+// knows, per module, the viewer's message and LeCroupier_'s answer set apart), LeCroupier_'s messages, the special
+// messages, the accounts. A saved setting reaches the OBS sources at once; nothing here touches OBS or Twitch.
 
 import { esc, fld, page, row, sw, toast } from '../ds/ds.js';
 import { getJson, postJson } from '../http.js';
@@ -39,6 +40,7 @@ interface Rules {
     raptoru: 'hide' | 'normal';
     external: string[];
     unknown: 'hide' | 'normal';
+    rules: Record<string, { message?: 'hide' | 'normal'; reply?: Mode }>;
   };
   croupier: {
     fallback: Mode;
@@ -49,6 +51,14 @@ interface Rules {
     'announcement' | 'highlighted' | 'first' | 'sub' | 'raid',
     Mode
   >;
+}
+interface Command {
+  key: string;
+  label: string;
+  module: string;
+  words: string[];
+  source: 'commands_v2' | 'module' | 'discovered';
+  enabled: boolean;
 }
 interface State {
   profiles: { id: string; label: string; base: string; settings: Settings }[];
@@ -76,7 +86,7 @@ interface State {
     name: string;
     feed: 'live' | 'demo';
   }[];
-  fields: { id: string; label: string; fields: Field[] }[];
+  fields: { id: string; label: string; help: string; fields: Field[] }[];
   fonts: string[];
   demo: {
     url: string;
@@ -86,24 +96,36 @@ interface State {
   };
   emotes: { count: number };
   repaired: string[];
+  live: {
+    linked: boolean;
+    connected: boolean;
+    lastEventAt: number | null;
+    catalogError: string | null;
+    pages: number;
+  };
+  commands: Command[];
 }
 
 const MODES: [Mode, string][] = [
   ['hide', 'Masquer'],
-  ['normal', 'Normal'],
+  ['normal', 'Afficher'],
   ['highlight', 'Mettre en avant'],
 ];
-const SPECIALS: [keyof Rules['special'], string, string][] = [
-  [
-    'announcement',
-    'Annonces Twitch',
-    '/announce, avec la couleur choisie dans Twitch',
-  ],
-  ['highlighted', 'Messages mis en avant', 'achetés avec les points de chaîne'],
-  ['first', 'Premier message d’un viewer', ''],
-  ['sub', 'Abonnements', 'phase suivante ; déjà montrés par les alertes'],
-  ['raid', 'Raids', 'phase suivante ; déjà montrés par les alertes'],
+const SHOW: [string, string][] = [
+  ['hide', 'Masquer'],
+  ['normal', 'Afficher'],
 ];
+const SPECIALS: [keyof Rules['special'], string][] = [
+  ['announcement', 'Annonces Twitch (/announce)'],
+  ['highlighted', 'Messages mis en avant (points de chaîne)'],
+  ['first', 'Premier message d’un viewer'],
+  ['sub', 'Abonnements'],
+  ['raid', 'Raids'],
+];
+const PRESET_HINT: Record<string, string> = {
+  modernisee: 'Recommandé : lisible sur tous les fonds',
+  origine: 'Comme StreamElements aujourd’hui',
+};
 
 const get = (o: Settings, path: string): unknown =>
   path
@@ -142,12 +164,13 @@ const pick = (
 };
 
 export function mountChatboxPage(root: HTMLElement) {
-  const pg = page(root, { title: 'Chatbox', mod: 'chatbox', panel: true });
+  const pg = page(root, { title: 'Chatbox', mod: 'chatbox' });
   let st: State | null = null;
   let profile = 'just-chatting';
   let tab: 'look' | 'visibility' | 'demo' = 'look';
   let bg = 'busy';
   let explain = true;
+  let search = '';
   const drafts: Record<string, Settings | undefined> = {};
   const places: Record<string, Placement | undefined> = {};
   const sceneOf: Record<string, string> = {};
@@ -163,6 +186,8 @@ export function mountChatboxPage(root: HTMLElement) {
     pg.body.querySelector<HTMLIFrameElement>('[data-cbx-preview]');
   const post = (msg: unknown) =>
     frame()?.contentWindow?.postMessage(msg, location.origin);
+  const field = (path: string) =>
+    st!.fields.flatMap((g) => g.fields).find((x) => x.path === path);
 
   async function load() {
     try {
@@ -186,40 +211,46 @@ export function mountChatboxPage(root: HTMLElement) {
   }
 
   // --- Header ----------------------------------------------------------------------------------------------------------
+  function liveChip() {
+    const l = st!.live;
+    if (!l.linked)
+      return '<span class="cbx-chip">Démonstration seulement (pas de Core)</span>';
+    if (l.connected) return '<span class="cbx-chip ok">Chat réel relié</span>';
+    return `<span class="cbx-chip">${l.pages ? 'Chat réel : connexion…' : 'Chat réel : prêt (aucune source OBS ouverte)'}</span>`;
+  }
   function paintHead() {
-    pg.state.innerHTML = `<span class="cbx-chip">${st!.emotes.count} emotes 7TV · BTTV · FFZ</span>${
+    pg.state.innerHTML = `${liveChip()}<span class="cbx-chip">${st!.emotes.count} emotes 7TV · BTTV · FFZ</span>${
       st!.repaired.length
         ? `<span class="cbx-chip warn">Réparé : ${esc(st!.repaired.join(', '))}</span>`
         : ''
     }`;
-    pg.actions.innerHTML = `${pick(
+    pg.actions.innerHTML = pick(
       'data-seg="tab"',
       [
         ['look', 'Apparence'],
-        ['visibility', 'Visibilité'],
+        ['visibility', 'Ce qui s’affiche'],
         ['demo', 'Démonstration'],
       ],
       tab,
-    )}
-      <button type="button" class="d-btn ${pg.panel.isOpen() ? 'on' : 'ghost'}" data-panel>Réglages du profil</button>`;
+    );
   }
 
   // --- Appearance ------------------------------------------------------------------------------------------------------
-  function presetBar() {
+  function presets() {
     const p = prof();
-    const custom = st!.presets[profile] ?? [];
-    const chip = (id: string, name: string, own = false) =>
-      `<span class="cbx-preset${p.base === id ? ' on' : ''}"><button type="button" data-preset="${esc(id)}" title="${esc(
-        st!.builtins.find((b) => b.id === id)?.desc ?? 'Préset personnel',
-      )}">${esc(name)}</button>${
+    const card = (id: string, name: string, hint: string, own = false) =>
+      `<div class="cbx-pcard${p.base === id ? ' on' : ''}"><button type="button" data-preset="${esc(id)}"><strong>${esc(name)}</strong><small>${esc(hint)}</small></button>${
         own
-          ? `<button type="button" class="cbx-x" data-rename="${esc(id)}" aria-label="Renommer">✎</button><button type="button" class="cbx-x" data-del="${esc(id)}" aria-label="Supprimer">×</button>`
+          ? `<span class="cbx-pact"><button type="button" data-rename="${esc(id)}">Renommer</button><button type="button" data-del="${esc(id)}">Supprimer</button></span>`
           : ''
-      }</span>`;
-    return `<div class="cbx-presets"><span class="d-lb">Présets</span>${st!.builtins
-      .map((b) => chip(b.id, b.name))
-      .join('')}${custom.map((c) => chip(c.id, c.name, true)).join('')}
-      <button type="button" class="d-btn sm ghost" data-save-preset>Enregistrer comme préset…</button></div>`;
+      }</div>`;
+    return `<div class="cbx-presets">${st!.builtins.map((b) => card(b.id, b.name, PRESET_HINT[b.id] ?? b.desc)).join('')}${(
+      st!.presets[profile] ?? []
+    )
+      .map((c) => card(c.id, c.name, 'Préset personnel', true))
+      .join(
+        '',
+      )}<button type="button" class="cbx-pnew" data-save-preset>＋ Garder ces réglages comme préset</button></div>`;
   }
 
   function previewUrl() {
@@ -233,64 +264,123 @@ export function mountChatboxPage(root: HTMLElement) {
     return `/chatbox/player.html?${params}#${st!.demo.token}`;
   }
 
-  function paintLook() {
+  const num = (
+    path: string,
+    label: string,
+    hint: string,
+    min: number,
+    max: number,
+    step: number,
+    unit: string,
+  ) =>
+    `<div class="cbx-ess"><div class="cbx-ess-h"><span>${esc(label)}</span><output data-out="${esc(path)}" data-unit="${esc(unit)}">${esc(get(settings(), path))} ${esc(unit)}</output></div><input type="range" data-f="${esc(path)}" min="${min}" max="${max}" step="${step}" value="${esc(get(settings(), path))}">${hint ? `<small>${esc(hint)}</small>` : ''}</div>`;
+
+  function essentials() {
+    const s = settings() as {
+      presence: { mode: string; seconds: number };
+      roles: { bar: number };
+    };
+    return `<section class="cbx-card"><h3>Réglages essentiels</h3>
+      ${num('text.size', 'Taille des messages', 'En pixels à l’écran.', 12, 48, 0.5, 'px')}
+      ${num('name.size', 'Taille des pseudos', '', 10, 44, 0.5, 'px')}
+      ${num('card.opacity', 'Fond des messages', 'Plus bas : plus discret. Le texte reste net.', 0, 1, 0.01, '')}
+      <div class="cbx-ess"><div class="cbx-ess-h"><span>Présence du chat</span></div>${pick(
+        'data-seg="presence"',
+        [
+          ['permanent', 'Toujours visible'],
+          ['idle', 'Disparaît au calme'],
+        ],
+        s.presence.mode,
+      )}${
+        s.presence.mode === 'idle'
+          ? `<div class="cbx-inline"><span>après</span>${fld('data-f="presence.seconds"', s.presence.seconds, 's', 'min="1" max="600" step="1"')}</div>`
+          : ''
+      }</div>
+      ${num('enter.duration', 'Vitesse d’arrivée des messages', 'Plus bas : plus vif.', 0, 1500, 10, 'ms')}
+      <div class="cbx-ess cbx-ess-row"><span>Barre de couleur des rôles</span>${sw(s.roles.bar > 0, 'data-rolebar', 'Barre de couleur des rôles')}</div>
+    </section>`;
+  }
+
+  function advanced() {
+    const s = settings();
+    return `<details class="cbx-card cbx-fold"><summary>Réglages avancés <small>toutes les options du profil</small></summary>
+      <datalist id="cbx-fonts">${st!.fonts.map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
+      ${st!.fields
+        .map(
+          (g) =>
+            `<details class="cbx-sub"><summary>${esc(g.label)}</summary><p class="cbx-hint">${esc(g.help)}</p>${g.fields
+              .map((f) => row(f.label, control(f, get(s, f.path))))
+              .join('')}</details>`,
+        )
+        .join('')}
+    </details>`;
+  }
+
+  function placementCard() {
     const pl = placement();
-    return `<div class="cbx-look">
-      <div class="cbx-top">
-        ${pick(
-          'data-seg="profile"',
-          st!.profiles.map((p) => [p.id, p.label] as [string, string]),
-          profile,
-          'cbx-profiles',
-        )}
-        ${presetBar()}
-        <span class="cbx-sp"></span>
-        <span class="cbx-dirty" ${dirty() ? '' : 'hidden'}>Modifications non enregistrées</span>
-        <button type="button" class="d-btn ghost" data-cancel ${dirty() ? '' : 'disabled'}>Annuler</button>
-        <button type="button" class="d-btn pri" data-save ${dirty() ? '' : 'disabled'}>Enregistrer et appliquer dans OBS</button>
+    return `<details class="cbx-card cbx-fold" data-fold="place"><summary>Emplacement dans « ${esc(scene().label)} » <small>${pl.w} × ${pl.h} px</small></summary>
+      <p class="cbx-hint">Fais glisser le cadre, ou son coin pour le redimensionner.</p>
+      <div class="cbx-map" data-map><div class="cbx-rect" data-rect><span class="cbx-handle" data-handle></span></div></div>
+      <div class="cbx-place">
+        ${(['x', 'y', 'w', 'h'] as const)
+          .map(
+            (k) =>
+              `<div class="cbx-pl"><span>${{ x: 'Gauche', y: 'Haut', w: 'Largeur', h: 'Hauteur' }[k]}</span>${fld(`data-pl="${k}"`, pl[k], 'px', 'step="1"')}</div>`,
+          )
+          .join('')}
+        <div class="cbx-pl"><span>Agrandissement dans cette scène</span>${fld('data-pl="zoom"', pl.zoom, '×', 'step="0.01" min="0.5" max="2"')}</div>
       </div>
+      <button type="button" class="d-btn sm ghost" data-place-reset>Revenir à la place d’origine</button>
+      <h4>Adresse de la source OBS</h4>
+      <p class="cbx-hint">Source navigateur 1920 × 1080, échelle 1, verrouillée, ajoutée <strong>masquée</strong> à côté de l’ancienne. Elle ne change jamais : les réglages enregistrés s’y appliquent seuls.</p>
+      <div class="cbx-url"><code>${esc(scene().url.replace(/#.*/, '#…'))}</code><button type="button" class="d-btn sm" data-copy>Copier</button></div>
+    </details>`;
+  }
+
+  function paintLook() {
+    return `<div class="cbx-look">
+      <div class="cbx-top">${pick(
+        'data-seg="profile"',
+        st!.profiles.map((p) => [p.id, p.label] as [string, string]),
+        profile,
+        'cbx-profiles',
+      )}${presets()}</div>
+      <div class="cbx-savebar" ${dirty() ? '' : 'hidden'}><span>Modifications non enregistrées</span><button type="button" class="d-btn ghost" data-cancel>Annuler</button><button type="button" class="d-btn pri" data-save>Enregistrer et appliquer dans OBS</button></div>
       <div class="cbx-grid">
         <section class="cbx-stage-wrap">
           <div class="cbx-tools">
-            ${pick(
-              'data-seg="scene"',
-              scenes().map((s) => [s.id, s.label] as [string, string]),
-              scene().id,
-            )}
+            ${
+              scenes().length > 1
+                ? pick(
+                    'data-seg="scene"',
+                    scenes().map((s) => [s.id, s.label] as [string, string]),
+                    scene().id,
+                  )
+                : ''
+            }
             ${pick(
               'data-seg="bg"',
               [
-                ['dark', 'Sombre'],
+                ['dark', 'Fond sombre'],
                 ['light', 'Lumineux'],
                 ['busy', 'Chargé'],
               ],
               bg,
             )}
-            <label class="cbx-check">${sw(explain, 'data-explain', 'Montrer les messages filtrés')} Messages filtrés</label>
+            <label class="cbx-check">${sw(explain, 'data-explain', 'Voir les messages masqués')} Voir les messages masqués</label>
+            <span class="cbx-sp"></span>
+            <label class="cbx-check">Tester avec <select data-scenario>${st!.demo.scenarios
+              .map(
+                (s) =>
+                  `<option value="${s.id}"${st!.demo.playing === s.id ? ' selected' : ''}>${esc(s.label)}</option>`,
+              )
+              .join('')}</select></label>
+            <button type="button" class="d-btn sm" data-play>Lancer</button><button type="button" class="d-btn sm ghost" data-play-clear>Vider</button>
           </div>
-          <div class="cbx-tools">${st!.demo.scenarios
-            .map(
-              (s) =>
-                `<button type="button" class="d-btn sm${st!.demo.playing === s.id ? ' on' : ' ghost'}" data-play="${s.id}">${esc(s.label)}</button>`,
-            )
-            .join(
-              '',
-            )}<button type="button" class="d-btn sm ghost" data-play="stop">Arrêter</button><button type="button" class="d-btn sm ghost" data-play="clear">Vider</button></div>
           <div class="cbx-stage bg-${bg}" data-stage><div class="cbx-frame" data-frame><iframe data-cbx-preview title="Prévisualisation" src="${esc(previewUrl())}"></iframe></div></div>
-          <p class="cbx-hint">Taille réelle à l’écran : ${pl.w} × ${pl.h} px${pl.zoom !== 1 ? `, proportions × ${pl.zoom}` : ''}. Les messages viennent du simulateur, jamais du vrai chat.</p>
+          <p class="cbx-hint">Taille réelle à l’écran : ${placement().w} × ${placement().h} px. Messages fictifs du simulateur, jamais le vrai chat.</p>
         </section>
-        <aside class="cbx-side">
-          <h3>Emplacement dans « ${esc(scene().label)} »</h3>
-          <div class="cbx-map" data-map><div class="cbx-rect" data-rect><span class="cbx-handle" data-handle></span></div></div>
-          <div class="cbx-place">
-            ${(['x', 'y', 'w', 'h'] as const).map((k) => `<div class="cbx-pl"><span>${{ x: 'Gauche', y: 'Haut', w: 'Largeur', h: 'Hauteur' }[k]}</span>${fld(`data-pl="${k}"`, pl[k], 'px', 'step="1"')}</div>`).join('')}
-            <div class="cbx-pl"><span>Proportions</span>${fld('data-pl="zoom"', pl.zoom, '×', 'step="0.01" min="0.5" max="2"')}</div>
-          </div>
-          <button type="button" class="d-btn sm ghost" data-place-reset>Revenir à la place d’origine</button>
-          <h3>Source OBS de cette scène</h3>
-          <p class="cbx-hint">Source navigateur 1920 × 1080, échelle 1, verrouillée. L’adresse ne change jamais : les réglages enregistrés s’y appliquent tout seuls. Installation sur ton autorisation seulement.</p>
-          <div class="cbx-url"><code>${esc(scene().url.replace(/#.*/, '#…'))}</code><button type="button" class="d-btn sm" data-copy>Copier l’adresse</button></div>
-        </aside>
+        <aside class="cbx-side">${essentials()}${placementCard()}${advanced()}</aside>
       </div>
     </div>`;
   }
@@ -312,7 +402,7 @@ export function mountChatboxPage(root: HTMLElement) {
   function paintMap() {
     const map = pg.body.querySelector<HTMLElement>('[data-map]');
     const rect = pg.body.querySelector<HTMLElement>('[data-rect]');
-    if (!map || !rect) return;
+    if (!map || !rect || !map.clientWidth) return;
     const k = map.clientWidth / 1920;
     const pl = placement();
     Object.assign(rect.style, {
@@ -343,17 +433,11 @@ export function mountChatboxPage(root: HTMLElement) {
   }
 
   function paintDirty() {
-    const d = dirty();
     pg.body
-      .querySelector<HTMLElement>('.cbx-dirty')
-      ?.toggleAttribute('hidden', !d);
-    for (const b of pg.body.querySelectorAll<HTMLButtonElement>(
-      '[data-save],[data-cancel]',
-    ))
-      b.disabled = !d;
+      .querySelector<HTMLElement>('.cbx-savebar')
+      ?.toggleAttribute('hidden', !dirty());
   }
 
-  // --- Settings panel (generated from the server's field list) --------------------------------------------------------
   function control(f: Field, v: unknown) {
     const a = `data-f="${esc(f.path)}"`;
     if (f.kind === 'number')
@@ -362,9 +446,9 @@ export function mountChatboxPage(root: HTMLElement) {
       return `<input type="color" ${a} value="${esc(v)}">`;
     if (f.kind === 'toggle') return sw(v === true, a, f.label);
     if (f.kind === 'font')
-      return `<input class="cbx-font" list="cbx-fonts" ${a} value="${esc(v)}">`;
+      return `<input class="cbx-input" list="cbx-fonts" ${a} value="${esc(v)}">`;
     if (f.kind === 'list')
-      return `<input class="cbx-font" ${a} value="${esc((v as number[]).join(', '))}" title="Taille pour 1, 2, 3… emotes seules">`;
+      return `<input class="cbx-input" ${a} value="${esc((v as number[]).join(', '))}" title="Taille pour 1, 2, 3… emotes seules">`;
     if (f.kind !== 'choice') return '';
     return pick(
       `data-seg="field" data-path="${esc(f.path)}"`,
@@ -373,24 +457,9 @@ export function mountChatboxPage(root: HTMLElement) {
     );
   }
 
-  function paintPanel() {
-    const s = settings();
-    pg.panel.set(
-      `<datalist id="cbx-fonts">${st!.fonts.map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
-      <p class="cbx-hint">Profil ${esc(prof().label)} : ces réglages ne touchent jamais les deux autres. Aperçu immédiat ; appliqué dans OBS à l’enregistrement.</p>` +
-        st!.fields
-          .map(
-            (g) =>
-              `<section class="d-grp" data-g="${esc(g.label.toLowerCase())}"><h3>${esc(g.label)}</h3>${g.fields
-                .map((f) => row(f.label, control(f, get(s, f.path))))
-                .join('')}</section>`,
-          )
-          .join(''),
-    );
-  }
-
+  /** One setting changed (essential or advanced): previewed at once, saved with « Enregistrer ». */
   function change(path: string, raw: unknown) {
-    const f = st!.fields.flatMap((g) => g.fields).find((x) => x.path === path);
+    const f = field(path);
     if (!f) return;
     let v: unknown = raw;
     if (f.kind === 'number') {
@@ -416,72 +485,85 @@ export function mountChatboxPage(root: HTMLElement) {
     set(d, path, f.kind === 'font' ? String(v).trim() : v);
     drafts[profile] = same(d, prof().settings) ? undefined : d;
     post({ type: 'chatbox:draft', settings: d });
-    for (const i of pg.panel.body.querySelectorAll<HTMLInputElement>(
+    for (const i of pg.body.querySelectorAll<HTMLInputElement>(
       `input[data-f="${CSS.escape(path)}"]`,
     ))
-      if (document.activeElement !== i && f.kind === 'number')
+      if (
+        document.activeElement !== i &&
+        (f.kind === 'number' || f.kind === 'color')
+      )
         i.value = String(v);
+    for (const o of pg.body.querySelectorAll<HTMLOutputElement>(
+      `output[data-out="${CSS.escape(path)}"]`,
+    ))
+      o.value = `${String(v)} ${o.dataset.unit ?? ''}`.trim();
     paintDirty();
   }
 
-  // --- Visibility ------------------------------------------------------------------------------------------------------
+  // --- What is shown ---------------------------------------------------------------------------------------------------
   const modeSeg = (
     holder: string,
     cur: string,
     opts: readonly (readonly [string, string])[] = MODES,
   ) => pick(holder, opts, cur);
 
+  function commandList() {
+    const r = st!.rules;
+    const l = st!.live;
+    const q = search.trim().toLowerCase().replace(/^!/, '');
+    const list = st!.commands.filter(
+      (c) =>
+        !q ||
+        c.label.toLowerCase().includes(q) ||
+        c.module.toLowerCase().includes(q) ||
+        c.words.some((w) => w.includes(q)),
+    );
+    const modules = [...new Set(list.map((c) => c.module))].sort((a, b) =>
+      a.localeCompare(b, 'fr'),
+    );
+    if (!l.linked)
+      return '<p class="cbx-note">Catalogue indisponible : cette démonstration n’est pas reliée au Core. Dans Studio, la liste vient du Core et se met à jour seule.</p>';
+    if (l.catalogError && !st!.commands.length)
+      return `<p class="cbx-note">Catalogue indisponible pour l’instant (${esc(l.catalogError)}). Il se recharge chaque minute.</p>`;
+    return (
+      modules
+        .map(
+          (m) =>
+            `<details class="cbx-sub" ${q ? 'open' : ''}><summary>${esc(m)} <small>${list.filter((c) => c.module === m).length}</small></summary>${list
+              .filter((c) => c.module === m)
+              .map((c) => {
+                const own = r.commands.rules[c.key] ?? {};
+                return `<div class="cbx-cmd"><div class="cbx-cmd-h"><strong>${esc(c.label)}</strong>${c.enabled ? '' : ' <small>(désactivée)</small>'}${c.source === 'discovered' ? ' <small>(découverte dans le chat)</small>' : ''}<span class="cbx-words">${c.words.map((w) => `!${esc(w)}`).join(' · ')}</span></div>
+                  <div class="cbx-cmd-c"><span>Message du viewer</span>${modeSeg(`data-seg="cmd-msg" data-key="${esc(c.key)}"`, own.message ?? r.commands.raptoru, SHOW)}</div>
+                  <div class="cbx-cmd-c"><span>Réponse de LeCroupier_</span>${modeSeg(`data-seg="cmd-reply" data-key="${esc(c.key)}"`, own.reply ?? 'inherit', [['inherit', 'Comme sa catégorie'], ...MODES])}</div></div>`;
+              })
+              .join('')}</details>`,
+        )
+        .join('') || '<p class="cbx-hint">Aucune commande ne correspond.</p>'
+    );
+  }
+
   function paintVisibility() {
     const r = st!.rules;
     const fams = st!.catalogue;
-    const accounts = st!.accounts.filter(
+    const recent = st!.accounts.filter(
       (a) => !r.accounts.some((x) => x.login === a.login),
     );
     return `<div class="cbx-vis">
-      <p class="cbx-note">Masquer un message ici le retire seulement de la chatbox : <strong>rien n’est fait sur Twitch</strong> (ni ban, ni timeout, ni suppression). Chaque changement s’applique tout de suite aux trois chatbox.</p>
-      <section class="cbx-card"><h3>Comptes</h3>
-        <p class="cbx-hint">Reconnus par leur identifiant Twitch (un pseudo ajouté est lié à son identifiant au premier message vu). « Normal » est une exception : toujours affiché.</p>
-        ${r.accounts
-          .map(
-            (a, i) =>
-              `<div class="cbx-line"><span><strong>${esc(a.login)}</strong> <small>${a.id ? `id ${esc(a.id)}` : 'identifiant au premier message'}</small></span>${modeSeg(`data-seg="acc" data-i="${i}"`, a.mode)}<button type="button" class="d-btn sm ghost" data-acc-del="${i}">Retirer</button></div>`,
-          )
-          .join('')}
-        <div class="cbx-line"><input class="cbx-font" data-acc-new placeholder="pseudo Twitch"><button type="button" class="d-btn sm" data-acc-add="hide">Masquer ce compte</button><button type="button" class="d-btn sm ghost" data-acc-add="highlight">Mettre en avant</button></div>
-        ${
-          accounts.length
-            ? `<h4>Vus récemment</h4>${accounts
-                .slice(0, 12)
-                .map(
-                  (a) =>
-                    `<div class="cbx-line"><span>${esc(a.name)} ${a.feed === 'demo' ? '<small>(démonstration)</small>' : ''}</span><button type="button" class="d-btn sm ghost" data-seen-hide="${esc(a.login)}">Masquer</button><button type="button" class="d-btn sm ghost" data-seen-hl="${esc(a.login)}">Mettre en avant</button></div>`,
-                )
-                .join('')}`
-            : ''
-        }
-      </section>
-      <section class="cbx-card"><h3>Commandes</h3>
-        <p class="cbx-hint">Une commande, c’est « ! » suivi d’une lettre : <code>!!!!!</code> ou <code>!?!?</code> restent toujours visibles.</p>
-        ${row(
-          'Commandes Raptoru reconnues (registre et alias)',
-          modeSeg('data-seg="cmd-raptoru"', r.commands.raptoru, [
-            ['hide', 'Masquer'],
-            ['normal', 'Afficher'],
-          ]),
-        )}
-        ${row(
-          'Commande que personne ne reconnaît',
-          modeSeg('data-seg="cmd-unknown"', r.commands.unknown, [
-            ['hide', 'Masquer'],
-            ['normal', 'Afficher'],
-          ]),
-        )}
-        <h4>Commandes d’autres bots, masquées</h4>
-        <div class="cbx-tags">${r.commands.external.map((c) => `<span class="cbx-tag">!${esc(c)}<button type="button" data-ext-del="${esc(c)}" aria-label="Retirer">×</button></span>`).join('') || '<small>Aucune.</small>'}</div>
-        <div class="cbx-line"><input class="cbx-font" data-ext-new placeholder="uptime, followage…"><button type="button" class="d-btn sm" data-ext-add>Ajouter</button></div>
+      <p class="cbx-note">Ces réglages valent pour les trois chatbox et s’appliquent tout de suite. Masquer un message ici le retire seulement de la chatbox : <strong>rien n’est fait sur Twitch</strong> (ni ban, ni timeout, ni suppression).</p>
+      <section class="cbx-card cbx-wide"><h3>Commandes</h3>
+        <p class="cbx-hint">Toutes les commandes connues du projet, par module. Les alias d’une commande suivent son réglage. <code>!!!!!</code> ou <code>!?!?</code> ne sont jamais des commandes.</p>
+        <div class="cbx-line"><input class="cbx-input cbx-search" type="search" data-search placeholder="Chercher une commande (ex. tts, daily, rb)" value="${esc(search)}"></div>
+        ${row('Commande reconnue, sans réglage propre', modeSeg('data-seg="cmd-raptoru"', r.commands.raptoru, SHOW))}
+        ${row('Commande que personne ne reconnaît', modeSeg('data-seg="cmd-unknown"', r.commands.unknown, SHOW))}
+        <div data-cmd-list>${commandList()}</div>
+        <details class="cbx-sub"><summary>Commandes d’autres bots <small>${r.commands.external.length}</small></summary>
+          <div class="cbx-tags">${r.commands.external.map((c) => `<span class="cbx-tag">!${esc(c)}<button type="button" data-ext-del="${esc(c)}" aria-label="Retirer">×</button></span>`).join('') || '<small>Aucune.</small>'}</div>
+          <div class="cbx-line"><input class="cbx-input" data-ext-new placeholder="uptime, followage…"><button type="button" class="d-btn sm" data-ext-add>Masquer ces commandes</button></div>
+        </details>
       </section>
       <section class="cbx-card"><h3>Messages de LeCroupier_</h3>
-        <p class="cbx-hint">Rangés par famille d’après le module qui les envoie (jamais d’après leur texte). Une famille réglée l’emporte sur sa catégorie.</p>
+        <p class="cbx-hint">Rangés d’après le module qui les envoie, jamais d’après leur texte. Une réponse à une commande suit d’abord le réglage de cette commande.</p>
         ${st!.categories
           .map((c) => {
             const own = fams.filter((f) => f.category === c.id);
@@ -499,20 +581,49 @@ export function mountChatboxPage(root: HTMLElement) {
               .join('')}</div>`;
           })
           .join('')}
-        ${row('Message non catégorisé (envoyé à la main, bot direct)', modeSeg('data-seg="fallback"', r.croupier.fallback))}
-        <p class="cbx-hint">Les familles apparaissent ici dès que LeCroupier_ les emploie dans le vrai chat (jalon 2 : branchement au Core).</p>
+        ${row('Message qu’aucun module n’explique', modeSeg('data-seg="fallback"', r.croupier.fallback))}
       </section>
       <section class="cbx-card"><h3>Messages spéciaux</h3>
-        ${SPECIALS.map(([k, label, hint]) => row(`${label}${hint ? ` · ${hint}` : ''}`, modeSeg(`data-seg="special" data-id="${k}"`, r.special[k]))).join('')}
+        <p class="cbx-hint">Les abonnements et les raids sont déjà montrés par les alertes : masqués par défaut pour éviter un doublon.</p>
+        ${SPECIALS.map(([k, label]) => row(label, modeSeg(`data-seg="special" data-id="${k}"`, r.special[k]))).join('')}
+      </section>
+      <section class="cbx-card"><h3>Comptes</h3>
+        <p class="cbx-hint">Reconnus par leur identifiant Twitch. « Afficher » est une exception : toujours affiché, même une commande.</p>
+        ${r.accounts
+          .map(
+            (a, i) =>
+              `<div class="cbx-line"><span><strong>${esc(a.login)}</strong> <small>${a.id ? `id ${esc(a.id)}` : 'identifiant au premier message'}</small></span>${modeSeg(`data-seg="acc" data-i="${i}"`, a.mode)}<button type="button" class="d-btn sm ghost" data-acc-del="${i}">Retirer</button></div>`,
+          )
+          .join('')}
+        <div class="cbx-line"><input class="cbx-input" data-acc-new placeholder="pseudo Twitch"><button type="button" class="d-btn sm" data-acc-add="hide">Masquer ce compte</button><button type="button" class="d-btn sm ghost" data-acc-add="highlight">Mettre en avant</button></div>
+        ${
+          recent.length
+            ? `<details class="cbx-sub"><summary>Vus récemment <small>${recent.length}</small></summary>${recent
+                .slice(0, 20)
+                .map(
+                  (a) =>
+                    `<div class="cbx-line"><span>${esc(a.name)} ${a.feed === 'demo' ? '<small>(démonstration)</small>' : ''}</span><button type="button" class="d-btn sm ghost" data-seen-hide="${esc(a.login)}">Masquer</button><button type="button" class="d-btn sm ghost" data-seen-hl="${esc(a.login)}">Mettre en avant</button></div>`,
+                )
+                .join('')}</details>`
+            : ''
+        }
       </section>
     </div>`;
   }
 
   async function saveRules(r: Rules, done = 'Appliqué aux trois chatbox.') {
-    if (await call('/rules', { rules: r }, done)) paint();
+    const open = [
+      ...pg.body.querySelectorAll<HTMLDetailsElement>('details'),
+    ].map((d) => d.open);
+    if (await call('/rules', { rules: r }, done)) {
+      paint();
+      // What the streamer had unfolded stays unfolded.
+      pg.body
+        .querySelectorAll<HTMLDetailsElement>('details')
+        .forEach((d, i) => (d.open = open[i] ?? d.open));
+    }
   }
 
-  /** A segmented choice that does not repaint the page: only its own buttons move. */
   function repick(holder: HTMLElement, on: HTMLElement) {
     const buttons = [...holder.querySelectorAll<HTMLElement>('button')];
     holder.style.setProperty('--i', String(buttons.indexOf(on)));
@@ -528,7 +639,6 @@ export function mountChatboxPage(root: HTMLElement) {
     paintHead();
     if (tab === 'look') {
       pg.body.innerHTML = paintLook();
-      paintPanel();
       requestAnimationFrame(() => {
         fitFrame();
         paintMap();
@@ -546,8 +656,7 @@ export function mountChatboxPage(root: HTMLElement) {
 
   // --- Events ----------------------------------------------------------------------------------------------------------
   root.addEventListener('click', async (e) => {
-    const t = e.target as HTMLElement;
-    const b = t.closest<HTMLElement>('button');
+    const b = (e.target as HTMLElement).closest<HTMLElement>('button');
     if (!b || !st) return;
     const r = clone(st.rules);
     const d = b.dataset;
@@ -573,6 +682,9 @@ export function mountChatboxPage(root: HTMLElement) {
         case 'field':
           change(h.path!, v);
           return repick(holder, b);
+        case 'presence':
+          change('presence.mode', v);
+          return paint();
         case 'acc':
           r.accounts[Number(h.i)]!.mode = v as Mode;
           break;
@@ -582,6 +694,17 @@ export function mountChatboxPage(root: HTMLElement) {
         case 'cmd-unknown':
           r.commands.unknown = v as 'hide' | 'normal';
           break;
+        case 'cmd-msg':
+        case 'cmd-reply': {
+          const own = { ...(r.commands.rules[h.key!] ?? {}) };
+          if (h.seg === 'cmd-msg') own.message = v as 'hide' | 'normal';
+          else if (v === 'inherit') delete own.reply;
+          else own.reply = v as Mode;
+          if (own.message === undefined && own.reply === undefined)
+            delete r.commands.rules[h.key!];
+          else r.commands.rules[h.key!] = own;
+          break;
+        }
         case 'cat':
           r.croupier.categories[h.id!] = v as Mode;
           break;
@@ -600,20 +723,12 @@ export function mountChatboxPage(root: HTMLElement) {
       }
       return saveRules(r);
     }
-    if (d.play) {
-      await call(
-        '/demo',
-        d.play === 'stop'
-          ? { stop: true }
-          : d.play === 'clear'
-            ? { clear: true }
-            : { scenario: d.play },
-      );
-      for (const x of pg.body.querySelectorAll<HTMLElement>('[data-play]')) {
-        x.classList.toggle('on', x.dataset.play === st.demo.playing);
-        x.classList.toggle('ghost', x.dataset.play !== st.demo.playing);
-      }
-    } else if (d.preset !== undefined) {
+    if (d.play !== undefined) {
+      const sc =
+        pg.body.querySelector<HTMLSelectElement>('[data-scenario]')!.value;
+      await call('/demo', { scenario: sc });
+    } else if (d.playClear !== undefined) await call('/demo', { clear: true });
+    else if (d.preset !== undefined) {
       if (
         dirty() &&
         !confirm('Remplacer les réglages non enregistrés par ce préset ?')
@@ -729,6 +844,12 @@ export function mountChatboxPage(root: HTMLElement) {
 
   root.addEventListener('input', (e) => {
     const i = e.target as HTMLInputElement;
+    if (i.dataset.search !== undefined) {
+      search = i.value;
+      const list = pg.body.querySelector<HTMLElement>('[data-cmd-list]');
+      if (list) list.innerHTML = commandList();
+      return;
+    }
     if (i.dataset.f && (i.type === 'range' || i.type === 'color'))
       change(i.dataset.f, i.type === 'range' ? Number(i.value) : i.value);
     if (i.dataset.pl) {
@@ -742,10 +863,13 @@ export function mountChatboxPage(root: HTMLElement) {
     if (i.dataset.explain !== undefined) {
       explain = i.checked;
       paint();
+    } else if (i.dataset.rolebar !== undefined) {
+      const base = st!.builtins.find((b) => b.id === prof().base)?.settings[
+        profile
+      ] as { roles?: { bar?: number } } | undefined;
+      change('roles.bar', i.checked ? Math.max(3, base?.roles?.bar ?? 3) : 0);
     } else if (i.dataset.f) {
-      const f = st?.fields
-        .flatMap((g) => g.fields)
-        .find((x) => x.path === i.dataset.f);
+      const f = field(i.dataset.f);
       change(
         i.dataset.f,
         f?.kind === 'toggle'
@@ -785,6 +909,15 @@ export function mountChatboxPage(root: HTMLElement) {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   });
+  // The map needs its size: drawn when the placement panel unfolds.
+  root.addEventListener(
+    'toggle',
+    (e) => {
+      if ((e.target as HTMLElement).matches?.('[data-fold="place"]'))
+        requestAnimationFrame(paintMap);
+    },
+    true,
+  );
   window.addEventListener('resize', () => {
     fitFrame();
     paintMap();

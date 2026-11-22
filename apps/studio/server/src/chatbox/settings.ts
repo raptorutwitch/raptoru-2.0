@@ -443,10 +443,17 @@ export type Field =
     }
   | { path: string; label: string; kind: 'list'; min: number; max: number };
 
-export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
+export const FIELD_GROUPS: {
+  id: string;
+  label: string;
+  /** One short sentence for the streamer. */
+  help: string;
+  fields: Field[];
+}[] = [
   {
     id: 'type',
     label: 'Typographie',
+    help: 'Polices, tailles et couleur du texte.',
     fields: [
       { path: 'name.family', label: 'Police du pseudo', kind: 'font' },
       {
@@ -495,7 +502,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
       { path: 'text.color', label: 'Couleur du message', kind: 'color' },
       {
         path: 'textShadow',
-        label: 'Lisibilité sur fond clair',
+        label: 'Ombre du texte (lisibilité)',
         kind: 'number',
         min: 0,
         max: 1,
@@ -503,7 +510,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
       },
       {
         path: 'nameContrast',
-        label: 'Éclaircir les pseudos très sombres',
+        label: 'Rendre lisibles les pseudos très sombres',
         kind: 'toggle',
       },
     ],
@@ -511,6 +518,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
   {
     id: 'card',
     label: 'Fond et cartes',
+    help: 'Le fond derrière chaque message. Le texte et les emotes restent toujours opaques.',
     fields: [
       {
         path: 'card.style',
@@ -525,7 +533,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
       { path: 'card.color', label: 'Couleur du fond', kind: 'color' },
       {
         path: 'card.opacity',
-        label: 'Opacité du fond (jamais le texte)',
+        label: 'Opacité du fond',
         kind: 'number',
         min: 0,
         max: 1,
@@ -613,7 +621,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
       },
       {
         path: 'opacity',
-        label: 'Opacité de toute la chatbox',
+        label: 'Opacité générale (texte compris)',
         kind: 'number',
         min: 0.2,
         max: 1,
@@ -624,6 +632,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
   {
     id: 'emotes',
     label: 'Badges et emotes',
+    help: 'La taille des badges, des emotes et des GIF.',
     fields: [
       {
         path: 'badge.size',
@@ -645,7 +654,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
       },
       {
         path: 'emote.solo',
-        label: 'Emotes seules (1, 2, 3… emotes)',
+        label: 'Emotes seules : taille pour 1, 2, 3… emotes',
         kind: 'list',
         min: 8,
         max: 240,
@@ -673,6 +682,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
   {
     id: 'roles',
     label: 'Rôles',
+    help: 'La barre de couleur à gauche du message : streamer, modération, VIP.',
     fields: [
       {
         path: 'roles.bar',
@@ -696,6 +706,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
   {
     id: 'motion',
     label: 'Animations et présence',
+    help: 'Comment les messages arrivent, et quand le chat disparaît.',
     fields: [
       {
         path: 'enter.style',
@@ -768,7 +779,7 @@ export const FIELD_GROUPS: { id: string; label: string; fields: Field[] }[] = [
       },
       {
         path: 'latest.others',
-        label: 'Fond des messages précédents',
+        label: 'Fond des anciens messages (atténuation)',
         kind: 'number',
         min: 0,
         max: 1,

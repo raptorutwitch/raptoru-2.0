@@ -20,8 +20,9 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.1 À faire maintenant (ordre réel)
 
-1. **Chatbox Raptoru : priorité de développement** (§ 2.4, [CHATBOX.md](CHATBOX.md)) : architecture validée et
-   spécification complète le 22/11 ; jalon 1 (prototype Lab et démonstration) en cours.
+1. **Chatbox Raptoru : terminé en Lab le 23/11, prêt à installer** (§ 2.4, [CHATBOX.md](CHATBOX.md)) : vrai chat
+   bot → Core → Studio, catalogue des commandes, éditeur simplifié ; installation pas à pas sur GO d'Antoni
+   (CHATBOX.md § 12 : fusion, Core, bot `CHATBOX_RELAY=true`, Studio, sources OBS masquées, essai scène par scène).
 2. **Casino V1 jusqu'au public** (gestes d'Antoni, en parallèle ; détail : [REPRISE.md](REPRISE.md) § 5.4 B) :
    téléverser le ZIP `d09fd03aa844` en Hosted Test hors live → choix de l'accès (`CASINO_EXTENSION=testers:<ids>`
    recommandé, ou `on`) → revue Twitch → publication, `PUBLISHED` mis à jour → essai réel en live → corrections des
@@ -29,6 +30,9 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.2 Ensuite (déjà décidé ou demandé)
 
+0. **KO Overlay : prochain chantier après les Chatbox** (décision d'Antoni du 23/11). Aucun contexte trouvé le 23/11
+   (dépôt, docs, collection OBS active, dossiers d'overlays, mémoire) : à la reprise, demander à Antoni ce que fait
+   l'overlay, ses scènes, son déclencheur et les fichiers ou sources existants, avant toute conception.
 1. **Chaos V2, lot 0** (mesures, sans code), puis lot 1 (lecteur natif, flip seul) : § 2.0. Priorité majeure décidée
    le 10/11, non commencée.
 2. **Validations réelles en attente** (temps d'Antoni, en live) : premier vrai tirage de la Roue du Sub V3 ; « Envoyer
@@ -189,8 +193,8 @@ prévisualisation et application en direct aux sources OBS). Détail : [CHATBOX.
 | Présentation des trois chatbox (paramètres exacts, critiques, options)         | **faite** (22/11) : présentation privée, [CHATBOX.md](CHATBOX.md) § 1           |
 | Direction de conception                                                        | **décidée** (22/11) : [CHATBOX.md](CHATBOX.md) § 4                              |
 | Architecture (bot → Core → Studio → pages OBS, sans nouvelle connexion Twitch) | **validée** (22/11) ; spécification complète ([CHATBOX.md](CHATBOX.md) § 5 à 9) |
-| Jalon 1 : prototype Lab et démonstration                                       | **en cours** ([CHATBOX.md](CHATBOX.md) § 10)                                    |
-| Jalons 2 et 3 : vrai chat dans le Lab, prêt pour le live                       | à faire                                                                         |
+| Jalon 1 : prototype Lab et démonstration                                       | **livré** (22/11), validé visuellement par Antoni le 23/11                      |
+| Jalons 2 et 3 : vrai chat dans le Lab, prêt pour le live                       | **livrés en Lab** (23/11) ([CHATBOX.md](CHATBOX.md) § 10)                       |
 | Production et remplacement dans OBS, scène par scène                           | sur GO d'Antoni ; les sources StreamElements restent intactes jusque-là         |
 
 ## 3. Héritage et dettes
