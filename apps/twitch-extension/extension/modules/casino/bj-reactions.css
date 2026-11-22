@@ -18,17 +18,24 @@
 .rx-pal.subs { background: linear-gradient(180deg, #33204a, #1d1130); box-shadow: 0 0 0 1.5px rgba(255, 207, 102, 0.85), 0 0 14px rgba(255, 190, 70, 0.22), 0 10px 24px rgba(0, 0, 0, 0.6); }
 @keyframes rxpal { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
 .rx-pal__main { display: flex; align-items: stretch; gap: 3px; }
-.rx-pal__row { display: flex; flex-wrap: nowrap; justify-content: center; gap: 3px; animation: rxpage 0.14s ease-out; }
-@keyframes rxpage { from { opacity: 0.2; transform: translateX(4px); } }
+.rx-pal__row { display: flex; flex-wrap: nowrap; justify-content: center; gap: 3px; }
+/* Deux étages à la même place (une seule ligne de haut) : l'autre attend juste au-dessus ou au-dessous, la liste glisse. */
+.rx-floors { display: grid; overflow: hidden; padding-top: 3px; margin-top: -3px; }
+.rx-floors > .rx-pal__row { grid-area: 1 / 1; transition: transform 0.22s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.22s; }
+.rx-floors[data-at="1"] > [data-fl="2"] { transform: translateY(105%); opacity: 0; }
+.rx-floors[data-at="2"] > [data-fl="1"] { transform: translateY(-105%); opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .rx-floors > .rx-pal__row { transition: opacity 0.12s; } }
 .rx-pick { width: var(--rxc); height: var(--rxc); display: grid; place-items: center; border-radius: 9px; background: rgba(255, 255, 255, 0.05); transition: transform 0.12s, background 0.12s, opacity 0.2s; }
 .rx-pick:hover, .rx-pick:focus-visible { background: rgba(255, 201, 77, 0.16); transform: translateY(-2px) scale(1.06); outline: none; }
 .rx-pick:active { transform: scale(0.92); }
 .rx-pick__img { width: calc(var(--rxc) - 8px); height: calc(var(--rxc) - 8px); object-fit: contain; pointer-events: none; }
 .rx-pal.dry .rx-pick { opacity: 0.4; cursor: default; transform: none; }
 /* La flèche des abonnés : fine, dorée, toute la hauteur de la rangée. */
-.rx-page { flex: none; width: 18px; display: grid; place-items: center; border-radius: 7px; color: #ffd36b; background: rgba(255, 201, 77, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 207, 102, 0.3); }
-.rx-page svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
-.rx-page:hover, .rx-page:focus-visible { color: #fff; background: rgba(255, 201, 77, 0.24); outline: none; }
+.rx-lift { flex: none; width: 16px; display: grid; grid-template-rows: 1fr 1fr; gap: 2px; }
+.rx-lift button { display: grid; place-items: center; border-radius: 6px; color: #ffd36b; background: rgba(255, 201, 77, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 207, 102, 0.28); transition: background 0.12s, opacity 0.12s; }
+.rx-lift svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+.rx-lift button:hover:not(:disabled), .rx-lift button:focus-visible { color: #fff; background: rgba(255, 201, 77, 0.26); outline: none; }
+.rx-lift button:disabled { opacity: 0.3; cursor: default; box-shadow: none; }
 .rx-pal__side { display: grid; gap: 4px; align-self: stretch; align-content: space-between; padding-left: 4px; border-left: 1px solid rgba(214, 170, 255, 0.14); }
 .rx-mini { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: var(--dim); }
 .rx-mini svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
@@ -36,7 +43,7 @@
 .rx-mute[aria-pressed='true'] { color: #ffb066; }
 /* Une table étroite (vidéo réduite, téléphone) : 2 rangées de 5, jamais plus large que la table. */
 @container bj (max-width: 540px) { .rx-pal__row { flex-wrap: wrap; width: calc(5 * var(--rxc) + 12px); } }
-@media (pointer: coarse) { .rx-pal { --rxc: 42px; } .rx-pal__row { flex-wrap: wrap; width: calc(5 * var(--rxc) + 12px); } .rx-page { width: 26px; } .rx-mini { width: 32px; height: 32px; } .rx-mini svg { width: 15px; height: 15px; } }
+@media (pointer: coarse) { .rx-pal { --rxc: 42px; } .rx-pal__row { flex-wrap: wrap; width: calc(5 * var(--rxc) + 12px); } .rx-lift { width: 22px; } .rx-mini { width: 32px; height: 32px; } .rx-mini svg { width: 15px; height: 15px; } }
 
 /* L'émote qui s'envole (bj-reactions.js float : Web Animations) : l'ancre (0 × 0) au pied de l'émote ; l'image, telle
    quelle, garde sa propre animation (GIF, WebP). Un nuage : plusieurs à la fois, chacune sa trajectoire. */

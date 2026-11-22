@@ -21,7 +21,6 @@ export const REACTION_IDS = [
   'r3',
   'r4',
   'r5',
-  'r6',
   'r7',
   'r8',
   'r9',
@@ -30,8 +29,12 @@ export const REACTION_IDS = [
   'r12',
   'r13',
 ] as const;
-/** The channel's subscribers only (mandate of 22/11): the Core checks the tier at every reaction (service.ts react). */
+/**
+ * The channel's subscribers only (mandate of 22/11): the Core checks the tier at every reaction (service.ts react). r6 is
+ * ICANT, a sub emote since the evening of 22/11 (s4 shows the same picture): never sent by a non-sub, even through the API.
+ */
 export const SUB_REACTION_IDS = [
+  'r6',
   's1',
   's2',
   's3',

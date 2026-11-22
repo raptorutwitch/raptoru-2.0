@@ -927,7 +927,7 @@ Deux livraisons séparées :
   | 2     | `r8`  | Sourire avec sueur | 😅 Twemoji `1f605`                                           |
   | 3     | `r9`  | Pleurs             | 😭 Twemoji `1f62d`                                           |
   | 4     | `r2`  | Visage rougissant  | 😳 Twemoji `1f633`                                           |
-  | 5     | `r10` | Salut              | 🫡 Twemoji `1fae1`                                           |
+  | 5     | `r4`  | Lunettes de soleil | 😎 Twemoji `1f60e` (à la place de 🫡 `r10`, 22/11 au soir)   |
   | 6     | `r3`  | Colère             | 😡 Twemoji `1f621`                                           |
   | 7     | `r11` | Câlin              | 🤗 Twemoji `1f917`                                           |
   | 8     | `r12` | Surprise           | 😮 Twemoji `1f62e`                                           |
@@ -937,8 +937,14 @@ Deux livraisons séparées :
     (`assets/twemoji`, version 17.0.3, SVG nets) — jamais le rendu natif de Windows ou du navigateur. Licence des
     visuels **CC-BY 4.0** : redistribution permise avec attribution (`assets/twemoji/readme.txt`,
     `license-graphics.txt`).
-  - Le premier choix du 21/11 (`r4` 😎, `r5` 😉, `r6` ICANT) n'est plus proposé mais reste accepté et affiché : un écran
-    pas encore à jour, et la banque (tableau ci-dessus, inchangé).
+  - `r10` 🫡, `r5` 😉 et `r6` ICANT ne sont plus proposés mais restent affichés : un écran pas encore à jour, et la
+    banque. **`r6` (ICANT) est réservé aux abonnés** depuis le 22/11 au soir (le Core le traite comme un `s…`).
+  - **La banque (LeCroupier\_)** réagit d'une émote seule, jamais de texte, au plus une fois par manche, la même pour
+    tous : blackjack de la banque ou d'un joueur, gros gain, grosse perte, banque qui saute, double gagné ou perdu,
+    split, bust, égalité, victoire, banque gagnante. Elle puise dans **toutes** les réactions (anciennes et abonnés
+    comprises), avec une probabilité par situation (faible pour les situations banales) : `reactions.js DEALER`.
+    Aucun message écrit automatique de LeCroupier_ sur le Blackjack (seuls restent l'invitation à une table et le
+    partage d'une manche, sur un clic du joueur).
   - ptn.gif est le fichier d'Antoni tel quel (128 × 128, transparent) : jamais réencodé, le GIF garde toutes ses images.
     Une émote est toujours affichée par une image (`<img>`) : elle s'anime dans la bulle de choix, au-dessus des places,
     dans le repère hors écran et dans la bulle de la banque. Les images proposées sont chargées une fois, dès que le
@@ -949,7 +955,8 @@ Deux livraisons séparées :
 #### 18.7.1 La page des abonnés (mandat du 22/11)
 
 - **Qui** : un viewer **abonné à la chaîne** (Twitch, tout palier, abonnement payé **ou offert** : Twitch compte un
-  abonnement offert comme un abonnement pendant sa durée). La flèche n'apparaît qu'à lui ; les classiques restent à
+  abonnement offert comme un abonnement pendant sa durée). Le petit ascenseur haut/bas (deux étages superposés, la
+  liste glisse verticalement, la bulle garde sa taille et reste ouverte) n'apparaît qu'à lui ; les classiques restent à
   tous ; aucun Jeton.
 - **Les 10** : les 9 émotes d'Antoni (dossier « Emote a donner pour le blackjack/Update », réduites de ≈ 2 000 px à
   128 × 128 PNG, 15 à 37 Ko chacune, dans `assets/casino/reactions/subs/`) et ptn, sur les deux pages :
@@ -959,7 +966,7 @@ Deux livraisons séparées :
   | `s1` | Aigri        | `Aigri v3.png`           |
   | `s2` | Cheh         | `Cheh.png`               |
   | `s3` | VNR          | `Emote VNR.png`          |
-  | `s4` | Flex Megumin | `Flex megumin.png`       |
+  | `s4` | ICANT        | `ICANT.png` (historique) |
   | `s5` | GasmRem      | `GasmRem.png`            |
   | `s6` | Happy        | `HappyFinal2.png`        |
   | `s7` | Raptor Sadge | `Raptor sadge Fixed.png` |

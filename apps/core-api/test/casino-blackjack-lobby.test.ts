@@ -377,11 +377,15 @@ describe('blackjack: reactions (service, PGlite)', () => {
     expect(await code(core.blackjack.react(CH, V(0), { r: 's9' }))).toBe(
       'sub_only',
     );
+    // ICANT (r6, a sub emote since 22/11 evening) included.
+    expect(await code(core.blackjack.react(CH, V(0), { r: 'r6' }))).toBe(
+      'sub_only',
+    );
     for (let i = 0; i < 5; i++)
       expect(await code(core.blackjack.react(CH, V(0), { r: 'r1' }))).toBe(
         'ok',
       );
-    for (const id of ['s1', 's9', 'r7'])
+    for (const id of ['s1', 's9', 'r6'])
       expect(await code(core.blackjack.react(CH, V(1), { r: id }))).toBe('ok');
     expect(await code(core.blackjack.react(CH, V(2), { r: 's5' }))).toBe('ok');
     // Its subscription ends (Twitch's event): refused at the next send, and the page goes away.
@@ -410,11 +414,11 @@ describe('blackjack: reactions (service, PGlite)', () => {
     const rx = first.reactions.seq;
     const t0 = Date.now();
     const waiting = core.blackjack.state(CH, a.table, V(1), seq, 5_000, rx);
-    setTimeout(() => void core.blackjack.react(CH, V(0), { r: 'r6' }), 50);
+    setTimeout(() => void core.blackjack.react(CH, V(0), { r: 'r5' }), 50);
     const got = await waiting;
     expect(Date.now() - t0).toBeLessThan(2_000);
     expect(got.state.seq).toBe(seq);
-    expect(got.reactions.list.map((x) => x.r)).toEqual(['r6']);
+    expect(got.reactions.list.map((x) => x.r)).toEqual(['r5']);
   });
 
   it('the streamer turns them off: refused, and the screens are told (no « Réagir » button)', async () => {
