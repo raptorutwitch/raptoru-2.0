@@ -47,8 +47,8 @@ SAMMI est abandonné depuis le 20/10. Le dépôt est **public** depuis le 28/10 
   (`CASINO_EXTENSION=on`, `casino.open=1`), refusé hors live ; **pas dans l'extension publique** : ZIP
   `d09fd03aa844` construit et vérifié le 22/11, **non téléversé** ; Hosted Test, revue Twitch et essai réel à faire
   ([ROADMAP.md](ROADMAP.md) § 0.4).
-- **Chatbox** : priorité de développement depuis le 22/11 ; reconnaissance faite, rien de spécifié
-  ([CHATBOX.md](CHATBOX.md)).
+- **Chatbox** : terminée en Lab le 23/11 et fusionnée ; mise en service pas à pas sur GO d'Antoni
+  ([CHATBOX.md](CHATBOX.md) § 12).
 - **Niveaux** : restauration WizeBot exécutée le 20/11 (432 comptes, définitive), badges tous les 25 niveaux,
   anciennes annulations bloquées, rattachements futurs non compressés ([LEVEL_UP_V2.md](LEVEL_UP_V2.md) § 15).
 - Roue du Sub V3 active depuis le 16/11 ; Music Hub ouvert à tous (`MUSIC_HUB_EXTENSION=on`).
@@ -115,7 +115,7 @@ seule source de ces états.
 | **Déployées mais éteintes ou vides**     | moteur de défis (`CHALLENGES_ENGINE` off, aucun défi) · catalogue cosmétique sans contenu définitif · boutique et profil d'alertes Halloween (événement fermé le 02/11)                                                                                                                                                                                                                                                                                                                                                                             |
 | **Lab uniquement**                       | Coffre mystère et Objectif de soirée (`labOnly`) · simulateurs du Lab                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **Branches non fusionnées**              | Chaudron des subs (PR #47) · titres équipés depuis Studio (PR #54) · étude Croupier IA (suspendue) · détails : [ROADMAP.md](ROADMAP.md) § 2.3                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **En conception**                        | **Chatbox Raptoru** (priorité depuis le 22/11) : reconnaissance du 20/11, rien de spécifié ([CHATBOX.md](CHATBOX.md)) · **Chaos V2** : recherche du 10/11, aucune implémentation ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md))                                                                                                                                                                                                                                                                                                                         |
+| **En conception**                        | **Chatbox Raptoru** : terminée en Lab le 23/11, à mettre en service ([CHATBOX.md](CHATBOX.md) § 12) · **Chaos V2** : recherche du 10/11, aucune implémentation ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md))                                                                                                                                                                                                                                                                                                                                           |
 
 ## 6. Travaux récents (08/11 → 22/11)
 

@@ -91,17 +91,22 @@ export function labModerationRoutes(
   raffle: RaffleLabService,
   /** Other Lab chat modules (Commands V2…), after the Tombola. */
   chatModules: LabChatModule[] = [],
+  /** Chatbox (docs/CHATBOX.md): every routed message (the Lab's simulated chat reaches the chatbox relay). */
+  observer?: ConstructorParameters<typeof LabChatRouter>[1],
 ): Route[] {
   const channel = (params: string[]) => parse(Digits, params[0]);
   // Single Lab chat ingress: every module that handles chat commands is listed here.
-  const labChat = new LabChatRouter([
-    {
-      name: 'raffle',
-      chat: (m) => raffle.chat(m),
-      stream: (e) => raffle.streamEvent(e),
-    },
-    ...chatModules,
-  ]);
+  const labChat = new LabChatRouter(
+    [
+      {
+        name: 'raffle',
+        chat: (m) => raffle.chat(m),
+        stream: (e) => raffle.streamEvent(e),
+      },
+      ...chatModules,
+    ],
+    observer,
+  );
   /**
    * Read models are for the team. The extension façade names the reader (`as`, `as_role`): Core
    * refuses a viewer. Studio (no reader named) is the broadcaster.

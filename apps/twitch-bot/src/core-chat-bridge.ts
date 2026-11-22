@@ -11,6 +11,12 @@ import {
   type SendJournal,
 } from './lab-chat-output.js';
 import type { Outbox } from './loyalty-outbox.js';
+import {
+  CHATBOX_SUBSCRIPTIONS,
+  chatboxEvent,
+  type createChatboxForwarder,
+  type OwnAnswers,
+} from './chatbox-forward.js';
 import type { HelixStream } from './stream-watch.js';
 
 // Production bot → main Core (lot 8): the chat games and the real Twitch alerts, with the Lab adapter's modules
@@ -50,6 +56,11 @@ export interface CoreChatBridgeDeps {
     version?: string,
   ): Promise<void>;
   getStream(): Promise<HelixStream | null>;
+  /** Chatbox Raptoru (CHATBOX_RELAY=true): the chat's display events to the main Core (docs/CHATBOX.md § 5.1). */
+  chatbox?: {
+    forwarder: ReturnType<typeof createChatboxForwarder>;
+    answers: OwnAnswers;
+  };
   /** Chat answers (Commands V2, games): absent = no executor (nothing can be sent). */
   output?: {
     send: LabChatOutputDeps['send'];
@@ -109,7 +120,7 @@ export function createCoreChatBridge(d: CoreChatBridgeDeps) {
   return {
     /** Added to the runtime's subscriptions on every (re)connection. */
     async subscribe(sessionId: string) {
-      if ((d.games || alertsOn) && !d.runtimeChat)
+      if ((d.games || alertsOn || d.chatbox) && !d.runtimeChat)
         await d.subscribe(
           'channel.chat.message',
           { broadcaster_user_id: d.broadcasterId, user_id: d.tokenUserId },
@@ -118,6 +129,22 @@ export function createCoreChatBridge(d: CoreChatBridgeDeps) {
       // An alert source refused (missing scope, not moderator) never takes the chat down with it.
       subscribed = [];
       refused = [];
+      // Chatbox: the announcements and the moderation, unless the alerts already subscribe a type (never twice).
+      const chatboxTypes = d.chatbox
+        ? CHATBOX_SUBSCRIPTIONS.filter(
+            (t) => !alerts.subscriptions().some((s) => s.type === t),
+          )
+        : [];
+      for (const type of chatboxTypes)
+        try {
+          await d.subscribe(
+            type,
+            { broadcaster_user_id: d.broadcasterId, user_id: d.tokenUserId },
+            sessionId,
+          );
+        } catch (error) {
+          log(`[chatbox] abonnement ${type} refusé`, (error as Error).message);
+        }
       for (const s of alerts.subscriptions())
         try {
           await d.subscribe(s.type, s.condition, sessionId, s.version);
@@ -141,6 +168,23 @@ export function createCoreChatBridge(d: CoreChatBridgeDeps) {
       messageId: string,
       timestamp: string,
     ) {
+      if (d.chatbox) {
+        try {
+          const read = () =>
+            chatboxEvent(type, event, {
+              tokenUserId: d.tokenUserId,
+              answered: (id) => d.chatbox!.answers.get(id),
+            });
+          const ev = read();
+          if (ev)
+            d.chatbox.forwarder.send(
+              ev,
+              ev.type === 'msg' && ev.own ? read : undefined,
+            );
+        } catch (error) {
+          log('[chatbox] event skipped', (error as Error).message);
+        }
+      }
       if (ingest)
         return ingest.handlers.notification(type, event, messageId, timestamp);
       if (!alertsOn) return;

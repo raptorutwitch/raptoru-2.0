@@ -1,3 +1,4 @@
+import { withTriggerParams } from '../chatbox/trigger.js';
 import { randomUUID } from 'node:crypto';
 import type { CmdStepAckRequest } from '@raptoru/schemas';
 import type { Clock } from '../clock.js';
@@ -237,7 +238,10 @@ export async function insertSteps(
         `${s.invocationId}:${seq}`,
         d.kind,
         d.type,
-        JSON.stringify(d.params),
+        // Chatbox (docs/CHATBOX.md § 6.3): the chat message this answer belongs to, when written while handling one.
+        JSON.stringify(
+          d.type === 'chat' ? withTriggerParams(d.params) : d.params,
+        ),
         d.on_error,
         d.skip ? 'skipped' : 'queued',
         s.now,
@@ -305,11 +309,13 @@ export async function insertWordGameSteps(
         s.channelId,
         seq,
         d.idempotencyKey,
-        JSON.stringify({
-          mode: d.mode,
-          text: d.text,
-          ...(d.mode === 'announce' && d.color ? { color: d.color } : {}),
-        }),
+        JSON.stringify(
+          withTriggerParams({
+            mode: d.mode,
+            text: d.text,
+            ...(d.mode === 'announce' && d.color ? { color: d.color } : {}),
+          }),
+        ),
         available,
         new Date(available.getTime() + ttlMs),
         s.now,

@@ -11,6 +11,7 @@ import { createCoreClient } from './core-client.js';
 import { createBroadcasterEvents } from './loyalty-events.js';
 import { fileOutbox, memoryOutbox } from './loyalty-outbox.js';
 import { createCoreChatBridge } from './core-chat-bridge.js';
+import { createChatboxForwarder, OwnAnswers } from './chatbox-forward.js';
 import type { AlertOutboxEvent } from './lab-alerts-ingest.js';
 import { fileJournal } from './lab-chat-output.js';
 import {
@@ -204,8 +205,11 @@ console.log(
   `[twitch-bot] token ok for ${status.login} (${status.userId}), expires ${status.expiresAt}, refresh ${status.hasRefreshToken ? 'available' : 'missing'} · chat commands ${config.DAILY_CHAT_COMMANDS} · presence shadow ${config.PRESENCE_SHADOW}`,
 );
 
+// Chatbox Raptoru (CHATBOX_RELAY=true): the bot's direct answers remember their command; the display events go to Core.
+const ownAnswers = new OwnAnswers();
 const runtime = createBotRuntime({
   config,
+  answers: ownAnswers,
   tokenUserId: status.userId!,
   helix: createHelix({
     clientId: config.TWITCH_CLIENT_ID,
@@ -243,8 +247,9 @@ const coreCall = async (path: string, body: unknown) => {
   });
   return { status: res.status, body: (await res.json()) as unknown };
 };
+const chatboxOn = config.CHATBOX_RELAY === 'true';
 const bridge =
-  config.CHAT_GAMES === 'true' || config.ALERTS_MODE !== 'off'
+  config.CHAT_GAMES === 'true' || config.ALERTS_MODE !== 'off' || chatboxOn
     ? createCoreChatBridge({
         post: async (path, body) => {
           const r = await coreCall(path, body);
@@ -271,6 +276,17 @@ const bridge =
         subscribe: (type, condition, sessionId, version) =>
           coreHelix.subscribe(type, condition, sessionId, version),
         getStream: () => coreHelix.getStream(config.TWITCH_BROADCASTER_ID),
+        ...(chatboxOn
+          ? {
+              chatbox: {
+                answers: ownAnswers,
+                forwarder: createChatboxForwarder({
+                  channelId: config.TWITCH_BROADCASTER_ID,
+                  post: (path, body) => coreCall(path, body),
+                }),
+              },
+            }
+          : {}),
         ...(config.CHAT_GAMES_OUTPUT === 'true' &&
         status.scopes.includes('user:write:chat')
           ? {

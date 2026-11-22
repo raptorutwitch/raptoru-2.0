@@ -45,6 +45,8 @@ const copies = [
   'apps/studio/server/word-game-player',
   // Level Up V2 OBS source (the chime is made by Studio; a custom sound lives in Studio's storage).
   'apps/studio/server/level-up-player',
+  // Chatbox Raptoru OBS pages, demonstration and bundled OFL fonts (docs/CHATBOX.md).
+  'apps/studio/server/chatbox-player',
   // Twitch alerts V1 OBS source / Studio preview (media live in Studio's storage, never in the package).
   'apps/studio/server/alerts-player',
   // Effects player OBS source (effect media live in Studio's storage, never in the package).
@@ -90,6 +92,9 @@ const runtimeFiles = [
   'apps/studio/server/word-game-player/ShuffleWordsSong.ogg',
   'apps/studio/server/level-up-player/player.html',
   'apps/studio/server/level-up-player/player.js',
+  'apps/studio/server/chatbox-player/player.html',
+  'apps/studio/server/chatbox-player/engine.js',
+  'apps/studio/server/chatbox-player/fonts/figtree-latin-wght-normal.woff2',
   'apps/studio/server/alerts-player/player.html',
   'apps/studio/server/alerts-player/engine.js',
   'apps/studio/server/effects-player/player.html',

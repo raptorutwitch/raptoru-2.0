@@ -3,6 +3,7 @@ import { modulesStatusProvider } from './control-center/modules.js';
 import { modulesRelay } from './modules/relay.js';
 import { moduleSettingsRelay } from './module-settings/relay.js';
 import { bootPlan } from './prod-transport/profile.js';
+import { BUILT_IN_PRODUCTION } from './prod-transport/built-in.js';
 import {
   createProductionRuntimes,
   fromMain,
@@ -98,6 +99,7 @@ import { HalloweenRuntime } from './halloween/runtime.js';
 import { CosmeticsRelay } from './cosmetics/relay.js';
 import { ChallengesRelay } from './challenges/relay.js';
 import { LevelUpRuntime } from './level-up/runtime.js';
+import { createChatboxHost, type ChatboxHost } from './chatbox/host.js';
 import { ProgressionRelay } from './progression/relay.js';
 import {
   createLocalRuntime,
@@ -518,6 +520,8 @@ export interface StudioServerOptions {
   labPanel?: CoreLabPanel | null;
   /** Level Up V2 (docs/LEVEL_UP_V2.md): its own OBS source (the viewers' level-ups), apart from every other overlay. */
   levelUp?: LevelUpRuntime | null;
+  /** Chatbox Raptoru (docs/CHATBOX.md): the OBS chat pages, their editor and the simulator. */
+  chatbox?: ChatboxHost | null;
 }
 
 export function createStudioServer(o: StudioServerOptions) {
@@ -549,6 +553,7 @@ export function createStudioServer(o: StudioServerOptions) {
     labFrontier = null,
     labPanel = null,
     levelUp = null,
+    chatbox = null,
   } = o;
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${host}`);
@@ -644,6 +649,8 @@ export function createStudioServer(o: StudioServerOptions) {
       if (cosmetics && (await cosmetics.handle(req, res, url))) return;
       if (challenges && (await challenges.handle(req, res, url))) return;
       if (levelUp && (await levelUp.handle(req, res, url))) return;
+      // Chatbox Raptoru: its OBS pages (token) and its editor's API (same host + Studio header, checked by the host).
+      if (chatbox && (await chatbox.handle(req, res, url))) return;
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
       if (alerts && (await alerts.handle(req, res, url))) return;
       if (points && (await points.handle(req, res, url))) return;
@@ -971,6 +978,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   let dockRef: DockRuntime | null = null;
   let halloweenRef: HalloweenRuntime | null = null;
   let levelUpRef: LevelUpRuntime | null = null;
+  let chatboxRef: ChatboxHost | null = null;
   let pointsRef: ChannelPointsRuntime | null = null;
   let twitchConnectionsRef: TwitchConnections | null = null;
   let stopping = false;
@@ -999,6 +1007,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     void dockRef?.server.close();
     halloweenRef?.stop();
     levelUpRef?.stop();
+    chatboxRef?.stop();
     pointsRef?.stop();
     lab.logs.add(
       'studio',
@@ -1593,6 +1602,31 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               : {}),
           })
         : null),
+    // Chatbox Raptoru (docs/CHATBOX.md): the Lab keeps its own settings; the real channel's emotes (public catalogues).
+    chatbox: (chatboxRef = await createChatboxHost({
+      dir:
+        alertsEnv === 'production'
+          ? join(paths.runtimeDir, 'production', 'chatbox')
+          : labModuleDir('chatbox'),
+      playerDir: join(REPO_ROOT, 'apps', 'studio', 'server', 'chatbox-player'),
+      origin: `http://${host}:${port}`,
+      channelId: BUILT_IN_PRODUCTION.channelId,
+      // The real chat and the command catalogue from the profile's Core (main Core: Lab or Production cockpit).
+      core:
+        labCore && transport
+          ? {
+              call: labCore,
+              events: transport.cockpitEvents,
+              channelId: cockpitChannel,
+            }
+          : null,
+      guard: (req) =>
+        !sameHost(req)
+          ? 'forbidden_host'
+          : req.headers[STUDIO_HEADER] !== '1'
+            ? 'missing_studio_header'
+            : null,
+    })),
     labPanel:
       mainLab && labCore
         ? new CoreLabPanel(labCore, MAIN_LAB_CHANNEL.id)
