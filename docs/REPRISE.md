@@ -190,14 +190,21 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
    remboursements, spectateurs, blackjack à plusieurs, nouvelles tables, réactions, téléphone).
 5. Corriger **uniquement** les problèmes observés.
 
-**C. Chaos V2 (« Chaos Overlay », nommé aussi « KO Overlay » par Antoni)** : le prototype du lot 1 a été livré le 22/11.
+**C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : le moteur est construit le 22/11.
 
-- **Où** : branche locale `feat/chaos-presenter-lot1`, worktree `Raptoru 2.0 - Worktrees\chaos-v2`,
-  [apps/chaos-presenter](../apps/chaos-presenter/README.md).
-- **Quoi** : lecteur natif C# (retournement à 180°, capture sans curseur) et panneau de test ; 26 contrôles verts.
-- **Prochaine étape** : test réel d'Antoni (R1–R6 du README). Ensuite : choisir C# ou Rust, mesures du lot 0, puis
-  lot 2 (module payant).
-- **Rien n'est poussé ni intégré à Studio.**
+- **Où** : branche locale `feat/chaos-engine` (après `feat/chaos-presenter-lot1`), worktree
+  `Raptoru 2.0 - Worktrees\chaos-v2`. Architecture : [chaos/ARCHITECTURE_MOTEUR.md](chaos/ARCHITECTURE_MOTEUR.md).
+- **Quoi** :
+  - moteur natif C# ([apps/chaos-engine](../apps/chaos-engine/README.md)), avec registre partagé et configuration ;
+  - ordonnanceur et transitions ;
+  - capture partagée, rendu par passes et calques ;
+  - gardien et arrêt d'urgence Ctrl+Maj+F11 ;
+  - page Studio › Chaos et banc `npm run chaos:lab`.
+- **Tests** : 21 unitaires, 39 d'intégration, 10 Studio et 8 de bout en bout, tous verts. Un seul effet réel : le
+  retournement.
+- **Prochaine étape** : test réel d'Antoni ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2), puis le lot 2
+  (module payant, Core).
+- **Rien n'est poussé, fusionné ni publié** : aucun Studio installé ne contient la page.
 
 **D. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (validations réelles en attente, finitions Studio).
 

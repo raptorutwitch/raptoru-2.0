@@ -34,6 +34,7 @@ export const VIEW_IDS = [
   'spotify',
   'music-overlay',
   'sub-wheel',
+  'chaos',
 ] as const;
 export type ViewId = (typeof VIEW_IDS)[number];
 
@@ -276,6 +277,17 @@ export const PAGES: Page[] = [
     view: 'effects',
     desc: 'FX Cam, couleur cam, lecteur d’effets.',
     keywords: 'fx cam couleur effets obs',
+  },
+  {
+    id: 'chaos',
+    // Chaos V2 (docs/chaos/ARCHITECTURE_MOTEUR.md): the native screen-effects engine, tested locally (no Jetons yet).
+    label: 'Chaos · effets d’écran',
+    section: 'modules',
+    group: 'Effets & mise en scène',
+    icon: 'sparkle',
+    view: 'chaos',
+    desc: 'Écran retourné : réglage, essai local, STOP ALL, mesures du moteur.',
+    keywords: 'chaos ko overlay retourner écran flip moteur effets',
   },
   {
     id: 'random-ban',

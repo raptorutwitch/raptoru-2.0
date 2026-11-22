@@ -18,9 +18,24 @@
     "diagnostic": { "label": "Diagnostic (interne)" }
   },
   "slots": {
-    "transform": { "label": "Transformation de l'image", "order": 10, "max_active": 1, "requires_capture": true },
-    "filter": { "label": "Filtre de l'image", "order": 20, "max_active": 3, "requires_capture": true },
-    "overlay": { "label": "Calque", "order": 90, "max_active": 4, "requires_capture": false }
+    "transform": {
+      "label": "Transformation de l'image",
+      "order": 10,
+      "max_active": 1,
+      "requires_capture": true
+    },
+    "filter": {
+      "label": "Filtre de l'image",
+      "order": 20,
+      "max_active": 3,
+      "requires_capture": true
+    },
+    "overlay": {
+      "label": "Calque",
+      "order": 90,
+      "max_active": 4,
+      "requires_capture": false
+    }
   },
   "effects": [
     {
@@ -35,15 +50,51 @@
       "gpu": { "primitive": "transform", "cost": "low", "passes": 1 },
       "duration": { "default_ms": 10000 },
       "params": [
-        { "id": "angle", "type": "number", "unit": "deg", "min": -180, "max": 180, "default": 180, "animatable": true, "neutral": 0, "exposed": false },
-        { "id": "fill", "type": "enum", "values": ["mirror", "black", "cover"], "default": "mirror", "label": "Coins pendant la rotation", "help": "mirror : prolongement flou et sombre de l'image tournée ; black : noir ; cover : l'image grossit pour couvrir l'écran." }
+        {
+          "id": "angle",
+          "type": "number",
+          "unit": "deg",
+          "min": -180,
+          "max": 180,
+          "default": 180,
+          "animatable": true,
+          "neutral": 0,
+          "exposed": false
+        },
+        {
+          "id": "fill",
+          "type": "enum",
+          "values": ["mirror", "black", "cover"],
+          "default": "mirror",
+          "label": "Coins pendant la rotation",
+          "help": "mirror : prolongement flou et sombre de l'image tournée ; black : noir ; cover : l'image grossit pour couvrir l'écran."
+        }
       ],
-      "variants": [{ "id": "rotate180", "label": "180°", "params": { "angle": 180 } }],
+      "variants": [
+        { "id": "rotate180", "label": "180°", "params": { "angle": 180 } }
+      ],
       "transitions": {
-        "in": { "kind": "ramp", "duration_ms": 550, "curve": "ease_in_out_sine", "kinds": ["ramp", "cut"] },
-        "out": { "kind": "ramp", "duration_ms": 550, "curve": "ease_in_out_sine", "kinds": ["ramp", "cut"] }
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 550,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 550,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
       },
-      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "capture_lost", "error"]
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
     },
     {
       "id": "diag.tint",
@@ -57,15 +108,40 @@
       "gpu": { "primitive": "shader", "cost": "low", "passes": 1 },
       "duration": { "default_ms": 5000 },
       "params": [
-        { "id": "strength", "type": "number", "min": 0, "max": 1, "default": 0.5, "animatable": true, "neutral": 0 },
+        {
+          "id": "strength",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "animatable": true,
+          "neutral": 0
+        },
         { "id": "color", "type": "color", "default": "#00ffff" }
       ],
       "variants": [],
       "transitions": {
-        "in": { "kind": "ramp", "duration_ms": 200, "curve": "linear", "kinds": ["ramp", "cut"] },
-        "out": { "kind": "ramp", "duration_ms": 200, "curve": "linear", "kinds": ["ramp", "cut"] }
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 200,
+          "curve": "linear",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 200,
+          "curve": "linear",
+          "kinds": ["ramp", "cut"]
+        }
       },
-      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "capture_lost", "error"]
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
     },
     {
       "id": "diag.marker",
@@ -79,7 +155,15 @@
       "gpu": { "primitive": "overlay", "cost": "low", "passes": 1 },
       "duration": { "default_ms": 5000 },
       "params": [
-        { "id": "opacity", "type": "number", "min": 0, "max": 1, "default": 1, "animatable": true, "neutral": 0 },
+        {
+          "id": "opacity",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "default": 1,
+          "animatable": true,
+          "neutral": 0
+        },
         { "id": "x", "type": "number", "min": 0, "max": 1, "default": 0.5 },
         { "id": "y", "type": "number", "min": 0, "max": 1, "default": 0.5 },
         { "id": "color", "type": "color", "default": "#ff00ff" },
@@ -87,10 +171,26 @@
       ],
       "variants": [],
       "transitions": {
-        "in": { "kind": "ramp", "duration_ms": 200, "curve": "ease_out_cubic", "kinds": ["ramp", "cut"] },
-        "out": { "kind": "ramp", "duration_ms": 200, "curve": "ease_in_cubic", "kinds": ["ramp", "cut"] }
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 200,
+          "curve": "ease_out_cubic",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 200,
+          "curve": "ease_in_cubic",
+          "kinds": ["ramp", "cut"]
+        }
       },
-      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "error"]
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "error"
+      ]
     },
     {
       "id": "diag.fault",
@@ -104,12 +204,32 @@
       "gpu": { "primitive": "overlay", "cost": "low", "passes": 0 },
       "duration": { "default_ms": 5000 },
       "params": [
-        { "id": "phase", "type": "enum", "values": ["prepare", "start", "render"], "default": "render" },
-        { "id": "after_ms", "type": "number", "min": 0, "max": 10000, "default": 300 }
+        {
+          "id": "phase",
+          "type": "enum",
+          "values": ["prepare", "start", "render"],
+          "default": "render"
+        },
+        {
+          "id": "after_ms",
+          "type": "number",
+          "min": 0,
+          "max": 10000,
+          "default": 300
+        }
       ],
       "variants": [],
-      "transitions": { "in": { "kind": "cut", "kinds": ["cut"] }, "out": { "kind": "cut", "kinds": ["cut"] } },
-      "stop_conditions": ["duration", "stop", "stop_all", "target_lost", "error"]
+      "transitions": {
+        "in": { "kind": "cut", "kinds": ["cut"] },
+        "out": { "kind": "cut", "kinds": ["cut"] }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "error"
+      ]
     }
   ]
 }

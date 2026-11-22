@@ -25,8 +25,17 @@ quelle cadence réelle avait la copie V1 (E5).
 **But** : prouver sur le vrai PC le point le plus risqué. Un retournement à 180°, un seul vrai curseur, aucun carré,
 une fluidité intacte.
 
-> **État au 22/11/2026 : prototype livré, test réel d'Antoni attendu.** Il est dans
-> [`apps/chaos-presenter/`](../../apps/chaos-presenter/README.md), sur la branche locale `feat/chaos-presenter-lot1`.
+> **Mise à jour du 22/11, mandat « architecture »** : le prototype est devenu le **moteur**
+> ([`apps/chaos-engine`](../../apps/chaos-engine/README.md), branche locale `feat/chaos-engine`,
+> [ARCHITECTURE_MOTEUR.md](ARCHITECTURE_MOTEUR.md)).
+>
+> - Il est intégré à Studio (page Chaos) et dispose d'un banc Chaos Lab.
+> - Le retour d'Antoni sur le lot 1 est traité : l'ancien écran n'apparaît plus pendant la rotation, et le panneau
+>   Windows a été remplacé par la page Studio.
+> - Le lot 2 (module payant) n'est pas commencé.
+> - Le texte ci-dessous décrit le prototype du lot 1 (`apps/chaos-presenter`, branche `feat/chaos-presenter-lot1`).
+>
+> **État au 22/11/2026 : prototype livré, test réel d'Antoni attendu.**
 >
 > - **Livré** : lecteur autonome (mode D, et mode C en secours) et panneau de test avec les raccourcis
 >   `Ctrl+Maj+F10` / `F11`, à la place du bouton Studio prévu plus bas.

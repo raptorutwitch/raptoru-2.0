@@ -29,9 +29,10 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.2 Ensuite (déjà décidé ou demandé)
 
-1. **Chaos V2 (« Chaos Overlay »)** : prototype du lot 1 (lecteur natif, retournement seul) livré le 22/11 en local
-   (`apps/chaos-presenter`, branche `feat/chaos-presenter-lot1`) ; **test réel d'Antoni attendu** (R1–R6 du README)
-   avant le lot 2. Le lot 0 (mesures PresentMon) reste à faire : § 2.0.
+1. **Chaos V2 (« Chaos Overlay »)** : le **moteur** est construit le 22/11 en local (`apps/chaos-engine`, branche
+   `feat/chaos-engine`), avec la page Studio › Chaos et le banc `npm run chaos:lab`. Retournement seul.
+   **Test réel d'Antoni attendu** ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2) avant le lot 2.
+   Le lot 0 (mesures PresentMon) reste à faire : § 2.0.
 2. **Validations réelles en attente** (temps d'Antoni, en live) : premier vrai tirage de la Roue du Sub V3 ; « Envoyer
    une vraie annonce test » de Level Up ; commande d'Aouh (expressions, latence, édition déléguée) ; parcours viewer de
    Music Hub ; effets OBS après OBS 33.
@@ -46,7 +47,7 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 | **En Production, public, validation réelle restante**    | extension `be1744e75f63` (Level Up V2 et son interrupteur de son, mini-profil, Commandes V2.1 « Mes commandes modifiables », Mini-jeux V5, Music Hub) · Roue du Sub V3 · progression restaurée · Studio 0.1.42                                                                            |
 | **Déployé côté Core, prêt à publier, pas encore public** | **Casino V1** : Core `a94d1081` ; ZIP `d09fd03aa844` construit et vérifié, **téléversement non prouvé** ; revue Twitch et essai réel à faire (§ 0.4)                                                                                                                                      |
 | **Recherche faite, à concevoir**                         | **Chatbox Raptoru** (remplacement des 3 chatbox StreamElements) : § 2.4, [CHATBOX.md](CHATBOX.md)                                                                                                                                                                                         |
-| **Étudié, prêt à implémenter**                           | Chaos V2 lot 0 (mesures) et lots 2 à 5 ; **lot 1 : prototype livré en local, test réel d'Antoni attendu** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md))                                                                                                                        |
+| **Étudié, prêt à implémenter**                           | Chaos V2 lot 0 (mesures) et lots 2 à 5 ; **moteur et page Studio livrés en local, test réel d'Antoni attendu** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md))                                                                                                                   |
 | **Backlog**                                              | finitions Studio (§ 2.2) · dettes (§ 3) · idées XP et modules (§ 4)                                                                                                                                                                                                                       |
 | **Bloqué par du contenu d'Antoni**                       | Défis (catalogue) · cosmétiques (catalogue vide)                                                                                                                                                                                                                                          |
 | **En pause ou suspendu** (ne pas relancer sans demande)  | § 6                                                                                                                                                                                                                                                                                       |
@@ -124,18 +125,26 @@ La recherche est terminée ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Un retour
 curseur, est **possible pour le curseur Windows** grâce à une capture native WGC. Architecture recommandée : un lecteur
 natif qui ne vit que pendant un effet, vu par la capture d'écran d'OBS, et un module `chaos` du socle payé en Jetons.
 
-**22/11 : le prototype du lot 1 existe** ([apps/chaos-presenter](../apps/chaos-presenter/README.md)).
+**22/11 : le moteur existe** ([apps/chaos-engine](../apps/chaos-engine/README.md),
+[chaos/ARCHITECTURE_MOTEUR.md](chaos/ARCHITECTURE_MOTEUR.md)). Il réutilise le prototype du lot 1, testé par Antoni
+(retournement et curseur bons ; ancien écran visible pendant la rotation, corrigé).
 
-- C'est un lecteur autonome et un panneau de test, écrits en C# et non en Rust (installation de Rust refusée par le
-  garde-fou de l'agent).
-- Le rendu de bout en bout est prouvé sur une mire par 26 contrôles automatiques : aucun flash, clic traversant, arrêt
-  en 10 à 35 ms.
-- **Pas encore prouvé en jeu** : le test réel d'Antoni décide de la suite.
+- Il contient :
+  - le registre partagé et la configuration versionnée ;
+  - l'ordonnanceur et les transitions ;
+  - la capture partagée, le rendu par passes et les calques ;
+  - le runtime isolé des effets ;
+  - la télémétrie, le gardien et l'arrêt d'urgence ;
+  - la page Studio › Chaos et le banc Chaos Lab.
+- Un seul effet réel : le retournement.
+- Tests : 21 unitaires, 39 d'intégration sur le vrai écran, 10 côté Studio, 8 de bout en bout dans la page.
+- **Pas encore prouvé en jeu**, ni dans un Studio installé (aucune release) : test réel d'Antoni
+  ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2).
 
 | Lot | Contenu                                                                                   | Prérequis                  |
 | --- | ----------------------------------------------------------------------------------------- | -------------------------- |
 | 0   | mesures PresentMon ; couper les fenêtres V1 permanentes ; choisir la fréquence de l'écran | GO d'Antoni, 45 min        |
-| 1   | lecteur natif, flip seul, panneau de test — **prototype livré le 22/11 (C#)**             | test réel d'Antoni (R1–R6) |
+| 1   | lecteur natif, flip seul — **moteur et page Studio livrés en local le 22/11 (C#)**        | test réel d'Antoni (R1–R6) |
 | 2   | module `chaos` payant dans le Lab (file, remboursements, extension, Studio)               | lot 1 accepté ; prix (Q2)  |
 | 3   | catalogue enrichi                                                                         | lot 2                      |
 | 4   | Production                                                                                | GO dédiés                  |

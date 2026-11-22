@@ -324,14 +324,17 @@ namespace Raptoru.Chaos
         /// (pas de mipmaps) jusqu'au retour à la normale pendant 5 s.
         void UpdateDegraded(long now, Dictionary<string, object> snap)
         {
-            if (cfg.Engine.Quality != "auto") { tel.Degraded = false; return; }
+            if (cfg.Engine.Quality != "auto") { tel.Degraded = false; tel.SlowIntervals = 0; return; }
+            // Médianes et p95 sur l'intervalle, jamais un maximum isolé (le démarrage d'une capture coûte une image) ;
+            // deux intervalles lents d'affilée avant de réduire la qualité.
             double worst = surfaces.Values.Select(s => s.Stats.Processing.P(95)).DefaultIfEmpty(-1).Max();
-            double passMax = tel.Passes.Values.Select(p => p.P(100)).DefaultIfEmpty(-1).Max();
-            bool slow = worst > 8 || passMax > 6;
-            if (slow && !tel.Degraded)
+            double passP50 = tel.Passes.Values.Where(p => p.Count > 0).Select(p => p.P(50)).DefaultIfEmpty(-1).Max();
+            bool slow = worst > 8 || passP50 > 4;
+            tel.SlowIntervals = slow ? tel.SlowIntervals + 1 : 0;
+            if (tel.SlowIntervals >= 2 && !tel.Degraded)
             {
                 tel.Degraded = true; tel.HealthySince = -1;
-                tel.DegradedReason = "traitement p95 " + worst + " ms, passe GPU max " + passMax + " ms";
+                tel.DegradedReason = (worst > 8 ? "traitement p95 " + worst + " ms" : "") + (worst > 8 && passP50 > 4 ? ", " : "") + (passP50 > 4 ? "passe GPU médiane " + passP50 + " ms" : "");
                 io.Send(Protocol.Event("engine.degraded", now, J.Map("reason", tel.DegradedReason)));
             }
             else if (!slow && tel.Degraded)

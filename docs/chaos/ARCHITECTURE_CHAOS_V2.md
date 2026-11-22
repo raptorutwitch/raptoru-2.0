@@ -107,7 +107,8 @@ installé sur le PC aujourd'hui. Il faut ajouter Rust à la CI (GitHub Actions W
 il ferait tomber Studio.
 
 **22/11/2026, lot 1 :** le prototype est en **C# sur .NET Framework 4.8**, compilé par le `csc.exe` fourni avec
-Windows ([`apps/chaos-presenter`](../../apps/chaos-presenter/README.md)).
+Windows. Il est devenu le moteur : [`apps/chaos-engine`](../../apps/chaos-engine/README.md) (lecteur nommé
+`ChaosEngine.exe` au lieu de `chaos-presenter.exe`) ; architecture réalisée : [ARCHITECTURE_MOTEUR.md](ARCHITECTURE_MOTEUR.md).
 
 - **Raison** : l'installation de Rust a été refusée par le garde-fou de l'agent.
 - **Ce qui ne change pas** : l'architecture (processus séparé, WGC, D3D11, DirectComposition, protocole JSON). Le

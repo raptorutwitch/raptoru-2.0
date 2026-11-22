@@ -38,6 +38,7 @@ namespace Raptoru.Chaos
         public bool Degraded;
         public string DegradedReason;
         public long DegradedSince = -1, HealthySince = -1;
+        public int SlowIntervals;
 
         public void Pass(string label, double ms)
         {

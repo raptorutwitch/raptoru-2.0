@@ -46,6 +46,7 @@ namespace Raptoru.Chaos
     sealed class WgcCaptureSource : ICaptureSource
     {
         const int BlackSize = 16;
+        static string cachedAccess;
         readonly Gpu gpu;
         readonly AutoResetEvent frameEvt;
         readonly GraphicsCaptureItem item;
@@ -91,15 +92,20 @@ namespace Raptoru.Chaos
             session = pool.CreateCaptureSession(item);
             try { session.IsCursorCaptureEnabled = false; }
             catch (Exception e) { throw new CaptureError("cursor_exclusion_unavailable", e.Message); }
-            borderAccess = "?";
-            try
+            // Autorisation « sans bordure » : demandée une fois par processus (Windows la garde), pas à chaque capture.
+            if (cachedAccess == null)
             {
-                var op = GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless);
-                var wait = Stopwatch.StartNew();
-                while (op.Status == Windows.Foundation.AsyncStatus.Started && wait.ElapsedMilliseconds < 3000) Thread.Sleep(5);
-                borderAccess = op.Status == Windows.Foundation.AsyncStatus.Completed ? op.GetResults().ToString() : "timeout";
+                try
+                {
+                    var op = GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless);
+                    var wait = Stopwatch.StartNew();
+                    while (op.Status == Windows.Foundation.AsyncStatus.Started && wait.ElapsedMilliseconds < 3000) Thread.Sleep(5);
+                    if (op.Status == Windows.Foundation.AsyncStatus.Completed) cachedAccess = op.GetResults().ToString();
+                    else borderAccess = "timeout";
+                }
+                catch (Exception e) { borderAccess = "error " + e.GetType().Name; }
             }
-            catch (Exception e) { borderAccess = "error " + e.GetType().Name; }
+            if (cachedAccess != null) borderAccess = cachedAccess;
             try { session.IsBorderRequired = false; border = "removed"; } catch (Exception) { border = "required"; }
             try { session.MinUpdateInterval = TimeSpan.FromMilliseconds(1); } catch (Exception) { }
             session.StartCapture();

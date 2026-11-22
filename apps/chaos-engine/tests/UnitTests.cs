@@ -91,14 +91,24 @@ namespace Raptoru.Chaos
                 True(f.Param("angle").Animatable && !f.Param("angle").Exposed, "angle animable non exposé");
                 True(r.Get("diag.marker").Internal && !r.Get("diag.marker").RequiresCapture, "repère interne sans capture");
             });
-            Case("registre invalide refusé (doublon, emplacement, défaut hors bornes, stop_all absent)", () =>
+            Case("registre invalide refusé (doublon, emplacement, défaut hors bornes, stop_all absent, schéma)", () =>
             {
-                string good = Reg().Json;
-                Throws<RegistryError>(() => Registry.Parse(good.Replace("\"id\": \"diag.tint\"", "\"id\": \"flip\"")));
-                Throws<RegistryError>(() => Registry.Parse(good.Replace("\"slot\": \"transform\"", "\"slot\": \"nulle-part\"")));
-                Throws<RegistryError>(() => Registry.Parse(good.Replace("\"default\": 180", "\"default\": 999")));
-                Throws<RegistryError>(() => Registry.Parse(good.Replace("[\"duration\", \"stop\", \"stop_all\", \"target_lost\", \"capture_lost\", \"error\"]", "[\"duration\"]")));
-                Throws<RegistryError>(() => Registry.Parse(good.Replace("raptoru.chaos.registry", "autre")));
+                // Chaque cas modifie l'objet lu (jamais le texte : le fichier peut être reformaté sans casser le test).
+                Func<Action<Dictionary<string, object>, List<Dictionary<string, object>>>, string> mutate = change =>
+                {
+                    var root = J.Parse(Reg().Json);
+                    var effects = J.Arr(root, "effects").Cast<Dictionary<string, object>>().ToList();
+                    change(root, effects);
+                    return J.Write(root);
+                };
+                Func<List<Dictionary<string, object>>, string, Dictionary<string, object>> fx = (l, id) => l.First(e => (string)e["id"] == id);
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => fx(l, "diag.tint")["id"] = "flip")));
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => fx(l, "flip")["slot"] = "nulle-part")));
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) =>
+                    J.Arr(fx(l, "flip"), "params").Cast<Dictionary<string, object>>().First(p => (string)p["id"] == "angle")["default"] = 999)));
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => fx(l, "flip")["stop_conditions"] = new object[] { "duration" })));
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => r["schema"] = "autre")));
+                Registry.Parse(mutate((r, l) => { })); // le document non modifié reste valide
             });
 
             // ---------- Paramètres ----------

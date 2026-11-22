@@ -1,0 +1,281 @@
+/* Studio › Chaos (pages/chaos.ts) : jetons du design system seulement ; une colonne sous 1100 px. */
+[data-mod='chaos'] {
+  --mod: var(--violet);
+}
+.cx {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 16px;
+  align-items: start;
+}
+.cx__main,
+.cx__side {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.cx-card {
+  padding: 14px 16px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--sheet2);
+  min-width: 0;
+}
+.cx-card > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.cx-card h2 {
+  margin: 0;
+  font: 600 17px var(--num);
+  white-space: nowrap;
+}
+.cx-card > header .d-faint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cx-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* Aperçu : un écran stylisé qui rejoue le réglage (rotation, coins, durées) ; le curseur, lui, ne bouge jamais. */
+.cx-stage__row {
+  display: grid;
+  grid-template-columns: minmax(220px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.cx-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  box-shadow:
+    0 0 0 1px var(--hair2),
+    0 10px 30px var(--shade);
+}
+.cx-screen__bg,
+.cx-screen__fg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: start;
+  padding-top: 10%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 49.6%,
+      rgb(255 255 255 / 0.25) 50%,
+      transparent 50.4%
+    ),
+    linear-gradient(
+      0deg,
+      transparent 49.4%,
+      rgb(255 255 255 / 0.25) 50%,
+      transparent 50.6%
+    ),
+    conic-gradient(
+      from 90deg at 50% 50%,
+      #2a6b5c 0 25%,
+      #c58b2b 0 50%,
+      #2f4f9c 0 75%,
+      #a63a3a 0
+    );
+  color: #fff;
+  will-change: transform;
+}
+.cx-screen__fg b {
+  font-size: 26px;
+  line-height: 1;
+}
+.cx-screen__fg span {
+  font: 700 18px var(--num);
+  letter-spacing: 0.08em;
+}
+.cx-screen__bg {
+  filter: blur(9px) brightness(0.45);
+}
+.cx-screen__bg > *,
+.cx-screen[data-fill='black'] .cx-screen__bg,
+.cx-screen[data-fill='cover'] .cx-screen__bg {
+  display: none;
+}
+.cx-screen__cursor {
+  position: absolute;
+  left: 63%;
+  top: 58%;
+  width: 0;
+  height: 0;
+  border-left: 7px solid #fff;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  transform: rotate(-35deg);
+  filter: drop-shadow(0 0 2px #000);
+}
+.cx-stage__cfg {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cx-stage__cfg .d-row {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.cx-stage__cfg .d-fld {
+  width: 92px;
+  margin-left: 8px;
+}
+
+/* Essai */
+.cx-test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+.cx-test__f {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cx-test__t {
+  flex: 1 1 260px;
+}
+.cx-test select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background: var(--raise);
+  color: var(--ink);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.cx-test .d-btn.pri {
+  min-width: 120px;
+}
+kbd {
+  padding: 0 4px;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  font: 600 11px var(--text);
+}
+
+/* En cours */
+.cx-live {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cx-live li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--fill0);
+}
+.cx-live__t {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Catalogue */
+.cx-cat {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cx-cat li {
+  padding: 10px;
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+}
+.cx-cat li.is-diag {
+  border-style: dashed;
+  opacity: 0.8;
+}
+.cx-cat__h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cx-cat p {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Moteur */
+.cx-kv {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.cx-kv dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cx-reset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Journal */
+.cx-log {
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  font-size: 12.5px;
+}
+.cx-log li span {
+  font-weight: 600;
+}
+.cx-log li.is-bad span {
+  color: var(--red);
+}
+.cx-log small {
+  display: block;
+  opacity: 0.65;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .cx {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .cx-stage__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
