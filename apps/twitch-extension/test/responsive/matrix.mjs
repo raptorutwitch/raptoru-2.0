@@ -49,6 +49,11 @@ export const MOBILE = [
   ['standard', 390, 844, 3],
   ['grand', 430, 932, 3],
   ['paysage', 844, 390, 3],
+  // The extension's REAL area in the Twitch app: the chat zone below the 16:9 video (estimated, CASINO.md § 16.0.1).
+  ['app Android (zone)', 393, 484, 3],
+  ['app petit Android (zone)', 360, 409, 2],
+  ['app ancien 360×640 (zone)', 360, 269, 2],
+  ['app paysage chat ouvert (zone)', 367, 349, 3],
 ];
 const QUICK = {
   video: [377, 452, 521, 565, 651, 1053],

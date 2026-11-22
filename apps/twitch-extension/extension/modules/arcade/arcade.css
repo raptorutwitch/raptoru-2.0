@@ -35,6 +35,23 @@
   flex: 1 1 auto;
   min-height: 0;
 }
+/* Application Twitch (mobile, 23/11) : l'extension n'a que la zone du chat sous la vidéo (≈ 390 × 450, souvent moins),
+   et la hauteur reçue de la page ne suffit pas à elle seule — à 0 px le jeu disparaissait (cadre vide), trop grande il
+   se centrait sous la zone visible. Sa hauteur est donc bornée par la LARGEUR : jamais moins qu'une cabine portrait
+   lisible (rouleaux, mise, Lancer ; jamais la cabine de PC à colonne de 150 px sur 350 px de large), jamais plus d'une
+   fois et un cinquième la largeur (pas de grand vide). Entre les deux, la place libre. La page défile au besoin. */
+html[data-surface='mobile'] .mg[data-screen^="casino_"] > .cz-host {
+  min-height: clamp(240px, 75vw, 340px); /* ≤ 4:3 : la cabine portrait, jamais celle de PC */
+  max-height: max(340px, 120vw);
+}
+/* Une zone très basse (≤ 320 px : petit téléphone, clavier ouvert) fige la page à 100vh sans défilement
+   (shell-panel.css, m17) : le plancher ci-dessus y était coupé et la cabine retombait en version PC. Les jeux du Casino y
+   défilent au doigt, comme le reste de la page. */
+html[data-surface='mobile'] body.mobile:has(.mg[data-screen^="casino_"]) #panel.m-body {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
 
 /* --- Le catalogue ---------------------------------------------------------------------------------------------- */
 .mg__home {
@@ -1134,6 +1151,16 @@
   .rb__recent li:nth-child(n + 4) {
     display: none;
   }
+}
+
+/* --- Application Twitch (mobile, 23/11) : sous la vidéo, la hauteur est comptée. Le bandeau « Mini-jeux · Random Ban
+   et les jeux du stream » répète l'en-tête : retiré ; « ‹ Jeux · Random Ban » et l'aide tiennent sur une rangée quand
+   il n'y a pas de charges à montrer ; le viseur prend une part de la hauteur visible (210 px sur un grand écran, 130
+   au moins), de sorte que la cible, Lancer et les premiers tirages restent sous le pouce. Rien n'est retiré du jeu. */
+html[data-surface='mobile'] .jdm-module[data-module='random_ban_ext'] .jdm-module__intro { display: none; }
+@container (max-width: 400px) {
+  html[data-surface='mobile'] .rb__bar:has(.rbg[hidden]) { grid-template-columns: minmax(0, 1fr) auto; }
+  html[data-surface='mobile'] .rbm__frame { min-height: clamp(110px, 30vh, calc(210 * var(--u))); }
 }
 
 /* --- Bas (lecteur réduit) : tout se resserre, l'historique garde ses premières lignes. -------------------------- */
