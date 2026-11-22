@@ -967,6 +967,9 @@ age_ms }] }`.
 
 ### 18.8 Mise en service sans incompatibilité
 
+**Fait le 22/11** : Core `a94d1081` déployé (00:39 UTC, GO d'Antoni) ; ZIP `d09fd03aa844` construit et vérifié, non
+téléversé ([INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) § 0). Le plan d'origine :
+
 1. **Le ZIP de l'extension** (avec l'inventaire et la ligne d'Antoni) : contre le Core actuel (`1f05b97c`), aucun
    bouton « Nouvelle table » ni « Réagir », aucune réaction de la banque : le Core ne les annonce pas. Tout le reste
    (pile, cartouche, languettes, machines, téléphone) fonctionne.
