@@ -194,6 +194,12 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 
 **C. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (Chaos V2 lot 0, validations réelles en attente, finitions Studio).
 
+**D. Soundboard : ajouter un son depuis Studio (23/11, local)** — [SOUNDBOARD.md](SOUNDBOARD.md). Développé et testé sur
+la branche locale `feat/soundboard-studio-import` (worktree `Raptoru 2.0 - Worktrees\soundboard`, non poussée) : éditeur
+Studio (fichier, poignées, écoute, nom, prix, publier, recouper, supprimer), fichiers WAV stockés par le Core
+(`sound_files`), catalogue dynamique, aperçu de l'extension depuis le Core. Rien de déployé : Core (migration), Studio,
+puis un dernier ZIP de l'extension, chacun sur GO d'Antoni (SOUNDBOARD.md § 3).
+
 ## 6. Comment reprendre dans une nouvelle session
 
 1. Lire ce fichier (§ 0, § 5), puis [../CLAUDE.md](../CLAUDE.md) et [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) § 0.

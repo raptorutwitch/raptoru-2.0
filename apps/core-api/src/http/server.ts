@@ -29,7 +29,7 @@ import {
 } from '../loyalty/engine.js';
 import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
 import { bonkLabRoutes } from './bonk-lab-routes.js';
-import { soundLabRoutes } from './sound-lab-routes.js';
+import { soundFileRoutes, soundLabRoutes } from './sound-lab-routes.js';
 import { ttsLabRoutes } from './tts-lab-routes.js';
 import { labModerationRoutes } from './lab-moderation-routes.js';
 import type { LabModerationService } from '../lab-moderation/service.js';
@@ -393,6 +393,8 @@ function routes({
     ...(chatIngress && cockpit?.channelId
       ? botChatRoutes(chatIngress.router, chatIngress.games, cockpit.channelId)
       : []),
+    // Soundboard files published from Studio: public, before the extension's catch-all.
+    ...(soundLab ? soundFileRoutes(soundLab) : []),
     ...(ext ? extRoutes(ext.facade) : []),
     ...loyaltyRoutes(
       loyalty,

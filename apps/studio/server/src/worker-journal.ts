@@ -41,7 +41,7 @@ export interface RuntimeWiring {
   core: <T>(
     path: string,
     body?: unknown,
-    options?: { timeoutMs?: number },
+    options?: { timeoutMs?: number; maxBytes?: number },
   ) => Promise<T>;
   /** Production journal file (never the Lab one). */
   journal: string;

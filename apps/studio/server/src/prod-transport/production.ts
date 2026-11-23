@@ -157,7 +157,7 @@ export async function createProductionRuntimes(
   const moduleCore: typeof core = ((
     path: string,
     body?: unknown,
-    options?: { timeoutMs?: number },
+    options?: { timeoutMs?: number; maxBytes?: number },
   ) =>
     core(
       o.labLoopback

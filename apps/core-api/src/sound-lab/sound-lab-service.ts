@@ -3,6 +3,7 @@ import { liveForPaid, STREAM_OFFLINE } from '../stream/live-gate.js';
 import type {
   SoundLabAckRequest,
   SoundLabAdmitRequest,
+  SoundFile,
   SoundLabAdmitResponse,
   SoundLabError,
   SoundLabHeartbeat,
@@ -11,6 +12,7 @@ import type {
   SoundLabSettings,
   SoundLabSound,
   SoundLabSoundConfig,
+  SoundLabSoundCreate,
   SoundLabSoundUpdate,
   SoundLabStatus,
 } from '@raptoru/schemas';
@@ -38,6 +40,7 @@ import {
   type EconomyPort,
 } from '../economy/economy.js';
 import { SOUND_BANK, type SoundBankEntry } from './bank.js';
+import { checkWav, soundFileUrl } from './wav.js';
 
 // Soundboard V2, Lab slice. Same contract as the Bonk Lab: Core owns the catalog, validation, the
 // authoritative interaction, its durable order (channel_sequence) and its status; Studio only
@@ -114,7 +117,17 @@ type ConfigRow = {
   cooldown_ms: number;
   playback_mode: SoundLabPlaybackMode;
   volume: number;
+  /** A file published from Studio (an added sound, or a re-cut bank sound); null = the bank's own file. */
+  file_id: string | null;
+  /** Its duration (from sound_files). */
+  file_duration_ms: number | null;
+  /** Set for a sound added in Studio (not in the bank). */
+  added_at: Date | null;
+  /** Removed from the Soundboard: never offered nor playable again. */
+  deleted_at: Date | null;
 };
+/** A sound of the Soundboard as Core resolves it now: its bank entry (or Studio's), its file, its settings. */
+type Resolved = { entry: SoundBankEntry; c: ConfigRow };
 
 interface Row {
   interaction_id: string;
@@ -159,6 +172,32 @@ const BANK = new Map(SOUND_BANK.map((s) => [s.id, s]));
 /** Name shown to viewers: the Studio rename if any, else the bank's canonical name. */
 const labelOf = (entry: SoundBankEntry, c: ConfigRow) =>
   c.custom_label ?? entry.label;
+/** Prices of an added sound live in its settings row; the entry only carries its file. */
+const resolve = (bank: SoundBankEntry | undefined, c: ConfigRow): Resolved => {
+  const entry: SoundBankEntry = bank ?? {
+    id: c.sound_id,
+    label: c.custom_label ?? c.sound_id,
+    token_cost: c.token_cost,
+    credit_cost: c.credit_cost,
+    files: [],
+  };
+  return {
+    entry: c.file_id
+      ? {
+          ...entry,
+          files: [
+            {
+              file: soundFileUrl(c.file_id),
+              duration_ms: c.file_duration_ms ?? 0,
+            },
+          ],
+        }
+      : entry,
+    c,
+  };
+};
+const isUniqueViolation = (e: unknown) =>
+  (e as { code?: string }).code === '23505';
 
 function toInteraction(r: Row): SoundLabInteraction {
   return {
@@ -258,8 +297,29 @@ export class SoundLabService {
 
   private async configRows(q: Queryable): Promise<Map<string, ConfigRow>> {
     await this.seed(q);
-    const rows = await q.query<ConfigRow>('select * from sound_lab_sounds');
+    const rows = await q.query<ConfigRow>(
+      `select s.*, f.duration_ms as file_duration_ms
+         from sound_lab_sounds s left join sound_files f using (file_id)`,
+    );
     return new Map(rows.map((r) => [r.sound_id, r]));
+  }
+
+  /**
+   * Every sound of the Soundboard now: the bank in its order (with its Studio file when re-cut), then the sounds added
+   * in Studio, oldest first. A removed sound is never listed, offered or playable.
+   */
+  private async entries(q: Queryable): Promise<Resolved[]> {
+    const rows = await this.configRows(q);
+    const bank = SOUND_BANK.map((entry) => resolve(entry, rows.get(entry.id)!));
+    const added = [...rows.values()]
+      .filter((c) => !BANK.has(c.sound_id) && c.added_at && c.file_id)
+      .sort(
+        (a, b) =>
+          new Date(a.added_at!).getTime() - new Date(b.added_at!).getTime() ||
+          a.sound_id.localeCompare(b.sound_id),
+      )
+      .map((c) => resolve(undefined, c));
+    return [...bank, ...added].filter((x) => !x.c.deleted_at);
   }
 
   /** Streamer configuration of the whole bank (Studio panel). */
@@ -267,20 +327,27 @@ export class SoundLabService {
     sounds: SoundLabSoundConfig[];
     settings: SoundLabSettings;
   }> {
-    const rows = await this.configRows(this.db);
     return {
-      sounds: SOUND_BANK.map((entry) =>
-        this.toConfig(entry, rows.get(entry.id)!),
-      ),
+      sounds: (await this.entries(this.db)).map((x) => this.toConfig(x)),
       settings: await this.settings(),
     };
   }
 
-  private toConfig(entry: SoundBankEntry, c: ConfigRow): SoundLabSoundConfig {
+  private async configOf(soundId: string): Promise<SoundLabSoundConfig> {
+    const found = (await this.entries(this.db)).find(
+      (x) => x.entry.id === soundId,
+    );
+    if (!found) throw new SoundLabError409('sound_not_found', 'unknown sound');
+    return this.toConfig(found);
+  }
+
+  private toConfig({ entry, c }: Resolved): SoundLabSoundConfig {
     return {
       id: entry.id,
+      source: BANK.has(entry.id) ? 'bank' : 'studio',
+      file_id: c.file_id,
       label: labelOf(entry, c),
-      default_label: entry.label,
+      default_label: BANK.get(entry.id)?.label ?? labelOf(entry, c),
       custom_label: c.custom_label,
       enabled: c.enabled,
       token_cost: c.token_cost,
@@ -300,23 +367,177 @@ export class SoundLabService {
     soundId: string,
     update: SoundLabSoundUpdate,
   ): Promise<SoundLabSoundConfig> {
-    const entry = BANK.get(soundId);
-    if (!entry) throw new SoundLabError409('sound_not_found', 'unknown sound');
-    await this.seed(this.db);
-    // Rename: an empty value, null or the default name clears custom_label (back to default).
-    const { label, ...rest } = update;
+    await this.configOf(soundId); // a removed or unknown sound: sound_not_found
+    const bank = BANK.get(soundId);
+    // Rename: for a bank sound, an empty value, null or the default name clears custom_label (back to default); a sound
+    // added in Studio has no other name.
+    const { label, file_id, ...rest } = update;
     const fields: [string, unknown][] = Object.entries(rest);
     if (label !== undefined) {
       const name = label?.trim() ?? '';
-      fields.push(['custom_label', name && name !== entry.label ? name : null]);
+      if (!bank && !name)
+        throw new SoundLabError409('label_required', 'this sound needs a name');
+      fields.push([
+        'custom_label',
+        bank ? (name && name !== bank.label ? name : null) : name,
+      ]);
+    }
+    // A new extract (a published file), or back to the bank's own file.
+    if (file_id !== undefined) {
+      if (soundId === 'random')
+        throw new SoundLabError409('not_replaceable', 'random has no file');
+      if (file_id === null && !bank)
+        throw new SoundLabError409('file_required', 'this sound needs a file');
+      if (file_id !== null)
+        await this.assertFileFree(this.db, file_id, soundId);
+      fields.push(['file_id', file_id]);
     }
     const sets = fields.map(([key], i) => `${key} = $${i + 2}`);
-    const rows = await this.db.query<ConfigRow>(
-      `update sound_lab_sounds set ${sets.join(', ')}, updated_at = $${fields.length + 2}
-       where sound_id = $1 returning *`,
-      [soundId, ...fields.map(([, value]) => value), this.clock.now()],
+    try {
+      await this.db.query(
+        `update sound_lab_sounds set ${sets.join(', ')}, updated_at = $${fields.length + 2}
+         where sound_id = $1 and deleted_at is null`,
+        [soundId, ...fields.map(([, value]) => value), this.clock.now()],
+      );
+    } catch (e) {
+      if (isUniqueViolation(e))
+        throw new SoundLabError409('duplicate_file', 'already published');
+      throw e;
+    }
+    return this.configOf(soundId);
+  }
+
+  // --- sounds added in Studio (docs/SOUNDBOARD.md § Ajouter un son) ------------------------------------------------
+
+  /** A published file (base64 of a WAV Studio cut): checked, stored once under its SHA-256, never changed. */
+  async uploadFile(base64: string): Promise<SoundFile> {
+    const bytes = Buffer.from(base64, 'base64');
+    const file = checkWav(bytes);
+    await this.db.query(
+      `insert into sound_files (file_id, mime, duration_ms, size, bytes, created_at)
+       values ($1, $2, $3, $4, $5, $6) on conflict (file_id) do nothing`,
+      [
+        file.file_id,
+        file.mime,
+        file.duration_ms,
+        file.size,
+        bytes,
+        this.clock.now(),
+      ],
     );
-    return this.toConfig(entry, rows[0]!);
+    return file;
+  }
+
+  async file(fileId: string): Promise<{ mime: string; bytes: Buffer } | null> {
+    const row = (
+      await this.db.query<{ mime: string; bytes: Buffer | Uint8Array }>(
+        'select mime, bytes from sound_files where file_id = $1',
+        [fileId],
+      )
+    )[0];
+    return row ? { mime: row.mime, bytes: Buffer.from(row.bytes) } : null;
+  }
+
+  /** The file exists and no other live sound plays it (one sound per extract: no duplicate by mistake). */
+  private async assertFileFree(q: Queryable, fileId: string, soundId: string) {
+    const file = await q.query('select 1 from sound_files where file_id = $1', [
+      fileId,
+    ]);
+    if (!file.length)
+      throw new SoundLabError409('file_not_found', 'publish the file first');
+    const other = (
+      await q.query<{ sound_id: string; custom_label: string | null }>(
+        `select sound_id, custom_label from sound_lab_sounds
+         where file_id = $1 and deleted_at is null and sound_id <> $2`,
+        [fileId, soundId],
+      )
+    )[0];
+    if (other)
+      throw new SoundLabError409('duplicate_file', 'already published', {
+        sound_id: other.sound_id,
+        label: other.custom_label ?? BANK.get(other.sound_id)?.label ?? null,
+      });
+  }
+
+  /**
+   * A new sound with its published file, offered at once. Its id is chosen by Studio once per editor: the same request
+   * again returns the same sound (a double click never makes two); another sound under that id is refused.
+   */
+  async createSound(req: SoundLabSoundCreate): Promise<SoundLabSoundConfig> {
+    if (BANK.has(req.id))
+      throw new SoundLabError409('sound_exists', 'this id is taken');
+    await this.seed(this.db);
+    const existing = (
+      await this.db.query<ConfigRow>(
+        'select * from sound_lab_sounds where sound_id = $1',
+        [req.id],
+      )
+    )[0];
+    if (existing) {
+      if (existing.file_id === req.file_id && !existing.deleted_at)
+        return this.configOf(req.id);
+      throw new SoundLabError409('sound_exists', 'this id is taken');
+    }
+    await this.assertFileFree(this.db, req.file_id, req.id);
+    const duration = (
+      await this.db.query<{ duration_ms: number }>(
+        'select duration_ms from sound_files where file_id = $1',
+        [req.file_id],
+      )
+    )[0]!.duration_ms;
+    const d = defaultSoundConfig({
+      ...req,
+      files: [{ file: soundFileUrl(req.file_id), duration_ms: duration }],
+    });
+    const now = this.clock.now();
+    try {
+      await this.db.query(
+        `insert into sound_lab_sounds (sound_id, custom_label, enabled, token_cost, credit_cost, cooldown_ms, playback_mode,
+           volume, updated_at, file_id, added_at)
+         values ($1, $2, true, $3, $4, 0, $5, 100, $6, $7, $6) on conflict (sound_id) do nothing`,
+        [
+          req.id,
+          req.label.trim(),
+          req.token_cost,
+          req.credit_cost,
+          d.playback_mode,
+          now,
+          req.file_id,
+        ],
+      );
+    } catch (e) {
+      if (isUniqueViolation(e))
+        throw new SoundLabError409('duplicate_file', 'already published');
+      throw e;
+    }
+    const mine = await this.db.query<{ file_id: string | null }>(
+      'select file_id from sound_lab_sounds where sound_id = $1',
+      [req.id],
+    );
+    if (mine[0]?.file_id !== req.file_id)
+      throw new SoundLabError409('sound_exists', 'this id is taken');
+    return this.configOf(req.id);
+  }
+
+  /**
+   * Removed from the Soundboard (catalogue, purchases, random): definitive from Studio. A sound already admitted still
+   * plays (its file is kept); its history is kept.
+   */
+  async deleteSound(soundId: string): Promise<{ ok: true }> {
+    await this.seed(this.db);
+    const row = (
+      await this.db.query<{ deleted_at: Date | null }>(
+        'select deleted_at from sound_lab_sounds where sound_id = $1',
+        [soundId],
+      )
+    )[0];
+    if (!row) throw new SoundLabError409('sound_not_found', 'unknown sound');
+    await this.db.query(
+      `update sound_lab_sounds set deleted_at = $2, enabled = false, updated_at = $2
+       where sound_id = $1 and deleted_at is null`,
+      [soundId, this.clock.now()],
+    );
+    return { ok: true };
   }
 
   async settings(): Promise<SoundLabSettings> {
@@ -340,7 +561,7 @@ export class SoundLabService {
 
   /** Catalog shown to the extension, with the live cooldown and running state. */
   async catalog(channelId: string): Promise<SoundLabSound[]> {
-    const rows = await this.configRows(this.db);
+    const sounds = await this.entries(this.db);
     const now = this.clock.now().getTime();
     const last = new Map(
       (
@@ -360,8 +581,7 @@ export class SoundLabService {
         )
       ).map((r) => r.sound_id),
     );
-    return SOUND_BANK.map((entry) => {
-      const c = rows.get(entry.id)!;
+    return sounds.map(({ entry, c }) => {
       const at = last.get(entry.id);
       return {
         id: entry.id,
@@ -487,11 +707,13 @@ export class SoundLabService {
           );
         return { interaction: toInteraction(prior), replayed: true };
       }
-      const rows = await this.configRows(q);
-      const entry = BANK.get(req.sound_id);
-      const config = rows.get(req.sound_id);
-      if (!entry || !config)
+      // The bank and the sounds added in Studio, as they are now (a removed sound is not found).
+      const all = await this.entries(q);
+      const byId = new Map(all.map((x) => [x.entry.id, x]));
+      const found = byId.get(req.sound_id);
+      if (!found)
         throw new SoundLabError409('sound_not_found', 'unknown sound');
+      const { entry, c: config } = found;
       if (!config.enabled)
         throw new SoundLabError409('sound_disabled', 'this sound is disabled');
 
@@ -569,14 +791,16 @@ export class SoundLabService {
         const lastRequested = await this.lastRequested(
           q,
           req.channel_id,
-          SOUND_BANK.filter((c) => rows.get(c.id)!.cooldown_ms > 0).map(
-            (c) => c.id,
-          ),
+          all.filter((x) => x.c.cooldown_ms > 0).map((x) => x.entry.id),
         );
         const candidates: SoundBankEntry[] = [];
-        for (const candidate of SOUND_BANK) {
-          const c = rows.get(candidate.id)!;
-          if (candidate.id === 'random' || !c.enabled) continue;
+        for (const { entry: candidate, c } of all) {
+          if (
+            candidate.id === 'random' ||
+            !candidate.files.length ||
+            !c.enabled
+          )
+            continue;
           if (
             c.playback_mode === 'ignore_if_running' &&
             running.has(candidate.id)
@@ -595,7 +819,7 @@ export class SoundLabService {
           throw new SoundLabError409('sound_unavailable', 'no playable sound');
         played = candidates[Math.floor(this.random() * candidates.length)]!;
       }
-      const playedConfig = rows.get(played.id)!;
+      const playedConfig = byId.get(played.id)!.c;
       if (
         playedConfig.playback_mode === 'ignore_if_running' &&
         running.has(played.id)

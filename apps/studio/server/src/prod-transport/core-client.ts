@@ -152,7 +152,8 @@ export function prodCoreClient(options: {
   const call = <T>(
     path: string,
     body?: unknown,
-    callOptions: { timeoutMs?: number } = {},
+    /** `maxBytes`: a larger answer for this call only (a Soundboard file); default MAX_RESPONSE_BYTES. */
+    callOptions: { timeoutMs?: number; maxBytes?: number } = {},
   ) => {
     if (!path.startsWith('/v1/studio/'))
       return Promise.reject(new Error('studio_route_required'));
@@ -214,7 +215,7 @@ export function prodCoreClient(options: {
         let size = 0;
         res.on('data', (chunk: Buffer) => {
           size += chunk.length;
-          if (size > MAX_RESPONSE_BYTES)
+          if (size > (callOptions.maxBytes ?? MAX_RESPONSE_BYTES))
             return fail(
               new StudioTransportError(
                 'invalid_response',

@@ -3,6 +3,7 @@ import { bindJournal, type WorkerTransport } from '../worker-journal.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type {
+  SoundFile,
   SoundLabAckRequest,
   SoundLabAdmitRequest,
   SoundLabInteraction,
@@ -42,7 +43,7 @@ type Journal = {
 export type SoundCoreCall = <T>(
   path: string,
   body?: unknown,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; maxBytes?: number },
 ) => Promise<T>;
 export const SOUND_CHANNEL = '900100';
 const FINAL: Event[] = ['completed', 'failed', 'execution_unknown', 'stopped'];
@@ -64,7 +65,7 @@ export function localSoundCoreClient(
   return async <T>(
     path: string,
     body?: unknown,
-    options: { timeoutMs?: number } = {},
+    options: { timeoutMs?: number; maxBytes?: number } = {},
   ): Promise<T> => {
     if (!path.startsWith('/v1/lab/sound/'))
       throw new Error('sound_route_required');
@@ -82,6 +83,7 @@ export function localSoundCoreClient(
     if (!res.ok)
       throw Object.assign(new Error(result.error ?? 'core_unavailable'), {
         status: res.status,
+        body: result,
       });
     return result;
   };
@@ -238,6 +240,31 @@ export class SoundWorker {
     return this.core<SoundLabSoundConfig>(
       `${this.configBase}/sounds/${encodeURIComponent(id)}`,
       update,
+    );
+  }
+  // Sounds added or re-cut in Studio (docs/SOUNDBOARD.md): the file first, then the sound that plays it.
+  uploadFile(data_base64: string) {
+    return this.core<SoundFile>(
+      `${this.configBase}/files`,
+      { data_base64 },
+      { timeoutMs: 60_000 },
+    );
+  }
+  async fileBytes(fileId: string) {
+    const { data_base64 } = await this.core<{ data_base64: string }>(
+      `${this.configBase}/files/${fileId}`,
+      undefined,
+      { timeoutMs: 30_000, maxBytes: 8 * 1024 * 1024 },
+    );
+    return Buffer.from(data_base64, 'base64');
+  }
+  createSound(sound: Record<string, unknown>) {
+    return this.core<SoundLabSoundConfig>(`${this.configBase}/sounds`, sound);
+  }
+  deleteSound(id: string) {
+    return this.core<{ ok: true }>(
+      `${this.configBase}/sounds/${encodeURIComponent(id)}/delete`,
+      {},
     );
   }
   async updateSettings(settings: SoundLabSettings) {

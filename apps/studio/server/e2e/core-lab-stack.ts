@@ -378,8 +378,18 @@ const labChat = await LabChatIngress.create({
   dir: join(dir, 'lab-chat'),
   identities: labChatIdentities,
 });
+// Studio › Soundboard's page (its bank, « Ajouter un son »): the runtime's screens only — never started, so it neither
+// heartbeats nor claims (the fictional player above plays the sounds).
+const { SoundRuntime } = await import('../src/sound-lab/runtime.js');
+const soundPage = await SoundRuntime.create(origin, {
+  core: transport,
+  journal: join(dir, 'sound-page.json'),
+  transport: wiring('sound'),
+  labReads: true,
+});
 const studio = createStudioServer({
   lab: createTestLab(),
+  sound: soundPage,
   onShutdown: () => {},
   labFrontier: { coreUrl, extensionSecret, channelId: CHANNEL },
   labPanel: new CoreLabPanel(labCore, CHANNEL),
