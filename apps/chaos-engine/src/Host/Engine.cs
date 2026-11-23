@@ -95,7 +95,7 @@ namespace Raptoru.Chaos
                 pool = new TexturePool(gpu);
                 timer = new GpuTimer(gpu);
                 text = new TextRaster(gpu);
-                caps = new CaptureManager(gpu, frameEvt);
+                caps = new CaptureManager(gpu, timer, frameEvt);
             }
             catch (Exception e)
             {
@@ -255,6 +255,7 @@ namespace Raptoru.Chaos
             if (StepInput(s, live, now)) { s.S.SetShown(false, now); return; }
             bool needsCapture = s.Cap != null;
             bool fresh = needsCapture && s.Cap.Acquire(now);
+            if (fresh) s.Stats.CaptureLatency.Add((N.QpcNow() - s.Cap.LastFrameQpc) * 1000.0 / N.QpcFreq());
             if (needsCapture && !s.Cap.HasFrame)
             {
                 if (now - s.FirstWaitAt > FirstFrameMs)
@@ -292,8 +293,17 @@ namespace Raptoru.Chaos
                 fb.Execute(gpu, lib, pool, timer, needsCapture ? s.Cap.Srv : IntPtr.Zero, s.S.BackBuffer, now, now / 1000f);
                 // Traitement = de l'arrivée de l'image à l'envoi du rendu ; l'attente du rafraîchissement (Present) n'en
                 // fait pas partie (sinon le repli de qualité se déclencherait à tort pendant les rotations).
-                if (fresh) s.Stats.Processing.Add((N.QpcNow() - s.Cap.LastArrivalQpc) * 1000.0 / N.QpcFreq());
+                long beforePresent = N.QpcNow();
+                if (fresh) s.Stats.Processing.Add((beforePresent - s.Cap.LastArrivalQpc) * 1000.0 / N.QpcFreq());
                 int hr = s.S.Present(animating || overlayOnly);
+                s.Stats.PresentCall.Add((N.QpcNow() - beforePresent) * 1000.0 / N.QpcFreq());
+                // Latence ajoutée (estimation, une image sur 4) : l'image du jeu aurait été affichée à sa composition ;
+                // sa version transformée l'est à la composition suivant notre Present.
+                if (fresh && (++s.Stats.Fresh & 3) == 0)
+                {
+                    long next = s.S.NextCompositionQpc();
+                    if (next > s.Cap.LastFrameQpc) s.Stats.AddedLatency.Add((next - s.Cap.LastFrameQpc) * 1000.0 / N.QpcFreq());
+                }
                 if (hr < 0)
                 {
                     tel.Error("present_failed");
@@ -423,7 +433,7 @@ namespace Raptoru.Chaos
                 UpdateDegraded(now, snap);
                 if (!idle || tel.Errors.Count > 0) io.Send(Protocol.Event("engine.telemetry", now, snap));
                 tel.ResetInterval(now);
-                foreach (var s in surfaces.Values) s.Stats.Processing.Clear();
+                foreach (var s in surfaces.Values) s.Stats.Clear();
             }
         }
 
@@ -440,6 +450,10 @@ namespace Raptoru.Chaos
                     "present_fps", tel.LastAt == 0 ? 0 : Math.Round((s.S.Presented - s.Stats.PresentedAt) / secs, 1),
                     "dropped", dropped - s.Stats.DroppedAt,
                     "processing_p50_ms", s.Stats.Processing.P(50), "processing_p95_ms", s.Stats.Processing.P(95),
+                    "capture_latency_p50_ms", s.Stats.CaptureLatency.P(50), "capture_latency_p95_ms", s.Stats.CaptureLatency.P(95),
+                    "present_call_p50_ms", s.Stats.PresentCall.P(50), "present_call_p95_ms", s.Stats.PresentCall.P(95),
+                    "added_latency_est_p50_ms", s.Stats.AddedLatency.P(50), "added_latency_est_p95_ms", s.Stats.AddedLatency.P(95),
+                    "refresh_hz", s.S.RefreshHz,
                     "black", s.Cap != null && s.Cap.Black, "composition_hz", s.S.CompositionHz(),
                     "capture", s.Cap != null ? s.Cap.Info() : null));
                 s.Stats.CapFramesAt = frames; s.Stats.DroppedAt = dropped; s.Stats.PresentedAt = s.S.Presented;

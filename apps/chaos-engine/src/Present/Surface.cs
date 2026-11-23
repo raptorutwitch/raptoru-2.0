@@ -26,6 +26,8 @@ namespace Raptoru.Chaos
         bool shown;
         long shownSince, visibleMs;
         public long Presented;
+        /// Fréquence de l'écran qui porte la cible (Hz).
+        public readonly int RefreshHz;
         public bool Shown { get { return shown; } }
         public uint Width { get { return w; } }
         public uint Height { get { return h; } }
@@ -39,6 +41,7 @@ namespace Raptoru.Chaos
             TargetRoot = N.GetAncestor(target, N.GA_ROOTOWNER);
             if (TargetRoot == IntPtr.Zero) TargetRoot = target;
             bounds = monitorMode ? N.MonitorRectOf(hmon) : N.FrameBounds(target);
+            RefreshHz = N.RefreshHz(monitorMode ? hmon : N.MonitorFromWindow(target, 2));
             w = width; h = height;
             hwnd = CreateWindow(bounds.Left, bounds.Top, (int)w, (int)h);
             if (monitorMode && !N.SetWindowDisplayAffinity(hwnd, N.WDA_EXCLUDEFROMCAPTURE))
@@ -153,6 +156,15 @@ namespace Raptoru.Chaos
         {
             DCOMPOSITION_FRAME_STATISTICS s;
             return compStats(dcomp, out s) >= 0 && s.RateDenominator > 0 ? Math.Round(s.RateNumerator / (double)s.RateDenominator, 1) : 0;
+        }
+
+        /// Prochaine composition prévue par Windows (QPC), 0 si inconnue.
+        public long NextCompositionQpc()
+        {
+            DCOMPOSITION_FRAME_STATISTICS s;
+            if (compStats(dcomp, out s) < 0 || s.TimeFrequency <= 0) return 0;
+            long f = N.QpcFreq();
+            return s.TimeFrequency == f ? s.NextEstimatedFrameTime : (long)(s.NextEstimatedFrameTime * (f / (double)s.TimeFrequency));
         }
 
         public void Dispose()

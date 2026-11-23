@@ -23,6 +23,18 @@ namespace Raptoru.Chaos
         }
     }
 
+    /// Diagnostic (interne) : charge GPU réglable (passes plein écran enchaînées, taps de flou par passe) pour mesurer
+    /// le coût des futurs effets multipasses (banc de performances, scénario E).
+    sealed class DiagPassesEffect : Effect
+    {
+        public override void Render(FrameBuilder fb, EffectFrame f)
+        {
+            int n = (int)f.P.Num("passes");
+            float taps = (float)f.P.Num("taps"), k = (float)f.Animated("strength");
+            for (int i = 0; i < n; i++) fb.Filter("diag_load", new[] { taps, k });
+        }
+    }
+
     /// Diagnostic (interne) : lève une erreur à l'étape choisie, pour prouver qu'un effet en panne s'arrête seul.
     sealed class DiagFaultEffect : Effect
     {

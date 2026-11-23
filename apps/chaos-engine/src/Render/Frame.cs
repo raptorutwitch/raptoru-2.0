@@ -175,10 +175,10 @@ namespace Raptoru.Chaos
                 if (p.NeedsBlurredInput && i > 0 && prev != null) gpu.GenerateMips(prev.Srv);
                 Array.Copy(p.U, cb, 16);
                 cb[27] = p.Lod;
-                timer.Begin(p.Label + ":" + p.Shader);
+                if (timer != null) timer.Begin(p.Label + ":" + p.Shader);
                 gpu.Target(last ? outRtv : dst.Rtv, Width, Height, false);
                 gpu.Draw(lib.VsFull, lib.Pixel(p.Shader), input, cb, 3);
-                timer.End();
+                if (timer != null) timer.End();
                 if (prev != null) pool.Return(prev, now);
                 prev = dst;
                 if (dst != null) input = dst.Srv;
@@ -196,10 +196,10 @@ namespace Raptoru.Chaos
                     u[24] = presenceTime; u[26] = (float)Math.Max(0, Math.Min(1, l.Opacity));
                     Array.Copy(l.Color, 0, u, 28, Math.Min(4, l.Color.Length));
                     if (l.Color.Length < 4) u[31] = 1;
-                    timer.Begin(kv.Key + ":layer");
+                    if (timer != null) timer.Begin(kv.Key + ":layer");
                     if (l.Texture != null) gpu.Draw(lib.VsQuad, lib.Pixel("layer_texture"), l.Texture.Srv, u, 4);
                     else gpu.Draw(lib.VsQuad, lib.Pixel("layer_shape"), IntPtr.Zero, u, 4);
-                    timer.End();
+                    if (timer != null) timer.End();
                 }
             }
             gpu.Unbind();

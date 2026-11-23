@@ -153,6 +153,54 @@
       ]
     },
     {
+      "id": "diag.passes",
+      "version": 1,
+      "label": "Charge GPU de diagnostic",
+      "description": "Mesure interne : enchaîne plusieurs passes plein écran sur l'image capturée (léger flou), pour mesurer le coût des futurs effets multipasses.",
+      "family": "diagnostic",
+      "slot": "filter",
+      "internal": true,
+      "on_conflict": "reject",
+      "gpu": { "primitive": "shader", "cost": "high", "passes": 6 },
+      "duration": { "default_ms": 5000 },
+      "params": [
+        { "id": "passes", "type": "number", "min": 1, "max": 6, "default": 4 },
+        { "id": "taps", "type": "number", "min": 1, "max": 32, "default": 12 },
+        {
+          "id": "strength",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "animatable": true,
+          "neutral": 0
+        }
+      ],
+      "variants": [],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 200,
+          "curve": "linear",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 200,
+          "curve": "linear",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
       "id": "diag.marker",
       "version": 1,
       "label": "Repère de diagnostic",

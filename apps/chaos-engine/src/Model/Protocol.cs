@@ -111,6 +111,7 @@ namespace Raptoru.Chaos
                 "source", J.Map("kind", r.SourceKind, "ref", r.SourceRef), "priority", r.Priority, "target", r.TargetInfo,
                 "variant", r.Variant, "preset", r.PresetName, "resolved", r.Resolved.ToJson(), "started", a.StartedAt >= 0);
             if (a.StartedAt >= 0) d["running_ms"] = (a.FinishedAt >= 0 ? a.FinishedAt : now) - a.StartedAt;
+            if (a.StartedAt >= 0 && a.AcceptedAt >= 0) d["startup_ms"] = a.StartedAt - a.AcceptedAt; // acceptée → première image visible
             if (a.State == ActState.Active && a.EndAt != long.MaxValue) d["remaining_ms"] = Math.Max(0, a.EndAt - now);
             if (a.Outcome != null) { d["outcome"] = a.Outcome; d["reason"] = a.EndReason; }
             if (a.FinishedAt >= 0) d["visible_ms"] = a.VisibleMs;

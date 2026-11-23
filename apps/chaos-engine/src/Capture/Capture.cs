@@ -30,6 +30,8 @@ namespace Raptoru.Chaos
         long Frames { get; }
         long Dropped { get; }
         long LastArrivalQpc { get; }
+        /// Instant (QPC) où Windows a composé l'image la plus récemment copiée (Direct3D11CaptureFrame.SystemRelativeTime).
+        long LastFrameQpc { get; }
         Dictionary<string, object> Info();
         /// Copie l'image la plus récente (les plus anciennes sont comptées comme perdues). Vrai si nouvelle image.
         bool Acquire(long now);
@@ -48,6 +50,7 @@ namespace Raptoru.Chaos
         const int BlackSize = 16;
         static string cachedAccess;
         readonly Gpu gpu;
+        readonly GpuTimer timer;
         readonly AutoResetEvent frameEvt;
         readonly GraphicsCaptureItem item;
         readonly Direct3D11CaptureFramePool pool;
@@ -56,7 +59,7 @@ namespace Raptoru.Chaos
         IntPtr tex, srv, staging;
         uint w, h;
         bool mipsDirty, blackPending;
-        long frames, dropped, lastArrival, nextBlackAt;
+        long frames, dropped, lastArrival, nextBlackAt, lastFrameQpc;
         volatile bool closed;
         public string Key { get; private set; }
         public string Backend { get { return "wgc"; } }
@@ -70,10 +73,11 @@ namespace Raptoru.Chaos
         public long Frames { get { return Interlocked.Read(ref frames); } }
         public long Dropped { get { return dropped; } }
         public long LastArrivalQpc { get { return Interlocked.Read(ref lastArrival); } }
+        public long LastFrameQpc { get { return lastFrameQpc; } }
 
-        public WgcCaptureSource(Gpu gpu, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon)
+        public WgcCaptureSource(Gpu gpu, GpuTimer timer, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon)
         {
-            this.gpu = gpu; this.frameEvt = frameEvt; Key = key;
+            this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; Key = key;
             if (!GraphicsCaptureSession.IsSupported()) throw new CaptureError("capture_unsupported", "Windows.Graphics.Capture indisponible");
             var interop = (IGraphicsCaptureItemInterop)WindowsRuntimeMarshal.GetActivationFactory(typeof(GraphicsCaptureItem));
             Guid iid = Iid.GraphicsCaptureItem;
@@ -140,7 +144,11 @@ namespace Raptoru.Chaos
                 var access = (IDirect3DDxgiInterfaceAccess)(object)surface;
                 Guid tid = Iid.Texture2D;
                 IntPtr frameTex = access.GetInterface(ref tid);
+                // SystemRelativeTime : horloge QPC exprimée en unités de 100 ns.
+                lastFrameQpc = (long)(latest.SystemRelativeTime.Ticks * (N.QpcFreq() / 1e7));
+                if (timer != null) timer.Begin("capture:copy");
                 gpu.Copy(tex, frameTex, 0, 0, w, h);
+                if (timer != null) timer.End();
                 Marshal.Release(frameTex);
                 Marshal.ReleaseComObject(surface);
                 HasFrame = true;
@@ -182,11 +190,12 @@ namespace Raptoru.Chaos
     {
         sealed class Entry { public ICaptureSource Source; public int Refs; public long ReleasedAt; }
         readonly Gpu gpu;
+        readonly GpuTimer timer;
         readonly AutoResetEvent frameEvt;
         readonly Dictionary<string, Entry> entries = new Dictionary<string, Entry>();
         public int Opened, Reused;
 
-        public CaptureManager(Gpu gpu, AutoResetEvent frameEvt) { this.gpu = gpu; this.frameEvt = frameEvt; }
+        public CaptureManager(Gpu gpu, GpuTimer timer, AutoResetEvent frameEvt) { this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; }
         public int Count { get { return entries.Count; } }
         public IEnumerable<ICaptureSource> Sources { get { return entries.Values.Select(e => e.Source); } }
 
@@ -196,7 +205,7 @@ namespace Raptoru.Chaos
             Entry e;
             if (entries.TryGetValue(key, out e) && !e.Source.Lost) { e.Refs++; Reused++; return e.Source; }
             if (e != null) { e.Source.Dispose(); entries.Remove(key); }
-            e = new Entry { Source = new WgcCaptureSource(gpu, frameEvt, key, hwnd, hmon), Refs = 1 };
+            e = new Entry { Source = new WgcCaptureSource(gpu, timer, frameEvt, key, hwnd, hmon), Refs = 1 };
             entries[key] = e;
             Opened++;
             return e.Source;

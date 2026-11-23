@@ -25,8 +25,17 @@ namespace Raptoru.Chaos
     /// Compteurs d'une surface sur l'intervalle en cours.
     sealed class SurfaceStats
     {
-        public long CapFramesAt, DroppedAt, PresentedAt;
+        public long CapFramesAt, DroppedAt, PresentedAt, Fresh;
+        /// Arrivée de l'image → rendu envoyé (CPU du moteur, hors attente de Present).
         public readonly Samples Processing = new Samples();
+        /// Composition de l'image du jeu par Windows → prise en charge par le moteur.
+        public readonly Samples CaptureLatency = new Samples();
+        /// Durée de l'appel Present (attente de tampon ou de synchronisation comprise).
+        public readonly Samples PresentCall = new Samples();
+        /// Estimation : composition de l'image du jeu → composition prévue de l'image transformée (latence ajoutée).
+        public readonly Samples AddedLatency = new Samples();
+
+        public void Clear() { Processing.Clear(); CaptureLatency.Clear(); PresentCall.Clear(); AddedLatency.Clear(); }
     }
 
     sealed class Telemetry
@@ -35,6 +44,7 @@ namespace Raptoru.Chaos
         public readonly Dictionary<string, int> Errors = new Dictionary<string, int>();
         public long ReadyMs, GpuInitMs, ShaderWarmMs, LastAt, MaxLoopGapMs, LastLoopAt = -1;
         public double LastCpuMs;
+        int gc0, gc1, gc2;
         public bool Degraded;
         public string DegradedReason;
         public long DegradedSince = -1, HealthySince = -1;
@@ -68,8 +78,12 @@ namespace Raptoru.Chaos
             double secs = Math.Max(0.001, (now - LastAt) / 1000.0);
             double perS = LastAt == 0 ? 0 : (cpu - LastCpuMs) / secs;
             LastCpuMs = cpu;
-            return J.Map("cpu_ms_per_s", Math.Round(perS, 1), "cpu_pct", Math.Round(perS / 10.0 / Environment.ProcessorCount, 2),
-                "private_mb", Math.Round(p.PrivateMemorySize64 / 1048576.0, 1));
+            int c0 = GC.CollectionCount(0), c1 = GC.CollectionCount(1), c2 = GC.CollectionCount(2);
+            var d = J.Map("cpu_ms_per_s", Math.Round(perS, 1), "cpu_pct", Math.Round(perS / 10.0 / Environment.ProcessorCount, 2),
+                "private_mb", Math.Round(p.PrivateMemorySize64 / 1048576.0, 1), "managed_mb", Math.Round(GC.GetTotalMemory(false) / 1048576.0, 1),
+                "gc", J.Map("gen0", c0 - gc0, "gen1", c1 - gc1, "gen2", c2 - gc2));
+            gc0 = c0; gc1 = c1; gc2 = c2;
+            return d;
         }
 
         public void ResetInterval(long now)

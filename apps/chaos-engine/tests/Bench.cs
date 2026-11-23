@@ -1,12 +1,20 @@
-// Banc de comparaison des méthodes de retournement (docs/chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md).
-// Un « jeu témoin » (fenêtre Direct3D plein écran, 240 images/s visées, chaque image horodatée) tourne sur un écran ; le
-// banc déclenche les méthodes une à une et compare la cadence du témoin, phase par phase (avant, entrée, pendant, sortie,
-// après) : base (aucun effet) · calque sur la fenêtre · calque sur l'écran entier · Windows (bascule d'orientation,
-// expérimental). Facultatif : PresentMon sur un vrai jeu (--presentmon <exe> --process <nom.exe>).
-// VISIBLE ET PERTURBANT : refuse de tourner si un jeu ou une application plein écran est actif, sauf
-// --autorise-pendant-un-jeu (accord d'Antoni). Jamais lancé par les contrôles automatiques.
-// Usage : chaos-bench.exe [--screen \\.\DISPLAY2] [--probe-screen same|other] [--methods base,calque,ecran,windows]
-//                         [--hold-ms 4000] [--probe-fps 240] [--out <fichier.json>]
+// Banc de performances du moteur Chaos (docs/chaos/PERFORMANCES_MOTEUR.md).
+// Un « jeu témoin » (fenêtre Direct3D flip model, cadence visée, charge GPU réglable, chaque image horodatée) tourne
+// sur un écran ; le banc enchaîne des scénarios et mesure, phase par phase (avant, entrée, pendant, sortie, après) :
+//   - le jeu témoin : cadence, durée des images (médiane, p99, max), à-coups, pire fenêtre de 250 ms, temps GPU ;
+//   - le temps GPU (moteur 3D de l'adaptateur) du moteur, du témoin et du compositeur de Windows (dwm.exe) ;
+//   - le CPU du moteur et du témoin ; la télémétrie interne du moteur (capture, rendu, Present, latence estimée).
+// Scénarios :
+//   aucun        A. aucun moteur Chaos            repos        B. moteur lancé, aucun effet
+//   flip-coupe   C. retournement sans animation   flip-anime   D. retournement animé (entrée et sortie lentes)
+//   passes       E. retournement + 4 passes GPU   calque       F. calque simple sans capture (diag.marker)
+//   flip-ecran   retournement de l'écran entier (calque, mode C)
+//   flip-windows retournement par Windows (EXPÉRIMENTAL, bascule d'orientation : jamais dans la liste par défaut)
+// VISIBLE : refuse de tourner si un jeu ou une application plein écran est actif, sauf --autorise-pendant-un-jeu
+// (accord d'Antoni). Jamais lancé par les contrôles automatiques.
+// Usage : chaos-bench.exe [--screen \\.\DISPLAY2] [--scenarios aucun,repos,flip-coupe,flip-anime,passes,calque]
+//                         [--probe-size 1280x720|full] [--probe-fps 240 (0 = sans limite)] [--probe-load 0]
+//                         [--hold-ms 8000] [--anim-ms 3000] [--label texte] [--out <fichier.json>]
 //                         [--presentmon <PresentMon.exe> --process <jeu.exe>] [--autorise-pendant-un-jeu]
 using System;
 using System.Collections.Generic;
@@ -22,32 +30,100 @@ namespace Raptoru.Chaos
 {
     delegate int FactoryCreateForHwnd(IntPtr self, IntPtr device, IntPtr hwnd, ref DXGI_SWAP_CHAIN_DESC1 d, IntPtr fullscreen, IntPtr restrict, out IntPtr sc); // 15
 
+    /// Temps GPU cumulé (moteur 3D de l'adaptateur) par processus, lu dans les compteurs « GPU Engine » de Windows
+    /// (sans droits d'administrateur). Running Time : unités de 100 ns.
+    sealed class GpuTimes : IDisposable
+    {
+        [DllImport("pdh.dll", CharSet = CharSet.Unicode)] static extern int PdhOpenQueryW(string src, IntPtr user, out IntPtr q);
+        [DllImport("pdh.dll", CharSet = CharSet.Unicode)] static extern int PdhAddEnglishCounterW(IntPtr q, string path, IntPtr user, out IntPtr c);
+        [DllImport("pdh.dll")] static extern int PdhCollectQueryData(IntPtr q);
+        [DllImport("pdh.dll", CharSet = CharSet.Unicode)] static extern int PdhGetRawCounterArrayW(IntPtr c, ref uint size, out uint count, IntPtr buf);
+        [DllImport("pdh.dll")] static extern int PdhCloseQuery(IntPtr q);
+        IntPtr q, c;
+        readonly string luid;
+        public double LastCollectMs;
+        public bool Ok { get { return c != IntPtr.Zero; } }
+
+        public GpuTimes(string luid)
+        {
+            this.luid = luid.ToLowerInvariant();
+            if (PdhOpenQueryW(null, IntPtr.Zero, out q) != 0) { q = IntPtr.Zero; return; }
+            if (PdhAddEnglishCounterW(q, @"\GPU Engine(*engtype_3D)\Running Time", IntPtr.Zero, out c) != 0) c = IntPtr.Zero;
+        }
+
+        /// pid → temps GPU cumulé (ms) sur l'adaptateur du moteur.
+        public Dictionary<int, double> Sample()
+        {
+            var r = new Dictionary<int, double>();
+            if (!Ok) return r;
+            var sw = Stopwatch.StartNew();
+            PdhCollectQueryData(q);
+            uint size = 0, count;
+            PdhGetRawCounterArrayW(c, ref size, out count, IntPtr.Zero);
+            if (size == 0) return r;
+            IntPtr buf = Marshal.AllocHGlobal((int)size);
+            try
+            {
+                if (PdhGetRawCounterArrayW(c, ref size, out count, buf) != 0) return r;
+                for (int i = 0; i < count; i++)
+                {
+                    // PDH_RAW_COUNTER_ITEM_W : nom (pointeur) + PDH_RAW_COUNTER (CStatus, TimeStamp, FirstValue à +16…) = 48 octets
+                    IntPtr item = new IntPtr(buf.ToInt64() + i * 48L);
+                    string name = Marshal.PtrToStringUni(Marshal.ReadIntPtr(item));
+                    if (name == null || name.ToLowerInvariant().IndexOf(luid, StringComparison.Ordinal) < 0) continue;
+                    int a = name.IndexOf("pid_", StringComparison.Ordinal), b = a < 0 ? -1 : name.IndexOf('_', a + 4);
+                    int pid;
+                    if (b < 0 || !int.TryParse(name.Substring(a + 4, b - a - 4), out pid)) continue;
+                    double ms = Marshal.ReadInt64(item, 8 + 16) / 10000.0;
+                    double cur; r.TryGetValue(pid, out cur); r[pid] = cur + ms;
+                }
+            }
+            finally { Marshal.FreeHGlobal(buf); }
+            LastCollectMs = sw.Elapsed.TotalMilliseconds;
+            return r;
+        }
+
+        public void Dispose() { if (q != IntPtr.Zero) { PdhCloseQuery(q); q = IntPtr.Zero; c = IntPtr.Zero; } }
+    }
+
     static class Bench
     {
         [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint ms);
         static WndProc probeProc;
         static readonly long Freq = Stopwatch.Frequency;
         static string Arg(string[] a, string k, string d) { int i = Array.IndexOf(a, k); return i >= 0 && i + 1 < a.Length ? a[i + 1] : d; }
+        static double Ms(long ticks) { return ticks * 1000.0 / Freq; }
 
         static int Main(string[] args)
         {
             N.SetProcessDpiAwarenessContext(new IntPtr(-4));
             Console.OutputEncoding = Encoding.UTF8;
-            if (args.Length > 0 && args[0] == "--probe") return Probe(args[1], args[2], int.Parse(args[3]));
+            if (args.Length > 0 && args[0] == "--probe")
+                return Probe(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), int.Parse(args[5]), int.Parse(args[6]));
             return Run(args);
         }
 
         // ---------- Jeu témoin ----------
-        static int Probe(string device, string outFile, int fps)
+        /// Fenêtre Direct3D (FLIP_DISCARD, Present(0) comme un jeu sans synchro verticale), pw×ph centrée (0 = écran
+        /// entier), load passes de « charge » (24 échantillons par pixel) par image pour simuler un jeu limité par le GPU.
+        static int Probe(string device, string prefix, int fps, int pw, int ph, int load)
         {
             timeBeginPeriod(1);
             IntPtr hmon = N.MonitorByDevice(device);
             RECT r = N.MonitorRectOf(hmon);
-            int w = r.Right - r.Left, h = r.Bottom - r.Top;
+            int mw = r.Right - r.Left, mh = r.Bottom - r.Top;
+            int w = pw > 0 ? Math.Min(pw, mw) : mw, h = ph > 0 ? Math.Min(ph, mh) : mh;
+            int x = r.Left + (mw - w) / 2, y = r.Top + (mh - h) / 2;
             probeProc = (hh, m, wp, lp) => N.DefWindowProcW(hh, m, wp, lp);
             var wc = new WNDCLASSEX { cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX)), lpfnWndProc = Marshal.GetFunctionPointerForDelegate(probeProc), hInstance = N.GetModuleHandleW(IntPtr.Zero), lpszClassName = "RaptoruChaosProbe" };
             N.RegisterClassExW(ref wc);
-            IntPtr hwnd = N.CreateWindowExW(0, "RaptoruChaosProbe", "Jeu témoin Chaos", N.WS_POPUP | 0x10000000 /* WS_VISIBLE */, r.Left, r.Top, w, h, IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
+            IntPtr hwnd = N.CreateWindowExW(0, "RaptoruChaosProbe", "Jeu témoin Chaos", N.WS_POPUP | 0x10000000 /* WS_VISIBLE */, x, y, w, h, IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
+            ShaderLibrary.Register("bench_load", @"
+float4 ps(V i) : SV_Target {
+  float3 acc = 0;
+  [unroll] for (int k = 0; k < 24; k++) { float a = k * 0.2618 + misc.x; acc += src.SampleLevel(smp, i.uv + float2(cos(a), sin(a)) * 0.01 * (1 + k % 4), 0).rgb; }
+  return float4(acc / 24, 1);
+}");
             var gpu = new Gpu();
             var lib = new ShaderLibrary(gpu, Path.Combine(Path.GetTempPath(), "chaos-bench-shaders"));
             lib.Warm();
@@ -67,33 +143,66 @@ namespace Raptoru.Chaos
             IntPtr srv = gpu.Srv(gpu.TextureWithData(256, 256, px));
             bool stop = false;
             new Thread(() => { Console.In.ReadLine(); stop = true; }) { IsBackground = true }.Start();
-            Console.WriteLine(J.Write(J.Map("probe", "ready", "hwnd", hwnd.ToInt64(), "width", w, "height", h)));
+            Console.WriteLine(J.Write(J.Map("probe", "ready", "hwnd", hwnd.ToInt64(), "width", w, "height", h, "pid", Process.GetCurrentProcess().Id)));
             var frames = new List<long>(1 << 20);
-            long interval = Freq / Math.Max(1, fps), next = Stopwatch.GetTimestamp();
+            var gpuSamples = new List<string>(1 << 18);
+            long interval = fps > 0 ? Freq / fps : 0, next = Stopwatch.GetTimestamp();
             var clock = Stopwatch.StartNew();
-            while (!stop && clock.Elapsed.TotalMinutes < 10)
+            var noFilter = new float[0];
+            while (!stop && clock.Elapsed.TotalMinutes < 15)
             {
                 MSG m;
                 while (N.PeekMessageW(out m, IntPtr.Zero, 0, 0, N.PM_REMOVE)) { N.TranslateMessage(ref m); N.DispatchMessageW(ref m); }
                 var fb = new FrameBuilder((uint)w, (uint)h, true);
                 fb.Transform(clock.Elapsed.TotalSeconds, 1.2, 1.2, 0, 0, "black");
-                fb.Execute(gpu, lib, pool, timer, srv, rtv, clock.ElapsedMilliseconds, (float)clock.Elapsed.TotalSeconds);
+                for (int i = 0; i < load; i++) fb.Filter("bench_load", noFilter);
+                timer.Begin("frame");
+                fb.Execute(gpu, lib, pool, null, srv, rtv, clock.ElapsedMilliseconds, (float)clock.Elapsed.TotalSeconds);
+                timer.End();
                 present(sc, 0, 0);
-                frames.Add(Stopwatch.GetTimestamp());
-                timer.Collect((l, ms) => { });
+                long t = Stopwatch.GetTimestamp();
+                frames.Add(t);
+                timer.Collect((l, ms) => gpuSamples.Add(t.ToString(CultureInfo.InvariantCulture) + " " + ms.ToString("0.000", CultureInfo.InvariantCulture)));
+                if (interval == 0) continue;
                 // Limiteur de cadence, comme beaucoup de jeux : l'attente ne compte pas dans les à-coups.
                 next += interval;
                 long now = Stopwatch.GetTimestamp();
                 if (next < now - interval) next = now;
                 while ((now = Stopwatch.GetTimestamp()) < next) { if (next - now > Freq / 500) Thread.Sleep(1); else Thread.SpinWait(64); }
             }
-            File.WriteAllLines(outFile, frames.Select(f => f.ToString(CultureInfo.InvariantCulture)));
+            File.WriteAllLines(prefix + ".frames", frames.Select(f => f.ToString(CultureInfo.InvariantCulture)));
+            File.WriteAllLines(prefix + ".gpu", gpuSamples);
             Console.WriteLine(J.Write(J.Map("probe", "done", "frames", frames.Count)));
             return 0;
         }
 
         // ---------- Banc ----------
-        sealed class Mark { public string Method; public long Before, Req, Started = -1, ExitAt = -1, Ended = -1, After; public List<string> Inputs = new List<string>(); }
+        static readonly string[] PhaseNames = { "avant", "entrée", "pendant", "sortie", "après" };
+
+        /// Un scénario : 6 bornes (QPC et horloge du banc) découpant 5 phases, relevés GPU et CPU à chaque borne.
+        sealed class Mark
+        {
+            public string Scenario, Error;
+            public EngineProc E;
+            public int EnginePid;
+            public readonly List<long> Qpc = new List<long>();
+            public readonly List<long> ClockMs = new List<long>();
+            public readonly List<Dictionary<int, double>> Gpu = new List<Dictionary<int, double>>();
+            public readonly List<double> EngineCpu = new List<double>(), ProbeCpu = new List<double>();
+            public long StartupMs = -1, ActivationMs = -1, StopMs = -1;
+            public readonly List<string> Inputs = new List<string>();
+        }
+
+        sealed class Ctx
+        {
+            public string Dev;
+            public long ProbeHwnd;
+            public int ProbePid, Hold, AnimMs, DwmPid;
+            public Process ProbeProc;
+            public EngineProc Engine;
+            public string EngineExe, Dir;
+            public GpuTimes Gpu;
+        }
 
         static int Run(string[] a)
         {
@@ -105,121 +214,301 @@ namespace Raptoru.Chaos
             }
             var screens = N.Monitors().Select(N.MonitorDevice).ToList();
             string primary = N.MonitorDevice(N.MonitorFromWindow(N.GetDesktopWindow(), 2));
-            string dev = Arg(a, "--screen", screens.FirstOrDefault(s => s != primary));
-            if (dev == null) { Console.WriteLine("Un seul écran : préciser --screen (le banc ne retourne jamais l'écran principal sans le demander)."); return 2; }
-            string probeDev = Arg(a, "--probe-screen", "same") == "other" ? screens.FirstOrDefault(s => s != dev) ?? dev : dev;
-            var methods = Arg(a, "--methods", "base,calque,ecran,windows").Split(',');
-            int hold = int.Parse(Arg(a, "--hold-ms", "4000")), fps = int.Parse(Arg(a, "--probe-fps", "240"));
-            string dir = Path.Combine(Path.GetTempPath(), "chaos-bench-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
-            Directory.CreateDirectory(dir);
-            string self = Process.GetCurrentProcess().MainModule.FileName, engineExe = Path.Combine(Path.GetDirectoryName(self), "ChaosEngine.exe");
-            Console.WriteLine("Banc Chaos : effet sur " + dev + ", jeu témoin sur " + probeDev + " (" + fps + " i/s visées), méthodes " + string.Join(", ", methods));
+            var x = new Ctx();
+            x.Dev = Arg(a, "--screen", screens.FirstOrDefault(s => s != primary));
+            if (x.Dev == null) { Console.WriteLine("Un seul écran : préciser --screen."); return 2; }
+            var scenarios = Arg(a, "--scenarios", "aucun,repos,flip-coupe,flip-anime,passes,calque").Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            x.Hold = int.Parse(Arg(a, "--hold-ms", "8000"));
+            x.AnimMs = int.Parse(Arg(a, "--anim-ms", "3000"));
+            int fps = int.Parse(Arg(a, "--probe-fps", "240")), load = int.Parse(Arg(a, "--probe-load", "0"));
+            string size = Arg(a, "--probe-size", "1280x720");
+            int pw = 0, ph = 0;
+            if (size != "full") { var p = size.Split('x'); pw = int.Parse(p[0]); ph = int.Parse(p[1]); }
+            x.Dir = Path.Combine(Path.GetTempPath(), "chaos-bench-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            Directory.CreateDirectory(x.Dir);
+            string self = Process.GetCurrentProcess().MainModule.FileName;
+            x.EngineExe = Path.Combine(Path.GetDirectoryName(self), "ChaosEngine.exe");
+            int hz = N.RefreshHz(N.MonitorByDevice(x.Dev));
+            Console.WriteLine("Banc Chaos : " + x.Dev + " (" + hz + " Hz), jeu témoin " + size + " à " + (fps > 0 ? fps + " i/s visées" : "cadence libre") +
+                ", charge " + load + " ; scénarios " + string.Join(", ", scenarios));
 
-            var probe = Process.Start(new ProcessStartInfo(self, "--probe " + probeDev + " \"" + Path.Combine(dir, "probe.txt") + "\" " + fps)
+            var adapterGpu = new Gpu();
+            DXGI_ADAPTER_DESC ad = AdapterDesc(adapterGpu);
+            x.Gpu = new GpuTimes("luid_0x" + ad.LuidHigh.ToString("x8") + "_0x" + ad.LuidLow.ToString("x8"));
+            x.DwmPid = Process.GetProcessesByName("dwm").Select(p => p.Id).FirstOrDefault();
+
+            string prefix = Path.Combine(x.Dir, "probe");
+            x.ProbeProc = Process.Start(new ProcessStartInfo(self, "--probe " + x.Dev + " \"" + prefix + "\" " + fps + " " + pw + " " + ph + " " + load)
             { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true });
-            long probeHwnd = (long)J.Num(J.Parse(probe.StandardOutput.ReadLine()), "hwnd", 0);
+            var hello = J.Parse(x.ProbeProc.StandardOutput.ReadLine());
+            x.ProbeHwnd = (long)J.Num(hello, "hwnd", 0);
+            x.ProbePid = x.ProbeProc.Id;
             Process pm = null;
             long pmStart = 0;
-            string pmCsv = Path.Combine(dir, "presentmon.csv"), pmProc = Arg(a, "--process", null);
+            string pmCsv = Path.Combine(x.Dir, "presentmon.csv"), pmProc = Arg(a, "--process", null);
             if (Arg(a, "--presentmon", null) != null && pmProc != null)
             {
                 pmStart = Stopwatch.GetTimestamp();
                 pm = Process.Start(new ProcessStartInfo(Arg(a, "--presentmon", null), "--process_name " + pmProc + " --output_file \"" + pmCsv + "\" --qpc_time --no_console_stats")
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true });
             }
-            var e = EngineProc.Start(engineExe, "--serve --state-dir \"" + Path.Combine(dir, "engine") + "\" --heartbeat-ms 3000");
             var marks = new List<Mark>();
             try
             {
-                if (e.Event("engine.ready", 10000) == null) { Console.WriteLine("moteur non prêt"); return 1; }
-                e.Pings(500);
-                Thread.Sleep(2000); // le témoin se stabilise
-                foreach (var m in methods)
+                Thread.Sleep(2500); // le témoin se stabilise
+                foreach (var s in scenarios)
                 {
                     string g = N.GameActivity();
                     if (g != null && g.StartsWith("jeu") && !a.Contains("--autorise-pendant-un-jeu")) { Console.WriteLine("Arrêt : " + g); break; }
-                    marks.Add(RunMethod(e, m.Trim(), dev, probeHwnd, hold));
+                    Console.WriteLine("  … " + s);
+                    marks.Add(RunScenario(x, s));
                 }
             }
             finally
             {
-                e.Call("stop_all");
-                e.Kill();
-                try { probe.StandardInput.WriteLine("stop"); probe.WaitForExit(5000); } catch (Exception) { }
+                StopEngine(x);
+                try { x.ProbeProc.StandardInput.WriteLine("stop"); x.ProbeProc.WaitForExit(8000); } catch (Exception) { }
                 if (pm != null) try { pm.Kill(); pm.WaitForExit(3000); } catch (Exception) { }
-                if (N.DisplayOrientation(dev) != 0) N.ResetDisplaySettings(dev, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+                if (N.DisplayOrientation(x.Dev) != 0) N.ResetDisplaySettings(x.Dev, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
+                x.Gpu.Dispose();
             }
-            var frames = File.Exists(Path.Combine(dir, "probe.txt"))
-                ? File.ReadAllLines(Path.Combine(dir, "probe.txt")).Select(l => long.Parse(l, CultureInfo.InvariantCulture)).ToList() : new List<long>();
-            var report = new List<object>();
-            Console.WriteLine(Report("Jeu témoin", frames, marks, report));
+            var frames = ReadLongs(prefix + ".frames");
+            var gpuFrames = File.Exists(prefix + ".gpu") ? File.ReadAllLines(prefix + ".gpu").Select(l => l.Split(' ')).Where(p => p.Length == 2)
+                .Select(p => new KeyValuePair<long, double>(long.Parse(p[0], CultureInfo.InvariantCulture), double.Parse(p[1], CultureInfo.InvariantCulture))).ToList()
+                : new List<KeyValuePair<long, double>>();
+            var refMark = marks.FirstOrDefault(m => m.Scenario == "aucun" && m.Error == null) ?? marks.FirstOrDefault(m => m.Error == null);
+            double refMs = refMark != null ? BenchStats.Summarize("ref", frames, Freq, refMark.Qpc[0], refMark.Qpc[5], -1).MedianMs : -1;
+            var sb = new StringBuilder();
+            sb.AppendLine("Jeu témoin (" + frames.Count + " images, médiane de référence " + refMs.ToString("0.00", CultureInfo.InvariantCulture) + " ms)");
+            sb.AppendLine("  phase       i/s   méd.    p99    max à-c. pire250 | GPU témoin p50  p99 | GPU % moteur   dwm  témoin | CPU % moteur");
+            var report = marks.Select(m => (object)Describe(m, x, frames, gpuFrames, refMs, sb)).ToArray();
+            Console.WriteLine(sb.ToString());
             if (pm != null && File.Exists(pmCsv))
             {
                 bool isQpc;
                 var rows = BenchStats.ParsePresentMon(File.ReadAllText(pmCsv), pmProc, out isQpc);
-                var pmFrames = rows.Select(x => isQpc ? (long)x.Time : pmStart + (long)(x.Time * Freq)).ToList();
-                Console.WriteLine(Report("PresentMon " + pmProc + (isQpc ? "" : " (horloge approchée)"), pmFrames, marks, report));
-                var modes = rows.GroupBy(x => x.Mode).Select(gr => gr.Key + " " + gr.Count()).ToArray();
-                Console.WriteLine("  modes de présentation : " + string.Join(", ", modes));
+                var pmFrames = rows.Select(r => isQpc ? (long)r.Time : pmStart + (long)(r.Time * Freq)).ToList();
+                var psb = new StringBuilder("PresentMon " + pmProc + (isQpc ? "" : " (horloge approchée)") + "\n");
+                foreach (var m in marks.Where(mm => mm.Error == null))
+                {
+                    psb.AppendLine("  " + m.Scenario);
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var p = BenchStats.Summarize(PhaseNames[i], pmFrames, Freq, m.Qpc[i], m.Qpc[i + 1], -1);
+                        psb.AppendLine(string.Format(CultureInfo.InvariantCulture, "    {0,-8} {1,6:0.0} i/s · {2,5:0.00} ms · p99 {3,6:0.00} ms · max {4,6:0.0} ms · {5} à-coups", p.Name, p.Fps, p.MedianMs, p.P99Ms, p.MaxMs, p.Hitches));
+                    }
+                }
+                psb.AppendLine("  modes de présentation : " + string.Join(", ", rows.GroupBy(r => r.Mode).Select(gr => gr.Key + " " + gr.Count())));
+                Console.WriteLine(psb.ToString());
             }
-            string outFile = Arg(a, "--out", Path.Combine(dir, "bench.json"));
-            File.WriteAllText(outFile, J.Write(J.Map("screen", dev, "probe_screen", probeDev, "probe_fps", fps, "hold_ms", hold, "results", report.ToArray(),
-                "marks", marks.Select(m => (object)J.Map("method", m.Method, "inputs", m.Inputs.ToArray())).ToArray())));
+            string outFile = Arg(a, "--out", Path.Combine(x.Dir, "bench.json"));
+            File.WriteAllText(outFile, J.Write(J.Map("label", Arg(a, "--label", ""), "date", DateTime.Now.ToString("s"), "engine_version", EngineVersion(x.EngineExe),
+                "screen", x.Dev, "refresh_hz", hz, "adapter", adapterGpu.Adapter, "gpu_counters", x.Gpu.Ok,
+                "probe", J.Map("size", size, "fps", fps, "load", load, "width", J.Num(hello, "width", 0), "height", J.Num(hello, "height", 0)),
+                "hold_ms", x.Hold, "anim_ms", x.AnimMs, "pdh_collect_ms", Math.Round(x.Gpu.LastCollectMs, 1), "scenarios", report)));
             Console.WriteLine("Résultats : " + outFile);
             return 0;
         }
 
-        static Mark RunMethod(EngineProc e, string method, string dev, long probeHwnd, int hold)
+        static string EngineVersion(string exe)
         {
-            var m = new Mark { Method = method, Before = Stopwatch.GetTimestamp() };
-            Thread.Sleep(2000);
-            m.Req = Stopwatch.GetTimestamp();
-            if (method != "base")
+            try
             {
-                e.Call("config.set", J.Map("section", "engine", "values", J.Map("input_effects", method == "windows")));
-                var target = method == "calque" ? J.Map("kind", "window", "hwnd", probeHwnd, "follow_foreground", false) : J.Map("kind", "monitor", "device", dev);
-                string id = "bench-" + method;
-                e.Call("effect.request", J.Map("request_id", id, "effect", "flip", "source", J.Map("kind", "test"), "target", target, "duration_ms", hold));
-                if (e.Event("effect.started", 5000, x => J.Str(x, "request_id", "") == id) != null) m.Started = Stopwatch.GetTimestamp();
-                var ended = e.Event("effect.ended", hold + 8000, x => J.Str(x, "request_id", "") == id);
-                m.Ended = Stopwatch.GetTimestamp();
-                if (m.Started > 0) m.ExitAt = m.Started + (long)((hold - 500) / 1000.0 * Freq);
-                foreach (var ev in e.Events("engine.input").Where(x => J.Str(x, "request_id", "") == id))
-                    m.Inputs.Add(J.Str(ev, "state", "") + " " + J.Num(ev, "call_ms", -1) + " ms");
-                if (ended == null) e.Call("stop_all");
-                e.Call("config.set", J.Map("section", "engine", "values", J.Map("input_effects", false)));
+                var p = Process.Start(new ProcessStartInfo(exe, "--version") { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true });
+                string v = p.StandardOutput.ReadToEnd().Trim(); p.WaitForExit(3000); return v;
             }
-            else { Thread.Sleep(hold + 1000); m.Started = m.Req; m.ExitAt = m.Req + (long)((hold - 500) / 1000.0 * Freq); m.Ended = m.Req + (long)((hold + 1000) / 1000.0 * Freq); }
-            Thread.Sleep(2000);
-            m.After = Stopwatch.GetTimestamp();
+            catch (Exception) { return "?"; }
+        }
+
+        static DXGI_ADAPTER_DESC AdapterDesc(Gpu g)
+        {
+            IntPtr adapter; DXGI_ADAPTER_DESC ad = new DXGI_ADAPTER_DESC();
+            if (Com.Fn<DxgiDevGetAdapter>(g.DxgiDevice, 7)(g.DxgiDevice, out adapter) >= 0) { Com.Fn<AdapterGetDesc>(adapter, 8)(adapter, out ad); Marshal.Release(adapter); }
+            return ad;
+        }
+
+        static List<long> ReadLongs(string f)
+        {
+            return File.Exists(f) ? File.ReadAllLines(f).Select(l => long.Parse(l, CultureInfo.InvariantCulture)).ToList() : new List<long>();
+        }
+
+        // ---------- Moteur ----------
+        static void EnsureEngine(Ctx x)
+        {
+            if (x.Engine != null && !x.Engine.P.HasExited) return;
+            x.Engine = EngineProc.Start(x.EngineExe, "--serve --state-dir \"" + Path.Combine(x.Dir, "engine") + "\" --heartbeat-ms 3000");
+            if (x.Engine.Event("engine.ready", 10000) == null) throw new Exception("moteur non prêt");
+            x.Engine.Pings(500);
+            x.Engine.Call("config.set", J.Map("section", "engine", "values", J.Map("telemetry_interval_ms", 500, "input_effects", false)));
+            Thread.Sleep(1500); // fin du démarrage (gardien, premières mesures)
+        }
+
+        static void StopEngine(Ctx x)
+        {
+            if (x.Engine == null) return;
+            try { x.Engine.Call("stop_all"); x.Engine.Send("shutdown"); x.Engine.P.WaitForExit(3000); } catch (Exception) { }
+            x.Engine.Kill();
+            x.Engine = null;
+        }
+
+        static double CpuMs(Process p)
+        {
+            try { p.Refresh(); return p.HasExited ? -1 : p.TotalProcessorTime.TotalMilliseconds; } catch (Exception) { return -1; }
+        }
+
+        static void Boundary(Ctx x, Mark m)
+        {
+            m.Qpc.Add(Stopwatch.GetTimestamp());
+            m.ClockMs.Add(EngineProc.Clock.ElapsedMilliseconds);
+            m.Gpu.Add(x.Gpu.Sample());
+            m.EngineCpu.Add(m.E != null ? CpuMs(m.E.P) : -1);
+            m.ProbeCpu.Add(CpuMs(x.ProbeProc));
+        }
+
+        static void SleepUntil(long qpc) { long now; while ((now = Stopwatch.GetTimestamp()) < qpc) Thread.Sleep((int)Math.Max(1, Math.Min(50, Ms(qpc - now)))); }
+
+        static Mark RunScenario(Ctx x, string s)
+        {
+            var m = new Mark { Scenario = s };
+            try
+            {
+                if (s == "aucun") StopEngine(x); else EnsureEngine(x);
+                m.E = x.Engine;
+                m.EnginePid = m.E != null ? m.E.P.Id : 0;
+                Dictionary<string, object> req = null;
+                bool animated = s == "flip-anime" || s == "flip-windows";
+                var cut = J.Map("in", J.Map("kind", "cut"), "out", J.Map("kind", "cut"));
+                var anim = J.Map("in", J.Map("kind", "ramp", "duration_ms", x.AnimMs), "out", J.Map("kind", "ramp", "duration_ms", x.AnimMs));
+                var window = J.Map("kind", "window", "hwnd", x.ProbeHwnd, "follow_foreground", false);
+                var monitor = J.Map("kind", "monitor", "device", x.Dev);
+                switch (s)
+                {
+                    case "flip-coupe": case "passes": req = J.Map("effect", "flip", "target", window, "transition", cut); break;
+                    case "flip-anime": req = J.Map("effect", "flip", "target", window, "transition", anim); break;
+                    case "calque": req = J.Map("effect", "diag.marker", "target", window, "transition", cut); break;
+                    case "flip-ecran": req = J.Map("effect", "flip", "target", monitor, "transition", cut); break;
+                    case "flip-windows": req = J.Map("effect", "flip", "target", monitor); break;
+                    case "aucun": case "repos": break;
+                    default: m.Error = "scénario inconnu"; return m;
+                }
+                string id = "bench-" + s;
+                int holdMs = animated ? Math.Max(x.Hold, x.AnimMs + 5000) : x.Hold;
+                int durMs = Math.Min(30000, holdMs + x.AnimMs + 8000); // l'arrêt vient du banc (mesure du temps d'arrêt)
+                Boundary(x, m);                                   // b0 : avant
+                Thread.Sleep(2000);
+                Boundary(x, m);                                   // b1 : demande
+                long reqAt = m.Qpc[1];
+                if (req != null)
+                {
+                    if (s == "flip-windows") x.Engine.Call("config.set", J.Map("section", "engine", "values", J.Map("input_effects", true)));
+                    req["request_id"] = id; req["source"] = J.Map("kind", "test"); req["duration_ms"] = durMs;
+                    x.Engine.Call("effect.request", req);
+                    if (s == "passes")
+                        x.Engine.Call("effect.request", J.Map("request_id", id + "-p", "effect", "diag.passes", "source", J.Map("kind", "test"), "target", window,
+                            "transition", cut, "duration_ms", durMs, "params", J.Map("passes", 4, "taps", 12)));
+                    var started = x.Engine.Event("effect.started", 6000, e => J.Str(e, "request_id", "") == id);
+                    if (started == null) { m.Error = "l'effet n'a pas démarré"; x.Engine.Call("stop_all"); return m; }
+                    m.ActivationMs = (long)Ms(Stopwatch.GetTimestamp() - reqAt);
+                    m.StartupMs = (long)J.Num(started, "startup_ms", -1);
+                    SleepUntil(Stopwatch.GetTimestamp() + (long)((animated ? x.AnimMs : 0) + 300) * Freq / 1000);
+                }
+                else Thread.Sleep(1000);
+                Boundary(x, m);                                   // b2 : fin de l'entrée
+                SleepUntil(reqAt + (long)holdMs * Freq / 1000);
+                Boundary(x, m);                                   // b3 : demande d'arrêt
+                long stopAt = m.Qpc[3];
+                if (req != null)
+                {
+                    x.Engine.Call("effect.cancel", J.Map("request_id", id, "immediate", !animated));
+                    if (s == "passes") x.Engine.Call("effect.cancel", J.Map("request_id", id + "-p", "immediate", true));
+                    var ended = x.Engine.Event("effect.ended", x.AnimMs + 8000, e => J.Str(e, "request_id", "") == id);
+                    m.StopMs = ended != null ? (long)Ms(Stopwatch.GetTimestamp() - stopAt) : -1;
+                    foreach (var ev in x.Engine.Events("engine.input").Where(e => J.Str(e, "request_id", "") == id))
+                        m.Inputs.Add(J.Str(ev, "state", "") + " " + J.Num(ev, "call_ms", -1) + " ms");
+                    if (s == "flip-windows") x.Engine.Call("config.set", J.Map("section", "engine", "values", J.Map("input_effects", false)));
+                    Thread.Sleep(300);
+                }
+                else Thread.Sleep(1000);
+                Boundary(x, m);                                   // b4 : fin de la sortie
+                Thread.Sleep(2000);
+                Boundary(x, m);                                   // b5 : fin
+            }
+            catch (Exception e) { m.Error = e.Message; }
             return m;
         }
 
-        static string Report(string title, List<long> frames, List<Mark> marks, List<object> json)
+        // ---------- Rapport ----------
+        static double GpuPct(Mark m, int i, int pid)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine(title + " (" + frames.Count + " images) — par phase : i/s · médiane · p99 · max · à-coups · pire 250 ms");
-            var baseMark = marks.FirstOrDefault(x => x.Method == "base");
-            double refMs = baseMark != null ? BenchStats.Summarize("ref", frames, Freq, baseMark.Req, baseMark.Ended, -1).MedianMs : -1;
-            long entry = (long)(1.2 * Freq), tail = Freq / 4;
-            foreach (var m in marks)
+            double a, b;
+            if (pid <= 0 || !m.Gpu[i].TryGetValue(pid, out a) || !m.Gpu[i + 1].TryGetValue(pid, out b)) return -1;
+            return Math.Round((b - a) / Ms(m.Qpc[i + 1] - m.Qpc[i]) * 100, 2);
+        }
+
+        /// CPU d'un processus pendant la phase, en % d'un cœur.
+        static double CpuPct(List<double> cpu, Mark m, int i)
+        {
+            if (cpu[i] < 0 || cpu[i + 1] < 0) return -1;
+            return Math.Round((cpu[i + 1] - cpu[i]) / Ms(m.Qpc[i + 1] - m.Qpc[i]) * 100, 2);
+        }
+
+        static readonly string[] SurfaceFields =
+        {
+            "capture_fps", "present_fps", "processing_p50_ms", "processing_p95_ms", "capture_latency_p50_ms", "capture_latency_p95_ms",
+            "present_call_p50_ms", "present_call_p95_ms", "added_latency_est_p50_ms", "added_latency_est_p95_ms", "refresh_hz"
+        };
+
+        /// Moyenne des relevés de télémétrie du moteur (intervalle de 500 ms) reçus pendant la phase.
+        static Dictionary<string, object> EngineTelemetry(Mark m, int i)
+        {
+            if (m.E == null) return null;
+            var evs = m.E.Events("engine.telemetry");
+            long from = m.ClockMs[i] + 550, to = m.ClockMs[i + 1];
+            var inPhase = evs.Where(d => J.Num(d, "_rx", 0) >= from && J.Num(d, "_rx", 0) <= to).ToList();
+            if (inPhase.Count == 0) return null;
+            var acc = new Dictionary<string, List<double>>();
+            Action<string, double> add = (k, v) => { if (v < 0) return; List<double> l; if (!acc.TryGetValue(k, out l)) acc[k] = l = new List<double>(); l.Add(v); };
+            foreach (var d in inPhase)
             {
-                if (m.Started < 0) { sb.AppendLine("  " + m.Method + " : l'effet n'a pas démarré"); continue; }
-                var phases = new[]
+                var surfaces = J.Arr(d, "surfaces");
+                var s0 = surfaces.Count > 0 ? surfaces[0] as Dictionary<string, object> : null;
+                if (s0 != null) foreach (var f in SurfaceFields) add(f, J.Num(s0, f, -1));
+                var proc = J.Obj(d, "process");
+                if (proc != null)
                 {
-                    BenchStats.Summarize("avant", frames, Freq, m.Before, m.Req, refMs),
-                    BenchStats.Summarize("entrée", frames, Freq, m.Req, m.Started + entry, refMs),
-                    BenchStats.Summarize("pendant", frames, Freq, m.Started + entry, Math.Max(m.Started + entry + 1, m.ExitAt), refMs),
-                    BenchStats.Summarize("sortie", frames, Freq, m.ExitAt, m.Ended + tail, refMs),
-                    BenchStats.Summarize("après", frames, Freq, m.Ended + tail, m.After, refMs),
-                };
-                sb.AppendLine("  " + m.Method + (m.Inputs.Count > 0 ? " (bascules : " + string.Join(", ", m.Inputs) + ")" : ""));
-                foreach (var p in phases)
-                    sb.AppendLine(string.Format(CultureInfo.InvariantCulture, "    {0,-8} {1,6:0.0} i/s · {2,5:0.00} ms · {3,6:0.00} ms · {4,6:0.0} ms · {5,3} · {6,6:0.0} i/s",
-                        p.Name, p.Fps, p.MedianMs, p.P99Ms, p.MaxMs, p.Hitches, p.WorstWindowFps));
-                json.Add(J.Map("source", title, "method", m.Method, "phases", phases.Select(p => (object)p.ToJson()).ToArray()));
+                    add("cpu_ms_per_s", J.Num(proc, "cpu_ms_per_s", -1)); add("private_mb", J.Num(proc, "private_mb", -1)); add("managed_mb", J.Num(proc, "managed_mb", -1));
+                    add("gc_gen0_per_s", J.Num(J.Obj(proc, "gc"), "gen0", -1) * 2);
+                }
+                add("vram_mb", J.Num(d, "vram_mb", -1));
+                var passes = J.Obj(d, "passes");
+                if (passes != null) foreach (var kv in passes) add("gpu:" + kv.Key + ":p50_ms", J.Num(kv.Value as Dictionary<string, object>, "p50_ms", -1));
             }
-            return sb.ToString();
+            return acc.ToDictionary(kv => kv.Key, kv => (object)Math.Round(kv.Value.Average(), 3));
+        }
+
+        static Dictionary<string, object> Describe(Mark m, Ctx x, List<long> frames, List<KeyValuePair<long, double>> gpuFrames, double refMs, StringBuilder sb)
+        {
+            sb.AppendLine("  " + m.Scenario + (m.Error != null ? " : ÉCHEC " + m.Error : "") +
+                (m.ActivationMs >= 0 ? " · activation " + m.ActivationMs + " ms (moteur " + m.StartupMs + " ms)" : "") +
+                (m.StopMs >= 0 ? " · arrêt " + m.StopMs + " ms" : "") + (m.Inputs.Count > 0 ? " · bascules " + string.Join(", ", m.Inputs) : ""));
+            if (m.Error != null || m.Qpc.Count < 6) return J.Map("scenario", m.Scenario, "error", m.Error);
+            var phases = new List<object>();
+            for (int i = 0; i < 5; i++)
+            {
+                var p = BenchStats.Summarize(PhaseNames[i], frames, Freq, m.Qpc[i], m.Qpc[i + 1], refMs);
+                var g = gpuFrames.Where(kv => kv.Key >= m.Qpc[i] && kv.Key < m.Qpc[i + 1]).Select(kv => kv.Value).OrderBy(v => v).ToList();
+                double g50 = BenchStats.Percentile(g, 50), g99 = BenchStats.Percentile(g, 99);
+                double ge = GpuPct(m, i, m.EnginePid), gd = GpuPct(m, i, x.DwmPid), gp = GpuPct(m, i, x.ProbePid), ce = CpuPct(m.EngineCpu, m, i);
+                sb.AppendLine(string.Format(CultureInfo.InvariantCulture, "    {0,-8} {1,6:0.0} {2,6:0.00} {3,6:0.00} {4,6:0.0} {5,3} {6,7:0.0} | {7,14:0.000} {8,6:0.000} | {9,10:0.00} {10,6:0.00} {11,6:0.00} | {12,6:0.00}",
+                    p.Name, p.Fps, p.MedianMs, p.P99Ms, p.MaxMs, p.Hitches, p.WorstWindowFps, g50, g99, ge, gd, gp, ce));
+                var j = p.ToJson();
+                j["probe_gpu_p50_ms"] = Math.Round(g50, 3); j["probe_gpu_p99_ms"] = Math.Round(g99, 3);
+                j["gpu_pct_engine"] = ge; j["gpu_pct_dwm"] = gd; j["gpu_pct_probe"] = gp;
+                j["cpu_pct_core_engine"] = ce; j["cpu_pct_core_probe"] = CpuPct(m.ProbeCpu, m, i);
+                j["engine"] = EngineTelemetry(m, i);
+                phases.Add(j);
+            }
+            return J.Map("scenario", m.Scenario, "activation_ms", m.ActivationMs, "startup_ms", m.StartupMs, "stop_ms", m.StopMs, "inputs", m.Inputs.ToArray(), "phases", phases.ToArray());
         }
     }
 }

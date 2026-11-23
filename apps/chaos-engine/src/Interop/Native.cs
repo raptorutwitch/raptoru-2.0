@@ -309,6 +309,12 @@ namespace Raptoru.Chaos
             if (!EnumDisplaySettingsExW(device, which, ref dm, 0)) dm.dmSize = 0;
             return dm;
         }
+        /// Fréquence de rafraîchissement d'un écran (Hz), 60 si inconnue.
+        public static int RefreshHz(IntPtr hmon)
+        {
+            var dm = DisplayMode(MonitorDevice(hmon));
+            return dm.dmSize != 0 && dm.dmDisplayFrequency > 1 ? dm.dmDisplayFrequency : 60;
+        }
         /// Orientation (0 normale, 1 = 90°, 2 = 180°, 3 = 270°), -1 si l'écran est inconnu.
         public static int DisplayOrientation(string device, int which = ENUM_CURRENT_SETTINGS)
         {

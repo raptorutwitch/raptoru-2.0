@@ -94,6 +94,7 @@ namespace Raptoru.Chaos
         {
             { "flip", () => new FlipEffect() },
             { "diag.tint", () => new DiagTintEffect() },
+            { "diag.passes", () => new DiagPassesEffect() },
             { "diag.marker", () => new DiagMarkerEffect() },
             { "diag.fault", () => new DiagFaultEffect() },
         };

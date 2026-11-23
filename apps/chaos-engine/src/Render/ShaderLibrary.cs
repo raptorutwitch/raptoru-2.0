@@ -74,6 +74,15 @@ float4 ps(V i) : SV_Target {
   float3 c = src.SampleLevel(smp, i.uv, 0).rgb;
   return float4(lerp(c, c * u0.rgb + u0.rgb * 0.25, u0.a), 1);
 }");
+            // Diagnostic : charge réglable, u0.x taps répartis en spirale autour du pixel (léger flou), u0.y mélange.
+            Register("diag_load", @"
+float4 ps(V i) : SV_Target {
+  float2 px = 1.0 / view.zw;
+  float3 acc = 0; int n = max(1, (int)u0.x);
+  [loop] for (int k = 0; k < n; k++) { float a = k * 2.39996; acc += src.SampleLevel(smp, i.uv + float2(cos(a), sin(a)) * (1.5 + k * 0.5) * px, 0).rgb; }
+  float3 c = src.SampleLevel(smp, i.uv, 0).rgb;
+  return float4(lerp(c, acc / n, u0.y), 1);
+}");
             // Calque forme (distance signée) : u0 = (forme 0 rectangle arrondi / 1 ellipse / 2 anneau, rayon des coins px,
             // épaisseur du trait px (0 = plein), -). Alpha prémultiplié.
             Register("layer_shape", @"
