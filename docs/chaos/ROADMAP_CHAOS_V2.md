@@ -25,6 +25,10 @@ quelle cadence réelle avait la copie V1 (E5).
 **But** : prouver sur le vrai PC le point le plus risqué. Un retournement à 180°, un seul vrai curseur, aucun carré,
 une fluidité intacte.
 
+> **23/11** : calque GPU = technologie principale ; curseur retourné intégré au moteur
+> ([ETUDE_CURSEUR.md](ETUDE_CURSEUR.md)) ; moteur optimisé ([PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md)) ; page
+> Studio › Chaos refaite en catalogue d'effets ([GUIDE_STUDIO_CHAOS.md](GUIDE_STUDIO_CHAOS.md)).
+>
 > **Mise à jour du 22/11, mandat « architecture »** : le prototype est devenu le **moteur**
 > ([`apps/chaos-engine`](../../apps/chaos-engine/README.md), branche locale `feat/chaos-engine`,
 > [ARCHITECTURE_MOTEUR.md](ARCHITECTURE_MOTEUR.md)).

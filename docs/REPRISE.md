@@ -190,27 +190,31 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
    remboursements, spectateurs, blackjack à plusieurs, nouvelles tables, réactions, téléphone).
 5. Corriger **uniquement** les problèmes observés.
 
-**C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : le moteur est construit le 22/11.
+**C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : moteur, curseur retourné et catalogue
+d'effets construits les 22 et 23/11, en local.
 
 - **Où** : branche locale `feat/chaos-engine` (après `feat/chaos-presenter-lot1`), worktree
-  `Raptoru 2.0 - Worktrees\chaos-v2`. Architecture : [chaos/ARCHITECTURE_MOTEUR.md](chaos/ARCHITECTURE_MOTEUR.md).
+  `Raptoru 2.0 - Worktrees\chaos-v2`. Lancer : `npm run chaos:lab` (recompile moteur et page).
 - **Quoi** :
-  - moteur natif C# ([apps/chaos-engine](../apps/chaos-engine/README.md)), avec registre partagé et configuration ;
-  - ordonnanceur et transitions ;
-  - capture partagée, rendu par passes et calques ;
-  - gardien et arrêt d'urgence Ctrl+Maj+F11 ;
-  - couche Entrées **expérimentale, coupée** : Windows retourne l'écran entier (souris inversée), mais chaque bascule
-    perturbe tout le PC (incident du 22/11 : Overwatch à 17 images/s,
-    [chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md](chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md)) ;
-  - page Studio › Chaos et banc `npm run chaos:lab`.
-- **Tests** : 23 unitaires ; 51 d'intégration avant l'incident, puis 17 sans écran ; 10 Studio ; 11 de bout en
-  bout. Un seul effet réel : le retournement (calque par défaut).
-- **Règle** : aucun essai visible (mire, calque, rotation, banc) pendant qu'un jeu tourne. La garde le refuse ;
+  - moteur natif C# ([apps/chaos-engine](../apps/chaos-engine/README.md)) : registre partagé, configuration,
+    ordonnanceur, transitions, capture partagée sans copie, rendu cadencé par écran, profils de performance, gardien,
+    Ctrl+Maj+F11 ([chaos/ARCHITECTURE_MOTEUR.md](chaos/ARCHITECTURE_MOTEUR.md),
+    [chaos/PERFORMANCES_MOTEUR.md](chaos/PERFORMANCES_MOTEUR.md)) ;
+  - **retournement 180° = calque GPU + curseur retourné** (décision d'Antoni du 23/11, essai Overwatch fluide) : le
+    curseur de Windows est masqué au-dessus de la cible et son image est redessinée au point miroir, entrées intactes
+    ([chaos/ETUDE_CURSEUR.md](chaos/ETUDE_CURSEUR.md)) ;
+  - rotation native de Windows **expérimentale, coupée**, jamais pour une activation communautaire ;
+  - **page Studio › Chaos = catalogue d'effets** : une carte et une fiche par effet (écran gauche / droit / tous,
+    durée, transitions, paramètres, curseur, disponibilité), Tester et Activer / Arrêter, états du moteur
+    ([chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md)).
+- **Tests** : 27 unitaires ; 17 contrôles sans écran ; curseur hors écran 8/8 ; 11 Studio ; parcours de la page sans
+  affichage 12/12. **Non lancés** (garde de jeu, jeu ou plein écran actif) : contrôles visibles, `--cursor-check`,
+  banc A/B, `--obs-compat`, partie visible du parcours.
+- **Règle** : aucun essai visible (mire, calque, rotation, banc, curseur) pendant qu'un jeu tourne. La garde le refuse ;
   `--autorise-pendant-un-jeu` seulement sur accord d'Antoni.
-- **Décision attendue** : candidat « calque + curseur affiché par le calque » (étude § 8), puis le banc avec son
-  accord.
-- **Prochaine étape** : test réel d'Antoni ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2), puis le lot 2
-  (module payant, Core).
+- **Prochaine étape** : essais d'Antoni sur la nouvelle page (Tester / Activer sur l'écran choisi, C1 à C5 de
+  [chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md)) ; mesures visibles quand aucun jeu ne tourne ; puis les
+  nouveaux effets, conçus séparément, et le lot 2 (module payant, Core).
 - **Rien n'est poussé, fusionné ni publié** : aucun Studio installé ne contient la page.
 
 **D. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (validations réelles en attente, finitions Studio).

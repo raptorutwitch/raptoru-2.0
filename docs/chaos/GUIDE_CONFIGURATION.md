@@ -16,24 +16,27 @@ Chaos (panneau Réglages et carte « Écran retourné »), ou par les commandes 
 
 ## 2. Réglages
 
-| Réglage                        | Défaut      | Bornes                             | Effet                                                                                                                       |
-| ------------------------------ | ----------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `engine.follow_foreground`     | vrai        | —                                  | fenêtre seule (diagnostic) : l'effet ne s'affiche que si la fenêtre est au premier plan                                     |
-| `engine.capture_linger_ms`     | 2000        | 0 à 30 000                         | garde la capture après un effet (pas de recréation à l'effet suivant)                                                       |
-| `engine.telemetry_interval_ms` | 1000        | 250 à 10 000                       | fréquence de `engine.telemetry`                                                                                             |
-| `engine.default_mode`          | `window`    | `window` ou `monitor`              | cible « premier plan » : la fenêtre du jeu (calque) ou son écran entier                                                     |
-| `engine.cursor_follow`         | vrai        | —                                  | curseur retourné avec l'image (effets `cursor: "follow"`, ex. retournement) : un seul curseur visible, clics justes         |
-| `engine.input_effects`         | faux        | —                                  | **expérimental** : sur un écran entier, Windows retourne l'affichage (souris inversée) ; chaque bascule perturbe tout le PC |
-| `safety.max_duration_ms`       | 30 000      | 1000 à 60 000                      | durée maximale d'un effet                                                                                                   |
-| `safety.max_active_effects`    | 4           | 1 à 8                              | effets simultanés au plus                                                                                                   |
-| `safety.safe_mode`             | faux        | —                                  | les rotations deviennent instantanées                                                                                       |
-| `performance.profile`          | `equilibre` | `qualite`, `equilibre`, `economie` | applique toutes les valeurs du profil ; une valeur changée à la main donne `personnalise`                                   |
-| `performance.max_fps`          | 0           | 0, ou 30 à 360                     | cadence de traitement maximale par cible (0 = fréquence de l'écran)                                                         |
-| `performance.max_passes`       | 6           | 1 à 8                              | passes GPU par image et par cible ; au-delà : `too_costly`                                                                  |
-| `performance.render_scale`     | 1           | 0,25 à 1                           | résolution des passes intermédiaires                                                                                        |
-| `performance.gpu_budget_ms`    | 2           | 0,25 à 16                          | temps GPU du moteur toléré par image                                                                                        |
-| `performance.on_overload`      | `reduire`   | `signaler` ou `reduire`            | surcharge : événement seul, ou paliers annoncés (coins noirs, demi-résolution, demi-cadence) avec retour automatique        |
-| `performance.zero_copy`        | vrai        | —                                  | lecture directe de l'image capturée (interrupteur de secours)                                                               |
+| Réglage                        | Défaut      | Bornes                                        | Effet                                                                                                                       |
+| ------------------------------ | ----------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `engine.follow_foreground`     | vrai        | —                                             | fenêtre seule (diagnostic) : l'effet ne s'affiche que si la fenêtre est au premier plan                                     |
+| `engine.capture_linger_ms`     | 2000        | 0 à 30 000                                    | garde la capture après un effet (pas de recréation à l'effet suivant)                                                       |
+| `engine.telemetry_interval_ms` | 1000        | 250 à 10 000                                  | fréquence de `engine.telemetry`                                                                                             |
+| `engine.default_mode`          | `window`    | `window` ou `monitor`                         | cible « premier plan » : la fenêtre du jeu (calque) ou son écran entier                                                     |
+| `engine.cursor_follow`         | vrai        | —                                             | curseur retourné avec l'image (effets `cursor: "follow"`, ex. retournement) : un seul curseur visible, clics justes         |
+| `engine.input_effects`         | faux        | —                                             | **expérimental** : sur un écran entier, Windows retourne l'affichage (souris inversée) ; chaque bascule perturbe tout le PC |
+| `safety.max_duration_ms`       | 30 000      | 1000 à 60 000                                 | durée maximale d'un effet                                                                                                   |
+| `safety.max_active_effects`    | 4           | 1 à 8                                         | effets simultanés au plus                                                                                                   |
+| `safety.safe_mode`             | faux        | —                                             | les rotations deviennent instantanées                                                                                       |
+| `effects.<effet>.screen`       | `primary`   | `left`, `right`, `s:<rang>`, `primary`, `all` | écran(s) de l'effet (fiche dans Studio) : par position réelle, jamais par numéro Windows                                    |
+| `effects.<effet>.enabled`      | vrai        | —                                             | disponible pour les déclenchements communautaires (Studio peut toujours tester et activer)                                  |
+| `effects.<effet>.cursor`       | vrai        | —                                             | curseur retourné avec l'image (effets `cursor: "follow"`)                                                                   |
+| `performance.profile`          | `equilibre` | `qualite`, `equilibre`, `economie`            | applique toutes les valeurs du profil ; une valeur changée à la main donne `personnalise`                                   |
+| `performance.max_fps`          | 0           | 0, ou 30 à 360                                | cadence de traitement maximale par cible (0 = fréquence de l'écran)                                                         |
+| `performance.max_passes`       | 6           | 1 à 8                                         | passes GPU par image et par cible ; au-delà : `too_costly`                                                                  |
+| `performance.render_scale`     | 1           | 0,25 à 1                                      | résolution des passes intermédiaires                                                                                        |
+| `performance.gpu_budget_ms`    | 2           | 0,25 à 16                                     | temps GPU du moteur toléré par image                                                                                        |
+| `performance.on_overload`      | `reduire`   | `signaler` ou `reduire`                       | surcharge : événement seul, ou paliers annoncés (coins noirs, demi-résolution, demi-cadence) avec retour automatique        |
+| `performance.zero_copy`        | vrai        | —                                             | lecture directe de l'image capturée (interrupteur de secours)                                                               |
 
 ## 3. Validation, persistance, migration
 
@@ -50,7 +53,9 @@ Chaos (panneau Réglages et carte « Écran retourné »), ou par les commandes 
     profil `equilibre`).
   - Une migration est une fonction de plus dans `ConfigStore.Migrate`.
 - Version plus récente que le moteur : refusée (`config_too_new`). Le moteur ne démarre pas plutôt que d'écraser.
-- Retour aux défauts : `config.reset` (`engine`, `safety`, `performance`, `presets`, ou tout).
+- Retour aux défauts : `config.reset` (`engine`, `safety`, `performance`, `effects`, `presets`, ou tout).
+- Les paramètres visuels, la durée et les transitions d'un effet restent dans `presets.<effet>.default` : la fiche de
+  l'effet dans Studio écrit les deux ([GUIDE_STUDIO_CHAOS.md](GUIDE_STUDIO_CHAOS.md)).
 
 ## 4. Emplacements
 

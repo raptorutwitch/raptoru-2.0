@@ -86,6 +86,10 @@ Règles :
   le vrai curseur. La logique de l'effet n'a rien à faire : le moteur applique et rétablit l'orientation, et son rendu
   compense la rotation de Windows. Limites et obligations : [COUCHE_ENTREES.md](COUCHE_ENTREES.md).
 
+**Studio** : la carte et la fiche de l'effet viennent de cette déclaration ([GUIDE_STUDIO_CHAOS.md](GUIDE_STUDIO_CHAOS.md)) :
+`icon` (icône de la carte), première phrase de `description`, paramètres exposés avec leur contrôle (`labels` donne
+des libellés lisibles aux valeurs d'un `enum`), transitions, durée, écran. Rien à écrire dans Studio.
+
 **Curseur** : un effet qui déplace l'image (emplacement `transform`) ajoute `"cursor": "follow"` à sa déclaration.
 Le moteur masque alors le curseur matériel au-dessus de la cible et dessine l'image du vrai curseur par la même
 transformation que l'image (`FrameBuilder.AddCursor`) : rien à écrire dans l'effet. Exemple : `flip`.

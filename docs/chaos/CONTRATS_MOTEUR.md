@@ -17,19 +17,21 @@ Protocole **v2**. Les types TypeScript et les schémas zod sont dans `packages/s
 
 ## 2. Commandes
 
-| Commande                                     | Corps                                                           | Résultat                                                                                                                                                  |
-| -------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hello` / `ping`                             | —                                                               | identité, version, protocole, registre, carte graphique, temps de démarrage / horloge                                                                     |
-| `describe`                                   | —                                                               | `registry` (le fichier entier), `implemented`, `primitives`, `curves`                                                                                     |
-| `status`                                     | —                                                               | effets actifs et en file (vues), surfaces, captures ouvertes, gardien, `input`, configuration                                                             |
-| `diagnostics`                                | —                                                               | télémétrie complète, shaders, pool, gardien, démarrage                                                                                                    |
-| `targets.list`                               | —                                                               | `monitors` (device, libellé, principal, position, taille, orientation, premier plan) et `windows` (hwnd, titre, processus, taille, réduite, premier plan) |
-| `effect.request`                             | voir § 3                                                        | la vue de la demande (§ 4)                                                                                                                                |
-| `effect.cancel`                              | `request_id`, `immediate?`, `reason?`                           | `{canceled}`                                                                                                                                              |
-| `stop_all`                                   | `reason?`                                                       | `{stopped: n}` (file vidée, tout coupé sans transition)                                                                                                   |
-| `config.get` / `config.set` / `config.reset` | `section` (`engine`, `safety` ; `presets` pour reset), `values` | la configuration                                                                                                                                          |
-| `preset.set` / `preset.delete`               | `effect`, `name`, `value` (params, `duration_ms`, `transition`) | la configuration                                                                                                                                          |
-| `shutdown`                                   | —                                                               | `{bye}`, puis STOP ALL et sortie                                                                                                                          |
+| Commande                                     | Corps                                                                                     | Résultat                                                                                                                                                                                                                                   |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `hello` / `ping`                             | —                                                                                         | identité, version, protocole, registre, carte graphique, temps de démarrage / horloge                                                                                                                                                      |
+| `describe`                                   | —                                                                                         | `registry` (le fichier entier), `implemented`, `primitives`, `curves`                                                                                                                                                                      |
+| `status`                                     | —                                                                                         | effets actifs et en file (vues), surfaces, captures ouvertes, gardien, `input`, configuration                                                                                                                                              |
+| `diagnostics`                                | —                                                                                         | télémétrie complète, shaders, pool, gardien, démarrage                                                                                                                                                                                     |
+| `targets.list`                               | `windows?` (faux : écrans seulement)                                                      | `monitors` rangés de gauche à droite (device, `key` left/right/s:n, libellé « Écran gauche »…, `order`, principal, position, taille, `hz`, orientation, premier plan) et `windows` (hwnd, titre, processus, taille, réduite, premier plan) |
+| `effect.request`                             | voir § 3                                                                                  | la vue de la demande (§ 4)                                                                                                                                                                                                                 |
+| `effect.cancel`                              | `request_id`, `immediate?`, `reason?`                                                     | `{canceled}`                                                                                                                                                                                                                               |
+| `effect.activate`                            | `effect`, `kind` (`test` : 5 s au plus, `manual`), `request_id`, `source`                 | `{effect, kind, screen, activations}` : l'effet avec SES réglages (écran(s) de `effects.<effet>`, préréglage `default`) ; une activation par écran (`id:rang`) pour « tous »                                                               |
+| `effect.stop`                                | `effect`, `immediate?`                                                                    | `{effect, stopped: n}` : toutes ses activations (transition de sortie)                                                                                                                                                                     |
+| `stop_all`                                   | `reason?`                                                                                 | `{stopped: n}` (file vidée, tout coupé sans transition)                                                                                                                                                                                    |
+| `config.get` / `config.set` / `config.reset` | `section` (`engine`, `safety`, `performance`, `effects` ; `presets` pour reset), `values` | la configuration                                                                                                                                                                                                                           |
+| `preset.set` / `preset.delete`               | `effect`, `name`, `value` (params, `duration_ms`, `transition`)                           | la configuration                                                                                                                                                                                                                           |
+| `shutdown`                                   | —                                                                                         | `{bye}`, puis STOP ALL et sortie                                                                                                                                                                                                           |
 
 Codes d'erreur courants :
 
@@ -38,7 +40,9 @@ Codes d'erreur courants :
   `invalid_policy`, `unknown_preset`, `unknown_variant` ;
 - paramètres et durée : `unknown_param`, `invalid_param`, `param_out_of_range`, `param_not_overridable`,
   `duration_out_of_range`, `invalid_transition` ;
-- cible : `no_window`, `no_monitor`, `target_minimized`, `exclusive_fullscreen`, `no_foreground`, `invalid_target` ;
+- cible : `no_window`, `no_monitor`, `screen_missing`, `target_minimized`, `exclusive_fullscreen`, `no_foreground`,
+  `invalid_target` ;
+- coût et disponibilité : `too_costly`, `effect_disabled` (effet désactivé, source communautaire) ;
 - autres : `unknown_request`, `invalid_config`, `config_too_new`.
 
 ## 3. Demande d'effet (`effect.request`)
@@ -54,6 +58,9 @@ Une demande sépare les éléments suivants :
 - **politique de conflit** : `policy` (`queue`, `replace`, `reject` ou `extend`) ;
 - **source** : `source.kind` et `source.ref` ;
 - **cible** : `target` ;
+  - `{kind:"screen",device}` (fiche d'un effet) : la fenêtre qui occupe cet écran (jeu en fenêtré sans bordure,
+    fenêtre agrandie), en calque, sans devoir être au premier plan ; à défaut, l'écran entier ; `target.screen` dit
+    « Écran gauche · 1920×1080 » ;
   - `{kind:"monitor",device}` : l'écran entier `\\.\DISPLAYn` (mode C). Si `engine.input_effects` est activé
     (expérimental), Windows retourne l'écran et la souris est inversée ([COUCHE_ENTREES.md](COUCHE_ENTREES.md)) ;
     sinon, ce n'est qu'un calque, invisible dans la capture d'écran d'OBS ;
