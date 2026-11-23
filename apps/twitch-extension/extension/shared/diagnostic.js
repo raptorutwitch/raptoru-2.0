@@ -211,6 +211,11 @@ function report(win) {
 
 // --- Le panneau ----------------------------------------------------------------------------------------------------
 const css = (el, styles) => Object.assign(el.style, styles);
+// Shown / hidden through `display` itself: an inline `display` (the panel's flex) wins over the `hidden` attribute.
+const show = (el, on, display) => {
+  el.hidden = !on;
+  el.style.display = on ? display : 'none';
+};
 function button(doc, label, onClick) {
   const b = doc.createElement('button');
   b.type = 'button';
@@ -229,7 +234,7 @@ function paint() {
 
 function showPill(win) {
   const doc = win.document;
-  if (pill) return void (pill.hidden = false);
+  if (pill) return show(pill, true, 'inline-block');
   pill = doc.createElement('button');
   pill.type = 'button';
   pill.textContent = 'Diag';
@@ -261,18 +266,18 @@ function open(win) {
       }),
       button(doc, 'Copier', () => void copy(win)),
       button(doc, 'Fermer', () => {
-        panel.hidden = true;
+        show(panel, false);
       }),
       button(doc, 'Désactiver', () => {
-        panel.hidden = true;
-        if (pill) pill.hidden = true;
+        show(panel, false);
+        if (pill) show(pill, false);
         remember(win, false);
       }),
     );
     panel.append(bar, status, text);
     doc.body.append(panel);
   }
-  panel.hidden = false;
+  show(panel, true, 'flex');
   status.textContent = 'Fais une capture d’écran, ou Copier puis colle le texte.';
   paint();
 }
