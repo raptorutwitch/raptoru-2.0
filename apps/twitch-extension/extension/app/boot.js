@@ -6,6 +6,10 @@
 // The entry module starts once the sheets are loaded. The page is never hidden: if anything here failed, the
 // markup and the grey-screen guard of the entry would still show (a hidden body would recreate a grey screen).
 import { RUNTIME } from '../shared/runtime-config.js';
+import { startDiagnostic } from '../shared/diagnostic.js';
+
+// Paquet de diagnostic Hosted Test seulement (RUNTIME.diagnostics) : les erreurs sont notées dès maintenant. Sinon, rien.
+startDiagnostic(RUNTIME);
 
 const page = /(?:^|\/)(video_component|panel|mobile)\.html$/i.exec(window.location.pathname)?.[1]?.toLowerCase()
   ?? (document.body.classList.contains('overlay') ? 'video_component' : 'mobile');

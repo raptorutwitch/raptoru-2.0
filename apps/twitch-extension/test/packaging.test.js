@@ -77,6 +77,7 @@ describe('targets and arguments', () => {
       target: 'production',
       shell: 'legacy',
       check: true,
+      diagnostic: false,
     });
   });
 
@@ -96,6 +97,29 @@ describe('targets and arguments', () => {
       'apiBase: "https://core-staging.raptoru.fr/v1/ext"',
     );
     expect(staging).toContain('shell: "v2"');
+  });
+
+  it('diagnostic builds (Hosted Test): the runtime flag only when asked, never for calibration', () => {
+    const plain = runtimeConfigSource(TARGETS.production, {
+      buildId: 'b',
+      shell: 'v2',
+    });
+    expect(plain).not.toContain('diagnostics');
+    const diag = runtimeConfigSource(TARGETS.production, {
+      buildId: 'b',
+      shell: 'v2',
+      diagnostic: true,
+    });
+    expect(diag).toContain('  diagnostics: true,\n');
+    expect(
+      parseArgs(['--target', 'production', '--shell', 'v2', '--diagnostic']),
+    ).toMatchObject({ diagnostic: true });
+    expect(parseArgs(['--target', 'production'])).toMatchObject({
+      diagnostic: false,
+    });
+    expect(() =>
+      parseArgs(['--target', 'calibration', '--diagnostic']),
+    ).toThrow(/production or staging only/);
   });
 
   it('one allowed list: the targets, plus the Lab prefix served by Studio', () => {

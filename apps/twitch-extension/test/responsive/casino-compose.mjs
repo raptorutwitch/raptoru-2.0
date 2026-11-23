@@ -29,6 +29,7 @@ const arg = (k) =>
   process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
 const ONLY = arg('only')?.split(',');
 const SURF = arg('sizes')?.split(',');
+const DIMS = arg('dims')?.split(','); // e.g. --dims=563x376,393x484
 
 const PAGES = {
   video: 'video_component.html?anchor=component',
@@ -37,16 +38,23 @@ const PAGES = {
 };
 // [surface, w, h, label]
 const SIZES = [
+  ['video', 563, 376, 'lecteur Twitch normal, 65 % (défaut)'],
   ['video', 651, 434, 'vidéo 75 % (référence)'],
   ['video', 452, 301, 'vidéo zoom 125 %'],
+  ['video', 490, 326, 'petit lecteur'],
+  ['video', 390, 260, 'très petit lecteur'],
+  ['video', 823, 549, 'grande fenêtre / théâtre'],
   ['video', 1053, 702, 'vidéo plein écran 1080p'],
   ['panel', 318, 496, 'panneau'],
-  ['mobile', 390, 844, 'téléphone'],
-  ['mobile', 360, 780, 'petit téléphone'],
-  ['mobile', 430, 932, 'grand téléphone'],
-  ['mobile', 390, 560, 'téléphone, sous la vidéo (est.)'],
+  // Twitch app, portrait: the extension only gets the area under the video (23/11), not the whole screen.
+  ['mobile', 393, 484, 'Android courant, sous la vidéo'],
+  ['mobile', 360, 409, 'petit Android, sous la vidéo'],
+  ['mobile', 412, 515, 'grand Android, sous la vidéo'],
   ['mobile', 844, 390, 'téléphone paysage'],
-].filter(([s]) => !SURF || SURF.includes(s));
+].filter(
+  ([s, w, h]) =>
+    (!SURF || SURF.includes(s)) && (!DIMS || DIMS.includes(`${w}x${h}`)),
+);
 
 // The elements that matter, per game: [selector, role]. role: 'game' (the play area), 'control' (the main action),
 // 'part' (another element that matters). The first visible match of each selector is measured.
@@ -111,7 +119,12 @@ const SCENARIOS = {
     { click: '[data-spot=red]', wait: 150 },
     { click: '[data-spot=d2]', wait: 400, shot: 'mises' },
     { click: '#spin', wait: 2200, shot: 'roue' },
-    { wait: 8000, shot: 'resultat' },
+    {
+      js: until('R?.querySelector(".banner.show")', 15000),
+      wait: 300,
+      shot: 'roue-resultat',
+    },
+    { wait: 4000, shot: 'resultat' },
   ],
   blackjack: [
     {
@@ -128,7 +141,9 @@ const SCENARIOS = {
     { click: '.seat.me [data-main]', wait: 150 },
     { click: '.seat.me [data-main]', wait: 150 },
     { click: '[data-side="20"]', wait: 600, shot: 'mises' },
-    { click: '[data-ready]', wait: 300 },
+    { click: '[data-rx-open]', wait: 500, shot: 'reactions' },
+    { click: '[data-rx-open]', wait: 300 },
+    { click: '[data-ready]', wait: 700, shot: 'distribution' },
     {
       js: until('b?.classList.contains("my-turn")'),
       wait: 900,
@@ -241,7 +256,7 @@ function measure({ keys, touch }) {
   const small = [];
   if (touch)
     for (const b of R.querySelectorAll('button, [role="radio"], summary')) {
-      if (!visible(b)) continue;
+      if (!visible(b) || b.disabled) continue; // a disabled control is not a target (closed bets)
       const r = b.getBoundingClientRect();
       if (
         r.bottom < B.top ||
@@ -307,7 +322,7 @@ async function run(game, [surface, w, h, label]) {
     viewport: { width: w, height: h },
     hasTouch: touch,
     isMobile: touch,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: Number(arg('dpr') ?? 1),
   });
   const page = await ctx.newPage();
   const errors = [];

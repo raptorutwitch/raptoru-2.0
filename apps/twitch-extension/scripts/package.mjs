@@ -51,13 +51,20 @@ const gitIn =
     execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 
 export function parseArgs(argv) {
-  const opts = { target: null, shell: 'legacy', check: false };
+  const opts = {
+    target: null,
+    shell: 'legacy',
+    check: false,
+    diagnostic: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const [flag, inline] = argv[i].split('=', 2);
     const value = () => inline ?? argv[++i];
     if (flag === '--target') opts.target = value();
     else if (flag === '--shell') opts.shell = value();
     else if (flag === '--check') opts.check = true;
+    // Hosted Test diagnostic build (shared/diagnostic.js): never for a Released version.
+    else if (flag === '--diagnostic') opts.diagnostic = true;
     else throw new Error(`unknown argument ${argv[i]}`);
   }
   if (!Object.hasOwn(TARGETS, opts.target ?? ''))
@@ -66,6 +73,8 @@ export function parseArgs(argv) {
     );
   if (!SHELLS.includes(opts.shell))
     throw new Error(`unknown shell ${opts.shell}: --shell ${SHELLS.join('|')}`);
+  if (opts.diagnostic && opts.target === 'calibration')
+    throw new Error('--diagnostic: production or staging only');
   return opts;
 }
 
@@ -105,7 +114,10 @@ export function checkInventory(text, commits) {
 }
 
 /** Generated shared/runtime-config.js; refuses any apiBase that is not the target's frozen one. */
-export function runtimeConfigSource(target, { buildId, shell }) {
+export function runtimeConfigSource(
+  target,
+  { buildId, shell, diagnostic = false },
+) {
   const frozen = TARGETS[target.name];
   if (
     !frozen ||
@@ -123,7 +135,7 @@ ${frozen.environment ? `  environment: '${frozen.environment}',\n` : ''}  apiBas
   siteUrl: '',
   buildId: ${JSON.stringify(buildId)},
   shell: ${JSON.stringify(shell)},
-${calibration ? '  fixtureCall: calibrationCall,\n' : ''}});
+${diagnostic ? '  diagnostics: true,\n' : ''}${calibration ? '  fixtureCall: calibrationCall,\n' : ''}});
 `;
 }
 
@@ -228,6 +240,7 @@ export function packageExtension({
   target: targetName,
   shell = 'legacy',
   check = false,
+  diagnostic = false,
   root = ROOT,
   git = gitIn(root),
 }) {
@@ -262,7 +275,7 @@ export function packageExtension({
     );
 
   const builtAt = new Date().toISOString();
-  const buildId = `${target.name}-${sha}-${builtAt.slice(0, 10)}`;
+  const buildId = `${target.name}-${sha}-${builtAt.slice(0, 10)}${diagnostic ? '-diag' : ''}`;
   for (const file of files(src)) {
     const rel = relative(src, file);
     if (/(^|[\\/])(\.env[^\\/]*|twitch-ext-mock\.js|[^\\/]*\.map)$/i.test(rel))
@@ -330,7 +343,7 @@ export function packageExtension({
 
     writeFileSync(
       join(out, 'shared', 'runtime-config.js'),
-      runtimeConfigSource(target, { buildId, shell }),
+      runtimeConfigSource(target, { buildId, shell, diagnostic }),
     );
 
     if (calibration) {
@@ -396,6 +409,7 @@ export const isAllowedApiBase = () => false;
       dirty: false,
       apiBase: target.apiBase,
       shell,
+      diagnostic,
       builtAt,
       buildId,
       published: published7,
@@ -425,7 +439,7 @@ export const isAllowedApiBase = () => false;
     if (errors.length)
       throw new Error(`package verification failed:\n  ${errors.join('\n  ')}`);
 
-    const suffix = shell === 'legacy' ? '' : `-shell-${shell}`;
+    const suffix = `${shell === 'legacy' ? '' : `-shell-${shell}`}${diagnostic ? '-DIAGNOSTIC' : ''}`;
     const zipName = {
       production: `raptoru-live-PRODUCTION-${sha}-depuis-${published7}-${gate.commits.length}-commits${suffix}.zip`,
       staging: `raptoru-live-STAGING-hosted-test-${sha}${suffix}.zip`,
@@ -460,6 +474,9 @@ function report(r, check) {
     `twitch-extension ${target.label}${check ? ' --check' : ''}: ${r.fileCount} files, ${(r.size / 1024 / 1024).toFixed(1)} MB, shell ${manifest.shell}`,
     `  apiBase   ${target.apiBase || '(none: local fixtures, calibration/adapter.js)'}`,
     `  buildId   ${manifest.buildId}`,
+    manifest.diagnostic
+      ? '  DIAGNOSTIC: Hosted Test only (5 taps on the title open the panel). Never Released.'
+      : null,
     `  published ${manifest.published} (PUBLISHED, presumed) · ${gate.commits.length} extension commits since`,
     target.name === 'production'
       ? `  inventory ${gate.inventoryName}: ${gate.ok ? 'valid, embedded as build-inventory.txt' : `INVALID\n    ${gate.problems.join('\n    ')}`}`

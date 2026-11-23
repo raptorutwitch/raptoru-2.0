@@ -162,7 +162,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
           <div class="sides" role="group" aria-label="Pari sur le score de la banque">
             <svg class="sides__arc" aria-hidden="true"><path id="${uid}-arc" fill="none"/><text><textPath href="#${uid}-arc" startOffset="50%" text-anchor="middle">Pari sur le score de la banque</textPath></text></svg>
             <p class="sides__t">Pari sur le score de la banque</p>
-            ${SIDE_SPOTS.map((k) => `<button type="button" class="side" data-side="${k}"${SHORT[k] !== SIDE_LABEL[k] ? ` data-full="${SIDE_LABEL[k]}"` : ''}><b>${SHORT[k]}</b><small>paye ${oddsText(k)}</small><span class="sv"></span></button>`).join('')}
+            ${SIDE_SPOTS.map((k) => `<button type="button" class="side" data-side="${k}"${SHORT[k] !== SIDE_LABEL[k] ? ` data-full="${SIDE_LABEL[k]}"` : ''}><b>${SHORT[k]}</b><small><i>paye </i>${oddsText(k)}</small><span class="sv"></span></button>`).join('')}
           </div>
           <div class="spot" aria-live="polite"></div>
           <div class="cart" hidden></div>
@@ -233,6 +233,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   let typing = false;
   let destroyed = false;
   let toastT = null;
+  let acesT = null;
   let tipT = null;
   let tickedFor = '';
   let serverBet = '';
@@ -249,12 +250,12 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   const L = () => st?.limits;
   const mine = () => st?.seats.find((x) => x?.me) ?? null;
 
-  function toast(text, bad = false) {
+  function toast(text, bad = false, ms = 2600) {
     const t = $('.toast');
     t.textContent = text;
     t.className = `toast show${bad ? ' bad' : ''}`;
     clearTimeout(toastT);
-    toastT = setTimeout(() => (t.className = 'toast'), 2600);
+    toastT = setTimeout(() => (t.className = 'toast'), ms);
   }
   const fail = (e) => !SILENT.has(e?.code) && toast(why(e, L()), true);
 
@@ -437,12 +438,21 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // Split (retour d'Antoni du 21/11) : la 2ᵉ carte de chaque main est une règle du moteur, distribuée sans clic — on le dit.
     const ev = next.last;
     // Une seule fois par manche (mandat du 21/11, A2 : pas de répétition) — la pile montre ensuite chaque main.
-    if (animate && me && ev?.seat === me.seat && me.hands.length > 1) {
+    // As séparés (retour d'Antoni du 23/11) : la règle (une carte chacun, mains closes sans clic) est dite au Split, puis
+    // la clôture des deux mains, une fois le premier message lu — l'ancien « tu joues la main 1 d'abord » était faux ici.
+    const aces = me?.hands[0]?.splitAces;
+    if (animate && me && ev?.seat === me.seat && aces) {
+      if (ev.type === 'split') toast('As séparés : une seule carte supplémentaire par main.', false, 3000);
+      else if (ev.type === 'card' && ev.auto && ev.hand === 1) acesT = setTimeout(() => toast('As séparés : tes deux mains sont complètes.', false, 2200), 900);
+    } else if (animate && me && ev?.seat === me.seat && me.hands.length > 1) {
       if (ev.type === 'split' && me.hands.length === 2) toast(`Split : tu joues la main ${ev.hand + 1} d’abord ; la main ${ev.hand + 2} recevra sa 2ᵉ carte à son tour.`);
       else if (ev.type === 'card' && ev.auto && ev.hand === 1) toast('Main 2 : sa 2ᵉ carte est distribuée automatiquement (règle du Split).');
     }
     if (animate && next.last?.type === 'peek') toast(me?.insurance?.stake ? `Pas de blackjack pour la banque : assurance perdue (−${fmt(me.insurance.stake)}), la main continue.` : 'Pas de blackjack pour la banque : la main continue.');
     if (animate && next.phase === 'settled' && prev?.phase !== 'settled') {
+      // jamais par-dessus le résultat : le message des As s'efface au règlement
+      clearTimeout(acesT);
+      if ($('.toast').textContent.startsWith('As séparés')) $('.toast').className = 'toast';
       payFlights(next);
       setTimeout(() => !destroyed && st === next && rx.dealer(pickDealerReaction(next, L()?.mainMin)), 900);
     }
@@ -523,7 +533,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // l'arc revient, large et peu profond, de part et d'autre de la banque (une rangée plate de 7 cases sur toute la
     // largeur écrasait la banque, minuscule, au-dessus d'une barre).
     const hero = felt.classList.contains('has-hero');
-    const flat = hero || W < 420 || (H < 300 && W < 600);
+    const flat = hero || W < 420 || (H < 240 && W < 600); // (lecteur 65 % : ≈ 540 × 265, l'arc reste — 23/11)
     box.classList.toggle('flat', flat);
     // De l'air entre les cartes de la banque, les cases et leur titre (retour d'Antoni du 21/11) : la rangée descend
     // (bord 50, flèche 42 au lieu de 40/40), et suit l'échelle --kg comme les cartes qu'elle contourne.
@@ -593,7 +603,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const sw = carousel ? Math.round(88 * kg) : Math.floor(Math.min(max, (W - 28 - gap * (perRow - 1)) / perRow));
     seatsEl.style.setProperty('--sw', `${sw}px`);
     seatsEl.style.setProperty('--gap', `${gap}px`);
-    seatsEl.style.setProperty('--mw', `${Math.max(18, Math.min(carousel ? 24 : narrow ? 21 : 25, Math.round(sw * 0.3)))}px`);
+    seatsEl.style.setProperty('--mw', `${Math.max(18, Math.min(carousel ? 24 : narrow ? 21 : 28, Math.round(sw * 0.3)))}px`);
     seatsEl.style.setProperty('--av', `${Math.max(14, Math.min(20, Math.round(sw * 0.17)))}px`);
     seatsEl.dataset.size = carousel ? 'l' : n <= 3 ? 'xl' : n <= 5 ? 'l' : n <= 7 ? 'm' : 's';
     const have = new Map([...seatsEl.querySelectorAll('.seat'), ...mineEl.querySelectorAll('.seat')].map((x) => [Number(x.dataset.seat), x]));
@@ -941,7 +951,8 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   /** Ce que j'ai d'engagé dans la manche : mes mains (doubles et splits compris), mes paris banque, mon assurance. */
   const engaged = (me) => (me.hands.length ? me.hands.reduce((a, h) => a + h.stake, 0) + Object.values(me.side ?? {}).reduce((a, b) => a + b, 0) + (me.insurance?.stake ?? 0) : reserved());
   /** « Mise en cours » : une petite zone à part (le solde, lui, est dans l'en-tête de Raptoru Live). */
-  const stakeHTML = (v) => `<div class="stake${v ? '' : ' none'}" title="Jetons misés sur cette manche"><small>Mise en cours</small><b>${fmt(v)}</b></div>`;
+  // (100K, 1M25 : un montant rond s'abrège ; 100 100 reste exact, « 100K1 » se lisait mal)
+  const stakeHTML = (v) => `<div class="stake${v ? '' : ' none'}" title="Jetons misés sur cette manche"><small>Mise<i> en cours</i></small><b title="${fmt(v)}">${v >= 10000 && v % 1000 === 0 ? kfmt(v) : fmt(v)}</b></div>`;
   function paintBar(s, me) {
     let key;
     let html;

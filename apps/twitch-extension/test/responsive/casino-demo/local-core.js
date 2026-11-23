@@ -64,6 +64,7 @@ const BJ_LIMITS = {
 };
 
 let balance = START;
+let botMain = 0;
 const rounds = []; // this viewer's rounds, newest first (publicView shape)
 const replies = new Map(); // idempotency key → answer (a resent intent replays it)
 const forced = {
@@ -645,7 +646,7 @@ function botsMove(t) {
   t.seats.forEach((s) => {
     if (!s || !isBot(s.user) || s.status !== 'seated') return;
     if (t.phase === 'betting' && !s.bet?.ready && due(s.user, 1800)) {
-      const main = 100 * (1 + rng.int(5));
+      const main = botMain || 100 * (1 + rng.int(5));
       const side =
         rng.int(3) === 0
           ? { [['d17', 'd18', 'd19', 'd20', 'd21', 'bust'][rng.int(6)]]: 50 }
@@ -794,6 +795,8 @@ function rigFor(t, kind) {
       then: [8, 8, 3, 10, 9, 10, 7, 2],
     },
     aces: { seats: { [seat]: [1, 1] }, dealer: [9, 7] },
+    // Split d'As (retour d'Antoni du 23/11) : main 1 A + 10 = 21, main 2 A + 5 — chacune s'arrête à une carte.
+    aces21: { seats: { [seat]: [1, 1] }, dealer: [9, 7], then: [10, 5] },
     blackjack: { seats: { [seat]: [1, 10] }, dealer: [9, 7] },
     insurance: { seats: { [seat]: [10, 9] }, dealer: [1, 10] },
     even: { seats: { [seat]: [1, 10] }, dealer: [1, 7] },
@@ -905,7 +908,21 @@ export async function casinoDemoCall(method, rawPath, body, key) {
       pending_actions: host.pending_actions,
     };
   }
-  if (method === 'GET' && path === '/casino/state') return casinoState();
+  if (method === 'GET' && path === '/casino/state') {
+    // ?casinoFault= (bench « Panne »): the two ways the slot screen can fail, to see what the viewer gets.
+    //   slot-mount: the state lacks the slot table → mountSlot throws after drawing its cabinet (no message).
+    //   state:      the Core refuses the state while the slot screen opens → « Le Casino ne répond pas ».
+    const fault = new URLSearchParams(location.search).get('casinoFault');
+    const onSlot =
+      document.querySelector('.mg')?.dataset.screen === 'casino_slot';
+    if (fault === 'state' && onSlot) throw refuse('unavailable', {}, 503);
+    if (fault === 'slot-mount' && onSlot) {
+      const s = casinoState();
+      delete s.tables.slot;
+      return s;
+    }
+    return casinoState();
+  }
   if (method === 'GET' && path === '/casino/history') return history(query);
   const round = /^\/casino\/rounds\/([^/]+)$/.exec(path);
   if (method === 'GET' && round) {
@@ -1014,6 +1031,10 @@ window.__casinoDemo = {
   },
   balance(n) {
     balance = Math.max(0, Math.floor(Number(n) || 0));
+  },
+  /** The simulated players' main bet (0: 100-500 at random) — big amounts on screen. */
+  botBet(n) {
+    botMain = Math.max(0, Math.floor(Number(n) || 0));
   },
   /** Another table with `n` simulated players (default 3); its number. */
   table(n = 3) {

@@ -10,14 +10,18 @@ export const BASE_H = 434;
 export const MIN = 0.6;
 
 /** L'échelle pour une iframe de w × h : 1 à partir de la référence, MIN au plus petit. */
-export const scaleFor = (w, h) => Math.max(MIN, Math.min(1, w / BASE_W, h / BASE_H));
+export const scaleFor = (w, h, [bw, bh] = [BASE_W, BASE_H]) => Math.max(MIN, Math.min(1, w / bw, h / bh));
+// Blackjack (23/11, Antoni : « pas un simple zoom ») : sa table a sa propre disposition au lecteur normal (563 × 376,
+// blackjack.css « lecteur 65 % ») — cartes et scores agrandis, marges réduites. Il n'est réduit d'un bloc qu'en dessous.
+export const BJ_BASE = [563, 376];
 
 export function fitVideoComponent(win = window) {
   const root = win.document.documentElement;
   let last = null;
   const apply = () => {
     const casino = !!win.document.querySelector('.cz-host');
-    const raw = casino ? scaleFor(win.innerWidth, win.innerHeight) : 1;
+    const bj = !!win.document.querySelector('.mg[data-screen="casino_blackjack"]');
+    const raw = casino ? scaleFor(win.innerWidth, win.innerHeight, bj ? BJ_BASE : undefined) : 1;
     const z = raw < 0.995 ? Math.round(raw * 1000) / 1000 : 1;
     if (z === last) return;
     last = z;
