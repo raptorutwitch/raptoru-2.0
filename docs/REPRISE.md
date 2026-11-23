@@ -194,11 +194,15 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 
 **C. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (Chaos V2 lot 0, validations réelles en attente, finitions Studio).
 
-**D. Soundboard : ajouter un son depuis Studio (23/11, local)** — [SOUNDBOARD.md](SOUNDBOARD.md). Développé et testé sur
-la branche `feat/soundboard-studio-import` (worktree `Raptoru 2.0 - Worktrees\soundboard`), **PR #126 ouverte, non fusionnée** : éditeur
-Studio (fichier, poignées, écoute, nom, prix, publier, recouper, supprimer), fichiers WAV stockés par le Core
-(`sound_files`), catalogue dynamique, aperçu de l'extension depuis le Core. Rien de déployé : Core (migration), Studio,
-puis un dernier ZIP de l'extension, chacun sur GO d'Antoni (SOUNDBOARD.md § 3). Essai d'Antoni : Lab isolé, SOUNDBOARD.md § 4.
+**D. Soundboard : ajouter un son depuis Studio (23/11)** — [SOUNDBOARD.md](SOUNDBOARD.md) § 3. PR #126 fusionnée
+(`408f201a`). **Core `408f201a` déployé le 23/11 (déploiement lancé à 16:44 UTC)** (migration `20261205130000_sound_files.sql` appliquée,
+sauvegarde Coolify 16:43:40 UTC, retour arrière `deploy core 2a41e06e… --rollback --go`) ; la réaction blackjack r6
+(ICANT, réservée aux abonnés, PR #122) part avec, sur GO d'Antoni. Bot non redéployé. **Studio 0.1.44 Soundboard
+construit, NON publié** (artefact `raptoru-studio-0.1.44` du run 45220697767, conservé jusqu'au 21/02/2027) : le Studio
+installé est `0.1.44-chaos.1` (chantier Chaos, autre session) ; ne rien installer par-dessus. Soundboard et Chaos seront
+réunis dans un build commun quand Chaos Overlay V2 sera prêt (décision d'Antoni du 23/11). Finitions Casino du 23/11
+fusionnées (PR #127, `ed70a107`). **ZIP consolidé** Soundboard + Casino (36 commits, sans diagnostic actif, Hosted Test
+seulement) : inventaire `INVENTAIRE-ed70a107018f.md` en attente de la ligne de validation d'Antoni.
 
 ## 6. Comment reprendre dans une nouvelle session
 

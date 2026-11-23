@@ -64,13 +64,16 @@ aussitôt** dans la Soundboard des viewers, sans nouveau ZIP. L'aléatoire tire 
 - Sons existants conservés : la banque et ses réglages ne changent pas ; « Fichier d'origine » rend le MP3 livré.
 - Supprimer : définitif depuis Studio (aussi pour un son de la banque) ; l'historique et le fichier restent.
 
-## 3. Mise en service (rien n'est déployé)
+## 3. Mise en service (Core déployé le 23/11 ; Studio et ZIP en attente)
 
-1. **Core** : migration additive `20261205130000_sound_files.sql` (sauvegarde < 60 min, `--migrations-approved`).
+1. **Core** : migration additive `20261205130000_sound_files.sql` (sauvegarde < 60 min, `--migrations-approved`). **Fait le
+   23/11** : Core `408f201a`, sauvegarde 16:43:40 UTC.
    Retour arrière : redéployer le Core précédent ; il ignore les nouvelles colonnes (les sons ajoutés disparaissent du
    catalogue, la banque revient telle quelle).
 2. **Studio** : nouvelle version (éditeur, cache, lecteur). Après le Core (un Core ancien refuse `sound/files` : l'éditeur
-   le dit, rien n'est publié).
+   le dit, rien n'est publié). **0.1.44 construite, non publiée** : le Studio installé est un build Chaos ; la Soundboard
+   arrivera dans le build commun. Un Studio sans cette version ne joue pas un son ajouté (forme `sound-files/…` refusée par
+   son lecteur) : n'ajouter de sons qu'avec un Studio qui la contient.
 3. **Extension** : **un dernier ZIP** pour l'aperçu des sons ajoutés (`soundboard-preview.js`). Sans lui, un son ajouté
    s'affiche et s'achète déjà, seul son aperçu répond « Aperçu indisponible ». Ensuite plus de ZIP pour un son.
 4. Bot : rien.
