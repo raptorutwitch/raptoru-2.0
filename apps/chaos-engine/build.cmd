@@ -25,6 +25,6 @@ if /i "%1"=="unit" goto done
 %CSC% /target:winexe /out:"%OUT%\ChaosEngine.exe" %WINRT% %NET% %RES% /recurse:"%HERE%src\*.cs" || exit /b 1
 %CSC% /target:exe /out:"%OUT%\chaos-checks.exe" %NET% "%HERE%tests\Checks.cs" "%HERE%src\Interop\Native.cs" "%HERE%src\Interop\Json.cs" || exit /b 1
 rem banc de comparaison des methodes (visible : jamais lance automatiquement, garde de jeu)
-%CSC% /target:exe /out:"%OUT%\chaos-bench.exe" /main:Raptoru.Chaos.Bench %WINRT% %NET% %RES% /recurse:"%HERE%src\*.cs" "%HERE%tests\Checks.cs" "%HERE%tests\Bench.cs" "%HERE%tests\BenchStats.cs" "%HERE%tests\CaptureCompat.cs" "%HERE%tests\CursorProto.cs" || exit /b 1
+%CSC% /target:exe /out:"%OUT%\chaos-bench.exe" /main:Raptoru.Chaos.Bench %WINRT% %NET% %RES% /recurse:"%HERE%src\*.cs" "%HERE%tests\Checks.cs" "%HERE%tests\Bench.cs" "%HERE%tests\BenchStats.cs" "%HERE%tests\CaptureCompat.cs" "%HERE%tests\CursorProto.cs" "%HERE%tests\CursorDemo.cs" || exit /b 1
 :done
 echo OK : %OUT%
