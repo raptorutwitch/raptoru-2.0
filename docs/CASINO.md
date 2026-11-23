@@ -571,6 +571,61 @@ Toujours **extension seule** : aucune règle, cote, mise, limite ni route du Cor
 
 ## 16. Composition responsive et banc interactif en cadre réel (21/11, après essai d'Antoni)
 
+### 16.0 Échelle uniforme du composant vidéo (22/11 au soir, régression vue en live)
+
+- **Constat** (captures d'Antoni) : dans un lecteur Twitch normal, l'iframe du composant fait ≈ **520 × 347** (console :
+  hauteur cible 60 %, format 3:2, « Dimensions automatiques » désactivées). Sous 651 × 434, le Blackjack basculait vers
+  ses dispositions compactes (paris en barres, boutons étirés). Le banc ouvrait par défaut 651 × 434 et les essais
+  validés étaient faits en plein écran (1053 × 702) : il ne montrait pas ce que voient la plupart des viewers.
+- **Correctif** (`extension/app/fit.js`) : tant qu'un écran du Casino est affiché, le composant vidéo est réduit d'un
+  bloc (CSS `zoom` sur la page) vers la composition de référence 651 × 434 — échelle = min(L/651, H/434), jamais
+  au-dessus de 1 (pas d'agrandissement en plein écran), arrêtée à 0,6 (en dessous, les dispositions compactes
+  reprennent). `app/layout.js` mesure la composition (la fenêtre ÷ le zoom). Le menu et les autres modules gardent leur
+  adaptation (plusieurs mesurent la fenêtre en `vh`). Panneau et mobile : inchangés.
+- **Banc** : « lecteur normal (520×347) » est le format par défaut ; petit (452×301), très petit (390×260), référence
+  (651×434), grande fenêtre (760×507), plein écran (1053×702).
+
+### 16.0.1 Application Twitch mobile (23/11, captures Android d'Antoni)
+
+- **Ce que reçoit l'extension** : dans l'application, `mobile.html?platform=mobile` s'affiche **à la place du chat**
+  (sous la vidéo 16:9, le bandeau de la chaîne et les onglets) — environ **393 × 484** sur un Android courant,
+  360 × 409 sur un petit, 360 × 269 sur un ancien 360 × 640. Le banc donnait à la page **l'écran entier** (390 × 844) :
+  aucun problème mobile n'y apparaissait. Dimensions **estimées** : Twitch ne documente ni la taille ni l'agencement
+  (« Do not assume any specific aspect ratio or dimension », dev.twitch.tv/docs/extensions/designing).
+- **Causes** :
+  - _Machine à sous (et les autres machines)_ : la hauteur du jeu n'avait qu'une source, la place laissée par la page
+    (colonne flex partant de `min-height: 100vh`). Selon la hauteur reçue : 0 px → jeu absent, cadre vide ; zone basse
+    (plus large que 4:3, ex. 357 × 244) → cabine de PC à colonne de 150 px, Lancer et montant de la mise hors cadre ;
+    zone ≤ 320 px → page figée à `100vh` sans défilement (shell-panel.css, m17), jeu coupé ; zone trop haute → contenu
+    centré sous la partie visible. Reproduit dans le banc (ancien 360 × 640) ; la capture d'Antoni n'a pas été reçue
+    ici, la cause exacte sur son téléphone reste à confirmer sur l'appareil.
+  - _TTS_ : hauteurs fixes pensées pour 844 px (aperçu 170 px, carte tirée 300 px, message sur 4 lignes) : sous la
+    vidéo, l'aperçu prenait la place et les personnages passaient sous le paiement.
+  - _Random Ban_ : bandeau « Mini-jeux · Random Ban et les jeux du stream » répété, barre sur deux rangées, viseur d'au
+    moins 210 px : Lancer sous la ligne de flottaison.
+- **Correctifs** (shell v2, surface mobile seulement ; PC, panneau et composant vidéo inchangés) :
+  `modules/arcade/arcade.css` — hauteur d'un jeu du Casino bornée par la **largeur** (au moins 75 % de la largeur,
+  entre 240 et 340 px : toujours la cabine portrait ; au plus 1,2 × la largeur) et défilement autorisé sur une zone très
+  basse ; Random Ban compacté (bandeau retiré, barre sur une rangée quand il n'y a pas de charges, viseur 110–210 px
+  selon la hauteur visible). `modules/tts/tts.css` — message, aperçu et carte tirée suivent la hauteur visible
+  (plafonds = anciennes valeurs, grand écran inchangé). Fonctions, coûts et parcours inchangés.
+- **Bonk (trouvé en passant, tous supports)** : un échec de lecture du catalogue d'emotes redessinait Bonk, dont le
+  rendu relançait aussitôt la lecture — une boucle de requêtes `/emotes` à la vitesse du réseau tant que le Core répond
+  en erreur (dans le banc, réponse immédiate : page figée). Après un échec, plus de nouvel essai automatique avant 15 s
+  (`shared/emote-access.js`, test `test/emote-access.test.js`) ; un rechargement explicite redemande tout de suite.
+- **Paysage** (guidelines Twitch 3.4 : « Mobile Extensions must display all elements within the stream chat viewport
+  in both portrait and landscape views », dev.twitch.tv/docs/extensions/guidelines-and-policies ; RFC 0003 et blog
+  Twitch 2018 : les extensions occupent la zone du chat) : l'extension vit **dans la zone du chat**. En paysage avec le
+  chat ouvert à côté de la vidéo, elle est présente et fonctionne (banc : 367 × 349). En **plein écran paysage**, aucun
+  point d'accès aux extensions n'est documenté et `isFullScreen` n'est pas envoyé sur mobile
+  (dev.twitch.tv/docs/extensions/reference) : limite de l'application Twitch, pas de notre frontend, sans contournement
+  autorisé. Le viewer quitte le plein écran (ou ouvre le chat) pour utiliser l'extension.
+- **Banc** : surface « Mobile » = un **téléphone dessiné comme l'application** (barre d'état, vidéo 16:9, bandeau de la
+  chaîne, onglets Chat / Raptoru Live, barre de navigation) ; l'iframe reçoit la zone restante et défile pour de vrai.
+  Pixel 7/8 (par défaut), petit Android, grand Android, ancien 360 × 640, iPhone, paysage chat ouvert, paysage plein
+  écran (sans extension), zone seule. « Accueil — tous les modules » ouvre le Hub (TTS V2, Random Ban et Mini-jeux avec
+  des données fictives). Ces captures ne remplacent pas un essai sur un vrai téléphone.
+
 Toujours **extension seule** (le Core en Production `1f05b97c` suffit : aucune règle, cote, mise, limite, route ni
 protection modifiée). Retour d'Antoni sur le banc : les débordements étaient corrigés, pas la façon d'occuper
 l'espace ; et le banc ne montrait ni le vrai cadre de Raptoru Live ni de vraies parties.
@@ -878,9 +933,10 @@ Deux livraisons séparées :
 
 ### 18.7 Réactions (Core `reactions.ts`, extension `bj-reactions.js`)
 
-- Un joueur **assis** touche « Réagir » (petit bouton plein à côté de Quitter) : une bulle de **7 émotes** (une rangée
-  sur PC, 4 + 3 au téléphone, au doigt), qui **reste ouverte** après chaque envoi (une petite croix ou un clic ailleurs
-  la ferment). L'émote part aussitôt au-dessus de sa place, chez tous les joueurs **et les spectateurs**.
+- Un joueur **assis** touche « Réagir » (petit bouton plein à côté de Quitter) : une bulle de **10 émotes** (une rangée
+  sur PC ; 2 rangées de 5 sur une table étroite ou au doigt), qui **reste ouverte** après chaque envoi et d'une page à
+  l'autre (une petite croix ou un clic ailleurs la ferment). Un **abonné** de la chaîne voit au bout de la rangée une
+  petite flèche dorée vers la **page des abonnés** (§ 18.7.1). L'émote part aussitôt au-dessus de sa place, chez tous les joueurs **et les spectateurs**.
 - **L'envol** (22/11, « une petite émote remplie d'hélium ») : elle grandit avec un petit rebond pendant qu'elle
   commence déjà à monter ; la montée est continue (aucun arrêt, aucune accélération brutale), dérive un peu à gauche ou
   à droite et s'efface pendant la fin de sa montée (≈ 3 s), avant d'atteindre le centre de la table. Plusieurs émotes coexistent (un petit nuage, 6 au plus par place),
@@ -905,7 +961,8 @@ Deux livraisons séparées :
   | La banque gagne contre tous                    | Lunettes de soleil | 20 %        |
 
 - **Sécurité** :
-  - seulement les identifiants `r1` … `r7`, jamais de texte libre ; aucun Jeton ; rien en base ;
+  - seulement les identifiants `r1` … `r13` et `s1` … `s9` (abonnés, § 18.7.1), jamais de texte libre ; aucun Jeton ;
+    rien en base ;
   - **rythme** (22/11) : un réservoir de 5 jetons par viewer, un de plus toutes les 2 s — une rafale de 5, puis 1 toutes
     les 2 s, jamais plus de 5 en réserve ; appliqué **par le Core** (refus `react_rate` avec `retry_in_ms`, en mémoire,
     sans conséquence économique), recopié dans l'extension pour un retour immédiat (les émotes s'estompent un instant
@@ -916,30 +973,76 @@ Deux livraisons séparées :
 - **Arrêt** : `casino.bj_reactions` (joueurs) et `casino.bj_dealer_reactions` (banque), à 1 par défaut, dans Studio ›
   Casino (avec la prochaine version de Studio ; avant, seulement par l'API des réglages). Chaque viewer peut aussi
   masquer les réactions pour lui seul (petite icône dans la bulle de choix).
-- **Les 7 réactions** (choix d'Antoni du 21/11, dans cet ordre ; le Core ne transmet que l'identifiant) :
+- **Les 10 réactions classiques** (choix d'Antoni du 22/11, dans cet ordre, pour tous ; le Core ne transmet que
+  l'identifiant, jamais réutilisé pour une autre image) :
 
-  | Id   | Réaction           | Visuel                                                       |
-  | ---- | ------------------ | ------------------------------------------------------------ |
-  | `r1` | Sourire            | 🙂 Twemoji `1f642`                                           |
-  | `r2` | Visage attendri    | 😳 Twemoji `1f633`                                           |
-  | `r3` | Colère             | 😡 Twemoji `1f621`                                           |
-  | `r4` | Lunettes de soleil | 😎 Twemoji `1f60e`                                           |
-  | `r5` | Sourire en coin    | 😉 Twemoji `1f609`                                           |
-  | `r6` | ICANT              | `ICANT.png` (émote d'Antoni, fixe)                           |
-  | `r7` | ptn                | `ptn.gif` (émote d'Antoni, animée : 75 images, transparente) |
-  - Les cinq emojis sont ceux de Discord : Discord affiche le jeu **Twemoji**, déjà embarqué dans l'extension
-    (`assets/twemoji`, version 17.0.3, SVG nets). Licence des visuels **CC-BY 4.0** : redistribution permise avec
-    attribution (`assets/twemoji/readme.txt`, `license-graphics.txt`). Ils ont été identifiés sur la capture fournie
-    par Antoni : le 2ᵉ est 😳 (_flushed_) et le 5ᵉ 😉 (_wink_), comme sur la capture.
-  - ICANT.png et ptn.gif sont les fichiers d'Antoni tels quels (128 × 128, transparents) : jamais réencodés, le GIF
-    garde toutes ses images. Une émote est toujours affichée par une image (`<img>`) : elle s'anime dans la bulle de
-    choix, au-dessus des places, dans le repère hors écran et dans la bulle de la banque. Un WebP animé futur
-    fonctionne de la même façon. Les 7 images sont chargées une fois, dès que le Core annonce les réactions.
+  | Ordre | Id    | Réaction           | Visuel                                                       |
+  | ----- | ----- | ------------------ | ------------------------------------------------------------ |
+  | 1     | `r1`  | Sourire            | 🙂 Twemoji `1f642`                                           |
+  | 2     | `r8`  | Sourire avec sueur | 😅 Twemoji `1f605`                                           |
+  | 3     | `r9`  | Pleurs             | 😭 Twemoji `1f62d`                                           |
+  | 4     | `r2`  | Visage rougissant  | 😳 Twemoji `1f633`                                           |
+  | 5     | `r4`  | Lunettes de soleil | 😎 Twemoji `1f60e` (à la place de 🫡 `r10`, 22/11 au soir)   |
+  | 6     | `r3`  | Colère             | 😡 Twemoji `1f621`                                           |
+  | 7     | `r11` | Câlin              | 🤗 Twemoji `1f917`                                           |
+  | 8     | `r12` | Surprise           | 😮 Twemoji `1f62e`                                           |
+  | 9     | `r13` | Crâne              | 💀 Twemoji `1f480`                                           |
+  | 10    | `r7`  | ptn                | `ptn.gif` (émote d'Antoni, animée : 75 images, transparente) |
+  - Les neuf emojis sont ceux de Discord : Discord affiche le jeu **Twemoji**, déjà embarqué dans l'extension
+    (`assets/twemoji`, version 17.0.3, SVG nets) — jamais le rendu natif de Windows ou du navigateur. Licence des
+    visuels **CC-BY 4.0** : redistribution permise avec attribution (`assets/twemoji/readme.txt`,
+    `license-graphics.txt`).
+  - `r10` 🫡, `r5` 😉 et `r6` ICANT ne sont plus proposés mais restent affichés : un écran pas encore à jour, et la
+    banque. **`r6` (ICANT) est réservé aux abonnés** depuis le 22/11 au soir (le Core le traite comme un `s…`).
+  - **La banque (LeCroupier\_)** réagit d'une émote seule, jamais de texte, au plus une fois par manche, la même pour
+    tous : blackjack de la banque ou d'un joueur, gros gain, grosse perte, banque qui saute, double gagné ou perdu,
+    split, bust, égalité, victoire, banque gagnante. Elle puise dans **toutes** les réactions (anciennes et abonnés
+    comprises), avec une probabilité par situation (faible pour les situations banales) : `reactions.js DEALER`.
+    Aucun message écrit automatique de LeCroupier_ sur le Blackjack (seuls restent l'invitation à une table et le
+    partage d'une manche, sur un clic du joueur).
+  - ptn.gif est le fichier d'Antoni tel quel (128 × 128, transparent) : jamais réencodé, le GIF garde toutes ses images.
+    Une émote est toujours affichée par une image (`<img>`) : elle s'anime dans la bulle de choix, au-dessus des places,
+    dans le repère hors écran et dans la bulle de la banque. Les images proposées sont chargées une fois, dès que le
+    Core annonce les réactions.
+  - **Versions mêlées** : un Core d'avant le 22/11 n'annonce que `r1` … `r7` — la nouvelle extension propose alors ces
+    7-là ; une extension d'avant le 22/11 face au nouveau Core propose ses 7 et ignore les émotes qu'elle ne connaît pas.
+
+#### 18.7.1 La page des abonnés (mandat du 22/11)
+
+- **Qui** : un viewer **abonné à la chaîne** (Twitch, tout palier, abonnement payé **ou offert** : Twitch compte un
+  abonnement offert comme un abonnement pendant sa durée). Le petit ascenseur haut/bas (deux étages superposés, la
+  liste glisse verticalement, la bulle garde sa taille et reste ouverte) n'apparaît qu'à lui ; les classiques restent à
+  tous ; aucun Jeton.
+- **Les 10** : les 9 émotes d'Antoni (dossier « Emote a donner pour le blackjack/Update », réduites de ≈ 2 000 px à
+  128 × 128 PNG, 15 à 37 Ko chacune, dans `assets/casino/reactions/subs/`) et ptn, sur les deux pages :
+
+  | Id   | Émote        | Fichier d'origine        |
+  | ---- | ------------ | ------------------------ |
+  | `s1` | Aigri        | `Aigri v3.png`           |
+  | `s2` | Cheh         | `Cheh.png`               |
+  | `s3` | VNR          | `Emote VNR.png`          |
+  | `s4` | ICANT        | `ICANT.png` (historique) |
+  | `s5` | GasmRem      | `GasmRem.png`            |
+  | `s6` | Happy        | `HappyFinal2.png`        |
+  | `s7` | Raptor Sadge | `Raptor sadge Fixed.png` |
+  | `s8` | SpiritEel    | `SpiritEel.png`          |
+  | `s9` | Grumpy       | `grumpy.png`             |
+
+- **Vérification par le Core**, jamais par l'écran : le cache d'abonnements du moteur de Fidélité
+  (`loyalty/tiers.ts resolveTiers` : événements Twitch abonnement / offert / fin, et instantanés Helix complets) — le
+  même que le mini-profil. À chaque réaction `s…` : `403 sub_only` (non abonné) ou `403 sub_unknown` (absent du cache
+  et aucun instantané de moins de 36 h : jamais deviné) ; refusée **avant** le rythme (un refus ne coûte rien). L'état
+  de la table indique `reactions.sub` (`yes` / `no` / `unknown`, `null` pour un spectateur anonyme) et n'ajoute les
+  identifiants `s…` qu'à un abonné. Un abonnement qui prend fin : refusé dès l'envoi suivant, la flèche disparaît à la
+  réponse suivante.
+- Les émotes des abonnés s'envolent **chez tout le monde**, comme les classiques.
+- **Banc d'essai** : « Abonnement (réactions subs) » : Abonné / Non abonné / Inconnu.
 
 - **Remplacer une émote** : déposer le fichier (PNG, GIF ou WebP animé, transparent, carré, 112 à 128 px) dans
   `apps/twitch-extension/extension/assets/casino/reactions/` et changer sa ligne `src` dans `reactions.js` du même
   dossier. Rien d'autre : identifiants, protocole, rythme, logique, animations d'apparition et Core ne bougent pas.
-  Ajouter une 8ᵉ réaction demanderait en plus son identifiant dans le Core (`reactions.ts`).
+  Ajouter une réaction demande en plus son identifiant dans le Core (`reactions.ts`) et sa place dans `PAGES`
+  (`reactions.js`).
 
 **Contrat** :
 

@@ -24,8 +24,10 @@ import {
 import * as Lobby from '../../../../core-api/src/casino/blackjack/lobby.ts';
 import {
   REACTION_IDS,
+  SUB_REACTION_IDS,
   TableReactions,
   isReactionId,
+  isSubReactionId,
 } from '../../../../core-api/src/casino/blackjack/reactions.ts';
 
 const ME = '42'; // the demo session's twitch_user_id (shared/demo-data.js)
@@ -89,6 +91,8 @@ async function sessionPayload() {
     const { createDemoSession } = await import(base);
     session = createDemoSession('paid');
     session.pending_actions = [];
+    // TTS V2 (characters, preview), as the production session offers it: the mobile bench shows the real TTS screen.
+    for (const m of session.modules) if (m.id === 'tts') m.tts_v2 = TTS_V2;
   }
   session.wallet = { points: balance, reserved: 0, available: balance };
   return structuredClone(session);
@@ -577,7 +581,23 @@ function sweep(now = Date.now()) {
   return gone.length;
 }
 /** A simulated player reacts (its own pace applies: reactions.ts). */
-function botReact(t, s, r = REACTION_IDS[rng.int(REACTION_IDS.length)]) {
+// What the simulated players send: the reactions an up-to-date screen offers (both pages: they are subscribers).
+const BOT_IDS = [
+  'r1',
+  'r8',
+  'r9',
+  'r2',
+  'r4',
+  'r3',
+  'r11',
+  'r12',
+  'r13',
+  'r7',
+  ...SUB_REACTION_IDS,
+];
+// The demo viewer's subscription as the Core would know it (the bench's « Abonnement » control): yes | no | unknown.
+let subStatus = 'yes';
+function botReact(t, s, r = BOT_IDS[rng.int(BOT_IDS.length)]) {
   try {
     reactions.push(t.id, s.user, t.seats.indexOf(s), r, Date.now());
     wake(t);
@@ -700,7 +720,8 @@ async function bjState(query) {
     reactions: {
       on: LIMITS.bj_reactions,
       dealer: LIMITS.bj_dealer_reactions,
-      ids: [...REACTION_IDS],
+      ids: [...REACTION_IDS, ...(subStatus === 'yes' ? SUB_REACTION_IDS : [])],
+      sub: subStatus,
       ...reactions.view(t.id, Date.now()),
     },
   };
@@ -717,6 +738,12 @@ function bj(action, body) {
   if (action === 'react') {
     if (!isReactionId(body?.r)) throw refuse('bad_reaction', {}, 400);
     if (!t) throw refuse('not_seated');
+    if (isSubReactionId(body.r) && subStatus !== 'yes')
+      throw refuse(
+        subStatus === 'unknown' ? 'sub_unknown' : 'sub_only',
+        {},
+        403,
+      );
     try {
       const n = reactions.push(t.id, ME, BJ.seatOf(t, ME), body.r, Date.now());
       wake(t);
@@ -782,6 +809,84 @@ function rigFor(t, kind) {
   return rigs[kind] ?? null;
 }
 
+// TTS V2 as the Core serves it (apps/core-api/src/tts-lab/rules.ts defaults; the TTS player ready, no cooldown).
+const tier = (id, min, max, price, cooldown_seconds) => ({
+  id,
+  min,
+  max,
+  price,
+  credit_cost: 1,
+  cooldown_seconds,
+});
+const TTS_V2 = {
+  module_state: 'enabled',
+  rules: {
+    max_chars: 2000,
+    tiers: [
+      tier('1-80', 1, 80, 7500, 60),
+      tier('81-150', 81, 150, 11_250, 90),
+      tier('151-300', 151, 300, 15_000, 120),
+      tier('301-500', 301, 500, 22_500, 180),
+      tier('501+', 501, null, 37_500, 300),
+    ],
+    speech: { chars_per_second: 13.5, overhead_ms: 2400 },
+  },
+  viewer: {
+    blocked: false,
+    player_offline: false,
+    viewer_busy: false,
+    queue_full: false,
+    cooldown_remaining_ms: 0,
+    current: null,
+  },
+};
+
+function randomBanState() {
+  const names = [
+    'Pika',
+    'Kiwi',
+    'Alice',
+    'Bob_le_viking',
+    'LeCroupier_',
+    'Mimi',
+    'Zorg',
+    'Nana',
+    'Tchoupi',
+    'Raptor_fan',
+  ];
+  const at = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  const done = (i, name, min) => ({
+    request_id: `rb${i}`,
+    source: 'extension',
+    status: 'confirmed',
+    buyer: { id: String(100 + i), name: names[(i + 3) % 10] },
+    target: { id: String(i), name },
+    duration_s: 300,
+    price_paid: 30_000,
+    created_at: at(min),
+  });
+  return {
+    state: {
+      price: 30_000,
+      live: true,
+      ready: true,
+      identity: true,
+      pending: 0,
+      max_pending: 3,
+      candidates: names.map((name, i) => ({
+        id: String(i),
+        name,
+        avatar: null,
+      })),
+      recent: [done(1, 'Kiwi', 3), done(2, 'Mimi', 9), done(3, 'Zorg', 21)],
+      mine: [],
+      sniper: { bonus: 1000, ready: true, window_ms: 1_800_000 },
+      charges: null,
+    },
+    actions: [{ name: 'launch', available: true }],
+  };
+}
+
 // --- The router (shared/api.js `call` in demo mode: method, path with its query, body, idempotency key) ---------------
 export async function casinoDemoCall(method, rawPath, body, key) {
   const [path, qs = ''] = String(rawPath).split('?');
@@ -789,6 +894,17 @@ export async function casinoDemoCall(method, rawPath, body, key) {
   if (path === '/session' || path === '/state') return sessionPayload();
   if (method === 'GET' && path === '/modules/v3')
     return structuredClone(HOST_MODULES);
+  // Random Ban (Mini-jeux): a frozen, plausible state so the bench shows the real screen (no draw is simulated).
+  if (method === 'GET' && /^\/modules\/v3\/random_ban[^/]*\/state$/.test(path))
+    return randomBanState();
+  if (method === 'GET' && path === '/tts/state') {
+    const host = await sessionPayload();
+    return {
+      tts_v2: TTS_V2,
+      wallet: host.wallet,
+      pending_actions: host.pending_actions,
+    };
+  }
   if (method === 'GET' && path === '/casino/state') return casinoState();
   if (method === 'GET' && path === '/casino/history') return history(query);
   const round = /^\/casino\/rounds\/([^/]+)$/.exec(path);
@@ -903,7 +1019,13 @@ window.__casinoDemo = {
   table(n = 3) {
     return otherTable(Math.max(0, Math.min(10, Number(n) || 0))).no;
   },
-  /** A simulated player at the viewer's table reacts now (`r`: r1 … r6, else at random). */
+  /** The demo viewer's subscription (the subscribers' reactions): 'yes' | 'no' | 'unknown'. */
+  sub(v) {
+    subStatus = ['yes', 'no', 'unknown'].includes(v) ? v : 'yes';
+    const t = seatedAt(ME);
+    if (t) wake(t);
+  },
+  /** A simulated player at the viewer's table reacts now (`r`: a reaction id, else at random). */
   react(r) {
     const t = seatedAt(ME);
     const bots = t?.seats.filter((s) => s && isBot(s.user)) ?? [];

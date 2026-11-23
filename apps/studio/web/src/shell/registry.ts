@@ -35,6 +35,7 @@ export const VIEW_IDS = [
   'music-overlay',
   'sub-wheel',
   'chaos',
+  'chatbox',
 ] as const;
 export type ViewId = (typeof VIEW_IDS)[number];
 
@@ -257,6 +258,17 @@ export const PAGES: Page[] = [
     view: 'casino',
     desc: 'Machine à sous et roulette de l’extension : ouverture, limites, parties.',
     keywords: 'casino machine à sous coffre roulette jetons extension',
+  },
+  {
+    id: 'chatbox',
+    label: 'Chatbox',
+    section: 'modules',
+    group: 'Effets & mise en scène',
+    icon: 'terminal',
+    view: 'chatbox',
+    desc: 'Les trois chatbox OBS : apparence, emplacements, visibilité, démonstration.',
+    keywords:
+      'chat chatbox overlay obs streamelements emotes 7tv croupier filtre',
   },
   {
     id: 'bonk',

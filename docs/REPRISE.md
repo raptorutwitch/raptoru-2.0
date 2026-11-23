@@ -14,17 +14,18 @@ Plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). 
 Le Core décide (données, Jetons, règles), le bot LeCroupier_ parle à Twitch, Raptoru Studio (Electron, PC d'Antoni)
 pilote OBS, l'extension Twitch et raptoru.fr parlent aux viewers. SAMMI abandonné. Dépôt public : aucun secret.
 
-Production (relevé du 22/11, 00:54 UTC) : Core a94d1081 (sain), bot 2c04a5db (un seul bot actif), Studio 0.1.42
-publié ET installé (relevé du 20/11), extension publique be1744e75f63 (prouvée par Antoni le 20/11), main 302db793.
+Production (relevé du 22/11, 14:15 UTC) : Core df3adb5e (sain), bot df3adb5e (un seul bot actif, CHATBOX_RELAY=true),
+Studio 0.1.43 publiée (0.1.42 installée tant qu'Antoni n'a pas mis à jour), extension publique be1744e75f63, main 8f428a37.
 Casino V1 : développement TERMINÉ et fusionné (PR #90 → #115, #111, #113) ; Core a94d1081 DÉPLOYÉ le 22/11 00:39 UTC
 (nouvelles tables + réactions ; aucune migration ; retour arrière Core 1f05b97c) ; réglages ouverts, refus hors live.
 ZIP PRÊT À PUBLIER, PAS téléversé (aucune preuve) : raptoru-live-PRODUCTION-d09fd03aa844-depuis-be1744e-20-commits-shell-v2.zip,
 SHA-256 1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039 (inventaire 2411c992b26b validé par Antoni).
 L'extension publique NE contient PAS le Casino ; aucune partie réelle avec de vrais viewers. Ne pas dire « Casino
 disponible pour tous ». Gestes restants : Antoni (Hosted Test, revue Twitch) — § 5.4.
-PRIORITÉ DE DÉVELOPPEMENT : remplacer les 3 chatbox StreamElements (Just Chatting, React, Dessin) par une chatbox
-Raptoru. Architecture validée et spécification complète le 22/11 ; jalon 1 (prototype Lab + démonstration) en cours :
-docs/CHATBOX.md (+ rapport et présentation privés hors Git). Sources OBS, StreamElements, Production : sans GO, rien.
+CHATBOX RAPTORU : EN SERVICE MASQUÉE le 22/11 (Core + bot df3adb5e, CHATBOX_RELAY=true, Studio 0.1.43 publiée, 5 sources
+OBS « Chatbox Raptoru — … » ajoutées MASQUÉES au-dessus des anciennes). Reste : Antoni installe 0.1.43, essai en live,
+bascule scène par scène SUR SON GO (docs/CHATBOX.md § 12.2). Ne rendre aucune source visible, ne toucher à aucune source
+StreamElements sans GO. Chantier suivant : KO Overlay = Chaos V2 (§ C).
 Niveaux : restauration WizeBot du 20/11 définitive (NE JAMAIS LA REJOUER).
 Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Méthode : docs/AGENT_WORKFLOW.md § 0.
 ```
@@ -121,9 +122,9 @@ Hosted Test de l'extension se prouvent dans la console Twitch (Antoni) ou en liv
 | Élément                | Valeur                                                                                                                                                                                                                                                         | Preuve                                           |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `origin/main`          | `302db793` (PR #113, inventaire validé) ; dernier code `a94d1081` (PR #111)                                                                                                                                                                                    | `git log`                                        |
-| Core                   | **`a94d1081`**, déployé le 22/11 00:39 UTC (déploiement `5wucyqh9ekhb8i3ehgllxldu`), `/health` et `/ready` OK ; aucune migration depuis Casino V1                                                                                                              | `coolify-deploy.mjs status core`                 |
-| Bot                    | **`2c04a5db`** (16/11), actif, seul bail (vu par le Core le 22/11)                                                                                                                                                                                             | `status core`                                    |
-| Studio                 | **0.1.42 publié (Latest) et installé** (relevé du 20/11 ; les interrupteurs des réactions du Casino viendront avec une prochaine version)                                                                                                                      | `build-info.json`                                |
+| Core                   | **`df3adb5e`** (Chatbox), déployé le 22/11 14:10 UTC (déploiement `4jae1tmush9ronyffbl9wvbb`), `/health` et `/ready` OK ; aucune migration ; avant `a94d1081`                                                                                                  | `coolify-deploy.mjs status core`                 |
+| Bot                    | **`df3adb5e`** (22/11 14:13 UTC, `CHATBOX_RELAY=true`), actif, seul bail ; avant `2c04a5db`                                                                                                                                                                    | `status core`                                    |
+| Studio                 | **0.1.43 publiée (Latest) le 22/11** (Chatbox + interrupteurs des réactions du Casino) ; 0.1.42 installée jusqu'à la mise à jour par Antoni                                                                                                                    | `build-info.json`                                |
 | Extension publique     | **`be1744e75f63`** (shell v2 : Level Up V2, mini-profil, Commandes V2.1, Mini-jeux V5, Music Hub), prouvée par Antoni le 20/11 ; sans Casino                                                                                                                   | `apps/twitch-extension/PUBLISHED`                |
 | Hosted Test            | dernier téléversement **tracé** : `2e2eaf3ae34a` (Casino, 20/11). `76875d47e728` (20/11) construit, téléversement non tracé                                                                                                                                    | [INVENTAIRE_RELEASES.md](INVENTAIRE_RELEASES.md) |
 | **ZIP prêt à publier** | `raptoru-live-PRODUCTION-d09fd03aa844-depuis-be1744e-20-commits-shell-v2.zip`, SHA-256 `1ec79c2adc15c242f66da51d226726fd9ef9abd381d6b753f8734d8b66d76039`, source `d09fd03a`, 20 commits depuis `be1744e75f63` ; écrit et vérifié le 22/11 ; **non téléversé** | `Worktrees\agent\apps\twitch-extension\release\` |
@@ -174,7 +175,8 @@ Les états ne se confondent pas (détail : [ROADMAP.md](ROADMAP.md) § 0.4) :
 
 1. Lire [CHATBOX.md](CHATBOX.md), puis la présentation et le rapport privés qu'il cite (§ 1) ; ne refaire ni la
    reconnaissance ni la présentation. Direction décidée par Antoni le 22/11 (CHATBOX.md § 4).
-2. Jalon en cours : CHATBOX.md § 10 (prototype Lab sur la branche `feat/chatbox-lab`, worktree `agent`).
+2. Core et bot `df3adb5e` déployés le 22/11 (14:10 et 14:13 UTC, bot `CHATBOX_RELAY=true`), Studio 0.1.43 publiée, cinq sources OBS ajoutées **masquées** (CHATBOX.md § 12). Suite : Antoni installe 0.1.43, puis l'essai en live et la bascule scène par scène
+   sur son GO (§ 12.2). Ensuite : KO Overlay = Chaos V2 (§ C ci-dessous).
 3. Aucune source OBS active, widget StreamElements ni Production modifiés sans autorisation explicite d'Antoni.
 
 **B. Casino jusqu'au public (gestes d'Antoni, en parallèle)**. Le Hosted Test ne permet **pas** un essai avec de vrais

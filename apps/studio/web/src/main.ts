@@ -31,6 +31,7 @@ import './pages/progression.css';
 import './pages/shop.css';
 import './pages/challenges.css';
 import './pages/halloween.css';
+import './pages/chatbox.css';
 import { mountExtensionLab } from './pages/labo-extension.js';
 import { mountTestLab } from './pages/labo-tests.js';
 import { mountBonkPage } from './pages/bonk.js';
@@ -60,6 +61,7 @@ import { mountHalloweenPage } from './pages/halloween.js';
 import { mountProgressionPage } from './pages/progression.js';
 import { mountShopPage } from './pages/shop.js';
 import { mountChallengesPage } from './pages/challenges.js';
+import { mountChatboxPage } from './pages/chatbox.js';
 import { mountShell, shellHtml } from './shell/shell.js';
 import { VIEW_IDS, type ViewId } from './shell/registry.js';
 
@@ -114,6 +116,7 @@ if (app) {
     bonk: mountBonkPage(el('bonk')),
     chaos: mountChaosPage(el('chaos')),
     modules: mountModuleHost(el('modules')),
+    chatbox: mountChatboxPage(el('chatbox')),
   };
   mountUpdateWidget(app.querySelector<HTMLElement>('.update-widget')!);
   // L'entrée Simulation de la barre latérale, avec l'état du live fictif (depuis n'importe quelle page).

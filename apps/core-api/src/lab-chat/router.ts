@@ -1,4 +1,5 @@
 import type { LabChatMessage, LabStreamEvent } from '@raptoru/schemas';
+import { commandWord, withTrigger } from '../chatbox/trigger.js';
 
 // Lab chat ingress — ONE entry for every chat message of the Lab (single Twitch adapter or the Studio
 // simulator) and for the stream state. Core routes each message to every Lab module that handles chat
@@ -48,7 +49,14 @@ export class LabChatRouter {
   private readonly log: LabChatEntry[] = [];
   private seq = 0;
 
-  constructor(private readonly modules: LabChatModule[]) {}
+  constructor(
+    private readonly modules: LabChatModule[],
+    /** Chatbox (docs/CHATBOX.md): every message once routed, with the modules that took it. Never throws. */
+    private readonly observer?: (
+      msg: LabChatMessage,
+      handled: Handled[],
+    ) => void,
+  ) {}
 
   /** Every module sees the message; the answer lists the modules that handled it. */
   async message(msg: LabChatMessage) {
@@ -63,7 +71,12 @@ export class LabChatRouter {
       for (const m of this.modules) {
         if (!m.chat || (!command && !m.plainText)) continue;
         if (m.answers && !command && answeredBy) continue;
-        const out = await m.chat(msg);
+        // The steps a module writes now remember this message and its command (chatbox: LeCroupier_'s answers).
+        const chat = m.chat.bind(m);
+        const out = await withTrigger(
+          { message_id: msg.message_id, command: commandWord(msg.text) },
+          () => chat(msg),
+        );
         if (out.outcome === 'ignored') continue;
         handled.push({ module: m.name, ...out });
         if (m.answers && !command) answeredBy = m.name;
@@ -73,6 +86,11 @@ export class LabChatRouter {
       throw e;
     } finally {
       this.remember(msg, receivedAt, handled, error);
+    }
+    try {
+      this.observer?.(msg, handled);
+    } catch {
+      /* the chatbox never fails a chat message */
     }
     return { handled };
   }

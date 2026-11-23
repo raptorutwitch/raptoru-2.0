@@ -1,0 +1,367 @@
+/* Chatbox Raptoru — the OBS page (docs/CHATBOX.md § 5.2, § 8). Full-frame transparent page at scale 1; the box is
+   placed by Studio; every value comes from the profile's settings as CSS variables (player.js). Only transform and
+   opacity are animated. The background's opacity never touches the text or the emotes. */
+
+@font-face {
+  font-family: 'Figtree';
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: block;
+  src: url('fonts/figtree-latin-wght-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Figtree';
+  font-weight: 300 900;
+  font-style: italic;
+  font-display: block;
+  src: url('fonts/figtree-latin-wght-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 600;
+  font-display: block;
+  src: url('fonts/barlow-condensed-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 700;
+  font-display: block;
+  src: url('fonts/barlow-condensed-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-display: block;
+  src: url('fonts/barlow-condensed-latin-800-normal.woff2') format('woff2');
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+#box {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  padding: var(--edge);
+  opacity: var(--opacity, 1);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top, 0px),
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top, 0px),
+    #000 100%
+  );
+  transition: opacity var(--fade-ms, 800ms) cubic-bezier(0.22, 1, 0.36, 1);
+  color: var(--text-color);
+  font-family: var(--text-font), 'Figtree', 'Segoe UI', sans-serif;
+}
+
+#box.is-idle-hidden {
+  opacity: 0;
+}
+
+#log {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--gap);
+  width: 100%;
+  min-width: 0;
+}
+
+.fit #log {
+  align-items: flex-start;
+}
+
+.msg {
+  position: relative;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+  padding: var(--pad-y) var(--pad-x);
+  border-radius: var(--radius);
+  isolation: isolate;
+  will-change: transform;
+}
+
+.msg > .bg {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border: var(--border-w) solid var(--border);
+  border-radius: inherit;
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  transition: opacity 400ms ease;
+}
+
+.latest-on .msg:not(.latest) > .bg {
+  opacity: var(--others);
+}
+
+/* Historical React widget (« Origine » only): the older messages were dimmed as a whole. */
+.dim-text .msg:not(.latest) {
+  opacity: var(--others);
+}
+
+.msg {
+  --bar-w: var(--bar);
+}
+
+.msg.role-broadcaster,
+.msg.role-moderator,
+.msg.role-vip,
+.msg.is-hl {
+  padding-left: calc(var(--pad-x) + var(--bar-w));
+}
+
+.msg.role-broadcaster::before,
+.msg.role-moderator::before,
+.msg.role-vip::before,
+.msg.is-hl::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--bar-w);
+  border-radius: var(--radius) 0 0 var(--radius);
+  content: '';
+}
+
+.msg.role-broadcaster::before {
+  background: var(--c-broadcaster);
+}
+.msg.role-moderator::before {
+  background: var(--c-moderator);
+}
+.msg.role-vip::before {
+  background: var(--c-vip);
+}
+
+/* A highlighted message: the accent in a wider bar and a soft glow on the left, a short tag; elegant, never neon. */
+.msg.is-hl {
+  --bar-w: max(var(--bar), 4px);
+}
+.msg.is-hl::before {
+  background: var(--hl) !important;
+}
+.msg.is-hl > .bg {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--hl) 26%, transparent) 0%,
+      transparent 78%
+    ),
+    var(--card-bg-hl);
+  opacity: 1 !important;
+}
+
+.meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: calc(var(--name-size) * 0.32);
+  margin-bottom: calc(var(--name-size) * 0.1);
+  line-height: 1.05;
+}
+
+.badges {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: calc(var(--badge) * 0.2);
+}
+
+.badge {
+  display: block;
+  width: var(--badge);
+  height: var(--badge);
+  border-radius: calc(var(--badge) * 0.12);
+  object-fit: contain;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--name-font), 'Figtree', sans-serif;
+  font-size: var(--name-size);
+  font-weight: var(--name-weight);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+}
+
+.tag {
+  flex: 0 0 auto;
+  padding: 0.18em 0.6em 0.14em;
+  border: 1px solid color-mix(in srgb, var(--hl) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hl) 14%, transparent);
+  color: var(--hl);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: max(11px, calc(var(--name-size) * 0.56));
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.reply {
+  overflow: hidden;
+  margin: 0 0 0.15em;
+  opacity: 0.72;
+  font-size: calc(var(--text-size) * 0.62);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: var(--text-shadow);
+}
+
+.body {
+  overflow-wrap: anywhere;
+  font-size: var(--text-size);
+  font-weight: var(--text-weight);
+  line-height: var(--lh);
+  text-shadow: var(--text-shadow);
+  text-wrap: pretty;
+}
+
+.is-action .body {
+  color: color-mix(in srgb, currentColor 84%, white);
+  font-style: italic;
+}
+
+.mention {
+  font-weight: 800;
+}
+
+.stack {
+  position: relative;
+  display: inline-block;
+  width: max-content;
+  height: var(--emote);
+  margin: 0 0.055em;
+  overflow: visible;
+  vertical-align: -0.23em;
+  line-height: 0;
+  filter: var(--emote-shadow);
+}
+
+.stack > img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.base {
+  display: block;
+  width: auto;
+  max-width: none;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zero {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: auto;
+  max-width: none;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.stack.is-orphan {
+  opacity: 0.92;
+}
+
+.gif {
+  display: inline-block;
+  width: auto;
+  max-width: var(--gif-w);
+  height: auto;
+  max-height: var(--gif-h);
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.is-emote-only .body {
+  line-height: 1;
+}
+
+.is-emote-only .stack {
+  height: var(--solo);
+  margin: 0 0.08em;
+  vertical-align: -0.14em;
+}
+
+.fallback-emoji {
+  font-family: 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: var(--emote);
+  line-height: 1;
+}
+
+/* Studio's preview only: the filtered messages stay visible, struck, with the rule that hid them. */
+.msg.is-hidden {
+  opacity: 0.38;
+}
+.msg.is-hidden .body,
+.msg.is-hidden .name {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+.why {
+  margin-top: 0.3em;
+  color: #ffd27a;
+  font:
+    600 12px/1.2 'Figtree',
+    sans-serif;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px #000;
+}
+
+#progress {
+  position: absolute;
+  right: var(--edge);
+  bottom: calc(var(--edge) * 0.45);
+  left: var(--edge);
+  display: none;
+  height: var(--progress-h);
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.has-progress #progress {
+  display: block;
+}
+#progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.62);
+  transform: scaleX(0);
+  transform-origin: left;
+}

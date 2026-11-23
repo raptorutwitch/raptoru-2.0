@@ -44,6 +44,8 @@ const GAMES = {
 // [label, w, h] — the Lot B mandate's explicit minimum (§ 9): very small, compact, standard, large, fullscreen,
 // portrait/landscape, mobile-realistic. Shares its numbers with test/responsive/matrix.mjs and casino-bench.js.
 const SIZES = [
+  ['lecteur Twitch normal, 65 % (22/11)', 563, 376],
+  ['lecteur Twitch normal, 60 %', 520, 347],
   ['zoom 150 %', 377, 251],
   ['zoom 125 %', 452, 301],
   ['panel court', 318, 300],
@@ -60,6 +62,9 @@ const SIZES = [
   // Zone de l'extension sous la vidéo dans l'application Twitch (estimations : la taille exacte dépend du téléphone).
   ['app Twitch portrait (est.)', 360, 480],
   ['app Twitch compact (est.)', 300, 340],
+  ['app Android, zone sous la vidéo (23/11)', 393, 484],
+  ['app ancien 360×640, zone (23/11)', 360, 269],
+  ['app paysage, chat ouvert (23/11)', 367, 349],
 ];
 /** Phone-sized rows run as a touch device (pointer: coarse), like the real app. */
 const TOUCH = (label) => label.startsWith('mobile') || label.startsWith('app ');

@@ -43,6 +43,8 @@ function loadSheets(hrefs) {
 }
 
 document.documentElement.dataset.shell = SHELL;
+// Le composant vidéo est réduit d'un bloc quand Twitch lui donne moins que la taille de référence (app/fit.js).
+if (page === 'video_component') (await import('./fit.js')).fitVideoComponent();
 if (SHELL === 'v2') {
   const { loadStyles } = await import('./styles.js');
   await loadStyles(V2[page]);

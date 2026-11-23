@@ -9,11 +9,14 @@ import {
 } from '../src/casino/blackjack/lobby.js';
 import {
   REACTION_BURST,
+  REACTION_IDS,
   REACTION_KEEP_MS,
   REACTION_KEEP_N,
   REACTION_REFILL_MS,
+  SUB_REACTION_IDS,
   TableReactions,
 } from '../src/casino/blackjack/reactions.js';
+import { applySnapshot, setSubscription } from '../src/loyalty/tiers.js';
 import { CasinoError } from '../src/casino/service.js';
 import { editWallet } from '../src/lab-moderation/store.js';
 import { setup, type TestCore } from './helpers.js';
@@ -294,7 +297,8 @@ describe('blackjack: reactions (service, PGlite)', () => {
     expect(spect.reactions).toMatchObject({
       on: true,
       dealer: true,
-      ids: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'],
+      ids: [...REACTION_IDS],
+      sub: null,
       seq: r.n,
       list: [
         {
@@ -314,7 +318,7 @@ describe('blackjack: reactions (service, PGlite)', () => {
     expect(await code(core.blackjack.react(CH, V(0), { r: 'r4' }))).toBe('ok');
     // The seventh (Antoni's animated ptn): its id only — the picture is the extension's.
     expect(await code(core.blackjack.react(CH, V(1), { r: 'r7' }))).toBe('ok');
-    expect(await code(core.blackjack.react(CH, V(1), { r: 'r8' }))).toBe(
+    expect(await code(core.blackjack.react(CH, V(1), { r: 'r14' }))).toBe(
       'bad_reaction',
     );
     expect(await tokens(core)).toBe(before);
@@ -325,6 +329,83 @@ describe('blackjack: reactions (service, PGlite)', () => {
     expect(rows[0]!.n).toBe(1); // the test's own wallet set only
   });
 
+  it('the subscribers’ page: a subscriber only (paid or gifted), checked by the Core at each send; unknown ≠ no', async () => {
+    const core = await lab();
+    const a = await core.blackjack.join(CH, V(0), {});
+    for (const i of [1, 2, 3])
+      await core.blackjack.join(CH, V(i), { table_id: a.table });
+    const sub = async (v: ReturnType<typeof V>) =>
+      (await core.blackjack.state(CH, a.table, v)).reactions;
+    const tierOf = (v: ReturnType<typeof V>) => ({
+      twitchUserId: v.id,
+      login: v.display_name.toLowerCase(),
+      displayName: v.display_name,
+    });
+    // No Twitch snapshot yet: nobody is known as a non-subscriber — « unknown », refused, never guessed.
+    expect(await sub(V(0))).toMatchObject({
+      sub: 'unknown',
+      ids: [...REACTION_IDS],
+    });
+    expect(await code(core.blackjack.react(CH, V(0), { r: 's1' }))).toBe(
+      'sub_unknown',
+    );
+    // A fresh complete snapshot: V(1) paid, V(2) gifted; V(0) absent → not a subscriber.
+    await applySnapshot(core.db, {
+      fetchedAt: core.clock.now().toISOString(),
+      subscribers: [
+        { viewer: tierOf(V(1)), tier: 't1', isGift: false },
+        { viewer: tierOf(V(2)), tier: 't1', isGift: true },
+      ],
+    } as never);
+    expect(await sub(V(0))).toMatchObject({
+      sub: 'no',
+      ids: [...REACTION_IDS],
+    });
+    expect(await sub(V(1))).toMatchObject({
+      sub: 'yes',
+      ids: [...REACTION_IDS, ...SUB_REACTION_IDS],
+    });
+    expect((await sub(V(2))).sub).toBe('yes');
+    // A spectator without a shared identity: no status, the classic ids only.
+    expect(
+      (await core.blackjack.state(CH, a.table, null)).reactions,
+    ).toMatchObject({
+      sub: null,
+      ids: [...REACTION_IDS],
+    });
+    // A direct call by a non-subscriber is refused, and costs no reaction (5 classic ones still pass right after).
+    expect(await code(core.blackjack.react(CH, V(0), { r: 's9' }))).toBe(
+      'sub_only',
+    );
+    // ICANT (r6, a sub emote since 22/11 evening) included.
+    expect(await code(core.blackjack.react(CH, V(0), { r: 'r6' }))).toBe(
+      'sub_only',
+    );
+    for (let i = 0; i < 5; i++)
+      expect(await code(core.blackjack.react(CH, V(0), { r: 'r1' }))).toBe(
+        'ok',
+      );
+    for (const id of ['s1', 's9', 'r6'])
+      expect(await code(core.blackjack.react(CH, V(1), { r: id }))).toBe('ok');
+    expect(await code(core.blackjack.react(CH, V(2), { r: 's5' }))).toBe('ok');
+    // Its subscription ends (Twitch's event): refused at the next send, and the page goes away.
+    await core.db.query(
+      'delete from viewer_subscriptions where twitch_user_id = $1',
+      [V(1).id],
+    );
+    expect(await code(core.blackjack.react(CH, V(1), { r: 's2' }))).toBe(
+      'sub_only',
+    );
+    expect((await sub(V(1))).sub).toBe('no');
+    // A new subscription event (no new snapshot needed).
+    await setSubscription(core.db, tierOf(V(3)), 't2', false);
+    expect(await code(core.blackjack.react(CH, V(3), { r: 's3' }))).toBe('ok');
+    // The snapshot grows old (36 h): an absent viewer is « unknown » again, a known subscriber stays one.
+    core.clock.advance(37 * 3600_000);
+    expect((await sub(V(0))).sub).toBe('unknown');
+    expect((await sub(V(3))).sub).toBe('yes');
+  });
+
   it('the long-poll answers for a new reaction (rx), not only for a new state', async () => {
     const core = await lab();
     const a = await core.blackjack.join(CH, V(0), {});
@@ -333,11 +414,11 @@ describe('blackjack: reactions (service, PGlite)', () => {
     const rx = first.reactions.seq;
     const t0 = Date.now();
     const waiting = core.blackjack.state(CH, a.table, V(1), seq, 5_000, rx);
-    setTimeout(() => void core.blackjack.react(CH, V(0), { r: 'r6' }), 50);
+    setTimeout(() => void core.blackjack.react(CH, V(0), { r: 'r5' }), 50);
     const got = await waiting;
     expect(Date.now() - t0).toBeLessThan(2_000);
     expect(got.state.seq).toBe(seq);
-    expect(got.reactions.list.map((x) => x.r)).toEqual(['r6']);
+    expect(got.reactions.list.map((x) => x.r)).toEqual(['r5']);
   });
 
   it('the streamer turns them off: refused, and the screens are told (no « Réagir » button)', async () => {

@@ -29,6 +29,8 @@ export default defineConfig(
       'apps/studio/server/halloween-overlay/**/*.js',
       // Music Hub: the OBS music overlay page (also the editor's preview frame).
       'apps/studio/server/music-overlay/**/*.js',
+      // Chatbox Raptoru: the OBS chat page, its engine and the demonstration (docs/CHATBOX.md).
+      'apps/studio/server/chatbox-player/**/*.js',
     ],
     languageOptions: {
       sourceType: 'module',

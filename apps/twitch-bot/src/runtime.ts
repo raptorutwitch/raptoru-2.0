@@ -1,3 +1,4 @@
+import { commandWord, type OwnAnswers } from './chatbox-forward.js';
 import type { Viewer } from '@raptoru/schemas';
 import { handleChatMessage } from './chat-commands.js';
 import type { BotConfig } from './config.js';
@@ -20,6 +21,8 @@ export interface BotRuntimeDeps {
     | 'sendChatMessage'
     | 'subscribe'
   >;
+  /** Chatbox: the bot's direct answers and the command each one answered (chatbox-forward.ts). */
+  answers?: OwnAnswers;
   core: CoreClient;
   workerId: string;
   log?: (...args: unknown[]) => void;
@@ -57,6 +60,7 @@ export function createBotRuntime({
   core,
   workerId,
   log = console.log,
+  answers,
 }: BotRuntimeDeps) {
   const broadcaster = config.TWITCH_BROADCASTER_ID;
   const dailyChat = config.DAILY_CHAT_COMMANDS === 'true';
@@ -85,9 +89,19 @@ export function createBotRuntime({
   });
   liveStateAgeSeconds = streams.liveStateAgeSeconds;
 
-  const say = chat
-    ? (text: string) => helix.sendChatMessage(broadcaster, tokenUserId, text)
-    : null;
+  // Chatbox: each direct answer remembers the command it answered (OwnAnswers), so the chatbox can show or hide it.
+  const sayFor = (command: string | null) =>
+    chat
+      ? async (text: string) => {
+          const id = await helix.sendChatMessage(
+            broadcaster,
+            tokenUserId,
+            text,
+          );
+          answers?.note(id ?? null, command);
+        }
+      : null;
+  const say = sayFor(null);
 
   const eventSub: EventSubHandlers = {
     async subscribe(sessionId) {
@@ -130,13 +144,15 @@ export function createBotRuntime({
               displayName: String(event.chatter_user_name),
             },
           };
-          if (dailyChat) await handleChatMessage(message, { core, say });
+          const answer = sayFor(commandWord(message.text))!;
+          if (dailyChat)
+            await handleChatMessage(message, { core, say: answer });
           if (loyaltyChat) {
             await handleLoyaltyMessage(
               { ...message, mentions: mentionsOf(event) },
               {
                 core,
-                say,
+                say: answer,
                 lookupLogin: (login) => helix.getUserByLogin(login),
               },
             );

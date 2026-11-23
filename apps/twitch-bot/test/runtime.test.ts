@@ -43,6 +43,7 @@ const baseConfig: BotConfig = {
   LAB_RANDOM_BAN_JOURNAL_FILE: '.lab-random-ban-journal.json',
   LAB_CAUTION_JOURNAL_FILE: '.lab-caution-journal.json',
   LAB_VOTEKICK_JOURNAL_FILE: '.lab-votekick-journal.json',
+  CHATBOX_RELAY: 'false',
 };
 
 let messageSeq = 0;
@@ -67,7 +68,7 @@ function build(config: Partial<BotConfig> = {}) {
       cursor: null,
       total: 0,
     })),
-    sendChatMessage: vi.fn<Helix['sendChatMessage']>(async () => {}),
+    sendChatMessage: vi.fn<Helix['sendChatMessage']>(async () => null),
     subscribe: vi.fn<Helix['subscribe']>(async () => {}),
     getUserByLogin: vi.fn<Helix['getUserByLogin']>(async () => null),
   };

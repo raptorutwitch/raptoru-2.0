@@ -30,6 +30,7 @@
     "studio": "turbo run build && npm run start -w @raptoru/studio-desktop",
     "studio:lab": "node scripts/studio-lab.mjs",
     "chaos:lab": "apps\\chaos-engine\\build.cmd && npm run build -w @raptoru/schemas && tsx apps/studio/server/scripts/chaos-lab.ts",
+    "chatbox:demo": "npm run build -w @raptoru/studio-web && npx tsx apps/studio/server/src/chatbox/demo-server.ts",
     "studio:legacy": "node scripts/studio-lab.mjs --legacy",
     "studio:package": "turbo run build && npm run package:win -w @raptoru/studio-desktop",
     "studio:release": "node apps/studio/desktop/scripts/release.mjs",

@@ -1,3 +1,5 @@
+import { ChatboxRelay, helixBadgeImages } from '../chatbox/relay.js';
+import { commandWord } from '../chatbox/trigger.js';
 import { musicExtRoutes } from '../http/music-ext-routes.js';
 import { parseMusicAudience } from './music-audience.js';
 import { cosmeticsRoutes } from '../http/cosmetics-routes.js';
@@ -114,6 +116,38 @@ export function createPublicFrontier(
     name: 'wallet_admin',
     chat: (m: Parameters<WalletAdminChat['chat']>[0]) => walletAdmin.chat(m),
   };
+  // Chatbox Raptoru (docs/CHATBOX.md § 5.1): the chat relayed to Studio, memory only; badge images with the Twitch app.
+  const chatbox = new ChatboxRelay({
+    db,
+    clock,
+    channelId,
+    badgeImages:
+      config.TWITCH_APP_CLIENT_ID && config.TWITCH_APP_CLIENT_SECRET
+        ? helixBadgeImages({
+            clientId: config.TWITCH_APP_CLIENT_ID,
+            clientSecret: config.TWITCH_APP_CLIENT_SECRET,
+          })
+        : null,
+  });
+  /** Chatbox: the command words the modules take (catalogue discovery) and the Lab's simulated chat. */
+  const chatboxObserver = (
+    msg: {
+      text: string;
+      source: string;
+      message_id: string;
+      chatter: {
+        id: string;
+        login: string;
+        display_name: string;
+        badges?: string[];
+      };
+    },
+    handled: { module: string }[],
+  ) => {
+    const word = commandWord(msg.text);
+    if (word && handled[0]) chatbox.discover(word, handled[0].module);
+    if (msg.source === 'simulator') void chatbox.simulated(msg).catch(() => {});
+  };
   const call = internalLabCall([
     ...bonkLabRoutes(core.bonkLab, lab ? core.twitchViewers : null),
     ...soundLabRoutes(core.soundLab),
@@ -131,6 +165,7 @@ export function createPublicFrontier(
             walletAdminModule,
           ]
         : [],
+      chatboxObserver,
     ),
     ...(lab ? labCockpitRoutes(core, channelId) : []),
     // Chat games configuration for the Studio cockpit (lot 8): Commands V2, Jeu des mots, Roulette / Slot / Duel.
@@ -198,12 +233,18 @@ export function createPublicFrontier(
       cockpit: { core: call, channelId, lab },
       // The chat games' doors for the production bot: the Tombola first, then the chat games (same as the Lab).
       chatIngress: {
-        router: chatRouter(core.raffleLab, [
-          ...core.chat.chatModules,
-          core.progression.chatModule,
-          walletAdminModule,
-        ]),
+        router: chatRouter(
+          core.raffleLab,
+          [
+            ...core.chat.chatModules,
+            core.progression.chatModule,
+            walletAdminModule,
+          ],
+          // Chatbox: the command words the modules take (catalogue discovery) and the Lab's simulated chat.
+          chatboxObserver,
+        ),
         games: core.chat,
+        chatbox: { relay: chatbox, db },
       },
       ext: secret
         ? {

@@ -185,18 +185,27 @@ export function createChatGames(o: {
     randomBanChat,
     fxCamChat,
     loginLookup,
+    /** Every module's chat words (Commands V2 refuses them; the chatbox's command catalogue lists them). */
+    reserved,
   };
 }
 export type ChatGames = ReturnType<typeof createChatGames>;
 
 /** The single chat ingress of a Core: the Tombola first, then the chat games. */
-export function chatRouter(raffle: RaffleLabService, modules: LabChatModule[]) {
-  return new LabChatRouter([
-    {
-      name: 'raffle',
-      chat: (m) => raffle.chat(m),
-      stream: (e) => raffle.streamEvent(e),
-    },
-    ...modules,
-  ]);
+export function chatRouter(
+  raffle: RaffleLabService,
+  modules: LabChatModule[],
+  observer?: ConstructorParameters<typeof LabChatRouter>[1],
+) {
+  return new LabChatRouter(
+    [
+      {
+        name: 'raffle',
+        chat: (m) => raffle.chat(m),
+        stream: (e) => raffle.streamEvent(e),
+      },
+      ...modules,
+    ],
+    observer,
+  );
 }

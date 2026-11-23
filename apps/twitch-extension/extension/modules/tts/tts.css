@@ -314,3 +314,22 @@ body.mobile:has(.ttsv2) #panel.m-body { height: 100vh; max-height: 100vh; overfl
 .ttsv2[data-surface='mobile'] .roster__row .pick { min-width: calc(38 * var(--g)); height: auto; flex: 0 1 calc(48 * var(--g)); aspect-ratio: 1 / 1; }
 /* Lot 1 : un prix ne se coupe jamais (« 7 500 J » reste sur une ligne ; le libellé peut passer à la ligne). */
 .ttsv2 .cta__price { white-space: nowrap; }
+
+/* --- Application Twitch (mobile, 23/11) : l'extension n'a que la zone du chat sous la vidéo (≈ 390 × 450 sur un
+   téléphone courant). Les hauteurs fixes ci-dessus (aperçu 170 px, carte tirée 300 px, message sur 4 lignes) venaient
+   d'un écran entier de 844 px : sous la vidéo, l'aperçu mangeait la place et les personnages passaient sous le
+   paiement. Elles suivent maintenant la hauteur visible, avec les valeurs d'origine pour plafond (grand écran
+   inchangé) et un plancher lisible ; le paiement reste collé en bas. */
+.ttsv2[data-surface='mobile'] .composer textarea { height: clamp(66px, 17vh, 140px); }
+.ttsv2[data-surface='mobile'] .ghost { height: clamp(84px, 21vh, calc(170 * var(--g))); }
+.ttsv2[data-surface='mobile'] .ghost__q { font-size: clamp(32px, 9vh, 56px); }
+.ttsv2[data-surface='mobile'] .stage { height: clamp(150px, 38vh, calc(300 * var(--g))); }
+.ttsv2[data-surface='mobile'] .done3 .stage { height: clamp(120px, 26vh, calc(196 * var(--g))); }
+@media (max-height: 560px) {
+  .ttsv2[data-surface='mobile'] .body { gap: calc(7 * var(--g)); }
+  .ttsv2[data-surface='mobile'] .roster { gap: calc(3 * var(--g)); }
+  .ttsv2[data-surface='mobile'] .pick { width: calc(42 * var(--g)); height: calc(42 * var(--g)); }
+  .ttsv2[data-surface='mobile'] .nav { height: calc(42 * var(--g)); }
+  .ttsv2[data-surface='mobile'] .pay, .ttsv2[data-surface='mobile'] .tx-foot { padding: calc(7 * var(--g)) calc(10 * var(--g)) calc(8 * var(--g)); }
+  .ttsv2[data-surface='mobile'] .cta { min-height: calc(46 * var(--g)); }
+}

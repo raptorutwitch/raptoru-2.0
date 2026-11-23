@@ -10,8 +10,41 @@
 // and is never stored. The extension mirrors the same bucket for an immediate answer; this one decides.
 import { CasinoError } from '../errors.js';
 
-/** The ids the Core accepts. Their pictures live in the extension (assets/casino/reactions/reactions.js). */
-export const REACTION_IDS = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7'] as const;
+/**
+ * The ids the Core accepts. Their pictures live in the extension (assets/casino/reactions/reactions.js). An id is never
+ * reused for another picture: r4–r6 (Antoni's first choice of 21/11) are no longer offered by an up-to-date screen but
+ * stay accepted and shown (a screen not yet updated, the dealer's reactions); r8–r13 complete the 10 of 22/11.
+ */
+export const REACTION_IDS = [
+  'r1',
+  'r2',
+  'r3',
+  'r4',
+  'r5',
+  'r7',
+  'r8',
+  'r9',
+  'r10',
+  'r11',
+  'r12',
+  'r13',
+] as const;
+/**
+ * The channel's subscribers only (mandate of 22/11): the Core checks the tier at every reaction (service.ts react). r6 is
+ * ICANT, a sub emote since the evening of 22/11 (s4 shows the same picture): never sent by a non-sub, even through the API.
+ */
+export const SUB_REACTION_IDS = [
+  'r6',
+  's1',
+  's2',
+  's3',
+  's4',
+  's5',
+  's6',
+  's7',
+  's8',
+  's9',
+] as const;
 export const REACTION_KEEP_MS = 10_000;
 export const REACTION_KEEP_N = 32;
 export const REACTION_BURST = 5;
@@ -24,8 +57,11 @@ export interface Reaction {
   at: number;
 }
 
-export const isReactionId = (r: unknown): r is (typeof REACTION_IDS)[number] =>
-  typeof r === 'string' && (REACTION_IDS as readonly string[]).includes(r);
+export const isSubReactionId = (r: unknown): boolean =>
+  typeof r === 'string' && (SUB_REACTION_IDS as readonly string[]).includes(r);
+export const isReactionId = (r: unknown): r is string =>
+  isSubReactionId(r) ||
+  (typeof r === 'string' && (REACTION_IDS as readonly string[]).includes(r));
 
 export class TableReactions {
   private readonly tables = new Map<string, Reaction[]>();

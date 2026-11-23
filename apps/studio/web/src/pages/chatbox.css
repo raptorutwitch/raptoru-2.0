@@ -1,0 +1,458 @@
+/* Chatbox Raptoru — Studio's screen (docs/CHATBOX.md § 9). The preview is the real OBS page: nothing here restyles it. */
+
+.cbx-empty {
+  color: var(--ink2);
+}
+
+.cbx-chip {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 99px;
+  color: var(--ink2);
+  font-size: 12px;
+}
+.cbx-chip.warn {
+  border-color: var(--gold-l);
+  color: var(--gold);
+}
+
+.cbx-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+}
+.cbx-sp {
+  flex: 1;
+}
+.cbx-presets {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cbx-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .cbx-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cbx-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cbx-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink2);
+  font-size: 13px;
+}
+
+.cbx-stage {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
+.cbx-frame {
+  overflow: hidden;
+  border-radius: 8px;
+  outline: 1px dashed rgb(255 255 255 / 0.18);
+}
+.cbx-frame iframe {
+  /* Same colour scheme as the page inside: Chromium paints an opaque backdrop behind a mismatched iframe. */
+  color-scheme: normal;
+  display: block;
+  border: 0;
+  background: transparent;
+  transform-origin: 0 0;
+}
+
+.cbx-stage.bg-dark {
+  background: radial-gradient(
+    120% 80% at 30% 20%,
+    #26303f 0%,
+    #10141b 60%,
+    #07090c 100%
+  );
+}
+.cbx-stage.bg-light {
+  background:
+    radial-gradient(
+      40% 30% at 70% 30%,
+      rgba(255, 200, 120, 0.6),
+      transparent 70%
+    ),
+    linear-gradient(160deg, #fbf7ef 0%, #efe9dd 55%, #e4ddd0 100%);
+}
+.cbx-stage.bg-busy {
+  background:
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.18) 0 14px,
+      transparent 14px 46px
+    ),
+    radial-gradient(60% 40% at 20% 30%, #ffcf4a 0%, transparent 70%),
+    radial-gradient(50% 45% at 80% 60%, #3fd1ff 0%, transparent 70%),
+    radial-gradient(45% 40% at 40% 85%, #ff4f8b 0%, transparent 70%),
+    linear-gradient(135deg, #2b7a3d, #6a3fb5);
+}
+
+.cbx-hint {
+  margin: 8px 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.cbx-note {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold-l);
+  border-radius: 10px;
+  background: var(--gold-a);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.cbx-side h3,
+.cbx-card h3 {
+  margin: 4px 0 10px;
+  font-size: 14px;
+}
+.cbx-card h4 {
+  margin: 14px 0 6px;
+  color: var(--ink2);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cbx-map {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background:
+    linear-gradient(var(--hair) 1px, transparent 1px) 0 0 / 10% 10%,
+    linear-gradient(90deg, var(--hair) 1px, transparent 1px) 0 0 / 10% 10%,
+    var(--check2);
+  touch-action: none;
+}
+.cbx-rect {
+  position: absolute;
+  border: 2px solid var(--teal);
+  border-radius: 3px;
+  background: var(--teal-a);
+  cursor: move;
+}
+.cbx-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--teal);
+  cursor: nwse-resize;
+}
+
+.cbx-place {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.cbx-pl {
+  display: grid;
+  gap: 4px;
+  color: var(--ink2);
+  font-size: 12px;
+}
+
+.cbx-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cbx-url code {
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink3);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cbx-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cbx-num input[type='range'] {
+  width: 120px;
+}
+.cbx-num input[type='number'] {
+  width: 64px;
+}
+.cbx-num small {
+  color: var(--ink3);
+}
+.cbx-input {
+  min-width: 140px;
+  padding: 5px 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 6px;
+  background: var(--sheet2);
+  color: var(--ink);
+  font: inherit;
+}
+
+.cbx-vis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+  gap: 16px;
+}
+.cbx-vis > .cbx-note {
+  grid-column: 1 / -1;
+}
+.cbx-card {
+  padding: 14px 16px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--sheet2);
+}
+.cbx-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.cbx-line > span:first-child {
+  flex: 1;
+  min-width: 140px;
+  overflow-wrap: anywhere;
+}
+.cbx-line small {
+  color: var(--ink3);
+}
+.cbx-cat {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.cbx-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cbx-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 99px;
+  font-size: 12.5px;
+}
+.cbx-tag button {
+  border: 0;
+  background: none;
+  color: var(--ink3);
+  cursor: pointer;
+}
+
+.cbx-demo {
+  color-scheme: normal;
+  width: 100%;
+  height: min(1100px, calc(100vh - 160px));
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: #0b0c0f;
+}
+
+/* --- Simplified editor (presets up front, essentials beside the preview, the rest folded) --- */
+.cbx-chip.ok {
+  border-color: var(--teal-l);
+  color: var(--teal);
+}
+.cbx-pcard {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 190px;
+  border: 1px solid var(--hair2);
+  border-radius: 12px;
+  background: var(--fill0);
+}
+.cbx-pcard.on {
+  border-color: var(--gold-l);
+  background: var(--gold-a);
+}
+.cbx-pcard > button {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cbx-pcard.on strong {
+  color: var(--gold);
+}
+.cbx-pcard small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.cbx-pact {
+  display: flex;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+.cbx-pact button {
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  color: var(--ink3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cbx-pnew {
+  padding: 10px 14px;
+  border: 1px dashed var(--hair2);
+  border-radius: 12px;
+  background: none;
+  color: var(--ink2);
+  font: inherit;
+  cursor: pointer;
+}
+.cbx-savebar {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--gold-l);
+  border-radius: 12px;
+  background: var(--sheet2);
+}
+.cbx-savebar > span {
+  flex: 1;
+  color: var(--gold);
+  font-weight: 600;
+}
+.cbx-side {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.cbx-ess {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.cbx-ess-h {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cbx-ess-h output {
+  color: var(--ink2);
+  font-variant-numeric: tabular-nums;
+}
+.cbx-ess small {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.cbx-ess input[type='range'] {
+  width: 100%;
+}
+.cbx-ess-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cbx-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink2);
+}
+.cbx-fold > summary,
+.cbx-sub > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.cbx-fold > summary small,
+.cbx-sub > summary small {
+  margin-left: 6px;
+  color: var(--ink3);
+  font-weight: 500;
+}
+.cbx-sub {
+  margin: 8px 0;
+  padding: 6px 0;
+  border-top: 1px solid var(--hair);
+}
+.cbx-wide {
+  grid-column: 1 / -1;
+}
+.cbx-search {
+  width: min(420px, 100%);
+}
+.cbx-cmd {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.2fr) minmax(220px, 1fr) minmax(
+      320px,
+      1.4fr
+    );
+  gap: 8px 16px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.cbx-cmd-h {
+  display: grid;
+  gap: 2px;
+}
+.cbx-words {
+  color: var(--ink3);
+  font-size: 12px;
+}
+.cbx-cmd-c {
+  display: grid;
+  gap: 4px;
+}
+.cbx-cmd-c > span {
+  color: var(--ink3);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+@media (max-width: 1100px) {
+  .cbx-cmd {
+    grid-template-columns: 1fr;
+  }
+}

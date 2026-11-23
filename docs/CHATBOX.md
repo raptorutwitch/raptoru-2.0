@@ -1,8 +1,8 @@
 # Chatbox Raptoru : chantier (remplacer les trois chatbox StreamElements)
 
-**État au 22/11/2026 : architecture validée par Antoni, spécification complète (§ 4 à 9), prototype Lab en cours
-(§ 10).** Aucune source OBS active, aucun widget StreamElements ni la Production ne sont touchés sans autorisation
-explicite d'Antoni. Ce fichier est le point d'entrée du chantier ; il ne remplace pas le rapport de reconnaissance ni
+**État au 22/11/2026 : en service, masqué** — Core et bot `df3adb5e` (`CHATBOX_RELAY=true`), Studio 0.1.43 publiée, cinq
+sources OBS ajoutées **masquées** ; essai en live et bascule sur GO d'Antoni (§ 12.2). Aucune source OBS active, aucun
+widget StreamElements ni la Production ne sont touchés sans autorisation explicite d'Antoni. Ce fichier est le point d'entrée du chantier ; il ne remplace pas le rapport de reconnaissance ni
 la présentation (§ 1).
 
 ## 1. Sources (hors Git, privées)
@@ -150,15 +150,25 @@ persistantes, éditées dans Studio ; aucune IA, aucune liste de phrases.
 - Par défaut : Nightbot et StreamElements masqués (modifiables) ; LeCroupier_ suit le catalogue du § 6.3 ; les
   viewers sont visibles.
 
-### 6.2 Commandes
+### 6.2 Commandes (catalogue complet, demande d'Antoni du 22/11)
 
 - Une commande, c'est `!` suivi d'une lettre ou d'un chiffre (`!song`, `!Roue`) ; `!!!!!`, `!?!?`, `! salut` ne le
-  sont jamais.
-- **Commande Raptoru reconnue** = le premier mot est un nom ou un alias du registre (Commandes V2, désactivées
-  comprises) ou un mot réservé d'un module (Tombola, mini-jeux, Roue du Sub, TTS…, `commands/reserved.ts`) : le Core
-  la marque ; **masquée par défaut**.
+  sont jamais (jamais masqués comme commandes).
+- **Catalogue** (Core, `chatbox/catalog.ts`, lu par Studio chaque minute) : le registre Commandes V2 de la chaîne
+  (noms + alias, désactivées comprises : une commande créée dans Studio apparaît seule), les mots réservés des modules
+  (Tombola, mini-jeux, `!tts`, `!rb`, `!fxcam`, Jetons des modérateurs, modules hôtes), les mots que les modules ne
+  déclarent que dans leur analyseur (Caution, Votekick, Musique, Roue du Sub, Halloween, Jeu des mots, Objectif, Daily
+  et Jetons du bot : `MODULE_COMMANDS`, une seule liste) et les mots qu'un module a pris dans le chat (découverts : une
+  nouvelle commande de module apparaît à sa première utilisation, jusqu'au redémarrage du Core).
+- **Une entrée par commande, ses alias avec elle** (`!solde · !balance · !compte` = un seul réglage).
+- **Deux réglages indépendants par commande** : le **message du viewer** (afficher / masquer ; par défaut masqué) et la
+  **réponse de LeCroupier_** (comme sa catégorie / masquer / afficher / mettre en avant).
+- **Lien réponse ↔ commande, sans lire de texte** : le routeur de chat du Core exécute chaque module dans le contexte
+  du message (`chatbox/trigger.ts`) ; chaque réponse écrite à ce moment garde `params.trigger` (message et mot de
+  commande) dans `cmd_steps` (aucune migration) ; les réponses directes du bot (Daily, Jetons) sont marquées par le
+  bot lui-même.
 - **Commandes externes** (Nightbot, StreamElements…) : une liste éditable dans Studio, masquées si listées.
-- **Commande inconnue** : politique réglable, **affichée par défaut** (jamais supprimée sur la seule présence de `!`).
+- **Commande inconnue** : politique réglable, **affichée par défaut**.
 
 ### 6.3 Catalogue des messages du Croupier
 
@@ -274,21 +284,111 @@ fondu du haut ; plafond de messages ; emplacements.
 
 ## 10. Jalons
 
-| Jalon                                           | Contenu                                                                                                                                                                                         | État             |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| **1. Prototype Lab et démonstration**           | moteur porté ; page OBS ; trois profils × Origine / Modernisée ; réglages persistants appliqués en direct ; règles de visibilité ; simulateur et démonstration ; écran Studio                   | **en cours**     |
-| **2. Le vrai chat dans le Lab**                 | bot (champs, suppressions, clear, ses messages marqués) ; classement par le Core (commandes, familles, rôle d'équipe) ; relais et flux Studio / Lab ; badges Helix ; catalogue réel du Croupier | à faire          |
-| **3. Prêt pour le live**                        | messages spéciaux réels ; charge (cinq sources, chat rapide) ; latence ; rechargement après mise à jour ; recette d'Antoni                                                                      | à faire          |
-| **4. Production (autorisation à chaque étape)** | déploiement Core et bot, release de Studio ; nouvelles sources **masquées** à côté des anciennes ; essai en live ; bascule scène par scène                                                      | sur autorisation |
+| Jalon                                           | État                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **1. Prototype Lab et démonstration**           | **livré** (22/11), essayé par Antoni le 22/11 : direction graphique validée                 |
+| **2. Le vrai chat dans le Lab**                 | **livré** (22/11) : bot, relais du Core, flux Studio, catalogue, rôles, modération, reprise |
+| **3. Prêt pour le live**                        | **livré en Lab** (22/11) : animations corrigées, éditeur simplifié, performances mesurées   |
+| **4. Production (autorisation à chaque étape)** | **prête, non faite** : code dans `main` (`df3adb5e`), procédure § 12                        |
 
-Tests à chaque jalon : unitaires (moteur, visibilité, réglages, Core, bot), matrice de parité, e2e de la page et de
-l'écran (application en direct, persistance après redémarrage), captures. Classe C
-([AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) § 3) : ni Jetons, ni droits, ni migration.
+### 10.1 Ce qui est livré (PR #118, fusionnée le 22/11 : `main` `df3adb5e`)
 
-Risques connus : les GIF Twitch (balise expérimentale des widgets) ne sont pas prouvés dans EventSub, vérification au
-jalon 2 sur un vrai message ; l'affichage dépendra du VPS et de Studio (recours : les sources StreamElements).
+- **Bot** (`apps/twitch-bot/src/chatbox-forward.ts`, drapeau `CHATBOX_RELAY`, **éteint par défaut**) : sur la connexion
+  EventSub existante, chaque message (couleur, badges, fragments d'emotes, réponse, message mis en avant, premier
+  message), les annonces, les suppressions / timeout / ban / clear, les messages de LeCroupier_ marqués (les jeux ne
+  les voient jamais) ; envoi groupé à `POST /v1/bot/chatbox`, au mieux (une panne ne bloque jamais les jeux). Route
+  séparée : le message strict des jeux du chat (`/v1/bot/chat`) n'est pas modifié.
+- **Core** (`apps/core-api/src/chatbox/`, `http/chatbox-routes.ts`) : relais **en mémoire** (badges Helix avec le jeton
+  d'application, rôle `supermod` de `lab_staff`, messages du Croupier rattachés à leur pas `cmd_steps`, curseur et
+  reprise), catalogue des commandes, flux SSE et catalogue pour Studio (`/v1/studio/cockpit/chatbox/…`, jeton
+  d'installation). En Lab, le chat simulé de Studio alimente le même relais. **Aucune migration.**
+- **Studio** : flux live unique pour les trois profils (ouvert seulement si une page OBS live écoute, reprise après
+  coupure ou redémarrage du Core), règles par commande, écran simplifié (présets, aperçu, six réglages essentiels,
+  emplacement et réglages avancés repliés, « Ce qui s'affiche » avec recherche).
+- **Page OBS** : la pile glisse en bloc avec le nouveau message (Web Animations ; le nouveau part au moins aussi bas que
+  le déplacement de la pile : **aucun chevauchement**, mesuré à chaque image, en rafale et à la suppression).
+- **Essayer** : `npm run chatbox:demo` (sans fermer le Studio installé ; catalogue absent, pas de Core) ou
+  `npm run studio:lab` (Studio installé fermé ; chat simulé du Lab → Core → page OBS live).
+- **Tests** : Core 8 (relais, déclencheur, catalogue) + 258 des suites voisines ; bot 7 (dont GIF Twitch, annonces
+  du chat partagé) ; Studio 52 (dont reprise du flux, redémarrage du Core, aucun doublon) ; e2e
+  `e2e/chatbox.e2e.ts` (3 : page et réglages en direct, chaîne réelle Lab → Core → Studio → page, chevauchement à
+  chaque image sur React et Dessin).
+- **Performances** (22/11, GPU réel RTX 3070 / D3D11, 5 pages plein cadre ouvertes, chat à 22 messages/s pendant 8 s) :
+  intervalle médian 16,6 ms, 95e centile 18,5–19,4 ms, 4 à 6 images au-delà de 34 ms sur ~530 par page (pic 94 ms à
+  l'arrivée de nouvelles images d'emotes) ; OBS rend à 30 images/s (33 ms) : marge confortable.
 
 ## 11. Reprise
 
 - Lire ce fichier, puis la présentation et le rapport (§ 1). Ne refaire ni la reconnaissance ni la présentation.
-- Prototype : worktree `agent`, branche `feat/chatbox-lab` ; journal du jalon en cours au § 10.
+- Le chantier est terminé en Lab ; la suite est la procédure § 12, étape par étape, sur GO d'Antoni.
+
+## 12. Mise en service (chaque étape sur GO d'Antoni)
+
+Versions en Production relevées le 22/11 (lecture seule) : Core `a94d1081`, bot `2c04a5db`, Studio installé 0.1.42.
+Depuis ces versions, `main` n'apporte au Core et au bot que la Chatbox ; à Studio, la Chatbox et la partie Studio du
+Casino déjà fusionnée (`a94d1081`). Rien de plus récent n'est écrasé.
+
+| Étape                     | Commande / geste                                                                                | Retour arrière                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 1. Core                   | `node scripts/coolify-deploy.mjs deploy core <sha de main> --go` (hors live ; aucune migration) | `deploy core a94d10812c8b48bffbbbaa76a2249c0ae9e34a0b --rollback --go` |
+| 2. Variable du bot        | Coolify, application `raptoru-bot` : `CHATBOX_RELAY=true` (nouvelle, sans secret)               | la passer à `false` (ou la retirer) puis redéployer le bot             |
+| 3. Bot, **après le Core** | `node scripts/coolify-deploy.mjs deploy bot <sha de main> --go`                                 | `deploy bot 2c04a5db58fe4d05b3e0cbc2ab5257e3aa841346 --rollback --go`  |
+| 4. Studio                 | workflow « Studio — construire / publier » (publish=public) ; Antoni installe                   | réinstaller 0.1.42 (releases GitHub)                                   |
+| 5. Sources OBS            | § 12.1 (nouvelles sources **masquées**)                                                         | supprimer les nouvelles sources ; les anciennes n'ont pas bougé        |
+| 6. Essai en live          | Antoni, § 12.2, scène par scène                                                                 | afficher l'ancienne source, masquer la nouvelle                        |
+
+- Ordre obligatoire : Core avant bot (un bot `CHATBOX_RELAY=true` devant un Core ancien ne perd que les événements
+  Chatbox, une ligne de journal par minute ; les jeux du chat ne sont jamais touchés).
+- `CHATBOX_RELAY=false` (défaut) : le nouveau bot se comporte exactement comme l'ancien.
+- **Fait le 22/11 (GO d'Antoni)** : étapes 1 à 3 hors live (Core 14:10 UTC, déploiement `4jae1tmush9ronyffbl9wvbb` ; variable
+  créée par l'API Coolify ; bot 14:13 UTC, `zsvjcrakgroe5i3xeuobvcbp`, EventSub bot et diffuseur OK) ; étape 4 :
+  0.1.43 publiée (workflow `45031697021`, `main` `8f428a37`) ; étape 5 : les cinq sources ajoutées par l'agent, OBS
+  fermé, dans la collection active (`Twitch_Dofus.codex-backup-20260919-144407.json`, sauvegarde
+  `….avant-chatbox-raptoru-2026-11-22.bak` à côté) : masquées, verrouillées, juste au-dessus des anciennes, 1920 × 1080,
+  0,0, échelle 1 ; anciennes sources inchangées (vérifié). La clé des adresses est
+  `apps/studio/server/.runtime/production/chatbox/chatbox-token` (hors Git), lue par Studio 0.1.43 au démarrage.
+  Étape 6 : à faire.
+- Les réglages du Lab et de la démonstration ne passent pas en Production : Studio Production démarre sur « Modernisée »
+  et les règles par défaut ; Antoni règle profils, emplacements, commandes dans Studio (Modules → Chatbox).
+
+### 12.1 Sources OBS à ajouter (Antoni)
+
+Pour chaque ligne : Studio → Modules → Chatbox → profil → scène → Emplacement → **Copier** l'adresse ; dans OBS, dans la
+scène, « + » → Navigateur → nom ci-dessous → coller l'adresse → largeur **1920**, hauteur **1080** → OK ; position
+0,0, échelle 1 ; la placer **juste au-dessus** de l'ancienne source ; **la masquer** (œil) ; la verrouiller.
+
+| Scène OBS          | Nouvelle source (nom proposé)      | Profil        | Ancienne source (ne pas toucher) | Zone de départ (Studio)     |
+| ------------------ | ---------------------------------- | ------------- | -------------------------------- | --------------------------- |
+| `Just Chatting`    | `Chatbox Raptoru — Just Chatting`  | Just Chatting | `Boîte de chat`                  | 1264, 61 · 577 × 962        |
+| `Waiting screen`   | `Chatbox Raptoru — Waiting screen` | Just Chatting | `Boîte de chat`                  | 0, 0 · 639 × 1065 · ×1,106  |
+| `Scène PS5`        | `Chatbox Raptoru — PS5`            | React         | `ChatReact`                      | 0, 346 · 455 × 492          |
+| `Scène Fullscreen` | `Chatbox Raptoru — Fullscreen`     | React         | `ChatReact`                      | 9, 374 · 484 × 522 · ×1,063 |
+| `Scène Dessin`     | `Chatbox Raptoru — Dessin`         | Dessin        | `Chatbox Dessin`                 | 0, 315 · 438 × 688          |
+
+Une source par scène (cinq) : l'adresse porte la scène, donc l'emplacement et les proportions décidés dans Studio. Les
+réglages enregistrés s'appliquent sans recharger la source. « Arrêter la source quand elle n'est pas visible » peut
+rester décoché (comme les anciennes).
+
+### 12.2 Essai en live et bascule (Antoni)
+
+1. Ouvrir Studio → Modules → Chatbox : le bandeau dit « Chat réel relié » quand une source OBS écoute.
+2. Dans une scène : afficher la nouvelle source, masquer l'ancienne. Écrire dans le chat : un message, une emote 7TV
+   avec une zero-width, `!!!!!`, une commande (`!daily`), une annonce ; supprimer un message ; vérifier les rôles.
+3. Retour immédiat si besoin : réafficher l'ancienne, masquer la nouvelle.
+4. Scène par scène. Les sources StreamElements restent en place jusqu'à la décision d'Antoni (ni désactivées ni
+   supprimées par l'agent).
+
+## 13. Limites connues (réelles, vérifiées le 22/11)
+
+- **`/me`** : EventSub (connexion du bot) ne signale pas un message `/me` (aucun champ, aucun type documenté) : il
+  s'affiche comme un message normal, sans italique. Les anciens widgets le recevaient par StreamElements (IRC).
+- **GIF Twitch** : transmis (fragment `gif` d'EventSub, adresse utilisée telle quelle), **pas dans les annonces**
+  (Twitch n'y prévoit pas de GIF) ; non vus en réel avant le live.
+- **Emote géante** (power-up « gigantified ») : affichée comme une emote normale (les anciens widgets non plus).
+- Un message de LeCroupier_ peut apparaître ~0,4 s (réponse directe du bot) à ~2 s (réponse d'un module) après son
+  envoi : le temps de le rattacher à sa commande.
+- Les commandes **découvertes** dans le chat sont oubliées au redémarrage du Core ; le registre et les listes des
+  modules sont permanents.
+- Le **chat partagé** s'affiche comme le reste (annonces partagées comprises), sans mention de la chaîne d'origine.
+- Vérifié en Lab (chat simulé → Core → Studio → page OBS) et par les tests ; **le chemin Twitch réel n'est vu qu'à
+  l'essai en live** (§ 12.2).
