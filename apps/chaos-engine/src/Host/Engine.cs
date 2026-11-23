@@ -744,7 +744,9 @@ namespace Raptoru.Chaos
                     d["pacers"] = pacers.Values.Select(p => (object)J.Map("hz", p.Hz, "mode", p.Mode, "ticks", p.Ticks)).ToArray();
                     d["startup"] = J.Map("ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs, "shader_warm_ms", tel.ShaderWarmMs);
                     return d;
-                case "targets.list": return J.Map("monitors", Targets.Monitors().ToArray(), "windows", Targets.Windows(selfPid).ToArray());
+                case "targets.list":
+                    // windows = false : les écrans seulement (relevé régulier de la page Chaos, sans parcourir les fenêtres).
+                    return J.Map("monitors", Targets.Monitors().ToArray(), "windows", J.Bool(b, "windows", true) ? Targets.Windows(selfPid).ToArray() : new object[0]);
                 case "effect.request":
                     var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def, cfg.Engine.InputEffects));
                     CheckAllowed(req);
