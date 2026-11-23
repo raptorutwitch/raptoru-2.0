@@ -7,7 +7,8 @@
 //   - gardien (processus séparé) : raccourci d'urgence et arrêt forcé si le moteur est figé (classe Guardian).
 // Mémoire partagée avec le gardien ("Local\RaptoruChaos-<pid>", 64 octets) :
 //   [0] tick de la dernière boucle (GetTickCount64) · [8] surfaces visibles · [12] arrêt d'urgence demandé ·
-//   [16] état du raccourci (0 inconnu, 1 actif, 2 indisponible) · [20] pid du gardien · [24] écrans retournés.
+//   [16] état du raccourci (0 inconnu, 1 actif, 2 indisponible) · [20] pid du gardien · [24] écrans retournés ·
+//   [28] curseur matériel masqué par le moteur (le gardien le rétablit si le moteur meurt ou gèle).
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -31,6 +32,7 @@ namespace Raptoru.Chaos
         StreamWriter stdout;
         long lastLine, lastLoop;
         volatile int visible, inputs;
+        volatile bool cursorHidden;
         bool quitting;
         MemoryMappedFile mmf;
         MemoryMappedViewAccessor view;
@@ -55,7 +57,7 @@ namespace Raptoru.Chaos
             // Le gardien d'abord : le premier battement ne doit pas en lancer un second (deux gardiens se disputaient
             // Ctrl+Maj+F11, et celui qui perdait pouvait afficher « raccourci indisponible »).
             if (guardian) SpawnGuardian();
-            Beat(0, 0);
+            Beat(0, 0, false);
             Thread("stdin", ReadStdin);
             Thread("watchdog", Watchdog);
             if (parentPid > 0) Thread("parent", WatchParent);
@@ -73,15 +75,18 @@ namespace Raptoru.Chaos
 
         public bool TryTake(out string line) { return lines.TryDequeue(out line); }
 
-        /// Battement de la boucle de rendu (chien de garde interne et gardien) : surfaces visibles, écrans retournés.
-        public void Beat(int visibleSurfaces, int heldInputs)
+        /// Battement de la boucle de rendu (chien de garde interne et gardien) : surfaces visibles, écrans retournés,
+        /// curseur matériel masqué.
+        public void Beat(int visibleSurfaces, int heldInputs, bool cursor)
         {
             Interlocked.Exchange(ref lastLoop, clock.ElapsedMilliseconds);
             visible = visibleSurfaces;
             inputs = heldInputs;
+            cursorHidden = cursor;
             view.Write(0, (long)N.GetTickCount64());
             view.Write(8, visibleSurfaces);
             view.Write(24, heldInputs);
+            view.Write(28, cursor ? 1 : 0);
             long now = clock.ElapsedMilliseconds;
             if (guardian && now >= nextGuardianCheck)
             {
@@ -148,7 +153,7 @@ namespace Raptoru.Chaos
                 long now = clock.ElapsedMilliseconds;
                 if (heartbeatMs > 0 && now - Interlocked.Read(ref lastLine) > heartbeatMs) Quit("heartbeat", 0);
                 long gap = now - Interlocked.Read(ref lastLoop);
-                if (((visible > 0 || inputs > 0) && gap > LoopStallVisibleMs) || gap > LoopStallMs) Quit("render_stall", 3);
+                if (((visible > 0 || inputs > 0 || cursorHidden) && gap > LoopStallVisibleMs) || gap > LoopStallMs) Quit("render_stall", 3);
             }
         }
 
@@ -179,21 +184,27 @@ namespace Raptoru.Chaos
             catch (Exception) { return 2; }
             view.Write(16, N.RegisterHotKey(IntPtr.Zero, 1, HotkeyMods, HotkeyVk) ? 1 : 2);
             long stopAt = 0;
+            bool cursorSeen = false;
             var handles = new[] { engine };
             while (true)
             {
                 uint r = N.MsgWaitForMultipleObjectsEx(1, handles, 100, N.QS_ALLINPUT, N.MWMO_INPUTAVAILABLE);
-                if (r == 0) return 0; // moteur terminé
+                // Moteur terminé (fin normale, plantage, tué) : s'il masquait le curseur, il est rétabli ici.
+                if (r == 0) { if (cursorSeen || view.ReadInt32(28) != 0) CursorLayer.RestoreSystem(); return 0; }
                 MSG m;
                 while (N.PeekMessageW(out m, IntPtr.Zero, 0, 0, N.PM_REMOVE))
                     if (m.message == N.WM_HOTKEY) { view.Write(12, 1); stopAt = (long)N.GetTickCount64(); }
                 long now = (long)N.GetTickCount64();
                 int vis = view.ReadInt32(8), held = view.ReadInt32(24);
+                bool cur = view.ReadInt32(28) != 0;
+                cursorSeen = cur;
                 long beat = view.ReadInt64(0);
-                bool onScreen = vis > 0 || held > 0;
-                if (onScreen && now - beat > 2500) { N.TerminateProcess(engine, 9); return 0; }
+                bool onScreen = vis > 0 || held > 0 || cur;
+                // Moteur gelé avec le curseur masqué : le curseur d'abord (1,2 s), puis l'arrêt forcé (2,5 s).
+                if (cur && now - beat > 1200) CursorLayer.RestoreSystem();
+                if (onScreen && now - beat > 2500) { N.TerminateProcess(engine, 9); CursorLayer.RestoreSystem(); return 0; }
                 if (stopAt > 0 && !onScreen) stopAt = 0;
-                if (stopAt > 0 && now - stopAt > 700) { N.TerminateProcess(engine, 9); return 0; }
+                if (stopAt > 0 && now - stopAt > 700) { N.TerminateProcess(engine, 9); CursorLayer.RestoreSystem(); return 0; }
             }
         }
     }

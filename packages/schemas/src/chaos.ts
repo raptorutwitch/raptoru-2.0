@@ -167,6 +167,11 @@ export const chaosEffectDefSchema = z.object({
   on_conflict: z.enum(CHAOS_POLICIES),
   /** Transformation d'entrée (couche Entrées) appliquée quand la cible est l'écran entier. */
   input: z.enum(CHAOS_INPUT_EFFECTS).optional(),
+  /**
+   * Curseur pendant l'effet : `follow` = le curseur visible suit l'image transformée (curseur matériel masqué au-dessus
+   * de la cible, image du vrai curseur dessinée au point transformé ; coordonnées et clics de Windows inchangés).
+   */
+  cursor: z.enum(['follow']).optional(),
   gpu: z.object({
     primitive: z.string(),
     cost: z.string(),

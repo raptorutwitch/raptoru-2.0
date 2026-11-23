@@ -34,6 +34,8 @@ namespace Raptoru.Chaos
         public uint Width { get { return w; } }
         public uint Height { get { return h; } }
         public IntPtr BackBuffer { get { return rtv; } }
+        /// Rectangle de la cible à l'écran (fenêtre suivie, ou écran entier) : le curseur est « au-dessus » s'il y est.
+        public RECT Bounds { get { return bounds; } }
 
         /// hmon ≠ 0 : l'écran entier (mode C) ; sinon la fenêtre target (mode D).
         public Surface(Gpu gpu, string key, IntPtr target, IntPtr hmon, uint width, uint height)

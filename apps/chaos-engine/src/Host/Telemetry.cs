@@ -36,8 +36,10 @@ namespace Raptoru.Chaos
         public readonly Samples PresentCall = new Samples();
         /// Estimation : composition de l'image du jeu → composition prévue de l'image transformée (latence ajoutée).
         public readonly Samples AddedLatency = new Samples();
+        /// Estimation : position du curseur lue → composition prévue de l'image qui le dessine (curseur suivi).
+        public readonly Samples CursorLatency = new Samples();
 
-        public void Clear() { Processing.Clear(); CaptureLatency.Clear(); PresentCall.Clear(); AddedLatency.Clear(); }
+        public void Clear() { Processing.Clear(); CaptureLatency.Clear(); PresentCall.Clear(); AddedLatency.Clear(); CursorLatency.Clear(); }
     }
 
     sealed class Telemetry

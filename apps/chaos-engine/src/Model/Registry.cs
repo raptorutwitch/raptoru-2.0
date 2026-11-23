@@ -45,6 +45,9 @@ namespace Raptoru.Chaos
         public int Version, DefaultDurationMs = 10000;
         /// Passes GPU déclarées (registre gpu.passes) : refus à la demande si elles dépassent performance.max_passes.
         public int GpuPasses = 1;
+        /// Curseur pendant l'effet : null = inchangé ; "follow" = le curseur visible suit l'image transformée (curseur
+        /// matériel masqué au-dessus de la cible, image du vrai curseur dessinée au point transformé ; entrées intactes).
+        public string Cursor;
         public bool Internal;
         public SlotDef Slot;
         public List<ParamDef> Params = new List<ParamDef>();
@@ -154,6 +157,9 @@ namespace Raptoru.Chaos
             if (!new[] { "queue", "replace", "reject", "extend" }.Contains(e.OnConflict)) throw new RegistryError(where + "on_conflict invalide");
             e.Primitive = J.Str(J.Obj(o, "gpu"), "primitive", "");
             e.GpuPasses = (int)J.Num(J.Obj(o, "gpu"), "passes", 1);
+            e.Cursor = J.Str(o, "cursor", null);
+            if (e.Cursor != null && e.Cursor != "follow") throw new RegistryError(where + "cursor inconnu " + e.Cursor + " (follow)");
+            if (e.Cursor != null && !e.RequiresCapture) throw new RegistryError(where + "cursor exige un effet qui transforme l'image capturée");
             e.Input = J.Str(o, "input", null);
             if (e.Input != null && !reg.InputEffects.ContainsKey(e.Input)) throw new RegistryError(where + "transformation d'entrée inconnue " + e.Input);
             e.DefaultDurationMs = (int)J.Num(J.Obj(o, "duration"), "default_ms", 10000);

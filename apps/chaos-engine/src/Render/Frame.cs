@@ -117,6 +117,9 @@ namespace Raptoru.Chaos
         readonly List<KeyValuePair<string, Layer>> layers = new List<KeyValuePair<string, Layer>>();
         readonly Dictionary<string, string> layerLabels = new Dictionary<string, string>();
         readonly float[] cb = new float[Gpu.CbFloats];
+        // Dernière transformation de l'image (AddCursor pose le curseur par la même transformation).
+        double tRot, tSx = 1, tSy = 1, tTx, tTy;
+        bool hasTransform;
 
         public FrameBuilder(uint w, uint h, bool hasCapture) { Reset(w, h, hasCapture); }
 
@@ -125,6 +128,7 @@ namespace Raptoru.Chaos
             Width = w; Height = h; HasCapture = hasCapture;
             passCount = 0; layers.Clear();
             CurrentLabel = "effect"; LowQuality = false; DisplayRotationRad = 0; Scale = 1;
+            hasTransform = false; tRot = 0; tSx = 1; tSy = 1; tTx = 0; tTy = 0;
         }
 
         public int PassCount { get { return passCount; } }
@@ -173,6 +177,7 @@ namespace Raptoru.Chaos
             else if (fill == "black") mode = 1;
             else if (fill == "clamp") mode = 2;
             p.U[0] = (float)rotationRad; p.U[1] = (float)scaleX; p.U[2] = (float)scaleY; p.U[3] = mode;
+            hasTransform = true; tRot = rotationRad; tSx = scaleX; tSy = scaleY; tTx = tx; tTy = ty;
             p.U[4] = (float)tx; p.U[5] = (float)ty; p.U[6] = 0.45f;
             p.NeedsBlurredInput = uncovered && mode == 0;
             p.Lod = 4.5f;
@@ -186,6 +191,23 @@ namespace Raptoru.Chaos
             Array.Copy(u, p.U, Math.Min(16, u.Length));
             p.NeedsBlurredInput = blurredInput;
             p.Lod = lod;
+        }
+
+        /// Image du vrai curseur (forme lue à cette image), posée par la MÊME transformation que l'image capturée :
+        /// au retournement, pointe au point miroir et image tournée ; pendant la rotation animée, au point tourné. Ce que
+        /// l'on voit sous ce curseur est donc toujours ce que le clic, qui tombe à la vraie position, touchera.
+        /// (px, py) : pointe du vrai curseur dans la cible, en pixels. Calque par-dessus tout le reste.
+        public void AddCursor(TextureRef tex, int hotX, int hotY, double px, double py)
+        {
+            double w0 = Width, h0 = Height, ax = w0 / h0;
+            double qx = ((px + 0.5) / w0 - 0.5) * ax, qy = (py + 0.5) / h0 - 0.5;
+            double k = Math.Cos(tRot), s = Math.Sin(tRot), ux = qx * tSx, uy = qy * tSy;
+            // Inverse exacte du shader « transform » (sortie → source) : source → sortie.
+            double cx = (((k * ux - s * uy) + tTx) / ax + 0.5) * w0, cy = ((s * ux + k * uy) + tTy + 0.5) * h0;
+            double sw = tex.W * Math.Abs(tSx), sh = tex.H * Math.Abs(tSy);
+            double hx = (hotX + 0.5 - tex.W / 2.0) * Math.Abs(tSx), hy = (hotY + 0.5 - tex.H / 2.0) * Math.Abs(tSy);
+            double centerX = cx - (k * hx - s * hy), centerY = cy - (s * hx + k * hy);
+            layers.Add(new KeyValuePair<string, Layer>("cursor", new Layer { X = (centerX - sw / 2) / w0, Y = (centerY - sh / 2) / h0, W = sw / w0, H = sh / h0, Rotation = tRot, Texture = tex }));
         }
 
         public void Add(Layer l) { if (l.Opacity > 0 && l.W > 0 && l.H > 0) layers.Add(new KeyValuePair<string, Layer>(CurrentLabel, l)); }

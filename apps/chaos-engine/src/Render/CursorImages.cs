@@ -1,4 +1,4 @@
-// Image du vrai curseur de Windows (prototype du curseur, docs/chaos/ETUDE_CURSEUR.md) : la forme courante
+// Image du vrai curseur de Windows (retournement : docs/chaos/ETUDE_CURSEUR.md) : la forme courante
 // (GetCursorInfo) est rendue par Windows lui-même (DrawIconEx) dans une texture BGRA prémultipliée, mise en cache par
 // forme. Même principe que la capture du curseur d'OBS (cursor-capture.c). Lecture seule : aucune entrée touchée.
 // Alpha : le curseur est rendu sur fond noir puis sur fond blanc ; alpha = 255 − (blanc − noir), couleur = rendu sur

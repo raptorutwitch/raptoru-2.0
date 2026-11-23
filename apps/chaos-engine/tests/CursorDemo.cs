@@ -61,8 +61,8 @@ namespace Raptoru.Chaos
         // ---------- Auto-test hors écran (aucune fenêtre, curseur jamais masqué) ----------
         [DllImport("user32.dll")] static extern IntPtr LoadCursorW(IntPtr inst, IntPtr id);
 
-        /// Vérifie l'image du curseur (forme lue, pointe, alpha) et sa pose retournée au point miroir, par la vraie chaîne
-        /// de rendu (FrameBuilder, calque texturé), dans une texture hors écran relue.
+        /// Vérifie l'image du curseur (forme lue, pointe, alpha) et sa pose par le moteur (FrameBuilder.AddCursor) : la pointe
+        /// tombe sur le point transformé de la vraie position, à tous les angles. Texture hors écran relue.
         public static int SelfTest()
         {
             var gpu = new Gpu();
@@ -83,29 +83,52 @@ namespace Raptoru.Chaos
                 int opaque = 0; for (int i = 3; i < px.Length; i += 4) if (px[i] > 128) opaque++;
                 check(opaque > 20 && opaque < img.Tex.W * img.Tex.H / 2, kv.Key + " : " + img.Tex.W + "×" + img.Tex.H + ", pointe (" + img.HotX + ", " + img.HotY + "), " + opaque + " pixels opaques");
             }
-            // Pose : cible 400×300, vrai curseur (flèche) en (100, 50) → pointe attendue en (299, 249), corps vers le haut à gauche.
+            // Pose par le moteur (FrameBuilder.AddCursor) : une image source 400×300 porte un repère rouge à la vraie
+            // position du curseur (100, 50) ; après la transformation de l'image, la pointe dessinée doit tomber sur le
+            // repère transformé, à tous les angles (rotation animée comprise), le corps de la flèche tourné d'autant.
             uint W = 400, H = 300;
             var arrow = images.Get(LoadCursorW(IntPtr.Zero, new IntPtr(32512)));
+            var src = new byte[W * H * 4];
+            for (int i = 3; i < src.Length; i += 4) src[i] = 255;
+            for (int y = 48; y <= 52; y++) for (int x = 98; x <= 102; x++) { int i = (int)((y * W + x) * 4); src[i + 2] = 255; }
+            var srcTex = gpu.TextureWithData(W, H, src);
+            var srcSrv = gpu.Srv(srcTex);
             var outTex = gpu.Texture(W, H, 1, 0x8 | 0x20, 0, 0, 0);
             var outRtv = gpu.Rtv(outTex);
-            var fb = new FrameBuilder(W, H, false);
-            double cx = 100, cy = 50;
-            double left = (W - 1 - cx) - (arrow.Tex.W - 1 - arrow.HotX), top = (H - 1 - cy) - (arrow.Tex.H - 1 - arrow.HotY);
-            fb.Add(new Layer { X = left / W, Y = top / H, W = arrow.Tex.W / (double)W, H = arrow.Tex.H / (double)H, Rotation = Math.PI, Texture = arrow.Tex });
-            fb.Execute(gpu, lib, pool, null, IntPtr.Zero, outRtv, 0, 0);
             var stg = gpu.Texture(W, H, 1, 0, 0, 3, 0x20000);
-            gpu.Copy(stg, outTex, 0, 0, W, H);
-            var o = gpu.ReadBack(stg, W, H);
-            Func<int, int, int> alpha = (x, y) => x < 0 || y < 0 || x >= W || y >= H ? 0 : o[(y * W + x) * 4 + 3];
-            int tipX = 299, tipY = 249, near = 0, beyond = 0, body = 0;
-            for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) if (alpha(tipX + dx, tipY + dy) > 128) near++;
-            for (int dy = 3; dy <= 12; dy++) for (int dx = 3; dx <= 12; dx++) if (alpha(tipX + dx, tipY + dy) > 128) beyond++;
-            for (int dy = -12; dy <= -3; dy++) for (int dx = -12; dx <= -3; dx++) if (alpha(tipX + dx, tipY + dy) > 128) body++;
-            check(near > 0, "pointe de la flèche au point miroir (299, 249) : " + near + " pixels opaques autour");
-            check(beyond == 0 && body > 10, "flèche retournée : corps en haut à gauche de la pointe (" + body + " px), rien au-delà (" + beyond + " px)");
-            int elsewhere = 0; for (int i = 3; i < o.Length; i += 4) if (o[i] > 0) elsewhere++;
-            check(elsewhere < arrow.Tex.W * arrow.Tex.H, "un seul curseur dans l'image (" + elsewhere + " pixels non transparents)");
-            Com.Release(ref stg); Com.Release(ref outRtv); Com.Release(ref outTex); images.Dispose();
+            Func<double, bool, byte[]> render = (angle, withCursor) =>
+            {
+                var fb = new FrameBuilder(W, H, true);
+                fb.Transform(angle, 1, 1, 0, 0, "black");
+                if (withCursor) fb.AddCursor(arrow.Tex, arrow.HotX, arrow.HotY, 100, 50);
+                fb.Execute(gpu, lib, pool, null, srcSrv, outRtv, 0, 0);
+                gpu.Copy(stg, outTex, 0, 0, W, H);
+                return gpu.ReadBack(stg, W, H);
+            };
+            foreach (var deg in new[] { 0.0, 37.0, 90.0, 143.0, 180.0 })
+            {
+                double th = deg * Math.PI / 180;
+                var plain = render(th, false); var drawn = render(th, true);
+                double mx = 0, my = 0; int mn = 0;
+                for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) { int i = (int)((y * W + x) * 4); if (plain[i + 2] > 150 && plain[i + 1] < 80) { mx += x; my += y; mn++; } }
+                if (mn == 0) { check(false, deg + "° : repère hors de l'image"); continue; }
+                mx /= mn; my /= mn;
+                double best = 1e9, bx = 0, by = 0; int cn = 0;
+                for (int y = 0; y < H; y++) for (int x = 0; x < W; x++)
+                {
+                    int i = (int)((y * W + x) * 4);
+                    if (Math.Abs(drawn[i] - plain[i]) + Math.Abs(drawn[i + 1] - plain[i + 1]) + Math.Abs(drawn[i + 2] - plain[i + 2]) < 60) continue;
+                    cn++; bx += x; by += y;
+                    double dd = Math.Sqrt((x - mx) * (x - mx) + (y - my) * (y - my));
+                    if (dd < best) best = dd;
+                }
+                bx /= Math.Max(1, cn); by /= Math.Max(1, cn);
+                // Corps de la flèche : en bas à droite de la pointe sans rotation, tourné de l'angle de l'image.
+                double ex = Math.Cos(th) - Math.Sin(th), ey = Math.Sin(th) + Math.Cos(th);
+                bool oriented = (bx - mx) * ex + (by - my) * ey > 0;
+                check(cn > 40 && best <= 2.5 && oriented, deg + "° : pointe du curseur sur le repère transformé (écart " + Math.Round(best, 1) + " px), corps orienté avec l'image, " + cn + " pixels");
+            }
+            Com.Release(ref stg); Com.Release(ref outRtv); Com.Release(ref outTex); Com.Release(ref srcSrv); Com.Release(ref srcTex); images.Dispose();
             Console.WriteLine("Total : " + ok + " ok, " + ko + " KO");
             return ko == 0 ? 0 : 1;
         }
@@ -242,16 +265,7 @@ namespace Raptoru.Chaos
                     if (drawCursor)
                     {
                         var img = images.Get(ci.hCursor);
-                        if (img != null)
-                        {
-                            // Pointe du curseur au point miroir ; image tournée de 180° autour de son centre (comme un écran
-                            // retourné par Windows).
-                            double W = cap.Width, H = cap.Height;
-                            double cx = ci.pt.X - tr.Left, cy = ci.pt.Y - tr.Top;
-                            double left = (W - 1 - cx) - (img.Tex.W - 1 - img.HotX), top = (H - 1 - cy) - (img.Tex.H - 1 - img.HotY);
-                            fb.Add(new Layer { X = left / W, Y = top / H, W = img.Tex.W / W, H = img.Tex.H / H, Rotation = Math.PI, Texture = img.Tex });
-                            cursorFrames++;
-                        }
+                        if (img != null) { fb.AddCursor(img.Tex, img.HotX, img.HotY, ci.pt.X - tr.Left, ci.pt.Y - tr.Top); cursorFrames++; }
                     }
                     fb.Execute(gpu, lib, pool, null, cap.Srv, surf.BackBuffer, now, now / 1000f);
                     surf.Present(false);

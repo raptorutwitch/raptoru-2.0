@@ -40,6 +40,16 @@ namespace Raptoru.Chaos
         static ShaderLibrary lib;
         static TexturePool pool;
 
+        internal static string Flags() { return Info(); }
+
+        /// Le curseur réel apparaît-il, à (x, y), dans une capture d'écran WGC avec curseur (méthode d'OBS) ?
+        internal static bool CursorInWgc(Gpu g, IntPtr hmon, RECT mon, int x, int y)
+        {
+            gpu = g;
+            var on = Capture(IntPtr.Zero, hmon, true, false); var off = Capture(IntPtr.Zero, hmon, false, false);
+            return Diff(on, off, x - mon.Left, y - mon.Top) >= 20;
+        }
+
         static string Info()
         {
             var ci = new CURSORINFO { cbSize = Marshal.SizeOf(typeof(CURSORINFO)) };
@@ -48,21 +58,21 @@ namespace Raptoru.Chaos
             return "drapeaux « " + f + " », forme " + (ci.hCursor != IntPtr.Zero ? "0x" + ci.hCursor.ToInt64().ToString("X") : "AUCUNE");
         }
 
-        static double IdleSeconds()
+        internal static double IdleSeconds()
         {
             var li = new LASTINPUTINFO { cbSize = Marshal.SizeOf(typeof(LASTINPUTINFO)) };
             return GetLastInputInfo(ref li) ? unchecked((uint)Environment.TickCount - li.dwTime) / 1000.0 : 0;
         }
 
         /// Visibilité du pointeur selon Desktop Duplication (nouvelle duplication : état initial du pointeur).
-        static string DdPointer(IntPtr hmon)
+        internal static string DdPointer(Gpu g, IntPtr hmon)
         {
-            IntPtr output = Pacer.FindOutput(gpu, hmon), o1 = IntPtr.Zero, dup = IntPtr.Zero;
+            IntPtr output = Pacer.FindOutput(g, hmon), o1 = IntPtr.Zero, dup = IntPtr.Zero;
             if (output == IntPtr.Zero) return "indisponible";
             try
             {
                 o1 = Com.QI(output, IidOutput1);
-                if (Com.Fn<OutDuplicate>(o1, 22)(o1, gpu.Device, out dup) < 0) return "indisponible";
+                if (Com.Fn<OutDuplicate>(o1, 22)(o1, g.Device, out dup) < 0) return "indisponible";
                 var acquire = Com.Fn<DupAcquire>(dup, 8); var release = Com.Fn<DupRelease>(dup, 14);
                 var sw = Stopwatch.StartNew();
                 while (sw.ElapsedMilliseconds < 800)
@@ -183,7 +193,7 @@ namespace Raptoru.Chaos
             var report = new List<string>();
             Action<string> say = s => { Console.WriteLine(s); report.Add(s); };
             say("Diagnostic du curseur — " + DateTime.Now.ToString("dd/MM HH:mm:ss") + ", Windows " + Environment.OSVersion.Version);
-            say("A  pointe (" + p.X + ", " + p.Y + ") sur " + N.MonitorDevice(hmon) + ", au-dessus de « " + wname + ".exe » ; " + Info() + " ; Desktop Duplication « " + DdPointer(hmon) + " »");
+            say("A  pointe (" + p.X + ", " + p.Y + ") sur " + N.MonitorDevice(hmon) + ", au-dessus de « " + wname + ".exe » ; " + Info() + " ; Desktop Duplication « " + DdPointer(gpu, hmon) + " »");
             bool flag;
             say("B  curseur VISIBLE");
             say("   B1 capture d'écran : " + Present(IntPtr.Zero, hmon, mx, my, false, out flag) + " ; IsCursorCaptureEnabled relu : " + flag);
@@ -196,7 +206,7 @@ namespace Raptoru.Chaos
                 try
                 {
                     // Le temps de deux captures au plus par étape ; rétabli entre les étapes.
-                    say("   C1 MagShowSystemCursor(FALSE) : " + (MagShowSystemCursor(false) ? "ok" : "ÉCHEC") + " ; " + Info() + " ; Desktop Duplication « " + DdPointer(hmon) + " »");
+                    say("   C1 MagShowSystemCursor(FALSE) : " + (MagShowSystemCursor(false) ? "ok" : "ÉCHEC") + " ; " + Info() + " ; Desktop Duplication « " + DdPointer(gpu, hmon) + " »");
                     MagShowSystemCursor(true); Thread.Sleep(200);
                     MagShowSystemCursor(false);
                     string c2 = Present(IntPtr.Zero, hmon, mx, my, false, out flag, 1);
@@ -209,30 +219,30 @@ namespace Raptoru.Chaos
                 }
                 finally { MagShowSystemCursor(true); MagUninitialize(); }
                 Thread.Sleep(200);
-                say("   rétabli : " + Info() + " ; Desktop Duplication « " + DdPointer(hmon) + " »");
+                say("   rétabli : " + Info() + " ; Desktop Duplication « " + DdPointer(gpu, hmon) + " »");
             }
             say("D  sécurité");
             var self = Process.GetCurrentProcess().MainModule.FileName;
             var child = Process.Start(new ProcessStartInfo(self, "--cursor-hide-child") { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true });
             string line = child.StandardOutput.ReadLine();
             Thread.Sleep(150);
-            string during = DdPointer(hmon);
+            string during = DdPointer(gpu, hmon);
             child.Kill(); child.WaitForExit(3000);
             Thread.Sleep(300);
-            string after = DdPointer(hmon);
+            string after = DdPointer(gpu, hmon);
             say("   D1 processus masqueur (" + line + ", Desktop Duplication « " + during + " ») tué : curseur « " + after + " » ; " + Info());
             if (after == "invisible")
             {
                 string again = "invisible";
-                for (int t = 0; t < 15 && again == "invisible"; t++) { Restore(); Thread.Sleep(t == 0 ? 200 : 2000); again = DdPointer(hmon); }
+                for (int t = 0; t < 15 && again == "invisible"; t++) { Restore(); Thread.Sleep(t == 0 ? 200 : 2000); again = DdPointer(gpu, hmon); }
                 say("      rétablissement par un autre processus : « " + again + " »" + (again == "invisible" ? " — CURSEUR TOUJOURS MASQUÉ : fermer puis rouvrir la session Windows" : ""));
             }
             var frozen = Process.Start(new ProcessStartInfo(self, "--cursor-hide-child") { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true });
             string fl = frozen.StandardOutput.ReadLine();
             var guard = Process.Start(new ProcessStartInfo(self, "--cursor-guard " + frozen.Id) { UseShellExecute = false, RedirectStandardInput = true, CreateNoWindow = true });
             var sw5 = Stopwatch.StartNew();
-            string state5 = DdPointer(hmon);
-            while (sw5.ElapsedMilliseconds < 4000 && state5 != "visible") { Thread.Sleep(100); state5 = DdPointer(hmon); }
+            string state5 = DdPointer(gpu, hmon);
+            while (sw5.ElapsedMilliseconds < 4000 && state5 != "visible") { Thread.Sleep(100); state5 = DdPointer(gpu, hmon); }
             say("   D2 processus masqueur gelé (" + fl + "), gardien sans battement : curseur « " + state5 + " » après " + sw5.ElapsedMilliseconds + " ms, masqueur " +
                 (frozen.WaitForExit(2000) ? "arrêté par le gardien" : "encore vivant"));
             try { if (!frozen.HasExited) frozen.Kill(); guard.StandardInput.Close(); guard.WaitForExit(2000); } catch (Exception) { }

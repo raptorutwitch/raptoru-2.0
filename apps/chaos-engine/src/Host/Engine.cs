@@ -38,6 +38,8 @@ namespace Raptoru.Chaos
         public bool HasSig, PendingFresh, WantsTicks;
         public Pacer Pacer;
         public double GpuFrameEstMs = -1;
+        /// Curseur : un effet de la surface le fait suivre l'image, et le vrai curseur est au-dessus de la cible.
+        public bool FollowsCursor, CursorOver;
     }
 
     sealed class EngineHost
@@ -54,6 +56,9 @@ namespace Raptoru.Chaos
         readonly Telemetry tel = new Telemetry();
         readonly Server io;
         readonly InputLayer input;
+        readonly CursorLayer cursor = new CursorLayer();
+        CursorImages cursorImages;
+        CursorSample cursorNow;
         readonly int selfPid = Process.GetCurrentProcess().Id;
         readonly System.Threading.AutoResetEvent frameEvt = new System.Threading.AutoResetEvent(false);
         readonly Dictionary<string, SurfaceEntry> surfaces = new Dictionary<string, SurfaceEntry>();
@@ -81,7 +86,8 @@ namespace Raptoru.Chaos
             sched = new Scheduler(reg, () => Now, () => cfg.Safety);
             io = new Server(clock, opt.HeartbeatMs, opt.ParentPid, opt.Guardian);
             input = new InputLayer(() => Now);
-            io.BeforeQuit = reason => { sched.StopAll(reason); Publish(); input.RevertAll(); };
+            // Le curseur d'abord : quelle que soit la raison de l'arrêt, il redevient visible avant tout le reste.
+            io.BeforeQuit = reason => { cursor.Restore(); sched.StopAll(reason); Publish(); input.RevertAll(); };
         }
 
         public int Run()
@@ -108,6 +114,7 @@ namespace Raptoru.Chaos
                 pool = new TexturePool(gpu);
                 timer = new GpuTimer(gpu);
                 text = new TextRaster(gpu);
+                cursorImages = new CursorImages(gpu);
                 caps = new CaptureManager(gpu, timer, frameEvt);
                 passSink = tel.Pass;
             }
@@ -134,6 +141,7 @@ namespace Raptoru.Chaos
                 while (io.TryTake(out line)) Dispatch(line);
                 if (io.TakeEmergencyStop())
                 {
+                    cursor.SetHidden(false, now);
                     sched.StopAll("emergency_hotkey");
                     Publish();
                     input.RevertAll();
@@ -147,7 +155,7 @@ namespace Raptoru.Chaos
                 if (now >= nextHousekeeping) Housekeeping(now);
                 int shown = 0;
                 foreach (var sf in surfaces.Values) if (sf.S.Shown) shown++;
-                io.Beat(shown, input.Count);
+                io.Beat(shown, input.Count, cursor.Hidden);
             }
         }
 
@@ -249,7 +257,8 @@ namespace Raptoru.Chaos
             if (inst.HoldsCapture) DropCapture(s, a.Req.TargetKey);
             if (s.Effects.Count == 0)
             {
-                // Plus aucun effet sur cette cible : la fenêtre disparaît tout de suite.
+                // Plus aucun effet sur cette cible : la fenêtre disparaît tout de suite, le curseur revient avec elle.
+                if (s.CursorOver) cursor.SetHidden(false, Now);
                 s.S.SetShown(false, Now);
                 s.S.Dispose();
                 surfaces.Remove(a.Req.TargetKey);
@@ -268,6 +277,18 @@ namespace Raptoru.Chaos
         {
             renderList.Clear();
             renderList.AddRange(surfaces.Values);
+            // Curseur (docs/chaos/ETUDE_CURSEUR.md) : masqué seulement s'il est au-dessus d'une cible affichée dont un
+            // effet le fait suivre l'image ; décidé AVANT le rendu, pour que l'image de cette passe porte déjà le curseur.
+            cursorNow = CursorLayer.Read();
+            bool hide = false;
+            foreach (var s in renderList)
+            {
+                s.FollowsCursor = FollowsCursor(s);
+                RECT b = s.S.Bounds;
+                s.CursorOver = s.FollowsCursor && s.S.Shown && cursorNow.Ok && cursorNow.X >= b.Left && cursorNow.X < b.Right && cursorNow.Y >= b.Top && cursorNow.Y < b.Bottom;
+                hide |= s.CursorOver;
+            }
+            cursor.SetHidden(hide, now);
             foreach (var s in renderList) RenderSurface(s, now);
             // Un rythmeur par écran, réveillé seulement si une surface de cet écran attend des images cadencées.
             foreach (var p in pacers.Values)
@@ -276,6 +297,17 @@ namespace Raptoru.Chaos
                 foreach (var s in renderList) if (s.Pacer == p && s.WantsTicks) need = true;
                 p.Need(need);
             }
+        }
+
+        /// Un effet en cours de la surface fait suivre l'image au curseur (registre "cursor": "follow"), sauf si Windows
+        /// retourne lui-même l'écran (couche Entrées expérimentale : son curseur est déjà le bon).
+        bool FollowsCursor(SurfaceEntry s)
+        {
+            if (!cfg.Engine.CursorFollow || (s.Device != null && input.RotationDeg(s.Device) != 0)) return false;
+            foreach (var e in s.Effects)
+                if (e.A.Def.Cursor == "follow" && e.State == InstanceState.Running && !e.HandedOff &&
+                    (e.A.State == ActState.Active || e.A.State == ActState.Exiting || e.A.State == ActState.Starting)) return true;
+            return false;
         }
 
         Pacer PacerFor(Surface surf)
@@ -334,7 +366,8 @@ namespace Raptoru.Chaos
                 return;
             }
             // Images cadencées (rythmeur de l'écran) : animation, calque sans capture, ou cadence plafonnée.
-            bool timed = Animating(s) || !needsCapture || (capped && s.PendingFresh);
+            // (curseur suivi : une image par rafraîchissement au plus, dès qu'il bouge ou change de forme)
+            bool timed = Animating(s) || !needsCapture || (capped && s.PendingFresh) || s.FollowsCursor;
             if (timed && s.Pacer == null) s.Pacer = PacerFor(s.S);
             s.WantsTicks = timed;
             bool tick = s.Pacer != null && s.Pacer.Ticks != s.PacerSeen;
@@ -377,6 +410,15 @@ namespace Raptoru.Chaos
                     sched.MarkFailed(a.Req.RequestId, "too_costly", e.Error);
                 }
             }
+            // Image du vrai curseur, posée par la transformation de l'image (dernier calque, par-dessus tout).
+            bool drawCursor = s.CursorOver && cursor.Hidden && cursorNow.Visible;
+            if (drawCursor)
+            {
+                var img = cursorImages.Get(cursorNow.Shape);
+                RECT b = s.S.Bounds;
+                if (img != null) fb.AddCursor(img.Tex, img.HotX, img.HotY, cursorNow.X - b.Left, cursorNow.Y - b.Top);
+                else drawCursor = false;
+            }
             long sig = fb.Signature(lib, now / 1000f);
             if (!s.PendingFresh && s.S.Shown && s.HasSig && sig == s.LastSig)
             {
@@ -392,6 +434,13 @@ namespace Raptoru.Chaos
             if (s.PendingFresh && needsCapture) s.Stats.Processing.Add((beforePresent - s.Cap.LastArrivalQpc) * 1000.0 / N.QpcFreq());
             int hr = s.S.Present(false);
             s.Stats.PresentCall.Add((N.QpcNow() - beforePresent) * 1000.0 / N.QpcFreq());
+            // Retard du curseur dessiné (estimation) : position lue → composition prévue de cette image. Le curseur
+            // matériel, lui, est placé par Windows à chaque composition.
+            if (drawCursor)
+            {
+                long nextComp = s.S.NextCompositionQpc();
+                if (nextComp > cursorNow.Qpc) s.Stats.CursorLatency.Add((nextComp - cursorNow.Qpc) * 1000.0 / N.QpcFreq());
+            }
             // Latence ajoutée (estimation, une image sur 4) : l'image du jeu aurait été affichée à sa composition ;
             // sa version transformée l'est à la composition suivant notre Present.
             if (s.PendingFresh && needsCapture && (++s.Stats.Fresh & 3) == 0)
@@ -556,6 +605,8 @@ namespace Raptoru.Chaos
                     "refresh_hz", s.S.RefreshHz, "rate_hz", Math.Round(RateHz(s), 1), "pacer", s.Pacer != null ? s.Pacer.Mode : null,
                     "skipped_static", s.Stats.SkippedStatic - s.Stats.SkippedStaticAt, "skipped_hidden", s.Stats.SkippedHidden - s.Stats.SkippedHiddenAt,
                     "frame_gpu_est_ms", Math.Round(s.GpuFrameEstMs, 3),
+                    "cursor_follow", s.FollowsCursor, "cursor_over", s.CursorOver,
+                    "cursor_latency_est_p50_ms", s.Stats.CursorLatency.P(50), "cursor_latency_est_p95_ms", s.Stats.CursorLatency.P(95),
                     "black", s.Cap != null && s.Cap.Black, "composition_hz", s.S.CompositionHz(),
                     "capture", s.Cap != null ? s.Cap.Info() : null));
                 s.Stats.CapFramesAt = frames; s.Stats.DroppedAt = dropped; s.Stats.PresentedAt = s.S.Presented;
@@ -567,6 +618,7 @@ namespace Raptoru.Chaos
                 "captures_open", caps.Count, "surfaces_open", surfaces.Count, "pool_targets", pool.Live, "text_textures", text.Count,
                 "degraded", tel.Degraded, "degraded_reason", tel.DegradedReason,
                 "performance", J.Map("profile", cfg.Performance.Profile, "level", tel.Level, "over_budget", tel.OverBudget, "gpu_budget_ms", cfg.Performance.GpuBudgetMs),
+                "cursor", CursorView(now),
                 "errors", tel.Errors.ToDictionary(kv => kv.Key, kv => (object)kv.Value));
         }
 
@@ -648,7 +700,13 @@ namespace Raptoru.Chaos
                 "implemented", EffectCatalog.Implemented.ToArray(), "adapter", gpu != null ? gpu.Adapter : null, "pid", selfPid,
                 "config_path", opt.ConfigPath, "config_notes", cfg.LoadNotes.ToArray(), "ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs,
                 "shader_warm_ms", tel.ShaderWarmMs, "emergency_hotkey", "Ctrl+Maj+F11", "input_effects", reg.InputEffects.Keys.ToArray(),
-                "input_effects_enabled", cfg.Engine.InputEffects);
+                "input_effects_enabled", cfg.Engine.InputEffects, "cursor_follow", cfg.Engine.CursorFollow);
+        }
+
+        Dictionary<string, object> CursorView(long now)
+        {
+            return J.Map("enabled", cfg.Engine.CursorFollow, "hidden", cursor.Hidden, "hides", cursor.Hides, "hidden_ms", cursor.HiddenTotalMs(now),
+                "shapes", cursorImages != null ? cursorImages.Built : 0, "failures", cursor.Failures, "last_error", cursor.LastError);
         }
 
         void Dispatch(string line)
@@ -682,6 +740,7 @@ namespace Raptoru.Chaos
                     d["pool_created"] = pool.Created; d["captures_opened"] = caps.Opened; d["captures_reused"] = caps.Reused;
                     d["guardian"] = J.Map("pid", io.GuardianPid, "restarts", io.GuardianRestarts, "hotkey", io.HotkeyState);
                     d["input"] = input.Describe();
+                    d["cursor"] = CursorView(now);
                     d["pacers"] = pacers.Values.Select(p => (object)J.Map("hz", p.Hz, "mode", p.Mode, "ticks", p.Ticks)).ToArray();
                     d["startup"] = J.Map("ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs, "shader_warm_ms", tel.ShaderWarmMs);
                     return d;
@@ -730,6 +789,7 @@ namespace Raptoru.Chaos
                 "captures_open", caps.Count, "degraded", tel.Degraded,
                 "guardian", J.Map("pid", io.GuardianPid, "hotkey", io.HotkeyState),
                 "input", input.Describe(),
+                "cursor", CursorView(now),
                 "config", cfg.ToJson());
         }
     }

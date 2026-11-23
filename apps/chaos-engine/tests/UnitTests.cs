@@ -277,6 +277,25 @@ namespace Raptoru.Chaos
                 finally { try { Directory.Delete(dir, true); } catch (Exception) { } }
             });
 
+            Case("curseur : le retournement fait suivre l'image au curseur ; déclaration validée ; réglage moteur", () =>
+            {
+                True(reg.Get("flip").Cursor == "follow" && reg.Get("diag.tint").Cursor == null && reg.Get("diag.marker").Cursor == null, "flip : curseur suivi, diagnostics inchangés");
+                Func<Action<Dictionary<string, object>, List<Dictionary<string, object>>>, string> mutate = change =>
+                {
+                    var root = J.Parse(Reg().Json);
+                    var effects = J.Arr(root, "effects").Cast<Dictionary<string, object>>().ToList();
+                    change(root, effects);
+                    return J.Write(root);
+                };
+                Func<List<Dictionary<string, object>>, string, Dictionary<string, object>> fx = (l, id) => l.First(e => (string)e["id"] == id);
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => fx(l, "flip")["cursor"] = "invert")));
+                Throws<RegistryError>(() => Registry.Parse(mutate((r, l) => fx(l, "diag.marker")["cursor"] = "follow")));
+                var c = new ConfigStore(reg, null);
+                True(c.Engine.CursorFollow, "défaut : curseur retourné avec l'image");
+                c.SetEngine(J.Map("cursor_follow", false));
+                True(!c.Engine.CursorFollow && J.Bool(J.Obj(c.ToJson(), "engine"), "cursor_follow", true) == false, "coupé à la demande (secours), enregistré");
+            });
+
             Case("performances : profils, valeur personnalisée, bornes, migration de quality, passes déclarées", () =>
             {
                 var c = new ConfigStore(reg, null);

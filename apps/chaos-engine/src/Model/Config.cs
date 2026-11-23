@@ -30,6 +30,9 @@ namespace Raptoru.Chaos
         /// l'affichage (vrai curseur, souris inversée). Coupée par défaut depuis l'incident du 22/11 : chaque bascule
         /// d'orientation reconfigure l'affichage de tout le PC (Overwatch à 17 images/s sur l'autre écran).
         public bool InputEffects;
+        /// Curseur retourné avec l'image (effets du registre avec "cursor": "follow", ex. flip) : un seul curseur visible,
+        /// aligné avec ce que le clic touchera. Faux : curseur de Windows inchangé (diagnostic, secours).
+        public bool CursorFollow = true;
         public int CaptureLingerMs = 2000, TelemetryIntervalMs = 1000;
     }
 
@@ -203,6 +206,7 @@ namespace Raptoru.Chaos
                 FollowForeground = J.Bool(v, "follow_foreground", Engine.FollowForeground),
                 DefaultMode = J.Str(v, "default_mode", Engine.DefaultMode),
                 InputEffects = J.Bool(v, "input_effects", Engine.InputEffects),
+                CursorFollow = J.Bool(v, "cursor_follow", Engine.CursorFollow),
                 CaptureLingerMs = (int)J.Num(v, "capture_linger_ms", Engine.CaptureLingerMs),
                 TelemetryIntervalMs = (int)J.Num(v, "telemetry_interval_ms", Engine.TelemetryIntervalMs)
             };
@@ -281,7 +285,7 @@ namespace Raptoru.Chaos
             var presets = new Dictionary<string, object>();
             foreach (var eff in Presets) presets[eff.Key] = eff.Value.ToDictionary(kv => kv.Key, kv => (object)kv.Value.ToJson());
             return J.Map("schema", Schema, "version", CurrentVersion,
-                "engine", J.Map("follow_foreground", Engine.FollowForeground, "default_mode", Engine.DefaultMode, "input_effects", Engine.InputEffects, "capture_linger_ms", Engine.CaptureLingerMs,
+                "engine", J.Map("follow_foreground", Engine.FollowForeground, "default_mode", Engine.DefaultMode, "input_effects", Engine.InputEffects, "cursor_follow", Engine.CursorFollow, "capture_linger_ms", Engine.CaptureLingerMs,
                                 "telemetry_interval_ms", Engine.TelemetryIntervalMs),
                 "safety", J.Map("max_duration_ms", Safety.MaxDurationMs, "max_active_effects", Safety.MaxActiveEffects, "safe_mode", Safety.SafeMode),
                 "performance", Performance.ToJson(),
