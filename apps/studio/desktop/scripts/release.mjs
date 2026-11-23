@@ -387,6 +387,8 @@ function verifyArtifacts(version) {
     )
   )
     fail('Extension Lab files missing from the package');
+  if (!existsSync(join(app, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe')))
+    fail('Chaos engine missing from the package');
 
   // Secrets: no secret-looking file, and no local secret value inside any packaged text file.
   const files = [];
