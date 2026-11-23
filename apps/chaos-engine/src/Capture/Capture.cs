@@ -93,7 +93,8 @@ namespace Raptoru.Chaos
         public long LastArrivalQpc { get { return Interlocked.Read(ref lastArrival); } }
         public long LastFrameQpc { get { return lastFrameQpc; } }
 
-        public WgcCaptureSource(Gpu gpu, GpuTimer timer, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon)
+        /// cursor : curseur inclus dans l'image (prototype du curseur ; le moteur l'exclut toujours).
+        public WgcCaptureSource(Gpu gpu, GpuTimer timer, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon, bool cursor = false)
         {
             this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; Key = key;
             if (!GraphicsCaptureSession.IsSupported()) throw new CaptureError("capture_unsupported", "Windows.Graphics.Capture indisponible");
@@ -112,7 +113,7 @@ namespace Raptoru.Chaos
             pool = Direct3D11CaptureFramePool.CreateFreeThreaded(gpu.WinrtDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, PoolBuffers, size);
             pool.FrameArrived += (s, a) => { Interlocked.Exchange(ref lastArrival, N.QpcNow()); Interlocked.Increment(ref frames); frameEvt.Set(); };
             session = pool.CreateCaptureSession(item);
-            try { session.IsCursorCaptureEnabled = false; }
+            try { session.IsCursorCaptureEnabled = cursor; }
             catch (Exception e) { throw new CaptureError("cursor_exclusion_unavailable", e.Message); }
             // Autorisation « sans bordure » : demandée une fois par processus (Windows la garde), pas à chaque capture.
             if (cachedAccess == null)

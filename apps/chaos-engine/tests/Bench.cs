@@ -104,6 +104,8 @@ namespace Raptoru.Chaos
         {
             N.SetProcessDpiAwarenessContext(new IntPtr(-4));
             Console.OutputEncoding = Encoding.UTF8;
+            if (args.Length > 0 && args[0] == "--cursor-proto") return CursorProto.Run(args);
+            if (args.Length > 0 && args[0] == "--cursor-hide-child") return CursorProto.Child();
             if (args.Length > 0 && args[0] == "--obs-compat")
                 return CaptureCompat.Run(args, Path.GetFullPath(Arg(args, "--engine", Path.Combine(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), "ChaosEngine.exe"))));
             if (args.Length > 0 && args[0] == "--probe")
