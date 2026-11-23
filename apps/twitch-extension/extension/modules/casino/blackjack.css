@@ -1074,3 +1074,22 @@
   .seat .tot { height: 19px; min-width: 24px; font-size: 12px; }
   .msg .bd p { font-size: 13px; }
 }
+
+/* --- Historique au lecteur normal (563 × 376, 23/11) : une vraie fenêtre flottante, centrée sur la table, à la taille de
+   son contenu (une manche = une petite fenêtre) et plafonnée (au-delà, la liste défile). Le reste de la table, assombri,
+   reste visible ; la barre du bas n'est pas couverte (la fenêtre vit dans le feutre). Colonne flex et non grille : une
+   grille à hauteur automatique ne fait pas défiler sa rangée flexible sous un max-height. */
+@container bj (min-width: 480px) and (max-width: 640px) and (min-height: 290px) and (max-height: 339px) {
+  .hist { --hw: min(360px, calc(100% - 24px)); left: 50%; right: auto; top: 50%; bottom: auto; width: var(--hw); max-height: calc(100% - 14px); display: flex; flex-direction: column; border-radius: 12px; box-shadow: 0 0 0 1px rgba(242, 198, 95, 0.38), 0 14px 32px rgba(0, 0, 0, 0.6), 0 0 0 100vmax rgba(8, 3, 16, 0.42); opacity: 0; visibility: hidden; pointer-events: none; transform: translate(-50%, -46%) scale(0.97); transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.25, 1), opacity 0.18s, visibility 0s 0.2s; }
+  .felt.hist-open .hist { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(-50%, -50%); transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.25, 1), opacity 0.18s; }
+  .hist header { flex: none; padding: 6px 6px 4px 11px; }
+  .hist header b { font-size: 12.5px; }
+  .hist header .ic { width: 24px; height: 24px; }
+  .htabs { flex: none; margin: 0 8px 6px; padding: 2px; }
+  .htabbtn { min-height: 24px; font-size: 10.5px; }
+  .hist__list { flex: 0 1 auto; min-height: 0; padding: 0 8px 8px; gap: 4px; }
+  .hsess { margin-bottom: 1px; padding: 6px 9px; gap: 2px; }
+  .mrow { padding: 5px 8px 6px; gap: 2px; }
+  .hround { padding: 5px 8px; }
+  .hist .none { margin: 4px 3px 2px; }
+}
