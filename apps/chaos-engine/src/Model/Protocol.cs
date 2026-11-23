@@ -79,6 +79,13 @@ namespace Raptoru.Chaos
             bool trusted = kind == "studio" || kind == "test";
             var resolved = Params.Resolve(def, J.Str(b, "variant", null), preset, J.Obj(b, "params"), dur, J.Obj(b, "transition"), reg.Limits, cfg.Safety, trusted);
             var target = resolveTarget(J.Obj(b, "target") ?? J.Map("kind", "foreground"), def);
+            // Couche Entrées (Windows retourne l'affichage, EXPÉRIMENTALE) : jamais pour une activation communautaire
+            // (Core, extension, points de chaîne), même si elle est activée : l'effet passe par le calque GPU.
+            if (!trusted && target.Info != null && J.Has(target.Info, "input"))
+            {
+                target.Info["input"] = null;
+                target.Info["input_blocked"] = "source_" + kind;
+            }
             return new EffectRequest
             {
                 RequestId = rid, Def = def, Variant = J.Str(b, "variant", null), PresetName = presetName, Policy = policy, Priority = (int)prio,

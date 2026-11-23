@@ -413,6 +413,12 @@ namespace Raptoru.Chaos
                 Eq("internal_effect", code(J.Map("request_id", "r", "effect", "diag.tint", "source", J.Map("kind", "core"))), "effet interne depuis le Core");
                 Eq("invalid_priority", code(J.Map("request_id", "r", "effect", "flip", "priority", 1.5)), "priorité");
                 Eq("unknown_preset", code(J.Map("request_id", "r", "effect", "flip", "preset", "absent")), "préréglage");
+                // Couche Entrées (expérimentale) : jamais pour une activation communautaire, même activée.
+                Func<Dictionary<string, object>, EffectDef, TargetRef> screen = (t, d) => new TargetRef { Key = "monitor:x", Kind = "monitor", Info = J.Map("kind", "monitor", "input", "invert_xy") };
+                var fromCore = Protocol.BuildRequest(J.Map("request_id", "c", "effect", "flip", "source", J.Map("kind", "core")), reg, cfg, screen);
+                var fromStudio = Protocol.BuildRequest(J.Map("request_id", "s", "effect", "flip", "source", J.Map("kind", "studio")), reg, cfg, screen);
+                True(J.Str(fromCore.TargetInfo, "input", null) == null && J.Str(fromCore.TargetInfo, "input_blocked", "") == "source_core" && J.Str(fromStudio.TargetInfo, "input", null) == "invert_xy",
+                    "retournement par Windows refusé aux sources communautaires (calque GPU à la place), permis à Studio");
                 var req = Protocol.BuildRequest(J.Map("request_id", "r", "effect", "flip", "source", J.Map("kind", "core", "ref", "achat-42"), "priority", 3), reg, cfg, target);
                 True(req.SourceKind == "core" && req.SourceRef == "achat-42" && req.Priority == 3 && req.TargetKey == "window:1", "demande complète");
                 var ev = Protocol.Event("effect.started", 5, J.Map("request_id", "r"));
