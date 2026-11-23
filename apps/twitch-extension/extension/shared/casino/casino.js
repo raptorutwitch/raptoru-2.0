@@ -8,6 +8,7 @@
 import * as Frame from './frame.js';
 import { createFollower } from './follow.js';
 import { createWalletSync } from './wallet-sync.js';
+import { diagMark } from '../diagnostic.js';
 
 export const LOADERS = {
   slot: () => import('./slot.js').then((m) => m.mountSlot),
@@ -210,15 +211,25 @@ function casinoScreen({ document, client, kind, follow = null }) {
     b.innerHTML = '<p class="cz-load">Chargement du Casino…</p>';
     let casino;
     let mountFn;
+    diagMark('casino', `${next} : chargement${opts.follow ? ' (spectateur)' : ''}`);
     try {
       [casino, mountFn] = await Promise.all([client.casinoState(), LOADERS[next](), useSheets(D, next)]);
     } catch (e) {
+      diagMark('casino', `${next} : échec du chargement (${e?.code ?? e?.name ?? 'erreur'})`);
       if (my === token) fail(e, () => (opts.follow ? followPlayer(followed) : open(next)));
       return null;
     }
     if (destroyed || my !== token) return null;
+    // (booléens seulement : jamais le solde ni l'identité)
+    diagMark('casino', `${next} : état reçu · viewer ${casino?.me ? 'oui' : 'non'} · reprise ${casino?.me?.resume || casino?.me?.resume_book ? 'oui' : 'non'} · table ${casino?.tables?.[next] ? 'oui' : 'non'} · feuilles ${D.adoptedStyleSheets?.length ?? 0}`);
     Frame.useRoot(D);
-    game = mountFn(D, { client, casino, follow: opts.follow ?? null, onLeave: () => void openLive() });
+    try {
+      game = mountFn(D, { client, casino, follow: opts.follow ?? null, onLeave: () => void openLive() });
+    } catch (e) {
+      diagMark('casino', `${next} : EXCEPTION au montage — ${e?.name}: ${e?.message}`);
+      throw e; // comportement inchangé (le diagnostic observe seulement)
+    }
+    diagMark('casino', `${next} : monté`);
     redrawHeader();
     return casino;
   }
