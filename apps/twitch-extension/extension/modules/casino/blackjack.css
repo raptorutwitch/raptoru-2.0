@@ -1048,6 +1048,10 @@
   .cards .card { padding: 0; }
   .seats .seat .tot:not(.is-bj):not(.bust) { color: #f3ecff; background: rgba(24, 13, 38, 0.88); box-shadow: 0 0 0 1px rgba(214, 170, 255, 0.35), 0 2px 4px rgba(0, 0, 0, 0.5); }
   .seats .seat:hover .tot:not(.is-bj):not(.bust) { color: #1f1430; background: linear-gradient(180deg, #fff, #ddd2ee); }
+  /* Correction (23/11) : le score des AUTRES joueurs est masqué, il n'apparaît qu'au survol de leur place (même coin) ;
+     la main en jeu garde le sien (au centre), ma place aussi. L'étiquette Blackjack et le tampon BUST restent. */
+  .seats .seat:not(.me) .tot:not(.is-bj) { visibility: hidden; }
+  .seats .seat:not(.me):hover .tot:not(.is-bj):not(:empty) { visibility: visible; }
 }
 
 /* --- Le score de la banque, partout : un liseré d'or le détache du feutre (il était trop discret, 23/11). */
