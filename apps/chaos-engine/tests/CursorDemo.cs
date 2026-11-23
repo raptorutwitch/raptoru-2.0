@@ -5,7 +5,9 @@
 //   - un gardien (processus séparé) rétablit le curseur si la démo plante, gèle ou est tuée ;
 //   - aucune entrée interceptée, aucune injection, aucun jeu touché.
 // Hors du moteur principal tant que les tests ne sont pas concluants.
-// Usage : chaos-bench.exe --cursor-demo [--seconds 30] [--window premier-plan] [--autorise-pendant-un-jeu]
+// Usage : chaos-bench.exe --cursor-demo [--seconds 30] [--window premier-plan] [--curseur dessine|capture] [--autorise-pendant-un-jeu]
+//   --curseur dessine (défaut depuis le 23/11) : image du vrai curseur (forme et position lues chaque image) dessinée
+//   retournée au point miroir ; --curseur capture : curseur dans l'image capturée (absent dès qu'il est masqué).
 //   sans --window : une fenêtre de tuiles cliquables sur l'écran secondaire (cliquer une tuile l'allume) ;
 //   --window premier-plan : la fenêtre au premier plan 3 s après le lancement (ex. Dofus, avec l'accord d'Antoni).
 using System;
@@ -26,6 +28,8 @@ namespace Raptoru.Chaos
         [DllImport("Magnification.dll")] static extern bool MagUninitialize();
         [DllImport("Magnification.dll")] static extern bool MagShowSystemCursor(bool show);
         [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")] static extern bool GetCursorInfo(ref CURSORINFO ci);
+        [StructLayout(LayoutKind.Sequential)] struct CURSORINFO { public int cbSize, flags; public IntPtr hCursor; public POINT pt; }
         static string Arg(string[] a, string k, string d) { int i = Array.IndexOf(a, k); return i >= 0 && i + 1 < a.Length ? a[i + 1] : d; }
 
         // ---------- Gardien : rétablit le curseur si la démo meurt ou ne bat plus ----------
@@ -53,6 +57,58 @@ namespace Raptoru.Chaos
         }
 
         static void Restore() { bool i = MagInitialize(); MagShowSystemCursor(true); if (i) MagUninitialize(); }
+
+        // ---------- Auto-test hors écran (aucune fenêtre, curseur jamais masqué) ----------
+        [DllImport("user32.dll")] static extern IntPtr LoadCursorW(IntPtr inst, IntPtr id);
+
+        /// Vérifie l'image du curseur (forme lue, pointe, alpha) et sa pose retournée au point miroir, par la vraie chaîne
+        /// de rendu (FrameBuilder, calque texturé), dans une texture hors écran relue.
+        public static int SelfTest()
+        {
+            var gpu = new Gpu();
+            var lib = new ShaderLibrary(gpu, Path.Combine(Path.GetTempPath(), "chaos-bench-shaders"));
+            var pool = new TexturePool(gpu);
+            var images = new CursorImages(gpu);
+            int ok = 0, ko = 0;
+            Action<bool, string> check = (c, what) => { if (c) ok++; else ko++; Console.WriteLine((c ? "  ok  " : "  KO  ") + what); };
+            foreach (var kv in new[] { new KeyValuePair<string, int>("flèche", 32512), new KeyValuePair<string, int>("barre de texte", 32513), new KeyValuePair<string, int>("main", 32649) })
+            {
+                IntPtr h = LoadCursorW(IntPtr.Zero, new IntPtr(kv.Value));
+                var img = images.Get(h);
+                if (img == null) { check(false, kv.Key + " : forme illisible"); continue; }
+                var st = gpu.Texture((uint)img.Tex.W, (uint)img.Tex.H, 1, 0, 0, 3, 0x20000);
+                gpu.Copy(st, img.Tex.Tex, 0, 0, (uint)img.Tex.W, (uint)img.Tex.H);
+                var px = gpu.ReadBack(st, (uint)img.Tex.W, (uint)img.Tex.H);
+                Com.Release(ref st);
+                int opaque = 0; for (int i = 3; i < px.Length; i += 4) if (px[i] > 128) opaque++;
+                check(opaque > 20 && opaque < img.Tex.W * img.Tex.H / 2, kv.Key + " : " + img.Tex.W + "×" + img.Tex.H + ", pointe (" + img.HotX + ", " + img.HotY + "), " + opaque + " pixels opaques");
+            }
+            // Pose : cible 400×300, vrai curseur (flèche) en (100, 50) → pointe attendue en (299, 249), corps vers le haut à gauche.
+            uint W = 400, H = 300;
+            var arrow = images.Get(LoadCursorW(IntPtr.Zero, new IntPtr(32512)));
+            var outTex = gpu.Texture(W, H, 1, 0x8 | 0x20, 0, 0, 0);
+            var outRtv = gpu.Rtv(outTex);
+            var fb = new FrameBuilder(W, H, false);
+            double cx = 100, cy = 50;
+            double left = (W - 1 - cx) - (arrow.Tex.W - 1 - arrow.HotX), top = (H - 1 - cy) - (arrow.Tex.H - 1 - arrow.HotY);
+            fb.Add(new Layer { X = left / W, Y = top / H, W = arrow.Tex.W / (double)W, H = arrow.Tex.H / (double)H, Rotation = Math.PI, Texture = arrow.Tex });
+            fb.Execute(gpu, lib, pool, null, IntPtr.Zero, outRtv, 0, 0);
+            var stg = gpu.Texture(W, H, 1, 0, 0, 3, 0x20000);
+            gpu.Copy(stg, outTex, 0, 0, W, H);
+            var o = gpu.ReadBack(stg, W, H);
+            Func<int, int, int> alpha = (x, y) => x < 0 || y < 0 || x >= W || y >= H ? 0 : o[(y * W + x) * 4 + 3];
+            int tipX = 299, tipY = 249, near = 0, beyond = 0, body = 0;
+            for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) if (alpha(tipX + dx, tipY + dy) > 128) near++;
+            for (int dy = 3; dy <= 12; dy++) for (int dx = 3; dx <= 12; dx++) if (alpha(tipX + dx, tipY + dy) > 128) beyond++;
+            for (int dy = -12; dy <= -3; dy++) for (int dx = -12; dx <= -3; dx++) if (alpha(tipX + dx, tipY + dy) > 128) body++;
+            check(near > 0, "pointe de la flèche au point miroir (299, 249) : " + near + " pixels opaques autour");
+            check(beyond == 0 && body > 10, "flèche retournée : corps en haut à gauche de la pointe (" + body + " px), rien au-delà (" + beyond + " px)");
+            int elsewhere = 0; for (int i = 3; i < o.Length; i += 4) if (o[i] > 0) elsewhere++;
+            check(elsewhere < arrow.Tex.W * arrow.Tex.H, "un seul curseur dans l'image (" + elsewhere + " pixels non transparents)");
+            Com.Release(ref stg); Com.Release(ref outRtv); Com.Release(ref outTex); images.Dispose();
+            Console.WriteLine("Total : " + ok + " ok, " + ko + " KO");
+            return ko == 0 ? 0 : 1;
+        }
 
         // ---------- Cible cliquable ----------
         sealed class ClickTarget : Form
@@ -130,20 +186,29 @@ namespace Raptoru.Chaos
             lib.Warm();
             var pool = new TexturePool(gpu);
             var evt = new AutoResetEvent(false);
-            var cap = new WgcCaptureSource(gpu, null, evt, "demo", target, IntPtr.Zero, true) { ZeroCopy = true };
+            // capture : curseur dans l'image capturée (Windows le retire quand il est masqué : essai du 23/11) ;
+            // dessine : image du vrai curseur (forme et position courantes) dessinée retournée au point miroir.
+            bool drawn = Arg(a, "--curseur", "dessine") != "capture";
+            var cap = new WgcCaptureSource(gpu, null, evt, "demo", target, IntPtr.Zero, !drawn) { ZeroCopy = true };
             var surf = new Surface(gpu, "demo", target, IntPtr.Zero, cap.Width, cap.Height);
             var fb = new FrameBuilder(cap.Width, cap.Height, true);
+            var pacer = new Pacer(gpu, surf.Hmon, surf.RefreshHz, evt);
+            pacer.Need(drawn);
+            var images = new CursorImages(gpu);
             bool init = MagInitialize(), hidden = false;
-            int toggles = 0, presents = 0, frames = 0;
-            long hiddenMs = 0, hiddenSince = 0;
+            int toggles = 0, presents = 0, frames = 0, cursorFrames = 0;
+            long hiddenMs = 0, hiddenSince = 0, seenTicks = 0, lastKey = 0;
             var added = new Samples();
+            var cursorLatency = new Samples();
+            var hiddenStates = new HashSet<string>();
             var clock = Stopwatch.StartNew();
-            Console.WriteLine("Démo : " + N.WindowText(target) + " retournée pendant " + seconds + " s (MagInitialize " + (init ? "ok" : "ÉCHEC") + ").");
+            Console.WriteLine("Démo : « " + N.WindowText(target) + " » retournée pendant " + seconds + " s, curseur " + (drawn ? "dessiné (image du vrai curseur)" : "dans la capture") +
+                " ; MagInitialize " + (init ? "ok" : "ÉCHEC") + " ; écran " + surf.RefreshHz + " Hz, rythme " + pacer.Mode + ".");
             try
             {
                 while (clock.Elapsed.TotalSeconds < seconds && N.IsWindow(target))
                 {
-                    evt.WaitOne(2);
+                    evt.WaitOne(4);
                     long now = clock.ElapsedMilliseconds;
                     // Curseur matériel masqué seulement au-dessus de la cible : jamais deux curseurs, jamais aucun ailleurs.
                     POINT p; GetCursorPos(out p);
@@ -156,16 +221,44 @@ namespace Raptoru.Chaos
                         hidden = over; toggles++;
                     }
                     surf.Track();
-                    if (!cap.Acquire(now) && surf.Shown) continue;
+                    bool fresh = cap.Acquire(now);
                     if (!cap.HasFrame) continue;
-                    frames++;
+                    // Le vrai curseur : forme et position lues à l'instant du rendu (lecture seule).
+                    var ci = new CURSORINFO { cbSize = Marshal.SizeOf(typeof(CURSORINFO)) };
+                    long sampleQpc = N.QpcNow();
+                    bool ciOk = GetCursorInfo(ref ci);
+                    if (hidden) hiddenStates.Add(!ciOk ? "GetCursorInfo échoue" : ((ci.flags & 1) != 0 ? "affiché" : (ci.flags & 2) != 0 ? "supprimé" : "caché") + (ci.hCursor != IntPtr.Zero ? ", forme lisible" : ", AUCUNE forme"));
+                    // Dessiné seulement quand le curseur matériel est masqué par la démo et que le programme visé montre un
+                    // curseur (un jeu qui le cache, visée à la souris, n'en a pas).
+                    bool drawCursor = drawn && hidden && ciOk && ci.hCursor != IntPtr.Zero && (ci.flags & 3) != 0;
+                    long key = drawCursor ? ((long)ci.pt.X << 40) ^ ((long)ci.pt.Y << 20) ^ ci.hCursor.ToInt64() : 0;
+                    bool tick = pacer.Ticks != seenTicks;
+                    if (tick) seenTicks = pacer.Ticks;
+                    if (!fresh && surf.Shown && !(tick && key != lastKey)) continue;
+                    lastKey = key;
+                    if (fresh) frames++;
                     fb.Reset(cap.Width, cap.Height, true);
                     fb.Transform(Math.PI, 1, 1, 0, 0, "black");
+                    if (drawCursor)
+                    {
+                        var img = images.Get(ci.hCursor);
+                        if (img != null)
+                        {
+                            // Pointe du curseur au point miroir ; image tournée de 180° autour de son centre (comme un écran
+                            // retourné par Windows).
+                            double W = cap.Width, H = cap.Height;
+                            double cx = ci.pt.X - tr.Left, cy = ci.pt.Y - tr.Top;
+                            double left = (W - 1 - cx) - (img.Tex.W - 1 - img.HotX), top = (H - 1 - cy) - (img.Tex.H - 1 - img.HotY);
+                            fb.Add(new Layer { X = left / W, Y = top / H, W = img.Tex.W / W, H = img.Tex.H / H, Rotation = Math.PI, Texture = img.Tex });
+                            cursorFrames++;
+                        }
+                    }
                     fb.Execute(gpu, lib, pool, null, cap.Srv, surf.BackBuffer, now, now / 1000f);
                     surf.Present(false);
                     presents++;
                     long next = surf.NextCompositionQpc();
-                    if (next > cap.LastFrameQpc && (presents & 3) == 0) added.Add((next - cap.LastFrameQpc) * 1000.0 / N.QpcFreq());
+                    if (fresh && next > cap.LastFrameQpc && (presents & 3) == 0) added.Add((next - cap.LastFrameQpc) * 1000.0 / N.QpcFreq());
+                    if (drawCursor && next > sampleQpc) cursorLatency.Add((next - sampleQpc) * 1000.0 / N.QpcFreq());
                     surf.SetShown(true, now);
                 }
             }
@@ -174,16 +267,21 @@ namespace Raptoru.Chaos
                 if (hidden) hiddenMs += clock.ElapsedMilliseconds - hiddenSince;
                 MagShowSystemCursor(true);
                 if (init) MagUninitialize();
+                pacer.Need(false);
                 surf.SetShown(false, clock.ElapsedMilliseconds);
-                surf.Dispose(); cap.Dispose();
+                surf.Dispose(); cap.Dispose(); images.Dispose();
                 beat.Dispose();
                 try { guard.StandardInput.Close(); guard.WaitForExit(2000); } catch (Exception) { }
                 if (form != null) try { form.Invoke((Action)(() => form.Close())); } catch (Exception) { }
             }
             double secs = Math.Max(0.001, clock.Elapsed.TotalSeconds);
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "Fin : {0:0.0} images capturées/s, {1:0.0} présentées/s ; latence ajoutée estimée (image et curseur) p50 {2} ms, p95 {3} ms ; curseur matériel masqué {4:0.0} s, {5} bascules.",
+                "Fin : {0:0.0} images capturées/s, {1:0.0} présentées/s ; latence ajoutée de l'image p50 {2} ms (p95 {3}) ; curseur matériel masqué {4:0.0} s, {5} bascules.",
                 frames / secs, presents / secs, added.P(50), added.P(95), hiddenMs / 1000.0, toggles));
+            if (drawn) Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "Curseur dessiné : {0} images, {1} forme(s) lue(s) ; position lue → composition prévue p50 {2} ms (p95 {3}).",
+                cursorFrames, images.Built, cursorLatency.P(50), cursorLatency.P(95)));
+            Console.WriteLine("Pendant le masquage, GetCursorInfo : " + (hiddenStates.Count > 0 ? string.Join(" | ", hiddenStates) : "jamais masqué (souris jamais au-dessus de la cible)") + ".");
             return 0;
         }
     }

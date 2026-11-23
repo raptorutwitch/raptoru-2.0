@@ -84,6 +84,8 @@ namespace Raptoru.Chaos
         /// Copie persistante (outils de test : lecture des pixels après une capture avec ZeroCopy = false).
         internal IntPtr CopyTexture { get { return tex; } }
         public bool ZeroCopy { get; set; }
+        /// Valeur relue de IsCursorCaptureEnabled (diagnostic du curseur).
+        public bool CursorCaptureEnabled { get { try { return session.IsCursorCaptureEnabled; } catch (Exception) { return false; } } }
         public bool HasFrame { get; private set; }
         public bool Lost { get { return closed; } }
         public string LostReason { get; private set; }

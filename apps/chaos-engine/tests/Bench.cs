@@ -106,6 +106,7 @@ namespace Raptoru.Chaos
             Console.OutputEncoding = Encoding.UTF8;
             if (args.Length > 0 && args[0] == "--cursor-proto") return CursorProto.Run(args);
             if (args.Length > 0 && args[0] == "--cursor-demo") return CursorDemo.Run(args);
+            if (args.Length > 0 && args[0] == "--cursor-selftest") return CursorDemo.SelfTest();
             if (args.Length > 0 && args[0] == "--cursor-guard") return CursorDemo.Guard(int.Parse(args[1]));
             if (args.Length > 0 && args[0] == "--cursor-hide-child") return CursorProto.Child();
             if (args.Length > 0 && args[0] == "--obs-compat")
