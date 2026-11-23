@@ -9,6 +9,7 @@
 const GAMES = {
   // The Hub (TTS, Soundboard, Tombola, Mini-jeux · Random Ban, Bonk…): every module, without opening a game.
   hub: { label: 'Accueil — tous les modules', tile: '' },
+  catalogue: { label: 'Mini-jeux — catalogue', tile: 'none' },
   blackjack: { label: 'Blackjack', tile: 'casino_blackjack' },
   slot: { label: 'Machine à fruits', tile: 'casino_slot' },
   book: { label: 'Machine à émotes', tile: 'casino_book' },
@@ -168,7 +169,7 @@ $('h').value = Number(params.get('h')) || ph;
 function src() {
   const game = $('game').value;
   if (mode === 'full')
-    return `/casino-v2/${SURFACES[$('surface').value].page}${GAMES[game].tile ? `&casinoGame=${GAMES[game].tile}` : ''}`;
+    return `/casino-v2/${SURFACES[$('surface').value].page}${GAMES[game].tile ? `&casinoGame=${GAMES[game].tile}` : ''}${$('fault').value ? `&casinoFault=${$('fault').value}` : ''}`;
   const raw = $('state').value;
   const [state, open] = raw.startsWith('open:')
     ? ['several', raw.slice(5)]
@@ -343,4 +344,6 @@ $('surface').addEventListener(
 $('state').addEventListener('change', show);
 $('size').addEventListener('change', () => (pickSize(), show()));
 $('reload').addEventListener('click', show);
+if (params.get('fault')) $('fault').value = params.get('fault');
+$('fault').addEventListener('change', show);
 show();

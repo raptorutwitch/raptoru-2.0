@@ -905,7 +905,21 @@ export async function casinoDemoCall(method, rawPath, body, key) {
       pending_actions: host.pending_actions,
     };
   }
-  if (method === 'GET' && path === '/casino/state') return casinoState();
+  if (method === 'GET' && path === '/casino/state') {
+    // ?casinoFault= (bench « Panne »): the two ways the slot screen can fail, to see what the viewer gets.
+    //   slot-mount: the state lacks the slot table → mountSlot throws after drawing its cabinet (no message).
+    //   state:      the Core refuses the state while the slot screen opens → « Le Casino ne répond pas ».
+    const fault = new URLSearchParams(location.search).get('casinoFault');
+    const onSlot =
+      document.querySelector('.mg')?.dataset.screen === 'casino_slot';
+    if (fault === 'state' && onSlot) throw refuse('unavailable', {}, 503);
+    if (fault === 'slot-mount' && onSlot) {
+      const s = casinoState();
+      delete s.tables.slot;
+      return s;
+    }
+    return casinoState();
+  }
   if (method === 'GET' && path === '/casino/history') return history(query);
   const round = /^\/casino\/rounds\/([^/]+)$/.exec(path);
   if (method === 'GET' && round) {
