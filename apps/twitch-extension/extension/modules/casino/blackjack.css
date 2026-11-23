@@ -1001,7 +1001,7 @@
   .spot .sh .tot { height: 22px; min-width: 30px; font-size: 13px; border-radius: 11px; }
   .sh__bet { font-size: 11.5px; }
   .seats { padding: 4px 10px 3px; }
-  .seats .seat { --mw: 31px; padding: 4px 3px 3px; }
+  .seats .seat { --mw: clamp(18px, calc(var(--sw, 92px) * 0.5), 31px); padding: 4px 3px 3px; } /* 31 px jusqu'à 7 places, puis selon la largeur de la place (10 places : ~22 px) */
   .seat .tot { height: 17px; min-width: 21px; padding: 0 5px; font-size: 11px; }
   .seat .nm { font-size: 10.5px; }
   .seat .bet { font-size: 10px; }
@@ -1023,6 +1023,31 @@
   .acts { gap: 4px; }
   .act { gap: 4px; padding: 0 4px; }
   .act small { font-size: 8px; }
+  /* Finition (23/11) — les 4 actions un peu plus étroites (88 px, à droite) : la mise garde sa place, même à 100K ;
+     Doubler / Split posent leur montant sous le libellé (+100K ne pousse plus le bouton). */
+  .bj.my-turn .stake { min-width: 50px; }
+  .acts:not(.two) { flex: 0 1 364px; margin-left: auto; }
+  .acts:not(.two) .act:has(small) { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 5px; row-gap: 1px; align-content: center; justify-content: center; }
+  .acts:not(.two) .act:has(small) .ico { grid-row: 1 / 3; }
+  .acts:not(.two) .act:has(small) b { align-self: end; }
+  .acts:not(.two) .act:has(small) small { grid-column: 2; align-self: start; justify-self: start; font-size: 8.5px; }
+  /* La ligne d'or descend (au plus près de la barre, sans la toucher) et s'aplatit un peu : ses bords mangeaient les
+     places des extrémités. */
+  .felt::before { bottom: 1px; height: 330px; }
+  /* Le sabot revient, discret, dans le coin bas gauche (hors de l'arc) ; son détail au survol. */
+  .shoe { display: flex; left: 7px; bottom: 4px; opacity: 0.7; }
+  .shoe i { width: 11px; height: 8px; }
+  .shoe small { font-size: 9px; }
+  /* Les scores des autres places restent DANS leur place (le coin haut droit, vide, de la dernière carte ; ils ne
+     débordent plus au-dessus, contre la main au centre) et en sourdine : la main en jeu est seule en blanc. Au survol
+     d'une place, son score s'allume. L'étiquette Blackjack déborde moins. */
+  .seats .seat .hand:not(.multi) .tot:not(.is-bj) { top: 0; right: -1px; z-index: 40; } /* (les cartes : 35, la règle .card de casino.css) */
+  .seats .seat .tot.is-bj { z-index: 40; transform: translate(-50%, -72%); }
+  /* La règle .card de casino.css (le panneau) donne aussi 12 px de marge aux cartes à jouer : une petite carte (10 places,
+     split) ne descendait pas sous 24 px de large et s'écrasait en carré. */
+  .cards .card { padding: 0; }
+  .seats .seat .tot:not(.is-bj):not(.bust) { color: #f3ecff; background: rgba(24, 13, 38, 0.88); box-shadow: 0 0 0 1px rgba(214, 170, 255, 0.35), 0 2px 4px rgba(0, 0, 0, 0.5); }
+  .seats .seat:hover .tot:not(.is-bj):not(.bust) { color: #1f1430; background: linear-gradient(180deg, #fff, #ddd2ee); }
 }
 
 /* --- Le score de la banque, partout : un liseré d'or le détache du feutre (il était trop discret, 23/11). */

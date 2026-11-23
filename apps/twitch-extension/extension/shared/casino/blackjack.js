@@ -941,7 +941,8 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   /** Ce que j'ai d'engagé dans la manche : mes mains (doubles et splits compris), mes paris banque, mon assurance. */
   const engaged = (me) => (me.hands.length ? me.hands.reduce((a, h) => a + h.stake, 0) + Object.values(me.side ?? {}).reduce((a, b) => a + b, 0) + (me.insurance?.stake ?? 0) : reserved());
   /** « Mise en cours » : une petite zone à part (le solde, lui, est dans l'en-tête de Raptoru Live). */
-  const stakeHTML = (v) => `<div class="stake${v ? '' : ' none'}" title="Jetons misés sur cette manche"><small>Mise<i> en cours</i></small><b>${fmt(v)}</b></div>`;
+  // (100K, 1M25 : un montant rond s'abrège ; 100 100 reste exact, « 100K1 » se lisait mal)
+  const stakeHTML = (v) => `<div class="stake${v ? '' : ' none'}" title="Jetons misés sur cette manche"><small>Mise<i> en cours</i></small><b title="${fmt(v)}">${v >= 10000 && v % 1000 === 0 ? kfmt(v) : fmt(v)}</b></div>`;
   function paintBar(s, me) {
     let key;
     let html;

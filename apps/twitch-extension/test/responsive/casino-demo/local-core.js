@@ -64,6 +64,7 @@ const BJ_LIMITS = {
 };
 
 let balance = START;
+let botMain = 0;
 const rounds = []; // this viewer's rounds, newest first (publicView shape)
 const replies = new Map(); // idempotency key → answer (a resent intent replays it)
 const forced = {
@@ -645,7 +646,7 @@ function botsMove(t) {
   t.seats.forEach((s) => {
     if (!s || !isBot(s.user) || s.status !== 'seated') return;
     if (t.phase === 'betting' && !s.bet?.ready && due(s.user, 1800)) {
-      const main = 100 * (1 + rng.int(5));
+      const main = botMain || 100 * (1 + rng.int(5));
       const side =
         rng.int(3) === 0
           ? { [['d17', 'd18', 'd19', 'd20', 'd21', 'bust'][rng.int(6)]]: 50 }
@@ -1028,6 +1029,10 @@ window.__casinoDemo = {
   },
   balance(n) {
     balance = Math.max(0, Math.floor(Number(n) || 0));
+  },
+  /** The simulated players' main bet (0: 100-500 at random) — big amounts on screen. */
+  botBet(n) {
+    botMain = Math.max(0, Math.floor(Number(n) || 0));
   },
   /** Another table with `n` simulated players (default 3); its number. */
   table(n = 3) {
