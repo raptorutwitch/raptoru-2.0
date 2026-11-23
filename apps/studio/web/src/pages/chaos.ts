@@ -45,6 +45,7 @@ interface EffectDef {
   slot: string;
   internal: boolean;
   input?: string;
+  cursor?: string;
   params: Param[];
   duration: { default_ms: number };
   transitions: Record<
@@ -88,6 +89,7 @@ interface Config {
     follow_foreground: boolean;
     default_mode?: string;
     input_effects?: boolean;
+    cursor_follow?: boolean;
     capture_linger_ms: number;
   };
   safety: {
@@ -137,6 +139,9 @@ interface Surf {
   added_latency_est_p50_ms?: number;
   skipped_static?: number;
   capture?: { zero_copy?: boolean } | null;
+  cursor_follow?: boolean;
+  cursor_over?: boolean;
+  cursor_latency_est_p50_ms?: number;
 }
 interface Telemetry {
   surfaces: Surf[];
@@ -150,6 +155,13 @@ interface Telemetry {
     level: number;
     over_budget: boolean;
     gpu_budget_ms: number;
+  };
+  cursor?: {
+    enabled: boolean;
+    hidden: boolean;
+    hides: number;
+    failures: number;
+    last_error: string | null;
   };
 }
 interface Ev {
@@ -409,7 +421,9 @@ export function mountChaosPage(root: HTMLElement) {
       z('method-sub'),
       viaWindows()
         ? 'Windows · écran entier · souris inversée (expérimental)'
-        : 'Calque · fenêtre du jeu',
+        : cfg()?.engine.cursor_follow === false
+          ? 'Calque · fenêtre du jeu · curseur inchangé'
+          : 'Calque · fenêtre du jeu · curseur retourné',
     );
     if (
       el.contains(document.activeElement) &&
@@ -441,7 +455,7 @@ export function mountChaosPage(root: HTMLElement) {
        ${
          viaWindows()
            ? '<p class="d-note cx-facts"><b>Expérimental, jamais en direct.</b> Windows retourne tout l’écran : vrai curseur, souris inversée, clic sous le curseur. Mais chaque bascule reconfigure l’affichage de tout le PC : le 22/11, Overwatch est tombé à 17 images/s pendant des bascules d’essai sur l’autre écran.</p>'
-           : '<p class="cx-facts">Le calque retourne l’image du jeu (fenêtre au premier plan) sans toucher à l’affichage de Windows. Le vrai curseur, lui, n’est pas retourné : le clic tombe au point symétrique de ce que l’on voit.</p>'
+           : '<p class="cx-facts">Le calque retourne l’image du jeu (fenêtre au premier plan) sans toucher à l’affichage de Windows. Un seul curseur visible : l’image du vrai curseur, retournée au point miroir. Il se déplace à l’envers et le clic tombe dessous ; la souris et les clics de Windows ne sont pas modifiés.</p>'
        }
        ${row('Coins pendant la rotation', seg('data-fill', FILL, flipFill()), 'miroir noir zoom remplissage')}
        <p class="d-faint cx-help">${flipFill() === 'mirror' ? 'Le prolongement flou et sombre de l’image déjà tournée : l’ancien écran n’apparaît jamais.' : flipFill() === 'black' ? 'Les coins découverts sont noirs.' : 'L’image grossit juste assez pour qu’aucun coin ne soit découvert.'} ${viaWindows() ? ' Seulement pendant les rotations : écran retourné, Windows affiche l’image entière.' : ''}</p>
@@ -641,7 +655,7 @@ export function mountChaosPage(root: HTMLElement) {
             .map(
               (
                 e,
-              ) => `<li class="${e.internal ? 'is-diag' : ''}"><div class="cx-cat__h"><b>${esc(e.label)}</b><span class="d-tag">${esc(r.families[e.family]?.label ?? e.family)}</span>${e.input ? '<span class="d-tag" title="Couche Entrées : écran entier">souris inversée</span>' : ''}${impl.has(e.id) ? '' : '<span class="d-tag bad">non implémenté</span>'}</div>
+              ) => `<li class="${e.internal ? 'is-diag' : ''}"><div class="cx-cat__h"><b>${esc(e.label)}</b><span class="d-tag">${esc(r.families[e.family]?.label ?? e.family)}</span>${e.cursor === 'follow' ? '<span class="d-tag" title="Un seul curseur visible : l’image du vrai curseur, transformée avec l’image">curseur retourné</span>' : ''}${e.input ? '<span class="d-tag" title="Couche Entrées : écran entier (expérimental)">souris inversée</span>' : ''}${impl.has(e.id) ? '' : '<span class="d-tag bad">non implémenté</span>'}</div>
                 <p>${esc(e.description)}</p>
                 <p class="d-faint">${esc(r.slots[e.slot]?.label ?? e.slot)} · ${e.params.filter((x) => x.exposed !== false).length} réglage(s) · ${esc(e.gpu.primitive)} · v${e.version}</p></li>`,
             )
@@ -687,6 +701,7 @@ export function mountChaosPage(root: HTMLElement) {
                 ? `<dt>Capture / affichage</dt><dd>${nb(surf.capture_fps)} / ${nb(surf.present_fps)}${NBSP}images/s${surf.dropped ? ` · ${surf.dropped}${NBSP}perdue(s)` : ''}</dd>
           <dt>Traitement</dt><dd>${ms(surf.processing_p50_ms)} (p95 ${ms(surf.processing_p95_ms)})${surf.black ? ' · <span class="d-tag warn">image noire</span>' : ''}</dd>
           <dt>Cadence</dt><dd>${surf.rate_hz !== undefined ? `${nb(surf.rate_hz, 0)}${NBSP}images/s au plus (écran ${nb(surf.refresh_hz ?? 0, 0)}${NBSP}Hz)` : '—'}${surf.pacer ? ` · rythme ${surf.pacer === 'vblank' ? 'de l’écran' : 'minuteur'}` : ''}${surf.capture?.zero_copy ? ' · sans copie' : ''}</dd>
+          ${t?.cursor && t.cursor.enabled ? `<dt>Curseur</dt><dd>${t.cursor.hidden ? 'retourné (curseur de Windows masqué au-dessus de la cible)' : surf.cursor_follow ? 'retourné dès qu’il passe sur la cible' : 'inchangé'}${surf.cursor_latency_est_p50_ms !== undefined && surf.cursor_latency_est_p50_ms >= 0 ? ` · retard ≈${NBSP}${ms(surf.cursor_latency_est_p50_ms)}` : ''}${t.cursor.failures ? ` <span class="d-tag warn">${esc(t.cursor.last_error ?? 'échec')}</span>` : ''}</dd>` : ''}
           ${surf.frame_gpu_est_ms !== undefined && surf.frame_gpu_est_ms >= 0 ? `<dt>GPU par image</dt><dd>${ms(surf.frame_gpu_est_ms)}${t?.performance ? ` (budget ${ms(t.performance.gpu_budget_ms)})` : ''}${surf.added_latency_est_p50_ms !== undefined && surf.added_latency_est_p50_ms >= 0 ? ` · latence ajoutée ≈${NBSP}${ms(surf.added_latency_est_p50_ms)}` : ''}</dd>` : ''}`
                 : ''
           }
@@ -743,6 +758,7 @@ export function mountChaosPage(root: HTMLElement) {
         'Moteur',
         'gear',
         `${row('Fenêtre seule (diagnostic) : seulement au premier plan', sw(c.engine.follow_foreground, 'data-cfg="engine.follow_foreground"', 'Fenêtre seule : seulement au premier plan'), 'focus alt tab fenêtre')}
+        ${row('Curseur retourné avec l’image', sw(c.engine.cursor_follow !== false, 'data-cfg="engine.cursor_follow"', 'Curseur retourné avec l’image'), 'curseur souris retournement clic miroir')}
         ${row('Performances', seg('data-perf', PROFILES, c.performance?.profile ?? 'equilibre'), 'profil performance qualité économie cadence')}
         ${c.performance ? `<p class="d-faint cx-help">${esc(perfSummary(c.performance))}</p>` : ''}
         ${row('Réduire la qualité si le moteur dépasse son budget', sw(c.performance?.on_overload !== 'signaler', 'data-reduce', 'Réduire la qualité si le moteur dépasse son budget'), 'repli performance qualité auto budget')}
