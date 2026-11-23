@@ -1013,7 +1013,6 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     void dockRef?.server.close();
     halloweenRef?.stop();
     levelUpRef?.stop();
-    void chaosRef?.stop();
     chatboxRef?.stop();
     pointsRef?.stop();
     lab.logs.add(
@@ -1026,6 +1025,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       {
         // The Lab chat ingress (bot child process) is awaited like the others before exiting.
         labchat: ingress ? () => ingress.stop() : undefined,
+        // Chaos: STOP ALL then exit, awaited (the cursor is shown again before Studio's server leaves).
+        chaos: chaosRef ? () => chaosRef!.stop() : undefined,
         twitchOAuth: twitchConnectionsRef
           ? () => twitchConnectionsRef!.stop()
           : undefined,
