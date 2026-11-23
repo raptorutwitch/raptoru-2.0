@@ -80,7 +80,10 @@ export const SoundLabInteraction = z.object({
   requested_sound_id: z.string(),
   sound_id: z.string(),
   sound_label: z.string(),
-  /** Resolved by Core; relative to the extension asset root (served locally by Studio). */
+  /**
+   * Resolved by Core: `assets/sounds/<file>.mp3` (a bank file, relative to the extension asset root, served locally by
+   * Studio) or `sound-files/<sha256>.wav` (a file published from Studio, held by Core, cached by Studio).
+   */
   sound_url: z.string(),
   duration_ms: z.number().int(),
   playback_mode: SoundLabPlaybackMode,
@@ -147,9 +150,52 @@ export const SoundLabAckRequest = z.strictObject({
 });
 export type SoundLabAckRequest = z.infer<typeof SoundLabAckRequest>;
 
+/**
+ * Sounds added (or re-cut) in Studio (docs/SOUNDBOARD.md § Ajouter un son): Studio cuts the extract and sends a WAV
+ * (PCM 16-bit, mono or stereo); Core checks it is complete and within these bounds, stores it under the SHA-256 of
+ * its bytes (immutable, deduplicated) and serves it to the extension and to Studio's player.
+ */
+export const SOUND_FILE_RULES = {
+  maxBytes: 4 * 1024 * 1024,
+  minDurationMs: 100,
+  maxDurationMs: 20_000,
+  /** Prices of a new sound: the bank's usual price of a short sound. */
+  defaultTokenCost: 500,
+  defaultCreditCost: 1,
+} as const;
+export const SoundFileId = z.string().regex(/^[0-9a-f]{64}$/);
+export const SoundFileUpload = z.strictObject({
+  data_base64: z
+    .string()
+    .min(1)
+    .max(Math.ceil(SOUND_FILE_RULES.maxBytes / 3) * 4),
+});
+export type SoundFileUpload = z.infer<typeof SoundFileUpload>;
+export const SoundFile = z.object({
+  file_id: SoundFileId,
+  mime: z.literal('audio/wav'),
+  duration_ms: z.number().int(),
+  size: z.number().int(),
+});
+export type SoundFile = z.infer<typeof SoundFile>;
+
+/** A new sound (Studio): its id is chosen once by Studio, so a repeated click returns the same sound. */
+export const SoundLabSoundCreate = z.strictObject({
+  id: SoundLabSoundId,
+  label: z.string().trim().min(1).max(40),
+  file_id: SoundFileId,
+  token_cost: z.number().int().min(0).max(1_000_000),
+  credit_cost: z.number().int().min(0).max(100),
+});
+export type SoundLabSoundCreate = z.infer<typeof SoundLabSoundCreate>;
+
 /** Streamer settings of one sound (Studio configuration panel). */
 export const SoundLabSoundConfig = z.object({
   id: z.string(),
+  /** `bank`: shipped with Raptoru (can be re-cut, never deleted for good); `studio`: added in Studio. */
+  source: z.enum(['bank', 'studio']),
+  /** The published file in use (added or re-cut in Studio); null = the bank's own file. */
+  file_id: z.string().nullable(),
   /** Name shown to viewers: custom_label ?? default_label. */
   label: z.string(),
   /** Canonical name from the Core bank (read-only). */
@@ -180,6 +226,8 @@ export const SoundLabSoundUpdate = z
     cooldown_ms: z.number().int().min(0).max(3_600_000),
     playback_mode: SoundLabPlaybackMode,
     volume: z.number().int().min(0).max(100),
+    /** A published file (a new extract); null = back to the bank's own file (bank sounds only). */
+    file_id: z.union([SoundFileId, z.null()]),
   })
   .partial()
   .refine((u) => Object.keys(u).length > 0, 'empty_update');

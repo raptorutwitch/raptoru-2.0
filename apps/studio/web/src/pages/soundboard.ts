@@ -37,7 +37,8 @@ import {
 } from '../mod/mod.js';
 import { whenProfile } from '../module-frame.js';
 import { setNavCount } from '../shell/shell.js';
-import { wave, waveSvg } from './soundboard-wave.js';
+import { openSoundEditor } from './soundboard-editor.js';
+import { mediaUrl, wave, waveSvg } from './soundboard-wave.js';
 
 // La Soundboard : une banque qu'on joue et qu'on règle à l'oreille. Le pupitre du haut montre le son choisi (forme d'onde réelle,
 // volume, prix), la banque se parcourt dessous, la colonne de droite vit avec le stream : lecteur, sons en cours, file, décisions.
@@ -47,6 +48,10 @@ type Mode = 'stack' | 'queue' | 'ignore_if_running';
 type Protection = 'off' | 'light' | 'medium';
 interface Sound {
   id: string;
+  /** `studio` : ajouté dans Studio (absent d'un Core plus ancien : banque). */
+  source?: 'bank' | 'studio';
+  /** Le fichier publié depuis Studio (son ajouté ou recoupé), sinon null. */
+  file_id?: string | null;
   label: string;
   default_label: string;
   custom_label: string | null;
@@ -141,7 +146,12 @@ const REFUS = {
 };
 const secs = (ms: number) =>
   `${(ms / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s`;
-const fileOf = (s: Sound) => s.preview_url?.split('/').pop() ?? '';
+const fileOf = (s: Sound) =>
+  s.source === 'studio'
+    ? 'Ajouté dans Studio'
+    : s.file_id
+      ? 'Extrait recoupé dans Studio'
+      : (s.preview_url?.split('/').pop() ?? '');
 /** Graduation de la règle du temps : assez serrée pour lire un son court. */
 const tickOf = (s: number) => (s <= 2 ? 0.25 : s <= 6 ? 0.5 : 1);
 
@@ -248,7 +258,7 @@ export function mountSoundboardPage(root: HTMLElement) {
     const again = audioId === id && !from;
     stopAudio();
     if (!s?.preview_url || again) return;
-    const a = new Audio(`/ext/${s.preview_url}`);
+    const a = new Audio(mediaUrl(s.preview_url));
     a.volume = s.volume / 100;
     if (from)
       a.addEventListener(
@@ -284,7 +294,7 @@ export function mountSoundboardPage(root: HTMLElement) {
   function loadWaves() {
     for (const s of cfg?.sounds ?? [])
       if (s.preview_url && !peaks.has(s.id))
-        void wave(`/ext/${s.preview_url}`).then((w) => {
+        void wave(mediaUrl(s.preview_url)).then((w) => {
           peaks.set(s.id, w);
           rowWaves.delete(s.id);
           if (s.id === picked) {
@@ -563,7 +573,7 @@ export function mountSoundboardPage(root: HTMLElement) {
           <span class="d-sp"></span>
           <span class="sb-saved" data-z="saved" role="status"></span>
           <button type="button" class="d-btn ghost sm" data-catpick hidden>${ic('layers')}<span data-z="dcat"></span>${ic('down')}</button>
-          <button type="button" class="d-btn ghost sm" data-media="replace">${ic('upload')}Remplacer</button>
+          <button type="button" class="d-btn ghost sm" data-media="edit" ${s.preview_url ? '' : 'disabled'}>${ic('wave')}Modifier l’extrait</button>
           <span class="sb-dsw" data-z="dsw"></span>
         </div>
         <div class="sb-wave" data-seek style="--p:0%;--v:1">${deckWave(s)}</div>
@@ -594,7 +604,7 @@ export function mountSoundboardPage(root: HTMLElement) {
     dz('dcat')!.textContent = library?.[s.id] ?? 'Sans catégorie';
     patch(
       dz('dname'),
-      s.custom_label !== null
+      s.custom_label !== null && s.source !== 'studio'
         ? `<button type="button" class="d-btn ghost sm" data-resetname title="Nom d’origine : ${esc(s.default_label)}">${ic('hist')}Nom d’origine</button>`
         : '',
     );
@@ -696,7 +706,7 @@ export function mountSoundboardPage(root: HTMLElement) {
     ${grp(
       'Médias',
       'upload',
-      `<div class="d-row col" data-k="ajouter remplacer média fichier mp3"><small>La liste des sons et leurs fichiers sont livrés avec Raptoru et l’extension Twitch. Ajouter ou remplacer un fichier depuis Studio n’est pas encore possible.</small></div>`,
+      `<div class="d-row col" data-k="ajouter remplacer média fichier mp3 wav extrait supprimer"><small>« Ajouter un son » : choisis un fichier, garde le passage voulu, publie. L’extrait est envoyé au Core et apparaît aussitôt dans la Soundboard des viewers, sans nouvelle extension. « Modifier l’extrait » recoupe un son ; l’original reste sur ce PC.</small></div>`,
     )}`);
   }
   function paint() {
@@ -827,14 +837,35 @@ export function mountSoundboardPage(root: HTMLElement) {
       if (v) done(v);
     });
   }
-  function mediaInfo(b: HTMLElement, add: boolean) {
-    pop(
-      b,
-      `<h3>${add ? 'Ajouter un son' : 'Remplacer le fichier'}</h3>
-      <p class="d-note">Pas encore disponible. La liste des sons et leurs fichiers sont livrés avec Raptoru et l’extension Twitch : un fichier déposé ici n’existerait ni à l’achat, ni dans l’aperçu des viewers.</p>`,
-      undefined,
-      { cls: 'd-form' },
-    );
+  /** Un son publié, recoupé ou supprimé : la banque relue, l'extension prévenue, le son montré. */
+  async function afterEdit(id: string | null, text: string) {
+    if (id) {
+      peaks.delete(id);
+      rowWaves.delete(id);
+    }
+    if (audioId === id) stopAudio();
+    // Redrawn: a new extract has another duration, so another ruler.
+    delete z('deck').dataset.id;
+    await readConfig();
+    if (id && sound(id)) pick(id);
+    refreshExtension();
+    toast(text);
+  }
+  function editSound(s: Sound | null) {
+    openSoundEditor({
+      sound: s,
+      onSaved: (saved) =>
+        void afterEdit(
+          saved.id,
+          s
+            ? `« ${saved.label} » enregistré : appliqué aux prochains achats`
+            : `« ${saved.label} » publié : il est dans la Soundboard des viewers`,
+        ),
+      onDeleted: (id) => {
+        if (picked === id) picked = null;
+        void afterEdit(null, 'Son supprimé de la Soundboard');
+      },
+    });
   }
   const findItem = (id: string) =>
     [
@@ -918,8 +949,9 @@ export function mountSoundboardPage(root: HTMLElement) {
       paintTools();
       return paintList();
     }
-    if (b?.dataset.media) return mediaInfo(b, b.dataset.media === 'add');
     const s = sound(picked);
+    if (b?.dataset.media === 'add') return editSound(null);
+    if (b?.dataset.media === 'edit' && s) return editSound(s);
     if (b?.matches('[data-catpick]') && s) return pickCategory(b, s);
     if (b?.matches('[data-resetname]') && s) {
       before.set(`${s.id}:label`, s.label);

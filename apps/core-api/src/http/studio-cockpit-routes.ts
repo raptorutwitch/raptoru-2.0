@@ -1,5 +1,6 @@
 import type { LabCall } from '../ext/lab-internal.js';
 import { HttpError, type Route } from './server.js';
+import { SOUND_FILE_MAX_BODY } from './sound-lab-routes.js';
 
 // ASTRA-P1-019 (cockpit delta, minimal): the streamer's Studio screens that are not execution —
 // Moderation V2, Tombola, Lab test wallet, TTS configuration — on the production transport. Only a
@@ -24,9 +25,10 @@ const CHANNEL_ROUTES =
 const BOT_ONLY =
   /^(commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)|modules\/\d{1,32}\/[a-z0-9_]+\/viewer(\/.*)?|casino\/\d{1,32}(?!\/admin\/)(\/.*)?)$/;
 // Channel-less: TTS rules; Soundboard bank configuration (prices, cooldowns, stack / queue / ignore,
-// enabled, volume protection) — the « Soundboard config » screen.
+// enabled, volume protection) — the « Soundboard config » screen — and its sounds added in Studio (a published file,
+// a new sound, a removal).
 const PLAIN_ROUTES =
-  /^(tts\/rules(\/reset)?|sound\/(config|settings|sounds\/[a-z0-9][a-z0-9_-]{0,47})|daily\/config)$/;
+  /^(tts\/rules(\/reset)?|sound\/(config|settings|files(\/[0-9a-f]{64})?|sounds(\/[a-z0-9][a-z0-9_-]{0,47}(\/delete)?)?)|daily\/config)$/;
 
 export function studioCockpitRoutes(
   core: LabCall,
@@ -56,6 +58,15 @@ export function studioCockpitRoutes(
     }
   };
   return [
+    {
+      // A Soundboard file published from Studio: the one cockpit body larger than 64 Ko (before the generic POST).
+      method: 'POST',
+      pattern: /^\/v1\/studio\/cockpit\/(sound\/files)$/,
+      auth: 'studio_installation',
+      maxBody: SOUND_FILE_MAX_BODY,
+      handle: ({ params, url, body }) =>
+        relay(target(params[0]!, url.search), body ?? {}),
+    },
     {
       method: 'GET',
       pattern: /^\/v1\/studio\/cockpit\/([A-Za-z0-9/_-]{1,200})$/,

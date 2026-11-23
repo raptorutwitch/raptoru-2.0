@@ -2,8 +2,26 @@
 // its state (the audio element, the sound being heard, the volume) and its resource (one Audio at a time, stopped and
 // rewound when replaced or when the Soundboard closes). A preview is never a purchase: nothing is sent, nothing is paid.
 // Twitch requires an extension's audio to start muted: the volume is 0 until the viewer raises it (kept locally).
+//
+// Two kinds of files (docs/SOUNDBOARD.md § Ajouter un son): a bank sound ships with the extension (assets/sounds/…);
+// a sound added in Studio is the Core's (sound-files/<sha256>.wav, under the EBS). The latter is fetched — the Core is
+// in the extension's connect-src allowlist — and played as a blob: URL (allowed by Twitch's media-src): no media
+// domain to declare, and no new ZIP for each new sound.
+
+import { isAllowedApiBase } from './runtime-guard.js';
+import { RUNTIME } from './runtime-config.js';
 
 const PREVIEW_VOLUME_KEY = 'raptoru-live:soundboard-preview-volume';
+const PUBLISHED_FILE = /^sound-files\/[0-9a-f]{64}\.wav$/;
+/** Blob URLs of the Core files already heard (immutable: their name is their hash). */
+const PUBLISHED_CACHE_MAX = 24;
+
+/** The Core URL of a published file, or null (a bank file, or an unconfigured build that never calls the network). */
+export function publishedPreviewUrl(previewUrl, apiBase = RUNTIME.apiBase) {
+  const url = String(previewUrl ?? '');
+  if (!PUBLISHED_FILE.test(url) || !isAllowedApiBase(apiBase)) return null;
+  return `${apiBase}/${url}`;
+}
 
 /** The preview URLs of a sound (one per variant, or its own). */
 export function soundPreviewUrls(sound) {
@@ -47,11 +65,43 @@ export function createSoundPreview({
   storage = globalThis.localStorage,
   AudioCtor = globalThis.Audio,
   log = console,
+  apiBase = RUNTIME.apiBase,
+  fetchImpl = (...args) => globalThis.fetch(...args),
+  objectUrls = globalThis.URL,
 }) {
   let audio = null;
   let restore = null;
   let soundId = null;
   let volume = readPreviewVolume(storage);
+  const published = new Map();
+
+  /** What the audio element plays: the packaged file, or a blob of the Core's file (fetched once, kept a while). */
+  async function sourceOf(previewUrl) {
+    const remote = publishedPreviewUrl(previewUrl, apiBase);
+    if (!remote) {
+      if (/^sound-files\//.test(String(previewUrl))) throw Object.assign(new Error('unconfigured_build'), { name: 'UNCONFIGURED' });
+      return new URL(String(previewUrl), document.baseURI).href;
+    }
+    let pending = published.get(remote);
+    if (pending) {
+      // Most recently heard last: the oldest one is the one let go.
+      published.delete(remote);
+      published.set(remote, pending);
+    } else {
+      pending = fetchImpl(remote, { credentials: 'omit' }).then(async (response) => {
+        if (!response.ok) throw Object.assign(new Error(`http_${response.status}`), { name: `HTTP_${response.status}` });
+        return objectUrls.createObjectURL(await response.blob());
+      });
+      published.set(remote, pending);
+      pending.catch(() => published.delete(remote));
+      if (published.size > PUBLISHED_CACHE_MAX) {
+        const [oldest, url] = published.entries().next().value;
+        published.delete(oldest);
+        void url.then((u) => objectUrls.revokeObjectURL(u), () => {});
+      }
+    }
+    return pending;
+  }
 
   function syncButtons() {
     const host = root();
@@ -107,12 +157,15 @@ export function createSoundPreview({
       mine = new AudioCtor();
       audio = mine;
       mine.preload = 'auto';
-      mine.src = new URL(String(previewUrl), document.baseURI).href;
       mine.volume = volume / 100;
       restore = ended;
       soundId = id;
       syncButtons();
       mine.addEventListener('ended', ended, { once: true });
+      const src = await sourceOf(previewUrl);
+      // Replaced or stopped while the Core's file was on its way: nothing to play.
+      if (audio !== mine) return;
+      mine.src = src;
       await mine.play();
     } catch (error) {
       if (audio !== mine) {

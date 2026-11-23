@@ -605,3 +605,258 @@
     gap: 10px 14px;
   }
 }
+
+/* --- Ajouter un son / Modifier l'extrait (soundboard-editor.ts) -------------------------------------------------------- */
+.d-dlg.sbe {
+  width: min(760px, calc(100vw - 32px));
+}
+.sbe-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 0 22px;
+}
+.sbe-h h2 {
+  margin: 0;
+  font: 600 17px var(--num);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sbe-b {
+  display: grid;
+  gap: 12px;
+  padding: 14px 22px 4px;
+}
+.sbe-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px dashed var(--hair3);
+  border-radius: 12px;
+  color: var(--ink2);
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sbe-drop[hidden] {
+  display: none;
+}
+.sbe-drop:hover,
+.sbe-drop:focus-within,
+.sbe-drop.is-over {
+  background: var(--fill);
+}
+.sbe-drop.is-over {
+  border-color: var(--mod);
+}
+.sbe-drop .d-ic {
+  font-size: 22px;
+  color: var(--mod);
+}
+.sbe-drop small {
+  color: var(--ink3);
+}
+.sbe-drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.sbe-ed[hidden] {
+  display: none;
+}
+.sbe-src {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.sbe-src > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* La forme d'onde : le fichier entier en retrait, l'extrait gardé en couleur entre les deux poignées. */
+.sbe-wave {
+  --s: 0%;
+  --e: 100%;
+  position: relative;
+  height: 120px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: var(--sheet);
+  touch-action: none;
+  cursor: crosshair;
+  user-select: none;
+}
+.sbe-wave svg {
+  position: absolute;
+  inset: 8px 0;
+  width: 100%;
+  height: calc(100% - 16px);
+}
+.sbe-wave path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.sbe-w0 {
+  color: var(--raise3);
+}
+.sbe-w1 {
+  color: var(--mod);
+  clip-path: inset(-10% calc(100% - var(--e)) -10% var(--s));
+}
+.sbe-sel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--s);
+  right: calc(100% - var(--e));
+  background: color-mix(in srgb, var(--mod) 12%, transparent);
+  box-shadow:
+    inset 0 2px 0 var(--mod),
+    inset 0 -2px 0 var(--mod);
+  pointer-events: none;
+}
+.sbe-hd {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 16px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: ew-resize;
+}
+.sbe-hd[data-h='start'] {
+  left: var(--s);
+}
+.sbe-hd[data-h='end'] {
+  left: var(--e);
+}
+.sbe-hd::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--mod);
+}
+.sbe-hd::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 12px;
+  height: 22px;
+  margin-top: -11px;
+  border-radius: 4px;
+  background: var(--mod);
+  box-shadow: 0 0 0 2px var(--pop);
+}
+.sbe-hd:focus-visible::after {
+  box-shadow:
+    0 0 0 2px var(--pop),
+    0 0 0 4px var(--ink);
+}
+.sbe-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--ink);
+  pointer-events: none;
+}
+.sbe-head[hidden] {
+  display: none;
+}
+.sbe-ruler {
+  position: relative;
+  height: 16px;
+  box-shadow: 0 -1px 0 var(--hair2);
+}
+.sbe-ruler i {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 5px;
+  background: var(--hair3);
+}
+.sbe-ruler b {
+  position: absolute;
+  top: 4px;
+  left: 3px;
+  font: 500 11px var(--num);
+  color: var(--ink3);
+  white-space: nowrap;
+}
+.sbe-ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+.sbe-t {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink3);
+}
+.sbe-t input {
+  width: 82px;
+  padding: 5px 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background: var(--sheet);
+  font: 500 13px var(--num);
+}
+.sbe-len {
+  color: var(--ink2);
+}
+.sbe-hint {
+  min-height: 18px;
+  margin: 0;
+  color: var(--ink3);
+  font-size: 12.5px;
+}
+.sbe-hint.bad {
+  color: var(--red);
+}
+.sbe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 16px;
+}
+.sbe-name {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 260px;
+}
+.sbe-name .d-fld input {
+  width: 100%;
+  text-align: left;
+}
+.sbe-a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 22px 18px;
+}
+.sbe-del {
+  color: var(--red);
+}
