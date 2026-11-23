@@ -9,7 +9,59 @@ Retour d'Antoni (23/11, Overwatch, champ de tir, OBS ouvert sans diffusion, mote
 correct, pas de ralentissement perceptible, fluidité satisfaisante ; **le vrai curseur ne suit pas la rotation**, les
 clics ne correspondent pas à ce que l'on voit.
 
-## 1. Réponse courte
+## 0. Suite du 23/11 après-midi : décision d'Antoni et essai de la piste C
+
+**Décision d'Antoni** : la piste C est exactement l'objectif. Le curseur Windows garde ses coordonnées normales, les
+clics vont aux coordonnées d'origine, et le curseur visible est celui de l'image retournée : il se déplace donc à
+l'inverse des mouvements physiques. **Aucune inversion des vraies entrées.** Jamais deux curseurs visibles.
+
+**Essai d'Antoni** (`--cursor-demo`, deux fois, reproductible) : les 12 cases se retournent ; au-dessus de la zone,
+le curseur Windows disparaît bien, mais **aucun curseur n'apparaît dans l'image retournée** ; hors de la zone, le
+curseur revient aussitôt et normalement.
+
+**Cause la plus probable** (à confirmer par le diagnostic ci-dessous) : la capture de Windows (WGC) ne dessine le
+curseur que s'il est visible. `MagShowSystemCursor(FALSE)` le masque pour tout le système, captures comprises : la
+combinaison « masqué à l'écran, présent dans la capture » n'existe pas. Les documentations sont muettes sur ce point.
+
+**Diagnostic** `chaos-bench.exe --cursor-proto --maintenant` (10 à 15 s, souris immobile au-dessus d'une fenêtre
+ordinaire, sans jeu ; le curseur disparaît quelques secondes à deux reprises). Il distingue les causes :
+
+| Étape | Question                                                                                        | Si « non »                                                     |
+| ----- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| B1    | curseur visible : présent dans la texture d'une capture d'écran ? `IsCursorCaptureEnabled` relu | l'option n'est pas prise en compte                             |
+| B2    | même chose pour une capture de fenêtre (le cas de la démo)                                      | la capture de fenêtre n'inclut pas le curseur                  |
+| B3    | la chaîne GPU du moteur (retournement 180°) conserve-t-elle le curseur, au point retourné ?     | perte pendant la composition GPU                               |
+| C1    | curseur masqué : drapeaux et forme lus par `GetCursorInfo`, état Desktop Duplication            | la forme du curseur n'est plus lisible une fois masqué         |
+| C2-C3 | curseur masqué : encore présent dans la texture capturée (écran, fenêtre) ?                     | **Windows retire le curseur des captures quand il est masqué** |
+| D1-D2 | processus masqueur tué, puis gelé : le curseur revient-il (seul, ou par le gardien) ?           | risque de curseur perdu                                        |
+
+La présence se mesure par l'écart entre deux captures simultanées de la même cible, l'une avec le curseur, l'autre
+sans, à l'endroit de la pointe. Rien n'est affiché, la souris n'est jamais déplacée.
+
+**Alternative sans la capture : l'image du vrai curseur, dessinée retournée.** Si Windows retire le curseur des
+captures, l'image de la piste C peut être obtenue autrement :
+
+- à chaque image, Chaos lit **la forme et la position courantes du vrai curseur** (`GetCursorInfo`, lecture seule) ;
+- Windows lui-même rend cette forme (`DrawIconEx`), exactement comme la capture du curseur d'OBS ;
+- Chaos la pose **retournée au point miroir** dans l'image retournée ;
+- le curseur matériel reste masqué au-dessus de la cible, les coordonnées et les clics restent ceux de Windows.
+
+Le résultat à l'écran est celui que décrit Antoni : un seul curseur, celui de l'image retournée, juste au-dessus de ce
+que le clic touchera. Différence avec la capture : c'est Chaos qui dépose l'image du curseur dans l'image retournée,
+au lieu que la capture l'y mette. La forme suit le curseur réel (flèche, main, barre de texte, curseurs propres aux
+jeux). Si le programme visé cache son curseur (visée d'un FPS), rien n'est dessiné.
+
+- Démo : `chaos-bench.exe --cursor-demo` (cette voie par défaut ; l'ancienne : `--curseur capture`). Elle affiche aussi,
+  pendant le masquage, ce que renvoie `GetCursorInfo`, et le retard du curseur dessiné (position lue → composition).
+- Auto-test hors écran `chaos-bench.exe --cursor-selftest` (aucune fenêtre, curseur jamais masqué) : **6/6 le 23/11**.
+  Flèche, barre de texte et main sont lues avec leur pointe ; la flèche est posée retournée, pointe au point miroir
+  exact, et un seul curseur figure dans l'image.
+- Limites connues : taille de pointeur agrandie dans les paramètres d'accessibilité (à vérifier), curseurs animés
+  (première image seulement), environ une image de retard.
+
+Rien n'est intégré au moteur principal avant des essais concluants.
+
+## 1. Réponse courte (avant l'essai de la piste C)
 
 1. **Avec le calque GPU, le curseur matériel de Windows ne peut pas suivre la rotation.** Windows le dessine toujours à
    sa position réelle, qui est aussi le point du clic. Une seule fonction de Windows déplace à la fois le curseur affiché
