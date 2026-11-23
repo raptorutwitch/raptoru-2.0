@@ -58,6 +58,15 @@ l'interrupteur général du curseur retourné, et l'essai d'un effet sur une fen
   activation par écran, toutes validées avant la première lancée. Le futur Core utilisera la même commande : un
   déclenchement des viewers suivra exactement la fiche.
 - Des réglages changés coup sur coup partent dans l'ordre, chacun sur le précédent, et la fiche les montre aussitôt.
+- **Compatibilité** : le moteur annonce ses commandes au démarrage (`engine.ready.commands`, moteur 0.4.0). Si une
+  commande de la page lui manque (moteur plus ancien que Studio), `/api/chaos/state` la liste dans
+  `engine.missing_commands` : la page affiche « Moteur trop ancien » et grise Tester / Activer au lieu d'échouer au
+  clic. C'est ce qui manquait le 23/11 : la liste des commandes du protocole (`Protocol.Commands`) n'avait pas
+  `effect.activate` ni `effect.stop`, d'où « commande inconnue : effect.activate » dans le Lab.
+- **Dans Studio installé** : le serveur de Studio démarre le moteur à la première ouverture de la page Chaos (aucun
+  PowerShell, aucun Lab), le relance s'il plante (0,5 s, 2 s, 5 s, 10 s), et l'arrête (STOP ALL, curseur rendu) avant
+  de quitter. Le moteur surveille aussi Studio : si le serveur disparaît, il s'arrête seul ; son gardien rend le
+  curseur. Réglages : `.runtime/chaos` du dossier de données (profil Production) ou `.runtime/lab-main/chaos` (Lab).
 - **Rien ne tourne au repos** : la page ne lit que l'état du moteur ; aucune capture, aucun rendu GPU, aucune fenêtre
   tant qu'aucun effet n'est actif. L'aperçu animé de la fiche est du CSS, joué seulement quand on change un réglage
   ou qu'on clique sur « Rejouer ».
@@ -74,14 +83,48 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 - `transitions.in/out.kinds` : les transitions proposées ; `cursor: "follow"` : la ligne « Curseur retourné ».
 - Un aperçu animé propre à l'effet est facultatif : une fonction de plus dans `PREVIEWS` (`chaos.ts`).
 
-## 4. Tests
+## 4. Installer dans Raptoru Studio (version de test)
+
+Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
+de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
+
+Version de test **0.1.44-chaos.1** (23/11), construite en local, **ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.1.exe`
+- 126 650 919 o, SHA-256 `bec90cc20a1a9545953eaf96966026e97f99292a47f216f9bd442cf1d85cba7c`
+- contenu : Studio 0.1.43 (aucun autre changement de Studio depuis) + Chaos V2 ; commit `64779c25` de
+  `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton, aucune valeur secrète locale dans le paquet (vérifié).
+- étiquette de test posée dans le paquet seulement (`package.json` du dépôt inchangé) : Studio désactive alors ses
+  mises à jour automatiques (« Version de test… »), sans erreur GitHub.
+
+Installer (hors live, jeu fermé) :
+
+1. Fermer Raptoru Studio (fenêtre et serveur).
+2. Lancer `Raptoru Studio Setup 0.1.44-chaos.1.exe` : il remplace la 0.1.43 dans le même dossier et garde les données
+   (`%APPDATA%\Raptoru Studio` et le dossier de données `Documents\Raptoru 2.0`).
+3. Ouvrir Studio : « À propos » = 0.1.44-chaos.1 ; profil, OBS et comptes Twitch comme avant.
+4. Modules › Effets & mise en scène › **Chaos · effets d'écran** : « Moteur prêt » en quelques secondes.
+5. Fiche « Écran retourné » : choisir l'écran, **Tester** (5 s), **Activer**, **Arrêter**, **STOP ALL**. Le curseur
+   retourné suit la souris sur l'écran retourné ; il n'est dessiné que si un vrai curseur est visible.
+6. Quitter Studio pendant un effet : l'effet s'arrête et le curseur revient.
+
+Retour à la 0.1.43 : désinstaller Raptoru Studio (Paramètres Windows › Applications ; les données restent), puis
+réinstaller la 0.1.43 depuis `raptoru-studio-releases`. La version officielle suivante (0.1.44, publiée seulement
+sur demande d'Antoni) devra être construite depuis `main` après fusion de Chaos ; elle se réinstalle par-dessus.
+
+Reconstruire la version de test : `npx turbo run build`, puis dans `apps/studio/desktop` : `node scripts/stage.mjs`,
+version de test posée dans `stage/app/package.json` et `stage/app/build-info.json`, puis
+`npx electron-builder --config electron-builder.json --win --x64 --publish never`.
+
+## 5. Tests
 
 - `npx vitest run test/chaos-runtime.test.ts` (dans `apps/studio/server`) : routes de la fiche (Tester, Activer,
   Arrêter, refus d'un effet invalide, source toujours `studio`), réglages par effet et ordre des écrans sur le vrai
   moteur.
 - `npx tsx apps/studio/server/scripts/chaos-lab-e2e.ts [--port 4120]` contre un Lab en marche : partie sans
   affichage (catalogue, fiche, chaque réglage enregistré puis relu après rechargement, ni sélecteur global ni compte à
-  rebours, méthode technique seulement en diagnostic avancé) ; partie visible (Tester, Arrêter, Activer, STOP ALL)
+  rebours, méthode technique seulement en diagnostic avancé ; Tester, Arrêter et STOP ALL jusqu'au vrai moteur sans
+  rien afficher : écran débranché refusé `screen_missing`) ; partie visible (Tester, Arrêter, Activer, STOP ALL)
   seulement si la garde de jeu le permet.
 - Un second Lab d'essai peut tourner à côté de celui d'Antoni : `CHAOS_ENGINE_EXE`, `CHAOS_LAB_STATE`,
   `CHAOS_LAB_DIST`, `CHAOS_LAB_PORT`.

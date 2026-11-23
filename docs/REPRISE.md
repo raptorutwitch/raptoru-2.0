@@ -195,8 +195,13 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 **C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : moteur, curseur retourné et catalogue
 d'effets construits les 22 et 23/11, en local.
 
-- **Où** : branche locale `feat/chaos-engine` (après `feat/chaos-presenter-lot1`), worktree
+- **Où** : branche locale **`feat/chaos-studio`** (= `feat/chaos-engine` + `origin/main` fusionné le 23/11), worktree
   `Raptoru 2.0 - Worktrees\chaos-v2`. Lancer : `npm run chaos:lab` (recompile moteur et page).
+- **Studio installé** : le paquet embarque le moteur ; Studio le démarre, le relance et l'arrête seul. Version de
+  test **0.1.44-chaos.1** construite, **non installée, non publiée** : chemin, empreinte et procédure dans
+  [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md) § 4. L'installation est faite par Antoni.
+- **23/11, « commande inconnue : effect.activate »** : `Protocol.Commands` n'avait ni `effect.activate` ni
+  `effect.stop`. Corrigé (moteur 0.4.0) ; le moteur annonce ses commandes et Studio signale un moteur trop ancien.
 - **Quoi** :
   - moteur natif C# ([apps/chaos-engine](../apps/chaos-engine/README.md)) : registre partagé, configuration,
     ordonnanceur, transitions, capture partagée sans copie, rendu cadencé par écran, profils de performance, gardien,
@@ -209,15 +214,15 @@ d'effets construits les 22 et 23/11, en local.
   - **page Studio › Chaos = catalogue d'effets** : une carte et une fiche par effet (écran gauche / droit / tous,
     durée, transitions, paramètres, curseur, disponibilité), Tester et Activer / Arrêter, états du moteur
     ([chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md)).
-- **Tests** : 27 unitaires ; 17 contrôles sans écran ; curseur hors écran 8/8 ; 11 Studio ; parcours de la page sans
-  affichage 12/12. **Non lancés** (garde de jeu, jeu ou plein écran actif) : contrôles visibles, `--cursor-check`,
+- **Tests** : 27 unitaires ; 17 contrôles sans écran ; curseur hors écran 8/8 ; 12 Studio (dont le vrai moteur) ;
+  parcours de la page sans affichage 15/15 (Tester, Arrêter, STOP ALL jusqu'au vrai moteur). **Non lancés** (garde de jeu, jeu ou plein écran actif) : contrôles visibles, `--cursor-check`,
   banc A/B, `--obs-compat`, partie visible du parcours.
 - **Règle** : aucun essai visible (mire, calque, rotation, banc, curseur) pendant qu'un jeu tourne. La garde le refuse ;
   `--autorise-pendant-un-jeu` seulement sur accord d'Antoni.
 - **Prochaine étape** : essais d'Antoni sur la nouvelle page (Tester / Activer sur l'écran choisi, C1 à C5 de
   [chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md)) ; mesures visibles quand aucun jeu ne tourne ; puis les
   nouveaux effets, conçus séparément, et le lot 2 (module payant, Core).
-- **Rien n'est poussé, fusionné ni publié** : aucun Studio installé ne contient la page.
+- **Rien n'est poussé, fusionné ni publié** : le Studio installé (0.1.43) ne contient pas encore la page.
 
 **D. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (validations réelles en attente, finitions Studio).
 
