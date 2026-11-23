@@ -111,7 +111,8 @@ décision.**
 
 - **Événement daté** : `engine.input` (`applied`, `restored`, `lost`), avec l'instant exact de chaque bascule
   (compteur haute précision de Windows) et la durée de l'appel.
-- **Banc de comparaison** `chaos-bench.exe` (compilé et vérifié, **jamais lancé**) :
+- **Banc** `chaos-bench.exe` (refait le 23/11 : scénarios A à F, temps GPU par processus, deux versions comparées,
+  vrai jeu avec `--game` ; voir [PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md) § 6 et § 9). Description d'origine :
   - un « jeu témoin » (fenêtre Direct3D plein écran, 240 images/s visées) note l'instant de chaque image ;
   - le banc déclenche chaque méthode : base, calque, écran, windows ;
   - pour chaque phase (avant, entrée, pendant, sortie, après), il donne : images/s, médiane, p99, pire image,

@@ -4,6 +4,11 @@
 > tomber Overwatch, qui tournait sur l'autre écran, à environ 17 images/s : elle reconfigure l'affichage de tout le PC.
 > Cette méthode ne s'active que sur décision explicite (Studio › Chaos › Méthode « Windows (expérimental) »), jamais en
 > direct. Analyse, comparaison et candidat sans bascule : [ETUDE_PERFORMANCES_RETOURNEMENT.md](ETUDE_PERFORMANCES_RETOURNEMENT.md).
+>
+> **23/11** : le calque GPU devient la technologie principale (essai d'Antoni dans Overwatch : fluide, sans
+> ralentissement perceptible). Cette méthode reste coupée par défaut et le moteur ne l'applique **jamais** à une
+> activation communautaire (Core, extension, points de chaîne) : la demande passe alors par le calque
+> (`target.input_blocked`). Curseur : [ETUDE_CURSEUR.md](ETUDE_CURSEUR.md).
 
 22/11/2026. Spécification d'Antoni pour le retournement à 180° :
 

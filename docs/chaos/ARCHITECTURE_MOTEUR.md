@@ -11,6 +11,8 @@ remplace le prototype du lot 1.
   - En expérimental, coupé par défaut : l'écran entier retourné par Windows, couche Entrées
     ([COUCHE_ENTREES.md](COUCHE_ENTREES.md)).
   - Incident de performances du 22/11 et comparaison des méthodes : [ETUDE_PERFORMANCES_RETOURNEMENT.md](ETUDE_PERFORMANCES_RETOURNEMENT.md).
+  - Capture sans copie, cadence par écran, image inchangée non redessinée, profils de performance, banc A à F :
+    [PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md).
 
 ## 1. Vue d'ensemble
 
@@ -89,6 +91,9 @@ l'image d'origine. Le mode `mirror` (défaut) prolonge en miroir, flou et assomb
 --render-preview <dossier>`.
 
 ## 4. Performances (mesurées le 22/11, RTX 3070, sans jeu)
+
+> Depuis le 23/11 : pipeline optimisé et mesuré en A/B, voir [PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md). Le
+> tableau ci-dessous est la mesure du 22/11, avant optimisation.
 
 | Mesure                     | Résultat                                                                                                                                                                                               | Comment                               |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
