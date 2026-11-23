@@ -246,6 +246,27 @@ describe('API locale Studio › Chaos', () => {
     });
   });
 
+  it('moteur plus ancien que Studio : la page reçoit les commandes qu’il ne connaît pas', async () => {
+    for (const [env, missing] of [
+      [{}, []],
+      [{ FAKE_CHAOS_OLD: '1' }, ['effect.activate', 'effect.stop']],
+    ] as const) {
+      const rt = new ChaosRuntime({
+        exe: 'x',
+        stateDir: tmpdir(),
+        spawnImpl: fake(env),
+        pingMs: 50,
+      });
+      cleanup.push(() => rt.stop());
+      const call = await serve(rt);
+      await call('/targets'); // démarre le moteur
+      const st = await call('/state');
+      expect(st.body).toMatchObject({
+        engine: { status: 'ready', missing_commands: missing },
+      });
+    }
+  });
+
   it('moteur absent : la page le dit, les actions répondent 503', async () => {
     const rt = new ChaosRuntime({
       exe: join(tmpdir(), 'pas-de-moteur.exe'),

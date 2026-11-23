@@ -1,5 +1,6 @@
 // Faux moteur Chaos (tests du pilote Studio) : parle le protocole v2 sur stdin/stdout, sans GPU ni fenêtre.
 // FAKE_CHAOS_CRASH_AFTER=n : quitte brutalement (code 7) à la n-ième commande, pour éprouver la relance.
+// FAKE_CHAOS_OLD=1 : moteur d'avant le catalogue d'effets (n'annonce pas ses commandes).
 import process from 'node:process';
 import { createInterface } from 'node:readline';
 
@@ -16,6 +17,29 @@ out({
   version: '0',
   protocol: 2,
   args: process.argv.slice(2),
+  ...(process.env.FAKE_CHAOS_OLD === '1'
+    ? {}
+    : {
+        commands: [
+          'hello',
+          'ping',
+          'describe',
+          'status',
+          'diagnostics',
+          'targets.list',
+          'effect.request',
+          'effect.cancel',
+          'effect.activate',
+          'effect.stop',
+          'stop_all',
+          'config.get',
+          'config.set',
+          'config.reset',
+          'preset.set',
+          'preset.delete',
+          'shutdown',
+        ],
+      }),
 });
 createInterface({ input: process.stdin }).on('line', (line) => {
   const c = JSON.parse(line);

@@ -210,6 +210,37 @@ try {
   await page.screenshot({ path: join(OUT, '2-reglages.png') });
   await page.locator('[data-pclose]').click();
 
+  // Les commandes des boutons jusqu'au vrai moteur, sans rien afficher (incident « commande inconnue :
+  // effect.activate » du 23/11) : écran enregistré débranché → le moteur refuse « Tester » comme tel et rien ne
+  // démarre ; « Arrêter » d'un effet arrêté et STOP ALL (bouton de la page) sont acceptés.
+  await post('/config', {
+    section: 'effects',
+    values: { flip: { ...savedFx, screen: 's:9' } },
+  });
+  const refused = (await (
+    await post('/activate', { effect: 'flip', kind: 'test' })
+  ).json()) as { error?: string };
+  check(
+    refused.error === 'screen_missing' &&
+      (await state()).status.active.length === 0,
+    '« Tester » jusqu’au moteur : écran débranché refusé comme tel, rien ne démarre',
+    refused.error ?? '',
+  );
+  await post('/config', { section: 'effects', values: { flip: savedFx } });
+  const stopped = (await (await post('/stop', { effect: 'flip' })).json()) as {
+    stopped?: number;
+  };
+  check(
+    stopped.stopped === 0,
+    '« Arrêter » jusqu’au moteur : accepté (rien en cours)',
+  );
+  await page.locator('[data-stopall]').click();
+  await page.waitForTimeout(800);
+  check(
+    (await page.locator('.d-toast.bad').count()) === 0,
+    'STOP ALL depuis la page : accepté par le moteur, aucune erreur',
+  );
+
   // ---------- B. Visible : Tester, Arrêter, Activer, STOP ALL ----------
   const why = guard();
   if (why && !args.includes('--autorise-pendant-un-jeu'))
