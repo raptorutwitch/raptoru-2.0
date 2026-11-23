@@ -233,6 +233,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   let typing = false;
   let destroyed = false;
   let toastT = null;
+  let acesT = null;
   let tipT = null;
   let tickedFor = '';
   let serverBet = '';
@@ -249,12 +250,12 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   const L = () => st?.limits;
   const mine = () => st?.seats.find((x) => x?.me) ?? null;
 
-  function toast(text, bad = false) {
+  function toast(text, bad = false, ms = 2600) {
     const t = $('.toast');
     t.textContent = text;
     t.className = `toast show${bad ? ' bad' : ''}`;
     clearTimeout(toastT);
-    toastT = setTimeout(() => (t.className = 'toast'), 2600);
+    toastT = setTimeout(() => (t.className = 'toast'), ms);
   }
   const fail = (e) => !SILENT.has(e?.code) && toast(why(e, L()), true);
 
@@ -437,12 +438,21 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // Split (retour d'Antoni du 21/11) : la 2ᵉ carte de chaque main est une règle du moteur, distribuée sans clic — on le dit.
     const ev = next.last;
     // Une seule fois par manche (mandat du 21/11, A2 : pas de répétition) — la pile montre ensuite chaque main.
-    if (animate && me && ev?.seat === me.seat && me.hands.length > 1) {
+    // As séparés (retour d'Antoni du 23/11) : la règle (une carte chacun, mains closes sans clic) est dite au Split, puis
+    // la clôture des deux mains, une fois le premier message lu — l'ancien « tu joues la main 1 d'abord » était faux ici.
+    const aces = me?.hands[0]?.splitAces;
+    if (animate && me && ev?.seat === me.seat && aces) {
+      if (ev.type === 'split') toast('As séparés : une seule carte supplémentaire par main.', false, 3000);
+      else if (ev.type === 'card' && ev.auto && ev.hand === 1) acesT = setTimeout(() => toast('As séparés : tes deux mains sont complètes.', false, 2200), 900);
+    } else if (animate && me && ev?.seat === me.seat && me.hands.length > 1) {
       if (ev.type === 'split' && me.hands.length === 2) toast(`Split : tu joues la main ${ev.hand + 1} d’abord ; la main ${ev.hand + 2} recevra sa 2ᵉ carte à son tour.`);
       else if (ev.type === 'card' && ev.auto && ev.hand === 1) toast('Main 2 : sa 2ᵉ carte est distribuée automatiquement (règle du Split).');
     }
     if (animate && next.last?.type === 'peek') toast(me?.insurance?.stake ? `Pas de blackjack pour la banque : assurance perdue (−${fmt(me.insurance.stake)}), la main continue.` : 'Pas de blackjack pour la banque : la main continue.');
     if (animate && next.phase === 'settled' && prev?.phase !== 'settled') {
+      // jamais par-dessus le résultat : le message des As s'efface au règlement
+      clearTimeout(acesT);
+      if ($('.toast').textContent.startsWith('As séparés')) $('.toast').className = 'toast';
       payFlights(next);
       setTimeout(() => !destroyed && st === next && rx.dealer(pickDealerReaction(next, L()?.mainMin)), 900);
     }

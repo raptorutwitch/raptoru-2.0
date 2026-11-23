@@ -98,6 +98,7 @@ const NEXT_BJ = [
   ['pair', 'une paire de 8 (Split)'],
   ['resplit', 'quatre 8 (Split jusqu’à 4 mains)'],
   ['aces', 'deux As (Split d’As)'],
+  ['aces21', 'deux As → 21 puis A + 5'],
   ['double', '6 + 5 = 11 (Doubler)'],
   ['blackjack', 'Blackjack'],
   ['insurance', 'banque As, blackjack (Assurance)'],

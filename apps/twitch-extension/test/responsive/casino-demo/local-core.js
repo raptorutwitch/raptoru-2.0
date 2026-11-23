@@ -795,6 +795,8 @@ function rigFor(t, kind) {
       then: [8, 8, 3, 10, 9, 10, 7, 2],
     },
     aces: { seats: { [seat]: [1, 1] }, dealer: [9, 7] },
+    // Split d'As (retour d'Antoni du 23/11) : main 1 A + 10 = 21, main 2 A + 5 — chacune s'arrête à une carte.
+    aces21: { seats: { [seat]: [1, 1] }, dealer: [9, 7], then: [10, 5] },
     blackjack: { seats: { [seat]: [1, 10] }, dealer: [9, 7] },
     insurance: { seats: { [seat]: [10, 9] }, dealer: [1, 10] },
     even: { seats: { [seat]: [1, 10] }, dealer: [1, 7] },
