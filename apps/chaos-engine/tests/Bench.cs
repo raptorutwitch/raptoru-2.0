@@ -13,11 +13,15 @@
 // VISIBLE : refuse de tourner si un jeu ou une application plein écran est actif, sauf --autorise-pendant-un-jeu
 // (accord d'Antoni). Jamais lancé par les contrôles automatiques.
 // Usage : chaos-bench.exe [--screen \\.\DISPLAY2] [--scenarios aucun,repos,flip-coupe,flip-anime,passes,calque]
+//                         [--probe-screen same|other (témoin sur l'autre écran : scénario de l'incident du 22/11)]
 //                         [--probe-size 1280x720|full] [--probe-fps 240 (0 = sans limite)] [--probe-load 0]
 //                         [--hold-ms 8000] [--anim-ms 3000] [--label texte] [--out <fichier.json>]
 //                         [--engine <ChaosEngine.exe>] (comparer deux versions avec le même banc)
 //                         [--set performance.zero_copy=false,performance.profile=economie] (réglages du moteur)
 //                         [--presentmon <PresentMon.exe> --process <jeu.exe>] [--autorise-pendant-un-jeu]
+// Vrai jeu (procédure Overwatch, docs/chaos/PERFORMANCES_MOTEUR.md § 9) : --game Overwatch.exe --presentmon <exe>
+//   --autorise-pendant-un-jeu → pas de témoin ; les effets visent la fenêtre du jeu ; cadence et mode de présentation
+//   du jeu par phase, relevés par PresentMon (droits : administrateur ou groupe « Utilisateurs du journal de performances »).
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -197,7 +201,8 @@ float4 ps(V i) : SV_Target {
 
         sealed class Ctx
         {
-            public string Dev;
+            public string Dev, ProbeDev;
+            public bool Game;
             public long ProbeHwnd;
             public int ProbePid, Hold, AnimMs, DwmPid;
             public Process ProbeProc;
@@ -220,7 +225,10 @@ float4 ps(V i) : SV_Target {
             var x = new Ctx();
             x.Dev = Arg(a, "--screen", screens.FirstOrDefault(s => s != primary));
             if (x.Dev == null) { Console.WriteLine("Un seul écran : préciser --screen."); return 2; }
-            var scenarios = Arg(a, "--scenarios", "aucun,repos,flip-coupe,flip-anime,passes,calque").Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            x.ProbeDev = Arg(a, "--probe-screen", "same") == "other" ? screens.FirstOrDefault(s => s != x.Dev) ?? x.Dev : x.Dev;
+            string gameExe = Arg(a, "--game", null);
+            if (gameExe != null && !a.Contains("--autorise-pendant-un-jeu")) { Console.WriteLine("--game exige --autorise-pendant-un-jeu (accord d'Antoni : le banc applique des effets au jeu)."); return 2; }
+            var scenarios = Arg(a, "--scenarios", gameExe != null ? "repos,flip-coupe,flip-anime,repos" : "aucun,repos,flip-coupe,flip-anime,passes,calque").Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
             x.Hold = int.Parse(Arg(a, "--hold-ms", "8000"));
             x.AnimMs = int.Parse(Arg(a, "--anim-ms", "3000"));
             int fps = int.Parse(Arg(a, "--probe-fps", "240")), load = int.Parse(Arg(a, "--probe-load", "0"));
@@ -239,7 +247,7 @@ float4 ps(V i) : SV_Target {
                 x.Sets.Add(new KeyValuePair<string, object>(parts[0], v));
             }
             int hz = N.RefreshHz(N.MonitorByDevice(x.Dev));
-            Console.WriteLine("Banc Chaos : " + x.Dev + " (" + hz + " Hz), jeu témoin " + size + " à " + (fps > 0 ? fps + " i/s visées" : "cadence libre") +
+            Console.WriteLine("Banc Chaos : effets écran entier sur " + x.Dev + " (" + hz + " Hz), jeu témoin sur " + x.ProbeDev + ", " + size + " à " + (fps > 0 ? fps + " i/s visées" : "cadence libre") +
                 ", charge " + load + " ; scénarios " + string.Join(", ", scenarios));
 
             var adapterGpu = new Gpu();
@@ -248,28 +256,47 @@ float4 ps(V i) : SV_Target {
             x.DwmPid = Process.GetProcessesByName("dwm").Select(p => p.Id).FirstOrDefault();
 
             string prefix = Path.Combine(x.Dir, "probe");
-            x.ProbeProc = Process.Start(new ProcessStartInfo(self, "--probe " + x.Dev + " \"" + prefix + "\" " + fps + " " + pw + " " + ph + " " + load)
-            { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true });
-            var hello = J.Parse(x.ProbeProc.StandardOutput.ReadLine());
-            x.ProbeHwnd = (long)J.Num(hello, "hwnd", 0);
-            x.ProbePid = x.ProbeProc.Id;
+            Dictionary<string, object> hello;
+            string pmProc = Arg(a, "--process", null);
+            if (gameExe != null)
+            {
+                // Vrai jeu : sa fenêtre principale devient la cible des effets « fenêtre » ; ses images viennent de PresentMon.
+                var gp = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(gameExe)).FirstOrDefault(pr => pr.MainWindowHandle != IntPtr.Zero);
+                if (gp == null) { Console.WriteLine("Jeu introuvable (fenêtre principale) : " + gameExe); return 2; }
+                x.Game = true; x.ProbeProc = gp; x.ProbePid = gp.Id; x.ProbeHwnd = gp.MainWindowHandle.ToInt64();
+                RECT gr = N.FrameBounds(gp.MainWindowHandle);
+                hello = J.Map("width", gr.Right - gr.Left, "height", gr.Bottom - gr.Top);
+                if (pmProc == null) pmProc = Path.GetFileName(gameExe);
+            }
+            else
+            {
+                x.ProbeProc = Process.Start(new ProcessStartInfo(self, "--probe " + x.ProbeDev + " \"" + prefix + "\" " + fps + " " + pw + " " + ph + " " + load)
+                { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true });
+                hello = J.Parse(x.ProbeProc.StandardOutput.ReadLine());
+                x.ProbeHwnd = (long)J.Num(hello, "hwnd", 0);
+                x.ProbePid = x.ProbeProc.Id;
+            }
             Process pm = null;
             long pmStart = 0;
-            string pmCsv = Path.Combine(x.Dir, "presentmon.csv"), pmProc = Arg(a, "--process", null);
+            string pmCsv = Path.Combine(x.Dir, "presentmon.csv");
             if (Arg(a, "--presentmon", null) != null && pmProc != null)
             {
                 pmStart = Stopwatch.GetTimestamp();
-                pm = Process.Start(new ProcessStartInfo(Arg(a, "--presentmon", null), "--process_name " + pmProc + " --output_file \"" + pmCsv + "\" --qpc_time --no_console_stats")
+                // Session nommée, et toute session restée ouverte par un banc précédent est arrêtée d'abord.
+                pm = Process.Start(new ProcessStartInfo(Arg(a, "--presentmon", null), "--process_name " + pmProc + " --output_file \"" + pmCsv +
+                    "\" --qpc_time --no_console_stats --session_name RaptoruChaos --stop_existing_session")
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true });
             }
+            else if (x.Game) Console.WriteLine("Sans PresentMon (--presentmon), seuls le GPU et le CPU du jeu sont relevés.");
             var marks = new List<Mark>();
             try
             {
-                Thread.Sleep(2500); // le témoin se stabilise
+                Thread.Sleep(2500); // le témoin (ou PresentMon) se stabilise
                 foreach (var s in scenarios)
                 {
                     string g = N.GameActivity();
-                    if (g != null && g.StartsWith("jeu") && !a.Contains("--autorise-pendant-un-jeu")) { Console.WriteLine("Arrêt : " + g); break; }
+                    // Garde revérifiée avant chaque scénario : jeu ou plein écran apparu → le banc s'arrête là.
+                    if (g != null && !a.Contains("--autorise-pendant-un-jeu")) { Console.WriteLine("Arrêt : " + g); break; }
                     Console.WriteLine("  … " + s);
                     marks.Add(RunScenario(x, s));
                 }
@@ -277,27 +304,35 @@ float4 ps(V i) : SV_Target {
             finally
             {
                 StopEngine(x);
-                try { x.ProbeProc.StandardInput.WriteLine("stop"); x.ProbeProc.WaitForExit(8000); } catch (Exception) { }
+                if (!x.Game) try { x.ProbeProc.StandardInput.WriteLine("stop"); x.ProbeProc.WaitForExit(8000); } catch (Exception) { }
                 if (pm != null) try { pm.Kill(); pm.WaitForExit(3000); } catch (Exception) { }
                 if (N.DisplayOrientation(x.Dev) != 0) N.ResetDisplaySettings(x.Dev, IntPtr.Zero, IntPtr.Zero, 0, IntPtr.Zero);
                 x.Gpu.Dispose();
             }
-            var frames = ReadLongs(prefix + ".frames");
+            List<BenchStats.PresentRow> pmRows = null;
+            List<long> pmFrames = null;
+            bool isQpc = false;
+            if (pm != null && File.Exists(pmCsv))
+            {
+                pmRows = BenchStats.ParsePresentMon(File.ReadAllText(pmCsv), pmProc, out isQpc);
+                long start = pmStart;
+                bool q = isQpc;
+                pmFrames = pmRows.Select(r => q ? (long)r.Time : start + (long)(r.Time * Freq)).ToList();
+            }
+            var frames = x.Game ? (pmFrames ?? new List<long>()) : ReadLongs(prefix + ".frames");
             var gpuFrames = File.Exists(prefix + ".gpu") ? File.ReadAllLines(prefix + ".gpu").Select(l => l.Split(' ')).Where(p => p.Length == 2)
                 .Select(p => new KeyValuePair<long, double>(long.Parse(p[0], CultureInfo.InvariantCulture), double.Parse(p[1], CultureInfo.InvariantCulture))).ToList()
                 : new List<KeyValuePair<long, double>>();
             var refMark = marks.FirstOrDefault(m => m.Scenario == "aucun" && m.Error == null) ?? marks.FirstOrDefault(m => m.Error == null);
             double refMs = refMark != null ? BenchStats.Summarize("ref", frames, Freq, refMark.Qpc[0], refMark.Qpc[5], -1).MedianMs : -1;
             var sb = new StringBuilder();
-            sb.AppendLine("Jeu témoin (" + frames.Count + " images, médiane de référence " + refMs.ToString("0.00", CultureInfo.InvariantCulture) + " ms)");
+            sb.AppendLine((x.Game ? "Jeu " + gameExe + " (PresentMon)" : "Jeu témoin") + " (" + frames.Count + " images, médiane de référence " + refMs.ToString("0.00", CultureInfo.InvariantCulture) + " ms)");
             sb.AppendLine("  phase       i/s   méd.    p99    max à-c. pire250 | GPU témoin p50  p99 | GPU % moteur   dwm  témoin | CPU % moteur");
             var report = marks.Select(m => (object)Describe(m, x, frames, gpuFrames, refMs, sb)).ToArray();
             Console.WriteLine(sb.ToString());
-            if (pm != null && File.Exists(pmCsv))
+            if (pmRows != null)
             {
-                bool isQpc;
-                var rows = BenchStats.ParsePresentMon(File.ReadAllText(pmCsv), pmProc, out isQpc);
-                var pmFrames = rows.Select(r => isQpc ? (long)r.Time : pmStart + (long)(r.Time * Freq)).ToList();
+                var rows = pmRows;
                 var psb = new StringBuilder("PresentMon " + pmProc + (isQpc ? "" : " (horloge approchée)") + "\n");
                 foreach (var m in marks.Where(mm => mm.Error == null))
                 {
@@ -305,7 +340,9 @@ float4 ps(V i) : SV_Target {
                     for (int i = 0; i < 5; i++)
                     {
                         var p = BenchStats.Summarize(PhaseNames[i], pmFrames, Freq, m.Qpc[i], m.Qpc[i + 1], -1);
-                        psb.AppendLine(string.Format(CultureInfo.InvariantCulture, "    {0,-8} {1,6:0.0} i/s · {2,5:0.00} ms · p99 {3,6:0.00} ms · max {4,6:0.0} ms · {5} à-coups", p.Name, p.Fps, p.MedianMs, p.P99Ms, p.MaxMs, p.Hitches));
+                        long from = m.Qpc[i], to = m.Qpc[i + 1];
+                        var modes = rows.Where((r, k) => pmFrames[k] >= from && pmFrames[k] < to).GroupBy(r => r.Mode).Select(gm => gm.Key + " " + gm.Count());
+                        psb.AppendLine(string.Format(CultureInfo.InvariantCulture, "    {0,-8} {1,6:0.0} i/s · {2,5:0.00} ms · p99 {3,6:0.00} ms · max {4,6:0.0} ms · {5} à-coups · {6}", p.Name, p.Fps, p.MedianMs, p.P99Ms, p.MaxMs, p.Hitches, string.Join(", ", modes)));
                     }
                 }
                 psb.AppendLine("  modes de présentation : " + string.Join(", ", rows.GroupBy(r => r.Mode).Select(gr => gr.Key + " " + gr.Count())));
@@ -314,8 +351,8 @@ float4 ps(V i) : SV_Target {
             string outFile = Arg(a, "--out", Path.Combine(x.Dir, "bench.json"));
             File.WriteAllText(outFile, J.Write(J.Map("label", Arg(a, "--label", ""), "date", DateTime.Now.ToString("s"), "engine_version", EngineVersion(x.EngineExe),
                 "engine", x.EngineExe, "settings", x.Sets.Select(kv => kv.Key + "=" + kv.Value).ToArray(),
-                "screen", x.Dev, "refresh_hz", hz, "adapter", adapterGpu.Adapter, "gpu_counters", x.Gpu.Ok,
-                "probe", J.Map("size", size, "fps", fps, "load", load, "width", J.Num(hello, "width", 0), "height", J.Num(hello, "height", 0)),
+                "screen", x.Dev, "probe_screen", x.ProbeDev, "probe_refresh_hz", N.RefreshHz(N.MonitorByDevice(x.ProbeDev)), "refresh_hz", hz, "adapter", adapterGpu.Adapter, "gpu_counters", x.Gpu.Ok,
+                "game", gameExe, "probe", J.Map("size", size, "fps", fps, "load", load, "width", J.Num(hello, "width", 0), "height", J.Num(hello, "height", 0)),
                 "hold_ms", x.Hold, "anim_ms", x.AnimMs, "pdh_collect_ms", Math.Round(x.Gpu.LastCollectMs, 1), "scenarios", report)));
             Console.WriteLine("Résultats : " + outFile);
             return 0;
