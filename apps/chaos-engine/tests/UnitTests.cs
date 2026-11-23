@@ -471,6 +471,9 @@ namespace Raptoru.Chaos
                 Eq("unknown_command", Throws<ProtocolError>(() => Protocol.ParseLine("{\"v\":2,\"cmd\":\"format_c\"}")), "commande");
                 Eq("bad_id", Throws<ProtocolError>(() => Protocol.ParseLine("{\"v\":2,\"cmd\":\"ping\",\"id\":\"a b\"}")), "identifiant");
                 Eq("ping", Protocol.ParseLine("{\"v\":2,\"cmd\":\"ping\",\"id\":\"c-1\"}").Name, "valide");
+                // Toute commande servie par le moteur doit être dans la liste du protocole (sinon « commande inconnue »).
+                foreach (var cmd in new[] { "effect.activate", "effect.stop", "targets.list", "config.set" })
+                    Eq(cmd, Protocol.ParseLine("{\"v\":2,\"cmd\":\"" + cmd + "\",\"id\":\"c-2\"}").Name, cmd + " acceptée");
             });
             Case("protocole : demande d'effet validée (identifiant, effet, source, interne, priorité, préréglage, cible)", () =>
             {

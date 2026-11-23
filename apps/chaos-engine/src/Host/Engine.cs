@@ -700,7 +700,8 @@ namespace Raptoru.Chaos
                 "implemented", EffectCatalog.Implemented.ToArray(), "adapter", gpu != null ? gpu.Adapter : null, "pid", selfPid,
                 "config_path", opt.ConfigPath, "config_notes", cfg.LoadNotes.ToArray(), "ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs,
                 "shader_warm_ms", tel.ShaderWarmMs, "emergency_hotkey", "Ctrl+Maj+F11", "input_effects", reg.InputEffects.Keys.ToArray(),
-                "input_effects_enabled", cfg.Engine.InputEffects, "cursor_follow", cfg.Engine.CursorFollow);
+                "input_effects_enabled", cfg.Engine.InputEffects, "cursor_follow", cfg.Engine.CursorFollow,
+                "commands", Protocol.Commands);
         }
 
         Dictionary<string, object> CursorView(long now)

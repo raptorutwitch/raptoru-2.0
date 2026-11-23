@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { chaosRegistrySchema } from '@raptoru/schemas';
+import { CHAOS_COMMANDS, chaosRegistrySchema } from '@raptoru/schemas';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChaosEngineClient, ChaosError } from '../src/chaos/engine-client.js';
 import { ChaosRuntime } from '../src/chaos/runtime.js';
@@ -321,6 +321,15 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
       expect((t.monitors as unknown as { label: string }[])[0]!.label).toMatch(
         /^Écran/,
       );
+      // Toutes les commandes de Studio sont servies par ce moteur (jamais « commande inconnue »), et la fiche d'un
+      // effet passe par le vrai protocole : effet inconnu refusé comme tel, sans rien afficher.
+      expect(c.state.hello?.commands).toEqual(
+        expect.arrayContaining([...CHAOS_COMMANDS]),
+      );
+      for (const cmd of ['effect.activate', 'effect.stop'] as const)
+        await expect(c.call(cmd, { effect: 'nope' })).rejects.toMatchObject({
+          code: 'unknown_effect',
+        });
       await c.stop();
       expect(c.state.status).toBe('stopped');
     }, 30_000);

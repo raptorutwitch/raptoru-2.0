@@ -36,8 +36,8 @@ namespace Raptoru.Chaos
         public const int Version = 2;
         public static readonly string[] Commands =
         {
-            "hello", "ping", "describe", "status", "diagnostics", "targets.list", "effect.request", "effect.cancel", "stop_all",
-            "config.get", "config.set", "config.reset", "preset.set", "preset.delete", "shutdown"
+            "hello", "ping", "describe", "status", "diagnostics", "targets.list", "effect.request", "effect.cancel", "effect.activate",
+            "effect.stop", "stop_all", "config.get", "config.set", "config.reset", "preset.set", "preset.delete", "shutdown"
         };
         public static readonly string[] Sources = { "studio", "core", "extension", "channel_points", "test" };
         public static readonly string[] Policies = { "queue", "replace", "reject", "extend" };

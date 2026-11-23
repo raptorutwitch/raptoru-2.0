@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { chaosEffectRequestSchema, type ChaosEvent } from '@raptoru/schemas';
+import {
+  CHAOS_COMMANDS,
+  chaosEffectRequestSchema,
+  type ChaosEvent,
+} from '@raptoru/schemas';
 import {
   ChaosEngineClient,
   ChaosError,
@@ -47,12 +51,29 @@ export class ChaosRuntime {
     return this.registry;
   }
 
+  /**
+   * Compatibilité Studio ↔ moteur : les commandes que la page utilise et que le moteur en marche ne sert pas (moteur
+   * plus ancien que Studio). Vide = compatible. Un moteur trop ancien pour annoncer ses commandes manque de tout ce
+   * qui est apparu avec cette annonce (catalogue d'effets du 23/11).
+   */
+  missingCommands(): string[] {
+    const hello = this.client.state.hello;
+    if (!hello) return [];
+    const served = Array.isArray(hello.commands)
+      ? (hello.commands as string[])
+      : CHAOS_COMMANDS.filter(
+          (c) => c !== 'effect.activate' && c !== 'effect.stop',
+        );
+    return CHAOS_COMMANDS.filter((c) => !served.includes(c));
+  }
+
   /** L'état complet pour la page : moteur, registre, état courant, mesures, derniers événements. */
   async state() {
     const engine = {
       ...this.client.state,
       available: this.client.available(),
       exe_hint: 'apps/chaos-engine/build.cmd',
+      missing_commands: this.missingCommands(),
     };
     if (this.client.state.status === 'absent')
       return {

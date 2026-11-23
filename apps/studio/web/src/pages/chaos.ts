@@ -141,6 +141,8 @@ interface State {
     restarts: number;
     lastExit: { reason: string | null; code: number | null; at: string } | null;
     lastError: string | null;
+    /** Commandes de la page que le moteur en marche ne sert pas (moteur plus ancien que Studio). */
+    missing_commands?: string[];
     available: boolean;
   };
   registry: { registry: Registry; implemented: string[] } | null;
@@ -309,7 +311,8 @@ export function mountChaosPage(root: HTMLElement) {
       settings: c.effects ?? {},
       rows: [...(st?.status?.active ?? []), ...(st?.status?.queued ?? [])],
       monitors,
-      ready: st?.engine.status === 'ready',
+      ready:
+        st?.engine.status === 'ready' && !st.engine.missing_commands?.length,
       maxDurationMs: Math.min(
         c.safety.max_duration_ms,
         r.engine_limits.max_duration_ms,
@@ -336,7 +339,9 @@ export function mountChaosPage(root: HTMLElement) {
     const chip = !st
       ? stateChip(readError ? 'r' : 'w', readError || 'Lecture…')
       : e?.status === 'ready'
-        ? stateChip('live', n ? `${n} effet(s) en cours` : 'Moteur prêt')
+        ? e.missing_commands?.length
+          ? stateChip('r', 'Moteur trop ancien')
+          : stateChip('live', n ? `${n} effet(s) en cours` : 'Moteur prêt')
         : e?.status === 'absent'
           ? stateChip('r', 'Moteur absent')
           : e?.status === 'restarting'
@@ -381,7 +386,13 @@ export function mountChaosPage(root: HTMLElement) {
     const pv = PREVIEWS[d.id];
     morph(z('sheet-head'), sheetHeadHtml(c, d, !!pv));
     morph(z('sheet-run'), runBarHtml(c, d));
-    patch(z('sheet-note'), esc(sheetNote(d)));
+    const missing = st?.engine.missing_commands ?? [];
+    patch(
+      z('sheet-note'),
+      missing.length
+        ? `<span class="d-note bad">Le moteur en marche est plus ancien que Studio (il ne connaît pas : ${esc(missing.join(', '))}). « Relancer » dans le panneau Moteur ; s’il reste ancien, reconstruire le moteur (apps/chaos-engine/build.cmd) ou mettre Studio à jour.</span>`
+        : esc(sheetNote(d)),
+    );
     const box = z('sheet-pv');
     box.hidden = !pv;
     if (pv && pvFor !== d.id) {
