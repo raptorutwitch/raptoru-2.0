@@ -3,7 +3,7 @@ rem Moteur Chaos : compile avec le C# fourni par Windows (.NET Framework 4.8), r
 rem   bin\ChaosEngine.exe  moteur (--serve), gardien (--guardian), mire (--test-target), apercu (--render-preview)
 rem   bin\chaos-unit.exe   tests unitaires de la logique pure (registre, parametres, transitions, config, ordonnanceur, protocole)
 rem   bin\chaos-checks.exe controles d'integration (processus, ecran, arrets, mesures ; garde de jeu)
-rem   bin\chaos-bench.exe  banc de comparaison des methodes de retournement (jeu temoin, PresentMon facultatif)
+rem   bin\chaos-bench.exe  banc de performances (jeu temoin, PresentMon facultatif) ; --obs-compat : methodes de capture dOBS
 rem Le registre des effets (source unique) est embarque : packages\schemas\src\chaos-registry.json
 rem Usage : build.cmd [unit]   (unit = seulement les tests unitaires)
 setlocal
@@ -25,6 +25,6 @@ if /i "%1"=="unit" goto done
 %CSC% /target:winexe /out:"%OUT%\ChaosEngine.exe" %WINRT% %NET% %RES% /recurse:"%HERE%src\*.cs" || exit /b 1
 %CSC% /target:exe /out:"%OUT%\chaos-checks.exe" %NET% "%HERE%tests\Checks.cs" "%HERE%src\Interop\Native.cs" "%HERE%src\Interop\Json.cs" || exit /b 1
 rem banc de comparaison des methodes (visible : jamais lance automatiquement, garde de jeu)
-%CSC% /target:exe /out:"%OUT%\chaos-bench.exe" /main:Raptoru.Chaos.Bench %WINRT% %NET% %RES% /recurse:"%HERE%src\*.cs" "%HERE%tests\Checks.cs" "%HERE%tests\Bench.cs" "%HERE%tests\BenchStats.cs" || exit /b 1
+%CSC% /target:exe /out:"%OUT%\chaos-bench.exe" /main:Raptoru.Chaos.Bench %WINRT% %NET% %RES% /recurse:"%HERE%src\*.cs" "%HERE%tests\Checks.cs" "%HERE%tests\Bench.cs" "%HERE%tests\BenchStats.cs" "%HERE%tests\CaptureCompat.cs" || exit /b 1
 :done
 echo OK : %OUT%

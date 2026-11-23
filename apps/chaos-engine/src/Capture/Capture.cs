@@ -81,6 +81,8 @@ namespace Raptoru.Chaos
         public uint Width { get { return w; } }
         public uint Height { get { return h; } }
         public IntPtr Srv { get { return current; } }
+        /// Copie persistante (outils de test : lecture des pixels après une capture avec ZeroCopy = false).
+        internal IntPtr CopyTexture { get { return tex; } }
         public bool ZeroCopy { get; set; }
         public bool HasFrame { get; private set; }
         public bool Lost { get { return closed; } }

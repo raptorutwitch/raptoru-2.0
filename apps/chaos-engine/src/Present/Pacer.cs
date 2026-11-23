@@ -42,7 +42,7 @@ namespace Raptoru.Chaos
         }
 
         /// Sortie DXGI (écran) de l'adaptateur du moteur qui affiche hmon ; 0 si l'écran est branché ailleurs.
-        static IntPtr FindOutput(Gpu gpu, IntPtr hmon)
+        internal static IntPtr FindOutput(Gpu gpu, IntPtr hmon)
         {
             IntPtr adapter;
             if (Com.Fn<DxgiDevGetAdapter>(gpu.DxgiDevice, 7)(gpu.DxgiDevice, out adapter) < 0) return IntPtr.Zero;
