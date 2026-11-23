@@ -9,6 +9,70 @@ Retour d'Antoni (23/11, Overwatch, champ de tir, OBS ouvert sans diffusion, mote
 correct, pas de ralentissement perceptible, fluidité satisfaisante ; **le vrai curseur ne suit pas la rotation**, les
 clics ne correspondent pas à ce que l'on voit.
 
+## Architecture retenue (décision d'Antoni du 23/11, intégrée au moteur le même jour)
+
+Le retournement 180° = **calque GPU + curseur retourné**. Résultat validé par Antoni avec la démo : un seul curseur
+visible, retourné, clics cohérents avec l'image, aucune entrée inversée.
+
+1. Le calque retourne l'image (capture WGC de la fenêtre du jeu, Direct3D 11, DirectComposition).
+2. **Au-dessus de la cible seulement**, le curseur matériel de Windows est masqué (`MagShowSystemCursor`, API Loupe).
+3. À chaque image, le moteur lit la forme et la position du vrai curseur (`GetCursorInfo`, lecture seule). Windows rend
+   la forme (`DrawIconEx`, comme OBS), et le moteur la pose **par la même transformation que l'image**
+   (`FrameBuilder.AddCursor`). À 180°, c'est le point miroir avec l'image tournée ; pendant la rotation animée, c'est le
+   point tourné. Ce que l'on voit sous le curseur est toujours ce que le clic touchera.
+4. Les coordonnées et les clics de Windows ne changent pas : aucune entrée modifiée, aucune injection, aucun crochet.
+5. La rotation native de Windows reste expérimentale, coupée par défaut, et jamais appliquée à une activation
+   communautaire.
+
+| Élément                                         | Rôle                                                                                                              |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Registre : `"cursor": "follow"` (effet `flip`)  | l'effet fait suivre l'image au curseur ; tout futur effet de l'emplacement `transform` peut le déclarer           |
+| `engine.cursor_follow` (vrai par défaut)        | interrupteur (Studio › Chaos › Moteur : « Curseur retourné avec l'image ») ; faux = curseur de Windows inchangé   |
+| `src/Input/CursorLayer.cs`                      | masque et rétablit le curseur matériel ; lit le vrai curseur                                                      |
+| `src/Render/CursorImages.cs`                    | image de la forme courante, rendue par Windows, alpha prémultiplié, mise en cache par forme                       |
+| `FrameBuilder.AddCursor`                        | inverse exacte du shader de transformation : la pointe tombe sur le point transformé (écart ≤ 0,2 px, auto-test)  |
+| `EngineHost.RenderAll` / `RenderSurface`        | décide le masquage avant le rendu ; dessine le curseur en dernier calque ; une image par rafraîchissement au plus |
+| Gardien (`--guardian`), mémoire partagée `[28]` | rétablit le curseur si le moteur meurt ou gèle                                                                    |
+
+**Quand le curseur matériel est-il masqué ?** Seulement si les quatre conditions sont réunies :
+
+- un effet qui le déclare est en cours sur une cible ;
+- cette cible est affichée ;
+- le vrai curseur est au-dessus d'elle ;
+- Windows ne retourne pas lui-même l'écran (couche Entrées expérimentale).
+
+Dès qu'il sort de la cible, il redevient visible. Si le programme visé cache son curseur (visée d'un FPS), rien n'est
+dessiné.
+
+**Restauration** (contrôlée par `chaos-bench.exe --cursor-check`) :
+
+| Cas                                       | Mécanisme                                                                        |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| curseur sorti de la cible, fin de l'effet | le moteur le rétablit à l'image suivante (et dès la fermeture de la surface)     |
+| STOP ALL, arrêt d'urgence Ctrl+Maj+F11    | rétabli avant l'arrêt des effets                                                 |
+| arrêt du moteur (toute cause gérée)       | rétabli en premier, avant tout le reste (`BeforeQuit`)                           |
+| moteur tué ou planté                      | le gardien le rétablit dès la fin du processus                                   |
+| moteur gelé                               | le gardien le rétablit après 1,2 s sans battement, puis arrête le moteur à 2,5 s |
+| secours manuel                            | `ChaosEngine.exe --restore-display` (écrans et curseur)                          |
+
+**Latence** : le moteur mesure, pour chaque image qui porte le curseur, le délai entre la lecture de la position et
+la composition prévue (`cursor_latency_est_*` dans la télémétrie, Studio › Moteur). Le curseur matériel, lui, est
+placé par Windows à chaque composition : ce délai est le retard ajouté. Valeurs mesurées :
+[PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md) § 7.
+
+**OBS** : la capture d'écran WGC (la méthode des scènes d'Antoni) ne contient plus le curseur réel une fois masqué.
+Elle contient le curseur retourné, qui fait partie du calque : les spectateurs voient un seul curseur, le même
+qu'Antoni. La méthode DXGI d'OBS dessine son propre curseur si `GetCursorInfo` le dit « affiché » : voir le contrôle.
+
+**Limites** :
+
+- environ une image de retard sur le curseur (mesuré) ;
+- curseurs animés : première image seulement ;
+- taille de pointeur agrandie dans les paramètres d'accessibilité : à vérifier ;
+- une « Capture de jeu » d'OBS ne voit ni le calque ni le curseur retourné ;
+- anti-triche : l'API Loupe est une API d'accessibilité sans injection, mais son usage en partie classée n'est pas
+  documenté par les éditeurs.
+
 ## 0. Suite du 23/11 après-midi : décision d'Antoni et essai de la piste C
 
 **Décision d'Antoni** : la piste C est exactement l'objectif. Le curseur Windows garde ses coordonnées normales, les

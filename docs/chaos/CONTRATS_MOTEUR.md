@@ -95,15 +95,21 @@ Sources possibles : `studio`, `core`, `extension`, `channel_points`, `test`.
 - `engine.emergency_stop`, `engine.error` (dont `input_unavailable`, `input_busy` avec `request_id`) et
   `engine.exit` (avec `reason`).
 
+État du curseur retourné (`status.cursor`, `diagnostics.cursor`, `engine.telemetry.cursor`) : `enabled`
+(`engine.cursor_follow`), `hidden` (curseur matériel masqué en ce moment), `hides`, `hidden_ms`, `shapes` (formes
+lues), `failures`, `last_error`. Par surface (`engine.telemetry.surfaces[]`) : `cursor_follow`, `cursor_over`,
+`cursor_latency_est_p50_ms` et `cursor_latency_est_p95_ms`.
+
 État de la couche Entrées (`status.input`, `diagnostics.input`) : `primitive` (`display_orientation`), `active`
 (`owner` = request_id, `device`, `orientation`, `since_ms`, `apply_ms`), `last_apply_ms`, `last_revert_ms`.
 
 ## 5. Fichiers
 
 - **Registre** : schéma `raptoru.chaos.registry`, version 2. Voir `chaosRegistrySchema`. `input_effects` déclare les
-  transformations d'entrée ; un effet s'y relie par `input`.
-- **Configuration** : `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 4 (v3 migrée : retour au
-  calque sur la fenêtre, `input_effects` coupé). Avant : version 3 (v2 migrée : la cible par
+  transformations d'entrée ; un effet s'y relie par `input`. Un effet de l'emplacement `transform` peut déclarer
+  `cursor: "follow"` : le curseur visible suit l'image (retournement).
+- **Configuration** : `<state-dir>/config.json`, schéma `raptoru.chaos.config`, version 5 (section
+  `performance` ; `engine.cursor_follow`). Version 4 : retour au calque sur la fenêtre, `input_effects` coupé. Avant : version 3 (v2 migrée : la cible par
   défaut devient l'écran entier).
 - **Cache des shaders** : `<state-dir>/shader-cache/*.cso`, effaçable sans risque.
 - Studio garde un dossier par profil (`runtime/…/chaos`). Le Chaos Lab utilise `%LOCALAPPDATA%\Raptoru\Chaos\lab`.

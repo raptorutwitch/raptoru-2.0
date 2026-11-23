@@ -85,6 +85,10 @@ flowchart LR
     après 3 s.
 14. **Retour vers Studio** : événements `effect.*`, `status` (dont `input`), `engine.telemetry`.
 
+**Curseur retourné (23/11, référence du retournement).** Au-dessus de la cible, le curseur matériel est masqué et
+l'image du vrai curseur est dessinée par la même transformation que l'image : un seul curseur, aligné avec ce que
+le clic touchera, sans toucher aux entrées. Détail : [ETUDE_CURSEUR.md](ETUDE_CURSEUR.md) (architecture retenue).
+
 **Correctif du lot 1 (l'ancien écran visible pendant la rotation).** Les coins découverts ne montrent plus jamais
 l'image d'origine. Le mode `mirror` (défaut) prolonge en miroir, flou et assombri, **l'image déjà tournée**. Les modes
 `black` et `cover` (agrandissement juste suffisant) sont proposés dans Studio. Pour comparer : `ChaosEngine.exe

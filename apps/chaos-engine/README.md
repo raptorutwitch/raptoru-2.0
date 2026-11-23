@@ -53,11 +53,14 @@ L'ancien panneau du lot 1 (`ChaosPresenter.exe`) doit être fermé : il tient le
 
 ```bat
 build.cmd                         :: moteur + tests (compilateur C# de Windows, rien à installer)
-bin\chaos-unit.exe                :: 23 tests de logique pure
+bin\chaos-unit.exe                :: 25 tests de logique pure
 bin\chaos-checks.exe [--quick]    :: contrôles d'intégration : mire puis écran secondaire retourné (garde de jeu)
-bin\chaos-bench.exe               :: banc de comparaison des méthodes (visible : seulement avec l'accord d'Antoni)
+bin\chaos-bench.exe               :: banc de performances A à F (visible : garde de jeu ; docs/chaos/PERFORMANCES_MOTEUR.md)
+bin\chaos-bench.exe --cursor-selftest   :: curseur retourné, hors écran (formes, pointe au point transformé)
+bin\chaos-bench.exe --cursor-check      :: curseur retourné dans le moteur : masquage, OBS, restaurations (visible)
+bin\chaos-bench.exe --obs-compat        :: ce que voient les méthodes de capture d'OBS (visible)
 bin\ChaosEngine.exe --game-check  :: la garde : un jeu ou un plein écran est-il actif ?
-bin\ChaosEngine.exe --restore-display   :: secours : écrans remis aux réglages enregistrés de Windows
+bin\ChaosEngine.exe --restore-display   :: secours : écrans remis aux réglages enregistrés de Windows, curseur rétabli
 bin\ChaosEngine.exe --bench-gpu   :: coût GPU par passe en 1440p, hors écran
 bin\ChaosEngine.exe --render-preview <dossier>   :: planche des transitions (PNG)
 bin\ChaosEngine.exe --describe    :: registre ↔ implémentations

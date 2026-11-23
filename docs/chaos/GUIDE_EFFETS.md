@@ -86,6 +86,10 @@ Règles :
   le vrai curseur. La logique de l'effet n'a rien à faire : le moteur applique et rétablit l'orientation, et son rendu
   compense la rotation de Windows. Limites et obligations : [COUCHE_ENTREES.md](COUCHE_ENTREES.md).
 
+**Curseur** : un effet qui déplace l'image (emplacement `transform`) ajoute `"cursor": "follow"` à sa déclaration.
+Le moteur masque alors le curseur matériel au-dessus de la cible et dessine l'image du vrai curseur par la même
+transformation que l'image (`FrameBuilder.AddCursor`) : rien à écrire dans l'effet. Exemple : `flip`.
+
 ## 2. Écrire la logique visuelle
 
 Dans `apps/chaos-engine/src/Effects/Effects.cs`, avec seulement les primitives du `FrameBuilder` :

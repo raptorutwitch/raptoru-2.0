@@ -22,6 +22,7 @@ Chaos (panneau Réglages et carte « Écran retourné »), ou par les commandes 
 | `engine.capture_linger_ms`     | 2000        | 0 à 30 000                         | garde la capture après un effet (pas de recréation à l'effet suivant)                                                       |
 | `engine.telemetry_interval_ms` | 1000        | 250 à 10 000                       | fréquence de `engine.telemetry`                                                                                             |
 | `engine.default_mode`          | `window`    | `window` ou `monitor`              | cible « premier plan » : la fenêtre du jeu (calque) ou son écran entier                                                     |
+| `engine.cursor_follow`         | vrai        | —                                  | curseur retourné avec l'image (effets `cursor: "follow"`, ex. retournement) : un seul curseur visible, clics justes         |
 | `engine.input_effects`         | faux        | —                                  | **expérimental** : sur un écran entier, Windows retourne l'affichage (souris inversée) ; chaque bascule perturbe tout le PC |
 | `safety.max_duration_ms`       | 30 000      | 1000 à 60 000                      | durée maximale d'un effet                                                                                                   |
 | `safety.max_active_effects`    | 4           | 1 à 8                              | effets simultanés au plus                                                                                                   |
