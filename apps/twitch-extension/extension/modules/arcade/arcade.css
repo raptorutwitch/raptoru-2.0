@@ -53,6 +53,16 @@ html[data-surface='mobile'] body.mobile:has(.mg[data-screen^="casino_"]) #panel.
   overflow: visible;
 }
 
+/* Téléphone, Blackjack et Roulette (23/11, retour d'Antoni : « trop petit, trop tassé ») : la page et le cadre du module
+   gardaient 21 px de marge de chaque côté et 37 px sous le jeu, autour d'une table qui manque de place. Ils la rendent
+   au jeu (≈ +24 px de large, +30 px de haut sur un Android 393 × 484). La machine à sous garde son cadre actuel. */
+html[data-surface='mobile'] body.mobile:has(.mg[data-screen="casino_blackjack"], .mg[data-screen="casino_roulette"]) .m-body {
+  padding: 2px 4px 4px;
+}
+html[data-surface='mobile'] .jdm-module:has(> .jdm-module__body .mg[data-screen="casino_blackjack"], > .jdm-module__body .mg[data-screen="casino_roulette"]) > .jdm-module__body {
+  padding: 4px;
+}
+
 /* --- Le catalogue ---------------------------------------------------------------------------------------------- */
 .mg__home {
   display: grid;

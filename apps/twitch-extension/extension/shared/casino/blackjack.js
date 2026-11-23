@@ -162,7 +162,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
           <div class="sides" role="group" aria-label="Pari sur le score de la banque">
             <svg class="sides__arc" aria-hidden="true"><path id="${uid}-arc" fill="none"/><text><textPath href="#${uid}-arc" startOffset="50%" text-anchor="middle">Pari sur le score de la banque</textPath></text></svg>
             <p class="sides__t">Pari sur le score de la banque</p>
-            ${SIDE_SPOTS.map((k) => `<button type="button" class="side" data-side="${k}"${SHORT[k] !== SIDE_LABEL[k] ? ` data-full="${SIDE_LABEL[k]}"` : ''}><b>${SHORT[k]}</b><small>paye ${oddsText(k)}</small><span class="sv"></span></button>`).join('')}
+            ${SIDE_SPOTS.map((k) => `<button type="button" class="side" data-side="${k}"${SHORT[k] !== SIDE_LABEL[k] ? ` data-full="${SIDE_LABEL[k]}"` : ''}><b>${SHORT[k]}</b><small><i>paye </i>${oddsText(k)}</small><span class="sv"></span></button>`).join('')}
           </div>
           <div class="spot" aria-live="polite"></div>
           <div class="cart" hidden></div>
@@ -593,7 +593,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     const sw = carousel ? Math.round(88 * kg) : Math.floor(Math.min(max, (W - 28 - gap * (perRow - 1)) / perRow));
     seatsEl.style.setProperty('--sw', `${sw}px`);
     seatsEl.style.setProperty('--gap', `${gap}px`);
-    seatsEl.style.setProperty('--mw', `${Math.max(18, Math.min(carousel ? 24 : narrow ? 21 : 25, Math.round(sw * 0.3)))}px`);
+    seatsEl.style.setProperty('--mw', `${Math.max(18, Math.min(carousel ? 24 : narrow ? 21 : 28, Math.round(sw * 0.3)))}px`);
     seatsEl.style.setProperty('--av', `${Math.max(14, Math.min(20, Math.round(sw * 0.17)))}px`);
     seatsEl.dataset.size = carousel ? 'l' : n <= 3 ? 'xl' : n <= 5 ? 'l' : n <= 7 ? 'm' : 's';
     const have = new Map([...seatsEl.querySelectorAll('.seat'), ...mineEl.querySelectorAll('.seat')].map((x) => [Number(x.dataset.seat), x]));
@@ -941,7 +941,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
   /** Ce que j'ai d'engagé dans la manche : mes mains (doubles et splits compris), mes paris banque, mon assurance. */
   const engaged = (me) => (me.hands.length ? me.hands.reduce((a, h) => a + h.stake, 0) + Object.values(me.side ?? {}).reduce((a, b) => a + b, 0) + (me.insurance?.stake ?? 0) : reserved());
   /** « Mise en cours » : une petite zone à part (le solde, lui, est dans l'en-tête de Raptoru Live). */
-  const stakeHTML = (v) => `<div class="stake${v ? '' : ' none'}" title="Jetons misés sur cette manche"><small>Mise en cours</small><b>${fmt(v)}</b></div>`;
+  const stakeHTML = (v) => `<div class="stake${v ? '' : ' none'}" title="Jetons misés sur cette manche"><small>Mise<i> en cours</i></small><b>${fmt(v)}</b></div>`;
   function paintBar(s, me) {
     let key;
     let html;

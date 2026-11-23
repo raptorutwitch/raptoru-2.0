@@ -860,7 +860,7 @@
 /* Table de hauteur moyenne ou basse mais assez large (PC 651 × 434, paysage 844 × 390) : la pile du Split s'étale en
    largeur — la hauteur manque, pas la largeur ; chaque main derrière dépasse sur la droite, son numéro et son score
    dans la bande qui dépasse (« M2 », « 17 ✓ »). Les bandes ne montent jamais sur les paris banque. */
-@container bj (max-height: 479px) and (min-width: 380px) {
+@container bj (max-height: 479px) and (min-width: 330px) { /* (téléphone sous la vidéo compris, 23/11 : la pile montait sur les paris) */
   .hstack { padding: 0 calc((var(--n, 2) - 1) * 46px) 0 0; }
   .hstack > .sh { transform: translate(calc(var(--d, 0) * 46px), calc(var(--d, 0) * -3px)); }
   .sh__tag { left: auto; right: 2px; top: 50%; height: auto; max-height: none; flex-direction: column; gap: 2px; padding: 3px 4px; font-size: 8.5px; transform: translateY(-50%); }
@@ -884,3 +884,94 @@
 .cards.is-bust::after { content: 'BUST'; position: absolute; left: 50%; top: 52%; z-index: 50; transform: translate(-50%, -50%) rotate(-17deg); padding: 0.22em 0.75em 0.18em; border-radius: 3px; font: 900 max(7px, calc(var(--cw) * 0.33)) / 1 var(--font); letter-spacing: 0.16em; color: #fff; white-space: nowrap; pointer-events: none; background: linear-gradient(180deg, rgba(232, 74, 96, 0.96), rgba(150, 22, 46, 0.96)); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 2px 6px rgba(0, 0, 0, 0.55); animation: bustin 0.3s var(--pop, ease-out) both; }
 @keyframes bustin { from { opacity: 0; transform: translate(-50%, -50%) rotate(-17deg) scale(1.6); } }
 @media (prefers-reduced-motion: reduce) { .cards.is-bust::after { animation: none; } }
+
+/* ================================================================================================================
+   Passe lisibilité / densité du 23/11 (retour d'Antoni sur ses captures Twitch Android et PC 563 × 376) : même
+   direction artistique ; le secondaire rétrécit, l'essentiel grossit, rien ne se chevauche.
+   ================================================================================================================ */
+
+/* « paye » se tait là où la place manque : la cote seule (11:2) reste. */
+.side > small > i, .stake small > i { font-style: normal; }
+
+/* --- Téléphone sous la vidéo (étroit, pas assez haut pour « ma place en grand » : la zone Twitch Android ≈ 393 × 484
+   donne une table de ≈ 375 × 420). La rangée fixe de 112-142 px de la banque ne contenait pas la grille 4 + 3 des
+   paris (≈ 131 px) : elle débordait sur la main en jeu, le bilan et la mise. Désormais, dans le flux : la banque en
+   grand, puis ses 7 paris sur UNE rangée sous un petit titre, puis le centre et les places. Les languettes Règles /
+   Historique passent en haut à droite (elles couvraient les paris et la place de droite) ; le sabot, décoratif, se tait. */
+@container bj (max-width: 420px) and (min-height: 300px) {
+  .felt:not(.has-hero) { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  .felt:not(.has-hero) .dealer { position: relative; left: auto; top: auto; grid-row: 1; margin-top: 6px; transform: none; }
+  .felt:not(.has-hero) .dealer .cards.big { --cw: clamp(34px, 11cqw, 44px); }
+  .felt:not(.has-hero) .dealer .cards:empty::before { content: none; } /* pendant les mises : pas de carte fantôme, la place va à la table */
+  .felt:not(.has-hero) .dealer { min-height: 26px; }
+  .felt:not(.has-hero) .dealer > .tot { height: 26px; min-width: 34px; padding: 0 8px; border-radius: 13px; font-size: 16px; }
+  .felt:not(.has-hero) .sides { position: relative; grid-row: 2; width: 100%; height: auto; }
+  .felt:not(.has-hero) .sides.flat { flex-wrap: wrap; gap: 3px; padding: 3px 8px 0; }
+  .felt:not(.has-hero) .sides.flat .sides__t { position: static; flex: 0 0 100%; margin: 0 0 1px; font-size: 6.5px; letter-spacing: 0.14em; color: rgba(242, 198, 95, 0.5); }
+  .felt:not(.has-hero) .sides.flat .side { flex: 1 1 0; min-width: 0; height: 34px; border-radius: 8px; }
+  .felt:not(.has-hero) .side > b { font-size: 14px; }
+  .felt:not(.has-hero) .side > small { font-size: 8.5px; }
+  .felt:not(.has-hero) .side > small > i { display: none; }
+  /* Une fois les mises closes, les cotes se taisent (la mise posée et son gain restent sur la case) : 24 px de haut. */
+  .felt:not(.has-hero) .sides.flat:not(.live) .side { height: 24px; }
+  .felt:not(.has-hero) .sides:not(.live) .side > small { display: none; }
+  .felt:not(.has-hero) .sides.flat:not(.live) .sides__t { display: none; }
+  .felt:not(.has-hero) .cart .av { display: none; } /* « À toi · Main 1/2 » en entier, à côté de la banque */
+  .felt:not(.has-hero) .cart { padding-left: 9px; }
+  .felt:not(.has-hero) .spot { grid-row: 3; padding: 0 8px; }
+  .felt:not(.has-hero) .spot .cards.big { --cw: clamp(32px, 9.5cqh, 46px); } /* la main en jeu prend la hauteur libre */
+  .toast { padding: 5px 10px; font-size: 10.5px; max-width: calc(100% - 16px); }
+  .felt:not(.has-hero) .seats { grid-row: 4; }
+  .felt:not(.has-hero) .shoe { display: none; }
+  .felt:not(.has-hero) .tabs { top: 6px; right: 6px; grid-auto-flow: column; gap: 5px; transform: none; }
+  .felt:not(.has-hero) .tabs > .htab, .felt:not(.has-hero) .tabs > .rtab { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 9px; }
+  .felt:not(.has-hero) .tabs > * > span { display: none; }
+}
+
+/* --- Les actions sur UNE ligne en étroit (Tirer · Rester · Doubler · Split) : le libellé, son coût dessous en petit ;
+   l'icône se tait (la couleur et le mot suffisent). 38 px de haut : toujours au doigt, une rangée gagnée. */
+@container bj (max-width: 420px) and (min-width: 330px) { /* (panneau 318 : la grille 2 × 2 d'avant) */
+  .acts { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .acts.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .acts .act { flex-direction: column; gap: 2px; height: 38px; padding: 0 2px; }
+  .acts .act .ico { display: none; }
+  .acts .act b { font-size: 12.5px; }
+  .acts .act small { font-size: 8.5px; }
+  /* Pendant les mises : porte · réaction · Annuler / Retirer / Rejouer · mise en cours · PRÊT sur la 2ᵉ ligne (PRÊT
+     tombait seul sur une 3ᵉ ligne : 50 px perdus pour la table). */
+  .bar .ops .ic { width: 32px; }
+  .bar { column-gap: 4px; }
+  .bar .btn.quit, .bar .btn.rxb { width: 36px; min-width: 0; }
+  .stake { padding: 3px 7px 4px; gap: 2px; }
+  .stake small { font-size: 7px; letter-spacing: 0.06em; }
+  .stake small > i { display: none; } /* « Mise » suffit */
+  .btn.ready { min-width: 0; padding: 0 11px; }
+}
+
+/* --- Composant vidéo PC (lecteur normal 563 × 376 : la table de référence 651 × 434 réduite d'un bloc, ≈ 632 × 373 de
+   table) : la largeur ne manque pas, la hauteur si. La main en jeu passe score et mise À CÔTÉ de ses cartes (≈ 20 px
+   rendus) ; ils servent à la banque (cartes 30 → 38 px, score plus gros), aux 7 paris (cases plus grandes, cotes
+   lisibles), à la main en jeu et aux places (cartes, pseudos, mises). */
+@container bj (min-width: 560px) and (min-height: 340px) and (max-height: 399px) {
+  .felt { grid-template-rows: 122px minmax(0, 1fr) auto; }
+  .sides, .sides__arc { height: 122px; }
+  .dealer { top: 4px; }
+  .dealer .cards.big { --cw: 36px; }
+  .dealer > .tot { height: 24px; min-width: 32px; padding: 0 8px; border-radius: 12px; font-size: 15px; }
+  .sides:not(.flat) .side { width: 58px; height: 32px; }
+  .sides:not(.flat) .side > b { font-size: 14px; }
+  .sides:not(.flat) .side > small { font-size: 7.5px; }
+  .spot .sh { grid-template-areas: 'cards foot'; align-items: center; column-gap: 9px; padding: 6px 10px; }
+  .spot .sh .sh__foot { flex-direction: column; gap: 4px; }
+  .spot .cards.big { --cw: 38px; }
+  .spot .sh .tot { height: 22px; min-width: 30px; font-size: 13px; border-radius: 11px; }
+  .sh__bet { font-size: 11.5px; }
+  .seat .nm { font-size: 10.5px; }
+  .seat .bet { font-size: 10px; }
+  .msg b { font-size: 16px; }
+  .msg small { font-size: 11px; }
+}
+
+/* Le titre des paris ne sert qu'à miser : hors des mises, il se tait (au règlement, il passait sous « La banque fait 17 »). */
+.sides__arc text { transition: opacity 0.25s; }
+.sides:not(.live) .sides__arc text { opacity: 0; }

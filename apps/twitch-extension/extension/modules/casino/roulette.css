@@ -450,3 +450,45 @@
   @container body (max-width: 560px) and (orientation: portrait) { .rt { grid-template-rows: 32px minmax(0, 1fr) 52px 54px; } }
   @container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) { .rt { grid-template-rows: 32px minmax(0, 1fr) 46px 48px; } }
 }
+
+/* --- Passe lisibilité / densité du 23/11 (retour d'Antoni) — la roue au téléphone (portrait) : « Rien ne va plus », la
+   mise et Passer sur UNE ligne sous la roue (ils empilaient ≈ 170 px), la roue prend la hauteur rendue (≈ 250 → 340 px
+   de diamètre sur un Android 393 × 484). Au résultat, le numéro est déjà au centre de la roue (.wres) : la bande dit la
+   couleur et le gain, à côté de « Revenir au tapis » ; le solde (déjà dans l'en-tête) se tait. */
+@container body (max-width: 520px) and (max-aspect-ratio: 4/3) {
+  .wover { gap: 8px; padding: 6px; }
+  .wover .wheel { width: min(calc(100cqw - 12px), calc(100cqh - 58px)); }
+  .wside { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 12px; }
+  .wkick { display: flex; align-items: baseline; gap: 7px; font-size: 10px; letter-spacing: 0.12em; }
+  .wkick b { display: inline; margin: 0; font-size: 13px; }
+  .wover:has(.banner.show) .wkick { display: none; }
+  .wover .banner.show { display: flex; align-items: center; gap: 8px; width: auto; max-width: none; padding: 6px 14px; border-radius: 999px; }
+  .wover .banner .np { display: none; }
+  .wover .banner .bl { font-size: 10px; }
+  .wover .banner b { font-size: 17px; }
+  .wover .banner.lose b { font-size: 14px; }
+}
+
+/* --- 23/11 — le tapis au téléphone (portrait court, ≈ 375 × 417 sous la vidéo) : les languettes « Paiements » et « Mise
+   rapide » posées sur les bords couvraient la 1ʳᵉ colonne de numéros et celle des chances simples, et le tapis gardait
+   ≈ 10 px de marge de chaque côté pour elles. Elles deviennent deux petites pastilles dans la rangée des derniers
+   numéros (même or, même action) ; le tapis prend toute la largeur et ses chiffres grossissent un peu. */
+@container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) {
+  .rt { --hh: 24px; }
+  .histrow { grid-template-columns: minmax(0, 1fr) 139px 34px; }
+  .histrow > .snd { grid-column: 3; }
+  .plateau { margin-inline: 0; }
+  .plateau > .notch { top: calc(-1 * (var(--hh) + 6px)); height: var(--hh); margin-top: 0; padding: 0; }
+  .plateau > .notch:not(.qk) { left: auto; right: 116px; width: 62px; }
+  .plateau > .notch.qk { right: 39px; width: 72px; color: var(--gold-2); }
+  .plateau > .notch:not(.qk) { color: var(--gold-2); }
+  .plateau > .notch::before { left: 0; right: 0; width: auto; border-radius: 999px; background: rgba(255, 201, 77, 0.08); box-shadow: inset 0 0 0 1px rgba(242, 198, 95, 0.55); }
+  .plateau > .notch span { writing-mode: horizontal-tb; transform: none; font-size: 8px; letter-spacing: 0.05em; white-space: nowrap; }
+  .plateau > .notch:hover, .plateau > .notch:focus-visible { transform: none; }
+  .spot { font-size: 14.5px; }
+  .spot.zero { font-size: 17px; }
+  .spot.side, .spot.col { font-size: 11.5px; }
+}
+@media (pointer: coarse) {
+  @container body (max-width: 560px) and (orientation: portrait) and (max-height: 560px) { .rt { --hh: 32px; } }
+}
