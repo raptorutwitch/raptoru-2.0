@@ -99,7 +99,8 @@ Version de test **0.1.44-chaos.1** (23/11), construite en local, **ni publiée n
 
 Installer (hors live, jeu fermé) :
 
-1. Fermer Raptoru Studio (fenêtre et serveur).
+1. Fermer Raptoru Studio (fenêtre et serveur) et le Chaos Lab (Ctrl+C dans sa fenêtre) : un moteur du Lab garde
+   Ctrl+Maj+F11 et Studio afficherait « déjà pris ».
 2. Lancer `Raptoru Studio Setup 0.1.44-chaos.1.exe` : il remplace la 0.1.43 dans le même dossier et garde les données
    (`%APPDATA%\Raptoru Studio` et le dossier de données `Documents\Raptoru 2.0`).
 3. Ouvrir Studio : « À propos » = 0.1.44-chaos.1 ; profil, OBS et comptes Twitch comme avant.
