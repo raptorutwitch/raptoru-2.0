@@ -252,7 +252,7 @@ namespace Raptoru.Chaos
                     True(c2.Safety.SafeMode && c2.Safety.MaxDurationMs == 20000 && (string)c2.GetPreset("flip", "default").Params["fill"] == "cover", "relu à l'identique");
                     File.WriteAllText(p, "{\"version\":1,\"follow_foreground\":false,\"safe_mode\":true,\"max_duration_ms\":15000}");
                     var c3 = new ConfigStore(reg, p); c3.Load();
-                    True(!c3.Engine.FollowForeground && c3.Safety.SafeMode && c3.Safety.MaxDurationMs == 15000, "migration v1 → v4");
+                    True(!c3.Engine.FollowForeground && c3.Safety.SafeMode && c3.Safety.MaxDurationMs == 15000, "migration v1 → v5");
                     True(c3.Engine.DefaultMode == "window" && !c3.Engine.InputEffects, "migration : calque sur la fenêtre, bascule Windows coupée");
                     var fresh = new ConfigStore(reg, null).Engine;
                     True(fresh.DefaultMode == "window" && !fresh.InputEffects, "défauts : calque sur la fenêtre, bascule Windows (expérimentale) coupée");
@@ -275,6 +275,32 @@ namespace Raptoru.Chaos
                     True(c5.Safety.MaxDurationMs == 30000 && c5.GetPreset("flip", "ok") != null && c5.GetPreset("flip", "x") == null && c5.LoadNotes.Count >= 2, "valeurs invalides ignorées une par une");
                 }
                 finally { try { Directory.Delete(dir, true); } catch (Exception) { } }
+            });
+
+            Case("performances : profils, valeur personnalisée, bornes, migration de quality, passes déclarées", () =>
+            {
+                var c = new ConfigStore(reg, null);
+                var d = c.Performance;
+                True(d.Profile == "equilibre" && d.MaxFps == 0 && d.MaxPasses == 6 && d.OnOverload == "reduire" && d.ZeroCopy, "défaut : équilibré, cadence de l'écran, réduction annoncée");
+                c.SetPerformance(J.Map("profile", "economie"));
+                True(c.Performance.MaxFps == 60 && c.Performance.MaxPasses == 3 && c.Performance.RenderScale == 0.5 && c.Performance.GpuBudgetMs == 1, "profil économie appliqué en entier");
+                c.SetPerformance(J.Map("max_fps", 90));
+                True(c.Performance.Profile == "personnalise" && c.Performance.MaxFps == 90 && c.Performance.MaxPasses == 3, "valeur à la main : profil personnalisé, le reste gardé");
+                c.SetPerformance(J.Map("profile", "qualite"));
+                True(c.Performance.OnOverload == "signaler" && c.Performance.MaxFps == 0 && c.Performance.MaxPasses == 8, "profil qualité : jamais de réduction automatique");
+                Eq("invalid_config", Throws<ConfigError>(() => c.SetPerformance(J.Map("max_fps", 10))), "cadence trop basse refusée");
+                Eq("invalid_config", Throws<ConfigError>(() => c.SetPerformance(J.Map("render_scale", 2))), "échelle hors bornes refusée");
+                Eq("invalid_config", Throws<ConfigError>(() => c.SetPerformance(J.Map("on_overload", "ignorer"))), "réaction inconnue refusée");
+                Eq("invalid_config", Throws<ConfigError>(() => c.SetPerformance(J.Map("profile", "turbo"))), "profil inconnu refusé");
+                True(c.Performance.Profile == "qualite", "un réglage refusé ne change rien");
+                var m = ConfigStore.Migrate(J.Map("schema", ConfigStore.Schema, "version", 4, "engine", J.Map("quality", "high", "capture_linger_ms", 3000)), 4);
+                True((int)J.Num(m, "version", 0) == 5 && J.Str(J.Obj(m, "performance"), "profile", "") == "qualite" && !J.Obj(m, "engine").ContainsKey("quality")
+                    && (int)J.Num(J.Obj(m, "engine"), "capture_linger_ms", 0) == 3000, "migration v4 → v5 : quality high → profil qualité, le reste gardé");
+                var m2 = ConfigStore.Migrate(J.Map("schema", ConfigStore.Schema, "version", 4, "engine", J.Map("quality", "auto")), 4);
+                True(J.Str(J.Obj(m2, "performance"), "profile", "") == "equilibre", "quality auto → profil équilibré");
+                True(reg.Get("diag.passes").GpuPasses == 6 && reg.Get("flip").GpuPasses == 1, "passes GPU déclarées par le registre (refus too_costly)");
+                c.Reset("performance");
+                True(c.Performance.Profile == "equilibre", "réinitialisation de la section");
             });
 
             // ---------- Ordonnanceur ----------

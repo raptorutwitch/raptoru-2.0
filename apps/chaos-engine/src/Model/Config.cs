@@ -3,7 +3,8 @@
 //   2. préréglages utilisateur          → presets.<effet>.<nom> (« default » = valeurs utilisées sans préréglage nommé) ;
 //   3. réglages globaux du moteur       → engine ;
 //   4. limites de sécurité              → safety (toujours dans les bornes absolues du registre) ;
-//   5. réglages commerciaux (prix, délais d'achat, remboursements) → AUCUN : ils appartiennent au Core.
+//   5. performances                     → performance (profil + réglages explicites, docs/chaos/PERFORMANCES_MOTEUR.md) ;
+//   6. réglages commerciaux (prix, délais d'achat, remboursements) → AUCUN : ils appartiennent au Core.
 // Fichier versionné (schema + version), migré à la lecture (sauvegarde de l'ancien), écrit de façon atomique.
 using System;
 using System.Collections.Generic;
@@ -30,7 +31,46 @@ namespace Raptoru.Chaos
         /// d'orientation reconfigure l'affichage de tout le PC (Overwatch à 17 images/s sur l'autre écran).
         public bool InputEffects;
         public int CaptureLingerMs = 2000, TelemetryIntervalMs = 1000;
-        public string Quality = "auto"; // auto : repli de qualité si le lecteur ralentit ; high : jamais de repli
+    }
+
+    /// Performances : un profil fixe toutes les valeurs ; changer une valeur à la main donne le profil « personnalise ».
+    /// Déterministe : aucune réduction de qualité sans on_overload = reduire ; chaque palier est annoncé
+    /// (engine.degraded / engine.recovered) et visible dans la télémétrie.
+    sealed class PerformanceConfig
+    {
+        public static readonly string[] Profiles = { "qualite", "equilibre", "economie" };
+        public string Profile = "equilibre";
+        /// Cadence de traitement maximale par cible (images/s) ; 0 = fréquence de l'écran de la cible.
+        public int MaxFps;
+        /// Passes GPU par image et par cible : au-delà, l'effet est refusé (too_costly).
+        public int MaxPasses = 6;
+        /// Résolution des passes intermédiaires (la dernière passe est toujours à pleine résolution).
+        public double RenderScale = 1;
+        /// Temps GPU du moteur toléré par image (ms) : au-delà, surcharge.
+        public double GpuBudgetMs = 2;
+        /// Surcharge : signaler (événement seulement) ou reduire (paliers annoncés, retour automatique).
+        public string OnOverload = "reduire";
+        /// Lecture directe de l'image capturée quand aucune copie n'est nécessaire (interrupteur de secours).
+        public bool ZeroCopy = true;
+
+        public static PerformanceConfig For(string profile)
+        {
+            switch (profile)
+            {
+                case "qualite": return new PerformanceConfig { Profile = profile, MaxFps = 0, MaxPasses = 8, RenderScale = 1, GpuBudgetMs = 4, OnOverload = "signaler" };
+                case "equilibre": return new PerformanceConfig();
+                case "economie": return new PerformanceConfig { Profile = profile, MaxFps = 60, MaxPasses = 3, RenderScale = 0.5, GpuBudgetMs = 1, OnOverload = "reduire" };
+            }
+            throw new ConfigError("invalid_config", "profil : qualite, equilibre ou economie");
+        }
+
+        public PerformanceConfig Clone() { return (PerformanceConfig)MemberwiseClone(); }
+
+        public Dictionary<string, object> ToJson()
+        {
+            return J.Map("profile", Profile, "max_fps", MaxFps, "max_passes", MaxPasses, "render_scale", RenderScale, "gpu_budget_ms", GpuBudgetMs,
+                "on_overload", OnOverload, "zero_copy", ZeroCopy);
+        }
     }
 
     sealed class ConfigError : Exception
@@ -42,11 +82,12 @@ namespace Raptoru.Chaos
     sealed class ConfigStore
     {
         public const string Schema = "raptoru.chaos.config";
-        public const int CurrentVersion = 4;
+        public const int CurrentVersion = 5;
         readonly Registry reg;
         readonly string path;
         public EngineSettings Engine = new EngineSettings();
         public SafetyConfig Safety = new SafetyConfig();
+        public PerformanceConfig Performance = new PerformanceConfig();
         public Dictionary<string, Dictionary<string, Preset>> Presets = new Dictionary<string, Dictionary<string, Preset>>();
         public readonly List<string> LoadNotes = new List<string>();
 
@@ -92,6 +133,7 @@ namespace Raptoru.Chaos
         /// v2 → v3 (22/11) : la cible par défaut devient l'écran entier (spécification du retournement).
         /// v3 → v4 (22/11, incident de performances) : retour au calque sur la fenêtre par défaut ; la bascule
         /// d'orientation par Windows devient une option expérimentale (input_effects), coupée.
+        /// v4 → v5 (23/11) : section performance ; engine.quality (auto / high) devient le profil equilibre / qualite.
         public static Dictionary<string, object> Migrate(Dictionary<string, object> root, int from)
         {
             if (from <= 1)
@@ -117,6 +159,15 @@ namespace Raptoru.Chaos
                 root["engine"] = engine;
                 root["version"] = 4;
             }
+            if (from <= 4)
+            {
+                var engine = J.Obj(root, "engine") ?? new Dictionary<string, object>();
+                string q = J.Str(engine, "quality", "auto");
+                engine.Remove("quality");
+                root["engine"] = engine;
+                root["performance"] = PerformanceConfig.For(q == "high" ? "qualite" : "equilibre").ToJson();
+                root["version"] = 5;
+            }
             return root;
         }
 
@@ -127,6 +178,8 @@ namespace Raptoru.Chaos
             if (e != null) TrySet(notes, "engine", () => SetEngine(e));
             var s = J.Obj(root, "safety");
             if (s != null) TrySet(notes, "safety", () => SetSafety(s));
+            var pf = J.Obj(root, "performance");
+            if (pf != null) TrySet(notes, "performance", () => SetPerformance(pf));
             var p = J.Obj(root, "presets");
             if (p != null)
                 foreach (var eff in p)
@@ -151,14 +204,33 @@ namespace Raptoru.Chaos
                 DefaultMode = J.Str(v, "default_mode", Engine.DefaultMode),
                 InputEffects = J.Bool(v, "input_effects", Engine.InputEffects),
                 CaptureLingerMs = (int)J.Num(v, "capture_linger_ms", Engine.CaptureLingerMs),
-                TelemetryIntervalMs = (int)J.Num(v, "telemetry_interval_ms", Engine.TelemetryIntervalMs),
-                Quality = J.Str(v, "quality", Engine.Quality)
+                TelemetryIntervalMs = (int)J.Num(v, "telemetry_interval_ms", Engine.TelemetryIntervalMs)
             };
             if (n.DefaultMode != "window" && n.DefaultMode != "monitor") throw new ConfigError("invalid_config", "default_mode : window ou monitor");
             if (n.CaptureLingerMs < 0 || n.CaptureLingerMs > 30000) throw new ConfigError("invalid_config", "capture_linger_ms : 0 à 30 000");
             if (n.TelemetryIntervalMs < 250 || n.TelemetryIntervalMs > 10000) throw new ConfigError("invalid_config", "telemetry_interval_ms : 250 à 10 000");
-            if (n.Quality != "auto" && n.Quality != "high") throw new ConfigError("invalid_config", "quality : auto ou high");
             Engine = n;
+        }
+
+        /// Un profil applique toutes ses valeurs ; une valeur fournie à la main donne le profil « personnalise ».
+        public void SetPerformance(Dictionary<string, object> v)
+        {
+            string profile = J.Str(v, "profile", null);
+            var n = profile != null && profile != "personnalise" ? PerformanceConfig.For(profile) : Performance.Clone();
+            bool custom = false;
+            if (J.Has(v, "max_fps")) { n.MaxFps = (int)J.Num(v, "max_fps", -1); custom = true; }
+            if (J.Has(v, "max_passes")) { n.MaxPasses = (int)J.Num(v, "max_passes", -1); custom = true; }
+            if (J.Has(v, "render_scale")) { n.RenderScale = J.Num(v, "render_scale", -1); custom = true; }
+            if (J.Has(v, "gpu_budget_ms")) { n.GpuBudgetMs = J.Num(v, "gpu_budget_ms", -1); custom = true; }
+            if (J.Has(v, "on_overload")) { n.OnOverload = J.Str(v, "on_overload", ""); custom = true; }
+            if (J.Has(v, "zero_copy")) n.ZeroCopy = J.Bool(v, "zero_copy", true);
+            if (custom || profile == "personnalise") n.Profile = "personnalise";
+            if (n.MaxFps != 0 && (n.MaxFps < 30 || n.MaxFps > 360)) throw new ConfigError("invalid_config", "max_fps : 0 (fréquence de l'écran) ou 30 à 360");
+            if (n.MaxPasses < 1 || n.MaxPasses > 8) throw new ConfigError("invalid_config", "max_passes : 1 à 8");
+            if (n.RenderScale < 0.25 || n.RenderScale > 1) throw new ConfigError("invalid_config", "render_scale : 0,25 à 1");
+            if (n.GpuBudgetMs < 0.25 || n.GpuBudgetMs > 16) throw new ConfigError("invalid_config", "gpu_budget_ms : 0,25 à 16");
+            if (n.OnOverload != "signaler" && n.OnOverload != "reduire") throw new ConfigError("invalid_config", "on_overload : signaler ou reduire");
+            Performance = n;
         }
 
         public void SetSafety(Dictionary<string, object> v)
@@ -199,8 +271,9 @@ namespace Raptoru.Chaos
         {
             if (section == null || section == "engine") Engine = new EngineSettings();
             if (section == null || section == "safety") Safety = new SafetyConfig();
+            if (section == null || section == "performance") Performance = new PerformanceConfig();
             if (section == null || section == "presets") Presets.Clear();
-            if (section != null && section != "engine" && section != "safety" && section != "presets") throw new ConfigError("invalid_config", "section inconnue : " + section);
+            if (section != null && section != "engine" && section != "safety" && section != "performance" && section != "presets") throw new ConfigError("invalid_config", "section inconnue : " + section);
         }
 
         public Dictionary<string, object> ToJson()
@@ -209,8 +282,9 @@ namespace Raptoru.Chaos
             foreach (var eff in Presets) presets[eff.Key] = eff.Value.ToDictionary(kv => kv.Key, kv => (object)kv.Value.ToJson());
             return J.Map("schema", Schema, "version", CurrentVersion,
                 "engine", J.Map("follow_foreground", Engine.FollowForeground, "default_mode", Engine.DefaultMode, "input_effects", Engine.InputEffects, "capture_linger_ms", Engine.CaptureLingerMs,
-                                "telemetry_interval_ms", Engine.TelemetryIntervalMs, "quality", Engine.Quality),
+                                "telemetry_interval_ms", Engine.TelemetryIntervalMs),
                 "safety", J.Map("max_duration_ms", Safety.MaxDurationMs, "max_active_effects", Safety.MaxActiveEffects, "safe_mode", Safety.SafeMode),
+                "performance", Performance.ToJson(),
                 "presets", presets);
         }
 

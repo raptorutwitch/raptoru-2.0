@@ -1,6 +1,9 @@
 // Hôte du moteur : une boucle (fil de rendu) relie commandes → ordonnanceur → effets → captures → rendu → surfaces,
 // et la couche Entrées (src/Input) pour les effets qui transforment aussi la souris (retournement de l'écran entier).
-// Au repos (aucun effet) : aucune fenêtre, aucune capture, cibles intermédiaires libérées, aucun écran modifié.
+// Au repos (aucun effet) : aucune fenêtre, aucune capture, cibles intermédiaires libérées, aucun écran modifié, un
+// réveil toutes les 250 ms. Rendu (docs/chaos/PERFORMANCES_MOTEUR.md) : une image par nouvelle capture, ou par retour
+// de balayage de l'écran de la cible (Pacer) quand l'image change sans capture (animation, calque) ; jamais d'image
+// identique redessinée, rien quand la cible est masquée ; Present sans attente.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -27,6 +30,14 @@ namespace Raptoru.Chaos
         public readonly List<EffectInstance> Effects = new List<EffectInstance>();
         public readonly SurfaceStats Stats = new SurfaceStats();
         public long FirstWaitAt = -1;
+        // Rendu : constructeur d'image réutilisé, effets vivants (tampon), dernière empreinte présentée, rythmeur.
+        public FrameBuilder Fb;
+        public readonly List<EffectInstance> Live = new List<EffectInstance>();
+        public readonly List<string> FrameLabels = new List<string>();
+        public long LastSig, LastRenderQpc, PacerSeen;
+        public bool HasSig, PendingFresh, WantsTicks;
+        public Pacer Pacer;
+        public double GpuFrameEstMs = -1;
     }
 
     sealed class EngineHost
@@ -54,6 +65,8 @@ namespace Raptoru.Chaos
         TextRaster text;
         CaptureManager caps;
         long nextTelemetry, nextHousekeeping;
+        readonly Dictionary<IntPtr, Pacer> pacers = new Dictionary<IntPtr, Pacer>();
+        Action<string, double> passSink;
 
         long Now { get { return clock.ElapsedMilliseconds; } }
 
@@ -96,6 +109,7 @@ namespace Raptoru.Chaos
                 timer = new GpuTimer(gpu);
                 text = new TextRaster(gpu);
                 caps = new CaptureManager(gpu, timer, frameEvt);
+                passSink = tel.Pass;
             }
             catch (Exception e)
             {
@@ -108,8 +122,10 @@ namespace Raptoru.Chaos
             var handles = new[] { io.CommandEvt.SafeWaitHandle.DangerousGetHandle(), frameEvt.SafeWaitHandle.DangerousGetHandle() };
             while (true)
             {
-                bool fast = surfaces.Values.Any(s => s.S.Shown && (Animating(s) || !s.Effects.Any(e => e.A.Def.RequiresCapture)));
-                N.MsgWaitForMultipleObjectsEx(2, handles, fast ? 1u : 15u, N.QS_ALLINPUT, N.MWMO_INPUTAVAILABLE);
+                // Réveils : commande, nouvelle capture ou retour de balayage (rythmeur) ; sinon 15 ms pendant un effet
+                // (fin d'effet, transition sans nouvelle image), 250 ms au repos (entretien, battement).
+                bool active = surfaces.Count > 0 || instances.Count > 0;
+                N.MsgWaitForMultipleObjectsEx(2, handles, active ? 15u : 250u, N.QS_ALLINPUT, N.MWMO_INPUTAVAILABLE);
                 long now = Now;
                 tel.Loop(now);
                 MSG m;
@@ -127,15 +143,20 @@ namespace Raptoru.Chaos
                 Publish();
                 RenderAll(now);
                 Publish();
+                if (active) timer.Collect(passSink);
                 if (now >= nextHousekeeping) Housekeeping(now);
-                io.Beat(surfaces.Values.Count(s => s.S.Shown), input.Count);
+                int shown = 0;
+                foreach (var sf in surfaces.Values) if (sf.S.Shown) shown++;
+                io.Beat(shown, input.Count);
             }
         }
 
         bool Animating(SurfaceEntry s)
         {
             long now = Now;
-            return s.Effects.Any(e => e.A.Anim != null && (e.A.State == ActState.Active || e.A.State == ActState.Exiting) && e.A.Anim.Animating(now));
+            foreach (var e in s.Effects)
+                if (e.A.Anim != null && (e.A.State == ActState.Active || e.A.State == ActState.Exiting) && e.A.Anim.Animating(now)) return true;
+            return false;
         }
 
         // ---------- Événements de l'ordonnanceur → cycle de vie des effets ----------
@@ -188,7 +209,7 @@ namespace Raptoru.Chaos
                 Surface surf;
                 try { surf = new Surface(gpu, r.TargetKey, r.TargetHwnd, r.TargetHmon, w, h); }
                 catch (Exception) { if (cap != null) caps.Release(r.TargetKey, Now); throw; }
-                s = new SurfaceEntry { S = surf, Cap = cap, CaptureUsers = cap != null ? 1 : 0, FirstWaitAt = Now, Device = r.TargetDevice };
+                s = new SurfaceEntry { S = surf, Cap = cap, CaptureUsers = cap != null ? 1 : 0, FirstWaitAt = Now, Device = r.TargetDevice, Fb = new FrameBuilder(w, h, cap != null) };
                 surfaces[r.TargetKey] = s;
                 return s;
             }
@@ -236,16 +257,50 @@ namespace Raptoru.Chaos
         }
 
         // ---------- Rendu ----------
+        readonly List<SurfaceEntry> renderList = new List<SurfaceEntry>();
+        static readonly Comparison<EffectInstance> ByOrder = (x, y) =>
+        {
+            int c = x.A.Def.Slot.Order.CompareTo(y.A.Def.Slot.Order);
+            return c != 0 ? c : x.A.AcceptedAt.CompareTo(y.A.AcceptedAt);
+        };
+
         void RenderAll(long now)
         {
-            foreach (var s in surfaces.Values.ToList()) RenderSurface(s, now);
+            renderList.Clear();
+            renderList.AddRange(surfaces.Values);
+            foreach (var s in renderList) RenderSurface(s, now);
+            // Un rythmeur par écran, réveillé seulement si une surface de cet écran attend des images cadencées.
+            foreach (var p in pacers.Values)
+            {
+                bool need = false;
+                foreach (var s in renderList) if (s.Pacer == p && s.WantsTicks) need = true;
+                p.Need(need);
+            }
+        }
+
+        Pacer PacerFor(Surface surf)
+        {
+            Pacer p;
+            if (!pacers.TryGetValue(surf.Hmon, out p)) pacers[surf.Hmon] = p = new Pacer(gpu, surf.Hmon, surf.RefreshHz, frameEvt);
+            return p;
+        }
+
+        /// Cadence de traitement d'une surface : fréquence de son écran, plafonnée par performance.max_fps, divisée par
+        /// deux au palier 3 de surcharge.
+        double RateHz(SurfaceEntry s)
+        {
+            double hz = s.S.RefreshHz, cap = cfg.Performance.MaxFps > 0 ? Math.Min(hz, cfg.Performance.MaxFps) : hz;
+            return tel.Level >= 3 ? cap / 2 : cap;
         }
 
         void RenderSurface(SurfaceEntry s, long now)
         {
-            var live = s.Effects.Where(e => e.State == InstanceState.Running && e.A.State != ActState.Finished && e.A.State != ActState.Queued)
-                .OrderBy(e => e.A.Def.Slot.Order).ThenBy(e => e.A.AcceptedAt).ToList();
+            var live = s.Live;
+            live.Clear();
+            s.WantsTicks = false;
+            foreach (var e in s.Effects) if (e.State == InstanceState.Running && e.A.State != ActState.Finished && e.A.State != ActState.Queued) live.Add(e);
             if (live.Count == 0) return;
+            if (live.Count > 1) live.Sort(ByOrder);
             if (!s.S.TargetAlive || (s.Cap != null && s.Cap.Lost))
             {
                 string why = s.Cap != null && s.Cap.Lost ? (s.Cap.LostReason ?? "capture_lost") : "target_lost";
@@ -254,8 +309,11 @@ namespace Raptoru.Chaos
             }
             if (StepInput(s, live, now)) { s.S.SetShown(false, now); return; }
             bool needsCapture = s.Cap != null;
+            double rate = RateHz(s);
+            bool capped = rate < s.S.RefreshHz - 0.5;
+            if (needsCapture) { s.Cap.ZeroCopy = cfg.Performance.ZeroCopy; s.Cap.SetMinInterval(capped ? 1000.0 / rate : 1); }
             bool fresh = needsCapture && s.Cap.Acquire(now);
-            if (fresh) s.Stats.CaptureLatency.Add((N.QpcNow() - s.Cap.LastFrameQpc) * 1000.0 / N.QpcFreq());
+            if (fresh) { s.Stats.CaptureLatency.Add((N.QpcNow() - s.Cap.LastFrameQpc) * 1000.0 / N.QpcFreq()); s.PendingFresh = true; }
             if (needsCapture && !s.Cap.HasFrame)
             {
                 if (now - s.FirstWaitAt > FirstFrameMs)
@@ -263,63 +321,106 @@ namespace Raptoru.Chaos
                 return;
             }
             s.S.Track();
-            bool follow = live.All(e => J.Bool(e.A.Req.TargetInfo, "follow_foreground", true)) && cfg.Engine.FollowForeground;
+            bool follow = cfg.Engine.FollowForeground;
+            foreach (var e in live) if (!J.Bool(e.A.Req.TargetInfo, "follow_foreground", true)) follow = false;
             bool want = !s.S.TargetMinimized && (!follow || s.S.TargetForeground());
-            bool animating = Animating(s);
-            bool overlayOnly = !needsCapture;
-            if (fresh || animating || overlayOnly || (want && !s.S.Shown))
+            if (!want)
             {
-                var fb = new FrameBuilder(s.S.Width, s.S.Height, needsCapture);
-                if (tel.Degraded) fb.LowQuality = true;
-                if (s.Device != null) fb.DisplayRotationRad = input.RotationDeg(s.Device) * Math.PI / 180;
-                foreach (var e in live)
+                // Cible masquée (autre fenêtre au premier plan, fenêtre réduite) : ni rendu ni présentation. La capture
+                // continue : l'image est à jour dès le retour au premier plan.
+                s.S.SetShown(false, now);
+                if (fresh) s.Stats.SkippedHidden++;
+                UpdateStarting(s, live, now);
+                return;
+            }
+            // Images cadencées (rythmeur de l'écran) : animation, calque sans capture, ou cadence plafonnée.
+            bool timed = Animating(s) || !needsCapture || (capped && s.PendingFresh);
+            if (timed && s.Pacer == null) s.Pacer = PacerFor(s.S);
+            s.WantsTicks = timed;
+            bool tick = s.Pacer != null && s.Pacer.Ticks != s.PacerSeen;
+            if (tick) s.PacerSeen = s.Pacer.Ticks;
+            // Images cadencées : une par retour de balayage (avec la capture la plus récente), jamais deux par période ;
+            // sinon une par nouvelle capture.
+            bool due = !s.S.Shown || (timed ? tick : s.PendingFresh);
+            // Cadence plafonnée : au plus une image (la plus récente) par période.
+            if (due && capped && s.S.Shown && N.QpcNow() - s.LastRenderQpc < (long)(N.QpcFreq() / rate * 0.9)) due = false;
+            if (!due) { UpdateStarting(s, live, now); return; }
+
+            var fb = s.Fb;
+            fb.Reset(s.S.Width, s.S.Height, needsCapture);
+            fb.LowQuality = tel.Level >= 1;
+            fb.Scale = tel.Level >= 2 ? Math.Min(cfg.Performance.RenderScale, 0.5) : cfg.Performance.RenderScale;
+            if (s.Device != null) fb.DisplayRotationRad = input.RotationDeg(s.Device) * Math.PI / 180;
+            int maxPasses = cfg.Performance.MaxPasses;
+            foreach (var e in live)
+            {
+                // Effet confié à Windows (écran retourné) : il n'a rien à dessiner, le calque sert aux autres effets.
+                if (e.HandedOff) continue;
+                var a = e.A;
+                var f = e.Frame;
+                f.P = a.Req.Resolved; f.Presence = a.Anim != null ? a.Anim.Presence(now) : 0; f.NowMs = now;
+                f.ElapsedMs = a.StartedAt >= 0 ? now - a.StartedAt : 0; f.Width = s.S.Width; f.Height = s.S.Height;
+                fb.CurrentLabel = a.Def.Id;
+                int passesBefore = fb.PassCount, layersBefore = fb.LayerCount;
+                if (!e.Guard("update", () => e.Impl.Update(f)) || !e.Guard("render", () => e.Impl.Render(fb, f)))
                 {
-                    // Effet confié à Windows (écran retourné) : il n'a rien à dessiner, le calque sert aux autres effets.
-                    if (e.HandedOff) continue;
-                    var a = e.A;
-                    var f = new EffectFrame
-                    {
-                        P = a.Req.Resolved, Presence = a.Anim != null ? a.Anim.Presence(now) : 0, NowMs = now,
-                        ElapsedMs = a.StartedAt >= 0 ? now - a.StartedAt : 0, Width = s.S.Width, Height = s.S.Height
-                    };
-                    fb.CurrentLabel = a.Def.Id;
-                    if (!e.Guard("update", () => e.Impl.Update(f)) || !e.Guard("render", () => e.Impl.Render(fb, f)))
-                    {
-                        tel.Error("effect_error");
-                        sched.MarkFailed(a.Req.RequestId, "effect_error", e.Error);
-                    }
+                    fb.Truncate(passesBefore, layersBefore);
+                    tel.Error("effect_error");
+                    sched.MarkFailed(a.Req.RequestId, "effect_error", e.Error);
                 }
-                if (needsCapture && fb.NeedsInputMips) { timer.Begin("capture:mips"); s.Cap.EnsureMips(); timer.End(); }
-                fb.Execute(gpu, lib, pool, timer, needsCapture ? s.Cap.Srv : IntPtr.Zero, s.S.BackBuffer, now, now / 1000f);
-                // Traitement = de l'arrivée de l'image à l'envoi du rendu ; l'attente du rafraîchissement (Present) n'en
-                // fait pas partie (sinon le repli de qualité se déclencherait à tort pendant les rotations).
-                long beforePresent = N.QpcNow();
-                if (fresh) s.Stats.Processing.Add((beforePresent - s.Cap.LastArrivalQpc) * 1000.0 / N.QpcFreq());
-                int hr = s.S.Present(animating || overlayOnly);
-                s.Stats.PresentCall.Add((N.QpcNow() - beforePresent) * 1000.0 / N.QpcFreq());
-                // Latence ajoutée (estimation, une image sur 4) : l'image du jeu aurait été affichée à sa composition ;
-                // sa version transformée l'est à la composition suivant notre Present.
-                if (fresh && (++s.Stats.Fresh & 3) == 0)
+                else if (fb.PassCount > maxPasses)
                 {
-                    long next = s.S.NextCompositionQpc();
-                    if (next > s.Cap.LastFrameQpc) s.Stats.AddedLatency.Add((next - s.Cap.LastFrameQpc) * 1000.0 / N.QpcFreq());
-                }
-                if (hr < 0)
-                {
-                    tel.Error("present_failed");
-                    io.Send(Protocol.Event("engine.error", now, J.Map("code", "gpu_error", "message", "Present 0x" + hr.ToString("X8") + " : le moteur s'arrête (Studio le relance)")));
-                    io.Quit("gpu_error", 4);
+                    // Budget de passes dépassé : cet effet seul est retiré (les autres continuent), refus explicite.
+                    fb.Truncate(passesBefore, layersBefore);
+                    e.Fail("trop coûteux : plus de " + maxPasses + " passes GPU par image (performance.max_passes)");
+                    tel.Error("too_costly");
+                    sched.MarkFailed(a.Req.RequestId, "too_costly", e.Error);
                 }
             }
-            s.S.SetShown(want, now);
+            long sig = fb.Signature(lib, now / 1000f);
+            if (!s.PendingFresh && s.S.Shown && s.HasSig && sig == s.LastSig)
+            {
+                // Rien n'a changé (calque immobile, même image du jeu) : ni rendu ni présentation.
+                s.Stats.SkippedStatic++;
+                UpdateStarting(s, live, now);
+                return;
+            }
+            if (needsCapture && fb.NeedsInputMips) s.Cap.EnsureMips();
+            fb.Execute(gpu, lib, pool, timer, needsCapture ? s.Cap.Srv : IntPtr.Zero, s.S.BackBuffer, now, now / 1000f);
+            long beforePresent = N.QpcNow();
+            // Traitement = de l'arrivée de l'image à l'envoi du rendu (attente volontaire d'une cadence plafonnée comprise).
+            if (s.PendingFresh && needsCapture) s.Stats.Processing.Add((beforePresent - s.Cap.LastArrivalQpc) * 1000.0 / N.QpcFreq());
+            int hr = s.S.Present(false);
+            s.Stats.PresentCall.Add((N.QpcNow() - beforePresent) * 1000.0 / N.QpcFreq());
+            // Latence ajoutée (estimation, une image sur 4) : l'image du jeu aurait été affichée à sa composition ;
+            // sa version transformée l'est à la composition suivant notre Present.
+            if (s.PendingFresh && needsCapture && (++s.Stats.Fresh & 3) == 0)
+            {
+                long next = s.S.NextCompositionQpc();
+                if (next > s.Cap.LastFrameQpc) s.Stats.AddedLatency.Add((next - s.Cap.LastFrameQpc) * 1000.0 / N.QpcFreq());
+            }
+            if (hr < 0)
+            {
+                tel.Error("present_failed");
+                io.Send(Protocol.Event("engine.error", now, J.Map("code", "gpu_error", "message", "Present 0x" + hr.ToString("X8") + " : le moteur s'arrête (Studio le relance)")));
+                io.Quit("gpu_error", 4);
+            }
+            s.LastSig = sig; s.HasSig = true; s.LastRenderQpc = N.QpcNow(); s.PendingFresh = false;
+            s.FrameLabels.Clear();
+            fb.Labels(s.FrameLabels);
+            s.S.SetShown(true, now);
+            UpdateStarting(s, live, now);
+        }
+
+        /// Une demande devient « démarrée » à sa première image visible (jamais visible en 15 s : annulée).
+        void UpdateStarting(SurfaceEntry s, List<EffectInstance> live, long now)
+        {
             foreach (var e in live)
             {
                 var a = e.A;
-                if (a.State == ActState.Starting)
-                {
-                    if (s.S.Shown) { e.VisibleSince = s.S.VisibleMs(now); sched.MarkStarted(a.Req.RequestId); }
-                    else if (now - a.AcceptedAt > NeverVisibleMs) sched.Cancel(a.Req.RequestId, true, "never_visible");
-                }
+                if (a.State != ActState.Starting) continue;
+                if (s.S.Shown) { e.VisibleSince = s.S.VisibleMs(now); sched.MarkStarted(a.Req.RequestId); }
+                else if (now - a.AcceptedAt > NeverVisibleMs) sched.Cancel(a.Req.RequestId, true, "never_visible");
             }
         }
 
@@ -412,7 +513,7 @@ namespace Raptoru.Chaos
             nextHousekeeping = now + 250;
             caps.Trim(now, surfaces.Count == 0 ? cfg.Engine.CaptureLingerMs : cfg.Engine.CaptureLingerMs);
             pool.Trim(now, 3000);
-            foreach (var s in surfaces.Values) s.S.KeepOnTop();
+            foreach (var s in surfaces.Values) { s.S.KeepOnTop(); s.GpuFrameEstMs = FrameGpuEstimate(s); }
             // Écran rétabli hors de Chaos (Paramètres de Windows, pilote, autre logiciel) : l'effet perd sa raison d'être.
             foreach (var owner in input.TakeLost())
             {
@@ -424,13 +525,12 @@ namespace Raptoru.Chaos
                 }
                 sched.Cancel(owner, true, "display_changed");
             }
-            timer.Collect((label, ms) => tel.Pass(label, ms));
             if (now >= nextTelemetry)
             {
                 bool idle = surfaces.Count == 0;
                 nextTelemetry = now + (idle ? 5000 : cfg.Engine.TelemetryIntervalMs);
                 var snap = TelemetrySnapshot(now);
-                UpdateDegraded(now, snap);
+                UpdateOverload(now);
                 if (!idle || tel.Errors.Count > 0) io.Send(Protocol.Event("engine.telemetry", now, snap));
                 tel.ResetInterval(now);
                 foreach (var s in surfaces.Values) s.Stats.Clear();
@@ -453,39 +553,91 @@ namespace Raptoru.Chaos
                     "capture_latency_p50_ms", s.Stats.CaptureLatency.P(50), "capture_latency_p95_ms", s.Stats.CaptureLatency.P(95),
                     "present_call_p50_ms", s.Stats.PresentCall.P(50), "present_call_p95_ms", s.Stats.PresentCall.P(95),
                     "added_latency_est_p50_ms", s.Stats.AddedLatency.P(50), "added_latency_est_p95_ms", s.Stats.AddedLatency.P(95),
-                    "refresh_hz", s.S.RefreshHz,
+                    "refresh_hz", s.S.RefreshHz, "rate_hz", Math.Round(RateHz(s), 1), "pacer", s.Pacer != null ? s.Pacer.Mode : null,
+                    "skipped_static", s.Stats.SkippedStatic - s.Stats.SkippedStaticAt, "skipped_hidden", s.Stats.SkippedHidden - s.Stats.SkippedHiddenAt,
+                    "frame_gpu_est_ms", Math.Round(s.GpuFrameEstMs, 3),
                     "black", s.Cap != null && s.Cap.Black, "composition_hz", s.S.CompositionHz(),
                     "capture", s.Cap != null ? s.Cap.Info() : null));
                 s.Stats.CapFramesAt = frames; s.Stats.DroppedAt = dropped; s.Stats.PresentedAt = s.S.Presented;
+                s.Stats.SkippedStaticAt = s.Stats.SkippedStatic; s.Stats.SkippedHiddenAt = s.Stats.SkippedHidden;
             }
             var proc = tel.Process(now);
             return J.Map("surfaces", list.ToArray(), "passes", tel.PassView(), "process", proc, "vram_mb", gpu.VideoMemoryMB(),
                 "loop_max_gap_ms", tel.MaxLoopGapMs, "active", sched.Running.Count(), "queued", sched.Queued.Count(),
                 "captures_open", caps.Count, "surfaces_open", surfaces.Count, "pool_targets", pool.Live, "text_textures", text.Count,
-                "degraded", tel.Degraded, "degraded_reason", tel.DegradedReason, "errors", tel.Errors.ToDictionary(kv => kv.Key, kv => (object)kv.Value));
+                "degraded", tel.Degraded, "degraded_reason", tel.DegradedReason,
+                "performance", J.Map("profile", cfg.Performance.Profile, "level", tel.Level, "over_budget", tel.OverBudget, "gpu_budget_ms", cfg.Performance.GpuBudgetMs),
+                "errors", tel.Errors.ToDictionary(kv => kv.Key, kv => (object)kv.Value));
         }
 
-        /// Repli de qualité (quality = auto) : si le traitement ralentit, le remplissage flou des coins devient noir
-        /// (pas de mipmaps) jusqu'au retour à la normale pendant 5 s.
-        void UpdateDegraded(long now, Dictionary<string, object> snap)
+        /// Temps GPU estimé d'une image de la surface : médiane de chaque passe de la dernière image, plus la copie et les
+        /// mipmaps de la capture s'il y en a eu dans l'intervalle.
+        double FrameGpuEstimate(SurfaceEntry s)
         {
-            if (cfg.Engine.Quality != "auto") { tel.Degraded = false; tel.SlowIntervals = 0; return; }
-            // Médianes et p95 sur l'intervalle, jamais un maximum isolé (le démarrage d'une capture coûte une image) ;
-            // deux intervalles lents d'affilée avant de réduire la qualité.
-            double worst = surfaces.Values.Select(s => s.Stats.Processing.P(95)).DefaultIfEmpty(-1).Max();
-            double passP50 = tel.Passes.Values.Where(p => p.Count > 0).Select(p => p.P(50)).DefaultIfEmpty(-1).Max();
-            bool slow = worst > 8 || passP50 > 4;
-            tel.SlowIntervals = slow ? tel.SlowIntervals + 1 : 0;
-            if (tel.SlowIntervals >= 2 && !tel.Degraded)
+            if (s.FrameLabels.Count == 0) return -1;
+            double t = 0;
+            Samples x;
+            foreach (var l in s.FrameLabels) if (tel.Passes.TryGetValue(l, out x) && x.Count > 0) t += x.P(50);
+            if (s.Cap != null)
+                foreach (var l in new[] { "capture:copy", "capture:mips" }) if (tel.Passes.TryGetValue(l, out x) && x.Count > 0) t += x.P(50);
+            return t;
+        }
+
+        /// Surcharge (docs/chaos/PERFORMANCES_MOTEUR.md) : temps GPU estimé par image au-delà de performance.gpu_budget_ms,
+        /// ou traitement p95 au-delà d'une période d'image, deux intervalles de suite.
+        ///   on_overload = reduire  : un palier de plus, annoncé (engine.degraded) — 1 coins noirs au lieu du flou,
+        ///                            2 passes intermédiaires à demi-résolution, 3 cadence divisée par deux ;
+        ///                            retour d'un palier après 5 s saines (engine.recovered).
+        ///   on_overload = signaler : un événement engine.over_budget, aucune modification.
+        void UpdateOverload(long now)
+        {
+            var pf = cfg.Performance;
+            double gpuMs = -1, lateMs = 0;
+            foreach (var s in surfaces.Values)
             {
-                tel.Degraded = true; tel.HealthySince = -1;
-                tel.DegradedReason = (worst > 8 ? "traitement p95 " + worst + " ms" : "") + (worst > 8 && passP50 > 4 ? ", " : "") + (passP50 > 4 ? "passe GPU médiane " + passP50 + " ms" : "");
-                io.Send(Protocol.Event("engine.degraded", now, J.Map("reason", tel.DegradedReason)));
+                gpuMs = Math.Max(gpuMs, s.GpuFrameEstMs);
+                double rate = RateHz(s), period = 1000.0 / Math.Max(1, rate) * (rate < s.S.RefreshHz - 0.5 ? 2 : 1);
+                double p95 = s.Stats.Processing.P(95);
+                if (p95 > period) lateMs = Math.Max(lateMs, p95 - period);
             }
-            else if (!slow && tel.Degraded)
+            bool overGpu = gpuMs > pf.GpuBudgetMs, late = lateMs > 0;
+            bool slow = overGpu || late;
+            if (pf.OnOverload == "signaler" && tel.Level > 0)
+            {
+                // Passage en « signaler » : la qualité revient tout de suite.
+                tel.Level = 0; tel.Degraded = false; tel.DegradedReason = null;
+                io.Send(Protocol.Event("engine.recovered", now, J.Map("level", 0, "reason", "on_overload_signaler")));
+            }
+            tel.SlowIntervals = slow ? tel.SlowIntervals + 1 : 0;
+            if (tel.SlowIntervals >= 2)
+            {
+                tel.SlowIntervals = 0; tel.HealthySince = -1;
+                string reason = (overGpu ? "GPU " + Math.Round(gpuMs, 2) + " ms par image (budget " + pf.GpuBudgetMs + " ms)" : "") + (overGpu && late ? ", " : "") +
+                    (late ? "traitement en retard de " + Math.Round(lateMs, 1) + " ms" : "");
+                if (pf.OnOverload == "reduire" && tel.Level < 3)
+                {
+                    tel.Level++; tel.Degraded = true; tel.DegradedReason = reason;
+                    string action = tel.Level == 1 ? "coins noirs au lieu du flou" : tel.Level == 2 ? "passes intermédiaires à demi-résolution" : "cadence divisée par deux";
+                    io.Send(Protocol.Event("engine.degraded", now, J.Map("reason", reason, "level", tel.Level, "action", action)));
+                }
+                else if (!tel.OverBudget)
+                {
+                    tel.OverBudget = true;
+                    io.Send(Protocol.Event("engine.over_budget", now, J.Map("reason", reason, "level", tel.Level)));
+                }
+            }
+            else if (!slow && (tel.Level > 0 || tel.OverBudget))
             {
                 if (tel.HealthySince < 0) tel.HealthySince = now;
-                else if (now - tel.HealthySince > 5000) { tel.Degraded = false; tel.DegradedReason = null; io.Send(Protocol.Event("engine.recovered", now, null)); }
+                else if (now - tel.HealthySince >= 5000)
+                {
+                    tel.HealthySince = now;
+                    if (tel.Level > 0) tel.Level--;
+                    tel.OverBudget = false;
+                    tel.Degraded = tel.Level > 0;
+                    if (!tel.Degraded) tel.DegradedReason = null;
+                    io.Send(Protocol.Event("engine.recovered", now, J.Map("level", tel.Level)));
+                }
             }
         }
 
@@ -530,11 +682,14 @@ namespace Raptoru.Chaos
                     d["pool_created"] = pool.Created; d["captures_opened"] = caps.Opened; d["captures_reused"] = caps.Reused;
                     d["guardian"] = J.Map("pid", io.GuardianPid, "restarts", io.GuardianRestarts, "hotkey", io.HotkeyState);
                     d["input"] = input.Describe();
+                    d["pacers"] = pacers.Values.Select(p => (object)J.Map("hz", p.Hz, "mode", p.Mode, "ticks", p.Ticks)).ToArray();
                     d["startup"] = J.Map("ready_ms", tel.ReadyMs, "gpu_init_ms", tel.GpuInitMs, "shader_warm_ms", tel.ShaderWarmMs);
                     return d;
                 case "targets.list": return J.Map("monitors", Targets.Monitors().ToArray(), "windows", Targets.Windows(selfPid).ToArray());
                 case "effect.request":
                     var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def, cfg.Engine.InputEffects));
+                    if (req.Def.GpuPasses > cfg.Performance.MaxPasses)
+                        throw new ProtocolError("too_costly", req.Def.Id + " : " + req.Def.GpuPasses + " passes GPU déclarées, " + cfg.Performance.MaxPasses + " permises (profil " + cfg.Performance.Profile + ")");
                     var a = sched.Submit(req);
                     return Protocol.View(a, Now);
                 case "effect.cancel":
@@ -548,7 +703,8 @@ namespace Raptoru.Chaos
                     var values = J.Obj(b, "values") ?? new Dictionary<string, object>();
                     if (section == "engine") cfg.SetEngine(values);
                     else if (section == "safety") cfg.SetSafety(values);
-                    else throw new ConfigError("invalid_config", "section modifiable : engine ou safety");
+                    else if (section == "performance") cfg.SetPerformance(values);
+                    else throw new ConfigError("invalid_config", "section modifiable : engine, safety ou performance");
                     cfg.Save();
                     return cfg.ToJson();
                 case "config.reset": cfg.Reset(J.Str(b, "section", null)); cfg.Save(); return cfg.ToJson();

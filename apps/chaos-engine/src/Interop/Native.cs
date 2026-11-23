@@ -112,6 +112,12 @@ namespace Raptoru.Chaos
         public uint VendorId, DeviceId, SubSysId, Revision; public UIntPtr DedicatedVideoMemory, DedicatedSystemMemory, SharedSystemMemory;
         public uint LuidLow; public int LuidHigh;
     }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct DXGI_OUTPUT_DESC
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+        public RECT DesktopCoordinates; public int AttachedToDesktop, Rotation; public IntPtr Monitor;
+    }
     [StructLayout(LayoutKind.Sequential)]
     struct DCOMPOSITION_FRAME_STATISTICS
     {
@@ -161,6 +167,10 @@ namespace Raptoru.Chaos
     delegate int DevCreateBlendState(IntPtr self, ref D3D11_BLEND_DESC d, out IntPtr state);                          // 20
     delegate void CtxSetBlendState(IntPtr self, IntPtr state, float[] factor, uint mask);                              // 35
     delegate void CtxClearRtv(IntPtr self, IntPtr rtv, float[] rgba);                                                 // 50
+    delegate void TexGetDesc(IntPtr self, out D3D11_TEXTURE2D_DESC d);                                                // 10 (ID3D11Texture2D)
+    delegate int AdapterEnumOutputs(IntPtr self, uint index, out IntPtr output);                                      // 7 (IDXGIAdapter)
+    delegate int OutGetDesc(IntPtr self, out DXGI_OUTPUT_DESC d);                                                     // 7 (IDXGIOutput)
+    delegate int OutWaitForVBlank(IntPtr self);                                                                       // 10 (IDXGIOutput)
     delegate int Adapter3QueryVideoMemory(IntPtr self, uint node, int group, out DXGI_QUERY_VIDEO_MEMORY_INFO info);   // 14 (IDXGIAdapter3)
 
     [StructLayout(LayoutKind.Sequential)]

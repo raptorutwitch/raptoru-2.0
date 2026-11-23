@@ -89,12 +89,20 @@ interface Config {
     default_mode?: string;
     input_effects?: boolean;
     capture_linger_ms: number;
-    quality: string;
   };
   safety: {
     max_duration_ms: number;
     max_active_effects: number;
     safe_mode: boolean;
+  };
+  performance?: {
+    profile: string;
+    max_fps: number;
+    max_passes: number;
+    render_scale: number;
+    gpu_budget_ms: number;
+    on_overload: string;
+    zero_copy: boolean;
   };
   presets: Record<string, Record<string, Preset>>;
 }
@@ -122,6 +130,13 @@ interface Surf {
   processing_p50_ms: number;
   processing_p95_ms: number;
   black: boolean;
+  rate_hz?: number;
+  refresh_hz?: number;
+  pacer?: string | null;
+  frame_gpu_est_ms?: number;
+  added_latency_est_p50_ms?: number;
+  skipped_static?: number;
+  capture?: { zero_copy?: boolean } | null;
 }
 interface Telemetry {
   surfaces: Surf[];
@@ -130,6 +145,12 @@ interface Telemetry {
   vram_mb: number;
   degraded: boolean;
   degraded_reason: string | null;
+  performance?: {
+    profile: string;
+    level: number;
+    over_budget: boolean;
+    gpu_budget_ms: number;
+  };
 }
 interface Ev {
   event: string;
@@ -218,6 +239,7 @@ const EVENT: Record<string, string> = {
   'effect.rejected': 'refusé',
   'engine.emergency_stop': 'Arrêt d’urgence',
   'engine.degraded': 'Moteur ralenti : qualité réduite',
+  'engine.over_budget': 'Moteur au-delà de son budget (signalé)',
   'engine.recovered': 'Moteur revenu à la normale',
   'engine.error': 'Erreur du moteur',
   'engine.input': 'Affichage',
@@ -230,6 +252,25 @@ const STATE: Record<string, string> = {
 };
 
 const NBSP = String.fromCharCode(160);
+// Profils du moteur (docs/chaos/PERFORMANCES_MOTEUR.md) ; « personnalise » s'affiche seulement s'il est en cours.
+const PROFILES: [string, string][] = [
+  ['qualite', 'Qualité'],
+  ['equilibre', 'Équilibré'],
+  ['economie', 'Économie'],
+];
+function perfSummary(p: NonNullable<Config['performance']>): string {
+  return [
+    p.profile === 'personnalise' ? 'Réglages personnalisés' : null,
+    p.max_fps > 0 ? `${p.max_fps} images/s au plus` : 'cadence de l’écran',
+    `${p.max_passes} passes GPU au plus`,
+    p.render_scale < 1
+      ? `passes intermédiaires à ${Math.round(p.render_scale * 100)} %`
+      : null,
+    `budget GPU ${p.gpu_budget_ms} ms par image`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 const nb = (v: number, digits = 1) =>
   v.toLocaleString('fr-FR', { maximumFractionDigits: digits });
 const ms = (v: number | undefined) =>
@@ -644,14 +685,17 @@ export function mountChaosPage(root: HTMLElement) {
               ? '<dt>Calque</dt><dd>retiré : Windows tient l’écran, aucune capture</dd>'
               : surf
                 ? `<dt>Capture / affichage</dt><dd>${nb(surf.capture_fps)} / ${nb(surf.present_fps)}${NBSP}images/s${surf.dropped ? ` · ${surf.dropped}${NBSP}perdue(s)` : ''}</dd>
-          <dt>Traitement</dt><dd>${ms(surf.processing_p50_ms)} (p95 ${ms(surf.processing_p95_ms)})${surf.black ? ' · <span class="d-tag warn">image noire</span>' : ''}</dd>`
+          <dt>Traitement</dt><dd>${ms(surf.processing_p50_ms)} (p95 ${ms(surf.processing_p95_ms)})${surf.black ? ' · <span class="d-tag warn">image noire</span>' : ''}</dd>
+          <dt>Cadence</dt><dd>${surf.rate_hz !== undefined ? `${nb(surf.rate_hz, 0)}${NBSP}images/s au plus (écran ${nb(surf.refresh_hz ?? 0, 0)}${NBSP}Hz)` : '—'}${surf.pacer ? ` · rythme ${surf.pacer === 'vblank' ? 'de l’écran' : 'minuteur'}` : ''}${surf.capture?.zero_copy ? ' · sans copie' : ''}</dd>
+          ${surf.frame_gpu_est_ms !== undefined && surf.frame_gpu_est_ms >= 0 ? `<dt>GPU par image</dt><dd>${ms(surf.frame_gpu_est_ms)}${t?.performance ? ` (budget ${ms(t.performance.gpu_budget_ms)})` : ''}${surf.added_latency_est_p50_ms !== undefined && surf.added_latency_est_p50_ms >= 0 ? ` · latence ajoutée ≈${NBSP}${ms(surf.added_latency_est_p50_ms)}` : ''}</dd>` : ''}`
                 : ''
           }
           ${passes.length ? `<dt>GPU par passe</dt><dd>${passes.map(([k, v]) => `${esc(k)} ${ms(v.p50_ms)}`).join(' · ')}</dd>` : ''}
           ${t ? `<dt>Processus</dt><dd>CPU ${nb(t.process.cpu_pct, 2)}${NBSP}% · ${nb(t.process.private_mb, 0)}${NBSP}Mo · vidéo ${nb(t.vram_mb, 0)}${NBSP}Mo</dd>` : ''}
         </dl>
         ${g?.hotkey === 'unavailable' ? '<p class="d-note">Ctrl+Maj+F11 est déjà pris par une autre application (par exemple l’ancien panneau du lot 1) : la fermer active l’arrêt d’urgence. STOP ALL reste disponible ici.</p>' : ''}
-        ${t?.degraded ? `<p class="d-note">Qualité réduite : ${esc(t.degraded_reason ?? '')}</p>` : ''}
+        ${t?.degraded ? `<p class="d-note">Qualité réduite (palier ${t.performance?.level ?? 1}) : ${esc(t.degraded_reason ?? '')}</p>` : ''}
+        ${t?.performance?.over_budget ? '<p class="d-note">Le moteur dépasse son budget (signalé, qualité inchangée).</p>' : ''}
         ${e.lastError ? `<p class="d-note bad">${esc(e.lastError)}</p>` : ''}
         <p class="d-faint cx-help">Mesures internes du moteur : la latence ressentie en jeu se mesure avec PresentMon.</p>`,
     );
@@ -699,7 +743,9 @@ export function mountChaosPage(root: HTMLElement) {
         'Moteur',
         'gear',
         `${row('Fenêtre seule (diagnostic) : seulement au premier plan', sw(c.engine.follow_foreground, 'data-cfg="engine.follow_foreground"', 'Fenêtre seule : seulement au premier plan'), 'focus alt tab fenêtre')}
-        ${row('Réduire la qualité si le moteur ralentit', sw(c.engine.quality === 'auto', 'data-quality', 'Réduire la qualité si le moteur ralentit'), 'repli performance qualité auto')}
+        ${row('Performances', seg('data-perf', PROFILES, c.performance?.profile ?? 'equilibre'), 'profil performance qualité économie cadence')}
+        ${c.performance ? `<p class="d-faint cx-help">${esc(perfSummary(c.performance))}</p>` : ''}
+        ${row('Réduire la qualité si le moteur dépasse son budget', sw(c.performance?.on_overload !== 'signaler', 'data-reduce', 'Réduire la qualité si le moteur dépasse son budget'), 'repli performance qualité auto budget')}
         ${numrow('Garder la capture après un effet', fld('data-cfg-num="engine.capture_linger_ms" min="0" max="30000" step="500"', c.engine.capture_linger_ms, 'ms'), 'capture délai')}`,
       )}
        ${grp(
@@ -822,7 +868,19 @@ export function mountChaosPage(root: HTMLElement) {
         },
         on ? 'Méthode Windows (expérimentale) activée' : 'Méthode calque',
       );
-    } else if (b.closest('[data-fill]') && b.hasAttribute('data-fill'))
+    } else if (b.hasAttribute('data-perf'))
+      void run(
+        null,
+        async () => {
+          await postJson('/api/chaos/config', {
+            section: 'performance',
+            values: { profile: b.getAttribute('data-perf') },
+          });
+          await refresh();
+        },
+        'Profil de performances enregistré',
+      );
+    else if (b.closest('[data-fill]') && b.hasAttribute('data-fill'))
       void savePreset(
         (x) => ((x.params ??= {}).fill = b.getAttribute('data-fill')),
       );
@@ -862,10 +920,10 @@ export function mountChaosPage(root: HTMLElement) {
         (x) =>
           (((x.transition ??= {}).out ??= {}).duration_ms = Number(t.value)),
       );
-    else if (t.hasAttribute('data-quality'))
+    else if (t.hasAttribute('data-reduce'))
       void setCfg(
-        'engine.quality',
-        (t as HTMLInputElement).checked ? 'auto' : 'high',
+        'performance.on_overload',
+        (t as HTMLInputElement).checked ? 'reduire' : 'signaler',
       );
     else if (t.dataset.cfg)
       void setCfg(t.dataset.cfg, (t as HTMLInputElement).checked);

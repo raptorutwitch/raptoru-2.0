@@ -129,6 +129,18 @@ float4 ps(V i) : SV_Target { return src.SampleLevel(smp, i.uv, 0) * misc.z; }");
             return s;
         }
 
+        /// Le shader lit-il le temps (misc.x) ? Alors son image change à chaque instant (pas d'image réutilisée).
+        public bool UsesTime(string name)
+        {
+            bool t;
+            if (usesTime.TryGetValue(name, out t)) return t;
+            string body;
+            t = Bodies.TryGetValue(name, out body) && body.Contains("misc.x");
+            usesTime[name] = t;
+            return t;
+        }
+        readonly Dictionary<string, bool> usesTime = new Dictionary<string, bool>();
+
         /// Compile tous les shaders déclarés (au démarrage du moteur : aucun à-coup au premier effet).
         public void Warm() { foreach (var n in new List<string>(Bodies.Keys)) Pixel(n); }
 

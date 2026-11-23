@@ -137,7 +137,11 @@ namespace Raptoru.Chaos
             copyRegion(Context, dst, 0, 0, 0, 0, src, 0, ref box);
         }
         public void GenerateMips(IntPtr srv) { genMips(Context, srv); }
-        public void Clear(IntPtr rtv, float r, float g, float b, float a) { clear(Context, rtv, new[] { r, g, b, a }); }
+        static readonly float[] Transparent = new float[4];
+        public void Clear(IntPtr rtv, float r, float g, float b, float a)
+        {
+            clear(Context, rtv, r == 0 && g == 0 && b == 0 && a == 0 ? Transparent : new[] { r, g, b, a });
+        }
 
         /// Prépare une passe : cible, fenêtre d'affichage, mélange (opaque ou alpha prémultiplié).
         public void Target(IntPtr rtv, uint w, uint h, bool blend)

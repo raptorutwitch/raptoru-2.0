@@ -264,8 +264,9 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
       expect(d.implemented.sort()).toEqual(reg.effects.map((e) => e.id).sort());
       expect(await c.call('config.get')).toMatchObject({
         schema: 'raptoru.chaos.config',
-        version: 4,
+        version: 5,
         engine: { default_mode: 'window', input_effects: false },
+        performance: { profile: 'equilibre', on_overload: 'reduire' },
       });
       const t = await c.call<{ monitors: { device: string }[] }>(
         'targets.list',

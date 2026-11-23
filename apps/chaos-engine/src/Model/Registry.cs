@@ -43,6 +43,8 @@ namespace Raptoru.Chaos
         /// Transformation d'entrée liée (couche Entrées), appliquée quand la cible est un écran entier ; null = aucune.
         public string Input;
         public int Version, DefaultDurationMs = 10000;
+        /// Passes GPU déclarées (registre gpu.passes) : refus à la demande si elles dépassent performance.max_passes.
+        public int GpuPasses = 1;
         public bool Internal;
         public SlotDef Slot;
         public List<ParamDef> Params = new List<ParamDef>();
@@ -151,6 +153,7 @@ namespace Raptoru.Chaos
             if (!reg.Slots.TryGetValue(e.SlotId, out e.Slot)) throw new RegistryError(where + "emplacement inconnu " + e.SlotId);
             if (!new[] { "queue", "replace", "reject", "extend" }.Contains(e.OnConflict)) throw new RegistryError(where + "on_conflict invalide");
             e.Primitive = J.Str(J.Obj(o, "gpu"), "primitive", "");
+            e.GpuPasses = (int)J.Num(J.Obj(o, "gpu"), "passes", 1);
             e.Input = J.Str(o, "input", null);
             if (e.Input != null && !reg.InputEffects.ContainsKey(e.Input)) throw new RegistryError(where + "transformation d'entrée inconnue " + e.Input);
             e.DefaultDurationMs = (int)J.Num(J.Obj(o, "duration"), "default_ms", 10000);

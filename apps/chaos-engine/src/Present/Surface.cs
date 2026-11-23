@@ -28,6 +28,8 @@ namespace Raptoru.Chaos
         public long Presented;
         /// Fréquence de l'écran qui porte la cible (Hz).
         public readonly int RefreshHz;
+        /// Écran qui porte la cible (rythmeur d'affichage).
+        public readonly IntPtr Hmon;
         public bool Shown { get { return shown; } }
         public uint Width { get { return w; } }
         public uint Height { get { return h; } }
@@ -41,7 +43,8 @@ namespace Raptoru.Chaos
             TargetRoot = N.GetAncestor(target, N.GA_ROOTOWNER);
             if (TargetRoot == IntPtr.Zero) TargetRoot = target;
             bounds = monitorMode ? N.MonitorRectOf(hmon) : N.FrameBounds(target);
-            RefreshHz = N.RefreshHz(monitorMode ? hmon : N.MonitorFromWindow(target, 2));
+            Hmon = monitorMode ? hmon : N.MonitorFromWindow(target, 2);
+            RefreshHz = N.RefreshHz(Hmon);
             w = width; h = height;
             hwnd = CreateWindow(bounds.Left, bounds.Top, (int)w, (int)h);
             if (monitorMode && !N.SetWindowDisplayAffinity(hwnd, N.WDA_EXCLUDEFROMCAPTURE))
@@ -144,7 +147,8 @@ namespace Raptoru.Chaos
             if (shown) N.SetWindowPos(hwnd, N.HWND_TOPMOST, 0, 0, 0, 0, N.SWP_NOMOVE | N.SWP_NOSIZE | N.SWP_NOACTIVATE | N.SWP_NOOWNERZORDER);
         }
 
-        /// Présente : immédiat hors animation (Windows prend l'image la plus récente), à la synchro pendant une animation.
+        /// Présente. Toujours sans attente (vsync = false) : Windows affiche l'image la plus récente à la composition de
+        /// l'écran ; la cadence vient des captures et du rythmeur de l'écran (Present(1) suivrait l'écran principal).
         public int Present(bool vsync)
         {
             int hr = present(swapchain, vsync ? 1u : 0u, 0);

@@ -15,6 +15,8 @@
 // Usage : chaos-bench.exe [--screen \\.\DISPLAY2] [--scenarios aucun,repos,flip-coupe,flip-anime,passes,calque]
 //                         [--probe-size 1280x720|full] [--probe-fps 240 (0 = sans limite)] [--probe-load 0]
 //                         [--hold-ms 8000] [--anim-ms 3000] [--label texte] [--out <fichier.json>]
+//                         [--engine <ChaosEngine.exe>] (comparer deux versions avec le même banc)
+//                         [--set performance.zero_copy=false,performance.profile=economie] (réglages du moteur)
 //                         [--presentmon <PresentMon.exe> --process <jeu.exe>] [--autorise-pendant-un-jeu]
 using System;
 using System.Collections.Generic;
@@ -201,6 +203,7 @@ float4 ps(V i) : SV_Target {
             public Process ProbeProc;
             public EngineProc Engine;
             public string EngineExe, Dir;
+            public List<KeyValuePair<string, object>> Sets = new List<KeyValuePair<string, object>>();
             public GpuTimes Gpu;
         }
 
@@ -227,7 +230,14 @@ float4 ps(V i) : SV_Target {
             x.Dir = Path.Combine(Path.GetTempPath(), "chaos-bench-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
             Directory.CreateDirectory(x.Dir);
             string self = Process.GetCurrentProcess().MainModule.FileName;
-            x.EngineExe = Path.Combine(Path.GetDirectoryName(self), "ChaosEngine.exe");
+            x.EngineExe = Path.GetFullPath(Arg(a, "--engine", Path.Combine(Path.GetDirectoryName(self), "ChaosEngine.exe")));
+            foreach (var kv in Arg(a, "--set", "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = kv.Split('=');
+                double d; bool bo;
+                object v = bool.TryParse(parts[1], out bo) ? (object)bo : double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out d) ? (object)d : parts[1];
+                x.Sets.Add(new KeyValuePair<string, object>(parts[0], v));
+            }
             int hz = N.RefreshHz(N.MonitorByDevice(x.Dev));
             Console.WriteLine("Banc Chaos : " + x.Dev + " (" + hz + " Hz), jeu témoin " + size + " à " + (fps > 0 ? fps + " i/s visées" : "cadence libre") +
                 ", charge " + load + " ; scénarios " + string.Join(", ", scenarios));
@@ -303,6 +313,7 @@ float4 ps(V i) : SV_Target {
             }
             string outFile = Arg(a, "--out", Path.Combine(x.Dir, "bench.json"));
             File.WriteAllText(outFile, J.Write(J.Map("label", Arg(a, "--label", ""), "date", DateTime.Now.ToString("s"), "engine_version", EngineVersion(x.EngineExe),
+                "engine", x.EngineExe, "settings", x.Sets.Select(kv => kv.Key + "=" + kv.Value).ToArray(),
                 "screen", x.Dev, "refresh_hz", hz, "adapter", adapterGpu.Adapter, "gpu_counters", x.Gpu.Ok,
                 "probe", J.Map("size", size, "fps", fps, "load", load, "width", J.Num(hello, "width", 0), "height", J.Num(hello, "height", 0)),
                 "hold_ms", x.Hold, "anim_ms", x.AnimMs, "pdh_collect_ms", Math.Round(x.Gpu.LastCollectMs, 1), "scenarios", report)));
@@ -340,6 +351,12 @@ float4 ps(V i) : SV_Target {
             if (x.Engine.Event("engine.ready", 10000) == null) throw new Exception("moteur non prêt");
             x.Engine.Pings(500);
             x.Engine.Call("config.set", J.Map("section", "engine", "values", J.Map("telemetry_interval_ms", 500, "input_effects", false)));
+            foreach (var kv in x.Sets)
+            {
+                var sec = kv.Key.Split('.');
+                var r = x.Engine.Call("config.set", J.Map("section", sec[0], "values", J.Map(sec[1], kv.Value)));
+                if (r == null || J.Has(r, "error")) throw new Exception("réglage refusé : " + kv.Key + " (" + (r != null ? J.Write(r["error"]) : "pas de réponse") + ")");
+            }
             Thread.Sleep(1500); // fin du démarrage (gardien, premières mesures)
         }
 

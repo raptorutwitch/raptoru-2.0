@@ -63,7 +63,17 @@ namespace Raptoru.Chaos
         public string InputDevice;
         public bool HoldsCapture, HandedOff;
         public long ExitPrepAt = -1;
+        /// Ce que l'effet reçoit à chaque image (réutilisé : aucune allocation par image).
+        public readonly EffectFrame Frame = new EffectFrame();
         public EffectInstance(Activation a, Effect impl) { A = a; Impl = impl; }
+
+        /// Arrêt immédiat de l'instance (erreur ou refus du moteur), ressources libérées.
+        public void Fail(string error)
+        {
+            Error = error;
+            State = InstanceState.Failed;
+            try { Impl.Dispose(); } catch (Exception) { }
+        }
 
         /// Exécute une étape du cycle de vie ; une exception rend l'instance Failed sans rien propager.
         public bool Guard(string phase, Action step)
@@ -72,9 +82,7 @@ namespace Raptoru.Chaos
             try { step(); return true; }
             catch (Exception e)
             {
-                Error = phase + " : " + e.GetType().Name + " " + e.Message;
-                State = InstanceState.Failed;
-                try { Impl.Dispose(); } catch (Exception) { }
+                Fail(phase + " : " + e.GetType().Name + " " + e.Message);
                 return false;
             }
         }

@@ -26,6 +26,8 @@ namespace Raptoru.Chaos
     sealed class SurfaceStats
     {
         public long CapFramesAt, DroppedAt, PresentedAt, Fresh;
+        /// Images non redessinées : identiques à la précédente, ou cible masquée.
+        public long SkippedStatic, SkippedHidden, SkippedStaticAt, SkippedHiddenAt;
         /// Arrivée de l'image → rendu envoyé (CPU du moteur, hors attente de Present).
         public readonly Samples Processing = new Samples();
         /// Composition de l'image du jeu par Windows → prise en charge par le moteur.
@@ -45,7 +47,9 @@ namespace Raptoru.Chaos
         public long ReadyMs, GpuInitMs, ShaderWarmMs, LastAt, MaxLoopGapMs, LastLoopAt = -1;
         public double LastCpuMs;
         int gc0, gc1, gc2;
-        public bool Degraded;
+        public bool Degraded, OverBudget;
+        /// Palier de réduction en cours (0 = aucun ; performance.on_overload = reduire).
+        public int Level;
         public string DegradedReason;
         public long DegradedSince = -1, HealthySince = -1;
         public int SlowIntervals;
