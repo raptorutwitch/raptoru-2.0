@@ -10,6 +10,7 @@
 //   Q3 la capture WGC le contient-elle encore une fois masqué ?
 //   Q4 si le processus qui l'a masqué est tué, le curseur revient-il seul ? sinon, un autre processus (le gardien)
 //      peut-il le rétablir ?
+//   Q5 si ce processus GÈLE (vivant, plus de battement), le gardien de --cursor-demo le rétablit-il en moins d'1,5 s ?
 // Usage : chaos-bench.exe --cursor-proto [--maintenant]
 using System;
 using System.Diagnostics;
@@ -116,6 +117,8 @@ namespace Raptoru.Chaos
             return best >= 20 ? "oui (" + best + " pixels)" : "non (" + best + " pixels)";
         }
 
+        static void Restore() { bool i = MagInitialize(); MagShowSystemCursor(true); if (i) MagUninitialize(); }
+
         /// Processus enfant : masque le curseur et attend d'être tué (test de plantage).
         public static int Child()
         {
@@ -187,6 +190,17 @@ namespace Raptoru.Chaos
                 say("    rétablissement par un autre processus (le gardien) : Desktop Duplication « " + again + " »" +
                     (again == "invisible" ? " — CURSEUR TOUJOURS MASQUÉ : fermer puis rouvrir la session Windows" : ""));
             }
+            // Q5 : processus masqueur gelé (vivant mais muet) ; le gardien de la démo, sans battement, doit rétablir.
+            var frozen = Process.Start(new ProcessStartInfo(self, "--cursor-hide-child") { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true });
+            string fl = frozen.StandardOutput.ReadLine();
+            var guard = Process.Start(new ProcessStartInfo(self, "--cursor-guard " + frozen.Id) { UseShellExecute = false, RedirectStandardInput = true, CreateNoWindow = true });
+            var sw5 = Stopwatch.StartNew();
+            string state5 = DdPointer(hmon);
+            while (sw5.ElapsedMilliseconds < 4000 && state5 != "visible") { Thread.Sleep(100); state5 = DdPointer(hmon); }
+            say("Q5 processus masqueur gelé (" + fl + "), gardien sans battement : curseur « " + state5 + " » après " + sw5.ElapsedMilliseconds + " ms, masqueur " +
+                (frozen.WaitForExit(2000) ? "arrêté par le gardien" : "encore vivant"));
+            try { if (!frozen.HasExited) frozen.Kill(); guard.StandardInput.Close(); guard.WaitForExit(2000); } catch (Exception) { }
+            Restore();
             string outFile = Path.Combine(Path.GetTempPath(), "chaos-cursor-proto-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".txt");
             File.WriteAllLines(outFile, report);
             Console.WriteLine("Résultats : " + outFile);
