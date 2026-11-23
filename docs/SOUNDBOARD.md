@@ -75,7 +75,17 @@ aussitôt** dans la Soundboard des viewers, sans nouveau ZIP. L'aléatoire tire 
    s'affiche et s'achète déjà, seul son aperçu répond « Aperçu indisponible ». Ensuite plus de ZIP pour un son.
 4. Bot : rien.
 
-## 4. Reste (non bloquant)
+## 4. Essayer dans le Lab, sans toucher au Studio installé
+
+`Documents\Raptoru 2.0 - Worktrees\Lab Soundboard (essai).cmd` (hors Git) lance, depuis ce worktree, la pile Lab isolée
+(`apps/studio/server/e2e/core-lab-stack.ts`) sur le port **4520** : le Core principal en mode Lab sur une base en
+mémoire, Studio et l'extension servis au navigateur, `E2E_CORE_LAB_REAL_SOUND=1` (les sons achetés sont joués par le
+vrai lecteur de la page Soundboard). Ports 4520, 4521, 4523 ; ni Docker, ni Twitch, ni OBS, ni Production ; tout est
+effacé à la fermeture. Studio : `http://127.0.0.1:4520/?tab=soundboard` ; viewer :
+`http://127.0.0.1:4520/ext/mobile.html?labRole=viewer`. Interface web compilée d'avance
+(`npm run build -w @raptoru/studio-web` après une modification).
+
+## 5. Reste (non bloquant)
 
 - Fichiers publiés plus jamais utilisés : jamais effacés (quelques Mo par son) ; un ménage reste à écrire.
 - WAV : 5 à 10 fois plus lourd qu'un MP3 (un aperçu de 3 s ≈ 260 Ko en mono). Un encodeur MP3 ou Opus serait une

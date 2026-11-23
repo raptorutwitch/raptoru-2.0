@@ -178,7 +178,7 @@ Triage : [CLEANUP_LATER.md](CLEANUP_LATER.md) § 2. Carte : [WORKSPACES.md](WORK
 | `study/croupier-ia-etude` (`2f64cc24`, locale)                             | étude de la personnalité IA, archivée | **suspendu** (§ 6), ne pas pousser |
 | `feat/cosmetic-shop` (PR #44) ; `docs/*` (PR #34, #36, #38, #40, #48)      | dépassés                              | à fermer sur accord                |
 | testeurs de l'extension en libre-service (Core `446e945c`, site `96b009f`) | file semi-automatique, locale         | activation sur GO                  |
-| `feat/soundboard-studio-import` (locale, worktree `soundboard`)            | ajouter un son depuis Studio          | GO d'Antoni (SOUNDBOARD.md § 3)    |
+| `feat/soundboard-studio-import` (PR #126, worktree `soundboard`)           | ajouter un son depuis Studio          | GO d'Antoni (SOUNDBOARD.md § 3)    |
 
 ### 2.4 Chatbox Raptoru : priorité de développement (direction décidée le 22/11)
 
