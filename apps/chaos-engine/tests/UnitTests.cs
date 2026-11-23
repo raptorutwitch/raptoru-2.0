@@ -277,6 +277,57 @@ namespace Raptoru.Chaos
                 finally { try { Directory.Delete(dir, true); } catch (Exception) { } }
             });
 
+            Case("écrans : ordre réel gauche → droite, noms, choix stables, écran débranché", () =>
+            {
+                // Le PC d'Antoni : DISPLAY1 principal à droite (0,0), DISPLAY2 à gauche (-1920).
+                var pc = new List<ScreenInfo>
+                {
+                    new ScreenInfo { Device = @"\\.\DISPLAY1", X = 0, Y = 0, Width = 2560, Height = 1440, Primary = true },
+                    new ScreenInfo { Device = @"\\.\DISPLAY2", X = -1920, Y = 165, Width = 1920, Height = 1080 },
+                };
+                var o = ScreenLayout.Ordered(pc);
+                True(o[0].Device.EndsWith("DISPLAY2") && o[1].Device.EndsWith("DISPLAY1"), "ordre selon la position, pas le numéro");
+                True(ScreenLayout.Label(0, 2) == "Écran gauche" && ScreenLayout.Label(1, 2) == "Écran droit" && ScreenLayout.Key(0, 2) == "left" && ScreenLayout.Key(1, 2) == "right", "noms et clés à deux écrans");
+                True(ScreenLayout.Label(1, 3) == "Écran du milieu" && ScreenLayout.Key(1, 3) == "s:1", "écran du milieu");
+                string err;
+                True(ScreenLayout.Resolve("left", o, out err)[0].Device.EndsWith("DISPLAY2") && err == null, "gauche");
+                True(ScreenLayout.Resolve("right", o, out err)[0].Device.EndsWith("DISPLAY1"), "droite");
+                True(ScreenLayout.Resolve("primary", o, out err)[0].Primary, "principal");
+                True(ScreenLayout.Resolve("all", o, out err).Count == 2, "tous les écrans, de gauche à droite");
+                var three = ScreenLayout.Ordered(pc.Concat(new[] { new ScreenInfo { Device = "C", X = 2560, Y = 0, Width = 1920, Height = 1080 } }));
+                True(ScreenLayout.Resolve("s:1", three, out err)[0].Device.EndsWith("DISPLAY1") && err == null, "milieu à trois écrans");
+                True(ScreenLayout.Resolve("s:1", o, out err).Count == 0 && err != null && err.Contains("n'existe plus"), "écran du milieu débranché : refus lisible, pas de remplacement silencieux");
+                True(ScreenLayout.Resolve("left", o.Take(1).ToList(), out err)[0].Device.EndsWith("DISPLAY2") && ScreenLayout.Resolve("right", o.Take(1).ToList(), out err).Count == 1,
+                    "un seul écran : gauche et droite le désignent");
+                True(!ScreenLayout.Valid("DISPLAY2") && !ScreenLayout.Valid("s:x") && ScreenLayout.Valid("s:2"), "choix invalides refusés");
+            });
+
+            Case("réglages d'un effet : défauts, persistance, validation", () =>
+            {
+                string dir = Path.Combine(Path.GetTempPath(), "chaos-unit-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(dir);
+                try
+                {
+                    string path = Path.Combine(dir, "config.json");
+                    var c = new ConfigStore(reg, path);
+                    var d = c.Effect("flip");
+                    True(d.Enabled && d.Screen == "primary" && d.Cursor, "défauts : disponible, écran principal, curseur retourné");
+                    c.SetEffects(J.Map("flip", J.Map("screen", "right", "cursor", false)));
+                    c.SetEffects(J.Map("flip", J.Map("enabled", false)));
+                    c.Save();
+                    var c2 = new ConfigStore(reg, path); c2.Load();
+                    var f = c2.Effect("flip");
+                    True(f.Screen == "right" && !f.Cursor && !f.Enabled, "relus à l'identique (chaque valeur gardée)");
+                    True(J.Obj(J.Obj(c2.ToJson(), "effects"), "flip") != null && J.Obj(J.Obj(c2.ToJson(), "effects"), "diag.tint") != null, "chaque effet du registre exposé");
+                    Eq("unknown_effect", Throws<ConfigError>(() => c2.SetEffects(J.Map("nope", J.Map("screen", "left")))), "effet inconnu");
+                    Eq("invalid_config", Throws<ConfigError>(() => c2.SetEffects(J.Map("flip", J.Map("screen", "DISPLAY2")))), "écran invalide");
+                    True(c2.Effect("flip").Screen == "right", "un réglage refusé ne change rien");
+                    c2.Reset("effects");
+                    True(c2.Effect("flip").Screen == "primary", "réinitialisation de la section");
+                }
+                finally { try { Directory.Delete(dir, true); } catch (Exception) { } }
+            });
+
             Case("curseur : le retournement fait suivre l'image au curseur ; déclaration validée ; réglage moteur", () =>
             {
                 True(reg.Get("flip").Cursor == "follow" && reg.Get("diag.tint").Cursor == null && reg.Get("diag.marker").Cursor == null, "flip : curseur suivi, diagnostics inchangés");

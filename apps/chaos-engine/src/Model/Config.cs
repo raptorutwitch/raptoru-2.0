@@ -4,6 +4,7 @@
 //   3. réglages globaux du moteur       → engine ;
 //   4. limites de sécurité              → safety (toujours dans les bornes absolues du registre) ;
 //   5. performances                     → performance (profil + réglages explicites, docs/chaos/PERFORMANCES_MOTEUR.md) ;
+//   5 bis. réglages d'un effet          → effects.<effet> (écran, disponible, curseur ; fiche de l'effet dans Studio) ;
 //   6. réglages commerciaux (prix, délais d'achat, remboursements) → AUCUN : ils appartiennent au Core.
 // Fichier versionné (schema + version), migré à la lecture (sauvegarde de l'ancien), écrit de façon atomique.
 using System;
@@ -76,6 +77,22 @@ namespace Raptoru.Chaos
         }
     }
 
+    /// Réglages d'un effet propres au streamer (fiche de l'effet dans Studio). Ses paramètres visuels, sa durée et ses
+    /// transitions sont dans presets.<effet>.default.
+    sealed class EffectSettings
+    {
+        /// Disponible pour les déclenchements communautaires (Core, extension, points de chaîne). Studio peut toujours
+        /// le tester ou l'activer à la main.
+        public bool Enabled = true;
+        /// Écran(s) visé(s) : left, right, s:<rang>, primary, all (Model/ScreenLayout).
+        public string Screen = "primary";
+        /// Curseur retourné avec l'image (effets du registre déclarant cursor = follow).
+        public bool Cursor = true;
+
+        public EffectSettings Clone() { return (EffectSettings)MemberwiseClone(); }
+        public Dictionary<string, object> ToJson() { return J.Map("enabled", Enabled, "screen", Screen, "cursor", Cursor); }
+    }
+
     sealed class ConfigError : Exception
     {
         public readonly string Code;
@@ -91,6 +108,7 @@ namespace Raptoru.Chaos
         public EngineSettings Engine = new EngineSettings();
         public SafetyConfig Safety = new SafetyConfig();
         public PerformanceConfig Performance = new PerformanceConfig();
+        public Dictionary<string, EffectSettings> Effects = new Dictionary<string, EffectSettings>();
         public Dictionary<string, Dictionary<string, Preset>> Presets = new Dictionary<string, Dictionary<string, Preset>>();
         public readonly List<string> LoadNotes = new List<string>();
 
@@ -183,6 +201,13 @@ namespace Raptoru.Chaos
             if (s != null) TrySet(notes, "safety", () => SetSafety(s));
             var pf = J.Obj(root, "performance");
             if (pf != null) TrySet(notes, "performance", () => SetPerformance(pf));
+            var ef = J.Obj(root, "effects");
+            if (ef != null)
+                foreach (var kv in ef)
+                {
+                    var one = J.Map(kv.Key, kv.Value);
+                    TrySet(notes, "effects." + kv.Key, () => SetEffects(one));
+                }
             var p = J.Obj(root, "presets");
             if (p != null)
                 foreach (var eff in p)
@@ -214,6 +239,32 @@ namespace Raptoru.Chaos
             if (n.CaptureLingerMs < 0 || n.CaptureLingerMs > 30000) throw new ConfigError("invalid_config", "capture_linger_ms : 0 à 30 000");
             if (n.TelemetryIntervalMs < 250 || n.TelemetryIntervalMs > 10000) throw new ConfigError("invalid_config", "telemetry_interval_ms : 250 à 10 000");
             Engine = n;
+        }
+
+        /// Réglages d'un effet (valeurs par défaut s'il n'a jamais été réglé).
+        public EffectSettings Effect(string id)
+        {
+            EffectSettings e;
+            return Effects.TryGetValue(id, out e) ? e : new EffectSettings();
+        }
+
+        /// { "<effet>": { enabled?, screen?, cursor? } } : seules les valeurs fournies changent ; tout est validé.
+        public void SetEffects(Dictionary<string, object> v)
+        {
+            var next = new Dictionary<string, EffectSettings>();
+            foreach (var kv in v)
+            {
+                if (reg.Get(kv.Key) == null) throw new ConfigError("unknown_effect", "effet inconnu : " + kv.Key);
+                var o = kv.Value as Dictionary<string, object>;
+                if (o == null) throw new ConfigError("invalid_config", "effects." + kv.Key + " : objet attendu");
+                var n = Effect(kv.Key).Clone();
+                n.Enabled = J.Bool(o, "enabled", n.Enabled);
+                n.Cursor = J.Bool(o, "cursor", n.Cursor);
+                n.Screen = J.Str(o, "screen", n.Screen);
+                if (!ScreenLayout.Valid(n.Screen)) throw new ConfigError("invalid_config", "effects." + kv.Key + ".screen : left, right, s:<rang>, primary ou all");
+                next[kv.Key] = n;
+            }
+            foreach (var kv in next) Effects[kv.Key] = kv.Value;
         }
 
         /// Un profil applique toutes ses valeurs ; une valeur fournie à la main donne le profil « personnalise ».
@@ -276,8 +327,9 @@ namespace Raptoru.Chaos
             if (section == null || section == "engine") Engine = new EngineSettings();
             if (section == null || section == "safety") Safety = new SafetyConfig();
             if (section == null || section == "performance") Performance = new PerformanceConfig();
+            if (section == null || section == "effects") Effects.Clear();
             if (section == null || section == "presets") Presets.Clear();
-            if (section != null && section != "engine" && section != "safety" && section != "performance" && section != "presets") throw new ConfigError("invalid_config", "section inconnue : " + section);
+            if (section != null && section != "engine" && section != "safety" && section != "performance" && section != "effects" && section != "presets") throw new ConfigError("invalid_config", "section inconnue : " + section);
         }
 
         public Dictionary<string, object> ToJson()
@@ -289,6 +341,7 @@ namespace Raptoru.Chaos
                                 "telemetry_interval_ms", Engine.TelemetryIntervalMs),
                 "safety", J.Map("max_duration_ms", Safety.MaxDurationMs, "max_active_effects", Safety.MaxActiveEffects, "safe_mode", Safety.SafeMode),
                 "performance", Performance.ToJson(),
+                "effects", reg.Effects.Keys.ToDictionary(id => id, id => (object)Effect(id).ToJson()),
                 "presets", presets);
         }
 

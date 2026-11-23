@@ -305,7 +305,7 @@ namespace Raptoru.Chaos
         {
             if (!cfg.Engine.CursorFollow || (s.Device != null && input.RotationDeg(s.Device) != 0)) return false;
             foreach (var e in s.Effects)
-                if (e.A.Def.Cursor == "follow" && e.State == InstanceState.Running && !e.HandedOff &&
+                if (e.A.Def.Cursor == "follow" && cfg.Effect(e.A.Def.Id).Cursor && e.State == InstanceState.Running && !e.HandedOff &&
                     (e.A.State == ActState.Active || e.A.State == ActState.Exiting || e.A.State == ActState.Starting)) return true;
             return false;
         }
@@ -747,14 +747,21 @@ namespace Raptoru.Chaos
                 case "targets.list": return J.Map("monitors", Targets.Monitors().ToArray(), "windows", Targets.Windows(selfPid).ToArray());
                 case "effect.request":
                     var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def, cfg.Engine.InputEffects));
-                    if (req.Def.GpuPasses > cfg.Performance.MaxPasses)
-                        throw new ProtocolError("too_costly", req.Def.Id + " : " + req.Def.GpuPasses + " passes GPU déclarées, " + cfg.Performance.MaxPasses + " permises (profil " + cfg.Performance.Profile + ")");
+                    CheckAllowed(req);
                     var a = sched.Submit(req);
                     return Protocol.View(a, Now);
                 case "effect.cancel":
                     string rid = J.Str(b, "request_id", null);
                     if (sched.Find(rid) == null) throw new ProtocolError("unknown_request", "demande inconnue : " + rid);
                     return J.Map("canceled", sched.Cancel(rid, J.Bool(b, "immediate", false), J.Str(b, "reason", "canceled")));
+                case "effect.activate": return Activate(b);
+                case "effect.stop":
+                    string eid = J.Str(b, "effect", null);
+                    if (reg.Get(eid) == null) throw new ProtocolError("unknown_effect", "effet inconnu : " + eid);
+                    int stopped = 0;
+                    foreach (var act in sched.Running.Concat(sched.Queued).Where(x => x.Def.Id == eid).ToList())
+                        if (sched.Cancel(act.Req.RequestId, J.Bool(b, "immediate", false), "stopped")) stopped++;
+                    return J.Map("effect", eid, "stopped", stopped);
                 case "stop_all": return J.Map("stopped", sched.StopAll(J.Str(b, "reason", "stop_all")));
                 case "config.get": return cfg.ToJson();
                 case "config.set":
@@ -763,7 +770,8 @@ namespace Raptoru.Chaos
                     if (section == "engine") cfg.SetEngine(values);
                     else if (section == "safety") cfg.SetSafety(values);
                     else if (section == "performance") cfg.SetPerformance(values);
-                    else throw new ConfigError("invalid_config", "section modifiable : engine, safety ou performance");
+                    else if (section == "effects") cfg.SetEffects(values);
+                    else throw new ConfigError("invalid_config", "section modifiable : engine, safety, performance ou effects");
                     cfg.Save();
                     return cfg.ToJson();
                 case "config.reset": cfg.Reset(J.Str(b, "section", null)); cfg.Save(); return cfg.ToJson();
@@ -776,6 +784,50 @@ namespace Raptoru.Chaos
                     return null;
             }
             throw new ProtocolError("unknown_command", c.Name);
+        }
+
+        /// Durée d'un essai depuis la fiche (Tester) : assez pour voir l'entrée, l'effet et la sortie.
+        const int TestMs = 5000;
+
+        /// Refus communs à toute demande : coût déclaré au-delà du profil ; effet désactivé pour une source communautaire.
+        void CheckAllowed(EffectRequest req)
+        {
+            if (req.Def.GpuPasses > cfg.Performance.MaxPasses)
+                throw new ProtocolError("too_costly", req.Def.Id + " : " + req.Def.GpuPasses + " passes GPU déclarées, " + cfg.Performance.MaxPasses + " permises (profil " + cfg.Performance.Profile + ")");
+            if (!cfg.Effect(req.Def.Id).Enabled && req.SourceKind != "studio" && req.SourceKind != "test")
+                throw new ProtocolError("effect_disabled", req.Def.Label + " est désactivé (fiche de l'effet dans Studio)");
+        }
+
+        /// Déclenche un effet avec SES réglages (fiche de l'effet) : écran(s) enregistré(s), préréglage « default ».
+        /// kind = test : 5 s au plus ; manual : durée réglée. « Tous les écrans » : une activation par écran (id:rang),
+        /// toutes validées avant la première soumise.
+        object Activate(Dictionary<string, object> b)
+        {
+            string id = J.Str(b, "effect", null);
+            var def = reg.Get(id);
+            if (def == null) throw new ProtocolError("unknown_effect", "effet inconnu : " + (id ?? "?"));
+            string rid = J.Str(b, "request_id", null), kind = J.Str(b, "kind", "manual");
+            if (kind != "manual" && kind != "test") throw new ProtocolError("invalid_request", "kind : manual ou test");
+            var es = cfg.Effect(id);
+            string err;
+            var screens = ScreenLayout.Resolve(es.Screen, Targets.Screens(), out err);
+            if (err != null) throw new ProtocolError("screen_missing", err);
+            var reqs = new List<EffectRequest>();
+            for (int i = 0; i < screens.Count; i++)
+            {
+                var body = J.Map("request_id", screens.Count > 1 && rid != null ? rid + ":" + (i + 1) : rid, "effect", id, "source", J.Obj(b, "source"),
+                    "target", J.Map("kind", "screen", "device", screens[i].Device));
+                if (kind == "test")
+                {
+                    var preset = cfg.GetPreset(id, "default");
+                    body["duration_ms"] = Math.Min(TestMs, preset != null && preset.DurationMs.HasValue ? preset.DurationMs.Value : def.DefaultDurationMs);
+                }
+                var req = Protocol.BuildRequest(body, reg, cfg, (spec, d) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, d, cfg.Engine.InputEffects));
+                CheckAllowed(req);
+                reqs.Add(req);
+            }
+            var views = reqs.Select(r => (object)Protocol.View(sched.Submit(r), Now)).ToArray();
+            return J.Map("effect", id, "kind", kind, "screen", es.Screen, "activations", views);
         }
 
         Dictionary<string, object> Status(long now)

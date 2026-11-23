@@ -1,4 +1,5 @@
-// Cibles : liste des fenêtres proposables et résolution d'une cible demandée (fenêtre, premier plan, écran).
+// Cibles : écrans (rangés de gauche à droite), fenêtres proposables, et résolution d'une cible demandée : écran du
+// streamer (« screen » : la fenêtre qui l'occupe, sinon l'écran entier), fenêtre, premier plan, écran entier.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -30,39 +31,80 @@ namespace Raptoru.Chaos
             return list;
         }
 
-        /// Écrans (cible par défaut du retournement) : nom Windows, position, taille, orientation, écran du premier plan.
-        public static List<Dictionary<string, object>> Monitors()
+        /// Écrans réels, rangés de gauche à droite (Model/ScreenLayout).
+        public static List<ScreenInfo> Screens()
         {
-            var list = new List<Dictionary<string, object>>();
-            IntPtr fgMon = N.MonitorFromWindow(N.GetForegroundWindow(), 2);
-            RECT primary = N.MonitorRect(N.GetDesktopWindow());
+            var list = new List<ScreenInfo>();
             foreach (var m in N.Monitors())
             {
                 RECT r = N.MonitorRectOf(m);
-                string dev = N.MonitorDevice(m);
-                bool isPrimary = r.Left == 0 && r.Top == 0;
-                list.Add(J.Map("device", dev, "label", MonitorLabel(r, primary, isPrimary), "primary", isPrimary, "x", r.Left, "y", r.Top,
-                    "width", r.Right - r.Left, "height", r.Bottom - r.Top, "orientation", Math.Max(0, N.DisplayOrientation(dev)) * 90,
-                    "foreground", m == fgMon));
+                list.Add(new ScreenInfo { Device = N.MonitorDevice(m), X = r.Left, Y = r.Top, Width = r.Right - r.Left, Height = r.Bottom - r.Top, Hz = N.RefreshHz(m), Primary = r.Left == 0 && r.Top == 0 });
             }
-            return list.OrderByDescending(d => (bool)d["primary"]).ThenBy(d => (int)d["x"]).ToList();
+            return ScreenLayout.Ordered(list);
         }
 
-        static string MonitorLabel(RECT r, RECT primary, bool isPrimary)
+        /// Écrans pour Studio : choix stable (key), nom lisible (label), nom Windows, taille et fréquence en information
+        /// secondaire, orientation, écran du premier plan.
+        public static List<Dictionary<string, object>> Monitors()
         {
-            string where = isPrimary ? "principal" : r.Right <= primary.Left ? "à gauche" : r.Left >= primary.Right ? "à droite" : r.Bottom <= primary.Top ? "au-dessus" : "en dessous";
-            return "Écran " + where + " · " + (r.Right - r.Left) + "×" + (r.Bottom - r.Top);
+            string fg = N.MonitorDevice(N.MonitorFromWindow(N.GetForegroundWindow(), 2));
+            var s = Screens();
+            return s.Select((x, i) => J.Map("device", x.Device, "key", ScreenLayout.Key(i, s.Count), "label", ScreenLayout.Label(i, s.Count), "order", i,
+                "primary", x.Primary, "x", x.X, "y", x.Y, "width", x.Width, "height", x.Height, "hz", x.Hz,
+                "orientation", Math.Max(0, N.DisplayOrientation(x.Device)) * 90, "foreground", x.Device == fg)).ToList();
         }
 
-        /// spec : {kind:"window", hwnd} | {kind:"foreground"} | {kind:"monitor", device? | hwnd?}.
+        static string ScreenTitle(string device)
+        {
+            var s = Screens();
+            int i = s.FindIndex(x => x.Device == device);
+            return i < 0 ? device : ScreenLayout.Label(i, s.Count) + " · " + s[i].Width + "×" + s[i].Height;
+        }
+
+        /// La fenêtre qui occupe un écran : la plus haute (ordre d'affichage) qui en couvre au moins 90 % (jeu en fenêtré
+        /// sans bordure, fenêtre agrandie). Ni bureau, ni outils, ni calques traversables, ni fenêtres du moteur.
+        static IntPtr WindowFilling(IntPtr hmon, int selfPid)
+        {
+            RECT m = N.MonitorRectOf(hmon);
+            double area = (double)(m.Right - m.Left) * (m.Bottom - m.Top);
+            IntPtr found = IntPtr.Zero;
+            N.EnumWindows((h, l) =>
+            {
+                if (!N.IsWindowVisible(h) || N.IsCloaked(h) || N.IsIconic(h) || N.GetWindow(h, N.GW_OWNER) != IntPtr.Zero) return true;
+                if ((N.GetWindowLongW(h, N.GWL_EXSTYLE) & (N.WS_EX_TOOLWINDOW | N.WS_EX_TRANSPARENT)) != 0) return true;
+                string cls = N.ClassName(h);
+                if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") return true;
+                uint pid; N.GetWindowThreadProcessId(h, out pid);
+                if (pid == selfPid) return true;
+                RECT r = N.FrameBounds(h);
+                double w = Math.Min(r.Right, m.Right) - Math.Max(r.Left, m.Left), hh = Math.Min(r.Bottom, m.Bottom) - Math.Max(r.Top, m.Top);
+                if (w <= 0 || hh <= 0 || w * hh < 0.9 * area) return true;
+                found = h;
+                return false;
+            }, IntPtr.Zero);
+            return found;
+        }
+
+        /// spec : {kind:"screen", device} | {kind:"window", hwnd} | {kind:"foreground"} | {kind:"monitor", device? | hwnd?}.
+        /// « screen » (fiche d'un effet) : la fenêtre qui occupe l'écran, retournée en calque sans devoir être au premier
+        /// plan, donc visible dans la capture d'écran d'OBS ; à défaut, l'écran entier (calque exclu des captures).
         /// « foreground » vise l'écran du jeu au premier plan (default_mode = monitor) ou sa fenêtre seule (window).
         public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, EffectDef def, bool inputEffects)
         {
             string kind = J.Str(spec, "kind", "foreground");
             bool foreground = kind == "foreground";
+            string screenDevice = null;
             IntPtr h, hmon = IntPtr.Zero;
             switch (kind)
             {
+                case "screen":
+                    screenDevice = J.Str(spec, "device", "");
+                    IntPtr sm = N.MonitorByDevice(screenDevice);
+                    if (sm == IntPtr.Zero) throw new ProtocolError("screen_missing", "écran introuvable : " + screenDevice + " (débranché ?)");
+                    h = WindowFilling(sm, selfPid);
+                    if (h == IntPtr.Zero) { kind = "monitor"; hmon = sm; h = N.GetDesktopWindow(); }
+                    else kind = "window";
+                    break;
                 case "window":
                     h = new IntPtr((long)J.Num(spec, "hwnd", 0));
                     break;
@@ -99,14 +141,17 @@ namespace Raptoru.Chaos
                 if (t.Device == null) throw new ProtocolError("no_monitor", "écran introuvable");
                 RECT r = N.MonitorRectOf(hmon);
                 t.Key = "monitor:" + t.Device;
-                t.Info = J.Map("kind", "monitor", "mode", "C", "device", t.Device, "title", MonitorLabel(r, N.MonitorRect(N.GetDesktopWindow()), r.Left == 0 && r.Top == 0),
+                t.Info = J.Map("kind", "monitor", "mode", "C", "device", t.Device, "title", ScreenTitle(t.Device),
                     "process", foreground ? ProcName(pid) : null, "input", inputEffects ? def.Input : null, "follow_foreground", false);
+                if (screenDevice != null) t.Info["screen"] = ScreenTitle(screenDevice);
             }
             else
             {
                 t.Key = "window:" + h.ToInt64().ToString("x");
+                // Cible « écran » : l'effet reste visible même si la fenêtre n'est pas au premier plan (Studio l'est).
                 t.Info = J.Map("kind", "window", "mode", "D", "hwnd", h.ToInt64(), "process", ProcName(pid), "title", N.WindowText(h),
-                    "input", null, "follow_foreground", J.Bool(spec, "follow_foreground", true));
+                    "input", null, "follow_foreground", screenDevice == null && J.Bool(spec, "follow_foreground", true));
+                if (screenDevice != null) { t.Info["screen"] = ScreenTitle(screenDevice); t.Info["device"] = screenDevice; }
             }
             return t;
         }
