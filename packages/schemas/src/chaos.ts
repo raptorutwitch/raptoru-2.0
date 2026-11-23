@@ -14,6 +14,8 @@ export const CHAOS_COMMANDS = [
   'targets.list',
   'effect.request',
   'effect.cancel',
+  'effect.activate',
+  'effect.stop',
   'stop_all',
   'config.get',
   'config.set',
@@ -118,6 +120,8 @@ const paramBase = {
   label: z.string().optional(),
   help: z.string().optional(),
   exposed: z.boolean().optional(),
+  /** Libellés lisibles des valeurs d'un choix (fiche de l'effet dans Studio). */
+  labels: z.record(z.string(), z.string()).optional(),
 };
 export const chaosParamSchema = z.discriminatedUnion('type', [
   z.object({
@@ -162,6 +166,8 @@ export const chaosEffectDefSchema = z.object({
   label: z.string(),
   description: z.string(),
   family: z.string(),
+  /** Icône de la carte dans le catalogue de Studio (nom du jeu d'icônes de Studio). */
+  icon: z.string().optional(),
   slot: z.string(),
   internal: z.boolean(),
   on_conflict: z.enum(CHAOS_POLICIES),

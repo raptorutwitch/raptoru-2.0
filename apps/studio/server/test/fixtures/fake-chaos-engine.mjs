@@ -62,6 +62,27 @@ createInterface({ input: process.stdin }).on('line', (line) => {
         source: c.source,
         target: c.target,
       });
+    case 'effect.activate':
+      if (c.effect !== 'flip')
+        return err('unknown_effect', `effet inconnu : ${c.effect}`);
+      active.push({ request_id: c.request_id, effect: c.effect });
+      return res({
+        effect: c.effect,
+        kind: c.kind,
+        screen: 'right',
+        activations: [
+          { request_id: c.request_id, state: 'starting', source: c.source },
+        ],
+      });
+    case 'effect.stop': {
+      const before = active.length;
+      active.splice(
+        0,
+        active.length,
+        ...active.filter((x) => x.effect !== c.effect),
+      );
+      return res({ effect: c.effect, stopped: before - active.length });
+    }
     case 'stop_all':
       active.length = 0;
       return res({ stopped: 1 });

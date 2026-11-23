@@ -208,6 +208,44 @@ describe('API locale Studio › Chaos', () => {
     expect((await call('/rien')).status).toBe(404);
   });
 
+  it('fiche d’un effet : Tester et Activer avec ses réglages enregistrés, Arrêter l’effet', async () => {
+    const rt = new ChaosRuntime({
+      exe: 'x',
+      stateDir: tmpdir(),
+      spawnImpl: fake(),
+      pingMs: 50,
+    });
+    cleanup.push(() => rt.stop());
+    const call = await serve(rt);
+    const test = await call('/activate', { effect: 'flip', kind: 'test' });
+    expect(test.status).toBe(200);
+    expect(test.body).toMatchObject({
+      effect: 'flip',
+      kind: 'test',
+      activations: [{ source: { kind: 'studio' } }],
+    });
+    const acts = (test.body as { activations: { request_id: string }[] })
+      .activations;
+    expect(String(acts[0]!.request_id)).toMatch(/^studio-test-/);
+    const manual = await call('/activate', {
+      effect: 'flip',
+      kind: 'n’importe quoi',
+      source: { kind: 'core' },
+    });
+    expect(manual.body).toMatchObject({
+      kind: 'manual',
+      activations: [{ source: { kind: 'studio' } }],
+    });
+    expect((await call('/activate', { effect: '../flip' })).status).toBe(400);
+    expect((await call('/activate', { effect: 'nope' })).body).toMatchObject({
+      error: 'unknown_effect',
+    });
+    expect((await call('/stop', { effect: 'flip' })).body).toEqual({
+      effect: 'flip',
+      stopped: 2,
+    });
+  });
+
   it('moteur absent : la page le dit, les actions répondent 503', async () => {
     const rt = new ChaosRuntime({
       exe: join(tmpdir(), 'pas-de-moteur.exe'),
@@ -267,6 +305,7 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
         version: 5,
         engine: { default_mode: 'window', input_effects: false },
         performance: { profile: 'equilibre', on_overload: 'reduire' },
+        effects: { flip: { enabled: true, screen: 'primary', cursor: true } },
       });
       const t = await c.call<{ monitors: { device: string }[] }>(
         'targets.list',
@@ -274,6 +313,14 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
       expect(t).toHaveProperty('windows');
       expect(t.monitors.length).toBeGreaterThan(0);
       expect(t.monitors[0]!.device).toMatch(/^\\\\\.\\DISPLAY\d+$/);
+      // Écrans rangés de gauche à droite, nommés pour le streamer (jamais DISPLAYn seul).
+      const xs = (
+        t.monitors as unknown as { x: number; label: string; key: string }[]
+      ).map((m) => m.x);
+      expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+      expect((t.monitors as unknown as { label: string }[])[0]!.label).toMatch(
+        /^Écran/,
+      );
       await c.stop();
       expect(c.state.status).toBe('stopped');
     }, 30_000);

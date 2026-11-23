@@ -1,13 +1,14 @@
 // npm run chaos:lab — banc de test du moteur Chaos, indépendant de toute instance de Studio (Production ou Lab) :
 // son propre port (4120), son propre dossier de réglages (%LOCALAPPDATA%\Raptoru\Chaos\lab), aucun Core, aucun bot,
 // aucun OBS, aucun Jeton. Il sert la page Studio › Chaos (le même module) et la même API locale (ChaosRuntime).
-// Options : --no-open (ne pas ouvrir le navigateur), --port <n>.
+// Options : --no-open (ne pas ouvrir le navigateur), --port <n>. Isolement (un second Lab d'essai pendant qu'Antoni
+// garde le sien) : CHAOS_ENGINE_EXE, CHAOS_LAB_STATE (réglages), CHAOS_LAB_DIST (page construite), CHAOS_LAB_PORT.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join, normalize } from 'node:path';
+import { dirname, extname, join, normalize, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { ChaosRuntime } from '../src/chaos/runtime.js';
@@ -31,7 +32,10 @@ const STATE =
   process.env.CHAOS_LAB_STATE ??
   join(process.env.LOCALAPPDATA ?? tmpdir(), 'Raptoru', 'Chaos', 'lab');
 const WEB = join(ROOT, 'apps', 'studio', 'web');
-const DIST = join(WEB, 'dist', 'chaos-lab');
+// resolve : chemin absolu au format de Windows (le contrôle « fichier dans DIST » compare des chaînes).
+const DIST = resolve(
+  process.env.CHAOS_LAB_DIST ?? join(WEB, 'dist', 'chaos-lab'),
+);
 
 const step = (what: string, cmd: string, a: string[]) => {
   console.log(`· ${what}`);
@@ -51,6 +55,9 @@ step('construction de la page Chaos', process.execPath, [
   'build',
   '--config',
   join(WEB, 'chaos-lab.vite.config.mjs'),
+  '--outDir',
+  DIST,
+  '--emptyOutDir',
 ]);
 
 const rt = new ChaosRuntime({

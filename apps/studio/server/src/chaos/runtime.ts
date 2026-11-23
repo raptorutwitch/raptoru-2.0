@@ -109,6 +109,11 @@ export class ChaosRuntime {
           return (reply(200, await this.state()), true);
         case 'GET /targets':
           return (reply(200, await c.call('targets.list')), true);
+        case 'GET /screens':
+          return (
+            reply(200, await c.call('targets.list', { windows: false })),
+            true
+          );
         case 'GET /diagnostics':
           return (reply(200, await c.call('diagnostics')), true);
         case 'POST /test': {
@@ -133,6 +138,45 @@ export class ChaosRuntime {
             true
           );
         }
+        case 'POST /activate': {
+          // Fiche d'un effet : « Tester » (essai court) ou « Activer » (durée réglée), avec SES réglages enregistrés
+          // dans le moteur (écran, préréglage). Source « studio » : aucun Jeton, aucun point de chaîne.
+          const effect = typeof body.effect === 'string' ? body.effect : '';
+          const kind = body.kind === 'test' ? 'test' : 'manual';
+          if (!/^[a-z][a-z0-9_.]{0,40}$/.test(effect))
+            return (
+              reply(400, {
+                error: 'invalid_request',
+                message: 'effet invalide',
+              }),
+              true
+            );
+          return (
+            reply(
+              200,
+              await c.call('effect.activate', {
+                effect,
+                kind,
+                request_id: `studio-${kind}-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`,
+                source: {
+                  kind: 'studio',
+                  ref: `Studio › Chaos › ${kind === 'test' ? 'Tester' : 'Activer'}`,
+                },
+              }),
+            ),
+            true
+          );
+        }
+        case 'POST /stop':
+          return (
+            reply(
+              200,
+              await c.call('effect.stop', {
+                effect: String(body.effect ?? ''),
+              }),
+            ),
+            true
+          );
         case 'POST /cancel':
           return (
             reply(

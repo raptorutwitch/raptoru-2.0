@@ -51,6 +51,7 @@
       "label": "Écran retourné",
       "description": "L'image se retourne à 180°. Un seul curseur visible : l'image du vrai curseur, retournée au point miroir ; il se déplace à l'envers et le clic tombe dessous (coordonnées et clics de Windows inchangés).",
       "family": "orientation",
+      "icon": "repeat",
       "slot": "transform",
       "internal": false,
       "on_conflict": "queue",
@@ -74,9 +75,14 @@
           "id": "fill",
           "type": "enum",
           "values": ["mirror", "black", "cover"],
+          "labels": {
+            "mirror": "Prolongement flou",
+            "black": "Noir",
+            "cover": "Agrandir"
+          },
           "default": "mirror",
           "label": "Coins pendant la rotation",
-          "help": "mirror : prolongement flou et sombre de l'image tournée ; black : noir ; cover : l'image grossit pour couvrir l'écran."
+          "help": "Prolongement flou : l'image tournée prolongée, floue et assombrie ; Noir : coins noirs ; Agrandir : l'image grossit juste assez pour couvrir l'écran."
         }
       ],
       "variants": [
@@ -112,6 +118,7 @@
       "label": "Teinte de diagnostic",
       "description": "Filtre de test : teinte l'image capturée (contrôle d'enchaînement des passes).",
       "family": "diagnostic",
+      "icon": "filter",
       "slot": "filter",
       "internal": true,
       "on_conflict": "reject",
@@ -159,6 +166,7 @@
       "label": "Charge GPU de diagnostic",
       "description": "Mesure interne : enchaîne plusieurs passes plein écran sur l'image capturée (léger flou), pour mesurer le coût des futurs effets multipasses.",
       "family": "diagnostic",
+      "icon": "layers",
       "slot": "filter",
       "internal": true,
       "on_conflict": "reject",
@@ -207,6 +215,7 @@
       "label": "Repère de diagnostic",
       "description": "Calque de test sans capture : un cadre et un disque (contrôle de la couche de calques).",
       "family": "diagnostic",
+      "icon": "sparkle",
       "slot": "overlay",
       "internal": true,
       "on_conflict": "reject",
@@ -256,6 +265,7 @@
       "label": "Panne simulée",
       "description": "Effet de test : lève une erreur à l'étape choisie (contrôle d'isolement des effets).",
       "family": "diagnostic",
+      "icon": "warn",
       "slot": "overlay",
       "internal": true,
       "on_conflict": "reject",
