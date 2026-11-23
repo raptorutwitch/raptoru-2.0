@@ -523,7 +523,7 @@ export function createTableView(host, { client, spectator = false, canAnnounce =
     // l'arc revient, large et peu profond, de part et d'autre de la banque (une rangée plate de 7 cases sur toute la
     // largeur écrasait la banque, minuscule, au-dessus d'une barre).
     const hero = felt.classList.contains('has-hero');
-    const flat = hero || W < 420 || (H < 300 && W < 600);
+    const flat = hero || W < 420 || (H < 240 && W < 600); // (lecteur 65 % : ≈ 540 × 265, l'arc reste — 23/11)
     box.classList.toggle('flat', flat);
     // De l'air entre les cartes de la banque, les cases et leur titre (retour d'Antoni du 21/11) : la rangée descend
     // (bord 50, flèche 42 au lieu de 40/40), et suit l'échelle --kg comme les cartes qu'elle contourne.

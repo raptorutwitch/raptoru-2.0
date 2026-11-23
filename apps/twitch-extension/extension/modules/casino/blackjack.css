@@ -975,3 +975,73 @@
 /* Le titre des paris ne sert qu'à miser : hors des mises, il se tait (au règlement, il passait sous « La banque fait 17 »). */
 .sides__arc text { transition: opacity 0.25s; }
 .sides:not(.live) .sides__arc text { opacity: 0; }
+
+/* --- Lecteur Twitch normal, composant vidéo à 65 % (563 × 376 → table ≈ 547 × 323), 23/11 (Antoni : « pas un simple
+   zoom ») : la table n'y est plus la référence 651 × 434 réduite d'un bloc (app/fit.js : BJ_BASE) mais sa propre mise
+   en page, MÊME disposition (banque en haut, 7 paris en arc, la main en jeu au centre, les places sur l'arc, la barre).
+   Les marges, le sabot et le titre de l'arc rendent leur place ; les cartes et les scores la prennent. Les lecteurs plus
+   petits reçoivent cette même table réduite d'un bloc. */
+@container bj (min-width: 480px) and (max-width: 640px) and (min-height: 290px) and (max-height: 339px) {
+  .felt { margin: 3px 3px 0; grid-template-rows: 118px minmax(0, 1fr) auto; }
+  .felt::before { height: 360px; }
+  .dealer { top: 3px; }
+  .dealer .cards.big { --cw: 40px; }
+  .dealer > .tot { height: 28px; min-width: 38px; padding: 0 9px; border-radius: 14px; font-size: 17px; box-shadow: 0 0 0 1.5px rgba(242, 198, 95, 0.85), 0 0 10px rgba(255, 201, 77, 0.3), 0 2px 5px rgba(0, 0, 0, 0.5); }
+  .sides, .sides__arc { height: 118px; }
+  .sides__arc text { display: none; }
+  .sides:not(.flat) .side { width: 58px; height: 30px; }
+  .sides:not(.flat) .side > b { font-size: 13.5px; }
+  .sides:not(.flat) .side > small { display: block; font-size: 7px; }
+  .side .sv { top: auto; bottom: -8px; } /* la mise sous la case : jamais contre les cartes de la banque */
+  .htab, .rtab { height: 28px; }
+  .msg { gap: 2px; }
+  .msg b { font-size: 15px; }
+  .msg small { font-size: 10.5px; }
+  .spot .cards.big { --cw: 38px; }
+  .spot .sh .tot { height: 22px; min-width: 30px; font-size: 13px; border-radius: 11px; }
+  .sh__bet { font-size: 11.5px; }
+  .seats { padding: 4px 10px 3px; }
+  .seats .seat { --mw: 31px; padding: 4px 3px 3px; }
+  .seat .tot { height: 17px; min-width: 21px; padding: 0 5px; font-size: 11px; }
+  .seat .nm { font-size: 10.5px; }
+  .seat .bet { font-size: 10px; }
+  .bar { height: 40px; margin: 4px 3px 3px; }
+  .bar .act, .bar .btn, .bar .btn.quit { height: 32px; }
+  .sb { width: 38px; height: 38px; }
+  /* La barre tient sur UNE ligne (sous 560 px, la règle étroite passait les jetons sur une 2ᵉ ligne et coupait la table) */
+  .bar { flex-wrap: nowrap; min-height: 0; padding: 0 6px; column-gap: 5px; }
+  .bar .chips { order: 0; width: auto; gap: 3px; justify-content: flex-start; }
+  .bar .chip { width: 28px; height: 28px; font-size: 8px; }
+  .bar .ops { gap: 3px; }
+  .bar .ops .ic { width: 28px; height: 28px; }
+  .bar .btn.quit, .bar .btn.rxb { width: 32px; }
+  .btn.ready { min-width: 0; padding: 0 12px; margin-left: 0; }
+  .stake { padding: 3px 8px 4px; gap: 2px; }
+  .stake small > i { display: none; } /* « Mise » */
+  .chips + .ops + .stake { margin-left: auto; }
+  .bj.my-turn .stake { display: grid; } /* la mise engagée reste visible à mon tour */
+  .acts { gap: 4px; }
+  .act { gap: 4px; padding: 0 4px; }
+  .act small { font-size: 8px; }
+}
+
+/* --- Le score de la banque, partout : un liseré d'or le détache du feutre (il était trop discret, 23/11). */
+.dealer > .tot:not(.bust):not(.is-bj) { box-shadow: 0 0 0 1.5px rgba(242, 198, 95, 0.85), 0 0 10px rgba(255, 201, 77, 0.28), 0 2px 5px rgba(0, 0, 0, 0.5); }
+
+/* --- Grand format (théâtre, plein écran) : le feutre éclaire toute la table (l'ellipse de 402 px laissait une bande
+   sombre en haut), les cartes, les scores et les paris prennent la place libre — l'arc garde sa géométrie (blackjack.js),
+   les cartes de la banque s'arrêtent juste au-dessus de la case du centre. */
+@container bj (min-width: 700px) and (min-height: 480px) {
+  .felt::before { height: 200%; }
+  .dealer .cards.big { --cw: clamp(46px, 9cqh, 54px); }
+  .dealer > .tot { height: 30px; min-width: 42px; padding: 0 10px; border-radius: 15px; font-size: 19px; }
+  .side, .sides:not(.flat) .side { width: 62px; height: 34px; }
+  .side > b { font-size: 15px; }
+  .side > small { font-size: 8px; }
+  .spot .cards.big { --cw: clamp(44px, 11cqh, 80px); }
+  .spot .sh .tot { height: 24px; min-width: 32px; font-size: 14px; border-radius: 12px; }
+  .sh__bet { font-size: 12.5px; }
+  .seats .seat { --mw: clamp(28px, 7cqh, 48px); }
+  .seat .tot { height: 19px; min-width: 24px; font-size: 12px; }
+  .msg .bd p { font-size: 13px; }
+}

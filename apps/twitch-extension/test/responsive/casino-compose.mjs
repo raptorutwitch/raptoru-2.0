@@ -41,6 +41,9 @@ const SIZES = [
   ['video', 563, 376, 'lecteur Twitch normal, 65 % (défaut)'],
   ['video', 651, 434, 'vidéo 75 % (référence)'],
   ['video', 452, 301, 'vidéo zoom 125 %'],
+  ['video', 490, 326, 'petit lecteur'],
+  ['video', 390, 260, 'très petit lecteur'],
+  ['video', 823, 549, 'grande fenêtre / théâtre'],
   ['video', 1053, 702, 'vidéo plein écran 1080p'],
   ['panel', 318, 496, 'panneau'],
   // Twitch app, portrait: the extension only gets the area under the video (23/11), not the whole screen.
@@ -138,7 +141,9 @@ const SCENARIOS = {
     { click: '.seat.me [data-main]', wait: 150 },
     { click: '.seat.me [data-main]', wait: 150 },
     { click: '[data-side="20"]', wait: 600, shot: 'mises' },
-    { click: '[data-ready]', wait: 300 },
+    { click: '[data-rx-open]', wait: 500, shot: 'reactions' },
+    { click: '[data-rx-open]', wait: 300 },
+    { click: '[data-ready]', wait: 700, shot: 'distribution' },
     {
       js: until('b?.classList.contains("my-turn")'),
       wait: 900,
