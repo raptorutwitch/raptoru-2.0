@@ -94,10 +94,25 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.6** (installée par Antoni le 24/11 ; Miroir validé en capture directe
-avec la 0.1.44-chaos.5).
+Studio installé aujourd'hui : **0.1.44-chaos.7** (installée par Antoni le 24/11 ; Miroir validé en capture directe
+avec la 0.1.44-chaos.5, un seul curseur dans OBS confirmé avec la suppression du double curseur).
 
-Version de test **0.1.44-chaos.7** (24/11 soir), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.8** (24/11 soir), construite en local, **ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.8.exe`
+- 126 760 063 o, SHA-256 `ce5f31fe63adbd2713f309fc92422e8d0f8cdc74116a2c57757d3082f07de43a`
+- contenu : tout ce que contenait 0.1.44-chaos.7, plus :
+  - Diffusion OBS › **Relais anti-coupure** ([CURSEUR_OBS.md](CURSEUR_OBS.md) § 5), qui supprime le flash noir de la
+    bascule du curseur d'OBS (mesuré : 0 image noire au lieu de 1 à 2 par bascule) ;
+  - le relais n'est créé dans OBS que sur ton clic, avec aperçu et confirmation, et seulement dans les scènes où
+    « Écran » est visible ;
+  - les réglages de fiche tapés coup sur coup ne se perdent plus ;
+- commit `84b297e9` de `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton dans le paquet (vérifié) ;
+- installer comme ci-dessous (jeu fermé, Studio et Chaos Lab fermés). Essais : CURSEUR_OBS.md § 5 E ;
+- retour arrière : « Retirer le relais… » dans Studio, puis au besoin relancer `Raptoru Studio Setup 0.1.44-chaos.7.exe`
+  (SHA-256 `b8bb39d8…`).
+
+Version de test précédente **0.1.44-chaos.7** (24/11 soir), installée par Antoni le 24/11 :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.7.exe`
 - 126 756 661 o, SHA-256 `b8bb39d8da90230d4af69a2a235c2c6bb95d986b33addcf09ecaa3756ce53ba2`

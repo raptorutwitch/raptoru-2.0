@@ -149,6 +149,8 @@ en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.m
 - lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
 - **curseur d'OBS et VHS animé** (24/11 soir : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md)), construits et testés hors
   écran. Restes :
+  - flash noir de la bascule : relais anti-coupure mesuré à 0 image noire (CURSEUR_OBS.md § 5). Reste la validation
+    d'Antoni avec `0.1.44-chaos.8`, puis son clic « Préparer le relais » dans son OBS ;
   - validation d'Antoni avec `0.1.44-chaos.7`, qui inclut le correctif de la fenêtre protégée
     ([chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md) § 6) : VHS au maintien, un seul curseur, coupure visible ou
     non, Miroir et Écran retourné avec Discord ouvert ;

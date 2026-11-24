@@ -218,6 +218,17 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     la sonde `chaos-bench.exe --capture-probe --screen \\.\DISPLAY1` (à lancer par Antoni).
   - Garde de jeu corrigée : les « plein écran » du 24/11 venaient des deux fenêtres Halloween de Studio (calques
     traversables, « Overlay actif » allumé), pas d'un jeu.
+- **Flash noir de la bascule du curseur d'OBS (24/11 soir)** : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md) § 5.
+  - **Cause** : OBS détruit puis recrée la duplication DXGI partagée de l'écran à chaque changement de réglage de sa
+    seule capture.
+  - **Solution mesurée** : le **relais**, une capture sans curseur du même écran, hors du cadre, dans les scènes où
+    « Écran » est visible ; pas dans Scène PS5.
+  - **Banc isolé 1080p60 et 1440p60** : bascule actuelle, 1 à 2 images noires par bascule ; relais, 0 ; même mémoire
+    vidéo ; changements de scène, 0 ; scène type PS5, aucune capture.
+  - **Corrigé en passant** : les réglages de fiche tapés coup sur coup ne se perdent plus. Le e2e de la page passe
+    de 37 à 39/39.
+  - **Commits** `6387c1e0`, `256308f3`, `dbb5aee2`, `dbe78017`, `984591ac`, `84b297e9` (locaux).
+  - **Version de test** `0.1.44-chaos.8` (non installée). Le relais n'est créé dans OBS que sur le clic d'Antoni.
 - **« Aucune image capturée » (Miroir, Écran retourné) avec chaos.6 (24/11 soir)** : la cible « écran » avait choisi
   Discord, qui s'exclut des captures (affinité 0x11). WGC ne livrait aucune image et l'effet échouait au bout de 3 s.
   - Correctif `badada91` : une fenêtre protégée n'est plus jamais choisie.
