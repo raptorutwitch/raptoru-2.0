@@ -94,9 +94,21 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.5** (installée et Miroir validé en capture directe par Antoni le 24/11).
+Studio installé aujourd'hui : **0.1.44-chaos.6** (installée par Antoni le 24/11 ; Miroir validé en capture directe
+avec la 0.1.44-chaos.5).
 
-Version de test **0.1.44-chaos.6** (24/11 soir), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.7** (24/11 soir), construite en local, **ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.7.exe`
+- 126 756 661 o, SHA-256 `b8bb39d8da90230d4af69a2a235c2c6bb95d986b33addcf09ecaa3756ce53ba2`
+- contenu : tout ce que contenait 0.1.44-chaos.6, plus un seul correctif ([CAPTURE_DIRECTE.md](CAPTURE_DIRECTE.md) § 6) :
+  une fenêtre protégée contre la capture n'est plus choisie comme source de la cible « écran ». C'est le cas de
+  Discord, qui provoquait « aucune image capturée » avec Miroir et Écran retourné ;
+- commit `badada91` de `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton dans le paquet (vérifié) ;
+- installer comme ci-dessous (jeu fermé, Studio et Chaos Lab fermés) ;
+- retour arrière : relancer `Raptoru Studio Setup 0.1.44-chaos.6.exe` (SHA-256 `e8d885f6…`).
+
+Version de test précédente **0.1.44-chaos.6** (24/11 soir), installée par Antoni le 24/11 :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.6.exe`
 - 126 755 863 o, SHA-256 `e8d885f66dd6c42f205addbf3678ff6c9b940feee451660586b4279110ce3008`

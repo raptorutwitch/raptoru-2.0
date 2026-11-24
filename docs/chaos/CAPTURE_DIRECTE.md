@@ -189,3 +189,56 @@ Studio fermé, jeu fermé. Mettre une fenêtre agrandie sur l'écran 1, puis lan
    Puis lancer la sonde A dans la même situation.
 
 **Retour arrière** : relancer `Raptoru Studio Setup 0.1.44-chaos.4.exe` (ou `.3`), même dossier `release`.
+
+## 6. « Aucune image capturée » avec Miroir et Écran retourné (24/11, chaos.6 → chaos.7)
+
+Signalé par Antoni avec Studio `0.1.44-chaos.6` : Miroir et Écran retourné étaient acceptés, puis échouaient au bout
+d'environ 3 s avec le message « aucune image capturée (fenêtre protégée ?) ».
+
+**Diagnostic** (journal du moteur dans Studio, relevé des fenêtres, `--capture-check`, sans rien afficher) :
+
+- **Fenêtre choisie** : les trois échecs ciblaient la même fenêtre, en mode E, sur l'écran 1 :
+  - processus `Discord.exe`, titre « @Aouh - Discord » ;
+  - handle 2038237966, classe `Chrome_WidgetWin_1` ;
+  - 26 % de l'écran, fenêtre la plus haute.
+- **Pourquoi elle** : c'est la règle « la plus haute qui couvre au moins 25 % » de chaos.5. Aucune fenêtre ne couvrait
+  90 % de l'écran 1.
+- **Le problème** : Discord s'exclut lui-même des captures (affinité d'affichage 17, `WDA_EXCLUDEFROMCAPTURE`).
+- **Réponse de Windows Graphics Capture** : aucune erreur. La session se crée et la bordure est retirée, mais aucune
+  image n'arrive.
+  - `--capture-check --hwnd 2038237966` : 0 image en 3 s.
+  - Le moteur abandonne après son délai de première image (3 s) : `no_frame`.
+- **Hors cause** :
+  - ce n'était pas une fenêtre de Studio, ni un calque traversable (ceux-là sont déjà écartés) ;
+  - ni la sortie OBS, ni le curseur, ni les shaders.
+- **Avant chaos.5**, l'écran 1 passait en mode C (écran entier) et marchait.
+
+**Correctif** (commit `badada91`) :
+
+- Une fenêtre protégée contre la capture n'est plus jamais choisie comme source en direct. Cela couvre toute affinité
+  autre que `WDA_NONE` : `WDA_MONITOR`, qui donne une image noire, et `WDA_EXCLUDEFROMCAPTURE`, qui rend la fenêtre
+  absente.
+- La règle est dans `Model/WindowPick.cs`, la même fonction que celle du moteur, testée par `chaos-unit`.
+- Écran 1 aujourd'hui :
+  - mode E sans fenêtre, c'est-à-dire l'image de l'écran seule ;
+  - première image en 105 ms (`--capture-check --screen \\.\DISPLAY1`) ;
+  - écran 2 (Brave) : 42 ms.
+- Pendant l'effet, Discord n'apparaît pas dans l'image transformée. C'est son propre choix d'être exclu des captures ;
+  il était déjà absent en mode C.
+
+**Tests** :
+
+- `chaos-unit` 37/37, dont le cas Discord relevé (`0x11` et `WDA_MONITOR` écartés, même fenêtre capturable retenue,
+  exclusions inchangées) ;
+- tests Studio ciblés 34/34 deux fois de suite. Une passe précédente avait un échec intermittent, sous charge, sur un
+  test à moteur simulé (« moteur plus ancien que Studio ») : il passe seul et aux passes suivantes ;
+- `--check-hold vhs` toujours conforme.
+
+**Non vérifié ici** : l'effet à l'écran et dans OBS, puisque l'affichage est interdit à l'agent.
+
+**Validation** : avec `0.1.44-chaos.7` installé et Discord ouvert sur l'écran 1, Tester Miroir puis Écran retourné.
+Les deux doivent démarrer, à l'écran et dans « Écran ». Pour vérifier la source choisie sans rien afficher :
+
+```
+"C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\chaos-engine\bin\ChaosEngine.exe" --capture-check --screen \\.\DISPLAY1
+```

@@ -218,6 +218,11 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     la sonde `chaos-bench.exe --capture-probe --screen \\.\DISPLAY1` (à lancer par Antoni).
   - Garde de jeu corrigée : les « plein écran » du 24/11 venaient des deux fenêtres Halloween de Studio (calques
     traversables, « Overlay actif » allumé), pas d'un jeu.
+- **« Aucune image capturée » (Miroir, Écran retourné) avec chaos.6 (24/11 soir)** : la cible « écran » avait choisi
+  Discord, qui s'exclut des captures (affinité 0x11). WGC ne livrait aucune image et l'effet échouait au bout de 3 s.
+  - Correctif `badada91` : une fenêtre protégée n'est plus jamais choisie.
+  - Diagnostic sans affichage : `ChaosEngine.exe --capture-check`.
+  - Version de test `0.1.44-chaos.7` (non installée). Doc : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md) § 6.
 - **Curseur d'OBS et VHS (24/11 soir, après la validation du Miroir en capture directe par Antoni)** :
   doc [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md).
   - **VHS figé au maintien** : le moteur ne redessinait plus sans nouvelle capture (tous modes).
