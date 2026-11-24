@@ -62,9 +62,9 @@ namespace Raptoru.Chaos
             return i < 0 ? device : ScreenLayout.Label(i, s.Count) + " · " + s[i].Width + "×" + s[i].Height;
         }
 
-        /// La fenêtre qui occupe un écran : la plus haute (ordre d'affichage) qui en couvre au moins 90 % (jeu en fenêtré
-        /// sans bordure, fenêtre agrandie). Ni bureau, ni outils, ni calques traversables, ni fenêtres du moteur.
-        static IntPtr WindowFilling(IntPtr hmon, int selfPid)
+        /// La fenêtre d'un écran : la plus haute (ordre d'affichage) qui en couvre au moins share (0,9 : jeu en fenêtré sans
+        /// bordure, fenêtre agrandie). Ni bureau, ni outils, ni calques traversables, ni fenêtres du moteur.
+        static IntPtr WindowOn(IntPtr hmon, int selfPid, double share)
         {
             RECT m = N.MonitorRectOf(hmon);
             double area = (double)(m.Right - m.Left) * (m.Bottom - m.Top);
@@ -79,7 +79,7 @@ namespace Raptoru.Chaos
                 if (pid == selfPid) return true;
                 RECT r = N.FrameBounds(h);
                 double w = Math.Min(r.Right, m.Right) - Math.Max(r.Left, m.Left), hh = Math.Min(r.Bottom, m.Bottom) - Math.Max(r.Top, m.Top);
-                if (w <= 0 || hh <= 0 || w * hh < 0.9 * area) return true;
+                if (w <= 0 || hh <= 0 || w * hh < share * area) return true;
                 found = h;
                 return false;
             }, IntPtr.Zero);
@@ -87,13 +87,15 @@ namespace Raptoru.Chaos
         }
 
         /// spec : {kind:"screen", device} | {kind:"window", hwnd} | {kind:"foreground"} | {kind:"monitor", device? | hwnd?}.
-        /// « screen » (fiche d'un effet) : TOUT l'écran (barre des tâches comprise). S'il est occupé par une fenêtre (jeu,
-        /// fenêtre agrandie) : mode E, la fenêtre capturée en direct posée sur une image de l'écran prise au départ, calque
-        /// jamais exclu des captures (visible dans la capture d'écran d'OBS), sans devoir être au premier plan. Sinon :
-        /// mode C, l'écran capturé (calque exclu des captures tant qu'il la lit). Clé « screen:<écran> » dans les deux cas :
-        /// les effets d'un même écran partagent une seule surface.
+        /// « screen » (fiche d'un effet) : TOUT l'écran (barre des tâches comprise), en mode E : la fenêtre qui l'occupe (jeu,
+        /// fenêtre agrandie, ≥ 90 %), à défaut la plus haute qui en couvre au moins 25 %, capturée en direct et posée sur
+        /// une image de l'écran prise AVANT l'apparition du calque (le reste de l'écran est figé pendant l'effet ; écran
+        /// sans fenêtre : l'image seule). Le calque n'est jamais exclu des captures : la capture d'écran d'OBS (« Écran »)
+        /// le voit, une seule application, sans filtre. Seulement avec la sortie OBS (obsOutput : filtres Chaos, calque
+        /// exclu de toute façon) et sans fenêtre qui occupe l'écran : mode C, l'écran entier capturé en direct. Clé
+        /// « screen:<écran> » dans tous les cas : les effets d'un même écran partagent une seule surface.
         /// « foreground » vise l'écran du jeu au premier plan (default_mode = monitor) ou sa fenêtre seule (window).
-        public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, EffectDef def, bool inputEffects)
+        public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, EffectDef def, bool inputEffects, bool obsOutput = false)
         {
             string kind = J.Str(spec, "kind", "foreground");
             bool foreground = kind == "foreground";
@@ -105,10 +107,10 @@ namespace Raptoru.Chaos
                     screenDevice = J.Str(spec, "device", "");
                     IntPtr sm = N.MonitorByDevice(screenDevice);
                     if (sm == IntPtr.Zero) throw new ProtocolError("screen_missing", "écran introuvable : " + screenDevice + " (débranché ?)");
-                    h = WindowFilling(sm, selfPid);
+                    h = WindowOn(sm, selfPid, 0.9);
                     hmon = sm;
-                    if (h == IntPtr.Zero) { kind = "monitor"; h = N.GetDesktopWindow(); }
-                    else kind = "composed";
+                    if (h == IntPtr.Zero && obsOutput) { kind = "monitor"; h = N.GetDesktopWindow(); }
+                    else { if (h == IntPtr.Zero) h = WindowOn(sm, selfPid, 0.25); kind = "composed"; }
                     break;
                 case "window":
                     h = new IntPtr((long)J.Num(spec, "hwnd", 0));
@@ -129,7 +131,8 @@ namespace Raptoru.Chaos
                     break;
                 default: throw new ProtocolError("invalid_target", "cible inconnue : " + kind);
             }
-            if (h == IntPtr.Zero || !N.IsWindow(h)) throw new ProtocolError("no_window", "fenêtre cible introuvable");
+            bool bare = kind == "composed" && h == IntPtr.Zero; // écran sans fenêtre : son image seule
+            if (!bare && (h == IntPtr.Zero || !N.IsWindow(h))) throw new ProtocolError("no_window", "fenêtre cible introuvable");
             uint pid; N.GetWindowThreadProcessId(h, out pid);
             bool monitor = kind == "monitor";
             if (!monitor && pid == selfPid) throw new ProtocolError("invalid_target", "une fenêtre du moteur ne peut pas être une cible");
@@ -143,7 +146,7 @@ namespace Raptoru.Chaos
                 t.Hmon = hmon;
                 t.Device = screenDevice;
                 t.Key = "screen:" + screenDevice;
-                t.Info = J.Map("kind", "screen", "mode", "E", "device", screenDevice, "hwnd", h.ToInt64(), "process", ProcName(pid), "title", N.WindowText(h),
+                t.Info = J.Map("kind", "screen", "mode", "E", "device", screenDevice, "hwnd", h.ToInt64(), "process", bare ? null : ProcName(pid), "title", bare ? null : N.WindowText(h),
                     "input", null, "follow_foreground", false, "screen", ScreenTitle(screenDevice));
             }
             else if (monitor)

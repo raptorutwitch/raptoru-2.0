@@ -478,7 +478,7 @@ namespace Raptoru.Chaos
             Case("protocole : demande d'effet validée (identifiant, effet, source, interne, priorité, préréglage, cible)", () =>
             {
                 var cfg = new ConfigStore(reg, null);
-                Func<Dictionary<string, object>, EffectDef, TargetRef> target = (t, d) => new TargetRef { Key = "window:1", Kind = "window" };
+                Func<Dictionary<string, object>, EffectDef, bool, TargetRef> target = (t, d, o) => new TargetRef { Key = "window:1", Kind = "window" };
                 Func<Dictionary<string, object>, string> code = b => Throws<ProtocolError>(() => Protocol.BuildRequest(b, reg, cfg, target));
                 Eq("bad_request_id", code(J.Map("effect", "flip")), "request_id");
                 Eq("unknown_effect", code(J.Map("request_id", "r", "effect", "nope")), "effet");
@@ -487,7 +487,7 @@ namespace Raptoru.Chaos
                 Eq("invalid_priority", code(J.Map("request_id", "r", "effect", "flip", "priority", 1.5)), "priorité");
                 Eq("unknown_preset", code(J.Map("request_id", "r", "effect", "flip", "preset", "absent")), "préréglage");
                 // Couche Entrées (expérimentale) : jamais pour une activation communautaire, même activée.
-                Func<Dictionary<string, object>, EffectDef, TargetRef> screen = (t, d) => new TargetRef { Key = "monitor:x", Kind = "monitor", Info = J.Map("kind", "monitor", "input", "invert_xy") };
+                Func<Dictionary<string, object>, EffectDef, bool, TargetRef> screen = (t, d, o) => new TargetRef { Key = "monitor:x", Kind = "monitor", Info = J.Map("kind", "monitor", "input", "invert_xy") };
                 var fromCore = Protocol.BuildRequest(J.Map("request_id", "c", "effect", "flip", "source", J.Map("kind", "core")), reg, cfg, screen);
                 var fromStudio = Protocol.BuildRequest(J.Map("request_id", "s", "effect", "flip", "source", J.Map("kind", "studio")), reg, cfg, screen);
                 True(J.Str(fromCore.TargetInfo, "input", null) == null && J.Str(fromCore.TargetInfo, "input_blocked", "") == "source_core" && J.Str(fromStudio.TargetInfo, "input", null) == "invert_xy",
@@ -496,6 +496,23 @@ namespace Raptoru.Chaos
                 True(req.SourceKind == "core" && req.SourceRef == "achat-42" && req.Priority == 3 && req.TargetKey == "window:1", "demande complète");
                 var ev = Protocol.Event("effect.started", 5, J.Map("request_id", "r"));
                 True((int)ev["v"] == 2 && (string)ev["type"] == "event" && (string)ev["event"] == "effect.started", "événement normalisé");
+            });
+            Case("capture directe par OBS : la sortie OBS est transmise à la résolution de cible ; calque exclu seulement s'il se capturerait", () =>
+            {
+                var cfg = new ConfigStore(reg, null);
+                var seen = new List<bool>();
+                Func<Dictionary<string, object>, EffectDef, bool, TargetRef> spy = (t, d, o) => { seen.Add(o); return new TargetRef { Key = "screen:x", Kind = "screen" }; };
+                Protocol.BuildRequest(J.Map("request_id", "a", "effect", "flip", "source", J.Map("kind", "studio"), "outputs", new object[] { "screen" }), reg, cfg, spy);
+                Protocol.BuildRequest(J.Map("request_id", "b", "effect", "flip", "source", J.Map("kind", "studio"), "outputs", new object[] { "screen", "obs" },
+                    "obs", J.Map("width", 2560, "height", 1440)), reg, cfg, spy);
+                Protocol.BuildRequest(J.Map("request_id", "c", "effect", "flip", "source", J.Map("kind", "studio")), reg, cfg, spy);
+                True(seen.SequenceEqual(new[] { false, true, false }), "écran seul → false, écran + OBS → true, défaut → false");
+                // Mode E : image de l'écran prise avant l'apparition du calque → jamais exclu tant qu'il n'est pas affiché.
+                True(!EffectRequest.SelfCapture(true, "E", false), "mode E, image de l'écran à prendre, calque masqué : capturable");
+                True(EffectRequest.SelfCapture(true, "E", true), "mode E, image à reprendre calque affiché : exclu le temps de la prise");
+                True(!EffectRequest.SelfCapture(false, "E", true), "mode E, image prise : capturable");
+                True(EffectRequest.SelfCapture(true, "C", false) && EffectRequest.SelfCapture(true, "C", true), "mode C : toujours exclu (il lit son écran)");
+                True(!EffectRequest.SelfCapture(false, "D", true), "mode D (fenêtre) : capturable");
             });
 
             // ---------- Catalogue des effets V2 (docs/chaos/ETUDE_EFFETS_V2.md) ----------

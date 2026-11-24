@@ -141,8 +141,9 @@ namespace Raptoru.Chaos
             return true;
         }
 
-        /// Mode C : l'écran existe tant qu'il est branché. Modes D et E : la fenêtre doit exister et ne pas être réduite.
-        public bool TargetAlive { get { return Mode == "C" || N.IsWindow(Target); } }
+        /// Mode C (et E sans fenêtre) : l'écran existe tant qu'il est branché. Modes D et E : la fenêtre doit exister et ne
+        /// pas être réduite.
+        public bool TargetAlive { get { return Mode == "C" || Target == IntPtr.Zero && MonitorMode || N.IsWindow(Target); } }
         public bool TargetMinimized { get { return Mode != "C" && N.IsIconic(Target); } }
 
         public bool TargetForeground()

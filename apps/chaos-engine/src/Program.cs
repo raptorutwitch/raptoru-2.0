@@ -69,8 +69,11 @@ namespace Raptoru.Chaos
                     {
                         try
                         {
-                            var t = Targets.Resolve(J.Map("kind", "screen", "device", sc.Device), "window", System.Diagnostics.Process.GetCurrentProcess().Id, rreg.Get("blink"), false);
+                            int self = System.Diagnostics.Process.GetCurrentProcess().Id;
+                            var t = Targets.Resolve(J.Map("kind", "screen", "device", sc.Device), "window", self, rreg.Get("blink"), false);
+                            var to = Targets.Resolve(J.Map("kind", "screen", "device", sc.Device), "window", self, rreg.Get("blink"), false, true);
                             list.Add(J.Map("device", sc.Device, "kind", t.Kind, "key", t.Key, "mode", J.Str(t.Info, "mode", null), "process", J.Str(t.Info, "process", null),
+                                "title", J.Str(t.Info, "title", null), "mode_with_obs_output", J.Str(to.Info, "mode", null),
                                 "monitor", J.Map("x", sc.X, "y", sc.Y, "width", sc.Width, "height", sc.Height)));
                         }
                         catch (ProtocolError e) { list.Add(J.Map("device", sc.Device, "error", e.Code)); }

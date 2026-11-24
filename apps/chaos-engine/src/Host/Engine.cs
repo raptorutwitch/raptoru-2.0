@@ -369,7 +369,10 @@ namespace Raptoru.Chaos
             // Exclusion des captures (docs/chaos/ECRAN_ENTIER.md) : seulement tant que la surface lit une capture de son
             // propre écran ; sinon la capture d'écran d'OBS la voit. Images composées avant l'exclusion ignorées.
             // Mode C (docs/chaos/MODE_C.md) : exclue aussi tant qu'un effet de la surface passe par la sortie OBS.
-            bool selfCapture = needsCapture && s.Cap.CapturesScreen, obsOut = false;
+            // Mode E : l'image de l'écran est prise AVANT que le calque n'apparaisse ; il n'a besoin d'être exclu que si
+            // elle doit être reprise pendant qu'il est déjà affiché (un autre effet tourne sur cet écran). Aucune bascule
+            // d'exclusion inutile : la capture d'écran d'OBS le voit dès sa première image.
+            bool selfCapture = needsCapture && EffectRequest.SelfCapture(s.Cap.CapturesScreen, s.S.Mode, s.S.Shown), obsOut = false;
             foreach (var e in s.Effects) if (e.A.Req.ObsLive && e.A.State != ActState.Finished) obsOut = true;
             bool excl = selfCapture || obsOut;
             if (excl != s.S.Excluded)
@@ -851,7 +854,7 @@ namespace Raptoru.Chaos
                     // windows = false : les écrans seulement (relevé régulier de la page Chaos, sans parcourir les fenêtres).
                     return J.Map("monitors", Targets.Monitors().ToArray(), "windows", J.Bool(b, "windows", true) ? Targets.Windows(selfPid).ToArray() : new object[0]);
                 case "effect.request":
-                    var req = Protocol.BuildRequest(b, reg, cfg, (spec, def) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def, cfg.Engine.InputEffects));
+                    var req = Protocol.BuildRequest(b, reg, cfg, (spec, def, obsOut) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, def, cfg.Engine.InputEffects, obsOut));
                     CheckAllowed(req);
                     var a = sched.Submit(req);
                     return Protocol.View(a, Now);
@@ -955,7 +958,7 @@ namespace Raptoru.Chaos
                 }
                 // Durée imposée (Performance Lab : la phase « effet » d'une mesure en jeu), validée comme toute demande.
                 else if (J.Has(b, "duration_ms")) body["duration_ms"] = (int)J.Num(b, "duration_ms", 0);
-                var req = Protocol.BuildRequest(body, reg, cfg, (spec, d) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, d, cfg.Engine.InputEffects));
+                var req = Protocol.BuildRequest(body, reg, cfg, (spec, d, obsOut) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, d, cfg.Engine.InputEffects, obsOut));
                 CheckAllowed(req);
                 reqs.Add(req);
             }

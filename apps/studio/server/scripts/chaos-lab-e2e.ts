@@ -436,12 +436,15 @@ try {
         .locator('.cx-obs [data-obs-mode][aria-pressed="true"]')
         .innerText()
     ).trim();
-  const obsText = await page.locator('.cx-obs').innerText();
   check(
-    (await modeOn()) === 'Écran + OBS',
-    'Diffusion OBS : « Écran + OBS » par défaut',
+    (await modeOn()) === 'Écran uniquement' &&
+      /capture directe/.test(await page.locator('.cx-obs').innerText()),
+    'Diffusion OBS : « Écran uniquement » (capture directe, sans filtre) par défaut',
     await modeOn(),
   );
+  await page.locator('.cx-obs [data-obs-mode="both"]').click();
+  await page.waitForTimeout(600);
+  const obsText = await page.locator('.cx-obs').innerText();
   check(
     /OBS non connecté/.test(obsText) && /Écran \+ OBS incomplet/.test(obsText),
     'sans OBS : le mode C se dit incomplet, avec la raison (les effets partent sur l’écran seul)',
@@ -450,18 +453,19 @@ try {
     await page.locator('.cx-obs [data-obs-preview]').isDisabled(),
     '« Préparer les filtres OBS… » indisponible sans OBS (rien ne peut être créé)',
   );
-  await page.locator('.cx-obs [data-obs-mode="screen"]').click();
-  await page.waitForTimeout(600);
   const obsSaved = (await (
     await fetch(`${BASE}/api/chaos/obs`, { headers: H })
   ).json()) as { config: { mode: string } };
   check(
-    obsSaved.config.mode === 'screen' && (await modeOn()) === 'Écran uniquement',
-    'mode « Écran uniquement » enregistré',
+    obsSaved.config.mode === 'both' && (await modeOn()) === 'Écran + OBS',
+    'mode « Écran + OBS » enregistré',
   );
-  await page.locator('.cx-obs [data-obs-mode="both"]').click();
+  await page.locator('.cx-obs [data-obs-mode="screen"]').click();
   await page.waitForTimeout(600);
-  check((await modeOn()) === 'Écran + OBS', 'mode « Écran + OBS » rétabli');
+  check(
+    (await modeOn()) === 'Écran uniquement',
+    'capture directe (« Écran uniquement ») rétablie',
+  );
   await page
     .locator('.cx-obs')
     .screenshot({ path: join(OUT, '9-diffusion-obs.png') });

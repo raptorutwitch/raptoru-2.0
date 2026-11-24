@@ -42,6 +42,11 @@ namespace Raptoru.Chaos
         /// calque n'est alors plus exclu des captures (jamais deux applications, jamais d'effet invisible sans le dire).
         public string ObsBlocked;
         public bool ObsLive { get { return OutObs && ObsBlocked == null; } }
+
+        /// La surface lit-elle une capture de son propre écran pendant que le calque y est (il s'y verrait : exclusion
+        /// obligatoire) ? Mode E : l'image de l'écran est prise avant l'apparition du calque ; seulement si elle doit être
+        /// reprise pendant qu'il est affiché (rare : une fenêtre qui quitte le plein écran pendant l'effet).
+        public static bool SelfCapture(bool capturesScreen, string mode, bool shown) { return capturesScreen && (mode != "E" || shown); }
     }
 
     sealed class Activation

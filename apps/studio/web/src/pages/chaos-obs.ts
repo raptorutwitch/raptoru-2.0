@@ -154,7 +154,7 @@ export function mountObsPanel(
       ${row('Sorties', seg('data-obs-mode', MODES, c.mode))}
       ${
         c.mode === 'screen'
-          ? '<p class="d-faint cx-obs__note">Écran uniquement : comme avant, la capture d’écran d’OBS voit le calque (les effets qui lisent l’image n’y sont pas visibles sur le bureau).</p>'
+          ? '<p class="d-faint cx-obs__note">Écran uniquement (capture directe) : la source « Écran » d’OBS voit le même calque, une seule fois, sans aucun filtre. Pendant un effet qui lit l’image, la fenêtre du dessus (le jeu) reste en direct ; le reste de l’écran est figé.</p>'
           : `${row('OBS', `<span class="cx-ctl">${obsLine}</span>`)}
       ${row(
         'Source gameplay',

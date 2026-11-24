@@ -101,7 +101,11 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
 describe('Chaos › Diffusion OBS (mode C)', () => {
   it('préparation : filtres V2 créés désactivés, passe avant calque, sauvegarde, idempotente ; V1 et filtres étrangers intacts', async () => {
     const { obs, out } = setup('prepare');
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     const before = v1(obs);
     const pv = await out.preview();
     expect(pv.create).toEqual([
@@ -149,7 +153,11 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
   it('sorties d’une activation : écran + OBS si tout est prêt, sinon écran seul et la raison (ou refus en « OBS uniquement »)', async () => {
     const { obs, out } = setup('outputs');
     expect((await out.outputsFor('mirror')).outputs).toEqual(['screen']); // filtres non préparés
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     expect((await out.outputsFor('mirror')).note).toMatch(/à préparer/);
     await out.prepare(join(dir, 'backups'));
     const ok = await out.outputsFor('mirror');
@@ -170,7 +178,11 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
 
   it('session : réglages avant le départ, activation au départ, recalage à l’arrêt anticipé, coupure à la fin ; rien d’autre touché', async () => {
     const { obs, out } = setup('session');
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     await out.prepare(join(dir, 'backups'));
     await out.status(true);
     const before = v1(obs);
@@ -237,7 +249,11 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
 
   it('deux activations du même effet à la suite : la fin de la première ne coupe jamais le filtre repris par la seconde', async () => {
     const { obs, out } = setup('owner');
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     await out.prepare(join(dir, 'backups'));
     await out.status(true);
     const m = () =>
@@ -294,7 +310,11 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
 
   it('STOP ALL, arrêt d’urgence : seuls les filtres V2 actifs sont coupés (un filtre V1 ou étranger actif reste actif)', async () => {
     const { obs, out } = setup('stopall');
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     await out.prepare(join(dir, 'backups'));
     for (const f of obs.filters) f.filterEnabled = true; // y compris le V1 « Retourné »
     expect((await out.disableAll('STOP ALL')).disabled).toBe(3);
@@ -314,7 +334,11 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
 
   it('protection anti-double refusée par Windows : la sortie OBS est coupée et l’incident affiché', async () => {
     const { obs, out } = setup('blocked');
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     await out.prepare(join(dir, 'backups'));
     await out.status(true);
     out.onEngineEvent({
@@ -348,7 +372,11 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
 
   it('OBS perdu pendant un effet : le moteur cesse d’exclure le calque ; à la reconnexion, aucun filtre V2 ne reste actif', async () => {
     const { obs, out, engine } = setup('lost');
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     await out.prepare(join(dir, 'backups'));
     await out.status(true);
     out.start();
@@ -388,7 +416,11 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
 
   it('plan du moteur changé depuis la préparation : la session échoue proprement (moteur prévenu, rien activé)', async () => {
     const { obs, out, engine } = setup('stale');
-    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.setConfig({
+      mode: 'both',
+      source: 'Écran',
+      device: '\\\\.\\DISPLAY1',
+    });
     await out.prepare(join(dir, 'backups'));
     await out.status(true);
     out.onEngineEvent({

@@ -316,49 +316,51 @@ namespace Raptoru.Chaos
     /// la fenêtre ne le contient jamais, et l'image de l'écran est prise avant qu'il s'affiche (ou calque exclu le temps de
     /// la prendre, CapturesScreen). Limite : le reste de l'écran est figé pendant l'effet (horloge, survol de la barre).
     /// Fenêtre qui couvre tout l'écran (jeu en fenêtré sans bordure) : sa capture est lue directement, sans composition.
+    /// Sans fenêtre (hwnd = 0, écran vide) : l'image de l'écran seule, figée pendant l'effet.
     sealed class ComposedScreenSource : ICaptureSource
     {
         const int SnapTimeoutMs = 500;
         readonly Gpu gpu;
         readonly GpuTimer timer;
         readonly AutoResetEvent frameEvt;
-        readonly WgcCaptureSource win;
+        readonly WgcCaptureSource win;   // null : aucune fenêtre (image de l'écran seule)
+        readonly string key;
         readonly IntPtr hwnd, hmon;
         readonly RECT mon;
         readonly uint w, h;
         WgcCaptureSource snap;
         IntPtr tex, srv;
-        long snapStart = -1, notBefore, snapMs = -1, composes;
+        long snapStart = -1, notBefore, snapMs = -1, composes, snapQpc;
         bool snapped, direct, mipsDirty, composed;
 
         public ComposedScreenSource(Gpu gpu, GpuTimer timer, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon)
         {
-            this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; this.hwnd = hwnd; this.hmon = hmon;
+            this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; this.key = key; this.hwnd = hwnd; this.hmon = hmon;
             mon = N.MonitorRectOf(hmon);
             w = (uint)Math.Max(16, mon.Right - mon.Left); h = (uint)Math.Max(16, mon.Bottom - mon.Top);
-            win = new WgcCaptureSource(gpu, timer, frameEvt, key, hwnd, IntPtr.Zero) { ZeroCopy = true };
+            if (hwnd != IntPtr.Zero) win = new WgcCaptureSource(gpu, timer, frameEvt, key, hwnd, IntPtr.Zero) { ZeroCopy = true };
             direct = Covers();
         }
 
-        public string Key { get { return win.Key; } }
+        public string Key { get { return key; } }
         public string Backend { get { return "wgc-screen"; } }
         public uint Width { get { return w; } }
         public uint Height { get { return h; } }
         public IntPtr Srv { get { return direct ? win.Srv : srv; } }
-        public bool HasFrame { get { return win.HasFrame && (direct || composed); } }
-        public bool Lost { get { return win.Lost; } }
-        public string LostReason { get { return win.LostReason; } }
-        public bool Black { get { return win.Black; } }
-        public long Frames { get { return win.Frames; } }
-        public long Dropped { get { return win.Dropped; } }
-        public long LastArrivalQpc { get { return win.LastArrivalQpc; } }
-        public long LastFrameQpc { get { return win.LastFrameQpc; } }
+        public bool HasFrame { get { return win != null ? win.HasFrame && (direct || composed) : composed; } }
+        public bool Lost { get { return win != null && win.Lost; } }
+        public string LostReason { get { return win != null ? win.LostReason : null; } }
+        public bool Black { get { return win != null && win.Black; } }
+        public long Frames { get { return win != null ? win.Frames : composes; } }
+        public long Dropped { get { return win != null ? win.Dropped : 0; } }
+        public long LastArrivalQpc { get { return win != null ? win.LastArrivalQpc : snapQpc; } }
+        public long LastFrameQpc { get { return win != null ? win.LastFrameQpc : snapQpc; } }
         /// Lecture directe de la fenêtre toujours (la composition est déjà une copie).
         public bool ZeroCopy { get; set; }
         public bool CapturesScreen { get { return !direct && !snapped; } }
         public void NotBefore(long qpc) { notBefore = qpc; if (snap != null) snap.NotBefore(qpc); }
         public void Refresh() { snapped = false; composed = false; DisposeSnap(); }
-        public void SetMinInterval(double ms) { win.SetMinInterval(ms); }
+        public void SetMinInterval(double ms) { if (win != null) win.SetMinInterval(ms); }
         /// Diagnostic : image de l'écran prise, composition directe.
         internal bool Snapped { get { return snapped; } }
         internal bool Direct { get { return direct; } }
@@ -367,6 +369,7 @@ namespace Raptoru.Chaos
         /// La fenêtre couvre tout l'écran, à la taille de l'écran : rien d'autre à montrer.
         bool Covers()
         {
+            if (win == null) return false;
             RECT r = N.FrameBounds(hwnd);
             return r.Left <= mon.Left && r.Top <= mon.Top && r.Right >= mon.Right && r.Bottom >= mon.Bottom && win.Width == w && win.Height == h;
         }
@@ -380,8 +383,8 @@ namespace Raptoru.Chaos
 
         public bool Acquire(long now)
         {
-            bool fresh = win.Acquire(now);
-            bool covers = win.HasFrame && Covers();
+            bool fresh = win != null && win.Acquire(now);
+            bool covers = win != null && win.HasFrame && Covers();
             if (covers != direct) { direct = covers; mipsDirty = true; if (!direct) { snapped = false; composed = false; } }
             if (direct) return fresh;
             bool justSnapped = false;
@@ -389,6 +392,11 @@ namespace Raptoru.Chaos
             {
                 if (!Snap(now)) return false;
                 justSnapped = true;
+            }
+            if (win == null)
+            {
+                if (justSnapped) { composed = true; mipsDirty = true; composes++; }
+                return justSnapped;
             }
             if (!win.HasFrame || (!fresh && !justSnapped)) return false;
             Compose();
@@ -413,6 +421,7 @@ namespace Raptoru.Chaos
             gpu.CopyAt(tex, 0, 0, snap.CurrentTexture, 0, 0, Math.Min(snap.Width, w), Math.Min(snap.Height, h));
             if (timer != null) timer.End();
             snapMs = now - snapStart;
+            snapQpc = N.QpcNow();
             snapped = true;
             DisposeSnap();
             return true;
@@ -447,9 +456,9 @@ namespace Raptoru.Chaos
 
         public Dictionary<string, object> Info()
         {
-            var d = win.Info();
+            var d = win != null ? win.Info() : new Dictionary<string, object> { { "key", key } };
             d["backend"] = Backend;
-            d["screen"] = J.Map("size", w + "x" + h, "direct", direct, "snapshot_ms", snapMs, "composes", composes);
+            d["screen"] = J.Map("size", w + "x" + h, "direct", direct, "snapshot_ms", snapMs, "composes", composes, "window", win != null);
             return d;
         }
 
@@ -457,7 +466,7 @@ namespace Raptoru.Chaos
 
         public void Dispose()
         {
-            win.Dispose();
+            if (win != null) win.Dispose();
             DisposeSnap();
             Com.Release(ref srv); Com.Release(ref tex);
         }

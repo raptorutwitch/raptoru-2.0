@@ -58,7 +58,7 @@ namespace Raptoru.Chaos
         }
 
         /// Construit une demande validée. resolveTarget transforme la cible demandée en cible réelle (ou lève ProtocolError).
-        public static EffectRequest BuildRequest(Dictionary<string, object> b, Registry reg, ConfigStore cfg, Func<Dictionary<string, object>, EffectDef, TargetRef> resolveTarget)
+        public static EffectRequest BuildRequest(Dictionary<string, object> b, Registry reg, ConfigStore cfg, Func<Dictionary<string, object>, EffectDef, bool, TargetRef> resolveTarget)
         {
             string rid = J.Str(b, "request_id", null);
             if (rid == null || !IdRe.IsMatch(rid)) throw new ProtocolError("bad_request_id", "request_id obligatoire (1 à 80 caractères A-Z a-z 0-9 _ . : -)");
@@ -79,14 +79,6 @@ namespace Raptoru.Chaos
             // Les sources externes (Core, extension, points de chaîne) ne règlent jamais un paramètre non exposé.
             bool trusted = kind == "studio" || kind == "test";
             var resolved = Params.Resolve(def, J.Str(b, "variant", null), preset, J.Obj(b, "params"), dur, J.Obj(b, "transition"), reg.Limits, cfg.Safety, trusted, J.Str(b, "level", null));
-            var target = resolveTarget(J.Obj(b, "target") ?? J.Map("kind", "foreground"), def);
-            // Couche Entrées (Windows retourne l'affichage, EXPÉRIMENTALE) : jamais pour une activation communautaire
-            // (Core, extension, points de chaîne), même si elle est activée : l'effet passe par le calque GPU.
-            if (!trusted && target.Info != null && J.Has(target.Info, "input"))
-            {
-                target.Info["input"] = null;
-                target.Info["input_blocked"] = "source_" + kind;
-            }
             // Sorties : ["screen"] par défaut ; "obs" demande la sortie OBS (taille de la source obligatoire).
             var outs = J.Strs(b, "outputs");
             bool outScreen = true, outObs = false;
@@ -98,6 +90,15 @@ namespace Raptoru.Chaos
             var obs = J.Obj(b, "obs");
             int obsW = (int)J.Num(obs, "width", 0), obsH = (int)J.Num(obs, "height", 0);
             if (outObs && (obsW < 16 || obsH < 16 || obsW > 16384 || obsH > 16384)) throw new ProtocolError("invalid_outputs", "sortie OBS : obs.width et obs.height (taille de la source) obligatoires");
+            // La sortie OBS décide du mode d'une cible « écran » (Targets.Resolve) : sans elle, calque jamais exclu.
+            var target = resolveTarget(J.Obj(b, "target") ?? J.Map("kind", "foreground"), def, outObs);
+            // Couche Entrées (Windows retourne l'affichage, EXPÉRIMENTALE) : jamais pour une activation communautaire
+            // (Core, extension, points de chaîne), même si elle est activée : l'effet passe par le calque GPU.
+            if (!trusted && target.Info != null && J.Has(target.Info, "input"))
+            {
+                target.Info["input"] = null;
+                target.Info["input_blocked"] = "source_" + kind;
+            }
             return new EffectRequest
             {
                 OutScreen = outScreen, OutObs = outObs, ObsW = obsW, ObsH = obsH,

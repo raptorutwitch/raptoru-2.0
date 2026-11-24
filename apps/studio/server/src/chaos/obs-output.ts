@@ -84,8 +84,10 @@ function obsReason(e: unknown) {
 }
 
 export class ChaosObsOutput {
+  // Capture directe par défaut (docs/chaos/CAPTURE_DIRECTE.md) : la source « Écran » d'OBS voit le calque, sans
+  // filtre. Écran + OBS (filtres, mode C) reste l'alternative, choisie dans le panneau Diffusion OBS.
   config: ChaosObsConfig = {
-    mode: 'both',
+    mode: 'screen',
     source: null,
     device: null,
     prepared: null,
@@ -120,13 +122,13 @@ export class ChaosObsOutput {
       ) as Partial<ChaosObsConfig>;
       this.config = {
         mode:
-          saved.mode === 'screen' || saved.mode === 'obs' ? saved.mode : 'both',
+          saved.mode === 'both' || saved.mode === 'obs' ? saved.mode : 'screen',
         source: typeof saved.source === 'string' ? saved.source : null,
         device: typeof saved.device === 'string' ? saved.device : null,
         prepared: saved.prepared ?? null,
       };
     } catch {
-      /* réglages par défaut : écran + OBS, source à choisir */
+      /* réglages par défaut : capture directe (écran seul), source à choisir */
     }
   }
   private async save() {
