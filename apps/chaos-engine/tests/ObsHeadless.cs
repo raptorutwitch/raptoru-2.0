@@ -209,8 +209,146 @@ namespace Raptoru.Chaos
             }
         }
 
+        // ---------- --cursor-toggle : « Capturer le curseur » d'une capture d'écran, basculé pendant la capture ----------
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_source_properties(IntPtr s);
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_properties_get(IntPtr props, string name);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_properties_destroy(IntPtr props);
+        [DllImport("obs.dll", CallingConvention = C)] static extern UIntPtr obs_property_list_item_count(IntPtr p);
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_property_list_item_name(IntPtr p, UIntPtr i);
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_property_list_item_string(IntPtr p, UIntPtr i);
+        [DllImport("obs.dll", CallingConvention = C)] static extern uint obs_source_get_width(IntPtr s);
+        [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
+        struct Sample { public long Ts; public double Mean, Zero; }
+        static readonly List<Sample> samples = new List<Sample>();
+        static readonly RawVideo onSample = (p, f) =>
+        {
+            // ~1 900 points répartis sur l'image : moyenne et part de pixels noirs (source vide = noir sur le canevas).
+            IntPtr data = Marshal.ReadIntPtr(f, 0);
+            int pitch = Marshal.ReadInt32(f, 8 * IntPtr.Size);
+            long ts = Marshal.ReadInt64(f, 8 * IntPtr.Size + 32);
+            double sum = 0; int zero = 0, n = 0;
+            for (int y = H / 40; y < H; y += H / 40)
+                for (int x = W / 50; x < W; x += W / 50)
+                {
+                    int v = Marshal.ReadInt32(new IntPtr(data.ToInt64() + (long)y * pitch + x * 4));
+                    int lum = (v & 0xff) + ((v >> 8) & 0xff) + ((v >> 16) & 0xff);
+                    sum += lum; if (lum <= 3) zero++; n++;
+                }
+            lock (gate) samples.Add(new Sample { Ts = ts, Mean = sum / n / 3, Zero = (double)zero / n });
+        };
+
+        /// chaos-obs-check.exe --cursor-toggle --out <dossier> [--method 1|2] [--monitor <texte du nom>] [--toggles 8]
+        /// Capture d'écran (« monitor_capture », méthode DXGI = 1 comme « Écran », ou WGC = 2) dans libobs sans fenêtre ;
+        /// « capture_cursor » basculé toutes les 1,2 s par obs_source_update (ce que fait SetInputSettings d'OBS
+        /// WebSocket) ; compte les images vides ou noircies autour de chaque bascule et vérifie que la source reste la
+        /// même. Lit l'écran en mémoire seulement (aucune image enregistrée), rien d'affiché, OBS réel non touché.
+        static int CursorToggle(string[] args)
+        {
+            string obsDir = @"C:\Program Files\obs-studio", outDir = null, match = "@ 0,0";
+            int method = 1, toggles = 8;
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
+                else if (args[i] == "--obs" && i + 1 < args.Length) obsDir = args[++i];
+                else if (args[i] == "--method" && i + 1 < args.Length) method = int.Parse(args[++i]);
+                else if (args[i] == "--monitor" && i + 1 < args.Length) match = args[++i];
+                else if (args[i] == "--toggles" && i + 1 < args.Length) toggles = int.Parse(args[++i]);
+            }
+            if (outDir == null) { Console.Error.WriteLine("--out obligatoire"); return 2; }
+            Directory.CreateDirectory(outDir);
+            SetProcessDpiAwarenessContext(new IntPtr(-4)); // pixels physiques : sinon DuplicateOutput1 est refusé (887A0004)
+            var scr = System.Windows.Forms.Screen.PrimaryScreen.Bounds;
+            W = scr.Width; H = scr.Height;
+            string bin = Path.Combine(obsDir, @"bin\64bit");
+            SetDllDirectory(bin);
+            Directory.SetCurrentDirectory(bin);
+            if (LoadLibrary(Path.Combine(bin, "obs.dll")) == IntPtr.Zero) { Console.Error.WriteLine("obs.dll introuvable : " + bin); return 2; }
+            string cfg = Path.Combine(Path.GetFullPath(outDir), "obs-config").Replace('\\', '/') + "/";
+            Directory.CreateDirectory(cfg);
+            if (!obs_startup("fr-FR", cfg, IntPtr.Zero)) { Console.Error.WriteLine("obs_startup"); return 1; }
+            var report = new Dictionary<string, object>();
+            int failures = 0;
+            try
+            {
+                var vi = new VideoInfo { Module = Marshal.StringToHGlobalAnsi("libobs-d3d11"), FpsNum = 60, FpsDen = 1, BaseW = (uint)W, BaseH = (uint)H, OutW = (uint)W, OutH = (uint)H, Format = 6, GpuConv = true, Cs = 2, Range = 2, Scale = 3 };
+                int rv = obs_reset_video(ref vi);
+                if (rv != 0) throw new InvalidOperationException("obs_reset_video " + rv);
+                string plugins = obsDir.Replace('\\', '/');
+                IntPtr mod;
+                int r = obs_open_module(out mod, plugins + "/core/win-capture/win-capture.dll", plugins + "/core/win-capture/data");
+                if (r != 0 || !obs_init_module(mod)) throw new InvalidOperationException("win-capture non chargé (" + r + ")");
+                report["obs"] = FileVersion(Path.Combine(bin, "obs64.exe"));
+                var src = Source("monitor_capture", "Écran (test)", new Dictionary<string, object> { { "method", method }, { "capture_cursor", true } });
+                // Écran : l'élément de la liste « monitor_id » dont le nom contient `match` (défaut : l'écran en 0,0).
+                IntPtr props = obs_source_properties(src), prop = obs_properties_get(props, "monitor_id");
+                string id = null, name = null;
+                var names = new List<string>();
+                for (uint i = 0; prop != IntPtr.Zero && i < (uint)obs_property_list_item_count(prop); i++)
+                {
+                    string nm = Utf8At(obs_property_list_item_name(prop, (UIntPtr)i)), v = Utf8At(obs_property_list_item_string(prop, (UIntPtr)i));
+                    names.Add(nm);
+                    if (id == null && nm.Contains(match)) { id = v; name = nm; }
+                }
+                obs_properties_destroy(props);
+                report["monitors"] = names.ToArray();
+                if (id == null) throw new InvalidOperationException("écran introuvable (« " + match + " ») parmi : " + string.Join(" | ", names));
+                report["monitor"] = name; report["method"] = method == 1 ? "DXGI" : method == 2 ? "WGC" : "auto";
+                Update(src, new Dictionary<string, object> { { "monitor_id", id } });
+                obs_set_output_source(0, src);
+                obs_add_raw_video_callback(IntPtr.Zero, onSample, IntPtr.Zero);
+                Thread.Sleep(2500);
+                IntPtr before = src;
+                uint w0 = obs_source_get_width(src);
+                long baseStart = NowNs();
+                Thread.Sleep(3000);
+                long baseEnd = NowNs();
+                var marks = new List<KeyValuePair<long, bool>>();
+                bool on = true;
+                for (int k = 0; k < toggles; k++)
+                {
+                    on = !on;
+                    marks.Add(new KeyValuePair<long, bool>(NowNs(), on));
+                    Update(src, new Dictionary<string, object> { { "capture_cursor", on } });
+                    Thread.Sleep(1200);
+                }
+                obs_remove_raw_video_callback(onSample, IntPtr.Zero);
+                obs_set_output_source(0, IntPtr.Zero);
+                List<Sample> all;
+                lock (gate) all = samples.ToList();
+                Func<Sample, bool> blank = s => s.Zero > 0.97;
+                var baseline = all.Where(s => s.Ts >= baseStart && s.Ts < baseEnd).ToList();
+                double baseMean = baseline.Count > 0 ? baseline.Average(s => s.Mean) : 0;
+                // « noirci » : moyenne tombée sous 60 % de la référence (trou partiel) ; « vide » : ≥ 97 % de pixels noirs.
+                Func<Sample, bool> dark = s => blank(s) || baseMean > 8 && s.Mean < 0.6 * baseMean;
+                var per = new List<object>();
+                int worst = 0;
+                foreach (var m in marks)
+                {
+                    var win = all.Where(s => s.Ts >= m.Key && s.Ts < m.Key + 600000000L).ToList();
+                    int nb = win.Count(blank), nd = win.Count(dark);
+                    worst = Math.Max(worst, nd);
+                    per.Add(J.Map("capture_cursor", m.Value, "frames_600ms", win.Count, "blank_frames", nb, "dark_frames", nd,
+                        "first_dark_ms", nd > 0 ? (object)Math.Round((win.First(dark).Ts - m.Key) / 1e6, 1) : null));
+                }
+                report["baseline"] = J.Map("frames", baseline.Count, "blank_frames", baseline.Count(blank), "dark_frames", baseline.Count(dark), "mean", Math.Round(baseMean, 1));
+                report["toggles"] = per.ToArray();
+                report["same_source"] = before == src && obs_source_get_width(src) == w0;
+                report["worst_dark_frames_per_toggle"] = worst;
+                Console.WriteLine("Écran : " + name + " · méthode " + report["method"] + " · référence : " + baseline.Count + " images, " + baseline.Count(dark) + " noircies");
+                foreach (Dictionary<string, object> t in per)
+                    Console.WriteLine("  capture_cursor → " + t["capture_cursor"] + " : " + t["dark_frames"] + " image(s) vide(s) ou noircie(s) sur " + t["frames_600ms"] + " en 600 ms" + (t["first_dark_ms"] != null ? " (dès " + t["first_dark_ms"] + " ms)" : ""));
+                obs_source_release(src);
+            }
+            catch (Exception e) { report["error"] = e.Message; failures++; Console.Error.WriteLine(e.Message); }
+            File.WriteAllText(Path.Combine(outDir, "report.json"), J.Write(report), new UTF8Encoding(false));
+            Console.Out.Flush();
+            obs_shutdown();
+            return failures == 0 ? 0 : 1;
+        }
+
         public static int Main(string[] args)
         {
+            if (args.Contains("--cursor-toggle")) return CursorToggle(args);
             string obsDir = @"C:\Program Files\obs-studio", outDir = null;
             uint fps = 0;
             var dirs = new List<string>();
