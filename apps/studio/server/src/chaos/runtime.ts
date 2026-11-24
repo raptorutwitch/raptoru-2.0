@@ -20,6 +20,7 @@ import {
 } from './perf.js';
 import type { ObsLike } from '../channel-points/obs-actions.js';
 import { ChaosObsError, ChaosObsOutput } from './obs-output.js';
+import { ChaosObsCursor } from './obs-cursor.js';
 import { PreviewError, renderPreview } from './preview.js';
 
 // Studio › Chaos (docs/chaos/ARCHITECTURE_MOTEUR.md) : l'API locale de la page Chaos. Elle ne décide rien : elle relaie
@@ -47,6 +48,8 @@ export class ChaosRuntime {
 
   /** Diffusion OBS (mode C, docs/chaos/MODE_C.md) : la sortie OBS des activations, sur la connexion OBS de Studio. */
   readonly obsOut: ChaosObsOutput;
+  /** Curseur d'OBS (docs/chaos/CURSEUR_OBS.md) : « Capturer le curseur » coupé pendant un effet à curseur dessiné. */
+  readonly obsCursor: ChaosObsCursor;
 
   constructor(
     private readonly opts: ChaosEngineOptions & {
@@ -67,7 +70,21 @@ export class ChaosRuntime {
       o.log,
     );
     void this.obsOut.load().then(() => this.obsOut.start());
-    this.client.on('exit', () => this.obsOut.onEngineExit());
+    this.obsCursor = new ChaosObsCursor(
+      join(o.stateDir, 'obs-cursor.json'),
+      o.obs ?? (() => null),
+      () => ({
+        source: this.obsOut.config.source,
+        device: this.obsOut.config.device,
+      }),
+      (effect) => this.drawsCursor(effect),
+      o.log,
+    );
+    void this.obsCursor.load().then(() => this.obsCursor.start());
+    this.client.on('exit', () => {
+      this.obsOut.onEngineExit();
+      void this.obsCursor.releaseAll();
+    });
     this.perf = new PerfLab(o.exe, o.stateDir, (cmd, args) =>
       this.client.call(cmd as Parameters<ChaosEngineClient['call']>[0], args),
     );
@@ -77,6 +94,7 @@ export class ChaosRuntime {
         this.perf.onTelemetry(e as unknown as Record<string, unknown>);
       } else {
         this.obsOut.onEngineEvent(e as unknown as Record<string, unknown>);
+        this.obsCursor.onEngineEvent(e as unknown as Record<string, unknown>);
         this.recent.push(e);
         if (this.recent.length > RECENT) this.recent.shift();
       }
@@ -87,8 +105,12 @@ export class ChaosRuntime {
   async stop() {
     this.perf.stop();
     this.obsOut.stop();
+    this.obsCursor.stop();
     await Promise.race([
-      this.obsOut.disableAll('Studio se ferme').catch(() => {}),
+      Promise.all([
+        this.obsOut.disableAll('Studio se ferme').catch(() => {}),
+        this.obsCursor.releaseAll(),
+      ]),
       new Promise((r) => setTimeout(r, 1500)),
     ]);
     return this.client.stop();
@@ -97,6 +119,22 @@ export class ChaosRuntime {
   private async describe() {
     this.registry ??= await this.client.call('describe');
     return this.registry;
+  }
+
+  /** L'effet dessine le curseur transformé : registre "cursor": "follow", suivi du curseur actif, case « curseur » de la fiche. */
+  private async drawsCursor(effect: string) {
+    const reg = (await this.describe())?.registry as
+      { effects?: { id: string; cursor?: string }[] } | undefined;
+    if (reg?.effects?.find((e) => e.id === effect)?.cursor !== 'follow')
+      return false;
+    const cfg = (await this.client.call('config.get')) as {
+      engine?: { cursor_follow?: boolean };
+      effects?: Record<string, { cursor?: boolean }>;
+    };
+    return (
+      cfg.engine?.cursor_follow !== false &&
+      cfg.effects?.[effect]?.cursor !== false
+    );
   }
 
   /**
@@ -272,6 +310,7 @@ export class ChaosRuntime {
           const [engine, obs] = await Promise.allSettled([
             c.call('stop_all', { reason: 'studio_stop_all' }),
             this.obsOut.disableAll('STOP ALL'),
+            this.obsCursor.releaseAll(),
           ]);
           if (engine.status === 'rejected') throw engine.reason;
           return (
@@ -287,10 +326,15 @@ export class ChaosRuntime {
         }
         case 'GET /obs':
           return (
-            reply(200, await this.obsOut.status(url.searchParams.has('force'))),
+            reply(200, {
+              ...(await this.obsOut.status(url.searchParams.has('force'))),
+              cursor: this.obsCursor.status(),
+            }),
             true
           );
         case 'POST /obs/config':
+          if (typeof body.cursor === 'boolean')
+            await this.obsCursor.setEnabled(body.cursor);
           return (
             reply(200, {
               config: await this.obsOut.setConfig({
@@ -304,7 +348,10 @@ export class ChaosRuntime {
                   ? { device: body.device as string | null }
                   : {}),
               }),
-              status: await this.obsOut.status(true),
+              status: {
+                ...(await this.obsOut.status(true)),
+                cursor: this.obsCursor.status(),
+              },
             }),
             true
           );

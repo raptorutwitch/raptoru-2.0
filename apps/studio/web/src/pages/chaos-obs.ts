@@ -59,6 +59,15 @@ export interface ObsStatus {
     error: string | null;
   }[];
   incident: { at: string; message: string } | null;
+  /** Curseur d'OBS pendant les effets à curseur dessiné (docs/chaos/CURSEUR_OBS.md). */
+  cursor?: {
+    enabled: boolean;
+    active: number;
+    hidden: boolean;
+    left_alone: boolean;
+    pending_restore: string | null;
+    incident: { at: string; message: string } | null;
+  };
 }
 interface Preview {
   source: string;
@@ -72,6 +81,10 @@ const MODES: [Mode, string][] = [
   ['screen', 'Écran uniquement'],
   ['obs', 'OBS uniquement'],
   ['both', 'Écran + OBS'],
+];
+const CURSOR: [string, string][] = [
+  ['off', 'Laisser'],
+  ['on', 'Masquer pendant les effets'],
 ];
 const KIND: Record<string, string> = {
   monitor_capture: 'capture d’écran',
@@ -150,25 +163,33 @@ export function mountObsPanel(
             ? stateChip('', 'obs-shaderfilter présent')
             : '')
       : stateChip('r', 'OBS non connecté');
-    return `<header><h2>Diffusion OBS</h2><span class="d-faint">Chaos sur ton écran et sur la source gameplay d’OBS, sous la webcam et les alertes</span><span class="d-sp"></span><button type="button" class="d-btn ghost sm" data-obs-refresh>${ic('repeat')}Vérifier</button></header>
-      ${row('Sorties', seg('data-obs-mode', MODES, c.mode))}
-      ${
-        c.mode === 'screen'
-          ? '<p class="d-faint cx-obs__note">Écran uniquement (capture directe) : la source « Écran » d’OBS voit le même calque, une seule fois, sans aucun filtre. Pendant un effet qui lit l’image, la fenêtre du dessus (le jeu) reste en direct ; le reste de l’écran est figé.</p>'
-          : `${row('OBS', `<span class="cx-ctl">${obsLine}</span>`)}
-      ${row(
-        'Source gameplay',
-        `<select data-obs-source aria-label="Source gameplay d’OBS"><option value="">Choisir…</option>${(
-          st.sources ?? []
+    const cur = st.cursor;
+    const cursorRows = `${row(
+      'Curseur d’OBS',
+      `${seg('data-obs-cursor', CURSOR, cur?.enabled ? 'on' : 'off')}${
+        cur?.hidden
+          ? stateChip('live', 'coupé pendant l’effet')
+          : cur?.pending_restore
+            ? stateChip('w', `à rétablir sur « ${esc(cur.pending_restore)} »`)
+            : cur?.left_alone
+              ? stateChip('', 'déjà coupé dans OBS : laissé tel quel')
+              : ''
+      }${cur?.enabled && !(c.source && c.device) ? '<span class="d-tag bad">choisir la source et l’écran capturé</span>' : ''}`,
+    )}
+      <p class="d-faint cx-obs__note">Miroir, retournement, tremblement, zoom, ivre et tunnel dessinent leur curseur transformé, qu’OBS capture avec l’image : « Masquer » coupe « Capturer le curseur » de la source pendant ces effets (un seul curseur dans le stream), puis rétablit la valeur d’avant. OBS redémarre alors sa capture : une ou deux images vides au début et à la fin de l’effet.${cur?.incident ? ` <b>${esc(new Date(cur.incident.at).toLocaleTimeString('fr-FR'))} · ${esc(cur.incident.message)}</b>` : ''}</p>`;
+    const sourceRows = `${row(
+      'Source gameplay',
+      `<select data-obs-source aria-label="Source gameplay d’OBS"><option value="">Choisir…</option>${(
+        st.sources ?? []
+      )
+        .map(
+          (s) =>
+            `<option value="${esc(s.name)}" ${s.name === c.source ? 'selected' : ''}>${esc(s.name)} · ${esc(KIND[s.kind] ?? s.kind)}</option>`,
         )
-          .map(
-            (s) =>
-              `<option value="${esc(s.name)}" ${s.name === c.source ? 'selected' : ''}>${esc(s.name)} · ${esc(KIND[s.kind] ?? s.kind)}</option>`,
-          )
-          .join(
-            '',
-          )}${c.source && !(st.sources ?? []).some((s) => s.name === c.source) ? `<option selected value="${esc(c.source)}">${esc(c.source)} (introuvable)</option>` : ''}</select>${src?.width ? `<span class="d-faint">${src.width} × ${src.height}</span>` : ''}`,
-      )}
+        .join(
+          '',
+        )}${c.source && !(st.sources ?? []).some((s) => s.name === c.source) ? `<option selected value="${esc(c.source)}">${esc(c.source)} (introuvable)</option>` : ''}</select>${src?.width ? `<span class="d-faint">${src.width} × ${src.height}</span>` : ''}`,
+    )}
       ${row(
         'Écran capturé',
         `<select data-obs-device aria-label="Écran que capture la source"><option value="">Choisir…</option>${mons
@@ -179,7 +200,17 @@ export function mountObsPanel(
           .join(
             '',
           )}</select>${mismatch ? `<span class="d-tag bad">taille différente de la source</span>` : ''}`,
-      )}
+      )}`;
+    return `<header><h2>Diffusion OBS</h2><span class="d-faint">Chaos sur ton écran et sur la source gameplay d’OBS, sous la webcam et les alertes</span><span class="d-sp"></span><button type="button" class="d-btn ghost sm" data-obs-refresh>${ic('repeat')}Vérifier</button></header>
+      ${row('Sorties', seg('data-obs-mode', MODES, c.mode))}
+      ${
+        c.mode === 'screen'
+          ? `<p class="d-faint cx-obs__note">Écran uniquement (capture directe) : la source « Écran » d’OBS voit le même calque, une seule fois, sans aucun filtre. Pendant un effet qui lit l’image, la fenêtre du dessus (le jeu) reste en direct ; le reste de l’écran est figé.</p>
+      ${row('OBS', `<span class="cx-ctl">${obsLine}</span>`)}
+      ${sourceRows}
+      ${cursorRows}`
+          : `${row('OBS', `<span class="cx-ctl">${obsLine}</span>`)}
+      ${sourceRows}
       ${row(
         'Filtres Chaos V2',
         `<span class="cx-ctl">${
@@ -246,6 +277,13 @@ export function mountObsPanel(
     if (b.dataset.obsMode)
       void run(b, async () => {
         await postJson('/api/chaos/obs/config', { mode: b.dataset.obsMode });
+        await load(true);
+      });
+    else if (b.dataset.obsCursor)
+      void run(b, async () => {
+        await postJson('/api/chaos/obs/config', {
+          cursor: b.dataset.obsCursor === 'on',
+        });
         await load(true);
       });
     else if (b.matches('[data-obs-refresh]')) void run(b, () => load(true));

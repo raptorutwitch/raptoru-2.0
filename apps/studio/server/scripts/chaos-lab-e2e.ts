@@ -442,6 +442,28 @@ try {
     'Diffusion OBS : « Écran uniquement » (capture directe, sans filtre) par défaut',
     await modeOn(),
   );
+  // Curseur d'OBS (docs/chaos/CURSEUR_OBS.md) : « Laisser » par défaut, rien ne change dans OBS sans accord.
+  const cursorSaved = async () =>
+    (
+      (await (await fetch(`${BASE}/api/chaos/obs`, { headers: H })).json()) as {
+        cursor?: { enabled: boolean };
+      }
+    ).cursor?.enabled;
+  check(
+    (await page
+      .locator('.cx-obs [data-obs-cursor="off"][aria-pressed="true"]')
+      .count()) === 1 && (await cursorSaved()) === false,
+    'curseur d’OBS : « Laisser » par défaut (OBS inchangé)',
+  );
+  await page.locator('.cx-obs [data-obs-cursor="on"]').click();
+  await page.waitForTimeout(600);
+  const onSaved = await cursorSaved();
+  await page.locator('.cx-obs [data-obs-cursor="off"]').click();
+  await page.waitForTimeout(600);
+  check(
+    onSaved === true && (await cursorSaved()) === false,
+    'curseur d’OBS : « Masquer pendant les effets » enregistré, puis « Laisser » rétabli',
+  );
   await page.locator('.cx-obs [data-obs-mode="both"]').click();
   await page.waitForTimeout(600);
   const obsText = await page.locator('.cx-obs').innerText();

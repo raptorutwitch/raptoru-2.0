@@ -355,6 +355,21 @@ export class ChaosObsOutput {
       }
       if (!this.config.device)
         reasons.push('écran physique de la source non choisi');
+    } else if (o?.connected) {
+      // Capture directe : seulement la liste des sources (curseur d'OBS, obs-cursor.ts) ; aucun filtre lu ni touché.
+      try {
+        const v = await o.request('GetVersion', {});
+        value.obs = { connected: true, version: v.obsVersion };
+        const inputs = ((await o.request('GetInputList', {})).inputs ?? []) as {
+          inputName: string;
+          inputKind: string;
+        }[];
+        value.sources = inputs
+          .filter((i) => CAPTURE_KINDS.includes(i.inputKind))
+          .map((i) => ({ name: i.inputName, kind: i.inputKind }));
+      } catch {
+        /* OBS occupé : la liste revient au relevé suivant */
+      }
     }
     value.effects = Object.fromEntries(
       Object.entries(this.plan?.effects ?? {}).map(([k, e]) => [
