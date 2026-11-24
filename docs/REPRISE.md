@@ -211,6 +211,11 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 
   Mesures et choix : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md) § 0 bis.
 
+- **Enquête Halloween / V2 (24/11)** : [chaos/ETUDE_HALLOWEEN_VS_V2.md](chaos/ETUDE_HALLOWEEN_VS_V2.md).
+  - Halloween utilisait déjà des filtres OBS pour le retournement (fenêtre exclue).
+  - Chaos V2 en mode E est vu directement par « Écran » (DXGI).
+  - Recommandation : mode automatique, calque capturé par défaut et filtres seulement sur le bureau, sous réserve de
+    la sonde `chaos-bench.exe --capture-probe` (à lancer par Antoni).
 - **Mode C (24/11, décision d'Antoni, par défaut)** : l'écran du streamer ET la source gameplay « Écran » d'OBS, sans
   double application. Doc : [chaos/MODE_C.md](chaos/MODE_C.md).
   - **Construit** : une activation à deux sorties (le moteur calcule la partition OBS avant la première image) ; calque

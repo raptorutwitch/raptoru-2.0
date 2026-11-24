@@ -2,8 +2,8 @@
 // Aucune action sur OBS : ses méthodes sont reproduites avec les mêmes API de Windows.
 //   BitBlt écran            capture GDI de l'écran (contrôles du moteur)
 //   BitBlt fenêtre          OBS « Capture de fenêtre », méthode BitBlt (contenu de la fenêtre du jeu)
-//   WGC écran               OBS « Capture d'écran », méthode Windows 10 (méthode choisie par l'OBS d'Antoni)
-//   DXGI écran              OBS « Capture d'écran », méthode DXGI (Desktop Duplication)
+//   WGC écran               OBS « Capture d'écran », méthode Windows 10
+//   DXGI écran              OBS « Capture d'écran », méthode DXGI (Desktop Duplication) : celle de la source « Écran » d'Antoni
 //   WGC fenêtre du jeu      OBS « Capture de fenêtre », méthode Windows 10
 //   WGC fenêtre du calque   une source OBS « Capture de fenêtre » qui viserait le calque lui-même
 // Cas : calque sur la fenêtre (mode D), écran entier (mode C, exclu des captures), et cible « écran » des fiches occupée
@@ -185,6 +185,101 @@ namespace Raptoru.Chaos
             }
             catch (Exception) { return null; }
             finally { Com.Release(ref dup); Com.Release(ref o1); Com.Release(ref output); }
+        }
+
+        /// --capture-probe [--screen \\.\DISPLAYn] : la capture d'écran d'OBS (DXGI, et WGC) voit-elle un calque Chaos
+        /// (la même fenêtre DirectComposition que le moteur), et ne le voit-elle plus une fois exclu des captures ?
+        /// SONDE QUASI INVISIBLE : le calque ne porte qu'un damier blanc à 2/255 d'opacité (cases de 8 px), quelques
+        /// secondes ; la réponse se lit statistiquement (écart cases « damier » − cases vides, sur ~6 000 points, contre
+        /// deux captures sans calque). Refusée pendant un jeu ou une application plein écran. Docs/chaos/ETUDE_HALLOWEEN_VS_V2.md.
+        public static int InvisibleProbe(string[] a)
+        {
+            string game = N.GameActivity();
+            if (game != null && !a.Contains("--autorise-pendant-un-jeu"))
+            {
+                Console.WriteLine("Sonde NON lancée : " + game + ".");
+                return 2;
+            }
+            string primary = N.MonitorDevice(N.MonitorFromWindow(N.GetDesktopWindow(), 2));
+            int ai = Array.IndexOf(a, "--screen");
+            string dev = ai >= 0 && ai + 1 < a.Length ? a[ai + 1] : primary;
+            IntPtr hmon = N.MonitorByDevice(dev);
+            RECT mon = N.MonitorRectOf(hmon);
+            int W = mon.Right - mon.Left, H = mon.Bottom - mon.Top;
+            gpu = new Gpu();
+            var lib = new ShaderLibrary(gpu, null);
+            const int cell = 8; const byte A = 2;
+            var px = new byte[W * H * 4];
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                    if (((x / cell) + (y / cell)) % 2 == 0) { int i = (y * W + x) * 4; px[i] = A; px[i + 1] = A; px[i + 2] = A; px[i + 3] = A; }
+            IntPtr tex = gpu.TextureWithData((uint)W, (uint)H, px), srv = gpu.Srv(tex);
+            var on = new List<Point>(); var off = new List<Point>();
+            for (int cy = 2; cy < H / cell - 2; cy += 3)
+                for (int cx = 2; cx < W / cell - 2; cx += 3)
+                {
+                    var p = new Point(mon.Left + cx * cell + cell / 2, mon.Top + cy * cell + cell / 2);
+                    if ((cx + cy) % 2 == 0) on.Add(p); else off.Add(p);
+                }
+            var pts = on.Concat(off).ToArray();
+            Func<string, Color[]> grab = m => m == "DXGI" ? DxgiAt(hmon, mon.Left, mon.Top, pts) : WgcAt(IntPtr.Zero, hmon, mon.Left, mon.Top, pts);
+            var methods = new[] { "DXGI", "WGC" };
+            var res = new Dictionary<string, Dictionary<string, Color[]>>();
+            foreach (var m in methods) res[m] = new Dictionary<string, Color[]>();
+            Surface surf = null;
+            try
+            {
+                foreach (var m in methods) res[m]["avant"] = grab(m);
+                surf = new Surface(gpu, "probe", IntPtr.Zero, hmon, (uint)W, (uint)H, false, false);
+                var cb = new float[Gpu.CbFloats];
+                cb[18] = 1; cb[19] = 1; cb[20] = W; cb[21] = H; cb[22] = W; cb[23] = H; cb[26] = 1;
+                gpu.Target(surf.BackBuffer, (uint)W, (uint)H, false);
+                gpu.Draw(lib.VsFull, lib.Pixel("layer_full"), srv, cb, 3);
+                gpu.Unbind();
+                surf.Present(false);
+                surf.SetShown(true, 0);
+                Thread.Sleep(150);
+                foreach (var m in methods) res[m]["calque"] = grab(m);
+                bool excl = surf.SetExcluded(true);
+                Thread.Sleep(150);
+                foreach (var m in methods) res[m]["calque exclu"] = grab(m);
+                surf.SetShown(false, 0);
+                surf.Dispose(); surf = null;
+                Thread.Sleep(150);
+                foreach (var m in methods) res[m]["après"] = grab(m);
+                // Score = écart moyen (luminance) des cases « damier » moins celui des cases vides, par rapport à la moyenne
+                // des captures sans calque ; bruit = même score entre « avant » et « après ».
+                Func<Color[], Color[], Color[], double> score = (x, b0, b1) =>
+                {
+                    if (x == null || b0 == null || b1 == null) return double.NaN;
+                    Func<int, double> lum = i => ((x[i].R + x[i].G + x[i].B) - (b0[i].R + b0[i].G + b0[i].B + b1[i].R + b1[i].G + b1[i].B) / 2.0) / 3.0;
+                    double so = 0, sf = 0;
+                    for (int i = 0; i < on.Count; i++) so += lum(i);
+                    for (int i = on.Count; i < pts.Length; i++) sf += lum(i);
+                    return so / on.Count - sf / off.Count;
+                };
+                var report = new List<object>();
+                Console.WriteLine("Sonde de capture (" + dev + ", " + W + "×" + H + ", damier 2/255, " + on.Count + " + " + off.Count + " points), exclusion appliquée : " + excl);
+                foreach (var m in methods)
+                {
+                    var r = res[m];
+                    double vis = score(r["calque"], r["avant"], r["après"]), exc = score(r["calque exclu"], r["avant"], r["après"]);
+                    double noise = Math.Abs(score(r["avant"], r["après"], r["après"]));
+                    string verdictVis = double.IsNaN(vis) ? "capture indisponible" : vis > 0.3 && vis > 5 * noise ? "VOIT le calque" : "ne voit PAS le calque";
+                    string verdictExc = double.IsNaN(exc) ? "capture indisponible" : exc > 0.3 && exc > 5 * noise ? "voit ENCORE le calque" : "ne le voit plus";
+                    Console.WriteLine("  " + m.PadRight(5) + " calque non exclu : " + verdictVis + " (score " + vis.ToString("0.00") + ") ; exclu : " + verdictExc + " (score " + exc.ToString("0.00") + ") ; bruit " + noise.ToString("0.00"));
+                    report.Add(J.Map("method", m, "visible_score", vis, "excluded_score", exc, "noise", noise, "sees_overlay", verdictVis, "sees_excluded", verdictExc));
+                }
+                string outFile = Path.Combine(Path.GetTempPath(), "chaos-capture-probe-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
+                File.WriteAllText(outFile, J.Write(J.Map("screen", dev, "size", W + "x" + H, "alpha", A / 255.0, "excluded_applied", excl, "results", report.ToArray())));
+                Console.WriteLine("Résultats : " + outFile);
+                return 0;
+            }
+            finally
+            {
+                if (surf != null) { try { surf.SetShown(false, 0); surf.Dispose(); } catch (Exception) { } }
+                Com.Release(ref srv); Com.Release(ref tex);
+            }
         }
 
         static List<KeyValuePair<string, string>> SampleAll(IntPtr target, IntPtr hmon, RECT mon)

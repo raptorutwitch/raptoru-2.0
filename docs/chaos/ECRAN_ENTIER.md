@@ -21,11 +21,11 @@ vaut pour **toutes** les captures, y compris celle d'OBS.
 
 ## 2. Trois regards différents
 
-| Qui regarde                                                                  | Ce qu'il voit du calque Chaos                                                                          |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Le streamer (son écran)                                                      | toujours le calque (fenêtre DirectComposition au premier plan)                                         |
-| OBS « Capture d'écran » (WGC ou DXGI : la méthode de l'OBS d'Antoni est WGC) | le calque, **sauf** s'il est exclu des captures                                                        |
-| OBS « Capture de fenêtre » ou « Capture de jeu » visant le jeu               | **jamais** le calque : ces méthodes lisent la fenêtre ou les images du jeu, pas ce qui est posé dessus |
+| Qui regarde                                                                          | Ce qu'il voit du calque Chaos                                                                          |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Le streamer (son écran)                                                              | toujours le calque (fenêtre DirectComposition au premier plan)                                         |
+| OBS « Capture d'écran » (WGC ou DXGI : « Écran » utilise DXGI, journal OBS du 23/11) | le calque, **sauf** s'il est exclu des captures                                                        |
+| OBS « Capture de fenêtre » ou « Capture de jeu » visant le jeu                       | **jamais** le calque : ces méthodes lisent la fenêtre ou les images du jeu, pas ce qui est posé dessus |
 
 Aucun réglage du moteur ne peut faire apparaître le calque dans une capture de fenêtre ou de jeu d'OBS. Pour qu'OBS
 montre l'effet, la scène doit utiliser une **capture d'écran**. Le choix de la source OBS appartient à Antoni.
