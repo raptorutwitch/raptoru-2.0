@@ -366,7 +366,7 @@ namespace Raptoru.Chaos
                     if (sc == "dessous" || sc == "visibilité")
                     {
                         var copy = capture("Copie sans curseur (test " + sc + ")", false); made.Add(copy);
-                        fit(sceneA, copy, 480); // décalée d'un quart : le quart gauche n'est couvert que par « Écran »
+                        fit(sceneA, copy, cw / 4f); // décalée d'un quart : le quart gauche n'est couvert que par « Écran »
                     }
                     IntPtr keepSrc = IntPtr.Zero;
                     if (sc == "relais" || sc == "scènes" || sc == "ps5")
