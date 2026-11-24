@@ -94,30 +94,45 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Version de test **0.1.44-chaos.1** (23/11), construite en local, **ni publiée ni installée** :
+Studio installé aujourd'hui : **0.1.44-chaos.1** (retournement seul, 23/11).
 
-- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.1.exe`
-- 126 650 919 o, SHA-256 `bec90cc20a1a9545953eaf96966026e97f99292a47f216f9bd442cf1d85cba7c`
-- contenu : Studio 0.1.43 (aucun autre changement de Studio depuis) + Chaos V2 ; commit `64779c25` de
-  `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton, aucune valeur secrète locale dans le paquet (vérifié).
+Version de test **0.1.44-chaos.2** (24/11), construite en local, **ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.2.exe`
+- 126 705 934 o, SHA-256 `676a1f421df3b95230ff19f972b854ddf16a729874d891fb7ce75faca23cadd3`
+- contenu : `main` du 24/11 (Studio 0.1.44 : Soundboard « Ajouter un son », compatible avec le Core `408f201a` déjà
+  déployé) + Chaos V2 complet (13 effets, fiches, aperçu) ; commit `064b6de8` de `feat/chaos-studio` (local) ; aucun
+  `.env`, aucun jeton, aucune valeur secrète locale dans le paquet (vérifié).
 - étiquette de test posée dans le paquet seulement (`package.json` du dépôt inchangé) : Studio désactive alors ses
   mises à jour automatiques (« Version de test… »), sans erreur GitHub.
 
-Installer (hors live, jeu fermé) :
+Installer (hors live, **jeu fermé** : les essais sont visibles) :
 
-1. Fermer Raptoru Studio (fenêtre et serveur) et le Chaos Lab (Ctrl+C dans sa fenêtre) : un moteur du Lab garde
+1. Fermer Raptoru Studio (fenêtre et serveur) et tout Chaos Lab (Ctrl+C dans sa fenêtre) : un moteur du Lab garde
    Ctrl+Maj+F11 et Studio afficherait « déjà pris ».
-2. Lancer `Raptoru Studio Setup 0.1.44-chaos.1.exe` : il remplace la 0.1.43 dans le même dossier et garde les données
-   (`%APPDATA%\Raptoru Studio` et le dossier de données `Documents\Raptoru 2.0`).
-3. Ouvrir Studio : « À propos » = 0.1.44-chaos.1 ; profil, OBS et comptes Twitch comme avant.
-4. Modules › Effets & mise en scène › **Chaos · effets d'écran** : « Moteur prêt » en quelques secondes.
-5. Fiche « Écran retourné » : choisir l'écran, **Tester** (5 s), **Activer**, **Arrêter**, **STOP ALL**. Le curseur
-   retourné suit la souris sur l'écran retourné ; il n'est dessiné que si un vrai curseur est visible.
-6. Quitter Studio pendant un effet : l'effet s'arrête et le curseur revient.
+2. Lancer `Raptoru Studio Setup 0.1.44-chaos.2.exe` : il remplace la version installée dans le même dossier et garde
+   les données (`%APPDATA%\Raptoru Studio` et le dossier de données `Documents\Raptoru 2.0`).
+3. Ouvrir Studio : « À propos » = 0.1.44-chaos.2 ; profil, OBS et comptes Twitch comme avant.
+4. Modules › Effets & mise en scène › **Chaos · effets d'écran** : « Moteur prêt » en quelques secondes, 13 cartes.
+5. Pour chaque effet : ouvrir sa fiche (l'aperçu s'anime à gauche), choisir un préréglage, **Tester** (5 s sur l'écran
+   choisi), puis **Activer** et **Arrêter**. À regarder en particulier :
+   - **Brouillard** (Dense, Très opaque, Arrive peu à peu) : des nappes qui bougent et se tordent, pas des taches ;
+   - **Clignement** (Naturel, Fatigue, Paupières qui résistent) : de vraies paupières, pas deux bandes ;
+   - **Flash** (Intense) : blanc, puis l'image de l'instant reste imprimée et s'efface ;
+   - **Vision tunnel** : point visé cliqué dans l'écran miniature ;
+   - **Zoom, tremblement, ivre, miroir** : le curseur (s'il est visible) suit l'image ; un seul curseur.
+6. STOP ALL pendant deux effets en même temps (ex. brouillard + noir et blanc) : tout s'arrête.
+7. Quitter Studio pendant un effet : l'effet s'arrête et le curseur revient.
+8. Soundboard : « Ajouter un son » répond comme dans la 0.1.44 de `main`.
 
-Retour à la 0.1.43 : désinstaller Raptoru Studio (Paramètres Windows › Applications ; les données restent), puis
-réinstaller la 0.1.43 depuis `raptoru-studio-releases`. La version officielle suivante (0.1.44, publiée seulement
-sur demande d'Antoni) devra être construite depuis `main` après fusion de Chaos ; elle se réinstalle par-dessus.
+Retour arrière :
+
+- relancer `Raptoru Studio Setup 0.1.44-chaos.1.exe` (même dossier `release`, SHA-256 `bec90cc2…`) ;
+- ou désinstaller Raptoru Studio (Paramètres Windows › Applications ; les données restent), puis réinstaller la
+  0.1.43 depuis `raptoru-studio-releases`.
+
+La version officielle suivante, publiée seulement sur demande d'Antoni, devra être construite depuis `main` après
+fusion de Chaos ; elle se réinstalle par-dessus.
 
 Reconstruire la version de test : `npx turbo run build`, puis dans `apps/studio/desktop` : `node scripts/stage.mjs`,
 version de test posée dans `stage/app/package.json` et `stage/app/build-info.json`, puis
