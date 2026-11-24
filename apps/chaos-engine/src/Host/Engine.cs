@@ -853,6 +853,8 @@ namespace Raptoru.Chaos
                     var preset = cfg.GetPreset(id, "default");
                     body["duration_ms"] = Math.Min(TestMs, preset != null && preset.DurationMs.HasValue ? preset.DurationMs.Value : def.DefaultDurationMs);
                 }
+                // Durée imposée (Performance Lab : la phase « effet » d'une mesure en jeu), validée comme toute demande.
+                else if (J.Has(b, "duration_ms")) body["duration_ms"] = (int)J.Num(b, "duration_ms", 0);
                 var req = Protocol.BuildRequest(body, reg, cfg, (spec, d) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, d, cfg.Engine.InputEffects));
                 CheckAllowed(req);
                 reqs.Add(req);

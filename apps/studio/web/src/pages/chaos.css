@@ -545,3 +545,121 @@ kbd {
   outline: 2px solid var(--mod);
   outline-offset: 2px;
 }
+
+/* Performance Lab (pages/chaos-perf.ts) : matériel, banc hors écran, validation en jeu ; tableaux défilants. */
+.cx-perf[hidden] {
+  display: none;
+}
+.cx-perf h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cx-perf__sys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.cx-perf__sys dt,
+.cx-perf__sum dt {
+  color: var(--ink3);
+  font-size: 11px;
+}
+.cx-perf__sys dd,
+.cx-perf__sum dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cx-perf__modes {
+  display: grid;
+  gap: 12px;
+}
+.cx-perf__mode {
+  padding: 12px;
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  min-width: 0;
+}
+.cx-perf__mode > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.cx-perf__mode h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 600 15px var(--num);
+}
+.cx-perf__run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+.cx-perf__bar {
+  flex: 1 1 160px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fill0);
+  overflow: hidden;
+}
+.cx-perf__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--mod);
+  transition: width 0.3s;
+}
+.cx-perf__tw {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.cx-perf__t {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--num);
+  font-variant-numeric: tabular-nums;
+}
+.cx-perf__t th,
+.cx-perf__t td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--hair);
+  text-align: right;
+  white-space: nowrap;
+}
+.cx-perf__t th:first-child,
+.cx-perf__t td:first-child {
+  text-align: left;
+}
+.cx-perf__t th {
+  font-weight: 600;
+}
+.cx-perf__t tr.is-ref td {
+  font-style: italic;
+}
+.cx-perf__t tr.is-combo td:first-child {
+  color: var(--mod);
+}
+.cx-perf__sum {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px 16px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.cx-perf__exp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-perf__bar > i {
+    transition: none;
+  }
+}

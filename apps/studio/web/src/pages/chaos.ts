@@ -35,6 +35,7 @@ import {
   side,
   viewerNote,
 } from './chaos-effects.js';
+import { mountPerfLab } from './chaos-perf.js';
 
 /** Aperçu rendu par le moteur (POST /api/chaos/preview) : grille d'images JPEG, deux séquences (début, fin). */
 interface Anim {
@@ -262,6 +263,7 @@ export function mountChaosPage(root: HTMLElement) {
   });
   p.body.innerHTML = `<div class="cx">
     <div class="cx__main">
+      <section class="cx-card cx-perf" aria-label="Performance Lab" data-z="perf" hidden></section>
       <section class="cx-card cx-catcard" aria-label="Catalogue des effets">
         <header><h2>Effets</h2><span class="d-faint" data-z="catsub"></span><span class="d-sp"></span><label class="cx-inline">${sw(false, 'data-diag', 'Afficher les effets de diagnostic')}<span class="d-faint">Diagnostic</span></label></header>
         <div data-z="catalog"></div>
@@ -364,7 +366,7 @@ export function mountChaosPage(root: HTMLElement) {
     patch(p.state, chip);
     patch(
       p.actions,
-      `<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
+      `<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-perf-open title="Mesurer le coût des effets : banc hors écran, puis validation en jeu">${ic('pulse')}Performance Lab</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
     );
   }
 
@@ -872,6 +874,14 @@ export function mountChaosPage(root: HTMLElement) {
   }
   const poll = poller(refresh, 1000);
   const pollScreens = poller(loadScreens, 5000);
+  // Performance Lab (chaos-perf.ts) : son propre relevé, seulement quand il est ouvert.
+  const perfLab = mountPerfLab(z('perf'), {
+    monitors: () => monitors,
+    effects: () =>
+      (ctx()?.reg.effects ?? [])
+        .filter((x) => !x.internal)
+        .map((x) => ({ id: x.id, label: x.label })),
+  });
 
   // ---------- Interactions ----------
   const sheetEffect = () => current()?.id ?? '';
@@ -879,6 +889,7 @@ export function mountChaosPage(root: HTMLElement) {
     const t = e.target as HTMLElement;
     const b = t.closest<HTMLElement>('button');
     if (!b) return;
+    if (b.matches('[data-perf-open]')) return perfLab.toggle();
     if (b.matches('[data-stopall]'))
       void run(
         b,

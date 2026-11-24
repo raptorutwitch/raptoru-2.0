@@ -36,61 +36,7 @@ namespace Raptoru.Chaos
 {
     delegate int FactoryCreateForHwnd(IntPtr self, IntPtr device, IntPtr hwnd, ref DXGI_SWAP_CHAIN_DESC1 d, IntPtr fullscreen, IntPtr restrict, out IntPtr sc); // 15
 
-    /// Temps GPU cumulé (moteur 3D de l'adaptateur) par processus, lu dans les compteurs « GPU Engine » de Windows
-    /// (sans droits d'administrateur). Running Time : unités de 100 ns.
-    sealed class GpuTimes : IDisposable
-    {
-        [DllImport("pdh.dll", CharSet = CharSet.Unicode)] static extern int PdhOpenQueryW(string src, IntPtr user, out IntPtr q);
-        [DllImport("pdh.dll", CharSet = CharSet.Unicode)] static extern int PdhAddEnglishCounterW(IntPtr q, string path, IntPtr user, out IntPtr c);
-        [DllImport("pdh.dll")] static extern int PdhCollectQueryData(IntPtr q);
-        [DllImport("pdh.dll", CharSet = CharSet.Unicode)] static extern int PdhGetRawCounterArrayW(IntPtr c, ref uint size, out uint count, IntPtr buf);
-        [DllImport("pdh.dll")] static extern int PdhCloseQuery(IntPtr q);
-        IntPtr q, c;
-        readonly string luid;
-        public double LastCollectMs;
-        public bool Ok { get { return c != IntPtr.Zero; } }
-
-        public GpuTimes(string luid)
-        {
-            this.luid = luid.ToLowerInvariant();
-            if (PdhOpenQueryW(null, IntPtr.Zero, out q) != 0) { q = IntPtr.Zero; return; }
-            if (PdhAddEnglishCounterW(q, @"\GPU Engine(*engtype_3D)\Running Time", IntPtr.Zero, out c) != 0) c = IntPtr.Zero;
-        }
-
-        /// pid → temps GPU cumulé (ms) sur l'adaptateur du moteur.
-        public Dictionary<int, double> Sample()
-        {
-            var r = new Dictionary<int, double>();
-            if (!Ok) return r;
-            var sw = Stopwatch.StartNew();
-            PdhCollectQueryData(q);
-            uint size = 0, count;
-            PdhGetRawCounterArrayW(c, ref size, out count, IntPtr.Zero);
-            if (size == 0) return r;
-            IntPtr buf = Marshal.AllocHGlobal((int)size);
-            try
-            {
-                if (PdhGetRawCounterArrayW(c, ref size, out count, buf) != 0) return r;
-                for (int i = 0; i < count; i++)
-                {
-                    // PDH_RAW_COUNTER_ITEM_W : nom (pointeur) + PDH_RAW_COUNTER (CStatus, TimeStamp, FirstValue à +16…) = 48 octets
-                    IntPtr item = new IntPtr(buf.ToInt64() + i * 48L);
-                    string name = Marshal.PtrToStringUni(Marshal.ReadIntPtr(item));
-                    if (name == null || name.ToLowerInvariant().IndexOf(luid, StringComparison.Ordinal) < 0) continue;
-                    int a = name.IndexOf("pid_", StringComparison.Ordinal), b = a < 0 ? -1 : name.IndexOf('_', a + 4);
-                    int pid;
-                    if (b < 0 || !int.TryParse(name.Substring(a + 4, b - a - 4), out pid)) continue;
-                    double ms = Marshal.ReadInt64(item, 8 + 16) / 10000.0;
-                    double cur; r.TryGetValue(pid, out cur); r[pid] = cur + ms;
-                }
-            }
-            finally { Marshal.FreeHGlobal(buf); }
-            LastCollectMs = sw.Elapsed.TotalMilliseconds;
-            return r;
-        }
-
-        public void Dispose() { if (q != IntPtr.Zero) { PdhCloseQuery(q); q = IntPtr.Zero; c = IntPtr.Zero; } }
-    }
+    // GpuTimes (compteurs « GPU Engine » par processus) : src/Host/PerfLab.cs.
 
     static class Bench
     {
@@ -260,7 +206,7 @@ float4 ps(V i) : SV_Target {
                 ", charge " + load + " ; scénarios " + string.Join(", ", scenarios));
 
             var adapterGpu = new Gpu();
-            DXGI_ADAPTER_DESC ad = AdapterDesc(adapterGpu);
+            DXGI_ADAPTER_DESC ad = adapterGpu.AdapterDesc();
             x.Gpu = new GpuTimes("luid_0x" + ad.LuidHigh.ToString("x8") + "_0x" + ad.LuidLow.ToString("x8"));
             x.DwmPid = Process.GetProcessesByName("dwm").Select(p => p.Id).FirstOrDefault();
 
@@ -375,13 +321,6 @@ float4 ps(V i) : SV_Target {
                 string v = p.StandardOutput.ReadToEnd().Trim(); p.WaitForExit(3000); return v;
             }
             catch (Exception) { return "?"; }
-        }
-
-        static DXGI_ADAPTER_DESC AdapterDesc(Gpu g)
-        {
-            IntPtr adapter; DXGI_ADAPTER_DESC ad = new DXGI_ADAPTER_DESC();
-            if (Com.Fn<DxgiDevGetAdapter>(g.DxgiDevice, 7)(g.DxgiDevice, out adapter) >= 0) { Com.Fn<AdapterGetDesc>(adapter, 8)(adapter, out ad); Marshal.Release(adapter); }
-            return ad;
         }
 
         static List<long> ReadLongs(string f)

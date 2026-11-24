@@ -143,6 +143,17 @@ namespace Raptoru.Chaos
             copyRegion(Context, dst, 0, dx, dy, 0, src, 0, ref box);
         }
         public void GenerateMips(IntPtr srv) { genMips(Context, srv); }
+        delegate void CtxFlush(IntPtr self); // 111
+        CtxFlush flush;
+        /// Envoie les commandes en attente à la carte (bancs hors écran : pas de Present pour le faire).
+        public void Flush() { if (flush == null) flush = Com.Fn<CtxFlush>(Context, 111); flush(Context); }
+        /// Description de l'adaptateur (nom, mémoire vidéo, LUID des compteurs de Windows).
+        public DXGI_ADAPTER_DESC AdapterDesc()
+        {
+            IntPtr adapter; var ad = new DXGI_ADAPTER_DESC();
+            if (Com.Fn<DxgiDevGetAdapter>(DxgiDevice, 7)(DxgiDevice, out adapter) >= 0) { Com.Fn<AdapterGetDesc>(adapter, 8)(adapter, out ad); Marshal.Release(adapter); }
+            return ad;
+        }
         static readonly float[] Transparent = new float[4];
         public void Clear(IntPtr rtv, float r, float g, float b, float a)
         {
@@ -250,6 +261,9 @@ namespace Raptoru.Chaos
             g.End(g.Context, t1[slot]); g.End(g.Context, dis[slot]);
             pending[slot] = true; slot = -1;
         }
+
+        /// Mesures envoyées dont le résultat n'est pas encore relu.
+        public int Pending { get { int n = 0; for (int i = 0; i < Slots; i++) if (pending[i]) n++; return n; } }
 
         public void Collect(Action<string, double> into)
         {

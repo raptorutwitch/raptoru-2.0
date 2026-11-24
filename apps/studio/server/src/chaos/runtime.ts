@@ -10,6 +10,13 @@ import {
   ChaosError,
   type ChaosEngineOptions,
 } from './engine-client.js';
+import {
+  liveCsv,
+  offscreenCsv,
+  PerfError,
+  PerfLab,
+  reportHtml,
+} from './perf.js';
 import { PreviewError, renderPreview } from './preview.js';
 
 // Studio › Chaos (docs/chaos/ARCHITECTURE_MOTEUR.md) : l'API locale de la page Chaos. Elle ne décide rien : elle relaie
@@ -28,6 +35,8 @@ const STATUS: Record<string, number> = {
 
 export class ChaosRuntime {
   readonly client: ChaosEngineClient;
+  /** Chaos Performance Lab (perf.ts) : banc hors écran et mesures en jeu, pilotés depuis la page Chaos. */
+  readonly perf: PerfLab;
   private readonly recent: ChaosEvent[] = [];
   private telemetry: ChaosEvent | null = null;
   private registry: Record<string, unknown> | null = null;
@@ -35,9 +44,14 @@ export class ChaosRuntime {
   constructor(private readonly opts: ChaosEngineOptions) {
     const o = opts;
     this.client = new ChaosEngineClient(o);
+    this.perf = new PerfLab(o.exe, o.stateDir, (cmd, args) =>
+      this.client.call(cmd as Parameters<ChaosEngineClient['call']>[0], args),
+    );
     this.client.on('event', (e: ChaosEvent) => {
-      if (e.event === 'engine.telemetry') this.telemetry = e;
-      else {
+      if (e.event === 'engine.telemetry') {
+        this.telemetry = e;
+        this.perf.onTelemetry(e as unknown as Record<string, unknown>);
+      } else {
         this.recent.push(e);
         if (this.recent.length > RECENT) this.recent.shift();
       }
@@ -45,6 +59,7 @@ export class ChaosRuntime {
   }
 
   stop() {
+    this.perf.stop();
     return this.client.stop();
   }
 
@@ -262,6 +277,101 @@ export class ChaosRuntime {
             ),
             true
           );
+        case 'GET /perf':
+          return (
+            reply(200, {
+              system: await this.perf.sysinfo().catch(() => null),
+              ...this.perf.state(),
+            }),
+            true
+          );
+        case 'POST /perf/offscreen/start':
+          return (
+            reply(
+              200,
+              this.perf.startOffscreen({
+                width: Number(body.width),
+                height: Number(body.height),
+                frames: Number(body.frames ?? 240),
+                warmup: Number(body.warmup ?? 30),
+                profile: String(body.profile ?? 'qualite'),
+                screen:
+                  typeof body.screen === 'string' ? body.screen : undefined,
+              }),
+            ),
+            true
+          );
+        case 'POST /perf/offscreen/cancel':
+          return (reply(200, this.perf.cancelOffscreen()), true);
+        case 'POST /perf/live/start':
+          return (
+            reply(
+              200,
+              await this.perf.startLive({
+                effect: String(body.effect ?? ''),
+                label: typeof body.label === 'string' ? body.label : undefined,
+                // Phases de 5 à 60 s depuis la page (la classe accepte moins pour ses tests).
+                reference_s: Math.max(5, Number(body.reference_s ?? 10)),
+                effect_s: Math.max(5, Number(body.effect_s ?? 10)),
+                after_s: Math.max(5, Number(body.after_s ?? 10)),
+              }),
+            ),
+            true
+          );
+        case 'POST /perf/live/stop':
+          return (reply(200, await this.perf.stopLive()), true);
+        case 'POST /perf/live/clear':
+          return (this.perf.clearLive(), reply(200, this.perf.state()), true);
+        case 'GET /perf/export': {
+          // Téléchargement du rapport : json (tout), csv (banc hors écran ou essais en jeu), html (lisible seul).
+          const f = url.searchParams.get('format') ?? 'json';
+          const part = url.searchParams.get('part') ?? 'offscreen';
+          const st = this.perf.state();
+          const stamp = new Date()
+            .toISOString()
+            .slice(0, 16)
+            .replace(/[:T]/g, '-');
+          const send = (type: string, ext: string, data: string) => {
+            res.writeHead(200, {
+              'content-type': `${type}; charset=utf-8`,
+              'content-disposition': `attachment; filename="chaos-perf-${stamp}.${ext}"`,
+              'cache-control': 'no-store',
+            });
+            res.end(data);
+            return true;
+          };
+          if (f === 'csv')
+            return send(
+              'text/csv',
+              'csv',
+              '﻿' +
+                (part === 'live'
+                  ? liveCsv(st.live_results)
+                  : offscreenCsv(st.offscreen)),
+            );
+          if (f === 'html')
+            return send(
+              'text/html',
+              'html',
+              reportHtml(
+                st.offscreen,
+                st.live_results,
+                await this.perf.sysinfo().catch(() => null),
+              ),
+            );
+          return send(
+            'application/json',
+            'json',
+            JSON.stringify(
+              {
+                system: await this.perf.sysinfo().catch(() => null),
+                ...st,
+              },
+              null,
+              2,
+            ),
+          );
+        }
         case 'POST /engine/restart':
           await c.stop();
           this.registry = null;
@@ -272,7 +382,9 @@ export class ChaosRuntime {
       return (reply(404, { error: 'not_found' }), true);
     } catch (e) {
       const code =
-        e instanceof ChaosError || e instanceof PreviewError
+        e instanceof ChaosError ||
+        e instanceof PreviewError ||
+        e instanceof PerfError
           ? e.code
           : 'internal';
       return (
