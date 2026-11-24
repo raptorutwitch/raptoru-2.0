@@ -283,6 +283,153 @@ namespace Raptoru.Chaos
             }
         }
 
+        /// Duplication DXGI gardée ouverte pendant toute la mesure, comme la source « Écran » d'OBS (méthode DXGI).
+        sealed class DupSession : IDisposable
+        {
+            IntPtr output, o1, dup;
+            Color[] last;
+            public bool Ok { get { return dup != IntPtr.Zero; } }
+            public DupSession(IntPtr hmon)
+            {
+                output = Pacer.FindOutput(gpu, hmon);
+                if (output == IntPtr.Zero) return;
+                o1 = Com.QI(output, IidOutput1);
+                if (Com.Fn<OutDuplicate>(o1, 22)(o1, gpu.Device, out dup) < 0) dup = IntPtr.Zero;
+            }
+            /// Dernière image (la plus récente disponible en ~120 ms ; la précédente si l'écran n'a pas changé).
+            public Color[] Grab(int ox, int oy)
+            {
+                if (!Ok) return null;
+                var acquire = Com.Fn<DupAcquire>(dup, 8);
+                var release = Com.Fn<DupRelease>(dup, 14);
+                var sw = Stopwatch.StartNew();
+                while (sw.ElapsedMilliseconds < 120)
+                {
+                    DXGI_OUTDUPL_FRAME_INFO info; IntPtr res;
+                    if (acquire(dup, 30, out info, out res) < 0) continue;
+                    try
+                    {
+                        if (info.LastPresentTime != 0)
+                        {
+                            IntPtr tex = Com.QI(res, Iid.Texture2D);
+                            D3D11_TEXTURE2D_DESC d; Com.Fn<TexGetDesc>(tex, 10)(tex, out d);
+                            last = Read(tex, d.Width, d.Height, ox, oy);
+                            Com.Release(ref tex);
+                        }
+                    }
+                    finally { Com.Release(ref res); release(dup); }
+                }
+                return last;
+            }
+            public void Dispose() { Com.Release(ref dup); Com.Release(ref o1); Com.Release(ref output); }
+        }
+
+        /// --capture-probe --engine [--screen \\.\DISPLAYn] : le VRAI chemin d'un effet, vu par la capture d'écran d'OBS.
+        /// Le moteur (ChaosEngine.exe à côté) joue l'effet interne « diag.watermark » sur la cible « écran » (comme une
+        /// fiche : mode E si une fenêtre occupe l'écran, sinon C) : l'image capturée telle quelle plus un damier à 2/255,
+        /// imperceptible. Pendant 4 s, une duplication DXGI gardée ouverte (comme OBS) et une capture WGC relèvent toutes
+        /// les ~150 ms si le filigrane est vu, avec le mode et l'exclusion de la surface (status du moteur). Répond à : « le
+        /// calque d'un effet est-il vu par OBS du début à la fin ? ». Refusée pendant un jeu ou une application plein écran.
+        public static int EnginePathProbe(string[] a, string engineExe)
+        {
+            var gc = N.CheckGame();
+            if (gc.Blocked && !a.Contains("--autorise-pendant-un-jeu")) { Console.WriteLine("Sonde NON lancée : " + gc.Detail()); return 2; }
+            foreach (var n in gc.Notes) Console.WriteLine("Garde : " + n);
+            string primary = N.MonitorDevice(N.MonitorFromWindow(N.GetDesktopWindow(), 2));
+            int ai = Array.IndexOf(a, "--screen");
+            string dev = ai >= 0 && ai + 1 < a.Length ? a[ai + 1] : primary;
+            IntPtr hmon = N.MonitorByDevice(dev);
+            RECT mon = N.MonitorRectOf(hmon);
+            int W = mon.Right - mon.Left, H = mon.Bottom - mon.Top;
+            const int cell = 8;
+            gpu = new Gpu();
+            var on = new List<Point>(); var off = new List<Point>();
+            for (int cy = 2; cy < H / cell - 2; cy += 3)
+                for (int cx = 2; cx < W / cell - 2; cx += 3)
+                {
+                    var p = new Point(mon.Left + cx * cell + cell / 2, mon.Top + cy * cell + cell / 2);
+                    if ((cx + cy) % 2 == 0) on.Add(p); else off.Add(p);
+                }
+            var pts = on.Concat(off).ToArray();
+            pointsOverride = pts;
+            Func<Color[], Color[], double> score = (x, b) =>
+            {
+                if (x == null || b == null) return double.NaN;
+                double so = 0, sf = 0;
+                for (int i = 0; i < pts.Length; i++)
+                {
+                    double d = ((x[i].R + x[i].G + x[i].B) - (b[i].R + b[i].G + b[i].B)) / 3.0;
+                    if (i < on.Count) so += d; else sf += d;
+                }
+                return so / on.Count - sf / off.Count;
+            };
+            var dupS = new DupSession(hmon);
+            var evt = new AutoResetEvent(false);
+            WgcCaptureSource wgc = null;
+            try { wgc = new WgcCaptureSource(gpu, null, evt, "probe", IntPtr.Zero, hmon) { ZeroCopy = false }; } catch (Exception) { }
+            var clock = Stopwatch.StartNew();
+            Func<Color[]> wgcGrab = () =>
+            {
+                if (wgc == null) return null;
+                for (int k = 0; k < 6; k++) { evt.WaitOne(20); wgc.Acquire(clock.ElapsedMilliseconds); }
+                return wgc.HasFrame ? Read(wgc.CopyTexture, wgc.Width, wgc.Height, mon.Left, mon.Top) : null;
+            };
+            var e = EngineProc.Start(engineExe, "--serve --state-dir \"" + Path.Combine(Path.GetTempPath(), "chaos-capture-probe") + "\" --heartbeat-ms 3000");
+            var samples = new List<object>();
+            try
+            {
+                if (e.Event("engine.ready", 10000) == null) { Console.WriteLine("moteur non prêt"); return 1; }
+                e.Pings(500);
+                Color[] baseD = dupS.Grab(mon.Left, mon.Top), baseW = wgcGrab();
+                Thread.Sleep(300);
+                Color[] baseD2 = dupS.Grab(mon.Left, mon.Top), baseW2 = wgcGrab();
+                double noiseD = Math.Abs(score(baseD2, baseD)), noiseW = Math.Abs(score(baseW2, baseW));
+                var resp = e.Call("effect.request", J.Map("request_id", "probe-wm", "effect", "diag.watermark", "source", J.Map("kind", "test"),
+                    "target", J.Map("kind", "screen", "device", dev), "duration_ms", 4000, "params", J.Map("strength", 2 / 255.0, "cell", cell)));
+                long t0 = clock.ElapsedMilliseconds;
+                string mode = null;
+                while (clock.ElapsedMilliseconds - t0 < 5200)
+                {
+                    long t = clock.ElapsedMilliseconds - t0;
+                    double sd = score(dupS.Grab(mon.Left, mon.Top), baseD), sw = score(wgcGrab(), baseW);
+                    var st = J.Obj(e.Call("status", null, 1000), "result");
+                    string m = null; object excl = null; bool shown = false;
+                    foreach (Dictionary<string, object> s in J.Arr(st, "surfaces"))
+                        if (J.Strs(s, "effects").Contains("probe-wm")) { m = J.Str(s, "mode", null); excl = s["excluded"]; shown = J.Bool(s, "visible", false); }
+                    if (m != null) mode = m;
+                    samples.Add(J.Map("t_ms", t, "dxgi", Math.Round(sd, 2), "wgc", Math.Round(sw, 2), "mode", m, "excluded", excl, "shown", shown));
+                    Console.WriteLine("  " + t.ToString().PadLeft(5) + " ms  DXGI " + sd.ToString("0.00").PadLeft(6) + "  WGC " + sw.ToString("0.00").PadLeft(6)
+                        + "  surface " + (m ?? "—") + (m != null ? (shown ? " affichée" : " masquée") + ((excl is bool && (bool)excl) ? ", EXCLUE" : ", capturable") : ""));
+                }
+                e.Event("effect.ended", 3000, x => J.Str(x, "request_id", "") == "probe-wm");
+                // Verdict sur les relevés où la surface est affichée.
+                var shownS = samples.Cast<Dictionary<string, object>>().Where(s => (bool)s["shown"]).ToList();
+                Func<string, double, string> verdict = (k, noise) =>
+                {
+                    var v = shownS.Select(s => (double)s[k]).Where(x => !double.IsNaN(x)).ToList();
+                    if (v.Count == 0) return "aucun relevé pendant l'effet";
+                    int seen = v.Count(x => x > 0.6 && x > 5 * noise);
+                    return seen + " relevés sur " + v.Count + " voient le calque" + (seen == v.Count ? " (toujours)" : seen == 0 ? " (jamais)" : " (par moments)");
+                };
+                Console.WriteLine("Mode de la surface : " + (mode ?? "inconnu") + " ; bruit DXGI " + noiseD.ToString("0.00") + ", WGC " + noiseW.ToString("0.00"));
+                Console.WriteLine("DXGI (comme « Écran ») : " + verdict("dxgi", noiseD));
+                Console.WriteLine("WGC : " + verdict("wgc", noiseW));
+                string outFile = Path.Combine(Path.GetTempPath(), "chaos-engine-probe-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
+                File.WriteAllText(outFile, J.Write(J.Map("screen", dev, "size", W + "x" + H, "mode", mode, "request", resp, "noise_dxgi", noiseD, "noise_wgc", noiseW,
+                    "dxgi", verdict("dxgi", noiseD), "wgc", verdict("wgc", noiseW), "samples", samples.ToArray())));
+                Console.WriteLine("Résultats : " + outFile);
+                return 0;
+            }
+            finally
+            {
+                try { e.Call("stop_all"); } catch (Exception) { }
+                e.Kill();
+                if (wgc != null) wgc.Dispose();
+                dupS.Dispose();
+                pointsOverride = null;
+            }
+        }
+
         static List<KeyValuePair<string, string>> SampleAll(IntPtr target, IntPtr hmon, RECT mon)
         {
             var r = new List<KeyValuePair<string, string>>();

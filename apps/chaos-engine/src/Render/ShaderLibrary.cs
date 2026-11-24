@@ -107,6 +107,15 @@ float4 ps(V i) : SV_Target {
   float3 c = src.SampleLevel(smp, i.uv, 0).rgb;
   return float4(lerp(c, c * u0.rgb + u0.rgb * 0.25, u0.a), 1);
 }");
+            // Diagnostic : l'image capturée telle quelle, plus un damier blanc presque invisible (u0.x d'intensité, cases de
+            // u0.y px) : la sonde de capture le cherche dans la capture d'écran (le calque est-il vu par OBS ?).
+            Register("diag_watermark", @"
+float4 ps(V i) : SV_Target {
+  float3 c = src.SampleLevel(smp, i.uv, 0).rgb;
+  float2 cell = floor(i.uv * view.xy / max(1, u0.y));
+  float on = fmod(cell.x + cell.y, 2) < 0.5 ? 1 : 0;
+  return float4(saturate(c + on * u0.x), 1);
+}");
             // Diagnostic : charge réglable, u0.x taps répartis en spirale autour du pixel (léger flou), u0.y mélange.
             Register("diag_load", @"
 float4 ps(V i) : SV_Target {

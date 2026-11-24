@@ -2970,6 +2970,66 @@
       ]
     },
     {
+      "id": "diag.watermark",
+      "version": 1,
+      "label": "Filigrane de diagnostic",
+      "description": "Filtre de test : l'image capturée telle quelle, plus un damier blanc presque invisible (2/255), pour vérifier que la capture d'écran d'OBS voit le calque (sonde de capture, chemin réel).",
+      "family": "diagnostic",
+      "icon": "filter",
+      "slot": "filter",
+      "internal": true,
+      "on_conflict": "reject",
+      "gpu": {
+        "primitive": "shader",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 5000
+      },
+      "params": [
+        {
+          "id": "strength",
+          "type": "number",
+          "min": 0,
+          "max": 0.05,
+          "default": 0.0078,
+          "animatable": true,
+          "neutral": 0
+        },
+        {
+          "id": "cell",
+          "type": "number",
+          "min": 2,
+          "max": 64,
+          "default": 8
+        }
+      ],
+      "variants": [],
+      "transitions": {
+        "in": {
+          "kind": "cut",
+          "duration_ms": 0,
+          "curve": "linear",
+          "kinds": ["cut"]
+        },
+        "out": {
+          "kind": "cut",
+          "duration_ms": 0,
+          "curve": "linear",
+          "kinds": ["cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
       "id": "diag.passes",
       "version": 1,
       "label": "Charge GPU de diagnostic",

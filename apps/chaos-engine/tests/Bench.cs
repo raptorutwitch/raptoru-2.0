@@ -59,6 +59,8 @@ namespace Raptoru.Chaos
             if (args.Length > 0 && args[0] == "--cursor-hide-child") return CursorProto.Child();
             if (args.Length > 0 && args[0] == "--obs-compat")
                 return CaptureCompat.Run(args, Path.GetFullPath(Arg(args, "--engine", Path.Combine(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), "ChaosEngine.exe"))));
+            if (args.Length > 0 && args[0] == "--capture-probe" && args.Contains("--engine"))
+                return CaptureCompat.EnginePathProbe(args, Path.Combine(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), "ChaosEngine.exe"));
             if (args.Length > 0 && args[0] == "--capture-probe") return CaptureCompat.InvisibleProbe(args);
             if (args.Length > 0 && args[0] == "--probe")
                 return Probe(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), int.Parse(args[5]), int.Parse(args[6]));

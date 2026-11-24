@@ -23,6 +23,16 @@ namespace Raptoru.Chaos
         }
     }
 
+    /// Diagnostic (interne) : l'image capturée, plus un filigrane presque invisible (sonde de capture, chemin réel : même
+    /// trajet qu'un miroir — capture, image de l'écran, exclusion éventuelle, présentation continue).
+    sealed class DiagWatermarkEffect : Effect
+    {
+        public override void Render(FrameBuilder fb, EffectFrame f)
+        {
+            fb.Filter("diag_watermark", new[] { (float)f.Animated("strength"), (float)f.P.Num("cell") });
+        }
+    }
+
     /// Diagnostic (interne) : charge GPU réglable (passes plein écran enchaînées, taps de flou par passe) pour mesurer
     /// le coût des futurs effets multipasses (banc de performances, scénario E).
     sealed class DiagPassesEffect : Effect

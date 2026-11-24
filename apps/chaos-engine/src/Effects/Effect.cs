@@ -122,6 +122,7 @@ namespace Raptoru.Chaos
             { "color", () => new ColorEffect() },
             { "vhs", () => new VhsEffect() },
             { "diag.tint", () => new DiagTintEffect() },
+            { "diag.watermark", () => new DiagWatermarkEffect() },
             { "diag.passes", () => new DiagPassesEffect() },
             { "diag.marker", () => new DiagMarkerEffect() },
             { "diag.fault", () => new DiagFaultEffect() },
