@@ -92,9 +92,10 @@ namespace Raptoru.Chaos
                     return EffectCatalog.Mismatches(reg).Count == 0 ? 0 : 1;
                 case "--version": Console.WriteLine(Version); return 0;
                 case "--game-check":
-                    string game = N.GameActivity();
-                    Out(game ?? "aucun jeu ni plein écran détecté");
-                    return game == null ? 0 : 1;
+                    // Diagnostic complet : règle, processus, fenêtre, écran ; notes (ce que Windows signale sans que ce soit un jeu).
+                    var gc = N.CheckGame();
+                    Out(gc.Detail());
+                    return gc.Blocked ? 1 : 0;
                 case "--restore-display":
                     int rr = InputLayer.RestoreAllDisplays();
                     bool cr = CursorLayer.RestoreSystem();

@@ -339,32 +339,109 @@ namespace Raptoru.Chaos
             "League of Legends", "RocketLeague", "GTA5", "eldenring", "RainbowSix", "Phasmophobia", "Lethal Company"
         };
 
-        /// Garde des essais visibles (mire, calque, rotation, banc) : raison lisible si un jeu ou une application plein
-        /// écran est actif, null sinon. Incident du 22/11 : des rotations d'essai sur l'autre écran ont fait tomber
-        /// Overwatch à 17 images/s. Aucun essai visible ne se lance alors sans l'accord explicite d'Antoni.
-        public static string GameActivity()
+        /// Diagnostic de la garde : règle qui bloque (null = rien ne bloque), processus, titre de fenêtre, écran, et notes
+        /// non bloquantes (ce que Windows signale mais qui n'est pas un jeu).
+        public sealed class GameCheck
         {
+            public string Rule, Proc, Title, Monitor, Reason;
+            public readonly List<string> Notes = new List<string>();
+            public bool Blocked { get { return Reason != null; } }
+            public string Detail()
+            {
+                var sb = new StringBuilder(Reason ?? "aucun jeu ni plein écran détecté");
+                if (Rule != null) sb.Append("\n  règle : ").Append(Rule);
+                if (Proc != null) sb.Append("\n  processus : ").Append(Proc);
+                if (Title != null) sb.Append("\n  fenêtre : « ").Append(Title).Append(" »");
+                if (Monitor != null) sb.Append("\n  écran : ").Append(Monitor);
+                foreach (var n in Notes) sb.Append("\n  note : ").Append(n);
+                return sb.ToString();
+            }
+        }
+
+        static string ProcOf(IntPtr h)
+        {
+            uint pid; GetWindowThreadProcessId(h, out pid);
+            try { return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName + ".exe"; } catch (Exception) { return "?"; }
+        }
+        static string ShortTitle(IntPtr h) { string t = WindowText(h); return t.Length > 80 ? t.Substring(0, 80) + "…" : t; }
+        static string Describe(IntPtr h) { return ProcOf(h) + " « " + ShortTitle(h) + " » sur " + MonitorDevice(MonitorFromWindow(h, 2)); }
+        static void Fill(GameCheck g, IntPtr h)
+        {
+            if (h == IntPtr.Zero) return;
+            g.Proc = ProcOf(h); g.Title = ShortTitle(h); g.Monitor = MonitorDevice(MonitorFromWindow(h, 2));
+        }
+
+        /// Garde des essais visibles (mire, calque, rotation, banc) : diagnostic détaillé. Incident du 22/11 : des
+        /// rotations d'essai sur l'autre écran ont fait tomber Overwatch à 17 images/s. Aucun essai visible ne se lance
+        /// alors sans l'accord explicite d'Antoni. Bloquent : un jeu connu lancé ; une fenêtre (non traversable) qui couvre
+        /// un écran entier ; un plein écran exclusif Direct3D ; le mode présentation ; un « plein écran » signalé par
+        /// Windows sans fenêtre identifiable (prudence). Ne bloquent PAS : les calques traversables qui couvrent un écran
+        /// (WS_EX_TRANSPARENT ou fenêtre outil : overlays de Raptoru, Discord, NVIDIA…), jamais des jeux, même quand Windows
+        /// les compte comme « plein écran » (24/11 : les deux fenêtres Halloween de Studio bloquaient ainsi la sonde).
+        public static GameCheck CheckGame()
+        {
+            var g = new GameCheck();
             foreach (var name in KnownGames)
-                if (System.Diagnostics.Process.GetProcessesByName(name).Length > 0) return "jeu en cours : " + name + ".exe";
-            int quns;
-            if (SHQueryUserNotificationState(out quns) == 0 && (quns == 2 || quns == 3 || quns == 4))
-                return quns == 3 ? "application Direct3D en plein écran exclusif" : quns == 4 ? "mode présentation de Windows" : "application plein écran au premier plan";
-            var screens = Monitors().ConvertAll(MonitorRectOf);
-            string full = null;
+            {
+                var ps = System.Diagnostics.Process.GetProcessesByName(name);
+                if (ps.Length == 0) continue;
+                g.Rule = "jeu connu en cours";
+                g.Reason = "jeu en cours : " + name + ".exe";
+                Fill(g, ps[0].MainWindowHandle);
+                g.Proc = name + ".exe";
+                return g;
+            }
+            IntPtr full = IntPtr.Zero;
+            var overlays = new List<string>();
             EnumWindows((h, l) =>
             {
                 if (!IsWindowVisible(h) || IsIconic(h) || IsCloaked(h)) return true;
-                if ((GetWindowLongW(h, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT)) != 0) return true;
                 string cls = ClassName(h);
                 if (cls == "Progman" || cls == "WorkerW") return true;
-                RECT r = FrameBounds(h);
-                if (!screens.Exists(m => m.Left == r.Left && m.Top == r.Top && m.Right == r.Right && m.Bottom == r.Bottom)) return true;
-                uint pid; GetWindowThreadProcessId(h, out pid);
-                try { full = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName + ".exe"; } catch (Exception) { full = "?"; }
+                RECT r = FrameBounds(h), m = MonitorRectOf(MonitorFromWindow(h, 2));
+                if (r.Left > m.Left || r.Top > m.Top || r.Right < m.Right || r.Bottom < m.Bottom) return true;
+                if ((GetWindowLongW(h, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT)) != 0) { overlays.Add(Describe(h)); return true; }
+                full = h;
                 return false;
             }, IntPtr.Zero);
-            return full != null ? "fenêtre plein écran : " + full : null;
+            if (full != IntPtr.Zero)
+            {
+                g.Rule = "fenêtre qui couvre un écran entier (jeu en fenêtré sans bordure, vidéo plein écran…)";
+                Fill(g, full);
+                g.Reason = "fenêtre plein écran : " + g.Proc + " sur " + g.Monitor;
+                return g;
+            }
+            int quns;
+            if (SHQueryUserNotificationState(out quns) == 0)
+            {
+                if (quns == 3)
+                {
+                    g.Rule = "Windows : application Direct3D en plein écran exclusif (QUNS_RUNNING_D3D_FULL_SCREEN)";
+                    g.Reason = "application Direct3D en plein écran exclusif";
+                    Fill(g, GetForegroundWindow());
+                    return g;
+                }
+                if (quns == 4) { g.Rule = "Windows : mode présentation (QUNS_PRESENTATION_MODE)"; g.Reason = "mode présentation de Windows"; return g; }
+                if (quns == 2)
+                {
+                    if (overlays.Count > 0)
+                        g.Notes.Add("Windows signale « plein écran » (QUNS_BUSY) à cause de calques traversables, jamais des jeux, ignorés : " + string.Join(" ; ", overlays));
+                    else
+                    {
+                        g.Rule = "Windows : application plein écran (QUNS_BUSY) sans fenêtre identifiable : prudence";
+                        g.Reason = "application plein écran signalée par Windows, non identifiée";
+                        Fill(g, GetForegroundWindow());
+                        return g;
+                    }
+                }
+            }
+            if (g.Reason == null && overlays.Count > 0 && g.Notes.Count == 0)
+                g.Notes.Add("calques traversables couvrant un écran (ignorés) : " + string.Join(" ; ", overlays));
+            return g;
         }
+
+        /// Raison lisible si un jeu ou une application plein écran bloque les essais visibles, null sinon.
+        public static string GameActivity() { var g = CheckGame(); return g.Blocked ? g.Reason : null; }
 
         public static string WindowText(IntPtr h) { var sb = new StringBuilder(256); GetWindowTextW(h, sb, 256); return sb.ToString(); }
         public static string ClassName(IntPtr h) { var sb = new StringBuilder(256); GetClassNameW(h, sb, 256); return sb.ToString(); }

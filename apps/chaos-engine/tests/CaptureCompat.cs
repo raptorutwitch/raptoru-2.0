@@ -194,12 +194,13 @@ namespace Raptoru.Chaos
         /// deux captures sans calque). Refusée pendant un jeu ou une application plein écran. Docs/chaos/ETUDE_HALLOWEEN_VS_V2.md.
         public static int InvisibleProbe(string[] a)
         {
-            string game = N.GameActivity();
-            if (game != null && !a.Contains("--autorise-pendant-un-jeu"))
+            var gc = N.CheckGame();
+            if (gc.Blocked && !a.Contains("--autorise-pendant-un-jeu"))
             {
-                Console.WriteLine("Sonde NON lancée : " + game + ".");
+                Console.WriteLine("Sonde NON lancée : " + gc.Detail());
                 return 2;
             }
+            foreach (var n in gc.Notes) Console.WriteLine("Garde : " + n);
             string primary = N.MonitorDevice(N.MonitorFromWindow(N.GetDesktopWindow(), 2));
             int ai = Array.IndexOf(a, "--screen");
             string dev = ai >= 0 && ai + 1 < a.Length ? a[ai + 1] : primary;
@@ -298,10 +299,11 @@ namespace Raptoru.Chaos
 
         public static int Run(string[] a, string engineExe)
         {
-            string game = N.GameActivity();
-            if (game != null && !a.Contains("--autorise-pendant-un-jeu"))
+            var gc = N.CheckGame();
+            if (gc.Blocked && !a.Contains("--autorise-pendant-un-jeu"))
             {
-                Console.WriteLine("Test NON lancé : " + game + ". Aucun essai visible pendant un jeu ; accord d'Antoni : --autorise-pendant-un-jeu.");
+                Console.WriteLine("Test NON lancé : " + gc.Detail());
+                Console.WriteLine("Aucun essai visible pendant un jeu ; accord d'Antoni : --autorise-pendant-un-jeu.");
                 return 2;
             }
             string primary = N.MonitorDevice(N.MonitorFromWindow(N.GetDesktopWindow(), 2));

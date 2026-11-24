@@ -230,8 +230,26 @@ fois exclu ?
   lancer par toi** :
 
 ```
-C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\chaos-engine\bin\chaos-bench.exe --capture-probe
+C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\chaos-engine\bin\chaos-bench.exe --capture-probe --screen \\.\DISPLAY1
 ```
+
+`\\.\DISPLAY1` est ton écran droit, celui que capture « Écran » (journal OBS : `alt_id: \\.\DISPLAY1`).
+
+**La garde de jeu (24/11, corrigée).**
+
+- Toute la journée, elle refusait « application plein écran au premier plan ». La cause n'était pas un jeu : ce sont
+  **les deux fenêtres Halloween de Studio** (« Raptoru — Halloween », toujours ouvertes car « Overlay actif » est
+  allumé, AUDIT D1). Elles sont transparentes, traversables, au premier plan et couvrent l'écran droit.
+- Windows les compte comme une application plein écran (`SHQueryUserNotificationState` = occupé), et la garde le
+  croyait sans chercher la fenêtre.
+- Désormais, `N.CheckGame()` identifie la fenêtre :
+  - un calque traversable n'est jamais un jeu : il est ignoré, avec une note ;
+  - bloquent toujours : un jeu connu lancé, une fenêtre non traversable qui couvre un écran (jeu en fenêtré sans
+    bordure, vidéo plein écran), le plein écran exclusif Direct3D, le mode présentation, et un « plein écran » de
+    Windows qu'aucune fenêtre n'explique.
+- `ChaosEngine.exe --game-check` affiche la règle, le processus, la fenêtre, l'écran et les notes.
+- Conseil : éteindre « Overlay actif » dans Studio › Halloween (événement fermé). Ces fenêtres restent au-dessus de
+  ton jeu en permanence (composition forcée par Windows, RECHERCHE § 3 C3) et Windows te croit en plein écran.
 
 Après `npm run chaos:lab` ou `apps\chaos-engine\build.cmd` ; les résultats vont dans `%TEMP%\chaos-capture-probe-*.json`.
 
