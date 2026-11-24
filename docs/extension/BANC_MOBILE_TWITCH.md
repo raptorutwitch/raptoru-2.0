@@ -71,6 +71,12 @@ jamais contactés.
 - Rien n'établit que les extensions mobiles s'affichent sur une chaîne hors ligne. Si l'icône manque, lancez un live
   technique sur la **chaîne de test**, qui n'a pas d'abonnés à notifier. Un écran noir suffit.
 
+## Première recette réelle (24/11/2026)
+
+Android SM-S916B, application Twitch officielle (WebView Chrome 157), chaîne de test LeCroupier_, version Local Test
+0.0602. Le banc a reproduit le Casino vide (hôte 346 × 0) puis, avec le build `banc-mobile-d4322f2213f5`, Antoni a
+**validé** l'affichage des trois jeux. Cause et correctif : [../CASINO.md](../CASINO.md) (« Vrai téléphone, 24/11 »).
+
 ## Limites
 
 - Le Core Lab est fictif : ce sont les vraies règles et le vrai code du Core, mais pas les données de Production.
