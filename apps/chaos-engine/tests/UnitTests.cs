@@ -525,6 +525,24 @@ namespace Raptoru.Chaos
                     "inchangé : transitions, calques sans capture, curseur suivi");
                 True(Cadence.Due(false, false, false, false), "première image toujours due");
             });
+            Case("cible écran (mode E) : une fenêtre protégée contre la capture n'est jamais la source en direct (Discord, 24/11)", () =>
+            {
+                // Relevé réel du 24/11 : Discord, 26 % de l'écran 1, la plus haute, affinité 0x11 (exclue des captures).
+                var discord = new WindowFacts { Visible = true, ExStyle = 0x280100, Class = "Chrome_WidgetWin_1", Affinity = 0x11, Share = 0.26 };
+                True(!WindowPick.Eligible(discord, 0.25), "WDA_EXCLUDEFROMCAPTURE : écartée (WGC n'en livre aucune image)");
+                discord.Affinity = 1;
+                True(!WindowPick.Eligible(discord, 0.25), "WDA_MONITOR : écartée (noire dans les captures)");
+                discord.Affinity = 0;
+                True(WindowPick.Eligible(discord, 0.25) && !WindowPick.Eligible(discord, 0.9), "même fenêtre capturable : retenue à 25 %, pas comme fenêtre qui occupe l'écran");
+                var game = new WindowFacts { Visible = true, Class = "UnityWndClass", Share = 1 };
+                True(WindowPick.Eligible(game, 0.9), "jeu plein écran capturable : retenu");
+                Func<WindowFacts, bool> no = f => !WindowPick.Eligible(f, 0.25);
+                True(no(new WindowFacts { Visible = true, Class = "X", Share = 1, ExStyle = 0x80 }) && no(new WindowFacts { Visible = true, Class = "X", Share = 1, ExStyle = 0x20 })
+                    && no(new WindowFacts { Visible = true, Class = "Progman", Share = 1 }) && no(new WindowFacts { Visible = true, Class = "X", Share = 1, Self = true })
+                    && no(new WindowFacts { Visible = true, Class = "X", Share = 1, Cloaked = true }) && no(new WindowFacts { Visible = true, Class = "X", Share = 1, Owned = true })
+                    && no(new WindowFacts { Visible = true, Class = "X", Share = 1, Iconic = true }) && no(new WindowFacts { Visible = false, Class = "X", Share = 1 }),
+                    "inchangé : outils, calques traversables, bureau, moteur, cachées, possédées, réduites écartés");
+            });
 
             // ---------- Catalogue des effets V2 (docs/chaos/ETUDE_EFFETS_V2.md) ----------
             Case("catalogue V2 : chaque effet public a ses variantes valides, ses paliers viewers et son aperçu", () =>

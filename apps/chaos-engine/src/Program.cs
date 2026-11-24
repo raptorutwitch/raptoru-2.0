@@ -61,6 +61,7 @@ namespace Raptoru.Chaos
                 case "--preview-anim": return EffectPreview.Anim(args[1], args[2], args[3], args[4], (uint)IntArg(args, "--w", 320), (uint)IntArg(args, "--h", 180), StrArg(args, "--cache", null));
                 case "--combo": return EffectPreview.Combo(args[1], args[2], long.Parse(args[3]), long.Parse(args[4]), int.Parse(args[5]));
                 case "--sysinfo": return PerfLab.SysInfoMain();
+                case "--capture-check": return CaptureCheck(args);
                 case "--resolve-screens":
                     // Ciblage « écran » de chaque écran branché, sans rien afficher ni capturer (contrôle multi-écrans).
                     var rreg = Registry.Embedded();
@@ -118,6 +119,51 @@ namespace Raptoru.Chaos
                         "Arrêt d'urgence à tout moment : Ctrl+Maj+F11.", "Raptoru Chaos " + Version);
                     return 0;
             }
+        }
+
+        /// --capture-check (--screen \\.\DISPLAYn | --hwnd n) : la source exacte que le moteur ouvrirait (cible « écran »
+        /// résolue comme une fiche, ou une fenêtre donnée), sans surface ni effet : rien n'est affiché. Première image en
+        /// combien de temps, ou aucune dans le délai du moteur (3 s, sinon « aucune image capturée ») ; erreur de Windows
+        /// Graphics Capture ; affinité d'affichage de la fenêtre ; bordure de capture retirée ou non.
+        static int CaptureCheck(string[] args)
+        {
+            var gc = N.CheckGame();
+            if (gc.Blocked && !args.Contains("--autorise-pendant-un-jeu")) { Out(J.Write(J.Map("error", "game", "detail", gc.Detail()))); return 2; }
+            string dev = StrArg(args, "--screen", null);
+            var hwnd = new IntPtr(long.Parse(StrArg(args, "--hwnd", "0")));
+            var res = new Dictionary<string, object>();
+            var gpu = new Gpu();
+            var evt = new AutoResetEvent(false);
+            ICaptureSource src;
+            try
+            {
+                if (dev != null)
+                {
+                    var t = Targets.Resolve(J.Map("kind", "screen", "device", dev), "window", System.Diagnostics.Process.GetCurrentProcess().Id, Registry.Embedded().Get("mirror"), false);
+                    res["target"] = t.Info;
+                    hwnd = t.Hwnd;
+                    src = t.Kind == "screen" ? (ICaptureSource)new ComposedScreenSource(gpu, null, evt, t.Key, t.Hwnd, t.Hmon) : new WgcCaptureSource(gpu, null, evt, t.Key, IntPtr.Zero, t.Hmon);
+                }
+                else src = new WgcCaptureSource(gpu, null, evt, "check", hwnd, IntPtr.Zero);
+            }
+            catch (Exception e) { res["error"] = e.GetType().Name + " : " + e.Message; Out(J.Write(res)); return 1; }
+            uint aff;
+            if (hwnd != IntPtr.Zero && N.GetWindowDisplayAffinity(hwnd, out aff)) res["affinity"] = aff;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            long first = -1;
+            while (sw.ElapsedMilliseconds < 3000)
+            {
+                evt.WaitOne(20);
+                src.Acquire(sw.ElapsedMilliseconds);
+                if (src.HasFrame) { first = sw.ElapsedMilliseconds; break; }
+            }
+            res["first_frame_ms"] = first >= 0 ? (object)first : null;
+            res["frames"] = src.Frames;
+            res["lost"] = src.Lost ? src.LostReason : null;
+            res["capture"] = src.Info();
+            src.Dispose();
+            Out(J.Write(res));
+            return first >= 0 ? 0 : 1;
         }
 
         /// Sortie texte en UTF-8 (le moteur est une application sans console : Console.OutputEncoding y échoue).

@@ -62,8 +62,9 @@ namespace Raptoru.Chaos
             return i < 0 ? device : ScreenLayout.Label(i, s.Count) + " · " + s[i].Width + "×" + s[i].Height;
         }
 
-        /// La fenêtre d'un écran : la plus haute (ordre d'affichage) qui en couvre au moins share (0,9 : jeu en fenêtré sans
-        /// bordure, fenêtre agrandie). Ni bureau, ni outils, ni calques traversables, ni fenêtres du moteur.
+        /// La fenêtre d'un écran : la plus haute (ordre d'affichage) éligible qui en couvre au moins share (0,9 : jeu en
+        /// fenêtré sans bordure, fenêtre agrandie). Règle : WindowPick.Eligible (ni bureau, ni outils, ni calques
+        /// traversables, ni fenêtres du moteur, ni fenêtre protégée contre la capture).
         static IntPtr WindowOn(IntPtr hmon, int selfPid, double share)
         {
             RECT m = N.MonitorRectOf(hmon);
@@ -71,15 +72,17 @@ namespace Raptoru.Chaos
             IntPtr found = IntPtr.Zero;
             N.EnumWindows((h, l) =>
             {
-                if (!N.IsWindowVisible(h) || N.IsCloaked(h) || N.IsIconic(h) || N.GetWindow(h, N.GW_OWNER) != IntPtr.Zero) return true;
-                if ((N.GetWindowLongW(h, N.GWL_EXSTYLE) & (N.WS_EX_TOOLWINDOW | N.WS_EX_TRANSPARENT)) != 0) return true;
-                string cls = N.ClassName(h);
-                if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") return true;
-                uint pid; N.GetWindowThreadProcessId(h, out pid);
-                if (pid == selfPid) return true;
+                if (!N.IsWindowVisible(h)) return true;
+                uint pid, aff; N.GetWindowThreadProcessId(h, out pid);
                 RECT r = N.FrameBounds(h);
                 double w = Math.Min(r.Right, m.Right) - Math.Max(r.Left, m.Left), hh = Math.Min(r.Bottom, m.Bottom) - Math.Max(r.Top, m.Top);
-                if (w <= 0 || hh <= 0 || w * hh < share * area) return true;
+                var f = new WindowFacts
+                {
+                    Visible = true, Cloaked = N.IsCloaked(h), Iconic = N.IsIconic(h), Owned = N.GetWindow(h, N.GW_OWNER) != IntPtr.Zero,
+                    Self = pid == selfPid, ExStyle = N.GetWindowLongW(h, N.GWL_EXSTYLE), Class = N.ClassName(h),
+                    Affinity = N.GetWindowDisplayAffinity(h, out aff) ? aff : 0, Share = w > 0 && hh > 0 ? w * hh / area : 0
+                };
+                if (!WindowPick.Eligible(f, share)) return true;
                 found = h;
                 return false;
             }, IntPtr.Zero);
