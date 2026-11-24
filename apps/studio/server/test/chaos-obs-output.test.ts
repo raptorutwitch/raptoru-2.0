@@ -235,6 +235,63 @@ describe('Chaos › Diffusion OBS (mode C)', () => {
     expect(v1(obs)).toEqual(before);
   });
 
+  it('deux activations du même effet à la suite : la fin de la première ne coupe jamais le filtre repris par la seconde', async () => {
+    const { obs, out } = setup('owner');
+    await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });
+    await out.prepare(join(dir, 'backups'));
+    await out.status(true);
+    const m = () =>
+      obs.filters.find((f) => f.filterName === `${V2_PREFIX}Miroir`)!;
+    const f = [{ key: 'mirror:transform', settings: { chaos_frames: 100 } }];
+    out.onEngineEvent({
+      event: 'effect.obs',
+      phase: 'prepare',
+      request_id: 'a',
+      effect: 'mirror',
+      filters: f,
+    });
+    out.onEngineEvent({
+      event: 'effect.started',
+      request_id: 'a',
+      outputs: { obs: true },
+    });
+    // Remplacement : la seconde est préparée AVANT que la fin de la première n'arrive.
+    out.onEngineEvent({
+      event: 'effect.obs',
+      phase: 'prepare',
+      request_id: 'b',
+      effect: 'mirror',
+      filters: f,
+    });
+    out.onEngineEvent({ event: 'effect.ended', request_id: 'a' });
+    out.onEngineEvent({
+      event: 'effect.started',
+      request_id: 'b',
+      outputs: { obs: true },
+    });
+    await settle();
+    expect(m().filterEnabled).toBe(true);
+    // Ordre inverse : fin de b, puis c préparée et démarrée.
+    out.onEngineEvent({ event: 'effect.ended', request_id: 'b' });
+    out.onEngineEvent({
+      event: 'effect.obs',
+      phase: 'prepare',
+      request_id: 'c',
+      effect: 'mirror',
+      filters: f,
+    });
+    out.onEngineEvent({
+      event: 'effect.started',
+      request_id: 'c',
+      outputs: { obs: true },
+    });
+    await settle();
+    expect(m().filterEnabled).toBe(true);
+    out.onEngineEvent({ event: 'effect.ended', request_id: 'c' });
+    await settle();
+    expect(m().filterEnabled).toBe(false);
+  });
+
   it('STOP ALL, arrêt d’urgence : seuls les filtres V2 actifs sont coupés (un filtre V1 ou étranger actif reste actif)', async () => {
     const { obs, out } = setup('stopall');
     await out.setConfig({ source: 'Écran', device: '\\\\.\\DISPLAY1' });

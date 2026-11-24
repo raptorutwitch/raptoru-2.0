@@ -51,8 +51,6 @@ interface Session {
   state: 'prepared' | 'live' | 'ending' | 'ended' | 'failed';
   error: string | null;
   enabledAt: number | null;
-  /** Requêtes OBS de la session, l'une après l'autre (réglages → activation → recalage → coupure). */
-  chain: Promise<void>;
   at: number;
 }
 type Engine = (cmd: string, args?: object) => Promise<unknown>;
@@ -94,6 +92,13 @@ export class ChaosObsOutput {
   };
   plan: ChaosObsPlan | null = null;
   private readonly sessions = new Map<string, Session>();
+  /**
+   * Toutes les requêtes OBS des sessions, l'une après l'autre, dans l'ordre des événements du moteur (réglages →
+   * activation → recalage → coupure) ; et le propriétaire de chaque filtre : la fin d'une activation ne coupe jamais un
+   * filtre qu'une activation suivante du même effet a déjà repris.
+   */
+  private chain: Promise<void> = Promise.resolve();
+  private readonly owner = new Map<string, string>();
   private wasConnected = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private cache: { at: number; value: Record<string, unknown> } | null = null;
@@ -435,7 +440,7 @@ export class ChaosObsOutput {
         if (s) {
           s.state = 'failed';
           s.error = reason;
-          this.queue(s, () => this.setEnabled(s.names, false));
+          this.queue(s, () => this.setEnabled(this.mine(s), false));
         }
         if (reason === 'exclusion_failed')
           this.incident(
@@ -459,7 +464,7 @@ export class ChaosObsOutput {
       });
     } else if (ENDED.has(ev)) {
       s.state = s.state === 'failed' ? 'failed' : 'ended';
-      this.queue(s, () => this.setEnabled(s.names, false));
+      this.queue(s, () => this.setEnabled(this.mine(s), false));
     }
   }
 
@@ -468,8 +473,13 @@ export class ChaosObsOutput {
     void this.disableAll('moteur arrêté');
   }
 
+  /** Les filtres de la session qu'aucune activation plus récente n'a repris. */
+  private mine(s: Session) {
+    return s.names.filter((n) => this.owner.get(n) === s.requestId);
+  }
+
   private queue(s: Session, step: () => Promise<void>) {
-    s.chain = s.chain.then(step).catch((err) => {
+    this.chain = this.chain.then(step).catch((err) => {
       s.state = 'failed';
       s.error = obsReason(err);
       this.incident(`Sortie OBS de ${s.effect} : ${s.error}`);
@@ -478,7 +488,7 @@ export class ChaosObsOutput {
         request_id: s.requestId,
         reason: s.error,
       }).catch(() => {});
-      void this.setEnabled(s.names, false).catch(() => {});
+      void this.setEnabled(this.mine(s), false).catch(() => {});
     });
   }
 
@@ -498,10 +508,10 @@ export class ChaosObsOutput {
       state: 'prepared',
       error: null,
       enabledAt: null,
-      chain: Promise.resolve(),
       at: this.now(),
     };
     this.sessions.set(rid, s);
+    for (const n of names ?? []) this.owner.set(n, rid);
     for (const [k, old] of this.sessions)
       if (this.now() - old.at > 10 * 60_000 && old.state !== 'live')
         this.sessions.delete(k);
@@ -560,6 +570,7 @@ export class ChaosObsOutput {
     for (const s of this.sessions.values())
       if (s.state === 'prepared' || s.state === 'live' || s.state === 'ending')
         s.state = 'ended';
+    this.owner.clear();
     const src = this.config.source;
     const o = this.obs();
     if (!src || !o?.connected) return { disabled: 0 };
