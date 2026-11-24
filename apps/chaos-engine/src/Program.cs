@@ -97,6 +97,14 @@ namespace Raptoru.Chaos
                     Out((rr == 0 ? "écrans rétablis (réglages enregistrés de Windows)" : "écrans : échec, code " + rr) + " ; curseur " + (cr ? "rétabli" : "non rétabli"));
                     return rr == 0 ? 0 : 1;
                 default:
+                    // Une option inconnue (outil plus ancien, faute de frappe) ne doit jamais ouvrir de fenêtre : elle
+                    // s'afficherait sur l'écran, peut-être pendant un jeu. La boîte d'information est réservée au
+                    // double-clic sur l'exécutable (aucun argument).
+                    if (args.Length > 0)
+                    {
+                        Console.Error.WriteLine("option inconnue : " + args[0]);
+                        return 2;
+                    }
                     MessageBox.Show("Le moteur Chaos se pilote depuis Raptoru Studio (page Chaos) ou le banc Chaos Lab.\n\n" +
                         "Arrêt d'urgence à tout moment : Ctrl+Maj+F11.", "Raptoru Chaos " + Version);
                     return 0;
