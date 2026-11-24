@@ -294,6 +294,21 @@ namespace Raptoru.Chaos
                 results.Add(J.Map("case", "mode_e_strip", "before", before, "after", after, "request", resp));
                 e.Call("stop_all");
                 e.Event("effect.ended", 3000);
+                Thread.Sleep(300);
+                // Mode C (écran + OBS, docs/chaos/MODE_C.md) : même cible, sortie OBS demandée. Le calque doit être exclu des
+                // captures : la capture d'écran (WGC, DXGI) voit la mire DROITE (OBS appliquera l'effet une fois), alors que
+                // le calque lui-même (WGC fenêtre du calque) est retourné. Une mire retournée vue par la capture d'écran =
+                // double application.
+                resp = e.Call("effect.request", J.Map("request_id", "compat-c2", "effect", "flip", "source", J.Map("kind", "test"), "target", screen, "transition", cut,
+                    "duration_ms", 20000, "outputs", new object[] { "screen", "obs" }, "obs", J.Map("width", mon.Right - mon.Left, "height", mon.Bottom - mon.Top)));
+                if (e.Event("effect.started", 5000, x => J.Str(x, "request_id", "") == "compat-c2") == null) Console.WriteLine("  l'effet « écran + OBS » n'a pas démarré");
+                Thread.Sleep(600);
+                report("Mode C (écran + OBS) : calque exclu, OBS doit voir la mire droite");
+                string dual = stripView();
+                Console.WriteLine("  Mode C, retourné à l'écran : " + dual + " (attendu : comme sans effet)");
+                results.Add(J.Map("case", "mode_c_dual", "before", before, "during", dual, "excluded_ok", dual == before, "request", resp));
+                e.Call("stop_all");
+                e.Event("effect.ended", 3000);
             }
             finally
             {
