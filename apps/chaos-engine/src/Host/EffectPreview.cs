@@ -21,7 +21,7 @@ namespace Raptoru.Chaos
     {
         /// Niveau d'intensité appliqué par les outils (--level), sauf s'ils en donnent un.
         public static string DefaultLevel;
-        sealed class Rig
+        internal sealed class Rig
         {
             public Gpu Gpu; public ShaderLibrary Lib; public TexturePool Pool; public GpuTimer Timer; public TextRaster Text;
             public uint W, H; public IntPtr Src, SrcSrv, Out, OutRtv, Staging, Big;
@@ -47,13 +47,14 @@ namespace Raptoru.Chaos
         }
 
         /// Une activation simulée : paramètres résolus (variante), animateur, effet préparé, graine fixe.
-        sealed class Sim
+        internal sealed class Sim
         {
             public ResolvedParams P; public Animator Anim; public Effect Fx; public readonly EffectFrame F = new EffectFrame();
             public long Total;
-            public Sim(Registry reg, Rig rig, EffectDef def, string variant, int seed, Preset preset = null, string level = null)
+            public Sim(Registry reg, Rig rig, EffectDef def, string variant, int seed, Preset preset = null, string level = null,
+                Dictionary<string, object> overrides = null, int? durationMs = null)
             {
-                P = Params.Resolve(def, variant, preset, null, null, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true, level ?? DefaultLevel);
+                P = Params.Resolve(def, variant, preset, overrides, durationMs, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true, level ?? DefaultLevel);
                 Anim = new Animator(P.In, P.Out);
                 Anim.Start(0);
                 Fx = EffectCatalog.Create(def.Id);

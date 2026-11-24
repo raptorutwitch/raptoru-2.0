@@ -80,6 +80,10 @@ namespace Raptoru.Chaos
                 case "--perf-offscreen": return PerfLab.Offscreen(args);
                 case "--perf-monitor": return PerfLab.Monitor(args);
                 case "--measure": return EffectPreview.Measure(args[1], args[2], args[3], (uint)IntArg(args, "--w", 640), (uint)IntArg(args, "--h", 360), StrArg(args, "--level", null));
+                case "--obs-export":
+                    return ObsExport.Run(args[1], args[2], StrArg(args, "--out", "obs-export"), StrArg(args, "--level", null), IntArg(args, "--seed", 4242),
+                        args.Contains("--duration-ms") ? IntArg(args, "--duration-ms", 10000) : (int?)null, StrArg(args, "--params", null),
+                        (uint)IntArg(args, "--w", 640), (uint)IntArg(args, "--h", 360), StrArg(args, "--refs", null));
                 case "--bench-effects": return EffectPreview.Bench(IntArg(args, "--w", 2560), IntArg(args, "--h", 1440), IntArg(args, "--frames", 300));
                 case "--describe":
                     var reg = Registry.Embedded();

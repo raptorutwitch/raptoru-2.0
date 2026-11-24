@@ -169,6 +169,10 @@ namespace Raptoru.Chaos
 
         public int PassCount { get { return passCount; } }
         public int LayerCount { get { return layers.Count; } }
+        /// Lecture des passes, calques et images retenues de l'image décrite (export vers OBS, sans exécution).
+        public FramePass PassAt(int i) { return all[i]; }
+        public Layer LayerAt(int i) { return layers[i].Value; }
+        public int RetainCount { get { return retains.Count; } }
         public bool NeedsInputMips { get { return passCount > 0 && all[0].NeedsBlurredInput; } }
         /// Retire les passes et calques ajoutés après (passes, calques) : effet refusé en cours d'image (trop coûteux).
         public void Truncate(int passes, int layerCount)

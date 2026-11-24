@@ -143,6 +143,11 @@ float4 ps(V i) : SV_Target { return src.SampleLevel(smp, i.uv, 0); }");
         /// Déclare un shader de pixels (corps HLSL définissant float4 ps(V i) : SV_Target).
         public static void Register(string name, string body) { Bodies[name] = body; }
 
+        /// Corps d'un shader déclaré (null si inconnu) et fonctions utiles de l'en-tête (sans constantes, textures ni
+        /// sommets) : export du même code vers un filtre OBS (ObsExport).
+        public static string Body(string name) { string b; return Bodies.TryGetValue(name, out b) ? b : null; }
+        public static string Helpers { get { return Prelude.Substring(Prelude.IndexOf("float2 aspect()", StringComparison.Ordinal)); } }
+
         readonly Gpu gpu;
         readonly string cacheDir;
         readonly Dictionary<string, IntPtr> ps = new Dictionary<string, IntPtr>();
