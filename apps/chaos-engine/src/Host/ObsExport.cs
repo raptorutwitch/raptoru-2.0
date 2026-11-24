@@ -329,6 +329,8 @@ CC chaos_constants(float x)
             settings["chaos_frames"] = (double)w;
             settings["chaos_rate"] = (double)Rate;
             settings["chaos_time"] = -1.0;
+            // Réglages complets : un filtre réutilisé (activation suivante, recalage précédent) ne garde rien de l'ancien.
+            settings["chaos_t_base"] = 0.0; settings["chaos_since"] = 0.0; settings["chaos_expires"] = 0.0;
             return settings;
         }
 
@@ -462,7 +464,10 @@ CC chaos_constants(float x)
         /// --obs-export <effet> <variante|-> --out <dossier> [--level --seed --duration-ms --params JSON --w --h
         /// --refs t1,t2,… (secondes : images du moteur sur la scène de jeu de synthèse, pour comparer avec OBS)].
         /// Écrit un .effect par passe, sa partition, et manifest.json (filtres, réglages d'activation, avertissements).
-        public static int Run(string effect, string variant, string outDir, string level, int seed, int? durationMs, string paramsJson, uint w, uint h, string refs)
+        /// --stop-at <ms> : arrêt anticipé à cet instant ; chaque filtre reçoit aussi les réglages de recalage (« retime »),
+        /// et les images de référence suivent la sortie qui commence à l'arrêt. --refs all:<s> : toutes les images
+        /// jusqu'à s secondes (mesure du décalage de départ dans OBS).
+        public static int Run(string effect, string variant, string outDir, string level, int seed, int? durationMs, string paramsJson, uint w, uint h, string refs, long stopAt = -1)
         {
             var reg = Registry.Embedded();
             EffectDef def;
@@ -486,20 +491,36 @@ CC chaos_constants(float x)
                     string fx = Path.Combine(outDir, stem + ".effect");
                     File.WriteAllText(fx, text, new UTF8Encoding(false));
                     var act = Track(op, used, Path.Combine(outDir, stem + "-track.png"));
-                    filters.Add(J.Map("name", "Raptoru Chaos · " + title, "shader", op.Shader, "kind", op.Overlay ? "overlay" : "filter",
+                    var entry = J.Map("name", "Raptoru Chaos · " + title, "shader", op.Shader, "kind", op.Overlay ? "overlay" : "filter",
                         "effect_file", Path.GetFullPath(fx).Replace('\\', '/'), "activation", act,
-                        "track_rows", act.Count(kv => kv.Key.StartsWith("chaos_r") && (double)kv.Value > 0)));
+                        "track_rows", act.Count(kv => kv.Key.StartsWith("chaos_r") && (double)kv.Value > 0));
+                    if (stopAt >= 0)
+                    {
+                        // Recalage à l'arrêt : la même réplique, sortie à stopAt, partition à partir de stopAt.
+                        var simStop = new EffectPreview.Sim(sim.P, seed, rig.Gpu, rig.Lib, rig.Text, w, h, stopAt);
+                        var recStop = Record(simStop, w, h, stopAt);
+                        simStop.Fx.Dispose();
+                        var opStop = recStop.Ops.FirstOrDefault(o => o.Key == op.Key);
+                        Dictionary<string, object> rt;
+                        if (opStop != null) rt = Track(opStop, used, Path.Combine(outDir, stem + "-retime.png"));
+                        else rt = J.Map("chaos_frames", 0.0);
+                        rt["chaos_t_base"] = stopAt / 1000.0;
+                        entry["retime"] = rt;
+                    }
+                    filters.Add(entry);
                 }
             var refList = new List<object>();
             if (refs != null && rec.Refusal == null)
             {
                 // Scène fixe (première position de la caméra) : OBS la reçoit en image, le moteur la rend avec l'effet.
                 SavePng(rig, rig.Src, Path.Combine(outDir, "scene.png"));
-                var sim2 = new EffectPreview.Sim(reg, rig, def, variant, seed, null, level ?? EffectPreview.DefaultLevel, overrides, durationMs);
+                var sim2 = new EffectPreview.Sim(sim.P, seed, rig.Gpu, rig.Lib, rig.Text, w, h, stopAt);
                 var fb = new FrameBuilder(w, h, true);
-                var want = refs.Split(',').Select(x => (int)Math.Round(double.Parse(x, CultureInfo.InvariantCulture) * Rate)).OrderBy(x => x).ToList();
-                int wi = 0;
-                for (int k = 0; k < rec.Count && wi < want.Count; k++)
+                var want = refs.StartsWith("all:")
+                    ? Enumerable.Range(0, (int)Math.Round(double.Parse(refs.Substring(4), CultureInfo.InvariantCulture) * Rate) + 1).ToList()
+                    : refs.Split(',').Select(x => (int)Math.Round(double.Parse(x, CultureInfo.InvariantCulture) * Rate)).OrderBy(x => x).ToList();
+                int wi = 0, n2 = (int)Math.Ceiling(sim2.Total * Rate / 1000.0) + 1;
+                for (int k = 0; k < n2 && wi < want.Count; k++)
                 {
                     long t = (long)Math.Round(k * 1000.0 / Rate);
                     fb.Reset(w, h, true);
@@ -516,7 +537,7 @@ CC chaos_constants(float x)
             var manifest = J.Map("effect", effect, "label", def.Label, "variant", variant, "level", sim.P.Level, "seed", seed,
                 "duration_ms", sim.P.DurationMs, "total_ms", sim.Total, "rate", Rate, "frames", rec.Count, "size", new[] { w, h },
                 "refusal", rec.Refusal, "warnings", rec.Warnings.ToArray(), "filters", filters.ToArray(), "refs", refList.ToArray(),
-                "scene", refs != null && rec.Refusal == null ? "scene.png" : null);
+                "scene", refs != null && rec.Refusal == null ? "scene.png" : null, "stop_ms", stopAt >= 0 ? (object)stopAt : null);
             File.WriteAllText(Path.Combine(outDir, "manifest.json"), J.Write(manifest), new UTF8Encoding(false));
             Console.WriteLine(J.Write(J.Map("effect", effect, "filters", filters.Count, "frames", rec.Count, "refusal", rec.Refusal, "warnings", rec.Warnings.ToArray())));
             return rec.Refusal == null ? 0 : 3;

@@ -73,8 +73,12 @@ namespace Raptoru.Chaos
             for (int y = 0; y < H; y++) Marshal.Copy(new IntPtr(data.ToInt64() + (long)y * pitch), b, y * W * 4, W * 4);
             // Sortie « RGBA » de libobs 33 lue ici : octets B, V, R, A (vérifié sur la webcam et l'alerte de test).
             for (int i = 0; i < b.Length; i += 4) { byte t = b[i]; b[i] = b[i + 2]; b[i + 2] = t; }
-            lock (gate) { last = b; frames++; }
+            long ts = Marshal.ReadInt64(f, 8 * IntPtr.Size + 32); // video_data.timestamp (ns, horloge os_gettime_ns)
+            lock (gate) { last = b; frames++; if (recording != null) recording.Add(new KeyValuePair<long, byte[]>(ts, b)); }
         };
+        static List<KeyValuePair<long, byte[]>> recording;
+        /// Horloge d'OBS (os_gettime_ns : compteur de performances de Windows), en ns et en s.
+        static long NowNs() { return (long)(System.Diagnostics.Stopwatch.GetTimestamp() * (1e9 / System.Diagnostics.Stopwatch.Frequency)); }
         /// Image rendue au moins `settleMs` après l'appel (les réglages d'un filtre s'appliquent au tic vidéo suivant).
         static byte[] Grab(int settleMs)
         {
@@ -164,6 +168,19 @@ namespace Raptoru.Chaos
             double mean = d.Count == 0 ? 0 : d.Average();
             return new Dictionary<string, object> { { "mean", Math.Round(mean, 2) }, { "p99", d.Count == 0 ? 0 : d[(int)(d.Count * 0.99)] }, { "max", d.Count == 0 ? 0 : d[d.Count - 1] } };
         }
+        /// Écart moyen rapide (un pixel sur 6 en tous sens, zone du jeu hors webcam et alerte) : rapprochement d'images.
+        static double Coarse(byte[] a, byte[] b)
+        {
+            long sum = 0; int n = 0;
+            for (int y = H / 6; y < H * 5 / 6; y += 6)
+                for (int x = 0; x < W * 2 / 3; x += 6)
+                {
+                    int i = (y * W + x) * 4;
+                    sum += Math.Abs(a[i] - b[i]) + Math.Abs(a[i + 1] - b[i + 1]) + Math.Abs(a[i + 2] - b[i + 2]);
+                    n += 3;
+                }
+            return n == 0 ? 0 : sum / (double)n;
+        }
         static double Mean(Dictionary<string, object> d) { return Convert.ToDouble(d["mean"], CultureInfo.InvariantCulture); }
         static int Max(Dictionary<string, object> d) { return Convert.ToInt32(d["max"], CultureInfo.InvariantCulture); }
 
@@ -195,12 +212,14 @@ namespace Raptoru.Chaos
         public static int Main(string[] args)
         {
             string obsDir = @"C:\Program Files\obs-studio", outDir = null;
+            uint fps = 0;
             var dirs = new List<string>();
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
                 else if (args[i] == "--obs" && i + 1 < args.Length) obsDir = args[++i];
                 else if (args[i] == "--perf") countOnly = true;
+                else if (args[i] == "--fps" && i + 1 < args.Length) fps = uint.Parse(args[++i]);
                 else dirs.Add(args[i]);
             }
             if (outDir == null || dirs.Count == 0) { Console.Error.WriteLine("usage : chaos-obs-check.exe <export>… --out <dossier>"); return 2; }
@@ -220,7 +239,7 @@ namespace Raptoru.Chaos
             int failures = 0;
             try
             {
-                var vi = new VideoInfo { Module = Marshal.StringToHGlobalAnsi("libobs-d3d11"), FpsNum = countOnly ? 60u : 30u, FpsDen = 1, BaseW = (uint)W, BaseH = (uint)H, OutW = (uint)W, OutH = (uint)H, Format = 6 /* RGBA */, GpuConv = true, Cs = 2, Range = 2, Scale = 3 };
+                var vi = new VideoInfo { Module = Marshal.StringToHGlobalAnsi("libobs-d3d11"), FpsNum = fps > 0 ? fps : countOnly ? 60u : 30u, FpsDen = 1, BaseW = (uint)W, BaseH = (uint)H, OutW = (uint)W, OutH = (uint)H, Format = 6 /* RGBA */, GpuConv = true, Cs = 2, Range = 2, Scale = 3 };
                 int rv = obs_reset_video(ref vi);
                 if (rv != 0) throw new InvalidOperationException("obs_reset_video " + rv);
                 string plugins = obsDir.Replace('\\', '/');
@@ -255,6 +274,7 @@ namespace Raptoru.Chaos
                     var p = new Vec2 { X = camRect.X, Y = camRect.Y }; obs_sceneitem_set_pos(obs_scene_add(scene, cam), ref p);
                     p = new Vec2 { X = alertRect.X, Y = alertRect.Y }; obs_sceneitem_set_pos(obs_scene_add(scene, alert), ref p);
                     var filters = new List<KeyValuePair<IntPtr, Dictionary<string, object>>>();
+                    var retimes = new List<Dictionary<string, object>>();
                     var errors = new List<string>();
                     foreach (Dictionary<string, object> f in J.Arr(man, "filters"))
                     {
@@ -263,6 +283,7 @@ namespace Raptoru.Chaos
                         obs_source_set_enabled(fs, false);
                         obs_source_filter_add(game, fs);
                         filters.Add(new KeyValuePair<IntPtr, Dictionary<string, object>>(fs, J.Obj(f, "activation")));
+                        retimes.Add(J.Obj(f, "retime"));
                     }
                     obs_set_output_source(0, obs_scene_get_source(scene));
                     if (countOnly)
@@ -299,11 +320,22 @@ namespace Raptoru.Chaos
                     var scenePx = LoadRgba(Path.Combine(mf.Key, J.Str(man, "scene", "scene.png")));
                     res["base_vs_scene"] = Diff(baseFrame, scenePx, gameArea, camRect, alertRect);
                     // Instants exacts (chaos_time) : image du jeu dans OBS contre le rendu du moteur au même instant.
+                    // Arrêt anticipé (--stop-at à l'export) : à partir de l'arrêt, les réglages de recalage (« retime »).
+                    // Plus de 20 images de référence : export de mesure du décalage (--refs all:…) → mesure, pas d'images.
+                    double stopS = J.Has(man, "stop_ms") ? J.Num(man, "stop_ms", 0) / 1000.0 : double.MaxValue;
+                    var allRefs = J.Arr(man, "refs").Cast<Dictionary<string, object>>().ToList();
+                    bool syncRun = allRefs.Count > 20;
+                    Func<int, double, Dictionary<string, object>> settingsAt = (fi, t) =>
+                    {
+                        var a = new Dictionary<string, object>(t >= stopS - 1e-6 && retimes[fi] != null ? retimes[fi] : filters[fi].Value);
+                        a["chaos_time"] = t;
+                        return a;
+                    };
                     var shots = new List<object>();
-                    foreach (Dictionary<string, object> rf in J.Arr(man, "refs"))
+                    foreach (var rf in syncRun ? new List<Dictionary<string, object>>() : allRefs)
                     {
                         double t = J.Num(rf, "t", 0);
-                        foreach (var f in filters) { var a = new Dictionary<string, object>(f.Value); a["chaos_time"] = t; Update(f.Key, a); obs_source_set_enabled(f.Key, true); }
+                        for (int fi = 0; fi < filters.Count; fi++) { Update(filters[fi].Key, settingsAt(fi, t)); obs_source_set_enabled(filters[fi].Key, true); }
                         var img = Grab(400);
                         var refPx = LoadRgba(Path.Combine(mf.Key, J.Str(rf, "file", "")));
                         var vsRef = Diff(img, refPx, gameArea, camRect, alertRect);
@@ -319,8 +351,73 @@ namespace Raptoru.Chaos
                         ToBitmap(img).Save(Path.Combine(outDir, effect + "-obs-" + tag.Replace(" ", "").Replace(',', '.') + ".png"), ImageFormat.Png);
                     }
                     res["shots"] = shots.ToArray();
+                    if (!syncRun && allRefs.Count > 0)
+                    {
+                        // Fenêtre de validité (horloge système, celle d'OBS) : hors fenêtre, le filtre rend l'image intacte
+                        // (un filtre resté actif après un OBS relancé ne rejoue jamais un effet expiré).
+                        double t0 = J.Num(allRefs[0], "t", 0), nowS = NowNs() / 1e9;
+                        Func<double, double, byte[]> windowed = (since, expires) =>
+                        {
+                            for (int fi = 0; fi < filters.Count; fi++) { var a = settingsAt(fi, t0); a["chaos_since"] = since; a["chaos_expires"] = expires; Update(filters[fi].Key, a); }
+                            return Grab(400);
+                        };
+                        var inside = Diff(windowed(nowS - 5, nowS + 600), baseFrame, gameArea, camRect, alertRect);
+                        var expired = Diff(windowed(nowS - 100, nowS - 30), baseFrame, gameArea, camRect, alertRect);
+                        var early = Diff(windowed(nowS + 60, nowS + 600), baseFrame, gameArea, camRect, alertRect);
+                        bool guardOk = Mean(inside) > 0.5 && Max(expired) <= 1 && Max(early) <= 1;
+                        if (!guardOk) failures++;
+                        res["fenetre_de_validite"] = new Dictionary<string, object> { { "dans_la_fenetre_vs_avant", inside }, { "expiree_vs_avant", expired }, { "pas_encore_valide_vs_avant", early }, { "ok", guardOk } };
+                    }
+                    if (syncRun)
+                    {
+                        // Décalage de départ : à chaque essai, filtre coupé puis activé (comme Studio au départ de l'effet) ;
+                        // chaque image d'OBS est rapprochée de l'image du moteur la plus proche (instant k/60 s) ; écart =
+                        // (heure de l'image − heure de l'activation) − instant de l'effet montré.
+                        var refPx = allRefs.Select(r => LoadRgba(Path.Combine(mf.Key, J.Str(r, "file", "")))).ToList();
+                        // Seules comptent les images de l'effet nettement différentes de leurs voisines (animation en cours) :
+                        // sur un plateau (effet installé), le rapprochement serait arbitraire.
+                        var distinct = refPx.Select((r, k) => k > 0 && k < refPx.Count - 1 && Math.Min(Coarse(r, refPx[k - 1]), Coarse(r, refPx[k + 1])) > 0.8).ToList();
+                        var offsets = new List<double>();
+                        var firsts = new List<double>();
+                        for (int trial = 0; trial < 8; trial++)
+                        {
+                            for (int fi = 0; fi < filters.Count; fi++) { obs_source_set_enabled(filters[fi].Key, false); var a = new Dictionary<string, object>(filters[fi].Value); a["chaos_time"] = -1.0; Update(filters[fi].Key, a); }
+                            Grab(250 + 37 * trial);
+                            lock (gate) recording = new List<KeyValuePair<long, byte[]>>();
+                            long te = NowNs();
+                            foreach (var f in filters) obs_source_set_enabled(f.Key, true);
+                            Thread.Sleep((int)(allRefs.Count * 1000.0 / 60) + 300);
+                            List<KeyValuePair<long, byte[]>> got;
+                            lock (gate) { got = recording; recording = null; }
+                            double first = double.NaN;
+                            foreach (var fr in got)
+                            {
+                                double wall = (fr.Key - te) / 1e6;
+                                if (wall < -40) continue;
+                                int best = -1; double bestD = double.MaxValue;
+                                for (int k = 0; k < refPx.Count; k++)
+                                {
+                                    double d = Coarse(fr.Value, refPx[k]);
+                                    if (d < bestD) { bestD = d; best = k; }
+                                }
+                                bool moving = best >= 1 && distinct[best] && bestD < 3;
+                                if (moving && double.IsNaN(first)) first = wall;
+                                if (moving) offsets.Add(wall - best * 1000.0 / 60);
+                            }
+                            if (!double.IsNaN(first)) firsts.Add(first);
+                        }
+                        offsets.Sort();
+                        Func<List<double>, Dictionary<string, object>> stats = l => l.Count == 0 ? null : new Dictionary<string, object> {
+                            { "n", l.Count }, { "moyenne_ms", Math.Round(l.Average(), 1) }, { "min_ms", Math.Round(l.Min(), 1) }, { "max_ms", Math.Round(l.Max(), 1) },
+                            { "p95_ms", Math.Round(l.OrderBy(x => x).ElementAt((int)(l.Count * 0.95)), 1) } };
+                        res["synchronisation"] = new Dictionary<string, object> {
+                            { "images_par_seconde", fps > 0 ? fps : 30 },
+                            { "retard_d_affichage_de_l_effet", stats(offsets) },
+                            { "premiere_image_en_mouvement_apres_activation", stats(firsts) } };
+                        if (offsets.Count == 0) failures++;
+                    }
                     // Temps réel : activation → l'effet joue sa partition (temps écoulé depuis l'activation) puis s'arrête seul.
-                    foreach (var f in filters) { obs_source_set_enabled(f.Key, false); var a = new Dictionary<string, object>(f.Value); a["chaos_time"] = -1.0; Update(f.Key, a); }
+                    foreach (var f in filters) { obs_source_set_enabled(f.Key, false); var a = new Dictionary<string, object>(f.Value); a["chaos_time"] = -1.0; a["chaos_since"] = 0.0; a["chaos_expires"] = 0.0; Update(f.Key, a); }
                     Grab(200);
                     foreach (var f in filters) obs_source_set_enabled(f.Key, true);
                     double total = J.Num(man, "total_ms", 0) / 1000.0;
@@ -345,9 +442,11 @@ namespace Raptoru.Chaos
                 Sheet(sheet, Path.Combine(outDir, "planche.png"));
             }
             catch (Exception e) { report["error"] = e.Message; failures++; }
-            finally { obs_shutdown(); }
+            // Rapport écrit AVANT la fermeture de libobs (une fermeture qui échoue ne fait pas perdre les mesures).
             File.WriteAllText(Path.Combine(outDir, "report.json"), J.Write(report), new UTF8Encoding(false));
             Console.WriteLine(J.Write(report));
+            Console.Out.Flush();
+            obs_shutdown();
             return failures == 0 ? 0 : 1;
         }
 

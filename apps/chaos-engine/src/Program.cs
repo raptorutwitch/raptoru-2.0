@@ -83,7 +83,7 @@ namespace Raptoru.Chaos
                 case "--obs-export":
                     return ObsExport.Run(args[1], args[2], StrArg(args, "--out", "obs-export"), StrArg(args, "--level", null), IntArg(args, "--seed", 4242),
                         args.Contains("--duration-ms") ? IntArg(args, "--duration-ms", 10000) : (int?)null, StrArg(args, "--params", null),
-                        (uint)IntArg(args, "--w", 640), (uint)IntArg(args, "--h", 360), StrArg(args, "--refs", null));
+                        (uint)IntArg(args, "--w", 640), (uint)IntArg(args, "--h", 360), StrArg(args, "--refs", null), IntArg(args, "--stop-at", -1));
                 case "--bench-effects": return EffectPreview.Bench(IntArg(args, "--w", 2560), IntArg(args, "--h", 1440), IntArg(args, "--frames", 300));
                 case "--describe":
                     var reg = Registry.Embedded();
