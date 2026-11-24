@@ -20,7 +20,7 @@ set WINRT=/r:"%WM%\Windows.Foundation.winmd" /r:"%WM%\Windows.Graphics.winmd" /r
 set NET=/r:System.Web.Extensions.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll
 set RES=/resource:"%REG%",chaos-registry.json
 
-%CSC% /target:exe /out:"%OUT%\chaos-unit.exe" %NET% %RES% /recurse:"%HERE%src\Model\*.cs" "%HERE%src\Interop\Json.cs" "%HERE%tests\BenchStats.cs" "%HERE%tests\UnitTests.cs" "%HERE%tests\UnitMain.cs" || exit /b 1
+%CSC% /target:exe /out:"%OUT%\chaos-unit.exe" %NET% %RES% /recurse:"%HERE%src\Model\*.cs" "%HERE%src\Effects\Motion.cs" "%HERE%src\Interop\Json.cs" "%HERE%tests\BenchStats.cs" "%HERE%tests\UnitTests.cs" "%HERE%tests\UnitMain.cs" || exit /b 1
 if /i "%1"=="unit" goto done
 %CSC% /target:winexe /out:"%OUT%\ChaosEngine.exe" %WINRT% %NET% %RES% /recurse:"%HERE%src\*.cs" || exit /b 1
 %CSC% /target:exe /out:"%OUT%\chaos-checks.exe" %NET% "%HERE%tests\Checks.cs" "%HERE%src\Interop\Native.cs" "%HERE%src\Interop\Json.cs" || exit /b 1

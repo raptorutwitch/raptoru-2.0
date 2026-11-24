@@ -1,6 +1,6 @@
 {
   "schema": "raptoru.chaos.registry",
-  "version": 2,
+  "version": 3,
   "engine_limits": {
     "min_duration_ms": 1000,
     "max_duration_ms": 60000,
@@ -11,11 +11,27 @@
     "max_transition_ms": 3000
   },
   "families": {
-    "orientation": { "label": "Orientation" },
-    "perception": { "label": "Perception" },
-    "lisibilite": { "label": "Lisibilité" },
-    "calque": { "label": "Calques" },
-    "diagnostic": { "label": "Diagnostic (interne)" }
+    "orientation": {
+      "label": "Orientation"
+    },
+    "mouvement": {
+      "label": "Mouvement"
+    },
+    "perception": {
+      "label": "Perception"
+    },
+    "lisibilite": {
+      "label": "Lisibilité"
+    },
+    "couleur": {
+      "label": "Couleur"
+    },
+    "calque": {
+      "label": "Calques"
+    },
+    "diagnostic": {
+      "label": "Diagnostic (interne)"
+    }
   },
   "input_effects": {
     "invert_xy": {
@@ -29,6 +45,12 @@
       "label": "Transformation de l'image",
       "order": 10,
       "max_active": 1,
+      "requires_capture": true
+    },
+    "camera": {
+      "label": "Caméra (mouvement, cadrage)",
+      "order": 15,
+      "max_active": 2,
       "requires_capture": true
     },
     "filter": {
@@ -57,8 +79,14 @@
       "on_conflict": "queue",
       "input": "invert_xy",
       "cursor": "follow",
-      "gpu": { "primitive": "transform", "cost": "low", "passes": 1 },
-      "duration": { "default_ms": 10000 },
+      "gpu": {
+        "primitive": "transform",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 10000
+      },
       "params": [
         {
           "id": "angle",
@@ -86,7 +114,13 @@
         }
       ],
       "variants": [
-        { "id": "rotate180", "label": "180°", "params": { "angle": 180 } }
+        {
+          "id": "rotate180",
+          "label": "180°",
+          "params": {
+            "angle": 180
+          }
+        }
       ],
       "transitions": {
         "in": {
@@ -113,6 +147,2517 @@
       ]
     },
     {
+      "id": "mirror",
+      "version": 1,
+      "label": "Miroir",
+      "description": "L’image du jeu est inversée gauche-droite ou haut-bas. Un seul curseur visible, retourné avec l’image ; les clics de Windows ne changent pas.",
+      "family": "orientation",
+      "icon": "copy",
+      "slot": "transform",
+      "internal": false,
+      "on_conflict": "queue",
+      "cursor": "follow",
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["horizontal", "vertical", "alterne"],
+        "preview": "horizontal",
+        "intensity_affects_price": false
+      },
+      "gpu": {
+        "primitive": "transform",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 10000
+      },
+      "params": [
+        {
+          "id": "axis",
+          "type": "enum",
+          "label": "Axe",
+          "values": ["horizontal", "vertical", "alterne"],
+          "labels": {
+            "horizontal": "Gauche ↔ droite",
+            "vertical": "Haut ↔ bas",
+            "alterne": "Alternance"
+          },
+          "default": "horizontal",
+          "help": "Alternance : l’image passe d’un miroir à l’autre par un demi-tour, à l’intervalle choisi."
+        },
+        {
+          "id": "interval_ms",
+          "type": "number",
+          "label": "Intervalle de l’alternance",
+          "min": 1000,
+          "max": 10000,
+          "default": 3000,
+          "unit": "ms",
+          "step": 100,
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "horizontal",
+          "label": "Gauche ↔ droite",
+          "params": {
+            "axis": "horizontal"
+          }
+        },
+        {
+          "id": "vertical",
+          "label": "Haut ↔ bas",
+          "params": {
+            "axis": "vertical"
+          }
+        },
+        {
+          "id": "alterne",
+          "label": "Alternance",
+          "params": {
+            "axis": "alterne",
+            "interval_ms": 3000
+          },
+          "duration_ms": 15000
+        },
+        {
+          "id": "instant",
+          "label": "Instantané",
+          "params": {
+            "axis": "horizontal"
+          },
+          "transition": {
+            "in": {
+              "kind": "cut"
+            },
+            "out": {
+              "kind": "cut"
+            }
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 450,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 450,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "shake",
+      "version": 1,
+      "label": "Tremblement",
+      "description": "L’écran tremble : vibration, secousse, impact ou séisme. Mouvement continu (jamais un saut par image), bords toujours couverts.",
+      "family": "mouvement",
+      "icon": "activity",
+      "slot": "camera",
+      "internal": false,
+      "on_conflict": "queue",
+      "cursor": "follow",
+      "order": 18,
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["leger", "secousse", "seisme"],
+        "preview": "secousse",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "transform",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 4000
+      },
+      "params": [
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Type",
+          "values": ["continu", "impact", "rafales", "seisme"],
+          "labels": {
+            "continu": "Continu",
+            "impact": "Impact",
+            "rafales": "Par rafales",
+            "seisme": "Séisme"
+          },
+          "default": "continu",
+          "help": "Impact : un choc puis un retour au calme ; Par rafales : secousses à intervalles irréguliers ; Séisme : monte, gronde, s’apaise."
+        },
+        {
+          "id": "intensity",
+          "type": "number",
+          "label": "Intensité",
+          "min": 0.05,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01
+        },
+        {
+          "id": "amp_x",
+          "type": "number",
+          "label": "Amplitude horizontale",
+          "min": 0,
+          "max": 8,
+          "default": 2.2,
+          "unit": "%",
+          "step": 0.1,
+          "help": "En % de la hauteur de l’écran.",
+          "advanced": true
+        },
+        {
+          "id": "amp_y",
+          "type": "number",
+          "label": "Amplitude verticale",
+          "min": 0,
+          "max": 8,
+          "default": 2.2,
+          "unit": "%",
+          "step": 0.1,
+          "advanced": true
+        },
+        {
+          "id": "rotation",
+          "type": "number",
+          "label": "Roulis",
+          "min": 0,
+          "max": 6,
+          "default": 0.8,
+          "unit": "°",
+          "step": 0.1,
+          "advanced": true
+        },
+        {
+          "id": "frequency",
+          "type": "number",
+          "label": "Fréquence",
+          "min": 1,
+          "max": 30,
+          "default": 9,
+          "unit": "Hz",
+          "step": 0.5,
+          "help": "Basse : grosses oscillations lentes ; haute : vibration.",
+          "advanced": true
+        },
+        {
+          "id": "decay_ms",
+          "type": "number",
+          "label": "Amortissement",
+          "min": 100,
+          "max": 4000,
+          "default": 700,
+          "unit": "ms",
+          "step": 50,
+          "help": "Temps de retour au calme après un impact ou une rafale.",
+          "advanced": true
+        },
+        {
+          "id": "interval_ms",
+          "type": "number",
+          "label": "Intervalle des rafales",
+          "min": 400,
+          "max": 6000,
+          "default": 1600,
+          "unit": "ms",
+          "step": 50,
+          "advanced": true
+        },
+        {
+          "id": "irregularity",
+          "type": "number",
+          "label": "Irrégularité",
+          "min": 0,
+          "max": 1,
+          "default": 0.8,
+          "step": 0.01,
+          "help": "0 : vibration régulière (moteur) ; 1 : secousse imprévisible.",
+          "advanced": true
+        },
+        {
+          "id": "fill",
+          "type": "enum",
+          "label": "Bords",
+          "values": ["cover", "mirror", "clamp"],
+          "labels": {
+            "cover": "Léger zoom",
+            "mirror": "Prolongement flou",
+            "clamp": "Bord étiré"
+          },
+          "default": "cover",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "mode": "continu",
+            "intensity": 0.35,
+            "amp_x": 1.2,
+            "amp_y": 1.2,
+            "rotation": 0.3,
+            "frequency": 14,
+            "irregularity": 0.7
+          }
+        },
+        {
+          "id": "secousse",
+          "label": "Secousse",
+          "params": {
+            "mode": "continu",
+            "intensity": 0.7,
+            "amp_x": 2.4,
+            "amp_y": 2.4,
+            "rotation": 0.9,
+            "frequency": 9,
+            "irregularity": 0.85
+          }
+        },
+        {
+          "id": "impact",
+          "label": "Impact",
+          "params": {
+            "mode": "impact",
+            "intensity": 1,
+            "amp_x": 3.5,
+            "amp_y": 3.0,
+            "rotation": 1.5,
+            "frequency": 11,
+            "decay_ms": 650,
+            "irregularity": 0.9
+          },
+          "duration_ms": 2000
+        },
+        {
+          "id": "rafales",
+          "label": "Par rafales",
+          "params": {
+            "mode": "rafales",
+            "intensity": 0.8,
+            "amp_x": 2.6,
+            "amp_y": 2.2,
+            "rotation": 0.8,
+            "frequency": 10,
+            "decay_ms": 500,
+            "interval_ms": 1500
+          },
+          "duration_ms": 8000
+        },
+        {
+          "id": "seisme",
+          "label": "Séisme",
+          "params": {
+            "mode": "seisme",
+            "intensity": 1,
+            "amp_x": 3.2,
+            "amp_y": 4.5,
+            "rotation": 1.2,
+            "frequency": 4,
+            "irregularity": 1
+          },
+          "duration_ms": 8000
+        },
+        {
+          "id": "vibration",
+          "label": "Vibration",
+          "params": {
+            "mode": "continu",
+            "intensity": 0.5,
+            "amp_x": 0.6,
+            "amp_y": 0.6,
+            "rotation": 0,
+            "frequency": 26,
+            "irregularity": 0.2
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 150,
+          "curve": "ease_out_cubic",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 600,
+          "curve": "ease_out_cubic",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "zoom",
+      "version": 1,
+      "label": "Zoom chaotique",
+      "description": "L’image du jeu est agrandie vers un point : zoom progressif, coup de zoom, pulsations. Jamais de bord découvert.",
+      "family": "mouvement",
+      "icon": "search",
+      "slot": "camera",
+      "internal": false,
+      "on_conflict": "queue",
+      "cursor": "follow",
+      "order": 14,
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["progressif", "pulsations", "extreme"],
+        "preview": "pulsations",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "transform",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 6000
+      },
+      "params": [
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Animation",
+          "values": ["progressif", "brutal", "pulsations"],
+          "labels": {
+            "progressif": "Progressif",
+            "brutal": "Brutal",
+            "pulsations": "Pulsations"
+          },
+          "default": "progressif",
+          "help": "Progressif : entre et sort aux vitesses des transitions ; Brutal : coup de zoom avec rebond ; Pulsations : zooms répétés."
+        },
+        {
+          "id": "factor",
+          "type": "number",
+          "label": "Facteur de zoom",
+          "min": 1.1,
+          "max": 8,
+          "default": 2,
+          "unit": "×",
+          "step": 0.1,
+          "help": "Jusqu’à ×1,5 : lisible ; au-delà de ×4 : le jeu devient difficile à lire."
+        },
+        {
+          "id": "focus_x",
+          "type": "number",
+          "label": "Point visé",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "help": "Clique dans l’aperçu pour choisir le point (coordonnées relatives : valables à toutes les résolutions).",
+          "widget": "point",
+          "pair": "focus_y"
+        },
+        {
+          "id": "focus_y",
+          "type": "number",
+          "label": "Point visé (vertical)",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "widget": "point_y"
+        },
+        {
+          "id": "recenter",
+          "type": "number",
+          "label": "Recentrage",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01,
+          "help": "0 : le point reste à sa place ; 1 : il vient au centre de l’écran.",
+          "advanced": true
+        },
+        {
+          "id": "pulses",
+          "type": "number",
+          "label": "Nombre de pulsations",
+          "min": 1,
+          "max": 12,
+          "default": 3,
+          "step": 1,
+          "advanced": true
+        },
+        {
+          "id": "attack_ms",
+          "type": "number",
+          "label": "Montée d’une pulsation",
+          "min": 40,
+          "max": 3000,
+          "default": 350,
+          "unit": "ms",
+          "step": 10,
+          "advanced": true
+        },
+        {
+          "id": "hold_ms",
+          "type": "number",
+          "label": "Maintien d’une pulsation",
+          "min": 0,
+          "max": 5000,
+          "default": 300,
+          "unit": "ms",
+          "step": 10,
+          "advanced": true
+        },
+        {
+          "id": "release_ms",
+          "type": "number",
+          "label": "Retour d’une pulsation",
+          "min": 40,
+          "max": 3000,
+          "default": 600,
+          "unit": "ms",
+          "step": 10,
+          "advanced": true
+        },
+        {
+          "id": "jitter",
+          "type": "number",
+          "label": "Variation",
+          "min": 0,
+          "max": 1,
+          "default": 0.3,
+          "step": 0.01,
+          "help": "Moments et forces des pulsations un peu différents à chaque fois.",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "progressif",
+          "label": "Progressif",
+          "params": {
+            "mode": "progressif",
+            "factor": 2
+          }
+        },
+        {
+          "id": "brutal",
+          "label": "Brutal",
+          "params": {
+            "mode": "brutal",
+            "factor": 2.5,
+            "recenter": 0.5
+          }
+        },
+        {
+          "id": "aller_retour",
+          "label": "Zoom et dézoom",
+          "params": {
+            "mode": "pulsations",
+            "factor": 3,
+            "pulses": 1,
+            "attack_ms": 1400,
+            "hold_ms": 1200,
+            "release_ms": 1600,
+            "jitter": 0
+          },
+          "duration_ms": 5000
+        },
+        {
+          "id": "pulsations",
+          "label": "Pulsations",
+          "params": {
+            "mode": "pulsations",
+            "factor": 1.8,
+            "pulses": 4,
+            "attack_ms": 180,
+            "hold_ms": 150,
+            "release_ms": 450,
+            "jitter": 0.35
+          }
+        },
+        {
+          "id": "intermittent",
+          "label": "Intermittent",
+          "params": {
+            "mode": "pulsations",
+            "factor": 2.6,
+            "pulses": 4,
+            "attack_ms": 60,
+            "hold_ms": 500,
+            "release_ms": 90,
+            "jitter": 1
+          },
+          "duration_ms": 8000
+        },
+        {
+          "id": "extreme",
+          "label": "Très gros zoom",
+          "params": {
+            "mode": "progressif",
+            "factor": 6,
+            "recenter": 0.6
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 600,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 700,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "drunk",
+      "version": 1,
+      "label": "Écran ivre",
+      "description": "L’image tangue, ondule et se dédouble lentement, comme un personnage qui perd l’équilibre ; l’ivresse peut monter au fil de l’effet.",
+      "family": "mouvement",
+      "icon": "wave",
+      "slot": "camera",
+      "internal": false,
+      "on_conflict": "queue",
+      "cursor": "follow",
+      "order": 16,
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["pompette", "ivre", "ivre_mort"],
+        "preview": "ivre",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "transform",
+        "cost": "medium",
+        "passes": 2
+      },
+      "duration": {
+        "default_ms": 15000
+      },
+      "params": [
+        {
+          "id": "intensity",
+          "type": "number",
+          "label": "Intensité",
+          "min": 0.05,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01
+        },
+        {
+          "id": "progression",
+          "type": "number",
+          "label": "Progression",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "help": "0 : constant ; 1 : commence sobre et monte jusqu’à la fin."
+        },
+        {
+          "id": "sway",
+          "type": "number",
+          "label": "Balancement",
+          "min": 0,
+          "max": 12,
+          "default": 4,
+          "unit": "°",
+          "step": 0.1,
+          "advanced": true
+        },
+        {
+          "id": "drift",
+          "type": "number",
+          "label": "Dérive",
+          "min": 0,
+          "max": 6,
+          "default": 2,
+          "unit": "%",
+          "step": 0.1,
+          "advanced": true
+        },
+        {
+          "id": "breathing",
+          "type": "number",
+          "label": "Respiration du zoom",
+          "min": 0,
+          "max": 10,
+          "default": 3,
+          "unit": "%",
+          "step": 0.1,
+          "advanced": true
+        },
+        {
+          "id": "warp",
+          "type": "number",
+          "label": "Ondulation",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "double",
+          "type": "number",
+          "label": "Vision double",
+          "min": 0,
+          "max": 1,
+          "default": 0.4,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "blur",
+          "type": "number",
+          "label": "Flou",
+          "min": 0,
+          "max": 1,
+          "default": 0.25,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "vignette",
+          "type": "number",
+          "label": "Bords sombres",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "speed",
+          "type": "number",
+          "label": "Vitesse",
+          "min": 0.2,
+          "max": 2,
+          "default": 0.7,
+          "step": 0.05,
+          "help": "Les mouvements restent lents (moins de 0,6 oscillation par seconde).",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "pompette",
+          "label": "Pompette",
+          "params": {
+            "intensity": 0.35,
+            "progression": 0,
+            "sway": 2.5,
+            "double": 0.15,
+            "blur": 0.1,
+            "warp": 0.35
+          }
+        },
+        {
+          "id": "ivre",
+          "label": "Ivre",
+          "params": {
+            "intensity": 0.65,
+            "progression": 0.5
+          }
+        },
+        {
+          "id": "ivre_mort",
+          "label": "Ivre mort",
+          "params": {
+            "intensity": 1,
+            "progression": 0.3,
+            "sway": 7,
+            "drift": 3.5,
+            "double": 0.8,
+            "blur": 0.55,
+            "warp": 0.8,
+            "vignette": 0.6
+          }
+        },
+        {
+          "id": "vertige",
+          "label": "Vertige",
+          "params": {
+            "intensity": 0.8,
+            "progression": 0.2,
+            "sway": 10,
+            "drift": 1,
+            "double": 0.1,
+            "warp": 0.25,
+            "breathing": 6,
+            "speed": 1.1
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 2000,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 2000,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "tunnel",
+      "version": 1,
+      "label": "Vision tunnel",
+      "description": "Tout s’assombrit autour d’un point choisi, qui grossit : focus doux, marqué ou extrême, champ qui se rétrécit ou point qui dérive.",
+      "family": "perception",
+      "icon": "star",
+      "slot": "camera",
+      "internal": false,
+      "on_conflict": "queue",
+      "cursor": "follow",
+      "order": 15,
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["doux", "marque", "extreme"],
+        "preview": "marque",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "transform",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 8000
+      },
+      "params": [
+        {
+          "id": "focus_x",
+          "type": "number",
+          "label": "Point visé",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "help": "Clique dans l’aperçu pour choisir le point (coordonnées relatives : valables à toutes les résolutions).",
+          "widget": "point",
+          "pair": "focus_y"
+        },
+        {
+          "id": "focus_y",
+          "type": "number",
+          "label": "Point visé (vertical)",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "widget": "point_y"
+        },
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Animation",
+          "values": ["fixe", "retrecit", "derive"],
+          "labels": {
+            "fixe": "Fixe",
+            "retrecit": "Se rétrécit",
+            "derive": "Point qui dérive"
+          },
+          "default": "fixe"
+        },
+        {
+          "id": "radius",
+          "type": "number",
+          "label": "Taille de la zone",
+          "min": 0.04,
+          "max": 0.8,
+          "default": 0.3,
+          "step": 0.01,
+          "help": "Rayon de la zone visible, en part de la hauteur de l’écran."
+        },
+        {
+          "id": "darkness",
+          "type": "number",
+          "label": "Obscurité",
+          "min": 0,
+          "max": 1,
+          "default": 0.9,
+          "step": 0.01
+        },
+        {
+          "id": "zoom",
+          "type": "number",
+          "label": "Zoom",
+          "min": 1,
+          "max": 4,
+          "default": 1.4,
+          "unit": "×",
+          "step": 0.05
+        },
+        {
+          "id": "shape",
+          "type": "enum",
+          "label": "Forme",
+          "values": ["cercle", "ellipse", "rectangle"],
+          "labels": {
+            "cercle": "Cercle",
+            "ellipse": "Ellipse",
+            "rectangle": "Rectangle arrondi"
+          },
+          "default": "ellipse",
+          "advanced": true
+        },
+        {
+          "id": "stretch",
+          "type": "number",
+          "label": "Allongement",
+          "min": 1,
+          "max": 3,
+          "default": 1.5,
+          "step": 0.05,
+          "help": "Ellipse et rectangle : largeur ÷ hauteur.",
+          "advanced": true
+        },
+        {
+          "id": "feather",
+          "type": "number",
+          "label": "Douceur du contour",
+          "min": 0,
+          "max": 1,
+          "default": 0.45,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "inner",
+          "type": "number",
+          "label": "Ombre intérieure",
+          "min": 0,
+          "max": 1,
+          "default": 0.3,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "recenter",
+          "type": "number",
+          "label": "Recentrage",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "help": "0 : le point reste à sa place ; 1 : il vient au centre.",
+          "advanced": true
+        },
+        {
+          "id": "shrink",
+          "type": "number",
+          "label": "Rétrécissement final",
+          "min": 0.1,
+          "max": 1,
+          "default": 0.45,
+          "step": 0.01,
+          "help": "Taille de la zone à la fin, en part de la taille de départ (animation « Se rétrécit »).",
+          "advanced": true
+        },
+        {
+          "id": "drift",
+          "type": "number",
+          "label": "Ampleur de la dérive",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "color",
+          "type": "color",
+          "label": "Couleur du voile",
+          "default": "#000000",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "doux",
+          "label": "Focus doux",
+          "params": {
+            "mode": "fixe",
+            "radius": 0.42,
+            "darkness": 0.6,
+            "zoom": 1.15,
+            "feather": 0.8,
+            "shape": "ellipse"
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Focus marqué",
+          "params": {
+            "mode": "fixe",
+            "radius": 0.3,
+            "darkness": 0.95,
+            "zoom": 1.4,
+            "feather": 0.4
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Focus extrême",
+          "params": {
+            "mode": "fixe",
+            "radius": 0.16,
+            "darkness": 1,
+            "zoom": 2.6,
+            "feather": 0.25,
+            "shape": "cercle",
+            "recenter": 0.8
+          }
+        },
+        {
+          "id": "dramatique",
+          "label": "Zoom dramatique",
+          "params": {
+            "mode": "retrecit",
+            "radius": 0.4,
+            "darkness": 1,
+            "zoom": 2.2,
+            "shrink": 0.35,
+            "feather": 0.35,
+            "shape": "cercle",
+            "recenter": 1
+          },
+          "duration_ms": 6000
+        },
+        {
+          "id": "cinema",
+          "label": "Cinéma",
+          "params": {
+            "mode": "fixe",
+            "radius": 0.36,
+            "darkness": 0.85,
+            "zoom": 1.25,
+            "shape": "rectangle",
+            "stretch": 2.2,
+            "feather": 0.3
+          }
+        },
+        {
+          "id": "derive",
+          "label": "Regard qui dérive",
+          "params": {
+            "mode": "derive",
+            "radius": 0.26,
+            "darkness": 0.92,
+            "zoom": 1.5,
+            "drift": 0.7
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 900,
+          "curve": "ease_in_out_cubic",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 900,
+          "curve": "ease_in_out_cubic",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "blink",
+      "version": 1,
+      "label": "Clignement des paupières",
+      "description": "Les paupières se ferment et se rouvrent comme un vrai clignement : rapide, lent, fatigue, yeux fermés, paupières qui résistent.",
+      "family": "perception",
+      "icon": "eye",
+      "slot": "overlay",
+      "internal": false,
+      "on_conflict": "queue",
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["naturel", "fatigue", "ferme"],
+        "preview": "naturel",
+        "intensity_affects_price": false
+      },
+      "gpu": {
+        "primitive": "overlay",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 6000
+      },
+      "params": [
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Comportement",
+          "values": ["naturel", "serie", "ferme", "somnolence", "resistance"],
+          "labels": {
+            "naturel": "Naturel",
+            "serie": "Série",
+            "ferme": "Yeux fermés",
+            "somnolence": "Somnolence",
+            "resistance": "Paupières qui résistent"
+          },
+          "default": "naturel"
+        },
+        {
+          "id": "intensity",
+          "type": "number",
+          "label": "Fermeture",
+          "min": 0.3,
+          "max": 1,
+          "default": 1,
+          "step": 0.01,
+          "help": "1 : les yeux se ferment complètement."
+        },
+        {
+          "id": "interval_ms",
+          "type": "number",
+          "label": "Intervalle",
+          "min": 300,
+          "max": 8000,
+          "default": 1800,
+          "unit": "ms",
+          "step": 50
+        },
+        {
+          "id": "close_ms",
+          "type": "number",
+          "label": "Fermeture",
+          "min": 40,
+          "max": 2000,
+          "default": 170,
+          "unit": "ms",
+          "step": 10,
+          "help": "Durée de la fermeture (elle accélère).",
+          "advanced": true
+        },
+        {
+          "id": "hold_ms",
+          "type": "number",
+          "label": "Maintien",
+          "min": 0,
+          "max": 5000,
+          "default": 70,
+          "unit": "ms",
+          "step": 10,
+          "advanced": true
+        },
+        {
+          "id": "open_ms",
+          "type": "number",
+          "label": "Ouverture",
+          "min": 40,
+          "max": 2000,
+          "default": 150,
+          "unit": "ms",
+          "step": 10,
+          "help": "Durée de l’ouverture (rapide au départ, puis se pose).",
+          "advanced": true
+        },
+        {
+          "id": "count",
+          "type": "number",
+          "label": "Clignements par série",
+          "min": 1,
+          "max": 6,
+          "default": 3,
+          "step": 1,
+          "advanced": true
+        },
+        {
+          "id": "irregularity",
+          "type": "number",
+          "label": "Variabilité",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "help": "Intervalles et durées un peu différents à chaque clignement.",
+          "advanced": true
+        },
+        {
+          "id": "curvature",
+          "type": "number",
+          "label": "Courbure des paupières",
+          "min": 0,
+          "max": 1,
+          "default": 0.45,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "softness",
+          "type": "number",
+          "label": "Flou du bord",
+          "min": 0,
+          "max": 1,
+          "default": 0.55,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "lashes",
+          "type": "number",
+          "label": "Cils",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "asymmetry",
+          "type": "number",
+          "label": "Asymétrie",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01,
+          "help": "Un côté se ferme un peu avant l’autre, comme de vraies paupières.",
+          "advanced": true
+        },
+        {
+          "id": "glow",
+          "type": "number",
+          "label": "Lueur à travers les paupières",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "tint",
+          "type": "color",
+          "label": "Teinte des paupières fermées",
+          "default": "#3a1309",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "naturel",
+          "label": "Naturel",
+          "params": {
+            "mode": "naturel",
+            "interval_ms": 1800,
+            "close_ms": 170,
+            "hold_ms": 70,
+            "open_ms": 150
+          }
+        },
+        {
+          "id": "rapide",
+          "label": "Rapide",
+          "params": {
+            "mode": "serie",
+            "count": 3,
+            "interval_ms": 1400,
+            "close_ms": 70,
+            "hold_ms": 20,
+            "open_ms": 90
+          }
+        },
+        {
+          "id": "lent",
+          "label": "Lent",
+          "params": {
+            "mode": "naturel",
+            "interval_ms": 2200,
+            "close_ms": 480,
+            "hold_ms": 380,
+            "open_ms": 420
+          }
+        },
+        {
+          "id": "ferme",
+          "label": "Yeux fermés",
+          "params": {
+            "mode": "ferme",
+            "close_ms": 420,
+            "open_ms": 380
+          },
+          "duration_ms": 4000
+        },
+        {
+          "id": "serie",
+          "label": "Plusieurs clignements",
+          "params": {
+            "mode": "serie",
+            "count": 4,
+            "interval_ms": 1800,
+            "close_ms": 120,
+            "hold_ms": 60,
+            "open_ms": 130
+          }
+        },
+        {
+          "id": "fatigue",
+          "label": "Fatigue",
+          "params": {
+            "mode": "somnolence",
+            "interval_ms": 2200,
+            "close_ms": 260,
+            "hold_ms": 160,
+            "open_ms": 320
+          },
+          "duration_ms": 12000
+        },
+        {
+          "id": "resistance",
+          "label": "Paupières qui résistent",
+          "params": {
+            "mode": "resistance",
+            "close_ms": 300
+          },
+          "duration_ms": 8000
+        },
+        {
+          "id": "irregulier",
+          "label": "Irrégulier",
+          "params": {
+            "mode": "naturel",
+            "interval_ms": 900,
+            "irregularity": 1,
+            "close_ms": 140,
+            "hold_ms": 90,
+            "open_ms": 200
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "cut",
+          "duration_ms": 0,
+          "curve": "linear",
+          "kinds": ["cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 260,
+          "curve": "ease_out_cubic",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "flash",
+      "version": 1,
+      "label": "Flash aveuglant",
+      "description": "Un flash blanc aveugle l’écran, puis l’image de l’instant reste imprimée et s’efface pendant que la vue revient.",
+      "family": "perception",
+      "icon": "bolt",
+      "slot": "overlay",
+      "internal": false,
+      "on_conflict": "reject",
+      "capture": "snapshot",
+      "cooldown_ms": 4000,
+      "photosensitive": true,
+      "viewer": {
+        "durations_ms": [3000, 6000, 9000],
+        "tiers": ["court", "intense", "longue"],
+        "preview": "intense",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "overlay",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 5000
+      },
+      "params": [
+        {
+          "id": "intensity",
+          "type": "number",
+          "label": "Intensité",
+          "min": 0.3,
+          "max": 1,
+          "default": 0.95,
+          "step": 0.01
+        },
+        {
+          "id": "blind_ms",
+          "type": "number",
+          "label": "Aveuglement",
+          "min": 100,
+          "max": 4000,
+          "default": 900,
+          "unit": "ms",
+          "step": 50,
+          "help": "Temps tout blanc."
+        },
+        {
+          "id": "recovery_ms",
+          "type": "number",
+          "label": "Récupération",
+          "min": 300,
+          "max": 8000,
+          "default": 2200,
+          "unit": "ms",
+          "step": 50,
+          "help": "Temps pour que le blanc se retire."
+        },
+        {
+          "id": "ghost",
+          "type": "number",
+          "label": "Image fantôme",
+          "min": 0,
+          "max": 1,
+          "default": 0.75,
+          "step": 0.01,
+          "help": "Opacité de l’image restée imprimée."
+        },
+        {
+          "id": "ghost_ms",
+          "type": "number",
+          "label": "Durée de la rémanence",
+          "min": 300,
+          "max": 10000,
+          "default": 3500,
+          "unit": "ms",
+          "step": 50
+        },
+        {
+          "id": "rise_ms",
+          "type": "number",
+          "label": "Montée du flash",
+          "min": 30,
+          "max": 400,
+          "default": 60,
+          "unit": "ms",
+          "step": 5,
+          "advanced": true
+        },
+        {
+          "id": "blur",
+          "type": "number",
+          "label": "Flou de l’image fantôme",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "desat",
+          "type": "number",
+          "label": "Délavage",
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "drift",
+          "type": "number",
+          "label": "Dérive de l’image fantôme",
+          "min": 0,
+          "max": 1,
+          "default": 0.4,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "tint",
+          "type": "color",
+          "label": "Teinte du flash",
+          "default": "#fff6e8",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "court",
+          "label": "Court",
+          "params": {
+            "intensity": 0.85,
+            "blind_ms": 300,
+            "recovery_ms": 900,
+            "ghost": 0.5,
+            "ghost_ms": 1500
+          },
+          "duration_ms": 3000
+        },
+        {
+          "id": "intense",
+          "label": "Intense",
+          "params": {
+            "intensity": 1,
+            "blind_ms": 1400,
+            "recovery_ms": 2600,
+            "ghost": 0.85,
+            "ghost_ms": 4000
+          },
+          "duration_ms": 6000
+        },
+        {
+          "id": "longue",
+          "label": "Récupération longue",
+          "params": {
+            "intensity": 1,
+            "blind_ms": 1000,
+            "recovery_ms": 5500,
+            "ghost": 0.9,
+            "ghost_ms": 7500,
+            "blur": 0.5
+          },
+          "duration_ms": 9000
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "cut",
+          "duration_ms": 0,
+          "curve": "linear",
+          "kinds": ["cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 600,
+          "curve": "linear",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "fog",
+      "version": 1,
+      "label": "Brouillard",
+      "description": "Des nappes de brume épaisse arrivent, se tordent et dérivent sur l’écran, de la brume légère au brouillard presque opaque.",
+      "family": "perception",
+      "icon": "layers",
+      "slot": "overlay",
+      "internal": false,
+      "on_conflict": "queue",
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["brume", "dense", "opaque"],
+        "preview": "dense",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "overlay",
+        "cost": "medium",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 20000
+      },
+      "params": [
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Évolution",
+          "values": ["stable", "montee", "intermittent", "dissipation"],
+          "labels": {
+            "stable": "Stable",
+            "montee": "S’épaissit",
+            "intermittent": "Bancs qui passent",
+            "dissipation": "Se dissipe"
+          },
+          "default": "stable"
+        },
+        {
+          "id": "density",
+          "type": "number",
+          "label": "Densité",
+          "min": 0.05,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01
+        },
+        {
+          "id": "opacity",
+          "type": "number",
+          "label": "Opacité",
+          "min": 0.1,
+          "max": 1,
+          "default": 0.85,
+          "step": 0.01,
+          "help": "Opacité maximale des nappes les plus épaisses."
+        },
+        {
+          "id": "speed",
+          "type": "number",
+          "label": "Vitesse du vent",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01
+        },
+        {
+          "id": "direction",
+          "type": "number",
+          "label": "Direction du vent",
+          "min": 0,
+          "max": 360,
+          "default": 200,
+          "unit": "°",
+          "step": 5,
+          "help": "0° : vers la droite ; 90° : vers le bas.",
+          "advanced": true
+        },
+        {
+          "id": "size",
+          "type": "number",
+          "label": "Taille des nappes",
+          "min": 0.2,
+          "max": 2,
+          "default": 0.8,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "turbulence",
+          "type": "number",
+          "label": "Turbulence",
+          "min": 0,
+          "max": 1,
+          "default": 0.55,
+          "step": 0.01,
+          "help": "Volutes qui se tordent et évoluent.",
+          "advanced": true
+        },
+        {
+          "id": "contrast",
+          "type": "number",
+          "label": "Contraste des nappes",
+          "min": 0,
+          "max": 1,
+          "default": 0.45,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "depth",
+          "type": "number",
+          "label": "Profondeur",
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01,
+          "help": "Poids de la nappe lointaine (plus fine, plus lente).",
+          "advanced": true
+        },
+        {
+          "id": "ground",
+          "type": "number",
+          "label": "Plus dense en bas",
+          "min": 0,
+          "max": 1,
+          "default": 0.45,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "banks",
+          "type": "number",
+          "label": "Bancs",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01,
+          "help": "Variation lente de la densité d’un endroit à l’autre.",
+          "advanced": true
+        },
+        {
+          "id": "relief",
+          "type": "number",
+          "label": "Relief",
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "haze",
+          "type": "number",
+          "label": "Voile",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "help": "Brume uniforme entre les nappes.",
+          "advanced": true
+        },
+        {
+          "id": "color",
+          "type": "color",
+          "label": "Couleur",
+          "default": "#cfd4da",
+          "advanced": true
+        },
+        {
+          "id": "quality",
+          "type": "enum",
+          "label": "Résolution du rendu",
+          "values": ["economie", "normale", "haute"],
+          "labels": {
+            "economie": "Économie",
+            "normale": "Normale",
+            "haute": "Haute"
+          },
+          "default": "normale",
+          "help": "Le brouillard est doux : il est calculé en résolution réduite puis agrandi. Haute : un peu plus de détail, coût ×2.",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "brume",
+          "label": "Brume",
+          "params": {
+            "mode": "stable",
+            "density": 0.45,
+            "opacity": 0.8,
+            "haze": 1,
+            "turbulence": 0.4,
+            "contrast": 0.25
+          }
+        },
+        {
+          "id": "dense",
+          "label": "Dense",
+          "params": {
+            "mode": "stable",
+            "density": 0.7,
+            "opacity": 0.88
+          }
+        },
+        {
+          "id": "opaque",
+          "label": "Très opaque",
+          "params": {
+            "mode": "stable",
+            "density": 0.95,
+            "opacity": 0.97,
+            "haze": 0.9,
+            "contrast": 0.35
+          }
+        },
+        {
+          "id": "bancs",
+          "label": "Bancs mouvants",
+          "params": {
+            "mode": "intermittent",
+            "density": 0.75,
+            "opacity": 0.9,
+            "banks": 0.8,
+            "speed": 0.6
+          }
+        },
+        {
+          "id": "arrivee",
+          "label": "Arrive peu à peu",
+          "params": {
+            "mode": "montee",
+            "density": 0.85,
+            "opacity": 0.92
+          },
+          "duration_ms": 25000
+        },
+        {
+          "id": "dissipe",
+          "label": "Se dissipe",
+          "params": {
+            "mode": "dissipation",
+            "density": 0.9,
+            "opacity": 0.93
+          },
+          "duration_ms": 15000
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 2500,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 3000,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "blur",
+      "version": 1,
+      "label": "Flou",
+      "description": "L’image du jeu devient floue, d’un léger flou à une bouillie illisible, de façon constante, pulsée ou progressive.",
+      "family": "lisibilite",
+      "icon": "filter",
+      "slot": "filter",
+      "internal": false,
+      "on_conflict": "queue",
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["leger", "moyen", "intense"],
+        "preview": "moyen",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "shader",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 8000
+      },
+      "params": [
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Animation",
+          "values": ["constant", "pulsation", "vague", "progressif"],
+          "labels": {
+            "constant": "Constant",
+            "pulsation": "Pulsé",
+            "vague": "Vagues",
+            "progressif": "Progressif"
+          },
+          "default": "constant",
+          "help": "Progressif : se floute pendant tout l’effet ; Pulsé et Vagues : va et vient entre le minimum et l’intensité."
+        },
+        {
+          "id": "amount",
+          "type": "number",
+          "label": "Intensité",
+          "min": 1,
+          "max": 100,
+          "default": 45,
+          "step": 1,
+          "help": "30 : flou ; 60 : très flou ; 90 et plus : illisible."
+        },
+        {
+          "id": "minimum",
+          "type": "number",
+          "label": "Intensité minimale",
+          "min": 0,
+          "max": 100,
+          "default": 10,
+          "step": 1,
+          "advanced": true
+        },
+        {
+          "id": "period_ms",
+          "type": "number",
+          "label": "Période",
+          "min": 400,
+          "max": 8000,
+          "default": 1600,
+          "unit": "ms",
+          "step": 50,
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "mode": "constant",
+            "amount": 28
+          }
+        },
+        {
+          "id": "moyen",
+          "label": "Moyen",
+          "params": {
+            "mode": "constant",
+            "amount": 48
+          }
+        },
+        {
+          "id": "intense",
+          "label": "Intense",
+          "params": {
+            "mode": "constant",
+            "amount": 70
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "mode": "constant",
+            "amount": 95
+          }
+        },
+        {
+          "id": "pulse",
+          "label": "Pulsé",
+          "params": {
+            "mode": "pulsation",
+            "amount": 65,
+            "minimum": 15,
+            "period_ms": 1400
+          }
+        },
+        {
+          "id": "progressif",
+          "label": "Progressif",
+          "params": {
+            "mode": "progressif",
+            "amount": 80
+          },
+          "duration_ms": 10000
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 600,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 800,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "pixelate",
+      "version": 1,
+      "label": "Pixelisation",
+      "description": "L’image du jeu se transforme en gros pixels, de reconnaissable à indéchiffrable.",
+      "family": "lisibilite",
+      "icon": "grid",
+      "slot": "filter",
+      "internal": false,
+      "on_conflict": "queue",
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["leger", "forte", "blocs"],
+        "preview": "forte",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "shader",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 8000
+      },
+      "params": [
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Animation",
+          "values": ["constant", "progressif", "intermittent"],
+          "labels": {
+            "constant": "Constante",
+            "progressif": "Progressive",
+            "intermittent": "Intermittente"
+          },
+          "default": "constant"
+        },
+        {
+          "id": "block",
+          "type": "number",
+          "label": "Taille des pixels",
+          "min": 2,
+          "max": 160,
+          "default": 24,
+          "unit": "px",
+          "step": 1,
+          "help": "Taille en 1080p (adaptée à la résolution de l’écran)."
+        },
+        {
+          "id": "grid",
+          "type": "number",
+          "label": "Grille",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "palette",
+          "type": "number",
+          "label": "Couleurs par canal",
+          "min": 0,
+          "max": 16,
+          "default": 0,
+          "step": 1,
+          "help": "0 : toutes ; 4 à 8 : rendu « vieille console ».",
+          "advanced": true
+        },
+        {
+          "id": "interval_ms",
+          "type": "number",
+          "label": "Intervalle (intermittente)",
+          "min": 400,
+          "max": 5000,
+          "default": 1300,
+          "unit": "ms",
+          "step": 50,
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "leger",
+          "label": "Légère",
+          "params": {
+            "mode": "constant",
+            "block": 10
+          }
+        },
+        {
+          "id": "forte",
+          "label": "Forte",
+          "params": {
+            "mode": "constant",
+            "block": 28
+          }
+        },
+        {
+          "id": "blocs",
+          "label": "Très gros blocs",
+          "params": {
+            "mode": "constant",
+            "block": 80
+          }
+        },
+        {
+          "id": "progressive",
+          "label": "Progressive",
+          "params": {
+            "mode": "progressif",
+            "block": 90
+          },
+          "duration_ms": 10000
+        },
+        {
+          "id": "intermittente",
+          "label": "Intermittente",
+          "params": {
+            "mode": "intermittent",
+            "block": 40
+          }
+        },
+        {
+          "id": "retro",
+          "label": "Rétro",
+          "params": {
+            "mode": "constant",
+            "block": 14,
+            "palette": 5,
+            "grid": 0.35
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 500,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 500,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "color",
+      "version": 1,
+      "label": "Filtre de couleur",
+      "description": "L’écran change de couleurs : noir et blanc, sépia, inversion, couleurs délavées ou saturées, monochrome teinté.",
+      "family": "couleur",
+      "icon": "image",
+      "slot": "filter",
+      "internal": false,
+      "on_conflict": "queue",
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["nb", "sepia", "inversion"],
+        "preview": "nb",
+        "intensity_affects_price": false
+      },
+      "gpu": {
+        "primitive": "shader",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 15000
+      },
+      "params": [
+        {
+          "id": "mode",
+          "type": "enum",
+          "label": "Filtre",
+          "values": [
+            "nb",
+            "sepia",
+            "inversion",
+            "desature",
+            "sature",
+            "teinte"
+          ],
+          "labels": {
+            "nb": "Noir et blanc",
+            "sepia": "Sépia",
+            "inversion": "Inversion",
+            "desature": "Délavé",
+            "sature": "Saturé",
+            "teinte": "Teinte"
+          },
+          "default": "nb"
+        },
+        {
+          "id": "amount",
+          "type": "number",
+          "label": "Force",
+          "min": 0,
+          "max": 1,
+          "default": 1,
+          "step": 0.01,
+          "animatable": true,
+          "neutral": 0
+        },
+        {
+          "id": "contrast",
+          "type": "number",
+          "label": "Contraste",
+          "min": 0.5,
+          "max": 2,
+          "default": 1.1,
+          "step": 0.01
+        },
+        {
+          "id": "saturation",
+          "type": "number",
+          "label": "Saturation",
+          "min": 0,
+          "max": 3,
+          "default": 0.35,
+          "step": 0.01,
+          "help": "Délavé et Saturé : 0 = gris, 1 = normal, 3 = très saturé.",
+          "advanced": true
+        },
+        {
+          "id": "tint",
+          "type": "color",
+          "label": "Teinte (monochrome teinté)",
+          "default": "#d23a3a",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "nb",
+          "label": "Noir et blanc",
+          "params": {
+            "mode": "nb",
+            "contrast": 1.1
+          }
+        },
+        {
+          "id": "film_noir",
+          "label": "Film noir",
+          "params": {
+            "mode": "nb",
+            "contrast": 1.45
+          }
+        },
+        {
+          "id": "sepia",
+          "label": "Sépia",
+          "params": {
+            "mode": "sepia",
+            "contrast": 1.05
+          }
+        },
+        {
+          "id": "inversion",
+          "label": "Inversion",
+          "params": {
+            "mode": "inversion",
+            "contrast": 1
+          }
+        },
+        {
+          "id": "delave",
+          "label": "Délavé",
+          "params": {
+            "mode": "desature",
+            "saturation": 0.3,
+            "contrast": 0.95
+          }
+        },
+        {
+          "id": "sature",
+          "label": "Saturé",
+          "params": {
+            "mode": "sature",
+            "saturation": 2.2,
+            "contrast": 1.1
+          }
+        },
+        {
+          "id": "rouge",
+          "label": "Monochrome rouge",
+          "params": {
+            "mode": "teinte",
+            "tint": "#d23a3a",
+            "contrast": 1.15
+          }
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 700,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 700,
+          "curve": "ease_in_out_sine",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
+      "id": "vhs",
+      "version": 1,
+      "label": "VHS / glitch",
+      "description": "L’image devient celle d’une vieille cassette VHS abîmée : tracking instable, couleurs qui bavent, parasites, déchirures et glitchs.",
+      "family": "lisibilite",
+      "icon": "film",
+      "slot": "filter",
+      "internal": false,
+      "on_conflict": "queue",
+      "viewer": {
+        "durations_ms": [5000, 10000, 20000, 30000],
+        "tiers": ["legere", "abimee", "glitch_violent"],
+        "preview": "abimee",
+        "intensity_affects_price": true
+      },
+      "gpu": {
+        "primitive": "shader",
+        "cost": "medium",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 10000
+      },
+      "params": [
+        {
+          "id": "intensity",
+          "type": "number",
+          "label": "Usure de la bande",
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01
+        },
+        {
+          "id": "tracking",
+          "type": "number",
+          "label": "Tracking instable",
+          "min": 0,
+          "max": 1,
+          "default": 0.35,
+          "step": 0.01
+        },
+        {
+          "id": "glitch",
+          "type": "number",
+          "label": "Glitchs",
+          "min": 0,
+          "max": 1,
+          "default": 0.3,
+          "step": 0.01,
+          "help": "Force des rafales : blocs de lignes décalés, couleurs séparées."
+        },
+        {
+          "id": "glitch_rate",
+          "type": "number",
+          "label": "Fréquence des glitchs",
+          "min": 0,
+          "max": 1,
+          "default": 0.3,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "jitter",
+          "type": "number",
+          "label": "Gigue des lignes",
+          "min": 0,
+          "max": 1,
+          "default": 0.4,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "noise",
+          "type": "number",
+          "label": "Grain",
+          "min": 0,
+          "max": 1,
+          "default": 0.45,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "chroma",
+          "type": "number",
+          "label": "Bavure des couleurs",
+          "min": 0,
+          "max": 2,
+          "default": 1,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "dropouts",
+          "type": "number",
+          "label": "Pertes de bande",
+          "min": 0,
+          "max": 1,
+          "default": 0.4,
+          "step": 0.01,
+          "help": "Courts traits blancs (bande usée).",
+          "advanced": true
+        },
+        {
+          "id": "fade",
+          "type": "number",
+          "label": "Délavage",
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.01,
+          "advanced": true
+        },
+        {
+          "id": "roll",
+          "type": "number",
+          "label": "Instabilité verticale",
+          "min": 0,
+          "max": 1,
+          "default": 0.3,
+          "step": 0.01,
+          "help": "Bande qui roule plus vite, glissements de l’image.",
+          "advanced": true
+        }
+      ],
+      "variants": [
+        {
+          "id": "legere",
+          "label": "VHS légère",
+          "params": {
+            "intensity": 0.4,
+            "tracking": 0.15,
+            "glitch": 0,
+            "jitter": 0.25,
+            "noise": 0.3,
+            "dropouts": 0.2,
+            "roll": 0.1
+          }
+        },
+        {
+          "id": "abimee",
+          "label": "VHS abîmée",
+          "params": {
+            "intensity": 0.85,
+            "tracking": 0.5,
+            "glitch": 0.3,
+            "jitter": 0.6,
+            "noise": 0.65,
+            "dropouts": 0.8,
+            "chroma": 1.5,
+            "roll": 0.4
+          }
+        },
+        {
+          "id": "tracking",
+          "label": "Tracking instable",
+          "params": {
+            "intensity": 0.6,
+            "tracking": 1,
+            "glitch": 0.1,
+            "roll": 0.8,
+            "jitter": 0.5
+          }
+        },
+        {
+          "id": "glitch_bref",
+          "label": "Glitch bref",
+          "params": {
+            "intensity": 0.3,
+            "tracking": 0.1,
+            "glitch": 0.8,
+            "glitch_rate": 0.9,
+            "noise": 0.3
+          },
+          "duration_ms": 2000
+        },
+        {
+          "id": "glitch_violent",
+          "label": "Glitch violent",
+          "params": {
+            "intensity": 0.9,
+            "tracking": 0.7,
+            "glitch": 1,
+            "glitch_rate": 1,
+            "jitter": 0.9,
+            "noise": 0.8,
+            "roll": 0.9
+          },
+          "duration_ms": 5000
+        }
+      ],
+      "transitions": {
+        "in": {
+          "kind": "ramp",
+          "duration_ms": 300,
+          "curve": "linear",
+          "kinds": ["ramp", "cut"]
+        },
+        "out": {
+          "kind": "ramp",
+          "duration_ms": 400,
+          "curve": "linear",
+          "kinds": ["ramp", "cut"]
+        }
+      },
+      "stop_conditions": [
+        "duration",
+        "stop",
+        "stop_all",
+        "target_lost",
+        "capture_lost",
+        "error"
+      ]
+    },
+    {
       "id": "diag.tint",
       "version": 1,
       "label": "Teinte de diagnostic",
@@ -122,8 +2667,14 @@
       "slot": "filter",
       "internal": true,
       "on_conflict": "reject",
-      "gpu": { "primitive": "shader", "cost": "low", "passes": 1 },
-      "duration": { "default_ms": 5000 },
+      "gpu": {
+        "primitive": "shader",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 5000
+      },
       "params": [
         {
           "id": "strength",
@@ -134,7 +2685,11 @@
           "animatable": true,
           "neutral": 0
         },
-        { "id": "color", "type": "color", "default": "#00ffff" }
+        {
+          "id": "color",
+          "type": "color",
+          "default": "#00ffff"
+        }
       ],
       "variants": [],
       "transitions": {
@@ -170,11 +2725,29 @@
       "slot": "filter",
       "internal": true,
       "on_conflict": "reject",
-      "gpu": { "primitive": "shader", "cost": "high", "passes": 6 },
-      "duration": { "default_ms": 5000 },
+      "gpu": {
+        "primitive": "shader",
+        "cost": "high",
+        "passes": 6
+      },
+      "duration": {
+        "default_ms": 5000
+      },
       "params": [
-        { "id": "passes", "type": "number", "min": 1, "max": 6, "default": 4 },
-        { "id": "taps", "type": "number", "min": 1, "max": 32, "default": 12 },
+        {
+          "id": "passes",
+          "type": "number",
+          "min": 1,
+          "max": 6,
+          "default": 4
+        },
+        {
+          "id": "taps",
+          "type": "number",
+          "min": 1,
+          "max": 32,
+          "default": 12
+        },
         {
           "id": "strength",
           "type": "number",
@@ -219,8 +2792,14 @@
       "slot": "overlay",
       "internal": true,
       "on_conflict": "reject",
-      "gpu": { "primitive": "overlay", "cost": "low", "passes": 1 },
-      "duration": { "default_ms": 5000 },
+      "gpu": {
+        "primitive": "overlay",
+        "cost": "low",
+        "passes": 1
+      },
+      "duration": {
+        "default_ms": 5000
+      },
       "params": [
         {
           "id": "opacity",
@@ -231,10 +2810,31 @@
           "animatable": true,
           "neutral": 0
         },
-        { "id": "x", "type": "number", "min": 0, "max": 1, "default": 0.5 },
-        { "id": "y", "type": "number", "min": 0, "max": 1, "default": 0.5 },
-        { "id": "color", "type": "color", "default": "#ff00ff" },
-        { "id": "text", "type": "string", "max_length": 40, "default": "CHAOS" }
+        {
+          "id": "x",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "default": 0.5
+        },
+        {
+          "id": "y",
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "default": 0.5
+        },
+        {
+          "id": "color",
+          "type": "color",
+          "default": "#ff00ff"
+        },
+        {
+          "id": "text",
+          "type": "string",
+          "max_length": 40,
+          "default": "CHAOS"
+        }
       ],
       "variants": [],
       "transitions": {
@@ -269,8 +2869,14 @@
       "slot": "overlay",
       "internal": true,
       "on_conflict": "reject",
-      "gpu": { "primitive": "overlay", "cost": "low", "passes": 0 },
-      "duration": { "default_ms": 5000 },
+      "gpu": {
+        "primitive": "overlay",
+        "cost": "low",
+        "passes": 0
+      },
+      "duration": {
+        "default_ms": 5000
+      },
       "params": [
         {
           "id": "phase",
@@ -288,8 +2894,14 @@
       ],
       "variants": [],
       "transitions": {
-        "in": { "kind": "cut", "kinds": ["cut"] },
-        "out": { "kind": "cut", "kinds": ["cut"] }
+        "in": {
+          "kind": "cut",
+          "kinds": ["cut"]
+        },
+        "out": {
+          "kind": "cut",
+          "kinds": ["cut"]
+        }
       },
       "stop_conditions": [
         "duration",

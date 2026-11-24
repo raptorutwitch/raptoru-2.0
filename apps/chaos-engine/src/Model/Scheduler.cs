@@ -62,6 +62,8 @@ namespace Raptoru.Chaos
         readonly List<Activation> live = new List<Activation>();
         readonly Dictionary<string, Activation> byId = new Dictionary<string, Activation>();
         readonly Queue<string> recent = new Queue<string>();
+        /// Fin de la dernière activation démarrée, par cible et effet (délai minimal du registre : cooldown_ms).
+        readonly Dictionary<string, long> lastEnd = new Dictionary<string, long>();
         public readonly List<SchedEvent> Events = new List<SchedEvent>();
 
         public Scheduler(Registry reg, Func<long> now, Func<SafetyConfig> safety) { this.reg = reg; this.now = now; this.safety = safety; }
@@ -101,6 +103,14 @@ namespace Raptoru.Chaos
             return new List<Activation>();
         }
 
+        /// Délai minimal du registre (cooldown_ms) pas encore écoulé depuis la fin du même effet sur la même cible.
+        bool Cooling(Activation a)
+        {
+            if (a.Def.CooldownMs <= 0) return false;
+            long end;
+            return lastEnd.TryGetValue(a.Req.TargetKey + "|" + a.Def.Id, out end) && now() - end < a.Def.CooldownMs;
+        }
+
         public Activation Submit(EffectRequest r)
         {
             var existing = Find(r.RequestId);
@@ -109,7 +119,9 @@ namespace Raptoru.Chaos
             Remember(a);
             string why;
             var blockers = Blockers(a, out why);
-            if (blockers.Count == 0) { Activate(a); return a; }
+            bool cooling = Cooling(a);
+            if (blockers.Count == 0 && !cooling) { Activate(a); return a; }
+            if (blockers.Count == 0) why = "cooldown";
             string policy = r.Policy ?? a.Def.OnConflict;
             switch (policy)
             {
@@ -236,6 +248,7 @@ namespace Raptoru.Chaos
             if (a.State == ActState.Finished) return;
             a.State = ActState.Finished;
             a.FinishedAt = now();
+            if (a.StartedAt >= 0) lastEnd[a.Req.TargetKey + "|" + a.Def.Id] = a.FinishedAt;
             a.Outcome = outcome;
             a.EndReason = reason;
             live.Remove(a);
@@ -273,7 +286,7 @@ namespace Raptoru.Chaos
             foreach (var q in Ordered(live.Where(x => x.State == ActState.Queued)).ToList())
             {
                 string why;
-                if (Blockers(q, out why).Count == 0) Activate(q);
+                if (Blockers(q, out why).Count == 0 && !Cooling(q)) Activate(q);
             }
         }
     }

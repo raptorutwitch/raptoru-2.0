@@ -498,6 +498,118 @@ namespace Raptoru.Chaos
                 True((int)ev["v"] == 2 && (string)ev["type"] == "event" && (string)ev["event"] == "effect.started", "événement normalisé");
             });
 
+            // ---------- Catalogue des effets V2 (docs/chaos/ETUDE_EFFETS_V2.md) ----------
+            Case("catalogue V2 : chaque effet public a ses variantes valides, ses paliers viewers et son aperçu", () =>
+            {
+                var r = Reg();
+                var pub = r.Effects.Values.Where(e => !e.Internal).ToList();
+                True(pub.Count >= 13, "13 effets publics au moins");
+                foreach (var e in pub)
+                {
+                    if (e.Id == "flip") continue;
+                    True(e.Variants.Count >= 1, e.Id + " : variantes");
+                    object v;
+                    True(e.Raw.TryGetValue("viewer", out v), e.Id + " : bloc viewer");
+                    var vw = (Dictionary<string, object>)v;
+                    foreach (var t in J.Strs(vw, "tiers")) True(e.Variants.ContainsKey(t), e.Id + " : palier " + t + " = une variante");
+                    True(e.Variants.ContainsKey(J.Str(vw, "preview", "")), e.Id + " : aperçu = une variante");
+                    foreach (var d in J.Arr(vw, "durations_ms")) { double ms = Convert.ToDouble(d); True(ms >= r.Limits.MinDurationMs && ms <= r.Limits.MaxDurationMs, e.Id + " : durée proposée dans les bornes"); }
+                    True(e.StopConditions.Contains("stop_all"), e.Id + " : STOP ALL");
+                    if (e.Cursor == "follow") True(e.SlotId == "transform" || e.SlotId == "camera", e.Id + " : seul un effet qui déplace l'image fait suivre le curseur");
+                    if (e.Photosensitive) True(e.CooldownMs >= 2000, e.Id + " : délai minimal entre deux flashs");
+                }
+                True(!r.Get("blink").RequiresCapture && !r.Get("fog").RequiresCapture, "clignement et brouillard sans capture");
+                True(r.Get("flash").RequiresCapture && r.Get("flash").CaptureMode == "snapshot", "flash : une image capturée");
+                True(r.Get("shake").Order > r.Get("zoom").Order && r.Get("zoom").Order < r.Get("tunnel").Order, "ordre : zoom, tunnel, puis tremblement");
+            });
+            Case("variantes : paramètres, durée et transitions ; le préréglage passe devant, la demande aussi", () =>
+            {
+                var r = Reg();
+                var s = new SafetyConfig { MaxDurationMs = r.Limits.MaxDurationMs };
+                var inst = Params.Resolve(r.Get("mirror"), "instant", null, null, null, null, r.Limits, s, true);
+                True(inst.In.Instant && inst.Out.Instant, "miroir instantané : transitions coupées");
+                var closed = Params.Resolve(r.Get("blink"), "ferme", null, null, null, null, r.Limits, s, true);
+                Eq(4000, closed.DurationMs, "yeux fermés : durée de la variante");
+                Eq("ferme", closed.Str("mode"), "yeux fermés : mode");
+                var pre = new Preset { DurationMs = 7000 };
+                Eq(7000, Params.Resolve(r.Get("blink"), "ferme", pre, null, null, null, r.Limits, s, true).DurationMs, "préréglage devant la variante");
+                Eq(2500, Params.Resolve(r.Get("blink"), "ferme", pre, null, 2500, null, r.Limits, s, true).DurationMs, "demande devant tout");
+                Eq("param_out_of_range", Throws<ParamError>(() => Params.Resolve(r.Get("zoom"), null, null, J.Map("factor", 20.0), null, null, r.Limits, s, false)), "zoom x20 refusé");
+                Eq("unknown_variant", Throws<ParamError>(() => Params.Resolve(r.Get("fog"), "purée", null, null, null, null, r.Limits, s, true)), "variante inconnue");
+            });
+            Case("registre : une variante hors bornes, une capture inconnue ou un délai négatif sont refusés au démarrage", () =>
+            {
+                Func<Action<List<Dictionary<string, object>>>, string> mutate = change =>
+                {
+                    var root = J.Parse(Reg().Json);
+                    change(J.Arr(root, "effects").Cast<Dictionary<string, object>>().ToList());
+                    return J.Write(root);
+                };
+                Func<List<Dictionary<string, object>>, string, Dictionary<string, object>> fx = (l, id) => l.First(e => (string)e["id"] == id);
+                Throws<RegistryError>(() => Registry.Parse(mutate(l => ((Dictionary<string, object>)J.Arr(fx(l, "zoom"), "variants")[0])["params"] = J.Map("factor", 50.0))));
+                Throws<RegistryError>(() => Registry.Parse(mutate(l => fx(l, "flash")["capture"] = "video")));
+                Throws<RegistryError>(() => Registry.Parse(mutate(l => fx(l, "flash")["cooldown_ms"] = -5.0)));
+            });
+            Case("délai minimal entre deux flashs : la suivante attend en file, ou est refusée (reject)", () =>
+            {
+                var root = J.Parse(Fake);
+                J.Arr(root, "effects").Cast<Dictionary<string, object>>().First(e => (string)e["id"] == "f2")["cooldown_ms"] = 1000.0;
+                var w = new World(Registry.Parse(J.Write(root)));
+                w.Req("x1", "f2"); w.S.MarkStarted("x1"); w.Run(2100);
+                True(w.S.Find("x1").State == ActState.Finished, "premier terminé");
+                w.Req("x2", "f2");
+                True(w.S.Find("x2").State == ActState.Queued, "suivant en file pendant le délai");
+                w.Run(1100);
+                True(w.S.Find("x2").State == ActState.Starting, "suivant accepté après le délai");
+                var root2 = J.Parse(Fake);
+                J.Arr(root2, "effects").Cast<Dictionary<string, object>>().First(e => (string)e["id"] == "f1")["cooldown_ms"] = 1000.0;
+                var w2 = new World(Registry.Parse(J.Write(root2)));
+                w2.Req("y1", "f1"); w2.S.MarkStarted("y1"); w2.Run(2100);
+                w2.Req("y2", "f1");
+                True(w2.S.Find("y2").State == ActState.Finished && w2.S.Find("y2").EndReason == "cooldown", "politique reject : refus cooldown");
+            });
+            Case("mouvement : bruit continu et borné, impulsions bornées, graine reproductible", () =>
+            {
+                double prev = Fx.Noise(7, 0), maxStep = 0;
+                for (int i = 1; i < 20000; i++)
+                {
+                    double n = Fx.Noise(7, i * 0.001);
+                    True(n >= -1 && n <= 1, "bruit dans [-1, 1]");
+                    maxStep = Math.Max(maxStep, Math.Abs(n - prev)); prev = n;
+                }
+                True(maxStep < 0.006, "aucun saut : écart max " + maxStep + " pour un pas de 0,001");
+                Eq(Fx.Noise(42, 3.3), Fx.Noise(42, 3.3), "même graine, même valeur");
+                True(Fx.Noise(42, 3.3) != Fx.Noise(43, 3.3), "autre graine, autre valeur");
+                for (int i = 0; i < 2000; i++)
+                {
+                    double v = Fx.Pulses(9, i * 0.01, 1.5, 0.1, 0.2, 0.4, 1);
+                    True(v >= 0 && v <= 1, "impulsion dans [0, 1]");
+                }
+                Eq(0.0, Fx.Pulses(9, 0.5, 1.5, 0.1, 0.2, 0.4, 0, 1.0), "rien avant le départ");
+            });
+            Case("cadrage d'un zoom : jamais de bord découvert ; recentrage 0 = point immobile, 1 = point au centre", () =>
+            {
+                var rnd = new Random(3);
+                double ax = 16 / 9.0;
+                for (int i = 0; i < 3000; i++)
+                {
+                    double z = 1 + rnd.NextDouble() * 7, fx = rnd.NextDouble(), fy = rnd.NextDouble(), rc = rnd.NextDouble();
+                    double tx, ty, sx, sy;
+                    Fx.ZoomFrame(z, fx, fy, rc, ax, out tx, out ty, out sx, out sy);
+                    // Sortie (u, v) -> source : ((u - 0.5) * ax - tx) / z / ax + 0.5 (shader transform, sans rotation).
+                    foreach (var u in new[] { 0.0, 1.0 })
+                    {
+                        double su = ((u - 0.5) * ax - tx) / z / ax + 0.5, sv = ((u - 0.5) - ty) / z + 0.5;
+                        True(su >= -1e-9 && su <= 1 + 1e-9 && sv >= -1e-9 && sv <= 1 + 1e-9, "coin de l'écran lu dans l'image");
+                    }
+                }
+                double a, b, c, d;
+                Fx.ZoomFrame(2, 0.3, 0.6, 0, ax, out a, out b, out c, out d);
+                Near(0.3, c, 1e-9, "recentrage 0 : x immobile"); Near(0.6, d, 1e-9, "recentrage 0 : y immobile");
+                Fx.ZoomFrame(4, 0.5, 0.4, 1, ax, out a, out b, out c, out d);
+                Near(0.5, c, 1e-9, "recentrage 1 : au centre (x)"); Near(0.5, d, 1e-9, "recentrage 1 : au centre (y)");
+            });
+
             Console.WriteLine("Total : " + ok + " ok, " + ko + " KO");
             return ko == 0 ? 0 : 1;
         }

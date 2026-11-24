@@ -55,6 +55,19 @@ namespace Raptoru.Chaos
         }
     }
 
+    /// Image retenue par un effet (flash : l'instant du déclenchement), copiée de l'image capturée par FrameBuilder.Retain
+    /// à la prochaine image rendue, avec ses mipmaps (lecture floue). Allouée à la première copie ; l'effet la libère
+    /// (Dispose). Une passe ou un calque la lit comme seconde texture (aux, register t1).
+    sealed class RetainedImage
+    {
+        public IntPtr Tex, Srv, Rtv;
+        public uint W, H;
+        /// Une image a été copiée (lisible).
+        public bool Ready;
+        internal bool Pending;
+        public void Release() { Com.Release(ref Rtv); Com.Release(ref Srv); Com.Release(ref Tex); Ready = false; Pending = false; }
+    }
+
     /// Texture affichable par un calque (texte rasterisé, image).
     sealed class TextureRef
     {
@@ -65,13 +78,23 @@ namespace Raptoru.Chaos
 
     enum LayerShape { RoundedRect = 0, Ellipse = 1, Ring = 2 }
 
-    /// Un calque : rectangle normalisé (0..1, coin haut-gauche + taille), rotation, opacité, forme ou texture.
+    /// Un calque : rectangle normalisé (0..1, coin haut-gauche + taille), rotation, opacité, forme ou texture ; ou un
+    /// shader de la bibliothèque plein écran (FrameBuilder.Overlay).
     sealed class Layer
     {
         public double X, Y, W, H, Rotation, Opacity = 1, RadiusPx, StrokePx;
         public LayerShape Shape;
         public float[] Color = { 1, 1, 1, 1 };
         public TextureRef Texture;
+        /// Texture retournée horizontalement (curseur d'une image en miroir).
+        public bool FlipX;
+        /// Calque shader (plein écran, alpha prémultiplié) : nom, 16 constantes, résolution de rendu (1 = pleine),
+        /// seconde texture facultative.
+        public string Shader;
+        public readonly float[] U = new float[32];
+        public double Scale = 1;
+        public IntPtr Aux;
+        internal string TimerLabel, LabelEffect;
 
         /// Centre un calque de taille (w, h) normalisée sur (cx, cy).
         public static Layer Centered(double cx, double cy, double w, double h)
@@ -83,9 +106,12 @@ namespace Raptoru.Chaos
     sealed class FramePass
     {
         public string Label, Shader, TimerLabel;
-        public readonly float[] U = new float[16];
+        /// 32 constantes : u0..u3 puis u4..u7 du shader.
+        public readonly float[] U = new float[32];
         public bool NeedsBlurredInput;
         public float Lod;
+        /// Seconde texture (image retenue), register t1 ; zéro = aucune.
+        public IntPtr Aux;
 
         /// Réutilisation d'une passe : l'étiquette de mesure n'est recalculée que si l'effet ou le shader change.
         public void Set(string label, string shader)
@@ -94,6 +120,7 @@ namespace Raptoru.Chaos
             Array.Clear(U, 0, U.Length);
             NeedsBlurredInput = false;
             Lod = 0;
+            Aux = IntPtr.Zero;
         }
     }
 
@@ -117,9 +144,16 @@ namespace Raptoru.Chaos
         readonly List<KeyValuePair<string, Layer>> layers = new List<KeyValuePair<string, Layer>>();
         readonly Dictionary<string, string> layerLabels = new Dictionary<string, string>();
         readonly float[] cb = new float[Gpu.CbFloats];
-        // Dernière transformation de l'image (AddCursor pose le curseur par la même transformation).
-        double tRot, tSx = 1, tSy = 1, tTx, tTy;
-        bool hasTransform;
+        // Transformations de l'image, dans l'ordre des passes (AddCursor pose le curseur par leur composition) :
+        // 5 valeurs chacune (rotation, échelle x, échelle y, translation x, y), 4 au plus.
+        const int MaxTransforms = 4;
+        readonly double[] chain = new double[MaxTransforms * 5];
+        int chainCount;
+        static readonly float[] White = { 1, 1, 1, 1 };
+        // Calques shader réutilisés d'une image à l'autre, images à retenir à cette image.
+        readonly List<Layer> overlayPool = new List<Layer>();
+        int overlayCount;
+        readonly List<RetainedImage> retains = new List<RetainedImage>();
 
         public FrameBuilder(uint w, uint h, bool hasCapture) { Reset(w, h, hasCapture); }
 
@@ -128,7 +162,7 @@ namespace Raptoru.Chaos
             Width = w; Height = h; HasCapture = hasCapture;
             passCount = 0; layers.Clear();
             CurrentLabel = "effect"; LowQuality = false; DisplayRotationRad = 0; Scale = 1;
-            hasTransform = false; tRot = 0; tSx = 1; tSy = 1; tTx = 0; tTy = 0;
+            chainCount = 0; overlayCount = 0; retains.Clear();
         }
 
         public int PassCount { get { return passCount; } }
@@ -145,7 +179,11 @@ namespace Raptoru.Chaos
         public void Labels(List<string> into)
         {
             for (int i = 0; i < passCount; i++) into.Add(all[i].TimerLabel);
-            foreach (var kv in layers) { string l; if (layerLabels.TryGetValue(kv.Key, out l)) into.Add(l); }
+            foreach (var kv in layers)
+            {
+                if (kv.Value.Shader != null) { into.Add(kv.Value.TimerLabel); continue; }
+                string l; if (layerLabels.TryGetValue(kv.Key, out l)) into.Add(l);
+            }
         }
 
         FramePass NewPass(string shader)
@@ -177,37 +215,86 @@ namespace Raptoru.Chaos
             else if (fill == "black") mode = 1;
             else if (fill == "clamp") mode = 2;
             p.U[0] = (float)rotationRad; p.U[1] = (float)scaleX; p.U[2] = (float)scaleY; p.U[3] = mode;
-            hasTransform = true; tRot = rotationRad; tSx = scaleX; tSy = scaleY; tTx = tx; tTy = ty;
-            p.U[4] = (float)tx; p.U[5] = (float)ty; p.U[6] = 0.45f;
+            if (chainCount < MaxTransforms)
+            {
+                int k = chainCount++ * 5;
+                chain[k] = rotationRad; chain[k + 1] = scaleX; chain[k + 2] = scaleY; chain[k + 3] = tx; chain[k + 4] = ty;
+            }
+            p.U[4] = (float)tx; p.U[5] = (float)ty; p.U[6] = 0.45f; p.U[7] = Math.Min(Math.Abs(scaleX), Math.Abs(scaleY)) >= 1.8 ? 1 : 0;
             p.NeedsBlurredInput = uncovered && mode == 0;
             p.Lod = 4.5f;
         }
 
-        /// Passe plein écran d'un shader de la bibliothèque (16 constantes). blurredInput : le shader lit des mips.
-        public void Filter(string shader, float[] u, bool blurredInput = false, float lod = 0)
+        /// Passe plein écran d'un shader de la bibliothèque (32 constantes : u0..u7). blurredInput : le shader lit des
+        /// mips. aux : seconde texture lue par le shader (image retenue).
+        public void Filter(string shader, float[] u, bool blurredInput = false, float lod = 0, IntPtr aux = default(IntPtr))
         {
             if (!HasCapture) throw new InvalidOperationException("Filter exige une capture");
             var p = NewPass(shader);
-            Array.Copy(u, p.U, Math.Min(16, u.Length));
+            Array.Copy(u, p.U, Math.Min(32, u.Length));
             p.NeedsBlurredInput = blurredInput;
             p.Lod = lod;
+            p.Aux = aux;
+        }
+
+        /// Calque plein écran dessiné par un shader de la bibliothèque, en alpha prémultiplié, SANS capture (paupières,
+        /// brouillard, masque) : u = 16 constantes ; scale < 1 : rendu à résolution réduite puis agrandi (motifs doux,
+        /// coût divisé par 1/scale²) ; aux : seconde texture (image retenue). Aucune allocation par image.
+        public void Overlay(string shader, float[] u, double scale = 1, IntPtr aux = default(IntPtr), double opacity = 1, float[] color = null)
+        {
+            if (overlayCount == overlayPool.Count) overlayPool.Add(new Layer());
+            var l = overlayPool[overlayCount++];
+            l.X = 0; l.Y = 0; l.W = 1; l.H = 1; l.Rotation = 0; l.Opacity = opacity; l.Texture = null; l.FlipX = false;
+            if (!ReferenceEquals(l.LabelEffect, CurrentLabel) || !ReferenceEquals(l.Shader, shader)) { l.LabelEffect = CurrentLabel; l.TimerLabel = CurrentLabel + ":" + shader; }
+            l.Shader = shader; l.Scale = Math.Max(0.125, Math.Min(1, scale)); l.Aux = aux;
+            Array.Clear(l.U, 0, 32);
+            Array.Copy(u, l.U, Math.Min(32, u.Length));
+            if (color != null) { l.Color = color; } else { l.Color = White; }
+            Add(l);
+        }
+
+        /// Retient l'image d'entrée de cette image (la capture) dans r, avec mipmaps : r.Ready à l'image suivante.
+        public void Retain(RetainedImage r)
+        {
+            if (!HasCapture) throw new InvalidOperationException("Retain exige une capture");
+            r.Pending = true;
+            retains.Add(r);
         }
 
         /// Image du vrai curseur (forme lue à cette image), posée par la MÊME transformation que l'image capturée :
         /// au retournement, pointe au point miroir et image tournée ; pendant la rotation animée, au point tourné. Ce que
         /// l'on voit sous ce curseur est donc toujours ce que le clic, qui tombe à la vraie position, touchera.
         /// (px, py) : pointe du vrai curseur dans la cible, en pixels. Calque par-dessus tout le reste.
+        /// Plusieurs transformations (miroir puis tremblement, zoom puis secousse…) : le curseur suit leur composition, dans
+        /// l'ordre des passes ; son image prend la même orientation (rotation, miroir) et la même échelle.
         public void AddCursor(TextureRef tex, int hotX, int hotY, double px, double py)
         {
             double w0 = Width, h0 = Height, ax = w0 / h0;
+            // Espace « aspect » du shader (x × largeur/hauteur) : unités égales sur les deux axes.
             double qx = ((px + 0.5) / w0 - 0.5) * ax, qy = (py + 0.5) / h0 - 0.5;
-            double k = Math.Cos(tRot), s = Math.Sin(tRot), ux = qx * tSx, uy = qy * tSy;
-            // Inverse exacte du shader « transform » (sortie → source) : source → sortie.
-            double cx = (((k * ux - s * uy) + tTx) / ax + 0.5) * w0, cy = ((s * ux + k * uy) + tTy + 0.5) * h0;
-            double sw = tex.W * Math.Abs(tSx), sh = tex.H * Math.Abs(tSy);
-            double hx = (hotX + 0.5 - tex.W / 2.0) * Math.Abs(tSx), hy = (hotY + 0.5 - tex.H / 2.0) * Math.Abs(tSy);
-            double centerX = cx - (k * hx - s * hy), centerY = cy - (s * hx + k * hy);
-            layers.Add(new KeyValuePair<string, Layer>("cursor", new Layer { X = (centerX - sw / 2) / w0, Y = (centerY - sh / 2) / h0, W = sw / w0, H = sh / h0, Rotation = tRot, Texture = tex }));
+            double m00 = 1, m01 = 0, m10 = 0, m11 = 1; // partie linéaire composée
+            for (int i = 0; i < chainCount; i++)
+            {
+                int j = i * 5;
+                double k = Math.Cos(chain[j]), s = Math.Sin(chain[j]), sx = chain[j + 1], sy = chain[j + 2];
+                // Inverse exacte du shader « transform » (sortie → source) : source → sortie.
+                double ux = qx * sx, uy = qy * sy;
+                qx = k * ux - s * uy + chain[j + 3]; qy = s * ux + k * uy + chain[j + 4];
+                double a00 = k * sx, a01 = -s * sy, a10 = s * sx, a11 = k * sy;
+                double n00 = a00 * m00 + a01 * m10, n01 = a00 * m01 + a01 * m11, n10 = a10 * m00 + a11 * m10, n11 = a10 * m01 + a11 * m11;
+                m00 = n00; m01 = n01; m10 = n10; m11 = n11;
+            }
+            double cx = (qx / ax + 0.5) * w0, cy = (qy + 0.5) * h0;
+            double det = m00 * m11 - m01 * m10;
+            bool flip = det < 0;
+            if (flip) { m00 = -m00; m10 = -m10; } // M × diag(-1, 1) : rotation pure (à l'échelle près)
+            double rot = Math.Atan2(m10, m00), scale = Math.Sqrt(Math.Abs(det));
+            double sw = tex.W * scale, sh = tex.H * scale;
+            // Pointe (hotspot) : décalage depuis le centre de l'image, transformé comme l'image (miroir puis rotation).
+            double hx = (hotX + 0.5 - tex.W / 2.0) * scale * (flip ? -1 : 1), hy = (hotY + 0.5 - tex.H / 2.0) * scale;
+            double kr = Math.Cos(rot), sr = Math.Sin(rot);
+            double centerX = cx - (kr * hx - sr * hy), centerY = cy - (sr * hx + kr * hy);
+            layers.Add(new KeyValuePair<string, Layer>("cursor", new Layer { X = (centerX - sw / 2) / w0, Y = (centerY - sh / 2) / h0, W = sw / w0, H = sh / h0, Rotation = rot, Texture = tex, FlipX = flip }));
         }
 
         public void Add(Layer l) { if (l.Opacity > 0 && l.W > 0 && l.H > 0) layers.Add(new KeyValuePair<string, Layer>(CurrentLabel, l)); }
@@ -218,20 +305,27 @@ namespace Raptoru.Chaos
         {
             long h = 1469598103934665603L;
             Mix(ref h, Width); Mix(ref h, Height); Mix(ref h, LowQuality ? 1 : 0); Mix(ref h, Q(DisplayRotationRad)); Mix(ref h, Q(Scale));
+            Mix(ref h, retains.Count);
             for (int i = 0; i < passCount; i++)
             {
                 var p = all[i];
-                Mix(ref h, p.Shader.GetHashCode()); Mix(ref h, p.NeedsBlurredInput ? 1 : 0); Mix(ref h, Q(p.Lod));
-                for (int k = 0; k < 16; k++) Mix(ref h, Q(p.U[k]));
+                Mix(ref h, p.Shader.GetHashCode()); Mix(ref h, p.NeedsBlurredInput ? 1 : 0); Mix(ref h, Q(p.Lod)); Mix(ref h, p.Aux.ToInt64());
+                for (int k = 0; k < 32; k++) Mix(ref h, Q(p.U[k]));
                 if (lib.UsesTime(p.Shader)) Mix(ref h, Q(time));
             }
             foreach (var kv in layers)
             {
                 var l = kv.Value;
                 Mix(ref h, Q(l.X)); Mix(ref h, Q(l.Y)); Mix(ref h, Q(l.W)); Mix(ref h, Q(l.H)); Mix(ref h, Q(l.Rotation)); Mix(ref h, Q(l.Opacity));
-                Mix(ref h, Q(l.RadiusPx)); Mix(ref h, Q(l.StrokePx)); Mix(ref h, (long)l.Shape);
+                Mix(ref h, Q(l.RadiusPx)); Mix(ref h, Q(l.StrokePx)); Mix(ref h, (long)l.Shape); Mix(ref h, l.FlipX ? 1 : 0);
                 foreach (var c in l.Color) Mix(ref h, Q(c));
                 Mix(ref h, l.Texture != null ? l.Texture.Srv.ToInt64() : 0);
+                if (l.Shader != null)
+                {
+                    Mix(ref h, l.Shader.GetHashCode()); Mix(ref h, Q(l.Scale)); Mix(ref h, l.Aux.ToInt64());
+                    for (int k = 0; k < 32; k++) Mix(ref h, Q(l.U[k]));
+                    if (lib.UsesTime(l.Shader)) Mix(ref h, Q(time));
+                }
             }
             return h;
         }
@@ -250,6 +344,23 @@ namespace Raptoru.Chaos
             uint inW = Width, inH = Height;
             uint sw = Math.Max(1, (uint)Math.Round(Width * Math.Min(1, Math.Max(0.25, Scale)))), sh = Math.Max(1, (uint)Math.Round(Height * Math.Min(1, Math.Max(0.25, Scale))));
             PooledTarget prev = null;
+            // Images retenues (flash) : copie de l'entrée et de ses mipmaps, une fois.
+            foreach (var r in retains)
+            {
+                if (!r.Pending || inputSrv == IntPtr.Zero) continue;
+                if (r.Tex == IntPtr.Zero || r.W != Width || r.H != Height)
+                {
+                    r.Release();
+                    r.W = Width; r.H = Height;
+                    r.Tex = gpu.Texture(Width, Height, 0, 0x8 | 0x20, 0x1, 0, 0);
+                    r.Srv = gpu.Srv(r.Tex); r.Rtv = gpu.Rtv(r.Tex);
+                }
+                cb[20] = Width; cb[21] = Height; cb[22] = Width; cb[23] = Height;
+                gpu.Target(r.Rtv, Width, Height, false);
+                gpu.Draw(lib.VsFull, lib.Pixel("copy"), inputSrv, cb, 3);
+                gpu.GenerateMips(r.Srv);
+                r.Pending = false; r.Ready = true;
+            }
             // L'image de la fenêtre n'est rendue par Windows qu'à son rafraîchissement (écran entier surtout) : vider la cible
             // d'abord place l'attente de son tampon hors des mesures GPU des passes, qui ne mesurent alors que leur coût réel.
             gpu.Clear(outRtv, 0, 0, 0, 0);
@@ -268,13 +379,14 @@ namespace Raptoru.Chaos
                 uint ow = last ? Width : sw, oh = last ? Height : sh;
                 PooledTarget dst = last ? null : pool.Rent(ow, oh, now);
                 if (p.NeedsBlurredInput && i > 0 && prev != null) gpu.GenerateMips(prev.Srv);
-                Array.Copy(p.U, cb, 16);
+                Array.Copy(p.U, 0, cb, 0, 16);
+                Array.Copy(p.U, 16, cb, 32, 16);
                 cb[16] = 0; cb[17] = 0; cb[18] = 1; cb[19] = 1;
                 cb[20] = ow; cb[21] = oh; cb[22] = inW; cb[23] = inH;
                 cb[27] = p.Lod;
                 if (timer != null) timer.Begin(p.TimerLabel);
                 gpu.Target(last ? outRtv : dst.Rtv, ow, oh, false);
-                gpu.Draw(lib.VsFull, lib.Pixel(p.Shader), input, cb, 3);
+                gpu.Draw(lib.VsFull, lib.Pixel(p.Shader), input, cb, 3, p.Aux);
                 if (timer != null) timer.End();
                 if (prev != null) pool.Return(prev, now);
                 prev = dst;
@@ -287,7 +399,9 @@ namespace Raptoru.Chaos
                 {
                     var l = kv.Value;
                     Array.Clear(cb, 0, cb.Length);
+                    if (l.Shader != null) { DrawShaderLayer(gpu, lib, pool, timer, l, outRtv, now, presenceTime); continue; }
                     cb[0] = (float)l.Shape; cb[1] = (float)l.RadiusPx; cb[2] = (float)l.StrokePx; cb[15] = (float)l.Rotation;
+                    cb[4] = l.FlipX ? 1 : 0;
                     cb[16] = (float)l.X; cb[17] = (float)l.Y; cb[18] = (float)l.W; cb[19] = (float)l.H;
                     cb[20] = Width; cb[21] = Height; cb[22] = Width; cb[23] = Height;
                     cb[24] = presenceTime; cb[26] = (float)Math.Max(0, Math.Min(1, l.Opacity));
@@ -302,6 +416,38 @@ namespace Raptoru.Chaos
                 }
             }
             gpu.Unbind();
+        }
+
+        /// Calque shader plein écran : directement dans la cible (pleine résolution), ou dans une cible réduite du pool
+        /// puis agrandi en bilinéaire par-dessus l'image (scale < 1).
+        void DrawShaderLayer(Gpu gpu, ShaderLibrary lib, TexturePool pool, GpuTimer timer, Layer l, IntPtr outRtv, long now, float time)
+        {
+            string label = l.TimerLabel;
+            Array.Copy(l.U, 0, cb, 0, 16);
+            Array.Copy(l.U, 16, cb, 32, 16);
+            Array.Copy(l.Color, 0, cb, 28, Math.Min(4, l.Color.Length));
+            cb[18] = 1; cb[19] = 1; cb[22] = Width; cb[23] = Height;
+            cb[24] = time; cb[26] = (float)Math.Max(0, Math.Min(1, l.Opacity));
+            if (timer != null) timer.Begin(label);
+            if (l.Scale >= 0.999)
+            {
+                cb[20] = Width; cb[21] = Height;
+                gpu.Draw(lib.VsFull, lib.Pixel(l.Shader), IntPtr.Zero, cb, 3, l.Aux);
+            }
+            else
+            {
+                uint lw = Math.Max(1, (uint)Math.Round(Width * l.Scale)), lh = Math.Max(1, (uint)Math.Round(Height * l.Scale));
+                var t = pool.Rent(lw, lh, now);
+                cb[20] = lw; cb[21] = lh;
+                gpu.Target(t.Rtv, lw, lh, false);
+                gpu.Draw(lib.VsFull, lib.Pixel(l.Shader), IntPtr.Zero, cb, 3, l.Aux);
+                Array.Clear(cb, 0, cb.Length);
+                cb[18] = 1; cb[19] = 1; cb[20] = Width; cb[21] = Height; cb[22] = lw; cb[23] = lh;
+                gpu.Target(outRtv, Width, Height, true);
+                gpu.Draw(lib.VsFull, lib.Pixel("layer_full"), t.Srv, cb, 3);
+                pool.Return(t, now);
+            }
+            if (timer != null) timer.End();
         }
     }
 }

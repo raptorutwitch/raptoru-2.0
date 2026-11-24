@@ -3,6 +3,8 @@
 //   --guardian <pid du moteur>          (lancé par le moteur lui-même)
 //   --test-target [--x --y --w --h]     (mire des contrôles automatiques)
 //   --render-preview <dossier>          (aperçu hors écran des transitions en PNG : développement des shaders)
+//   --render-effects <dossier> [effet…] [--frames]   (planches des effets du catalogue, hors écran)
+//   --bench-effects [--w --h --frames]  (temps GPU par passe de chaque effet, hors écran)
 //   --restore-display                   (secours : écrans aux réglages enregistrés de Windows, curseur rétabli)
 //   --game-check                        (garde des essais visibles : code 1 et la raison si un jeu est actif)
 //   --describe | --version
@@ -51,6 +53,9 @@ namespace Raptoru.Chaos
                     return 0;
                 case "--render-preview": return Preview.Run(args.Length > 1 ? args[1] : ".");
                 case "--bench-gpu": return Preview.Bench(IntArg(args, "--w", 2560), IntArg(args, "--h", 1440), IntArg(args, "--frames", 600));
+                case "--render-effects": return EffectPreview.Run(args.Length > 1 ? args[1] : ".", args.Skip(2).Where((x, i) => !x.StartsWith("--") && !args.Skip(1).ElementAt(i).StartsWith("--w") && !args.Skip(1).ElementAt(i).StartsWith("--h")).ToList(), args.Contains("--frames"), (uint)IntArg(args, "--w", 480), (uint)IntArg(args, "--h", 270));
+                case "--strip": return EffectPreview.Strip(args[1], args[2], args[3], long.Parse(args[4]), long.Parse(args[5]), int.Parse(args[6]), (uint)IntArg(args, "--w", 480), (uint)IntArg(args, "--h", 270));
+                case "--bench-effects": return EffectPreview.Bench(IntArg(args, "--w", 2560), IntArg(args, "--h", 1440), IntArg(args, "--frames", 300));
                 case "--describe":
                     var reg = Registry.Embedded();
                     Console.WriteLine(J.Write(J.Map("registry_version", reg.Version, "effects", reg.Effects.Keys.ToArray(),

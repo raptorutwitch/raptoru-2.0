@@ -16,6 +16,10 @@ namespace Raptoru.Chaos
         public double Presence;   // 0 = absent, 1 = entier (entrée et sortie animées par le moteur)
         public long NowMs, ElapsedMs;
         public uint Width, Height;
+        /// Graine de l'activation : variations « aléatoires » reproductibles, différentes d'un déclenchement à l'autre.
+        public int Seed;
+        /// Sortie en cours (fin de durée, arrêt) : Presence descend vers 0.
+        public bool Exiting;
 
         /// Valeur d'un paramètre animable selon la présence (neutre → cible) ; sinon sa valeur.
         public double Animated(string id)
@@ -33,11 +37,14 @@ namespace Raptoru.Chaos
         public ShaderLibrary Shaders;
         public TextRaster Text;
         public ResolvedParams P;
+        public int Seed;
     }
 
     abstract class Effect
     {
         public virtual void Prepare(EffectContext c) { }
+        /// Faux : l'effet n'a plus besoin de la capture (flash : image retenue) ; le moteur la rend.
+        public virtual bool NeedsCapture { get { return true; } }
         public virtual void Start() { }
         public virtual void Update(EffectFrame f) { }
         public abstract void Render(FrameBuilder fb, EffectFrame f);
@@ -55,6 +62,7 @@ namespace Raptoru.Chaos
         public readonly Activation A;
         public readonly Effect Impl;
         public InstanceState State = InstanceState.Created;
+        public int Seed;
         public string Error;
         public long VisibleSince = -1;
         // Couche Entrées (écran entier) : pendant l'effet, Windows tient l'écran retourné et le calque se retire
@@ -101,6 +109,18 @@ namespace Raptoru.Chaos
         static readonly Dictionary<string, Func<Effect>> Factories = new Dictionary<string, Func<Effect>>
         {
             { "flip", () => new FlipEffect() },
+            { "mirror", () => new MirrorEffect() },
+            { "shake", () => new ShakeEffect() },
+            { "zoom", () => new ZoomEffect() },
+            { "drunk", () => new DrunkEffect() },
+            { "tunnel", () => new TunnelEffect() },
+            { "blink", () => new BlinkEffect() },
+            { "flash", () => new FlashEffect() },
+            { "fog", () => new FogEffect() },
+            { "blur", () => new BlurEffect() },
+            { "pixelate", () => new PixelateEffect() },
+            { "color", () => new ColorEffect() },
+            { "vhs", () => new VhsEffect() },
             { "diag.tint", () => new DiagTintEffect() },
             { "diag.passes", () => new DiagPassesEffect() },
             { "diag.marker", () => new DiagMarkerEffect() },
@@ -109,6 +129,17 @@ namespace Raptoru.Chaos
 
         public static IEnumerable<string> Implemented { get { return Factories.Keys; } }
         public static Effect Create(string id) { return Factories[id](); }
+
+        /// Graine stable d'une activation (FNV-1a de son identifiant) : même demande → même motif.
+        public static int SeedOf(string requestId)
+        {
+            unchecked
+            {
+                uint h = 2166136261;
+                foreach (char ch in requestId ?? "") { h ^= ch; h *= 16777619; }
+                return (int)(h & 0x7FFFFFFF);
+            }
+        }
 
         /// Écarts entre registre et implémentations (vide = cohérent).
         public static List<string> Mismatches(Registry reg)

@@ -180,7 +180,7 @@ namespace Raptoru.Chaos
 
         void StartInstance(Activation a)
         {
-            var inst = new EffectInstance(a, EffectCatalog.Create(a.Def.Id));
+            var inst = new EffectInstance(a, EffectCatalog.Create(a.Def.Id)) { Seed = EffectCatalog.SeedOf(a.Req.RequestId) };
             SurfaceEntry s;
             try { s = Attach(a); }
             catch (CaptureError e) { tel.Error(e.Code); sched.MarkFailed(a.Req.RequestId, e.Code, e.Message); return; }
@@ -191,7 +191,7 @@ namespace Raptoru.Chaos
             if (a.Def.Input != null && a.Req.TargetDevice != null && J.Str(a.Req.TargetInfo, "input", null) != null)
             { inst.Input = InputPhase.Pending; inst.InputDevice = a.Req.TargetDevice; }
             s.Effects.Add(inst);
-            var ctx = new EffectContext { Gpu = gpu, Shaders = lib, Text = text, P = a.Req.Resolved };
+            var ctx = new EffectContext { Gpu = gpu, Shaders = lib, Text = text, P = a.Req.Resolved, Seed = inst.Seed };
             if (!inst.Guard("prepare", () => { inst.Impl.Prepare(ctx); inst.State = InstanceState.Prepared; }) ||
                 !inst.Guard("start", () => { inst.Impl.Start(); inst.State = InstanceState.Running; }))
             {
@@ -269,7 +269,7 @@ namespace Raptoru.Chaos
         readonly List<SurfaceEntry> renderList = new List<SurfaceEntry>();
         static readonly Comparison<EffectInstance> ByOrder = (x, y) =>
         {
-            int c = x.A.Def.Slot.Order.CompareTo(y.A.Def.Slot.Order);
+            int c = x.A.Def.Order.CompareTo(y.A.Def.Order);
             return c != 0 ? c : x.A.AcceptedAt.CompareTo(y.A.AcceptedAt);
         };
 
@@ -393,6 +393,7 @@ namespace Raptoru.Chaos
                 var f = e.Frame;
                 f.P = a.Req.Resolved; f.Presence = a.Anim != null ? a.Anim.Presence(now) : 0; f.NowMs = now;
                 f.ElapsedMs = a.StartedAt >= 0 ? now - a.StartedAt : 0; f.Width = s.S.Width; f.Height = s.S.Height;
+                f.Seed = e.Seed; f.Exiting = a.State == ActState.Exiting;
                 fb.CurrentLabel = a.Def.Id;
                 int passesBefore = fb.PassCount, layersBefore = fb.LayerCount;
                 if (!e.Guard("update", () => e.Impl.Update(f)) || !e.Guard("render", () => e.Impl.Render(fb, f)))
@@ -458,6 +459,10 @@ namespace Raptoru.Chaos
             s.FrameLabels.Clear();
             fb.Labels(s.FrameLabels);
             s.S.SetShown(true, now);
+            // Capture rendue par un effet qui n'en a plus besoin (flash : image retenue à cette image) : si plus aucun
+            // effet de la cible ne la lit, la fenêtre redevient transparente et le jeu se voit directement.
+            foreach (var e in live)
+                if (e.HoldsCapture && e.State == InstanceState.Running && !e.Impl.NeedsCapture) { e.HoldsCapture = false; DropCapture(s, e.A.Req.TargetKey); }
             UpdateStarting(s, live, now);
         }
 
@@ -795,6 +800,8 @@ namespace Raptoru.Chaos
         /// Refus communs à toute demande : coût déclaré au-delà du profil ; effet désactivé pour une source communautaire.
         void CheckAllowed(EffectRequest req)
         {
+            if (req.Def.Photosensitive && cfg.Safety.SafeMode)
+                throw new ProtocolError("safe_mode", req.Def.Label + " : effet lumineux brusque, refusé en mode sûr");
             if (req.Def.GpuPasses > cfg.Performance.MaxPasses)
                 throw new ProtocolError("too_costly", req.Def.Id + " : " + req.Def.GpuPasses + " passes GPU déclarées, " + cfg.Performance.MaxPasses + " permises (profil " + cfg.Performance.Profile + ")");
             if (!cfg.Effect(req.Def.Id).Enabled && req.SourceKind != "studio" && req.SourceKind != "test")

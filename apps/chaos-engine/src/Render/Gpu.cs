@@ -10,7 +10,7 @@ namespace Raptoru.Chaos
     sealed class Gpu
     {
         public const int Bgra = 87; // DXGI_FORMAT_B8G8R8A8_UNORM
-        public const int CbFloats = 32; // constantes communes à toutes les passes (voir ShaderLibrary.Prelude)
+        public const int CbFloats = 48; // constantes communes à toutes les passes (voir ShaderLibrary.Prelude)
 
         public IntPtr Device, Context, DxgiDevice, Factory, Adapter3;
         public IDirect3DDevice WinrtDevice;
@@ -153,8 +153,9 @@ namespace Raptoru.Chaos
             setLayout(Context, IntPtr.Zero);
         }
 
-        /// Un dessin : constantes communes, shaders, texture source (facultative), sommets (3 = plein écran, 4 = calque).
-        public void Draw(IntPtr vs, IntPtr ps, IntPtr srv, float[] cb, uint vertices)
+        /// Un dessin : constantes communes, shaders, texture source (facultative), sommets (3 = plein écran, 4 = calque),
+        /// seconde texture facultative (aux, register t1 : image retenue).
+        public void Draw(IntPtr vs, IntPtr ps, IntPtr srv, float[] cb, uint vertices, IntPtr aux = default(IntPtr))
         {
             Marshal.Copy(cb, 0, cbData, CbFloats);
             update(Context, cbuffer, 0, IntPtr.Zero, cbData, 0, 0);
@@ -162,10 +163,12 @@ namespace Raptoru.Chaos
             vsSet(Context, vs, IntPtr.Zero, 0);
             psSet(Context, ps, IntPtr.Zero, 0);
             IntPtr s = srv; psSetSrv(Context, 0, 1, ref s);
+            if (aux != IntPtr.Zero) { IntPtr a = aux; psSetSrv(Context, 1, 1, ref a); }
             IntPtr smp = sampler; psSetSampler(Context, 0, 1, ref smp);
             IntPtr c = cbuffer; psSetCb(Context, 0, 1, ref c); vsSetCb(Context, 0, 1, ref c);
             draw(Context, vertices, 0);
             IntPtr none = IntPtr.Zero; psSetSrv(Context, 0, 1, ref none);
+            if (aux != IntPtr.Zero) psSetSrv(Context, 1, 1, ref none);
         }
 
         public void Unbind() { IntPtr none = IntPtr.Zero; setRt(Context, 1, ref none, IntPtr.Zero); }

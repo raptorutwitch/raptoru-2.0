@@ -122,6 +122,14 @@ const paramBase = {
   exposed: z.boolean().optional(),
   /** Libellés lisibles des valeurs d'un choix (fiche de l'effet dans Studio). */
   labels: z.record(z.string(), z.string()).optional(),
+  /** Réglage fin : replié dans « Réglages avancés » de la fiche. */
+  advanced: z.boolean().optional(),
+  /**
+   * Contrôle particulier dans Studio : `point` = choix d'un point dans un aperçu de l'écran (ce paramètre = x, `pair`
+   * = le paramètre y, marqué `point_y`).
+   */
+  widget: z.enum(['point', 'point_y']).optional(),
+  pair: z.string().optional(),
 };
 export const chaosParamSchema = z.discriminatedUnion('type', [
   z.object({
@@ -131,6 +139,8 @@ export const chaosParamSchema = z.discriminatedUnion('type', [
     max: z.number(),
     default: z.number(),
     unit: z.string().optional(),
+    /** Pas du curseur dans Studio. */
+    step: z.number().positive().optional(),
     animatable: z.boolean().optional(),
     neutral: z.number().optional(),
   }),
@@ -178,6 +188,26 @@ export const chaosEffectDefSchema = z.object({
    * de la cible, image du vrai curseur dessinée au point transformé ; coordonnées et clics de Windows inchangés).
    */
   cursor: z.enum(['follow']).optional(),
+  /** Ordre dans la chaîne de rendu (défaut : celui de l'emplacement) : un tremblement passe après un zoom. */
+  order: z.number().int().optional(),
+  /** `snapshot` : une seule image capturée au départ (flash : image retenue), puis la capture est rendue. */
+  capture: z.enum(['snapshot']).optional(),
+  /** Délai minimal entre deux activations sur une même cible (ms). */
+  cooldown_ms: z.number().int().min(0).optional(),
+  /** Effet lumineux brusque : refusé en mode sûr. */
+  photosensitive: z.boolean().optional(),
+  /**
+   * Préparation de l'achat par les viewers (aucune boutique active) : durées proposées, paliers = variantes
+   * proposées, variante de l'aperçu, et si l'intensité peut changer le prix. Les prix restent l'affaire du Core.
+   */
+  viewer: z
+    .object({
+      durations_ms: z.array(z.number().int().positive()).min(1),
+      tiers: z.array(z.string()).min(1),
+      preview: z.string(),
+      intensity_affects_price: z.boolean(),
+    })
+    .optional(),
   gpu: z.object({
     primitive: z.string(),
     cost: z.string(),
@@ -190,6 +220,23 @@ export const chaosEffectDefSchema = z.object({
       id: z.string(),
       label: z.string().optional(),
       params: z.record(z.string(), z.unknown()),
+      duration_ms: z.number().int().positive().optional(),
+      transition: z
+        .object({
+          in: z
+            .object({
+              kind: z.enum(['ramp', 'cut']).optional(),
+              duration_ms: z.number().int().min(0).optional(),
+            })
+            .optional(),
+          out: z
+            .object({
+              kind: z.enum(['ramp', 'cut']).optional(),
+              duration_ms: z.number().int().min(0).optional(),
+            })
+            .optional(),
+        })
+        .optional(),
     }),
   ),
   transitions: z.object({ in: transitionDef, out: transitionDef }),

@@ -129,23 +129,27 @@ namespace Raptoru.Chaos
         {
             var r = new ResolvedParams { Def = def };
             foreach (var p in def.Params) r.Values[p.Id] = p.Default;
+            // Couches : défauts → variante (paramètres, durée, transitions) → préréglage → demande.
+            Preset vp = null;
             if (!string.IsNullOrEmpty(variant))
             {
-                Dictionary<string, object> vp;
                 if (!def.Variants.TryGetValue(variant, out vp)) throw new ParamError("unknown_variant", "variante inconnue : " + variant);
-                Apply(def, r, vp, true);
+                Apply(def, r, vp.Params, true);
             }
             if (preset != null) Apply(def, r, preset.Params, true);
             if (overrides != null) Apply(def, r, overrides, trusted);
 
             int maxDuration = Math.Min(lim.MaxDurationMs, safety.MaxDurationMs);
-            int dur = durationMs ?? (preset != null && preset.DurationMs.HasValue ? preset.DurationMs.Value : def.DefaultDurationMs);
+            int dur = durationMs ?? (preset != null && preset.DurationMs.HasValue ? preset.DurationMs.Value
+                : vp != null && vp.DurationMs.HasValue ? vp.DurationMs.Value : def.DefaultDurationMs);
             if (dur < lim.MinDurationMs || dur > maxDuration)
                 throw new ParamError("duration_out_of_range", "durée hors bornes [" + lim.MinDurationMs + ", " + maxDuration + "] ms");
             r.DurationMs = dur;
 
-            r.In = Plan(def, def.In, preset != null ? preset.InKind : null, preset != null ? preset.InMs : null, J.Obj(transition, "in"), lim, safety);
-            r.Out = Plan(def, def.Out, preset != null ? preset.OutKind : null, preset != null ? preset.OutMs : null, J.Obj(transition, "out"), lim, safety);
+            var pin = preset != null && (preset.InKind != null || preset.InMs.HasValue) ? preset : vp;
+            var pout = preset != null && (preset.OutKind != null || preset.OutMs.HasValue) ? preset : vp;
+            r.In = Plan(def, def.In, pin != null ? pin.InKind : null, pin != null ? pin.InMs : null, J.Obj(transition, "in"), lim, safety);
+            r.Out = Plan(def, def.Out, pout != null ? pout.OutKind : null, pout != null ? pout.OutMs : null, J.Obj(transition, "out"), lim, safety);
             ClampRotationSpeed(r, r.In, "transition.in.duration_ms", lim);
             ClampRotationSpeed(r, r.Out, "transition.out.duration_ms", lim);
             return r;

@@ -48,14 +48,24 @@ namespace Raptoru.Chaos
         /// Curseur pendant l'effet : null = inchangé ; "follow" = le curseur visible suit l'image transformée (curseur
         /// matériel masqué au-dessus de la cible, image du vrai curseur dessinée au point transformé ; entrées intactes).
         public string Cursor;
+        /// Capture propre à l'effet : null = celle de son emplacement ; "snapshot" = une image capturée au départ
+        /// (flash : image retenue), puis la capture est rendue.
+        public string CaptureMode;
+        /// Ordre de la chaîne de rendu (défaut : celui de l'emplacement) : un tremblement passe après un zoom.
+        public int Order;
+        /// Délai minimal entre la fin d'une activation et le départ de la suivante, sur une même cible (0 = aucun).
+        public int CooldownMs;
+        /// Effet lumineux brusque (flash) : refusé en mode sûr.
+        public bool Photosensitive;
         public bool Internal;
         public SlotDef Slot;
         public List<ParamDef> Params = new List<ParamDef>();
-        public Dictionary<string, Dictionary<string, object>> Variants = new Dictionary<string, Dictionary<string, object>>();
+        /// Variantes (préréglages du registre) : paramètres, et facultativement durée et transitions.
+        public Dictionary<string, Preset> Variants = new Dictionary<string, Preset>();
         public TransitionDef In = new TransitionDef(), Out = new TransitionDef();
         public List<string> StopConditions = new List<string>();
         public Dictionary<string, object> Raw;
-        public bool RequiresCapture { get { return Slot != null && Slot.RequiresCapture; } }
+        public bool RequiresCapture { get { return Slot != null && Slot.RequiresCapture || CaptureMode == "snapshot"; } }
         public ParamDef Param(string id) { return Params.FirstOrDefault(p => p.Id == id); }
     }
 
@@ -157,6 +167,12 @@ namespace Raptoru.Chaos
             if (!new[] { "queue", "replace", "reject", "extend" }.Contains(e.OnConflict)) throw new RegistryError(where + "on_conflict invalide");
             e.Primitive = J.Str(J.Obj(o, "gpu"), "primitive", "");
             e.GpuPasses = (int)J.Num(J.Obj(o, "gpu"), "passes", 1);
+            e.Order = (int)J.Num(o, "order", e.Slot.Order);
+            e.CaptureMode = J.Str(o, "capture", null);
+            if (e.CaptureMode != null && e.CaptureMode != "snapshot") throw new RegistryError(where + "capture inconnue " + e.CaptureMode + " (snapshot)");
+            e.CooldownMs = (int)J.Num(o, "cooldown_ms", 0);
+            if (e.CooldownMs < 0 || e.CooldownMs > 600000) throw new RegistryError(where + "cooldown_ms hors bornes");
+            e.Photosensitive = J.Bool(o, "photosensitive", false);
             e.Cursor = J.Str(o, "cursor", null);
             if (e.Cursor != null && e.Cursor != "follow") throw new RegistryError(where + "cursor inconnu " + e.Cursor + " (follow)");
             if (e.Cursor != null && !e.RequiresCapture) throw new RegistryError(where + "cursor exige un effet qui transforme l'image capturée");
@@ -166,17 +182,20 @@ namespace Raptoru.Chaos
             if (e.DefaultDurationMs < reg.Limits.MinDurationMs || e.DefaultDurationMs > reg.Limits.MaxDurationMs) throw new RegistryError(where + "durée par défaut hors bornes");
             foreach (var po in J.Arr(o, "params")) e.Params.Add(ParseParam(po as Dictionary<string, object>, where));
             if (e.Params.Select(p => p.Id).Distinct().Count() != e.Params.Count) throw new RegistryError(where + "paramètre en double");
+            var tr = J.Obj(o, "transitions");
+            e.In = ParseTransition(J.Obj(tr, "in"), where, reg);
+            e.Out = ParseTransition(J.Obj(tr, "out"), where, reg);
             foreach (var vo in J.Arr(o, "variants"))
             {
                 var v = vo as Dictionary<string, object>;
                 string vid = J.Str(v, "id", "");
-                var vp = J.Obj(v, "params") ?? new Dictionary<string, object>();
-                foreach (var k in vp.Keys) if (e.Param(k) == null) throw new RegistryError(where + "variante " + vid + " : paramètre inconnu " + k);
+                if (string.IsNullOrEmpty(vid) || e.Variants.ContainsKey(vid)) throw new RegistryError(where + "variante sans identifiant ou en double : " + vid);
+                var vp = Preset.FromJson(v);
+                // Une variante obéit aux mêmes règles qu'une demande (bornes, durée, transitions) : vérifiée ici, une fois.
+                try { Params.CheckPreset(e, vp, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }); }
+                catch (ParamError pe) { throw new RegistryError(where + "variante " + vid + " : " + pe.Message); }
                 e.Variants[vid] = vp;
             }
-            var tr = J.Obj(o, "transitions");
-            e.In = ParseTransition(J.Obj(tr, "in"), where, reg);
-            e.Out = ParseTransition(J.Obj(tr, "out"), where, reg);
             e.StopConditions = J.Strs(o, "stop_conditions");
             if (!e.StopConditions.Contains("stop_all")) throw new RegistryError(where + "stop_all doit toujours arrêter l'effet");
             return e;
