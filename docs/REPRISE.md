@@ -193,7 +193,8 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 5. Corriger **uniquement** les problèmes observés.
 
 **C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : moteur, curseur retourné, page Studio
-(22–23/11), puis **bibliothèque de 13 effets** (nuit du 23 au 24/11), en local.
+(22–23/11), puis **bibliothèque de 13 effets** (nuit du 23 au 24/11), puis **passe de polissage + Performance Lab**
+(24/11, après les essais d'Antoni dans 0.1.44-chaos.2), en local.
 
 - **Où** : branche locale **`feat/chaos-studio`** (`origin/main` refusionné le 24/11 : Soundboard), worktree
   `Raptoru 2.0 - Worktrees\chaos-v2`. Lancer : `npm run chaos:lab` (recompile moteur et page).
@@ -201,20 +202,42 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
   aveuglant avec rémanence, brouillard, flou, pixelisation, filtres de couleur, VHS / glitch. Chacun a sa fiche dans
   Studio (préréglages en un clic, réglages avancés repliés, point visé, aperçu rendu par le moteur hors écran). État,
   techniques, sources, limites : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md).
+- **Polissage du 24/11** :
+  - **tout l'écran, barre des tâches comprise** : mode E, [chaos/ECRAN_ENTIER.md](chaos/ECRAN_ENTIER.md) ;
+  - clignement fermé à 100 %, brouillard à quatre niveaux d'occlusion, tunnel en vrai dégradé, flash à forte
+    rémanence, ivre mort et vertige plus forts ;
+  - **intensité** Léger / Marqué / Extrême / Personnalisé dans chaque fiche ;
+  - **Chaos Performance Lab** : banc hors écran et validation en jeu, [chaos/PERFORMANCE_LAB.md](chaos/PERFORMANCE_LAB.md).
+
+  Mesures et choix : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md) § 0 bis.
+
 - **Études OBS** (aucune modification d'OBS) : [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md) (ralenti global +
   rattrapage) et [chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md) (replay des dernières secondes).
-- **Studio installé** : `0.1.44-chaos.1` (retournement seul). **Version de test commune `0.1.44-chaos.2`**
-  (Soundboard de `main` + Chaos V2 complet) construite, **non installée, non publiée** : chemin, empreinte et
-  procédure dans [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md) § 4. L'installation est faite par Antoni.
-- **Tests** : 33 unitaires du moteur ; 13 Studio (dont le vrai moteur et l'aperçu) ; parcours de la page sans
-  affichage 24/24 ; chaque effet examiné image par image hors écran (`--render-effects`, `--strip`, `--combo`).
-  **Non lancés** (garde de jeu : plein écran au premier plan toute la nuit) : tout essai visible, banc GPU des effets
-  (`--bench-effects`), essais en jeu et dans OBS.
+- **Studio installé** : `0.1.44-chaos.2`, essayée par Antoni le 24/11.
+  - **Version de test `0.1.44-chaos.3`** (polissage + Performance Lab) : construite, **non installée, non publiée**.
+  - Chemin, empreinte, essais et protocole Overwatch + OBS : [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md)
+    § 4.
+  - L'installation est faite par Antoni.
+- **Tests passés** :
+  - 34 tests unitaires du moteur ;
+  - 23 tests Studio Chaos, dont le Performance Lab et les propriétés des effets mesurées hors écran par le vrai
+    moteur (paupières 100 % fermées à toutes les proportions d'écran, niveaux du brouillard, dégradé du tunnel) ;
+  - parcours de la page sans affichage : 30/30.
+- **Non lancés** (garde de jeu, plein écran au premier plan) :
+  - tout essai visible ;
+  - le vrai banc GPU (seul le banc de fumée a tourné) ;
+  - les essais en jeu et dans OBS ;
+  - le banc de compatibilité OBS du mode E.
 - **Règle** : aucun essai visible (calque, rotation, banc, curseur) pendant qu'un jeu tourne. La garde le refuse ;
   `--autorise-pendant-un-jeu` seulement sur accord d'Antoni.
-- **Prochaine étape** : installer `0.1.44-chaos.2` et essayer chaque effet (liste dans GUIDE_STUDIO_CHAOS § 4), le
-  brouillard en premier (il ne compte comme réussi qu'après son avis en mouvement) ; banc GPU jeu fermé ; puis le
-  lot 2 (achat par les viewers, Core) et un prototype OBS isolé si Antoni le décide.
+- **Prochaine étape** :
+  1. installer `0.1.44-chaos.3` ;
+  2. vérifier la barre des tâches dans l'effet, à l'écran et dans OBS (capture d'écran) ;
+  3. refaire les essais du clignement, du brouillard (Occultant), du tunnel, du flash et de l'écran ivre ;
+  4. lancer le banc hors écran du Performance Lab, jeu fermé ;
+  5. faire la validation en jeu sur Overwatch avec OBS (protocole : [chaos/PERFORMANCE_LAB.md](chaos/PERFORMANCE_LAB.md)
+     § 4) ;
+  6. ensuite, le lot 2 (achat par les viewers, Core) et un prototype OBS isolé si Antoni le décide.
 - **Rien n'est poussé, fusionné ni publié.**
 
 **D. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (validations réelles en attente, finitions Studio).

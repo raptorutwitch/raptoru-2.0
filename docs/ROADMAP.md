@@ -34,10 +34,17 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
    et 23/11 en local (`apps/chaos-engine`, branche `feat/chaos-studio`, `npm run chaos:lab`). Retournement essayé par
    Antoni dans Studio installé (`0.1.44-chaos.1`). **24/11 : 12 effets de plus** (miroir, tremblement, zoom, ivre,
    tunnel, clignement, flash, brouillard, flou, pixelisation, couleur, VHS), fiches Studio, études OBS Wasted et Replay ;
-   version de test commune `0.1.44-chaos.2` construite, non installée
-   ([chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md)). **Essais d'Antoni attendus**, puis lot 2 (achat par les
-   viewers).
+   version de test commune `0.1.44-chaos.2`, essayée par Antoni (retours positifs).
+   **Polissage du 24/11** :
+   - effets sur tout l'écran (mode E) ;
+   - clignement fermé à 100 %, brouillard occultant, tunnel en dégradé, flash, ivre ;
+   - intensités Léger / Marqué / Extrême ;
+   - Chaos Performance Lab ;
+   - version de test `0.1.44-chaos.3` non installée ([chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md) § 0 bis).
+
+   **Essais d'Antoni attendus**, puis lot 2 (achat par les viewers).
    Le lot 0 (mesures PresentMon) reste à faire : § 2.0.
+
 2. **Validations réelles en attente** (temps d'Antoni, en live) : premier vrai tirage de la Roue du Sub V3 ; « Envoyer
    une vraie annonce test » de Level Up ; commande d'Aouh (expressions, latence, édition déléguée) ; parcours viewer de
    Music Hub ; effets OBS après OBS 33.
@@ -130,7 +137,12 @@ Colonnes : état réel · ce qui reste · document. « Public » = dans l'extens
 en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md). Restes :
 
 - essais d'Antoni effet par effet (le brouillard ne compte comme réussi qu'après son avis en mouvement) ;
-- banc GPU des effets en 1440p (`--bench-effects`) et mesure en jeu (banc A–F) ;
+- banc hors écran du Performance Lab en 1440p et 1080p (jeu fermé), puis validation en jeu sur Overwatch + OBS
+  ([chaos/PERFORMANCE_LAB.md](chaos/PERFORMANCE_LAB.md)) ;
+- images/s du jeu dans le Performance Lab : intégration de PresentMon (droits d'administrateur) si la lecture à la
+  main ne suffit pas ;
+- mode E : barre des tâches figée pendant un effet qui lit l'image (horloge, survol) ; « barre vivante » possible
+  plus tard par une seconde surface exclue des captures ([chaos/ECRAN_ENTIER.md](chaos/ECRAN_ENTIER.md) § 4) ;
 - flou : sous-échantillonnage à 13 lectures si le flou très fort ondule en mouvement ;
 - point visé : miniature capturée du vrai écran, si l'écran miniature ne suffit pas ;
 - lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;

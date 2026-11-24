@@ -94,15 +94,20 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.1** (retournement seul, 23/11).
+Studio installé aujourd'hui : **0.1.44-chaos.2** (13 effets, essayée par Antoni le 24/11).
 
-Version de test **0.1.44-chaos.2** (24/11), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.3** (24/11), construite en local, **ni publiée ni installée** :
 
-- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.2.exe`
-- 126 705 934 o, SHA-256 `676a1f421df3b95230ff19f972b854ddf16a729874d891fb7ce75faca23cadd3`
-- contenu : `main` du 24/11 (Studio 0.1.44 : Soundboard « Ajouter un son », compatible avec le Core `408f201a` déjà
-  déployé) + Chaos V2 complet (13 effets, fiches, aperçu) ; commit `064b6de8` de `feat/chaos-studio` (local) ; aucun
-  `.env`, aucun jeton, aucune valeur secrète locale dans le paquet (vérifié).
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.3.exe`
+- 126 729 317 o, SHA-256 `9ffcc0c11327f8efbec304bcd78e042de22bea613e93d2e57ccec73b67236418`
+- contenu :
+  - tout ce que contenait 0.1.44-chaos.2 (`main` du 24/11, inchangé depuis) ;
+  - effets sur tout l'écran (mode E) ;
+  - polissage : clignement, brouillard, tunnel, flash, ivre ;
+  - intensités ;
+  - Chaos Performance Lab.
+- commit `5f501392` de `feat/chaos-studio` (local) ;
+- aucun `.env`, aucun jeton, aucune valeur secrète locale dans le paquet (vérifié).
 - étiquette de test posée dans le paquet seulement (`package.json` du dépôt inchangé) : Studio désactive alors ses
   mises à jour automatiques (« Version de test… »), sans erreur GitHub.
 
@@ -110,24 +115,37 @@ Installer (hors live, **jeu fermé** : les essais sont visibles) :
 
 1. Fermer Raptoru Studio (fenêtre et serveur) et tout Chaos Lab (Ctrl+C dans sa fenêtre) : un moteur du Lab garde
    Ctrl+Maj+F11 et Studio afficherait « déjà pris ».
-2. Lancer `Raptoru Studio Setup 0.1.44-chaos.2.exe` : il remplace la version installée dans le même dossier et garde
+2. Lancer `Raptoru Studio Setup 0.1.44-chaos.3.exe` : il remplace la version installée dans le même dossier et garde
    les données (`%APPDATA%\Raptoru Studio` et le dossier de données `Documents\Raptoru 2.0`).
-3. Ouvrir Studio : « À propos » = 0.1.44-chaos.2 ; profil, OBS et comptes Twitch comme avant.
+3. Ouvrir Studio : « À propos » = 0.1.44-chaos.3 ; profil, OBS et comptes Twitch comme avant.
 4. Modules › Effets & mise en scène › **Chaos · effets d'écran** : « Moteur prêt » en quelques secondes, 13 cartes.
-5. Pour chaque effet : ouvrir sa fiche (l'aperçu s'anime à gauche), choisir un préréglage, **Tester** (5 s sur l'écran
-   choisi), puis **Activer** et **Arrêter**. À regarder en particulier :
-   - **Brouillard** (Dense, Très opaque, Arrive peu à peu) : des nappes qui bougent et se tordent, pas des taches ;
-   - **Clignement** (Naturel, Fatigue, Paupières qui résistent) : de vraies paupières, pas deux bandes ;
-   - **Flash** (Intense) : blanc, puis l'image de l'instant reste imprimée et s'efface ;
-   - **Vision tunnel** : point visé cliqué dans l'écran miniature ;
-   - **Zoom, tremblement, ivre, miroir** : le curseur (s'il est visible) suit l'image ; un seul curseur.
-6. STOP ALL pendant deux effets en même temps (ex. brouillard + noir et blanc) : tout s'arrête.
-7. Quitter Studio pendant un effet : l'effet s'arrête et le curseur revient.
-8. Soundboard : « Ajouter un son » répond comme dans la 0.1.44 de `main`.
+5. Avec une fenêtre agrandie (Studio, un navigateur) sur l'écran choisi : **la barre des tâches participe à l'effet**.
+   - Elle doit le faire pour l'écran ivre, le clignement et le retournement.
+   - Si OBS tourne avec une **capture d'écran** de cet écran, la vue d'OBS montre aussi l'effet sur tout l'écran.
+   - Pendant un effet qui transforme l'image, la barre est figée (horloge, survol) : c'est normal.
+6. Fiches, avec la nouvelle ligne **Intensité** (Léger, Marqué, Extrême, Personnalisé) :
+   - **Clignement** (Naturel, Rapide, Yeux fermés) : au plus fort, plus rien du jeu ne se voit ; le clignement rapide
+     laisse voir la fermeture ;
+   - **Brouillard** : Brume légère → Marqué → Dense → **Occultant**. En Occultant, de grosses masses cachent des régions
+     entières pendant que des trouées passent ; ce doit rester du brouillard ;
+   - **Vision tunnel** : l'ombre s'épaissit avec la distance au point visé ; Extrême = gros zoom sur une petite zone ;
+     réglages « Largeur du dégradé » et « Douceur du bord » ;
+   - **Flash** (Intense), **sur une scène qui bouge** : blanc, puis l'image figée qui masque le jeu, puis le jeu qui
+     réapparaît dessous ;
+   - **Écran ivre** (Ivre mort, Vertige) : franchement désorientant, sans être un tremblement ;
+   - changer de préréglage garde l'intensité ; toucher un réglage passe en Personnalisé.
+7. **Performance Lab** (bouton dans l'en-tête de la page Chaos) :
+   - **banc hors écran** jeu fermé, puis exporter le rapport HTML ;
+   - **validation en jeu** sur Overwatch avec OBS, selon le protocole de
+     [PERFORMANCE_LAB.md](PERFORMANCE_LAB.md) § 4.
+8. STOP ALL pendant deux effets en même temps (ex. brouillard + noir et blanc) : tout s'arrête.
+9. Quitter Studio pendant un effet : l'effet s'arrête et le curseur revient.
+10. Soundboard : « Ajouter un son » répond comme dans la 0.1.44 de `main`.
 
 Retour arrière :
 
-- relancer `Raptoru Studio Setup 0.1.44-chaos.1.exe` (même dossier `release`, SHA-256 `bec90cc2…`) ;
+- relancer `Raptoru Studio Setup 0.1.44-chaos.2.exe` (même dossier `release`, SHA-256 `676a1f42…`), ou
+  `0.1.44-chaos.1` (`bec90cc2…`) ;
 - ou désinstaller Raptoru Studio (Paramètres Windows › Applications ; les données restent), puis réinstaller la
   0.1.43 depuis `raptoru-studio-releases`.
 
