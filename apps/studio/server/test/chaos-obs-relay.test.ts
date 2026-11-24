@@ -144,6 +144,11 @@ class SceneObs {
           d.inputSettings as object,
         );
         return {};
+      case 'RemoveSceneItem': {
+        const list = this.scenes.get(String(d.sceneName))!;
+        list.splice(list.indexOf(item()), 1);
+        return {};
+      }
       case 'RemoveInput':
         if (!this.inputs.delete(String(d.inputName)))
           throw new Error('source introuvable');
@@ -182,8 +187,8 @@ describe('Chaos › relais anti-coupure du curseur d’OBS', () => {
     expect(p).toMatchObject({
       relay,
       exists: false,
-      scenes: ['Scène Fullscreen', 'Scène PS5'],
-      missing: ['Scène Fullscreen', 'Scène PS5'],
+      scenes: ['Scène Fullscreen'],
+      missing: ['Scène Fullscreen'],
       settings: { monitor_id: 'M1', method: 0, capture_cursor: false },
     });
     expect(obs.calls.every((c) => c.type.startsWith('Get'))).toBe(true);
@@ -196,8 +201,12 @@ describe('Chaos › relais anti-coupure du curseur d’OBS', () => {
       () => 'Écran',
     );
     const res = await r.prepare();
-    expect(res.added).toEqual(['Scène Fullscreen', 'Scène PS5']);
-    for (const sc of ['Scène Fullscreen', 'Scène PS5']) {
+    expect(res.added).toEqual(['Scène Fullscreen']);
+    // « Scène PS5 » : « Écran » y est masquée → pas de relais, aucune capture de l'écran du PC n'y tourne.
+    expect(obs.scenes.get('Scène PS5')!.map((i) => i.sourceName)).toEqual([
+      'Écran',
+    ]);
+    for (const sc of ['Scène Fullscreen']) {
       const items = obs.scenes.get(sc)!;
       const it = items.find((i) => i.sourceName === relay)!;
       expect(it).toMatchObject({
@@ -267,6 +276,28 @@ describe('Chaos › relais anti-coupure du curseur d’OBS', () => {
     expect((await r.status()).missing).toEqual(['Scène Dessin']);
     expect((await r.prepare()).added).toEqual(['Scène Dessin']);
     expect(obs.calls.filter((c) => c.type === 'CreateInput')).toHaveLength(0);
+  });
+
+  it('relais posé là où « Écran » est masquée (ou devenue masquée) : retiré par « Préparer », jamais ajouté', async () => {
+    const obs = new SceneObs();
+    const r = new ChaosObsRelay(
+      () => obs,
+      () => 'Écran',
+    );
+    await r.prepare();
+    // Antoni masque « Écran » dans « Scène Fullscreen » : le relais y capturerait l'écran pour rien.
+    obs.scenes
+      .get('Scène Fullscreen')!
+      .find((i) => i.sourceName === 'Écran')!.sceneItemEnabled = false;
+    const st = await r.status();
+    expect(st).toMatchObject({ ready: false, extra: ['Scène Fullscreen'] });
+    const res = await r.prepare();
+    expect(res.removed_from).toEqual(['Scène Fullscreen']);
+    for (const v of obs.scenes.values())
+      expect(v.some((i) => i.sourceName === relay)).toBe(false);
+    expect(
+      obs.scenes.get('Scène Fullscreen')!.map((i) => i.sourceName),
+    ).toEqual(['Fond', 'Écran', 'Webcam']);
   });
 
   it('« Écran » déplacée sur un autre écran : le relais suit au prochain « Préparer » ; retirer = retour arrière complet', async () => {

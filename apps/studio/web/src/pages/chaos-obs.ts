@@ -78,6 +78,7 @@ export interface ObsStatus {
     same_screen?: boolean;
     scenes?: string[];
     missing?: string[];
+    extra?: string[];
     program_covered?: boolean;
   };
 }
@@ -86,6 +87,7 @@ interface RelayPlan {
   exists: boolean;
   scenes: string[];
   missing: string[];
+  extra: { scene: string }[];
 }
 interface Preview {
   source: string;
@@ -208,7 +210,9 @@ export function mountObsPanel(
                   'w',
                   rel.same_screen === false
                     ? 'sur un autre écran que la source'
-                    : `manque dans ${(rel.missing ?? []).map(esc).join(', ')}`,
+                    : (rel.missing ?? []).length
+                      ? `manque dans ${(rel.missing ?? []).map(esc).join(', ')}`
+                      : `à retirer de ${(rel.extra ?? []).map(esc).join(', ')} (« ${esc(st.config.source ?? '')} » y est masquée)`,
                 )
               : stateChip('off', rel?.reason ? esc(rel.reason) : 'absent')
         }</span><span class="d-sp"></span>
@@ -323,7 +327,7 @@ export function mountObsPanel(
         const p = await getJson<RelayPlan>('/api/chaos/obs/relay');
         const ok = await confirmBox({
           title: 'Préparer le relais anti-coupure dans OBS ?',
-          body: `${p.exists ? `« ${p.relay} » existe déjà.` : `Création de « ${p.relay} » : capture du même écran que « ${st?.config.source ?? ''} », sans curseur.`} Ajout ${p.missing.length ? `à : ${p.missing.join(', ')}` : 'à aucune scène (déjà partout)'} — tout en bas, verrouillé, minuscule et hors du cadre (invisible dans le stream). Aucune autre source, aucun filtre ni réglage n’est modifié ; « Retirer le relais » annule tout.`,
+          body: `${p.exists ? `« ${p.relay} » existe déjà.` : `Création de « ${p.relay} » : capture du même écran que « ${st?.config.source ?? ''} », sans curseur.`} Ajout ${p.missing.length ? `aux scènes où « ${st?.config.source ?? ''} » est visible : ${p.missing.join(', ')}` : 'à aucune scène (déjà partout où elle est visible)'} — tout en bas, verrouillé, minuscule et hors du cadre (invisible dans le stream).${p.extra.length ? ` Retrait des scènes où elle est masquée : ${p.extra.map((x) => x.scene).join(', ')}.` : ''} Jamais dans une scène où « ${st?.config.source ?? ''} » est masquée (PS5). Aucune autre source, aucun filtre ni réglage n’est modifié ; « Retirer le relais » annule tout.`,
           yes: 'Préparer dans OBS',
           no: 'Annuler',
           danger: false,

@@ -6,8 +6,9 @@ import { ChaosObsError } from './obs-output.js';
 // de cet écran, elle la détruit puis la recrée : images vides (le flash noir). OBS partage UNE duplication par écran
 // entre toutes ses captures de cet écran (compteur de références, libobs-d3d11) : une seconde capture du même écran,
 // toujours affichée, la garde en vie et la bascule devient instantanée. Le relais est cette seconde capture : sans
-// curseur, minuscule et hors du cadre (invisible dans le stream), verrouillée, tout en bas de chaque scène qui contient
-// la source. Créé et retiré seulement sur un geste d'Antoni (aperçu exact, confirmation) ; rien d'autre n'est touché.
+// curseur, minuscule et hors du cadre (invisible dans le stream), verrouillée, tout en bas de chaque scène où la source
+// est VISIBLE — jamais là où elle est masquée ou absente (« Scène PS5 » : aucune capture de l'écran du PC n'y tourne).
+// Créé et retiré seulement sur un geste d'Antoni (aperçu exact, confirmation) ; rien d'autre n'est touché.
 
 export const RELAY_PREFIX = 'Raptoru Chaos V2 · relais curseur · ';
 /** Hors du cadre et minuscule : jamais visible, mais « affichée » pour OBS (la duplication reste partagée). */
@@ -65,8 +66,13 @@ export class ChaosObsRelay {
         same_screen: plan.sameScreen,
         scenes: plan.scenes,
         missing: plan.missing,
+        extra: plan.extra.map((x) => x.scene),
         program_covered: plan.programCovered,
-        ready: plan.exists && plan.sameScreen && plan.missing.length === 0,
+        ready:
+          plan.exists &&
+          plan.sameScreen &&
+          plan.missing.length === 0 &&
+          plan.extra.length === 0,
       };
     } catch (e) {
       return {
@@ -106,14 +112,23 @@ export class ChaosObsRelay {
     const program = String(
       list.currentProgramSceneName ?? list.currentProgramScene ?? '',
     );
+    // Scènes où la source est visible : le relais y est nécessaire. Ailleurs (masquée, absente), un relais capturerait
+    // l'écran pour rien : à retirer.
     const withSource: string[] = [];
     const missing: string[] = [];
+    const extra: { scene: string; ids: number[] }[] = [];
     for (const sc of scenes) {
       const items = ((await o.request('GetSceneItemList', { sceneName: sc }))
         .sceneItems ?? []) as SceneItem[];
-      if (!items.some((i) => i.sourceName === src)) continue;
-      withSource.push(sc);
-      if (!items.some((i) => i.sourceName === relay)) missing.push(sc);
+      const shown = items.some(
+        (i) => i.sourceName === src && i.sceneItemEnabled !== false,
+      );
+      const mine = items.filter((i) => i.sourceName === relay);
+      if (shown) {
+        withSource.push(sc);
+        if (!mine.length) missing.push(sc);
+      } else if (mine.length)
+        extra.push({ scene: sc, ids: mine.map((i) => i.sceneItemId) });
     }
     return {
       relay,
@@ -129,6 +144,7 @@ export class ChaosObsRelay {
       },
       scenes: withSource,
       missing,
+      extra,
       programCovered:
         !withSource.includes(program) || !missing.includes(program),
     };
@@ -141,6 +157,12 @@ export class ChaosObsRelay {
   async prepare() {
     const o = this.conn();
     const p = await this.plan();
+    for (const x of p.extra)
+      for (const id of x.ids)
+        await o.request('RemoveSceneItem', {
+          sceneName: x.scene,
+          sceneItemId: id,
+        });
     const done: string[] = [];
     for (const sc of p.missing) {
       let id: number;
@@ -196,9 +218,14 @@ export class ChaosObsRelay {
         overlay: true,
       });
     this.log(
-      `[chaos/relais] relais « ${p.relay} » ${done.length ? `ajouté à ${done.join(', ')}` : 'déjà en place'}`,
+      `[chaos/relais] relais « ${p.relay} » ${done.length ? `ajouté à ${done.join(', ')}` : 'déjà en place'}${p.extra.length ? ` ; retiré de ${p.extra.map((x) => x.scene).join(', ')}` : ''}`,
     );
-    return { relay: p.relay, added: done, status: await this.status() };
+    return {
+      relay: p.relay,
+      added: done,
+      removed_from: p.extra.map((x) => x.scene),
+      status: await this.status(),
+    };
   }
 
   /** Retour arrière : le relais disparaît de toutes les scènes (aucune autre source touchée). */
