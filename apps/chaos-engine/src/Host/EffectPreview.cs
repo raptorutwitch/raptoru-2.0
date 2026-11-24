@@ -51,23 +51,30 @@ namespace Raptoru.Chaos
         {
             public ResolvedParams P; public Animator Anim; public Effect Fx; public readonly EffectFrame F = new EffectFrame();
             public long Total;
+            /// Début de la sortie (ms depuis le départ) : fin de la durée, ou arrêt anticipé / prolongation (session OBS).
+            public long ExitAt;
             public Sim(Registry reg, Rig rig, EffectDef def, string variant, int seed, Preset preset = null, string level = null,
                 Dictionary<string, object> overrides = null, int? durationMs = null)
+                : this(Params.Resolve(def, variant, preset, overrides, durationMs, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true, level ?? DefaultLevel),
+                       seed, rig.Gpu, rig.Lib, rig.Text, rig.W, rig.H, -1) { }
+            /// Réplique d'une activation (paramètres déjà résolus, graine de l'activation), sur le GPU du moteur.
+            public Sim(ResolvedParams p, int seed, Gpu gpu, ShaderLibrary lib, TextRaster text, uint w, uint h, long exitAt)
             {
-                P = Params.Resolve(def, variant, preset, overrides, durationMs, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true, level ?? DefaultLevel);
+                P = p;
                 Anim = new Animator(P.In, P.Out);
                 Anim.Start(0);
-                Fx = EffectCatalog.Create(def.Id);
-                Fx.Prepare(new EffectContext { Gpu = rig.Gpu, Shaders = rig.Lib, Text = rig.Text, P = P, Seed = seed });
+                Fx = EffectCatalog.Create(P.Def.Id);
+                Fx.Prepare(new EffectContext { Gpu = gpu, Shaders = lib, Text = text, P = P, Seed = seed });
                 Fx.Start();
-                F.P = P; F.Seed = seed; F.Width = rig.W; F.Height = rig.H;
-                Total = P.DurationMs + (P.Out.Instant ? 0 : P.Out.DurationMs);
+                F.P = P; F.Seed = seed; F.Width = w; F.Height = h;
+                ExitAt = exitAt >= 0 ? exitAt : P.DurationMs;
+                Total = ExitAt + (P.Out.Instant ? 0 : P.Out.DurationMs);
             }
-            /// Rend l'instant t (ms depuis le départ) dans fb ; la sortie commence à la fin de la durée.
+            /// Rend l'instant t (ms depuis le départ) dans fb ; la sortie commence à ExitAt (fin de la durée par défaut).
             public void Render(FrameBuilder fb, long t)
             {
-                if (t >= P.DurationMs) Anim.BeginExit(P.DurationMs);
-                F.Presence = Anim.Presence(t); F.NowMs = t; F.ElapsedMs = t; F.Exiting = t >= P.DurationMs;
+                if (t >= ExitAt) Anim.BeginExit(ExitAt);
+                F.Presence = Anim.Presence(t); F.NowMs = t; F.ElapsedMs = t; F.Exiting = t >= ExitAt;
                 fb.CurrentLabel = P.Def.Id;
                 Fx.Update(F);
                 Fx.Render(fb, F);

@@ -37,7 +37,8 @@ namespace Raptoru.Chaos
         public static readonly string[] Commands =
         {
             "hello", "ping", "describe", "status", "diagnostics", "targets.list", "effect.request", "effect.cancel", "effect.activate",
-            "effect.stop", "stop_all", "config.get", "config.set", "config.reset", "preset.set", "preset.delete", "shutdown"
+            "effect.stop", "stop_all", "config.get", "config.set", "config.reset", "preset.set", "preset.delete", "shutdown",
+            "obs.plan", "effect.obs_lost"
         };
         public static readonly string[] Sources = { "studio", "core", "extension", "channel_points", "test" };
         public static readonly string[] Policies = { "queue", "replace", "reject", "extend" };
@@ -86,8 +87,20 @@ namespace Raptoru.Chaos
                 target.Info["input"] = null;
                 target.Info["input_blocked"] = "source_" + kind;
             }
+            // Sorties : ["screen"] par défaut ; "obs" demande la sortie OBS (taille de la source obligatoire).
+            var outs = J.Strs(b, "outputs");
+            bool outScreen = true, outObs = false;
+            if (outs != null && outs.Count > 0)
+            {
+                if (outs.Any(o => o != "screen" && o != "obs")) throw new ProtocolError("invalid_outputs", "sorties : screen et/ou obs");
+                outScreen = outs.Contains("screen"); outObs = outs.Contains("obs");
+            }
+            var obs = J.Obj(b, "obs");
+            int obsW = (int)J.Num(obs, "width", 0), obsH = (int)J.Num(obs, "height", 0);
+            if (outObs && (obsW < 16 || obsH < 16 || obsW > 16384 || obsH > 16384)) throw new ProtocolError("invalid_outputs", "sortie OBS : obs.width et obs.height (taille de la source) obligatoires");
             return new EffectRequest
             {
+                OutScreen = outScreen, OutObs = outObs, ObsW = obsW, ObsH = obsH,
                 RequestId = rid, Def = def, Variant = J.Str(b, "variant", null), PresetName = presetName, Policy = policy, Priority = (int)prio,
                 SourceKind = kind, SourceRef = J.Str(src, "ref", null), Resolved = resolved, TargetKey = target.Key, TargetInfo = target.Info,
                 TargetHwnd = target.Hwnd, TargetMonitor = target.Kind == "monitor", TargetComposed = target.Kind == "screen", TargetHmon = target.Hmon, TargetDevice = target.Device
@@ -116,7 +129,8 @@ namespace Raptoru.Chaos
             var d = J.Map(
                 "request_id", r.RequestId, "effect", a.Def.Id, "effect_version", a.Def.Version, "state", a.State.ToString().ToLowerInvariant(),
                 "source", J.Map("kind", r.SourceKind, "ref", r.SourceRef), "priority", r.Priority, "target", r.TargetInfo,
-                "variant", r.Variant, "preset", r.PresetName, "resolved", r.Resolved.ToJson(), "started", a.StartedAt >= 0);
+                "variant", r.Variant, "preset", r.PresetName, "resolved", r.Resolved.ToJson(), "started", a.StartedAt >= 0,
+                "outputs", J.Map("screen", r.OutScreen, "obs", r.ObsLive, "obs_requested", r.OutObs, "obs_blocked", r.ObsBlocked));
             if (a.StartedAt >= 0) d["running_ms"] = (a.FinishedAt >= 0 ? a.FinishedAt : now) - a.StartedAt;
             if (a.StartedAt >= 0 && a.AcceptedAt >= 0) d["startup_ms"] = a.StartedAt - a.AcceptedAt; // acceptée → première image visible
             if (a.State == ActState.Active && a.EndAt != long.MaxValue) d["remaining_ms"] = Math.Max(0, a.EndAt - now);

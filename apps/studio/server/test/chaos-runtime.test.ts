@@ -204,7 +204,11 @@ describe('API locale Studio › Chaos', () => {
     });
     expect(forged.status).toBe(200);
     expect(forged.body).toMatchObject({ source: { kind: 'studio' } });
-    expect((await call('/stop-all', {})).body).toEqual({ stopped: 1 });
+    // STOP ALL coupe aussi les filtres Chaos V2 d'OBS (aucun ici : OBS absent).
+    expect((await call('/stop-all', {})).body).toEqual({
+      stopped: 1,
+      obs: { disabled: 0 },
+    });
     expect((await call('/rien')).status).toBe(404);
   });
 

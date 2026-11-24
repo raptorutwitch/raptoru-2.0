@@ -14,6 +14,7 @@ import {
   seg,
   stateChip,
   sw,
+  toast,
 } from '../ds/ds.js';
 import { getJson, postJson } from '../http.js';
 import {
@@ -35,6 +36,7 @@ import {
   side,
   viewerNote,
 } from './chaos-effects.js';
+import { mountObsPanel, obsChip, type ObsStatus } from './chaos-obs.js';
 import { mountPerfLab } from './chaos-perf.js';
 
 /** Aperçu rendu par le moteur (POST /api/chaos/preview) : grille d'images JPEG, deux séquences (début, fin). */
@@ -263,6 +265,7 @@ export function mountChaosPage(root: HTMLElement) {
   });
   p.body.innerHTML = `<div class="cx">
     <div class="cx__main">
+      <section class="cx-card cx-obs" aria-label="Diffusion OBS" data-z="obs" hidden></section>
       <section class="cx-card cx-perf" aria-label="Performance Lab" data-z="perf" hidden></section>
       <section class="cx-card cx-catcard" aria-label="Catalogue des effets">
         <header><h2>Effets</h2><span class="d-faint" data-z="catsub"></span><span class="d-sp"></span><label class="cx-inline">${sw(false, 'data-diag', 'Afficher les effets de diagnostic')}<span class="d-faint">Diagnostic</span></label></header>
@@ -366,7 +369,7 @@ export function mountChaosPage(root: HTMLElement) {
     patch(p.state, chip);
     patch(
       p.actions,
-      `<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-perf-open title="Mesurer le coût des effets : banc hors écran, puis validation en jeu">${ic('pulse')}Performance Lab</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
+      `<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-obs-open title="Chaos sur ton écran et sur la source gameplay d’OBS (mode C)">${ic('layers')}Diffusion OBS${obsChip(obsSt)}</button><button type="button" class="d-btn ghost" data-perf-open title="Mesurer le coût des effets : banc hors écran, puis validation en jeu">${ic('pulse')}Performance Lab</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
     );
   }
 
@@ -584,7 +587,12 @@ export function mountChaosPage(root: HTMLElement) {
     await run(
       btn,
       async () => {
-        await postJson('/api/chaos/activate', { effect, kind });
+        const r = await postJson<{ obs_output?: { note: string | null } }>(
+          '/api/chaos/activate',
+          { effect, kind },
+        );
+        // Écran + OBS incomplet : l'effet part sur l'écran seul, et le streamer le sait.
+        if (r.obs_output?.note) toast(r.obs_output.note, { bad: true });
         await refresh();
       },
       undefined,
@@ -874,6 +882,19 @@ export function mountChaosPage(root: HTMLElement) {
   }
   const poll = poller(refresh, 1000);
   const pollScreens = poller(loadScreens, 5000);
+  // Diffusion OBS (chaos-obs.ts) : mode C, source gameplay, filtres ; sa puce dans l'en-tête.
+  let obsSt: ObsStatus | null = null;
+  const obsPanel = mountObsPanel(z('obs'), {
+    monitors: () => monitors,
+    effects: () =>
+      (ctx()?.reg.effects ?? [])
+        .filter((x) => !x.internal)
+        .map((x) => ({ id: x.id, label: x.label })),
+    onStatus: (s) => {
+      obsSt = s;
+      paintHead();
+    },
+  });
   // Performance Lab (chaos-perf.ts) : son propre relevé, seulement quand il est ouvert.
   const perfLab = mountPerfLab(z('perf'), {
     monitors: () => monitors,
@@ -890,6 +911,7 @@ export function mountChaosPage(root: HTMLElement) {
     const b = t.closest<HTMLElement>('button');
     if (!b) return;
     if (b.matches('[data-perf-open]')) return perfLab.toggle();
+    if (b.matches('[data-obs-open]')) return obsPanel.toggle();
     if (b.matches('[data-stopall]'))
       void run(
         b,

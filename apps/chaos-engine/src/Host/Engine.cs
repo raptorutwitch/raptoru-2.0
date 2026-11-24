@@ -176,12 +176,27 @@ namespace Raptoru.Chaos
                 if (e.Kind == "accepted") StartInstance(e.A);
                 if (e.A.State == ActState.Finished) FinishInstance(e.A);
                 io.Send(Protocol.EffectEvent(e, Now));
+                // Prolongation (ou durée allongée avant le départ) : la sortie OBS suit la nouvelle fin.
+                if ((e.Kind == "extended" || e.Kind == "started") && e.A.Req.ObsLive && e.A.State == ActState.Active) ObsRetime(e.A, e.Kind);
             }
         }
 
         void StartInstance(Activation a)
         {
             var inst = new EffectInstance(a, EffectCatalog.Create(a.Def.Id)) { Seed = EffectCatalog.SeedOf(a.Req.RequestId) };
+            // Sortie OBS : la partition est calculée AVANT la première image (même graine, mêmes paramètres) et publiée ;
+            // Studio règle les filtres, puis les active au départ (effect.started). Impossible : la sortie OBS est retirée
+            // et le dit (le calque, non exclu, reste visible par la capture d'écran : une seule application).
+            if (a.Req.OutObs) ObsStart(a, inst.Seed);
+            if (!a.Req.OutScreen)
+            {
+                // Sortie OBS seule : aucun calque. Sans sortie OBS possible, l'activation échoue (rien ne serait montré).
+                if (!a.Req.ObsLive) { sched.MarkFailed(a.Req.RequestId, "obs_unavailable", "sortie OBS impossible : " + a.Req.ObsBlocked); return; }
+                instances[a.Req.RequestId] = inst;
+                inst.State = InstanceState.Running;
+                sched.MarkStarted(a.Req.RequestId);
+                return;
+            }
             SurfaceEntry s;
             try { s = Attach(a); }
             catch (CaptureError e) { tel.Error(e.Code); sched.MarkFailed(a.Req.RequestId, e.Code, e.Message); return; }
@@ -219,7 +234,8 @@ namespace Raptoru.Chaos
                 }
                 Surface surf;
                 // Exclue des captures dès sa création seulement si elle lit la capture de son propre écran (mode C).
-                try { surf = new Surface(gpu, r.TargetKey, r.TargetHwnd, r.TargetHmon, w, h, r.TargetComposed, cap != null && cap.CapturesScreen && !r.TargetComposed); }
+                // Sortie OBS vivante : exclue aussi (OBS applique l'effet lui-même ; le calque ne doit jamais s'y ajouter).
+                try { surf = new Surface(gpu, r.TargetKey, r.TargetHwnd, r.TargetHmon, w, h, r.TargetComposed, cap != null && cap.CapturesScreen && !r.TargetComposed || r.ObsLive); }
                 catch (Exception) { if (cap != null) caps.Release(capKey, Now); throw; }
                 s = new SurfaceEntry { S = surf, Cap = cap, CapKey = cap != null ? capKey : null, CaptureUsers = cap != null ? 1 : 0, FirstWaitAt = Now, Device = r.TargetDevice, Fb = new FrameBuilder(w, h, cap != null) };
                 surfaces[r.TargetKey] = s;
@@ -352,15 +368,24 @@ namespace Raptoru.Chaos
             bool needsCapture = s.Cap != null;
             // Exclusion des captures (docs/chaos/ECRAN_ENTIER.md) : seulement tant que la surface lit une capture de son
             // propre écran ; sinon la capture d'écran d'OBS la voit. Images composées avant l'exclusion ignorées.
-            bool excl = needsCapture && s.Cap.CapturesScreen;
+            // Mode C (docs/chaos/MODE_C.md) : exclue aussi tant qu'un effet de la surface passe par la sortie OBS.
+            bool selfCapture = needsCapture && s.Cap.CapturesScreen, obsOut = false;
+            foreach (var e in s.Effects) if (e.A.Req.ObsLive && e.A.State != ActState.Finished) obsOut = true;
+            bool excl = selfCapture || obsOut;
             if (excl != s.S.Excluded)
             {
                 if (!s.S.SetExcluded(excl))
                 {
-                    foreach (var e in live) sched.MarkFailed(e.A.Req.RequestId, "exclusion_failed", "impossible d'exclure le calque des captures : il se capturerait lui-même");
-                    return;
+                    if (selfCapture)
+                    {
+                        foreach (var e in live) sched.MarkFailed(e.A.Req.RequestId, "exclusion_failed", "impossible d'exclure le calque des captures : il se capturerait lui-même");
+                        return;
+                    }
+                    // Sortie OBS : sans exclusion, OBS verrait le calque ET appliquerait son filtre. La sortie OBS est
+                    // retirée (Studio coupe ses filtres) ; le calque reste visible par la capture d'écran : une application.
+                    foreach (var e in s.Effects) if (e.A.Req.ObsLive) ObsBlock(e.A, "exclusion_failed");
                 }
-                if (excl && s.S.Shown) s.Cap.NotBefore(N.QpcNow());
+                else if (excl && s.S.Shown && needsCapture) s.Cap.NotBefore(N.QpcNow());
             }
             double rate = RateHz(s);
             bool capped = rate < s.S.RefreshHz - 0.5;
@@ -720,6 +745,57 @@ namespace Raptoru.Chaos
         }
 
         // ---------- Commandes ----------
+        // ---------- Sortie OBS (mode C, docs/chaos/MODE_C.md) ----------
+        string ObsDir(string sub) { return Path.Combine(opt.StateDir ?? Path.GetDirectoryName(opt.ConfigPath) ?? ".", "obs", sub); }
+
+        /// Partition de l'activation à son départ (avant la première image) : publiée en effect.obs (phase « prepare »).
+        void ObsStart(Activation a, int seed)
+        {
+            var r = a.Req;
+            string refusal;
+            Dictionary<string, object> session = null;
+            try { session = ObsExport.Session(r.Resolved, seed, gpu, lib, text, (uint)r.ObsW, (uint)r.ObsH, 0, r.Resolved.DurationMs, ObsDir("tracks"), r.RequestId, true, out refusal); }
+            catch (Exception e) { refusal = "export : " + e.Message; }
+            if (session == null) { ObsBlock(a, refusal); return; }
+            a.ObsExitAt = r.Resolved.DurationMs;
+            session["phase"] = "prepare";
+            session["request_id"] = r.RequestId; session["effect"] = a.Def.Id;
+            io.Send(Protocol.Event("effect.obs", Now, session));
+        }
+
+        /// Sortie qui ne commence plus à la fin prévue (arrêt anticipé, prolongation) : nouvelle partition à partir de
+        /// maintenant (phase « retime ») ; les deux sorties gardent la même animation de sortie.
+        void ObsRetime(Activation a, string why)
+        {
+            if (!a.Req.ObsLive || a.StartedAt < 0) return;
+            long now = Now, from = Math.Max(0, now - a.StartedAt);
+            long exitAt = a.State == ActState.Exiting ? from : (a.EndAt == long.MaxValue ? a.Req.Resolved.DurationMs : a.EndAt - a.StartedAt);
+            if (exitAt == a.ObsExitAt) return;
+            EffectInstance inst;
+            int seed = instances.TryGetValue(a.Req.RequestId, out inst) ? inst.Seed : EffectCatalog.SeedOf(a.Req.RequestId);
+            string refusal;
+            Dictionary<string, object> session = null;
+            try { session = ObsExport.Session(a.Req.Resolved, seed, gpu, lib, text, (uint)a.Req.ObsW, (uint)a.Req.ObsH, from, exitAt, ObsDir("tracks"), a.Req.RequestId, false, out refusal); }
+            catch (Exception e) { refusal = "export : " + e.Message; }
+            if (session == null) { ObsBlock(a, refusal); return; }
+            a.ObsExitAt = exitAt;
+            session["phase"] = "retime"; session["why"] = why;
+            session["request_id"] = a.Req.RequestId; session["effect"] = a.Def.Id;
+            io.Send(Protocol.Event("effect.obs", now, session));
+        }
+
+        void ObsAfterStop(Activation a)
+        {
+            if (a != null && a.State == ActState.Exiting) ObsRetime(a, "stop");
+        }
+
+        /// Retire la sortie OBS d'une activation (Studio coupe ses filtres) : phase « blocked ».
+        void ObsBlock(Activation a, string reason)
+        {
+            a.Req.ObsBlocked = reason ?? "indisponible";
+            io.Send(Protocol.Event("effect.obs", Now, J.Map("phase", "blocked", "request_id", a.Req.RequestId, "effect", a.Def.Id, "reason", a.Req.ObsBlocked)));
+        }
+
         Dictionary<string, object> Hello()
         {
             return J.Map("engine", "raptoru-chaos-engine", "version", Program.Version, "protocol", Protocol.Version, "registry_version", reg.Version,
@@ -782,15 +858,26 @@ namespace Raptoru.Chaos
                 case "effect.cancel":
                     string rid = J.Str(b, "request_id", null);
                     if (sched.Find(rid) == null) throw new ProtocolError("unknown_request", "demande inconnue : " + rid);
-                    return J.Map("canceled", sched.Cancel(rid, J.Bool(b, "immediate", false), J.Str(b, "reason", "canceled")));
+                    bool canceled = sched.Cancel(rid, J.Bool(b, "immediate", false), J.Str(b, "reason", "canceled"));
+                    ObsAfterStop(sched.Find(rid));
+                    return J.Map("canceled", canceled);
                 case "effect.activate": return Activate(b);
                 case "effect.stop":
                     string eid = J.Str(b, "effect", null);
                     if (reg.Get(eid) == null) throw new ProtocolError("unknown_effect", "effet inconnu : " + eid);
                     int stopped = 0;
                     foreach (var act in sched.Running.Concat(sched.Queued).Where(x => x.Def.Id == eid).ToList())
-                        if (sched.Cancel(act.Req.RequestId, J.Bool(b, "immediate", false), "stopped")) stopped++;
+                        if (sched.Cancel(act.Req.RequestId, J.Bool(b, "immediate", false), "stopped")) { stopped++; ObsAfterStop(act); }
                     return J.Map("effect", eid, "stopped", stopped);
+                case "obs.plan":
+                    ObsExport.Clean(ObsDir("tracks"));
+                    return ObsExport.Plan(reg, gpu, lib, text, ObsDir("fx"));
+                case "effect.obs_lost":
+                    // Studio a perdu la sortie OBS d'une activation (OBS fermé, filtre introuvable) : le calque n'est plus
+                    // exclu des captures (la capture d'écran d'OBS, si elle revient, le voit : une application).
+                    var lost = sched.Find(J.Str(b, "request_id", null));
+                    if (lost != null && lost.Req.ObsLive) ObsBlock(lost, J.Str(b, "reason", "obs_lost"));
+                    return J.Map("request_id", J.Str(b, "request_id", null), "outputs", lost != null ? Protocol.View(lost, Now)["outputs"] : null);
                 case "stop_all": return J.Map("stopped", sched.StopAll(J.Str(b, "reason", "stop_all")));
                 case "config.get": return cfg.ToJson();
                 case "config.set":
@@ -844,10 +931,23 @@ namespace Raptoru.Chaos
             var screens = ScreenLayout.Resolve(es.Screen, Targets.Screens(), out err);
             if (err != null) throw new ProtocolError("screen_missing", err);
             var reqs = new List<EffectRequest>();
+            var outs = J.Strs(b, "outputs");
+            var obs = J.Obj(b, "obs");
+            string obsDev = J.Str(obs, "device", null);
+            bool wantScreen = outs.Count == 0 || outs.Contains("screen"), wantObs = outs.Contains("obs");
+            bool obsTargeted = wantObs && obsDev != null && screens.Any(x => string.Equals(x.Device, obsDev, StringComparison.OrdinalIgnoreCase));
+            if (wantObs && !wantScreen && !obsTargeted)
+                throw new ProtocolError("screen_missing", "la source OBS capture l'écran " + (obsDev ?? "?") + ", que cette fiche ne vise pas");
             for (int i = 0; i < screens.Count; i++)
             {
+                bool here = obsTargeted && string.Equals(screens[i].Device, obsDev, StringComparison.OrdinalIgnoreCase);
+                if (!wantScreen && !here) continue;
                 var body = J.Map("request_id", screens.Count > 1 && rid != null ? rid + ":" + (i + 1) : rid, "effect", id, "source", J.Obj(b, "source"),
                     "target", J.Map("kind", "screen", "device", screens[i].Device));
+                var o = new List<object>();
+                if (wantScreen) o.Add("screen");
+                if (here) { o.Add("obs"); body["obs"] = J.Map("width", J.Num(obs, "width", 0), "height", J.Num(obs, "height", 0)); }
+                body["outputs"] = o;
                 if (kind == "test")
                 {
                     var preset = cfg.GetPreset(id, "default");
@@ -860,7 +960,8 @@ namespace Raptoru.Chaos
                 reqs.Add(req);
             }
             var views = reqs.Select(r => (object)Protocol.View(sched.Submit(r), Now)).ToArray();
-            return J.Map("effect", id, "kind", kind, "screen", es.Screen, "activations", views);
+            return J.Map("effect", id, "kind", kind, "screen", es.Screen, "activations", views,
+                "obs", wantObs ? J.Map("device", obsDev, "targeted", obsTargeted) : null);
         }
 
         Dictionary<string, object> Status(long now)

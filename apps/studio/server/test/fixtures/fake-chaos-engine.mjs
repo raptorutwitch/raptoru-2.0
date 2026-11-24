@@ -38,6 +38,8 @@ out({
           'preset.set',
           'preset.delete',
           'shutdown',
+          'obs.plan',
+          'effect.obs_lost',
         ],
       }),
 });

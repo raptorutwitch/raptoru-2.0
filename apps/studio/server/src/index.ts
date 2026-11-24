@@ -1618,6 +1618,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         join(REPO_ROOT, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe'),
       stateDir: labModuleDir('chaos'),
       log: (line) => lab.logs.add('studio', line),
+      // Diffusion OBS (mode C) : la seule connexion OBS de Studio (celle du Bonk), comme Halloween.
+      obs: () => bonk?.obs ?? null,
     })),
     // Chatbox Raptoru (docs/CHATBOX.md): the Lab keeps its own settings; the real channel's emotes (public catalogues).
     chatbox: (chatboxRef = await createChatboxHost({

@@ -27,10 +27,11 @@ namespace Raptoru.Chaos
         static readonly string[] Vecs = { "u0", "u1", "u2", "u3", "rect", "view", "misc", "color", "u4", "u5", "u6", "u7", "ext" };
         const int Slots = 52, On = 48;
 
-        /// Une passe de l'effet : un filtre OBS (passe sur l'image, ou calque composé sur l'image).
+        /// Une passe de l'effet : un filtre OBS (passe sur l'image, ou calque composé sur l'image). Clé stable : shader,
+        /// nature et rang parmi les passes du même shader (« transform », « transform#2 », « fog@calque »).
         public sealed class Op
         {
-            public string Shader; public bool Overlay;
+            public string Shader, Key; public bool Overlay;
             public readonly List<float[]> Frames = new List<float[]>();
         }
 
@@ -42,21 +43,44 @@ namespace Raptoru.Chaos
             public int Count;
         }
 
-        /// Joue l'activation d'avance (60 images/s, de 0 à la fin de la sortie) et relève les constantes de chaque passe.
-        public static Recording Record(EffectPreview.Sim sim, uint w, uint h)
+        static float[] Off() { return new float[Slots]; }
+
+        /// Joue l'activation d'avance à 60 images/s, de fromMs (temps de l'effet) à la fin de la sortie, ou aux seuls
+        /// instants donnés (plan), et relève les constantes de chaque passe. Une passe absente d'une image y est
+        /// « éteinte » (le filtre rend l'image intacte) : la suite de passes peut varier pendant l'effet.
+        public static Recording Record(EffectPreview.Sim sim, uint w, uint h, long fromMs = 0, IList<long> only = null)
         {
             var rec = new Recording();
             var fb = new FrameBuilder(w, h, true);
-            int n = (int)Math.Ceiling(sim.Total * Rate / 1000.0) + 1;
+            int n = only != null ? only.Count : (int)Math.Ceiling(Math.Max(0, sim.Total - fromMs) * Rate / 1000.0) + 1;
             var seen = new HashSet<string>();
+            var byKey = new Dictionary<string, Op>();
+            var counts = new Dictionary<string, int>();
+            var present = new HashSet<Op>();
             for (int k = 0; k < n && rec.Refusal == null; k++)
             {
-                long t = (long)Math.Round(k * 1000.0 / Rate);
+                long t = only != null ? only[k] : fromMs + (long)Math.Round(k * 1000.0 / Rate);
                 fb.Reset(w, h, true);
                 sim.Render(fb, t);
-                if (fb.RetainCount > 0) { rec.Refusal = "image retenue (flash) : pas encore exportée"; break; }
-                var frame = new List<KeyValuePair<Op, float[]>>();
-                for (int i = 0; i < fb.PassCount; i++)
+                if (fb.RetainCount > 0) { rec.Refusal = "image retenue (flash) : pas d'image figée dans un filtre OBS sans état"; break; }
+                counts.Clear(); present.Clear();
+                Action<string, bool, float[]> add = (shader, overlay, v) =>
+                {
+                    string baseKey = shader + (overlay ? "@calque" : "");
+                    int c; counts.TryGetValue(baseKey, out c); counts[baseKey] = ++c;
+                    string key = c == 1 ? baseKey : baseKey + "#" + c;
+                    Op op;
+                    if (!byKey.TryGetValue(key, out op))
+                    {
+                        byKey[key] = op = new Op { Shader = shader, Overlay = overlay, Key = key };
+                        rec.Ops.Add(op);
+                        while (op.Frames.Count < k) op.Frames.Add(Off());
+                    }
+                    v[16] = 0; v[17] = 0; v[18] = 1; v[19] = 1; v[On] = 1;
+                    op.Frames.Add(v);
+                    present.Add(op);
+                };
+                for (int i = 0; i < fb.PassCount && rec.Refusal == null; i++)
                 {
                     var p = fb.PassAt(i);
                     if (p.Aux != IntPtr.Zero) { rec.Refusal = "seconde texture (" + p.Shader + ")"; break; }
@@ -65,7 +89,7 @@ namespace Raptoru.Chaos
                     v[24] = t / 1000f; v[26] = 1; v[27] = p.Lod;
                     if (p.NeedsBlurredInput && seen.Add("mips:" + p.Shader))
                         rec.Warnings.Add(p.Shader + " lit des niveaux de flou (mips) : approchés dans OBS par 9 lectures");
-                    frame.Add(new KeyValuePair<Op, float[]>(new Op { Shader = p.Shader }, v));
+                    add(p.Shader, false, v);
                 }
                 for (int i = 0; i < fb.LayerCount && rec.Refusal == null; i++)
                 {
@@ -78,28 +102,16 @@ namespace Raptoru.Chaos
                     v[24] = t / 1000f; v[26] = (float)Math.Max(0, Math.Min(1, l.Opacity));
                     if (l.Scale < 0.999 && seen.Add("scale:" + l.Shader))
                         rec.Warnings.Add(l.Shader + " : calque rendu par le moteur à " + Math.Round(l.Scale * 100) + " % de la résolution, à 100 % dans OBS");
-                    frame.Add(new KeyValuePair<Op, float[]>(new Op { Shader = l.Shader, Overlay = true }, v));
+                    add(l.Shader, true, v);
                 }
                 if (rec.Refusal != null) break;
-                // Même suite de passes à chaque image (ou aucune : image intacte) : sinon, pas de filtres fixes possibles.
-                if (frame.Count > 0)
-                {
-                    if (rec.Ops.Count == 0) foreach (var kv in frame) rec.Ops.Add(kv.Key);
-                    else if (frame.Count != rec.Ops.Count || frame.Where((kv, i) => kv.Key.Shader != rec.Ops[i].Shader || kv.Key.Overlay != rec.Ops[i].Overlay).Any())
-                    { rec.Refusal = "suite de passes variable à " + t + " ms"; break; }
-                }
-                // Les passes déjà connues reçoivent leur image (ou une image « éteinte » quand l'effet ne dessine rien).
-                while (rec.Ops.Count > 0 && rec.Ops[0].Frames.Count < k) foreach (var op in rec.Ops) op.Frames.Add(new float[Slots]);
-                for (int i = 0; i < rec.Ops.Count; i++)
-                {
-                    float[] v = frame.Count > 0 ? frame[i].Value : new float[Slots];
-                    v[16] = 0; v[17] = 0; v[18] = 1; v[19] = 1;
-                    v[On] = frame.Count > 0 ? 1 : 0;
-                    rec.Ops[i].Frames.Add(v);
-                }
+                foreach (var op in rec.Ops) if (!present.Contains(op)) op.Frames.Add(Off());
                 rec.Count = k + 1;
             }
-            if (rec.Refusal == null && rec.Ops.Count == 0) rec.Refusal = "l'effet ne dessine rien";
+            // Ordre des filtres : passes sur l'image d'abord, calques ensuite (le moteur pose ses calques après ses passes).
+            var sorted = rec.Ops.OrderBy(o => o.Overlay ? 1 : 0).ToList();
+            rec.Ops.Clear(); rec.Ops.AddRange(sorted);
+            if (rec.Refusal == null && rec.Ops.Count == 0 && only == null) rec.Refusal = "l'effet ne dessine rien";
             return rec;
         }
 
@@ -179,7 +191,11 @@ namespace Raptoru.Chaos
             s.Append("// Raptoru Chaos (Studio) — ").Append(title).Append(" : shader « ").Append(shader).Append(" » du moteur.\n");
             s.Append("// Généré par ChaosEngine.exe --obs-export ; Studio le règle pendant un effet. Ne pas modifier.\n");
             s.Append("uniform float4x4 ViewProj;\nuniform texture2d image;\nuniform float elapsed_time_enable;\nuniform float2 uv_size;\n");
-            s.Append("uniform texture2d chaos_track;\nuniform float chaos_frames = 0.0;\nuniform float chaos_rate = 60.0;\nuniform float chaos_time = -1.0;\n");
+            s.Append("uniform float local_time;\nuniform texture2d chaos_track;\nuniform float chaos_frames = 0.0;\nuniform float chaos_rate = 60.0;\nuniform float chaos_time = -1.0;\n");
+            // Session : début de la partition (temps de l'effet, s) ; fenêtre de validité en horloge système (s depuis le
+            // démarrage de Windows, l'horloge d'OBS) : un filtre resté actif ne rejoue jamais un effet expiré (OBS relancé,
+            // Studio absent).
+            s.Append("uniform float chaos_t_base = 0.0;\nuniform float chaos_since = 0.0;\nuniform float chaos_expires = 0.0;\n");
             for (int v = 0; v < Vecs.Length; v++)
             {
                 if (!usedVecs.Contains(Vecs[v]) || Vecs[v] == "rect" || Vecs[v] == "view") continue;
@@ -250,8 +266,10 @@ CC chaos_constants(float x)
             s.Append(@"float4 PSChaos(V v_in) : TARGET
 {
 	float4 base = image.Sample(chaos_smp, v_in.uv);
+	if (chaos_expires > 0.0 && (local_time > chaos_expires || local_time < chaos_since))
+		return base;
 	float t = chaos_time >= 0.0 ? chaos_time : elapsed_time_enable;
-	float x = floor(t * chaos_rate + 0.5);
+	float x = floor(max(0.0, t - chaos_t_base) * chaos_rate + 0.5);
 	if (x >= chaos_frames)
 		return base;
 	CC c = chaos_constants(x);
@@ -312,6 +330,133 @@ CC chaos_constants(float x)
             settings["chaos_rate"] = (double)Rate;
             settings["chaos_time"] = -1.0;
             return settings;
+        }
+
+        // ---------- Sessions (moteur en marche) : une activation, deux sorties ----------
+        static string Safe(string s) { return Regex.Replace(s ?? "", @"[^A-Za-z0-9_.\-]", "_"); }
+        static double QpcSeconds() { return N.QpcNow() / (double)N.QpcFreq(); }
+        /// Marge de la fenêtre de validité d'une session : démarrage (attente de la première image, 20 s au plus), puis
+        /// décalage OBS / moteur et arrêt par Studio.
+        const double StartAllowanceS = 22, EndMarginS = 3;
+
+        /// Sortie OBS d'une activation : la même réplique (paramètres résolus, graine, entrée et sortie) jouée de fromMs à
+        /// la fin de sa sortie (qui commence à exitAtMs), une partition par passe, et les réglages à poser sur chaque filtre.
+        /// refusal : effet impossible dans un filtre OBS (flash), sans fichier écrit.
+        public static Dictionary<string, object> Session(ResolvedParams p, int seed, Gpu gpu, ShaderLibrary lib, TextRaster text,
+            uint w, uint h, long fromMs, long exitAtMs, string dir, string requestId, bool starting, out string refusal)
+        {
+            var sim = new EffectPreview.Sim(p, seed, gpu, lib, text, w, h, exitAtMs);
+            Recording rec;
+            try { rec = Record(sim, w, h, fromMs); }
+            finally { sim.Fx.Dispose(); }
+            refusal = rec.Refusal;
+            if (refusal != null) return null;
+            Directory.CreateDirectory(dir);
+            double now = QpcSeconds(), span = (sim.Total - fromMs) / 1000.0;
+            var filters = new List<object>();
+            foreach (var op in rec.Ops)
+            {
+                HashSet<string> used;
+                EffectText(op.Shader, op.Overlay, op.Shader, out used);
+                var act = Track(op, used, Path.Combine(dir, Safe(requestId) + "-" + (fromMs > 0 ? fromMs + "-" : "") + Safe(op.Key) + ".png"));
+                act["chaos_t_base"] = fromMs / 1000.0;
+                act["chaos_since"] = now - 2;
+                act["chaos_expires"] = now + span + (starting ? StartAllowanceS : 0) + EndMarginS;
+                filters.Add(J.Map("key", p.Def.Id + ":" + op.Key, "shader", op.Shader, "kind", op.Overlay ? "overlay" : "filter", "settings", act));
+            }
+            return J.Map("filters", filters.ToArray(), "frames", rec.Count, "from_ms", fromMs, "exit_at_ms", exitAtMs, "total_ms", sim.Total,
+                "warnings", rec.Warnings.ToArray());
+        }
+
+        /// Partitions de plus d'une heure : supprimées (une session dure au plus quelques minutes).
+        public static void Clean(string dir)
+        {
+            try
+            {
+                if (!Directory.Exists(dir)) return;
+                foreach (var f in Directory.GetFiles(dir, "*.png"))
+                    if (File.GetLastWriteTimeUtc(f) < DateTime.UtcNow.AddHours(-1)) File.Delete(f);
+            }
+            catch (Exception) { }
+        }
+
+        static readonly Dictionary<string, string> Roles = new Dictionary<string, string>
+        {
+            { "transform", "cadrage" }, { "drunk", "déformation" }, { "tunnel", "voile" }, { "eyelids", "paupières" }, { "fog", "brouillard" },
+            { "blur", "flou" }, { "pixelate", "pixels" }, { "color", "couleur" }, { "vhs", "VHS" }
+        };
+
+        /// Plan des filtres OBS (préparation dans Studio) : pour chaque effet public, ses passes possibles (toutes
+        /// variantes et tous niveaux, relevées à quelques instants), le nom de chaque filtre (espace « Raptoru Chaos V2 »,
+        /// distinct des filtres V1), son fichier .effect (un par shader, nom = empreinte du contenu : un shader changé =
+        /// un nouveau fichier, rechargé par shaderfilter) et sa place dans la chaîne. Effet impossible : sa raison.
+        public static Dictionary<string, object> Plan(Registry reg, Gpu gpu, ShaderLibrary lib, TextRaster text, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            var safety = new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs };
+            var effects = new Dictionary<string, object>();
+            var passes = new List<object[]>();   // ordre de la chaîne : passes (par ordre des effets), puis calques
+            var files = new Dictionary<string, string>();
+            var hashes = new List<string>();
+            foreach (var def in reg.Effects.Values.Where(d => !d.Internal).OrderBy(d => d.Order).ThenBy(d => d.Id))
+            {
+                var ops = new List<Op>();
+                var warnings = new HashSet<string>();
+                string refusal = null;
+                var variants = new List<string> { null }; variants.AddRange(def.Variants.Keys);
+                var levels = new List<string> { null }; levels.AddRange(def.Levels.Select(kv => kv.Key));
+                foreach (var v in variants)
+                    foreach (var l in levels)
+                    {
+                        if (refusal != null) break;
+                        var p = Params.Resolve(def, v, null, null, null, null, reg.Limits, safety, true, l);
+                        var sim = new EffectPreview.Sim(p, 4242, gpu, lib, text, 160, 90, -1);
+                        Recording rec;
+                        var at = new List<long> { 150, 400, 900, 1800, 3500, p.DurationMs / 2, Math.Max(0, p.DurationMs - 200), p.DurationMs + 100 };
+                        try { rec = Record(sim, 160, 90, 0, at.Distinct().OrderBy(x => x).ToList()); }
+                        finally { sim.Fx.Dispose(); }
+                        if (rec.Refusal != null) { refusal = rec.Refusal; break; }
+                        foreach (var w in rec.Warnings) warnings.Add(w);
+                        foreach (var op in rec.Ops) if (!ops.Any(o => o.Key == op.Key)) ops.Add(op);
+                    }
+                var list = new List<object>();
+                if (refusal == null)
+                {
+                    ops = ops.OrderBy(o => o.Overlay ? 1 : 0).ToList();
+                    foreach (var op in ops)
+                    {
+                        string fk = op.Shader + (op.Overlay ? "-calque" : "");
+                        string file;
+                        if (!files.TryGetValue(fk, out file))
+                        {
+                            HashSet<string> used;
+                            string textFx = EffectText(op.Shader, op.Overlay, op.Shader, out used);
+                            string hash;
+                            using (var sha = System.Security.Cryptography.SHA1.Create())
+                                hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(textFx))).Replace("-", "").Substring(0, 10).ToLowerInvariant();
+                            file = Path.Combine(dir, fk + "-" + hash + ".effect");
+                            if (!File.Exists(file)) File.WriteAllText(file, textFx, new UTF8Encoding(false));
+                            files[fk] = file = Path.GetFullPath(file).Replace('\\', '/');
+                            hashes.Add(hash);
+                        }
+                        string role;
+                        if (!Roles.TryGetValue(op.Shader, out role)) role = op.Shader;
+                        int hashIdx = op.Key.IndexOf('#');
+                        string name = "Raptoru Chaos V2 · " + def.Label + (ops.Count > 1 ? " · " + role + (hashIdx > 0 ? " " + op.Key.Substring(hashIdx + 1) : "") : "");
+                        var f = J.Map("key", def.Id + ":" + op.Key, "name", name, "shader", op.Shader, "kind", op.Overlay ? "overlay" : "filter", "effect_file", file);
+                        list.Add(f);
+                        passes.Add(new object[] { op.Overlay ? 1 : 0, f });
+                    }
+                }
+                effects[def.Id] = J.Map("label", def.Label, "available", refusal == null, "reason", refusal, "warnings", warnings.ToArray(), "filters", list.ToArray());
+            }
+            int order = 0;
+            foreach (var pf in passes.OrderBy(x => (int)x[0])) ((Dictionary<string, object>)pf[1])["order"] = order++;
+            hashes.Sort(StringComparer.Ordinal);
+            string version;
+            using (var sha = System.Security.Cryptography.SHA1.Create())
+                version = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join(",", hashes)))).Replace("-", "").Substring(0, 12).ToLowerInvariant();
+            return J.Map("version", version, "dir", Path.GetFullPath(dir).Replace('\\', '/'), "effects", effects);
         }
 
         /// --obs-export <effet> <variante|-> --out <dossier> [--level --seed --duration-ms --params JSON --w --h

@@ -663,3 +663,55 @@ kbd {
     transition: none;
   }
 }
+
+/* Diffusion OBS (pages/chaos-obs.ts) : mode C, source gameplay, filtres Chaos V2. */
+.cx-obs[hidden] {
+  display: none;
+}
+.cx-obs > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+.cx-obs .d-row select {
+  max-width: min(320px, 100%);
+}
+.cx-obs .cx-ctl {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cx-obs__note,
+.cx-obs__inc {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.cx-obs__inc {
+  color: var(--warn, var(--ink2));
+}
+.cx-obs__pv,
+.cx-obs__warn {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.cx-obs__pv p {
+  margin: 6px 0;
+}
+.cx-obs__warn {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+[data-obs-open] .d-state {
+  margin-left: 6px;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  [data-obs-open] .d-state {
+    display: none;
+  }
+}

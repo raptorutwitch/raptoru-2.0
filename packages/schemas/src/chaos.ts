@@ -23,6 +23,8 @@ export const CHAOS_COMMANDS = [
   'preset.set',
   'preset.delete',
   'shutdown',
+  'obs.plan',
+  'effect.obs_lost',
 ] as const;
 export type ChaosCommand = (typeof CHAOS_COMMANDS)[number];
 

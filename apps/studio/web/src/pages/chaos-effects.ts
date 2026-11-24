@@ -115,6 +115,13 @@ export interface EffectView {
   };
   remaining_ms?: number;
   resolved: { duration_ms: number };
+  /** Sorties de la session (mode C) : écran, OBS, et pourquoi la sortie OBS a été retirée. */
+  outputs?: {
+    screen: boolean;
+    obs: boolean;
+    obs_requested: boolean;
+    obs_blocked: string | null;
+  };
 }
 export interface Mon {
   device: string;
@@ -231,11 +238,23 @@ export function screenChoice(c: FxCtx, id: string) {
 const stateLine = (c: FxCtx, d: EffectDef) => {
   const s = fxState(c, d.id);
   if (s.exiting) return stateChip('w', 'Se termine');
-  if (s.on)
+  if (s.on) {
+    // Mode C : les deux sorties de la session, et la raison d'une sortie OBS retirée.
+    const out = s.rows.find((v) => v.state !== 'queued')?.outputs;
+    const where = out
+      ? out.screen && out.obs
+        ? ' · écran + OBS'
+        : out.obs
+          ? ' · OBS seulement'
+          : out.obs_requested
+            ? ' · écran seulement (sortie OBS coupée)'
+            : ''
+      : '';
     return stateChip(
-      'live',
-      `En cours${s.remaining >= 0 ? ` · reste ${secs(s.remaining)}` : ''}${s.where.length ? ` · ${s.where.join(', ')}` : ''}`,
+      out?.obs_requested && !out.obs ? 'w' : 'live',
+      `En cours${s.remaining >= 0 ? ` · reste ${secs(s.remaining)}` : ''}${s.where.length ? ` · ${s.where.join(', ')}` : ''}${where}`,
     );
+  }
   if (s.queued) return stateChip('w', 'En file');
   return settings(c, d.id).enabled
     ? stateChip('', 'Prêt')

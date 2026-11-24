@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { join } from 'node:path';
 import {
   CHAOS_COMMANDS,
   chaosEffectRequestSchema,
@@ -17,6 +18,8 @@ import {
   PerfLab,
   reportHtml,
 } from './perf.js';
+import type { ObsLike } from '../channel-points/obs-actions.js';
+import { ChaosObsError, ChaosObsOutput } from './obs-output.js';
 import { PreviewError, renderPreview } from './preview.js';
 
 // Studio › Chaos (docs/chaos/ARCHITECTURE_MOTEUR.md) : l'API locale de la page Chaos. Elle ne décide rien : elle relaie
@@ -31,6 +34,7 @@ const STATUS: Record<string, number> = {
   engine_exited: 503,
   engine_timeout: 504,
   invalid_request: 400,
+  obs_offline: 503,
 };
 
 export class ChaosRuntime {
@@ -41,9 +45,29 @@ export class ChaosRuntime {
   private telemetry: ChaosEvent | null = null;
   private registry: Record<string, unknown> | null = null;
 
-  constructor(private readonly opts: ChaosEngineOptions) {
+  /** Diffusion OBS (mode C, docs/chaos/MODE_C.md) : la sortie OBS des activations, sur la connexion OBS de Studio. */
+  readonly obsOut: ChaosObsOutput;
+
+  constructor(
+    private readonly opts: ChaosEngineOptions & {
+      /** La seule connexion OBS de Studio (celle du Bonk) ; absente : diffusion OBS indisponible. */
+      obs?: () => ObsLike | null;
+    },
+  ) {
     const o = opts;
     this.client = new ChaosEngineClient(o);
+    this.obsOut = new ChaosObsOutput(
+      join(o.stateDir, 'obs-output.json'),
+      o.obs ?? (() => null),
+      (cmd, args) =>
+        this.client.call(
+          cmd as Parameters<ChaosEngineClient['call']>[0],
+          args as Record<string, unknown>,
+        ),
+      o.log,
+    );
+    void this.obsOut.load().then(() => this.obsOut.start());
+    this.client.on('exit', () => this.obsOut.onEngineExit());
     this.perf = new PerfLab(o.exe, o.stateDir, (cmd, args) =>
       this.client.call(cmd as Parameters<ChaosEngineClient['call']>[0], args),
     );
@@ -52,14 +76,21 @@ export class ChaosRuntime {
         this.telemetry = e;
         this.perf.onTelemetry(e as unknown as Record<string, unknown>);
       } else {
+        this.obsOut.onEngineEvent(e as unknown as Record<string, unknown>);
         this.recent.push(e);
         if (this.recent.length > RECENT) this.recent.shift();
       }
     });
   }
 
-  stop() {
+  /** Studio se ferme : filtres Chaos V2 coupés (au plus 1,5 s d'attente), puis le moteur. */
+  async stop() {
     this.perf.stop();
+    this.obsOut.stop();
+    await Promise.race([
+      this.obsOut.disableAll('Studio se ferme').catch(() => {}),
+      new Promise((r) => setTimeout(r, 1500)),
+    ]);
     return this.client.stop();
   }
 
@@ -111,6 +142,7 @@ export class ChaosRuntime {
         status,
         telemetry: this.telemetry,
         events: this.recent.slice(-30),
+        obs: this.obsOut.config.mode,
       };
     } catch (e) {
       return {
@@ -189,19 +221,28 @@ export class ChaosRuntime {
               }),
               true
             );
+          // Une seule commande pour les deux sorties : le moteur tient la session (écran et/ou OBS).
+          const out = await this.obsOut.outputsFor(effect);
+          const result = (await c.call('effect.activate', {
+            effect,
+            kind,
+            request_id: `studio-${kind}-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`,
+            source: {
+              kind: 'studio',
+              ref: `Studio › Chaos › ${kind === 'test' ? 'Tester' : 'Activer'}`,
+            },
+            outputs: out.outputs,
+            ...(out.obs ? { obs: out.obs } : {}),
+          })) as Record<string, unknown>;
           return (
-            reply(
-              200,
-              await c.call('effect.activate', {
-                effect,
-                kind,
-                request_id: `studio-${kind}-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`,
-                source: {
-                  kind: 'studio',
-                  ref: `Studio › Chaos › ${kind === 'test' ? 'Tester' : 'Activer'}`,
-                },
-              }),
-            ),
+            reply(200, {
+              ...result,
+              obs_output: {
+                mode: this.obsOut.config.mode,
+                outputs: out.outputs,
+                note: out.note ?? null,
+              },
+            }),
             true
           );
         }
@@ -226,11 +267,82 @@ export class ChaosRuntime {
             ),
             true
           );
-        case 'POST /stop-all':
+        case 'POST /stop-all': {
+          // STOP ALL : le calque d'abord (moteur), et les filtres Chaos V2 d'OBS en même temps, sans attendre d'événement.
+          const [engine, obs] = await Promise.allSettled([
+            c.call('stop_all', { reason: 'studio_stop_all' }),
+            this.obsOut.disableAll('STOP ALL'),
+          ]);
+          if (engine.status === 'rejected') throw engine.reason;
           return (
-            reply(200, await c.call('stop_all', { reason: 'studio_stop_all' })),
+            reply(200, {
+              ...(engine.value as Record<string, unknown>),
+              obs:
+                obs.status === 'fulfilled'
+                  ? obs.value
+                  : { error: obsMessage(obs.reason) },
+            }),
             true
           );
+        }
+        case 'GET /obs':
+          return (
+            reply(200, await this.obsOut.status(url.searchParams.has('force'))),
+            true
+          );
+        case 'POST /obs/config':
+          return (
+            reply(200, {
+              config: await this.obsOut.setConfig({
+                ...(body.mode !== undefined
+                  ? { mode: body.mode as 'screen' }
+                  : {}),
+                ...(body.source !== undefined
+                  ? { source: body.source as string | null }
+                  : {}),
+                ...(body.device !== undefined
+                  ? { device: body.device as string | null }
+                  : {}),
+              }),
+              status: await this.obsOut.status(true),
+            }),
+            true
+          );
+        case 'GET /obs/preview':
+          return (reply(200, await this.obsOut.preview()), true);
+        case 'POST /obs/prepare':
+          if (body.confirm !== true)
+            return (
+              reply(400, {
+                error: 'invalid_request',
+                message: 'confirmation obligatoire',
+              }),
+              true
+            );
+          return (
+            reply(
+              200,
+              await this.obsOut.prepare(
+                join(this.opts.stateDir, 'obs-backups'),
+              ),
+            ),
+            true
+          );
+        case 'POST /obs/disable-all':
+          return (
+            reply(200, await this.obsOut.disableAll('coupure depuis Studio')),
+            true
+          );
+        case 'POST /obs/remove':
+          if (body.confirm !== true)
+            return (
+              reply(400, {
+                error: 'invalid_request',
+                message: 'confirmation obligatoire',
+              }),
+              true
+            );
+          return (reply(200, await this.obsOut.remove()), true);
         case 'POST /config':
           return (
             reply(
@@ -384,7 +496,8 @@ export class ChaosRuntime {
       const code =
         e instanceof ChaosError ||
         e instanceof PreviewError ||
-        e instanceof PerfError
+        e instanceof PerfError ||
+        e instanceof ChaosObsError
           ? e.code
           : 'internal';
       return (
@@ -396,6 +509,10 @@ export class ChaosRuntime {
       );
     }
   }
+}
+
+function obsMessage(e: unknown) {
+  return (e as Error)?.message ?? 'erreur OBS';
 }
 
 async function readBody(

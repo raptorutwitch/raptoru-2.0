@@ -133,11 +133,11 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
             temps_reel: { ok: boolean };
           }[];
         };
-        const e = r.effects[0];
+        const e = r.effects[0]!;
         expect(e.compile_errors).toEqual([]);
-        expect(e.shots[0].jeu_vs_moteur.mean).toBeLessThanOrEqual(1);
-        expect(e.shots[0].webcam_vs_avant.max).toBeLessThanOrEqual(1);
-        expect(e.shots[0].alerte_vs_avant.max).toBeLessThanOrEqual(1);
+        expect(e.shots[0]!.jeu_vs_moteur.mean).toBeLessThanOrEqual(1);
+        expect(e.shots[0]!.webcam_vs_avant.max).toBeLessThanOrEqual(1);
+        expect(e.shots[0]!.alerte_vs_avant.max).toBeLessThanOrEqual(1);
         expect(e.temps_reel.ok).toBe(true);
         expect(r.ok).toBe(true);
       },

@@ -33,6 +33,15 @@ namespace Raptoru.Chaos
         /// Écran entier : HMONITOR et nom Windows (\\.\DISPLAYn) ; null en mode fenêtre.
         public IntPtr TargetHmon;
         public string TargetDevice;
+        /// Sorties de l'activation (docs/chaos/MODE_C.md) : l'écran (calque local) et/ou la source gameplay d'OBS (filtres
+        /// pilotés par Studio). Une seule session : même graine, mêmes paramètres, même durée, même arrêt.
+        public bool OutScreen = true, OutObs;
+        /// Taille de la source OBS (partition calculée à sa taille).
+        public int ObsW, ObsH;
+        /// Sortie OBS retirée : raison (effet impossible dans un filtre, exclusion des captures refusée, OBS perdu) ; le
+        /// calque n'est alors plus exclu des captures (jamais deux applications, jamais d'effet invisible sans le dire).
+        public string ObsBlocked;
+        public bool ObsLive { get { return OutObs && ObsBlocked == null; } }
     }
 
     sealed class Activation
@@ -46,6 +55,9 @@ namespace Raptoru.Chaos
         public bool Replacing;
         public int PendingExtraMs, Extensions;
         public long VisibleMs;
+        /// Sortie OBS : instant de début de la sortie déjà publiée (ms depuis le départ), pour ne recalculer la partition
+        /// que si la sortie change (arrêt anticipé, prolongation).
+        public long ObsExitAt = -1;
     }
 
     sealed class SchedEvent
