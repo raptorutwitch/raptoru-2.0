@@ -214,3 +214,7 @@ toute référence au Core Lab ou au tunnel Cloudflare. »). ZIP écrit par l'emb
 - 850187ae 2026-11-18 feat(casino): spectators follow a player, live — never a result ahead of the player's screen
 - 22310e85 2026-11-17 fix(casino): security review — shares only while the casino plays, the wallet cap before the draw, strict ids
 - 91839307 2026-11-17 feat(casino): extension, Studio and Lab — the slot machine with the Coffre, the roulette, spectators
+
+<!-- Ligne inscrite par l'agent le 24/11/2026 sur autorisation écrite d'Antoni : « Je t'autorise explicitement à inscrire en mon nom la ligne suivante dans l'inventaire INVENTAIRE-9da1d323642f.md » (recette réelle sur téléphone : Casino affiché, défilement mobile OK). -->
+
+Validé par Antoni : oui
