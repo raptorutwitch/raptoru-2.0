@@ -18,11 +18,16 @@ const HYST = 8;
 const clamp = (min, v, max) => Math.min(max, Math.max(min, v));
 const round = (v) => Math.round(v * 1000) / 1000;
 
-/** Surface of this page: decided by the page and Twitch's query parameters only. */
+/**
+ * Surface of this page: decided by the page and Twitch's query parameters only. The Twitch app opens mobile.html with
+ * the ANCHOR of the channel's activation (`anchor=component` for a video component): the platform wins over it, or
+ * every mobile rule was dropped on a real phone (24/11, banc mobile : Casino 346 × 0, Lancer hors champ).
+ */
 export function detectSurface(location = window.location) {
   const q = new URLSearchParams(location.search);
-  if (/(?:^|\/)video_component\.html$/i.test(location.pathname) || q.get('anchor') === 'component') return 'video';
+  if (/(?:^|\/)video_component\.html$/i.test(location.pathname)) return 'video';
   if (q.get('platform') === 'mobile' || /(?:^|\/)mobile\.html$/i.test(location.pathname)) return 'mobile';
+  if (q.get('anchor') === 'component') return 'video';
   if (q.get('popout') === 'true') return 'popout';
   return 'panel';
 }

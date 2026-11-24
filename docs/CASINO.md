@@ -661,6 +661,14 @@ anti-débordement (`test:casino-responsive`, jeu isolé) reste en place.
   (`min-height`) : la hauteur « 100 % » du Mini-jeux ne se résolvait pas et l'écran du Casino (taille fixe, container
   `size`) retombait à 0. Corrigé (`arcade.css` : la colonne flex du module donne sa hauteur au jeu ; `casino.css` :
   `#body` épinglé à la boîte de l'hôte). Vaut aussi pour `panel.html`.
+- **Vrai téléphone, 24/11 : le Casino restait à 0 px malgré ce correctif.** L'application Twitch ouvre
+  `mobile.html?platform=mobile&anchor=component` quand l'extension est activée en composant vidéo ; `app/layout.js`
+  lisait l'ancre d'abord et classait la page en surface « video » : toutes les règles `html[data-surface='mobile']`
+  étaient ignorées (hôte 346 × 0, machine à sous en cabine PC, Lancer hors champ). Les bancs utilisaient `anchor=panel`
+  et ne pouvaient pas le voir. Corrigé : `mobile.html` et `platform=mobile` décident (commit `9da1d323`) ; test
+  `test/layout.test.js` ; `casino-compose` charge l'adresse réelle de l'application et part d'un cadre 1 × 1.
+  Trouvé et **validé par Antoni sur son téléphone** (Android, application Twitch officielle) grâce au banc mobile
+  ([extension/BANC_MOBILE_TWITCH.md](extension/BANC_MOBILE_TWITCH.md)).
 - **Blackjack à 651×434** : l'en-tête laisse ≈ 373 px à la table ; le mode « hauteur basse » (≤ 380 px) s'y
   appliquait (banque à 22 px, arc des paris débordant sur le centre). Seuils : hauteur basse ≤ 339 px, nouvelle
   hauteur moyenne 340-399 px (rangée de la banque 112 px) ; l'arc se cale sur la hauteur réelle de sa rangée.

@@ -1,6 +1,7 @@
 // Layout decision of the socle (app/layout.js, plan § 3.1–3.3): profiles, scales, hysteresis.
+import { URL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { computeLayout } from '../extension/app/layout.js';
+import { computeLayout, detectSurface } from '../extension/app/layout.js';
 
 describe('computeLayout', () => {
   it.each([
@@ -37,5 +38,30 @@ describe('computeLayout', () => {
       kt: 1,
     });
     expect(computeLayout({ w: 500, h: 500 }).profile).toBe('etroit');
+  });
+});
+
+// Real phone, 24/11 (banc mobile, SM-S916B): the Twitch app opened mobile.html with the anchor of the channel's
+// activation (anchor=component). Read as « video », every html[data-surface='mobile'] rule was dropped and the Casino
+// collapsed to 346 × 0. The page and platform=mobile decide; the anchor only for a page that is not mobile.html.
+describe('detectSurface', () => {
+  const at = (href) => detectSurface(new URL(href, 'https://x.ext-twitch.tv/'));
+  it.each([
+    ['mobile.html?platform=mobile&anchor=component&mode=viewer', 'mobile'],
+    ['mobile.html?platform=mobile&anchor=panel&mode=viewer', 'mobile'],
+    ['mobile.html?anchor=video_overlay', 'mobile'],
+    ['video_component.html?anchor=component&platform=web', 'video'],
+    ['panel.html?anchor=panel&platform=web', 'panel'],
+    ['panel.html?anchor=panel&popout=true', 'popout'],
+    ['index.html?anchor=component', 'video'],
+  ])('%s → %s', (href, surface) => {
+    expect(at(href)).toBe(surface);
+  });
+  it('a phone frame that starts at 0 × 0 and grows to 382 × 444 is the narrow profile, no stale size', () => {
+    expect(computeLayout({ w: 382, h: 444 })).toEqual({
+      profile: 'etroit',
+      kg: 1,
+      kt: 1,
+    });
   });
 });

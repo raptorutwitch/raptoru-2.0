@@ -204,6 +204,14 @@ réunis dans un build commun quand Chaos Overlay V2 sera prêt (décision d'Anto
 fusionnées (PR #127, `ed70a107`). **ZIP consolidé** Soundboard + Casino (36 commits, sans diagnostic actif, Hosted Test
 seulement) : inventaire `INVENTAIRE-ed70a107018f.md` en attente de la ligne de validation d'Antoni.
 
+**E. Casino vide sur téléphone : corrigé (24/11)** — cause : l'application Twitch ouvre `mobile.html` avec
+`anchor=component`, lu comme surface « video » ([CASINO.md](CASINO.md) § composition). Correctif `app/layout.js`
+validé par Antoni sur son vrai téléphone (banc mobile, build `banc-mobile-d4322f2213f5`). Branche
+`fix/ext-mobile-surface` (PR vers `main`) : correctif + tests + banc mobile ([extension/BANC_MOBILE_TWITCH.md](extension/BANC_MOBILE_TWITCH.md)).
+ZIP de Production `9da1d323642f` (37 commits = ZIP consolidé du 23/11 + ce correctif) : inventaire
+`INVENTAIRE-9da1d323642f.md` en attente de la ligne de validation d'Antoni. Les mesures de diagnostic supplémentaires
+restent sur la branche locale `diag/casino-mobile-vide`, hors livraison.
+
 ## 6. Comment reprendre dans une nouvelle session
 
 1. Lire ce fichier (§ 0, § 5), puis [../CLAUDE.md](../CLAUDE.md) et [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) § 0.
