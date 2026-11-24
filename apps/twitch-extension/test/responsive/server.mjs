@@ -11,6 +11,7 @@
 // The Twitch helper <script> is stripped from the HTML on the fly (no network to Twitch).
 // Never use ports 4100/4110/3789 (installed Studio). Default 4471.
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
@@ -42,11 +43,26 @@ const TYPES = {
   '.mp4': 'video/mp4',
 };
 
+// BENCH_DIAGNOSTICS=1: the casino demo's runtime carries the diagnostic flag of a `--diagnostic` package
+// (shared/diagnostic.js: 5 taps on the title open the panel), to see a diagnostic ZIP's behaviour locally.
+const DIAG = process.env.BENCH_DIAGNOSTICS === '1';
+// A packaged copy (BENCH_ROOT = an extracted ZIP) names its build in the casino demo's runtime (the diagnostic's « Build »).
+const PACKAGED = (() => {
+  try {
+    return (
+      JSON.parse(
+        readFileSync(join(ROOT, 'extension', 'build-manifest.json'), 'utf8'),
+      ).buildId ?? null
+    );
+  } catch {
+    return null;
+  }
+})();
 const runtime = (variant, shell) => {
-  const shellField = shell ? `, shell: ${JSON.stringify(shell)}` : '';
+  const shellField = `${shell ? `, shell: ${JSON.stringify(shell)}` : ''}${DIAG ? ', diagnostics: true' : ''}`;
   if (variant === 'casino')
     return `import { casinoDemoCall } from '/bench/casino-demo-core.js';
-export const RUNTIME = Object.freeze({ mode: 'demo', environment: 'démo locale', apiBase: '', siteUrl: '', buildId: 'casino-demo'${shellField}, fixtureCall: casinoDemoCall });
+export const RUNTIME = Object.freeze({ mode: 'demo', environment: 'démo locale', apiBase: '', siteUrl: '', buildId: ${JSON.stringify(PACKAGED ? `${PACKAGED} · banc local` : 'casino-demo')}${shellField}, fixtureCall: casinoDemoCall });
 `;
   if (variant === 'live')
     return `export const RUNTIME = Object.freeze({ mode: 'test', apiBase: 'https://core.bench.invalid/v1/ext', siteUrl: '', buildId: 'bench-live'${shellField} });
@@ -95,7 +111,11 @@ export function startServer(
         });
         return res.end(
           await readFile(
-            join(ROOT, 'test', 'responsive', 'out', 'casino-demo-core.js'),
+            join(
+              dirname(fileURLToPath(import.meta.url)),
+              'out',
+              'casino-demo-core.js',
+            ),
           ),
         );
       }

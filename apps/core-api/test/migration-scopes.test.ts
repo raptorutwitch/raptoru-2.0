@@ -235,7 +235,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     const files = await readdir(DEFAULT_MIGRATIONS_DIR);
     const prod = selectMigrations(files, 'prod');
     const old = selectMigrations(files, 'prod', OLD_PROD);
-    expect(old.length).toBe(62);
+    expect(old.length).toBe(63);
     expect(prod.filter((f) => !old.includes(f))).toEqual([
       ...MAIN_CORE_LAB_MIGRATIONS,
     ]);
@@ -246,7 +246,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a blank database: everything once; again: nothing', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod')).length).toBe(80);
+    expect((await migrate(db, 'prod')).length).toBe(81);
     expect(await migrate(db, 'prod')).toEqual([]);
     for (const t of ['cmd_steps', 'word_game_words', 'mini_game_duels'])
       expect(
@@ -311,6 +311,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
     '20261202130000_casino_feed.sql',
     '20261203130000_casino_feed_skip.sql',
     '20261204130000_casino_v1.sql',
+    '20261205130000_sound_files.sql',
   ];
   const prodBeforeWheel = PROD_MIGRATIONS.filter(
     (f) => !AFTER_25_10.includes(f),
@@ -453,7 +454,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
 
   it('a database migrated by the previous production selection: only the main Core files, once', async () => {
     const db = createPgliteDb(new PGlite());
-    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(62);
+    expect((await migrate(db, 'prod', undefined, OLD_PROD)).length).toBe(63);
     expect(await migrate(db, 'prod')).toEqual([...MAIN_CORE_LAB_MIGRATIONS]);
     expect(await migrate(db, 'prod')).toEqual([]);
   });
@@ -465,7 +466,7 @@ describe('main Core scope (lot 8): blank, existing and upgraded databases', () =
       stagingExtra: STAGING_EXTRA_LAB_MIGRATIONS,
     };
     expect((await migrate(db, 'staging', undefined, OLD_STAGING)).length).toBe(
-      66,
+      67,
     );
     expect(await migrate(db, 'prod')).toEqual(
       MAIN_CORE_LAB_MIGRATIONS.filter(

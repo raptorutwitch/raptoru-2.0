@@ -5,6 +5,8 @@
 // /v1/ext (Studio signs the Lab JWT and relays). Fictional data only; no Twitch, no OBS, no network.
 // E2E_CORE_LAB_PLAYERS=1 (default stack): fictional players connected from the start; otherwise « Studio » is closed
 // and the tests open / close it (port + 1).
+// E2E_CORE_LAB_REAL_SOUND=1 (a hand-run Lab, docs/SOUNDBOARD.md § 4): the Soundboard is played by Studio's real player
+// page (« Démarrer ici » on the Soundboard page) instead of the fictional one.
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -27,6 +29,7 @@ import { createPgliteDb } from '../../../core-api/test/helpers.js';
 
 const port = Number(process.env.E2E_CORE_LAB_PORT ?? 4389);
 const playersAtStart = process.env.E2E_CORE_LAB_PLAYERS === '1';
+const realSound = process.env.E2E_CORE_LAB_REAL_SOUND === '1';
 const log = (what: string, e: unknown) =>
   console.error(
     `[e2e-core-lab] ${what}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`,
@@ -254,6 +257,7 @@ const cycles: (() => Promise<void>)[] = [
     await ttsWorker.playerAck(id, delivery.attempt_id!, player, 'completed');
   },
   async () => {
+    if (realSound) return; // the Soundboard page's own player plays them
     await soundWorker.playerHeartbeat(player, true);
     await soundWorker.tick();
     for (
@@ -378,8 +382,32 @@ const labChat = await LabChatIngress.create({
   dir: join(dir, 'lab-chat'),
   identities: labChatIdentities,
 });
+// Studio › Soundboard's page (its bank, « Ajouter un son »). Started only with E2E_CORE_LAB_REAL_SOUND=1 (its real player
+// page then plays the sounds); otherwise it neither heartbeats nor claims (the fictional player above plays them).
+const { SoundRuntime } = await import('../src/sound-lab/runtime.js');
+const soundPage = await SoundRuntime.create(origin, {
+  // The history reads through the cockpit, as production.ts wires the local Lab on the main Core.
+  core: ((
+    path: string,
+    body?: unknown,
+    options?: { timeoutMs?: number; maxBytes?: number },
+  ) =>
+    transport(
+      path.replace(
+        /^\/v1\/studio\/sound\/(channels\/\d+\/interactions)/,
+        '/v1/studio/cockpit/sound/$1',
+      ),
+      body,
+      options,
+    )) as typeof transport,
+  journal: join(dir, 'sound-page.json'),
+  transport: wiring('sound'),
+  labReads: true,
+});
+if (realSound) soundPage.start();
 const studio = createStudioServer({
   lab: createTestLab(),
+  sound: soundPage,
   onShutdown: () => {},
   labFrontier: { coreUrl, extensionSecret, channelId: CHANNEL },
   labPanel: new CoreLabPanel(labCore, CHANNEL),

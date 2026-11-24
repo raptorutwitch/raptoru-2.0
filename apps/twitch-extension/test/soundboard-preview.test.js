@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   chooseSoundPreviewUrl,
   createSoundPreview,
+  publishedPreviewUrl,
   soundPreviewUrls,
 } from '../extension/shared/soundboard-preview.js';
 
@@ -164,5 +165,89 @@ describe('Soundboard local preview', () => {
     expect(soundPreviewUrls(hello)).toEqual(['a.mp3', 'b.mp3']);
     expect(chooseSoundPreviewUrl(hello, () => 0.99)).toBe('b.mp3');
     expect(chooseSoundPreviewUrl({ id: 'x' })).toBeNull();
+  });
+
+  it('a sound added in Studio: the Core file fetched once (connect-src), played as a blob: (media-src), kept for the next time', async () => {
+    const f = fakes({ saved: 50 });
+    const id = 'a'.repeat(64);
+    const added = { id: 'ajout', preview_url: `sound-files/${id}.wav` };
+    const fetched = [];
+    const p = createSoundPreview({
+      document: f.document,
+      root: () => f.root,
+      storage: f.storage,
+      AudioCtor: f.FakeAudio,
+      apiBase: '/ext-lab/api',
+      fetchImpl: async (url, init) => {
+        fetched.push([url, init.credentials]);
+        return { ok: true, status: 200, blob: async () => 'BLOB' };
+      },
+      objectUrls: {
+        createObjectURL: (b) => `blob:lab/${b}`,
+        revokeObjectURL() {},
+      },
+    });
+    await p.play(added);
+    expect(fetched).toEqual([[`/ext-lab/api/sound-files/${id}.wav`, 'omit']]);
+    expect(f.made[0].src).toBe('blob:lab/BLOB');
+    expect(p.soundId).toBe('ajout');
+    await p.play(boop);
+    await p.play(added);
+    expect(fetched).toHaveLength(1);
+    expect(f.made[2].src).toBe('blob:lab/BLOB');
+    // The bank's files still come with the extension.
+    expect(f.made[1].src).toBe('http://lab/ext/assets/sounds/boop.mp3');
+  });
+
+  it('a Core file that cannot be read: said in words, nothing sent, tried again next time', async () => {
+    const f = fakes({ saved: 50 });
+    const added = {
+      id: 'ajout',
+      preview_url: `sound-files/${'b'.repeat(64)}.wav`,
+    };
+    let calls = 0;
+    const p = createSoundPreview({
+      document: f.document,
+      root: () => f.root,
+      storage: f.storage,
+      log: { warn() {} },
+      AudioCtor: f.FakeAudio,
+      apiBase: 'https://core.raptoru.fr/v1/ext',
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: false, status: 404 };
+      },
+    });
+    const notices = [];
+    await p.play(added, null, { notice: (t) => notices.push(t) });
+    expect(notices).toEqual([
+      'Aperçu indisponible (HTTP_404). Rien n’a été envoyé.',
+    ]);
+    expect(p.soundId).toBeNull();
+    await p.play(added, null, { notice: () => {} });
+    expect(calls).toBe(2);
+  });
+
+  it('only the EBS the extension may call, only the published shape', () => {
+    const id = 'c'.repeat(64);
+    expect(
+      publishedPreviewUrl(
+        `sound-files/${id}.wav`,
+        'https://core.raptoru.fr/v1/ext',
+      ),
+    ).toBe(`https://core.raptoru.fr/v1/ext/sound-files/${id}.wav`);
+    expect(
+      publishedPreviewUrl(
+        `sound-files/${id}.wav`,
+        'https://evil.example/v1/ext',
+      ),
+    ).toBeNull();
+    expect(publishedPreviewUrl(`sound-files/${id}.wav`, '')).toBeNull();
+    expect(
+      publishedPreviewUrl('assets/sounds/boop.mp3', '/ext-lab/api'),
+    ).toBeNull();
+    expect(
+      publishedPreviewUrl('sound-files/../x.wav', '/ext-lab/api'),
+    ).toBeNull();
   });
 });

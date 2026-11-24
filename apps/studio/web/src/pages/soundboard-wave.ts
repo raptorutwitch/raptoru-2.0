@@ -67,3 +67,13 @@ export function wave(url: string) {
   }
   return p;
 }
+
+/**
+ * Où Studio lit le fichier d'un son : un son de la banque est livré avec l'extension (/ext/…) ; un son ajouté ou recoupé
+ * dans Studio est le fichier publié au Core, dont Studio garde une copie (/sound-lab/files/…).
+ */
+export function mediaUrl(previewUrl: string) {
+  return previewUrl.startsWith('sound-files/')
+    ? `/sound-lab/files/${previewUrl.slice('sound-files/'.length)}`
+    : `/ext/${previewUrl}`;
+}
