@@ -94,10 +94,23 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.4** (installée par Antoni le 24/11).
+Studio installé aujourd'hui : **0.1.44-chaos.5** (installée et Miroir validé en capture directe par Antoni le 24/11).
 
-Version de test **0.1.44-chaos.5** (24/11 soir, capture directe par « Écran », sans filtre), construite en local,
-**ni publiée ni installée** :
+Version de test **0.1.44-chaos.6** (24/11 soir), construite en local, **ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.6.exe`
+- 126 755 863 o, SHA-256 `e8d885f66dd6c42f205addbf3678ff6c9b940feee451660586b4279110ce3008`
+- contenu : tout ce que contenait 0.1.44-chaos.5, plus ([CURSEUR_OBS.md](CURSEUR_OBS.md)) :
+  - VHS, flou pulsé et pixelisation progressive animés pendant tout le maintien ;
+  - Diffusion OBS › Curseur d'OBS : « Masquer pendant les effets » coupe « Capturer le curseur » de la source pendant
+    les effets à curseur dessiné, puis rétablit la valeur d'avant. Le réglage est désactivé par défaut : rien ne change
+    dans OBS sans ton choix ;
+- commit `f3ae3b3f` de `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton dans le paquet (vérifié) ;
+- installer comme ci-dessous (jeu fermé, Studio et Chaos Lab fermés). Essais : CURSEUR_OBS.md § 4 ;
+- retour arrière : relancer `Raptoru Studio Setup 0.1.44-chaos.5.exe` (SHA-256 `57fef362…`).
+
+Version de test précédente **0.1.44-chaos.5** (24/11 soir, capture directe par « Écran », sans filtre), installée par
+Antoni le 24/11 :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.5.exe`
 - 126 750 834 o, SHA-256 `57fef362e01788e4c025e0c2ba18a30e1487ef61f4000625042a5df9133e3b34`

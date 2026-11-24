@@ -147,7 +147,11 @@ en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.m
 - flou : sous-échantillonnage à 13 lectures si le flou très fort ondule en mouvement ;
 - point visé : miniature capturée du vrai écran, si l'écran miniature ne suffit pas ;
 - lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
-- **capture directe par « Écran »** (24/11 soir, priorité d'Antoni après la sonde DXGI : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md)) :
+- **curseur d'OBS et VHS animé** (24/11 soir : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md)), construits et testés hors
+  écran. Restes :
+  - validation d'Antoni avec `0.1.44-chaos.6` (VHS au maintien, un seul curseur, coupure visible ou non) ;
+  - si la coupure d'OBS gêne : étudier un curseur transformé sans changer le réglage d'OBS ;
+- **capture directe par « Écran »** (24/11 soir, priorité d'Antoni après la sonde DXGI, Miroir validé en chaos.5 : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md)) :
   - construite et testée hors écran ; Studio part en « Écran uniquement » ;
   - reste la validation visible d'Antoni (Miroir, Clignement, Brouillard, Zoom ; version de test `0.1.44-chaos.5`) ;
   - reste aussi la mesure à l'écran du coût de composition du mode E ;

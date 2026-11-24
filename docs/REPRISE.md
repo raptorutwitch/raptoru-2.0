@@ -218,7 +218,19 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     la sonde `chaos-bench.exe --capture-probe --screen \\.\DISPLAY1` (à lancer par Antoni).
   - Garde de jeu corrigée : les « plein écran » du 24/11 venaient des deux fenêtres Halloween de Studio (calques
     traversables, « Overlay actif » allumé), pas d'un jeu.
-- **Capture directe par « Écran » (24/11 soir, priorité d'Antoni)** : un seul rendu, vu à l'écran et capturé tel quel
+- **Curseur d'OBS et VHS (24/11 soir, après la validation du Miroir en capture directe par Antoni)** :
+  doc [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md).
+  - **VHS figé au maintien** : le moteur ne redessinait plus sans nouvelle capture (tous modes).
+    - Correctif : une image qui lit l'horloge de l'effet est redessinée à chaque rafraîchissement.
+    - Non-régression : `ChaosEngine.exe --check-hold vhs --expect-motion` (0/582 → 582/582).
+  - **Deux curseurs dans OBS** : Studio coupe « Capturer le curseur » de la source pendant les effets à curseur
+    dessiné, puis rétablit la valeur d'avant.
+    - Désactivé par défaut (« Laisser ») : à activer dans Diffusion OBS.
+    - OBS redémarre sa capture à chaque changement : 0 à 2 images vides (DXGI).
+  - Commits `c7e8c582`, `a3f878dd`, `f3ae3b3f` (locaux).
+  - Tests : moteur 36/36, Studio ciblés 34/34, page 38/38.
+  - Version de test `0.1.44-chaos.6` (non installée) : GUIDE_STUDIO_CHAOS.md § 4.
+- **Capture directe par « Écran » (24/11 soir, priorité d'Antoni ; Miroir validé par Antoni en chaos.5)** : un seul rendu, vu à l'écran et capturé tel quel
   par « Écran » (DXGI), sans filtre. Doc : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md).
   - **Cause du Miroir absent d'OBS** : sans fenêtre couvrant 90 % de l'écran, la fiche partait en mode C, dont le
     calque est exclu des captures pendant tout l'effet.
