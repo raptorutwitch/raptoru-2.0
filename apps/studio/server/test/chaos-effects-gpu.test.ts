@@ -56,6 +56,36 @@ async function measure(
 describe.runIf(process.platform === 'win32' && existsSync(REAL))(
   'effets Chaos : propriétés mesurées hors écran (vrai moteur)',
   () => {
+    it('ciblage « écran » de chaque écran branché : tout l’écran, une seule surface par écran (mode E si une fenêtre l’occupe, sinon C)', async () => {
+      const { stdout } = await run(REAL, ['--resolve-screens'], {
+        windowsHide: true,
+        timeout: 30_000,
+      });
+      const screens = (
+        JSON.parse(stdout) as {
+          screens: {
+            device: string;
+            kind?: string;
+            key?: string;
+            mode?: string;
+            error?: string;
+            monitor: { x: number };
+          }[];
+        }
+      ).screens;
+      expect(screens.length).toBeGreaterThanOrEqual(1);
+      for (const s of screens) {
+        expect(s.error, s.device).toBeUndefined();
+        expect(s.key).toBe(`screen:${s.device}`);
+        expect(
+          s.kind === 'screen' ? 'E' : s.kind === 'monitor' ? 'C' : '?',
+        ).toBe(s.mode);
+      }
+      // Rangés de gauche à droite, comme dans la fiche.
+      const xs = screens.map((s) => s.monitor.x);
+      expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+    }, 30_000);
+
     it('clignement : au plus fort de chaque variante, plus aucun pixel visible (occlusion 100 %)', async () => {
       for (const v of [
         'naturel',

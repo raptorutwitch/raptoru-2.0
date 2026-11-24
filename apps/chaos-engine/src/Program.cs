@@ -61,6 +61,22 @@ namespace Raptoru.Chaos
                 case "--preview-anim": return EffectPreview.Anim(args[1], args[2], args[3], args[4], (uint)IntArg(args, "--w", 320), (uint)IntArg(args, "--h", 180), StrArg(args, "--cache", null));
                 case "--combo": return EffectPreview.Combo(args[1], args[2], long.Parse(args[3]), long.Parse(args[4]), int.Parse(args[5]));
                 case "--sysinfo": return PerfLab.SysInfoMain();
+                case "--resolve-screens":
+                    // Ciblage « écran » de chaque écran branché, sans rien afficher ni capturer (contrôle multi-écrans).
+                    var rreg = Registry.Embedded();
+                    var list = new List<object>();
+                    foreach (var sc in Targets.Screens())
+                    {
+                        try
+                        {
+                            var t = Targets.Resolve(J.Map("kind", "screen", "device", sc.Device), "window", System.Diagnostics.Process.GetCurrentProcess().Id, rreg.Get("blink"), false);
+                            list.Add(J.Map("device", sc.Device, "kind", t.Kind, "key", t.Key, "mode", J.Str(t.Info, "mode", null), "process", J.Str(t.Info, "process", null),
+                                "monitor", J.Map("x", sc.X, "y", sc.Y, "width", sc.Width, "height", sc.Height)));
+                        }
+                        catch (ProtocolError e) { list.Add(J.Map("device", sc.Device, "error", e.Code)); }
+                    }
+                    Out(J.Write(J.Map("screens", list.ToArray())));
+                    return 0;
                 case "--perf-offscreen": return PerfLab.Offscreen(args);
                 case "--perf-monitor": return PerfLab.Monitor(args);
                 case "--measure": return EffectPreview.Measure(args[1], args[2], args[3], (uint)IntArg(args, "--w", 640), (uint)IntArg(args, "--h", 360), StrArg(args, "--level", null));
