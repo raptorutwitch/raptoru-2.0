@@ -222,15 +222,15 @@ Le diagnostic vient d'une lecture du code d'OBS (`master`) : `plugins/win-captur
 
 ### B. Architectures comparées
 
-| Piste | Faisabilité OBS 33 | Preuve | Ajouts dans OBS | Plugin | Risque de noir | Risque de double curseur | Remarques |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Actuelle (bascule `capture_cursor`) | oui | mesuré : 0 à 2 images vides, une fois 15 | aucun | non | **oui** | non | c'est le flash |
-| **Relais** : petite capture sans curseur du même écran, hors cadre, dans chaque scène de « Écran » ; bascule inchangée | oui | code lu, banc § C | 1 source, 1 élément par scène | non | nul attendu (§ C) | non | « Écran » ni déplacée ni masquée ; coût : une petite source qui partage la duplication |
-| Copie sans curseur **sous** « Écran » | oui | code lu, banc § C | 1 source, 1 élément par scène | non | nul attendu, et filet si une image manque | non | sa visibilité doit suivre celle de « Écran » dans chaque scène (« Scène PS5 » : « Écran » masquée, la copie montrerait le bureau) |
-| Deux captures, **visibilité** basculée | oui | code lu, banc § C | 1 source, 1 élément par scène | non | nul grâce au même partage | possible 1 image à la réapparition | touche la visibilité d'éléments de production ; la capture masquée libère sa duplication |
-| Curseur hors DXGI (capture toujours sans curseur, curseur fourni à part) | non sans plugin | code lu | source curseur | **oui** pour être propre | — | — | OBS n'a pas de source « curseur » ; le déplacer par WebSocket = 60 requêtes/s, latence, formes non suivies |
-| Côté Windows ou moteur (cacher le curseur à OBS seul) | non | code lu | — | — | — | — | cache par handle dans OBS ; exclure le curseur Chaos donnerait au stream un curseur mal placé |
-| Correctif d'OBS (`update_settings` qui compare) | hors Studio | code lu | — | build d'OBS | nul | non | à proposer à OBS, pas maintenable ici |
+| Piste                                                                                                                  | Faisabilité OBS 33 | Preuve                                   | Ajouts dans OBS               | Plugin                   | Risque de noir                            | Risque de double curseur           | Remarques                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------- | ----------------------------- | ------------------------ | ----------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Actuelle (bascule `capture_cursor`)                                                                                    | oui                | mesuré : 0 à 2 images vides, une fois 15 | aucun                         | non                      | **oui**                                   | non                                | c'est le flash                                                                                                                    |
+| **Relais** : petite capture sans curseur du même écran, hors cadre, dans chaque scène de « Écran » ; bascule inchangée | oui                | code lu, banc § C                        | 1 source, 1 élément par scène | non                      | nul attendu (§ C)                         | non                                | « Écran » ni déplacée ni masquée ; coût : une petite source qui partage la duplication                                            |
+| Copie sans curseur **sous** « Écran »                                                                                  | oui                | code lu, banc § C                        | 1 source, 1 élément par scène | non                      | nul attendu, et filet si une image manque | non                                | sa visibilité doit suivre celle de « Écran » dans chaque scène (« Scène PS5 » : « Écran » masquée, la copie montrerait le bureau) |
+| Deux captures, **visibilité** basculée                                                                                 | oui                | code lu, banc § C                        | 1 source, 1 élément par scène | non                      | nul grâce au même partage                 | possible 1 image à la réapparition | touche la visibilité d'éléments de production ; la capture masquée libère sa duplication                                          |
+| Curseur hors DXGI (capture toujours sans curseur, curseur fourni à part)                                               | non sans plugin    | code lu                                  | source curseur                | **oui** pour être propre | —                                         | —                                  | OBS n'a pas de source « curseur » ; le déplacer par WebSocket = 60 requêtes/s, latence, formes non suivies                        |
+| Côté Windows ou moteur (cacher le curseur à OBS seul)                                                                  | non                | code lu                                  | —                             | —                        | —                                         | —                                  | cache par handle dans OBS ; exclure le curseur Chaos donnerait au stream un curseur mal placé                                     |
+| Correctif d'OBS (`update_settings` qui compare)                                                                        | hors Studio        | code lu                                  | —                             | build d'OBS              | nul                                       | non                                | à proposer à OBS, pas maintenable ici                                                                                             |
 
 **Recommandation : le relais.** C'est la piste la plus simple qui supprime la cause, le noir, sans changer le
 mécanisme validé :
@@ -254,14 +254,14 @@ Commande : `chaos-obs-check.exe --cursor-relay --toggles 10 --canvas 1920x1080` 
   - lancé le 24/11 vers 17 h 45, une fois la garde de jeu libre ;
   - rien d'affiché ni enregistré.
 
-| Scénario | Images noires par bascule (1080p60) | (1440p60) | « Écran » absente après bascule | GPU au repos (ms/image) | Mémoire vidéo du processus | Images en retard |
-| --- | --- | --- | --- | --- | --- | --- |
-| Actuel (bascule seule) | **1 à chaque bascule** (10/10) | **1 à 2** (10/10) | 1 à 2 | 1,23 / 1,48 | 48,5 / 55,1 Mo | 0 |
-| **Relais** | **0** (0/10) | **0** (0/10) | **0** | 1,01 / 1,38–1,70 | 48,5 / 55,1 Mo (identique) | 0 |
-| Copie dessous | 0 | 0 | 0 | 1,37 / 1,35 | identique | 0 |
-| Visibilité (masquer / réafficher) | 0 | 0 | 0 à la réapparition (la copie couvre pendant le masquage) | 1,33 / 1,31 | identique | 0 |
-| Relais, 2 scènes, sortie basculée entre bascules (20 actions) | 0 | 0 | 0 | 1,27 / 1,40 | identique | 0 |
-| Scène type PS5 (« Écran » masquée, pas de relais) | — | — | « Écran » et relais **non affichés** : aucune capture | 1,11 / 1,34 (plus bas : capture arrêtée) | 33,5 / 40,1 Mo (textures libérées) | 0 |
+| Scénario                                                      | Images noires par bascule (1080p60) | (1440p60)         | « Écran » absente après bascule                           | GPU au repos (ms/image)                  | Mémoire vidéo du processus         | Images en retard |
+| ------------------------------------------------------------- | ----------------------------------- | ----------------- | --------------------------------------------------------- | ---------------------------------------- | ---------------------------------- | ---------------- |
+| Actuel (bascule seule)                                        | **1 à chaque bascule** (10/10)      | **1 à 2** (10/10) | 1 à 2                                                     | 1,23 / 1,48                              | 48,5 / 55,1 Mo                     | 0                |
+| **Relais**                                                    | **0** (0/10)                        | **0** (0/10)      | **0**                                                     | 1,01 / 1,38–1,70                         | 48,5 / 55,1 Mo (identique)         | 0                |
+| Copie dessous                                                 | 0                                   | 0                 | 0                                                         | 1,37 / 1,35                              | identique                          | 0                |
+| Visibilité (masquer / réafficher)                             | 0                                   | 0                 | 0 à la réapparition (la copie couvre pendant le masquage) | 1,33 / 1,31                              | identique                          | 0                |
+| Relais, 2 scènes, sortie basculée entre bascules (20 actions) | 0                                   | 0                 | 0                                                         | 1,27 / 1,40                              | identique                          | 0                |
+| Scène type PS5 (« Écran » masquée, pas de relais)             | —                                   | —                 | « Écran » et relais **non affichés** : aucune capture     | 1,11 / 1,34 (plus bas : capture arrêtée) | 33,5 / 40,1 Mo (textures libérées) | 0                |
 
 - **Le relais hors cadre garde la duplication.** OBS le tient pour affiché (`obs_source_showing` vrai). Le noir
   disparaît exactement comme le prévoit le code.
@@ -304,6 +304,7 @@ Studio › Chaos › Diffusion OBS › **Relais anti-coupure** (`apps/studio/ser
    - **« Préparer le relais… »** : lire l'aperçu (trois scènes, pas Scène PS5), puis confirmer.
 
    C'est le seul ajout à ton OBS.
+
 3. Dans OBS, vérifier :
    - « Raptoru Chaos V2 · relais curseur · Écran » est en bas des trois scènes, verrouillé et invisible dans l'aperçu ;
    - Scène PS5 est inchangée ;

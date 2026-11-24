@@ -628,10 +628,14 @@ export function mountChaosPage(root: HTMLElement) {
         undefined,
         ERRORS,
       );
-      // Dernier enregistrement de la file pour cet effet (ou échec) : le moteur redevient la seule source.
-      if (!ok || pending[effect] === next) {
+      // Dernier enregistrement de la file pour cet effet (ou échec) : le moteur redevient la seule source, une fois
+      // relu (jusque-là, la fiche garde ses réglages : un réglage tapé entre-temps part du bon état).
+      if (!ok) {
         delete pending[effect];
         await refresh();
+      } else if (pending[effect] === next) {
+        await refresh();
+        if (pending[effect] === next) delete pending[effect];
       }
     });
   }
@@ -841,9 +845,17 @@ export function mountChaosPage(root: HTMLElement) {
     paintPanel();
   }
 
+  // Relevés concurrents (périodique, après un enregistrement, après une case) : leurs réponses peuvent revenir dans le
+  // désordre ; un état plus ancien que celui déjà affiché est ignoré (il effacerait un réglage tout juste enregistré).
+  let refreshSeq = 0;
+  let appliedSeq = 0;
   async function refresh() {
+    const seq = ++refreshSeq;
     try {
-      st = await getJson<State>('/api/chaos/state');
+      const next = await getJson<State>('/api/chaos/state');
+      if (seq < appliedSeq) return;
+      appliedSeq = seq;
+      st = next;
       readError = '';
     } catch (e) {
       readError =
