@@ -244,6 +244,37 @@ namespace Raptoru.Chaos
         [DllImport("obs.dll", CallingConvention = C)] static extern void obs_sceneitem_set_bounds_type(IntPtr item, int type);
         [DllImport("obs.dll", CallingConvention = C)] static extern void obs_sceneitem_set_bounds(IntPtr item, ref Vec2 bounds);
         [DllImport("obs.dll", CallingConvention = C)] [return: MarshalAs(UnmanagedType.U1)] static extern bool obs_sceneitem_set_visible(IntPtr item, [MarshalAs(UnmanagedType.U1)] bool visible);
+        [DllImport("obs.dll", CallingConvention = C)] [return: MarshalAs(UnmanagedType.U1)] static extern bool obs_source_showing(IntPtr s);
+        static IntPtr pdhMemQ, pdhMemC;
+        /// Mémoire vidéo dédiée de ce processus (Mo), compteur Windows « GPU Process Memory ».
+        static double GpuMemMb()
+        {
+            if (pdhMemQ == IntPtr.Zero && (PdhOpenQueryW(null, IntPtr.Zero, out pdhMemQ) != 0 || PdhAddEnglishCounterW(pdhMemQ, @"\GPU Process Memory(*)\Dedicated Usage", IntPtr.Zero, out pdhMemC) != 0)) return double.NaN;
+            PdhCollectQueryData(pdhMemQ);
+            uint size = 0, count;
+            PdhGetRawCounterArrayW(pdhMemC, ref size, out count, IntPtr.Zero);
+            if (size == 0) return double.NaN;
+            IntPtr buf = Marshal.AllocHGlobal((int)size);
+            try
+            {
+                if (PdhGetRawCounterArrayW(pdhMemC, ref size, out count, buf) != 0) return double.NaN;
+                string me = "pid_" + System.Diagnostics.Process.GetCurrentProcess().Id + "_";
+                double b = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    IntPtr item = new IntPtr(buf.ToInt64() + i * 48L);
+                    string name = Marshal.PtrToStringUni(Marshal.ReadIntPtr(item));
+                    if (name != null && name.Contains(me)) b += Marshal.ReadInt64(item, 24);
+                }
+                return Math.Round(b / 1048576.0, 1);
+            }
+            finally { Marshal.FreeHGlobal(buf); }
+        }
+        static Dictionary<string, object> Memory()
+        {
+            var pr = System.Diagnostics.Process.GetCurrentProcess();
+            return J.Map("gpu_dediee_mo", GpuMemMb(), "privee_mo", Math.Round(pr.PrivateMemorySize64 / 1048576.0, 1));
+        }
 
         /// chaos-obs-check.exe --cursor-relay --out <dossier> [--monitor <texte>] [--toggles 8]
         /// Banc isolé (libobs sans fenêtre, OBS réel non touché, capture lue en mémoire, aucune image enregistrée), canevas
@@ -260,18 +291,19 @@ namespace Raptoru.Chaos
         static int CursorRelay(string[] args)
         {
             string obsDir = @"C:\Program Files\obs-studio", outDir = null, match = "@ 0,0";
-            int toggles = 8;
+            int toggles = 8, cw = 1920, ch = 1080;
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
                 else if (args[i] == "--obs" && i + 1 < args.Length) obsDir = args[++i];
                 else if (args[i] == "--monitor" && i + 1 < args.Length) match = args[++i];
                 else if (args[i] == "--toggles" && i + 1 < args.Length) toggles = int.Parse(args[++i]);
+                else if (args[i] == "--canvas" && i + 1 < args.Length) { var c = args[++i].Split('x'); cw = int.Parse(c[0]); ch = int.Parse(c[1]); }
             }
             if (outDir == null) { Console.Error.WriteLine("--out obligatoire"); return 2; }
             Directory.CreateDirectory(outDir);
             SetProcessDpiAwarenessContext(new IntPtr(-4));
-            W = 1920; H = 1080;
+            W = cw; H = ch;
             string bin = Path.Combine(obsDir, @"bin\64bit");
             SetDllDirectory(bin);
             Directory.SetCurrentDirectory(bin);
@@ -283,7 +315,7 @@ namespace Raptoru.Chaos
             int failures = 0;
             try
             {
-                var vi = new VideoInfo { Module = Marshal.StringToHGlobalAnsi("libobs-d3d11"), FpsNum = 60, FpsDen = 1, BaseW = 1920, BaseH = 1080, OutW = 1920, OutH = 1080, Format = 6, GpuConv = true, Cs = 2, Range = 2, Scale = 3 };
+                var vi = new VideoInfo { Module = Marshal.StringToHGlobalAnsi("libobs-d3d11"), FpsNum = 60, FpsDen = 1, BaseW = (uint)cw, BaseH = (uint)ch, OutW = (uint)cw, OutH = (uint)ch, Format = 6, GpuConv = true, Cs = 2, Range = 2, Scale = 3 };
                 int rv = obs_reset_video(ref vi);
                 if (rv != 0) throw new InvalidOperationException("obs_reset_video " + rv);
                 string plugins = obsDir.Replace('\\', '/');
@@ -291,6 +323,8 @@ namespace Raptoru.Chaos
                 int r = obs_open_module(out mod, plugins + "/core/win-capture/win-capture.dll", plugins + "/core/win-capture/data");
                 if (r != 0 || !obs_init_module(mod)) throw new InvalidOperationException("win-capture non chargé (" + r + ")");
                 report["obs"] = FileVersion(Path.Combine(bin, "obs64.exe"));
+                report["canvas"] = cw + "x" + ch + "@60";
+                report["memoire_au_depart"] = Memory();
                 // Identifiant de l'écran (liste « monitor_id » de la source).
                 string id = null, name = null;
                 var probe = Source("monitor_capture", "sonde", new Dictionary<string, object> { { "method", 1 } });
@@ -311,7 +345,7 @@ namespace Raptoru.Chaos
                 {
                     var it = obs_scene_add(scene, src);
                     obs_sceneitem_set_bounds_type(it, 2);
-                    var b = new Vec2 { X = 1920, Y = 1080 }; obs_sceneitem_set_bounds(it, ref b);
+                    var b = new Vec2 { X = cw, Y = ch }; obs_sceneitem_set_bounds(it, ref b);
                     var p = new Vec2 { X = dx, Y = 0 }; obs_sceneitem_set_pos(it, ref p);
                     return it;
                 };
@@ -323,7 +357,7 @@ namespace Raptoru.Chaos
                     return it;
                 };
                 var scenarios = new List<object>();
-                foreach (string sc in new[] { "actuel", "relais", "dessous", "visibilité", "scènes" })
+                foreach (string sc in new[] { "actuel", "relais", "dessous", "visibilité", "scènes", "ps5" })
                 {
                     var made = new List<IntPtr>();
                     IntPtr ecran = capture("Écran (test " + sc + ")", true); made.Add(ecran);
@@ -334,16 +368,33 @@ namespace Raptoru.Chaos
                         var copy = capture("Copie sans curseur (test " + sc + ")", false); made.Add(copy);
                         fit(sceneA, copy, 480); // décalée d'un quart : le quart gauche n'est couvert que par « Écran »
                     }
-                    if (sc == "relais" || sc == "scènes")
+                    IntPtr keepSrc = IntPtr.Zero;
+                    if (sc == "relais" || sc == "scènes" || sc == "ps5")
                     {
-                        var keep = capture("Relais sans curseur (test " + sc + ")", false); made.Add(keep);
-                        keeper(sceneA, keep);
-                        if (sc == "scènes") { sceneB = obs_scene_create("B " + sc); keeper(sceneB, keep); fit(sceneB, ecran, 0); }
+                        keepSrc = capture("Relais sans curseur (test " + sc + ")", false); made.Add(keepSrc);
+                        keeper(sceneA, keepSrc);
+                        if (sc == "scènes") { sceneB = obs_scene_create("B " + sc); keeper(sceneB, keepSrc); fit(sceneB, ecran, 0); }
                     }
                     topItem = fit(sceneA, ecran, 0);
+                    Dictionary<string, object> ps5 = null;
+                    if (sc == "ps5")
+                    {
+                        // Comme « Scène PS5 » : « Écran » présente mais masquée, et PAS de relais (Préparer ne l'y ajoute pas).
+                        var sceneP = obs_scene_create("PS5 " + sc);
+                        var hidden = fit(sceneP, ecran, 0);
+                        obs_sceneitem_set_visible(hidden, false);
+                        obs_set_output_source(0, obs_scene_get_source(sceneP));
+                        Thread.Sleep(2500);
+                        ps5 = J.Map("ecran_affichee", obs_source_showing(ecran), "relais_affiche", obs_source_showing(keepSrc), "repos", Phase(3), "memoire", Memory());
+                        Console.WriteLine("ps5        scène PS5 : « Écran » affichée=" + ps5["ecran_affichee"] + ", relais affiché=" + ps5["relais_affiche"] + " (aucune capture attendue)");
+                        obs_set_output_source(0, IntPtr.Zero);
+                        obs_scene_release(sceneP);
+                    }
                     obs_set_output_source(0, obs_scene_get_source(sceneA));
                     Thread.Sleep(2500);
                     var idle = Phase(3);
+                    var mem = Memory();
+                    var showing = J.Map("ecran", obs_source_showing(ecran), "relais", keepSrc != IntPtr.Zero ? (object)obs_source_showing(keepSrc) : null);
                     lock (gate) samples.Clear();
                     long b0 = NowNs(); Thread.Sleep(1500); long b1 = NowNs();
                     var marks = new List<KeyValuePair<long, string>>();
@@ -376,9 +427,9 @@ namespace Raptoru.Chaos
                         worstBlack = Math.Max(worstBlack, nb); worstMissing = Math.Max(worstMissing, nm);
                         per.Add(J.Map("action", m.Value, "images_500ms", win.Count, "noires", nb, "ecran_absente", nm));
                     }
-                    scenarios.Add(J.Map("scenario", sc, "repos", idle, "reference", J.Map("images", baseS.Count, "noires", baseS.Count(black), "ecran_absente", baseS.Count(missing)),
+                    scenarios.Add(J.Map("scenario", sc, "repos", idle, "memoire", mem, "affichees", showing, "ps5", ps5, "reference", J.Map("images", baseS.Count, "noires", baseS.Count(black), "ecran_absente", baseS.Count(missing)),
                         "pire_noires", worstBlack, "pire_ecran_absente", worstMissing, "bascules", per.ToArray()));
-                    Console.WriteLine(sc.PadRight(11) + " repos GPU " + idle["gpu_ms_par_image"] + " ms/image, en retard " + idle["images_en_retard"]
+                    Console.WriteLine(sc.PadRight(11) + " repos GPU " + idle["gpu_ms_par_image"] + " ms/image, en retard " + idle["images_en_retard"] + ", VRAM " + mem["gpu_dediee_mo"] + " Mo, relais affiché=" + showing["relais"]
                         + " | référence " + baseS.Count(black) + " noire(s) | par bascule : noires " + string.Join(",", per.Cast<Dictionary<string, object>>().Select(x => x["noires"]))
                         + " ; « Écran » absente " + string.Join(",", per.Cast<Dictionary<string, object>>().Select(x => x["ecran_absente"])));
                     obs_scene_release(sceneA); if (sceneB != IntPtr.Zero) obs_scene_release(sceneB);
