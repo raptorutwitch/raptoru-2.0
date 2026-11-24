@@ -23,10 +23,10 @@ namespace Raptoru.Chaos
         {
             public Gpu Gpu; public ShaderLibrary Lib; public TexturePool Pool; public GpuTimer Timer; public TextRaster Text;
             public uint W, H; public IntPtr Src, SrcSrv, Out, OutRtv, Staging, Big;
-            public Rig(uint w, uint h, bool staging)
+            public Rig(uint w, uint h, bool staging, string shaderCache = null)
             {
                 W = w; H = h;
-                Gpu = new Gpu(); Lib = new ShaderLibrary(Gpu, null); Pool = new TexturePool(Gpu); Timer = new GpuTimer(Gpu); Text = new TextRaster(Gpu);
+                Gpu = new Gpu(); Lib = new ShaderLibrary(Gpu, shaderCache); Pool = new TexturePool(Gpu); Timer = new GpuTimer(Gpu); Text = new TextRaster(Gpu);
                 Src = Gpu.Texture(w, h, 0, 0x8 | 0x20, 0x1, 0, 0); SrcSrv = Gpu.Srv(Src);
                 // Panorama 1,5 × plus large que l'écran : la « caméra du jeu » le parcourt (Pan), pour que les effets qui
                 // retiennent une image (flash) ou suivent le mouvement se jugent sur une image qui bouge.
@@ -49,9 +49,9 @@ namespace Raptoru.Chaos
         {
             public ResolvedParams P; public Animator Anim; public Effect Fx; public readonly EffectFrame F = new EffectFrame();
             public long Total;
-            public Sim(Registry reg, Rig rig, EffectDef def, string variant, int seed)
+            public Sim(Registry reg, Rig rig, EffectDef def, string variant, int seed, Preset preset = null)
             {
-                P = Params.Resolve(def, variant, null, null, null, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true);
+                P = Params.Resolve(def, variant, preset, null, null, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true);
                 Anim = new Animator(P.In, P.Out);
                 Anim.Start(0);
                 Fx = EffectCatalog.Create(def.Id);
@@ -152,6 +152,59 @@ namespace Raptoru.Chaos
             for (int i = 0; i < row.Count; i += 6) rows.Add(new KeyValuePair<string, List<KeyValuePair<string, Bitmap>>>(i == 0 ? (variant ?? "") : "", row.Skip(i).Take(6).ToList()));
             Contact(def.Label + " · " + (variant ?? "défaut"), rows, file, (int)W, (int)H);
             Console.WriteLine(file);
+            return 0;
+        }
+
+        /// Aperçu animé d'une fiche Studio (et, plus tard, de l'extension) : la vraie chaîne avec les VRAIS réglages
+        /// (variante, préréglage), sur la scène de jeu de synthèse, en images JPEG d'une grille. Deux séquences en temps
+        /// réel à 15 i/s : le début (3,2 s : entrée et premiers instants) puis, si l'effet est plus long, sa dernière
+        /// seconde (sortie). Sortie standard : description JSON de la grille. Aucune fenêtre ni capture : un processus
+        /// court, séparé du moteur en marche.
+        public static int Anim(string file, string id, string variant, string presetFile, uint W, uint H, string cache)
+        {
+            var reg = Registry.Embedded();
+            var def = reg.Get(id);
+            if (def == null || def.Internal) { Console.WriteLine(J.Write(J.Map("error", "unknown_effect"))); return 1; }
+            Preset preset = null;
+            if (presetFile != null && presetFile != "-") preset = Preset.FromJson(J.Parse(File.ReadAllText(presetFile)));
+            // Réglages refusés comme le moteur les refuserait (bornes, durée, transitions) : rien n'est rendu.
+            try { Params.Resolve(def, variant == "-" ? null : variant, preset, null, null, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true); }
+            catch (ParamError e) { Console.WriteLine(J.Write(J.Map("error", e.Code, "message", e.Message))); return 1; }
+            var rig = new Rig(W, H, true, cache);
+            var sim = new Sim(reg, rig, def, variant == "-" ? null : variant, 12345, preset);
+            const int Fps = 15;
+            long head = Math.Min(sim.Total, 3200), tailFrom = sim.Total > head + 1000 ? sim.Total - 1000 : -1;
+            var times = new List<long>();
+            for (long t = 0; t < head; t += 1000 / Fps) times.Add(t);
+            if (tailFrom > 0) for (long t = tailFrom; t < sim.Total; t += 1000 / Fps) times.Add(t);
+            int cols = 8, rows = (times.Count + cols - 1) / cols;
+            var fb = new FrameBuilder(W, H, true);
+            using (var sheet = new Bitmap((int)W * cols, (int)H * rows, PixelFormat.Format24bppRgb))
+            using (var g = Graphics.FromImage(sheet))
+            {
+                int k = 0;
+                for (long t = 0; k < times.Count; t += 16)
+                {
+                    // Avance image par image (effets à état), et saute directement à la sortie.
+                    if (k > 0 && times[k] - t > 1500) t = times[k] - 500;
+                    bool shot = t >= times[k];
+                    long at = shot ? times[k] : t;
+                    fb.Reset(W, H, true);
+                    rig.Pan(at);
+                    sim.Render(fb, at);
+                    fb.Execute(rig.Gpu, rig.Lib, rig.Pool, null, rig.SrcSrv, rig.OutRtv, at, at / 1000f);
+                    if (!shot) continue;
+                    using (var bmp = Read(rig)) g.DrawImageUnscaled(bmp, (int)W * (k % cols), (int)H * (k / cols));
+                    k++;
+                }
+                var enc = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
+                var ps = new EncoderParameters(1);
+                ps.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 78L);
+                sheet.Save(file, enc, ps);
+            }
+            sim.Fx.Dispose();
+            Console.WriteLine(J.Write(J.Map("frames", times.Count, "cols", cols, "w", W, "h", H, "fps", Fps,
+                "head_ms", head, "tail_from_ms", tailFrom, "total_ms", sim.Total, "duration_ms", sim.P.DurationMs)));
             return 0;
         }
 
