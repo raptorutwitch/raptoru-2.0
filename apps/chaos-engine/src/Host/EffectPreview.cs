@@ -14,6 +14,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Raptoru.Chaos
 {
@@ -79,6 +80,85 @@ namespace Raptoru.Chaos
                 Fx.Update(F);
                 Fx.Render(fb, F);
             }
+        }
+
+        /// --check-hold <effet> [--level x] [--w --h] [--expect-motion] : non-régression du maintien animé (bug VHS du 24/11).
+        /// Image source FIXE, aucune nouvelle capture, comme une fenêtre immobile ou l'image figée du mode E. La cadence du
+        /// moteur (Cadence.Timed et Due, la même règle) est rejouée à 60 Hz : une image n'est rendue que si elle est due ;
+        /// sinon la précédente reste affichée. Relevés : entrée, cinq instants du maintien, sortie. Conforme si chaque
+        /// rafraîchissement du maintien est rendu et, avec --expect-motion, si l'image affichée change d'un relevé du
+        /// maintien au suivant. L'ancienne règle (horloge ignorée) est rejouée pour comparaison. JSON ; code 0 = conforme.
+        public static int CheckHold(string effect, uint W, uint H, bool expectMotion)
+        {
+            var reg = Registry.Embedded();
+            EffectDef def;
+            if (!reg.Effects.TryGetValue(effect, out def)) { Console.Error.WriteLine("effet inconnu : " + effect); return 2; }
+            var rig = new Rig(W, H, true);
+            var rules = new List<object>();
+            bool ok = true;
+            foreach (bool oldRule in new[] { true, false })
+            {
+                var sim = new Sim(reg, rig, def, null, 4242);
+                var fb = new FrameBuilder(rig.W, rig.H, true);
+                long inMs = sim.P.In.Instant ? 0 : sim.P.In.DurationMs, outMs = sim.P.Out.Instant ? 0 : sim.P.Out.DurationMs;
+                long holdA = inMs, holdB = sim.ExitAt;
+                var marks = new List<KeyValuePair<string, long>>();
+                if (inMs > 0) marks.Add(new KeyValuePair<string, long>("entrée", inMs / 2));
+                for (int i = 1; i <= 5; i++) marks.Add(new KeyValuePair<string, long>("maintien " + i, holdA + (holdB - holdA) * i / 6));
+                if (outMs > 0) marks.Add(new KeyValuePair<string, long>("sortie", sim.ExitAt + outMs / 2));
+                bool shown = false, clockDriven = false, fresh = true;
+                int holdTicks = 0, holdRenders = 0, changed = 0, pairs = 0, k = 0, renders = 0;
+                byte[] prevHold = null;
+                var shots = new List<object>();
+                for (int n = 0; ; n++)
+                {
+                    long t = (long)Math.Round(n * 1000.0 / 60);
+                    if (t > sim.Total) break;
+                    if (t >= sim.ExitAt) sim.Anim.BeginExit(sim.ExitAt);
+                    bool timed = Cadence.Timed(sim.Anim.Animating(t), def.RequiresCapture, false, false, !oldRule && clockDriven);
+                    bool due = Cadence.Due(shown, timed, true, fresh), hold = t >= holdA && t < holdB;
+                    if (hold) holdTicks++;
+                    if (due)
+                    {
+                        fb.Reset(rig.W, rig.H, true);
+                        sim.F.ClockRead = false;
+                        sim.Render(fb, t);
+                        clockDriven = sim.F.ClockRead;
+                        fb.Execute(rig.Gpu, rig.Lib, rig.Pool, null, rig.SrcSrv, rig.OutRtv, t, t / 1000f);
+                        shown = true; fresh = false; renders++;
+                        if (hold) holdRenders++;
+                    }
+                    while (k < marks.Count && t >= marks[k].Value)
+                    {
+                        // Image affichée à cet instant : la dernière rendue (rig.Out), comme le calque à l'écran.
+                        rig.Gpu.Copy(rig.Staging, rig.Out, 0, 0, rig.W, rig.H);
+                        var img = rig.Gpu.ReadBack(rig.Staging, rig.W, rig.H);
+                        bool isHold = marks[k].Key.StartsWith("maintien");
+                        double diff = -1;
+                        if (isHold && prevHold != null)
+                        {
+                            int c = 0;
+                            for (int i = 0; i < img.Length; i += 4) if (Math.Abs(img[i] - prevHold[i]) + Math.Abs(img[i + 1] - prevHold[i + 1]) + Math.Abs(img[i + 2] - prevHold[i + 2]) > 6) c++;
+                            diff = Math.Round(100.0 * c / (img.Length / 4), 2);
+                            pairs++; if (diff >= 1) changed++;
+                        }
+                        if (isHold) prevHold = img;
+                        shots.Add(J.Map("at", marks[k].Key, "t_ms", t, "presence", Math.Round(sim.Anim.Presence(t), 3), "renders_so_far", renders,
+                            "pixels_changed_since_previous_hold_pct", diff >= 0 ? (object)diff : null));
+                        k++;
+                    }
+                }
+                // Un filtre qui ne lit pas l'horloge (couleur) est immobile au maintien : une image par capture suffit.
+                bool animated = (!clockDriven || holdRenders == holdTicks) && (!expectMotion || changed == pairs);
+                if (!oldRule && !animated) ok = false;
+                rules.Add(J.Map("rule", oldRule ? "avant (horloge ignorée)" : "après (Cadence.Timed + horloge)", "hold_ticks", holdTicks, "hold_renders", holdRenders,
+                    "hold_pairs_changed", changed + "/" + pairs, "hold_animated", animated, "clock_read", clockDriven, "shots", shots.ToArray()));
+                sim.Fx.Dispose();
+            }
+            // UTF-8 (relevés nommés « entrée », « sortie ») : le moteur est une application sans console.
+            using (var o = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)))
+                o.WriteLine(J.Write(J.Map("effect", effect, "requires_capture", def.RequiresCapture, "ok", ok, "rules", rules.ToArray())));
+            return ok ? 0 : 1;
         }
 
         /// --measure <effet> <variante|-> <t1,t2,…> [--w --h] : couverture d'un calque à chaque instant demandé, hors écran.

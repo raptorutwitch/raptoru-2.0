@@ -14,7 +14,13 @@ namespace Raptoru.Chaos
     {
         public ResolvedParams P;
         public double Presence;   // 0 = absent, 1 = entier (entrée et sortie animées par le moteur)
-        public long NowMs, ElapsedMs;
+        public long NowMs;
+        long elapsed;
+        /// Horloge de l'effet (ms depuis sa première image). La lire déclare l'image animée par le temps (ClockRead) : le
+        /// moteur la redessine alors à chaque rafraîchissement, même sans nouvelle capture (Cadence.Timed).
+        public long ElapsedMs { get { ClockRead = true; return elapsed; } set { elapsed = value; } }
+        /// Le rendu de cette image a lu ElapsedMs (remis à faux par le moteur avant chaque image).
+        public bool ClockRead;
         public uint Width, Height;
         /// Graine de l'activation : variations « aléatoires » reproductibles, différentes d'un déclenchement à l'autre.
         public int Seed;

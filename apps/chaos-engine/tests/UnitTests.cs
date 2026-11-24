@@ -514,6 +514,17 @@ namespace Raptoru.Chaos
                 True(EffectRequest.SelfCapture(true, "C", false) && EffectRequest.SelfCapture(true, "C", true), "mode C : toujours exclu (il lit son écran)");
                 True(!EffectRequest.SelfCapture(false, "D", true), "mode D (fenêtre) : capturable");
             });
+            Case("cadence : un filtre qui lit la capture ET l'horloge reste redessiné pendant le maintien sans nouvelle capture (VHS, 24/11)", () =>
+            {
+                // Maintien (pas de transition), filtre sur capture, aucune capture nouvelle, pas de curseur suivi.
+                True(!Cadence.Timed(false, true, false, false, false), "filtre immobile (couleur) : une image par nouvelle capture seulement");
+                True(Cadence.Timed(false, true, false, false, true), "filtre animé par l'horloge (VHS) : une image par rafraîchissement");
+                True(Cadence.Due(true, Cadence.Timed(false, true, false, false, true), true, false), "VHS au maintien, capture inchangée : image due à chaque rafraîchissement");
+                True(!Cadence.Due(true, Cadence.Timed(false, true, false, false, false), true, false), "ancienne règle : aucune image due (gel jusqu'à la sortie)");
+                True(Cadence.Timed(true, true, false, false, false) && Cadence.Timed(false, false, false, false, false) && Cadence.Timed(false, true, false, true, false),
+                    "inchangé : transitions, calques sans capture, curseur suivi");
+                True(Cadence.Due(false, false, false, false), "première image toujours due");
+            });
 
             // ---------- Catalogue des effets V2 (docs/chaos/ETUDE_EFFETS_V2.md) ----------
             Case("catalogue V2 : chaque effet public a ses variantes valides, ses paliers viewers et son aperçu", () =>

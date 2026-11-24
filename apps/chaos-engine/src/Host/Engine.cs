@@ -41,6 +41,8 @@ namespace Raptoru.Chaos
         public double GpuFrameEstMs = -1;
         /// Curseur : un effet de la surface le fait suivre l'image, et le vrai curseur est au-dessus de la cible.
         public bool FollowsCursor, CursorOver;
+        /// La dernière image rendue lisait l'horloge d'un effet : animée par le temps, redessinée à chaque rafraîchissement.
+        public bool ClockDriven;
     }
 
     sealed class EngineHost
@@ -416,14 +418,14 @@ namespace Raptoru.Chaos
             }
             // Images cadencées (rythmeur de l'écran) : animation, calque sans capture, ou cadence plafonnée.
             // (curseur suivi : une image par rafraîchissement au plus, dès qu'il bouge ou change de forme)
-            bool timed = Animating(s) || !needsCapture || (capped && s.PendingFresh) || s.FollowsCursor;
+            bool timed = Cadence.Timed(Animating(s), needsCapture, capped && s.PendingFresh, s.FollowsCursor, s.ClockDriven);
             if (timed && s.Pacer == null) s.Pacer = PacerFor(s.S);
             s.WantsTicks = timed;
             bool tick = s.Pacer != null && s.Pacer.Ticks != s.PacerSeen;
             if (tick) s.PacerSeen = s.Pacer.Ticks;
             // Images cadencées : une par retour de balayage (avec la capture la plus récente), jamais deux par période ;
             // sinon une par nouvelle capture.
-            bool due = !s.S.Shown || (timed ? tick : s.PendingFresh);
+            bool due = Cadence.Due(s.S.Shown, timed, tick, s.PendingFresh);
             // Cadence plafonnée : au plus une image (la plus récente) par période.
             if (due && capped && s.S.Shown && N.QpcNow() - s.LastRenderQpc < (long)(N.QpcFreq() / rate * 0.9)) due = false;
             if (!due) { UpdateStarting(s, live, now); return; }
@@ -434,6 +436,7 @@ namespace Raptoru.Chaos
             fb.Scale = tel.Level >= 2 ? Math.Min(cfg.Performance.RenderScale, 0.5) : cfg.Performance.RenderScale;
             if (s.Device != null) fb.DisplayRotationRad = input.RotationDeg(s.Device) * Math.PI / 180;
             int maxPasses = cfg.Performance.MaxPasses;
+            bool clock = false;
             foreach (var e in live)
             {
                 // Effet confié à Windows (écran retourné) : il n'a rien à dessiner, le calque sert aux autres effets.
@@ -442,7 +445,7 @@ namespace Raptoru.Chaos
                 var f = e.Frame;
                 f.P = a.Req.Resolved; f.Presence = a.Anim != null ? a.Anim.Presence(now) : 0; f.NowMs = now;
                 f.ElapsedMs = a.StartedAt >= 0 ? now - a.StartedAt : 0; f.Width = s.S.Width; f.Height = s.S.Height;
-                f.Seed = e.Seed; f.Exiting = a.State == ActState.Exiting;
+                f.Seed = e.Seed; f.Exiting = a.State == ActState.Exiting; f.ClockRead = false;
                 fb.CurrentLabel = a.Def.Id;
                 int passesBefore = fb.PassCount, layersBefore = fb.LayerCount;
                 if (!e.Guard("update", () => e.Impl.Update(f)) || !e.Guard("render", () => e.Impl.Render(fb, f)))
@@ -459,7 +462,9 @@ namespace Raptoru.Chaos
                     tel.Error("too_costly");
                     sched.MarkFailed(a.Req.RequestId, "too_costly", e.Error);
                 }
+                clock |= f.ClockRead;
             }
+            s.ClockDriven = clock;
             // Image du vrai curseur, posée par la transformation de l'image (dernier calque, par-dessus tout).
             bool drawCursor = s.CursorOver && cursor.Hidden && cursorNow.Visible;
             if (drawCursor)

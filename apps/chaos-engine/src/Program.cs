@@ -82,6 +82,7 @@ namespace Raptoru.Chaos
                     return 0;
                 case "--perf-offscreen": return PerfLab.Offscreen(args);
                 case "--perf-monitor": return PerfLab.Monitor(args);
+                case "--check-hold": return EffectPreview.CheckHold(args[1], (uint)IntArg(args, "--w", 480), (uint)IntArg(args, "--h", 270), args.Contains("--expect-motion"));
                 case "--measure": return EffectPreview.Measure(args[1], args[2], args[3], (uint)IntArg(args, "--w", 640), (uint)IntArg(args, "--h", 360), StrArg(args, "--level", null));
                 case "--obs-export":
                     return ObsExport.Run(args[1], args[2], StrArg(args, "--out", "obs-export"), StrArg(args, "--level", null), IntArg(args, "--seed", 4242),
