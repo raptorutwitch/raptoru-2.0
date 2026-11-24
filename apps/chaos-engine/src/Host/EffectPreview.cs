@@ -208,6 +208,49 @@ namespace Raptoru.Chaos
             return 0;
         }
 
+        /// Superpositions : plusieurs effets en même temps (« fog,color:nb »), rendus dans l'ordre du moteur (registre :
+        /// order), n images de t0 à t1. Vérifie les combinaisons (brouillard + noir et blanc, zoom + tunnel, flash pendant
+        /// un retournement…).
+        public static int Combo(string dir, string spec, long t0, long t1, int n, uint W = 480, uint H = 270)
+        {
+            Directory.CreateDirectory(dir);
+            var reg = Registry.Embedded();
+            var rig = new Rig(W, H, true);
+            var sims = new List<Sim>();
+            int seed = 500;
+            foreach (var part in spec.Split(','))
+            {
+                var kv = part.Split(':');
+                var def = reg.Get(kv[0]);
+                if (def == null) { Console.WriteLine("effet inconnu : " + kv[0]); return 1; }
+                sims.Add(new Sim(reg, rig, def, kv.Length > 1 ? kv[1] : null, seed++));
+            }
+            sims.Sort((a, b) => a.P.Def.Order.CompareTo(b.P.Def.Order));
+            var fb = new FrameBuilder(W, H, true);
+            var row = new List<KeyValuePair<string, Bitmap>>();
+            int k = 0;
+            for (long t = 0; k < n; t += 16)
+            {
+                long want = n == 1 ? t0 : t0 + (t1 - t0) * k / (n - 1);
+                bool shot = t >= want;
+                long at = shot ? want : t;
+                fb.Reset(W, H, true);
+                rig.Pan(at);
+                foreach (var s in sims) s.Render(fb, at);
+                fb.Execute(rig.Gpu, rig.Lib, rig.Pool, null, rig.SrcSrv, rig.OutRtv, at, at / 1000f);
+                if (!shot) continue;
+                row.Add(new KeyValuePair<string, Bitmap>((want / 1000.0).ToString("0.00") + " s", Read(rig)));
+                k++;
+            }
+            foreach (var s in sims) s.Fx.Dispose();
+            string file = Path.Combine(dir, "combo-" + spec.Replace(':', '_').Replace(',', '+') + ".png");
+            var rows = new List<KeyValuePair<string, List<KeyValuePair<string, Bitmap>>>>();
+            for (int i = 0; i < row.Count; i += 6) rows.Add(new KeyValuePair<string, List<KeyValuePair<string, Bitmap>>>("", row.Skip(i).Take(6).ToList()));
+            Contact(spec, rows, file, (int)W, (int)H);
+            Console.WriteLine(file);
+            return 0;
+        }
+
         /// Instants montrés : début d'entrée, fin d'entrée, maintien (3), début et milieu de sortie, fin.
         static List<long> Times(Sim s)
         {

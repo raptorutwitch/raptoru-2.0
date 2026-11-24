@@ -344,23 +344,10 @@ namespace Raptoru.Chaos
             uint inW = Width, inH = Height;
             uint sw = Math.Max(1, (uint)Math.Round(Width * Math.Min(1, Math.Max(0.25, Scale)))), sh = Math.Max(1, (uint)Math.Round(Height * Math.Min(1, Math.Max(0.25, Scale))));
             PooledTarget prev = null;
-            // Images retenues (flash) : copie de l'entrée et de ses mipmaps, une fois.
-            foreach (var r in retains)
-            {
-                if (!r.Pending || inputSrv == IntPtr.Zero) continue;
-                if (r.Tex == IntPtr.Zero || r.W != Width || r.H != Height)
-                {
-                    r.Release();
-                    r.W = Width; r.H = Height;
-                    r.Tex = gpu.Texture(Width, Height, 0, 0x8 | 0x20, 0x1, 0, 0);
-                    r.Srv = gpu.Srv(r.Tex); r.Rtv = gpu.Rtv(r.Tex);
-                }
-                cb[20] = Width; cb[21] = Height; cb[22] = Width; cb[23] = Height;
-                gpu.Target(r.Rtv, Width, Height, false);
-                gpu.Draw(lib.VsFull, lib.Pixel("copy"), inputSrv, cb, 3);
-                gpu.GenerateMips(r.Srv);
-                r.Pending = false; r.Ready = true;
-            }
+            // Images retenues (flash) : ce qui est AFFICHÉ, sans les calques. Sans passe : l'image capturée ; avec des passes
+            // (retournement, zoom…) : la sortie de la dernière, qui écrit alors dans une cible du pool, copiée ensuite.
+            bool retainAfter = false;
+            foreach (var r in retains) if (r.Pending && inputSrv != IntPtr.Zero) { if (passCount > 0) retainAfter = true; else RetainFrom(gpu, lib, r, inputSrv); }
             // L'image de la fenêtre n'est rendue par Windows qu'à son rafraîchissement (écran entier surtout) : vider la cible
             // d'abord place l'attente de son tampon hors des mesures GPU des passes, qui ne mesurent alors que leur coût réel.
             gpu.Clear(outRtv, 0, 0, 0, 0);
@@ -375,7 +362,7 @@ namespace Raptoru.Chaos
             for (int i = 0; i < passCount; i++)
             {
                 var p = all[i];
-                bool last = i == passCount - 1;
+                bool last = i == passCount - 1 && !retainAfter;
                 uint ow = last ? Width : sw, oh = last ? Height : sh;
                 PooledTarget dst = last ? null : pool.Rent(ow, oh, now);
                 if (p.NeedsBlurredInput && i > 0 && prev != null) gpu.GenerateMips(prev.Srv);
@@ -391,6 +378,17 @@ namespace Raptoru.Chaos
                 if (prev != null) pool.Return(prev, now);
                 prev = dst;
                 if (dst != null) { input = dst.Srv; inW = ow; inH = oh; }
+            }
+            if (retainAfter && prev != null)
+            {
+                // Image finale des passes : retenue, puis recopiée dans la cible (cette image seulement).
+                foreach (var r in retains) if (r.Pending) RetainFrom(gpu, lib, r, prev.Srv);
+                Array.Clear(cb, 0, cb.Length);
+                cb[18] = 1; cb[19] = 1; cb[20] = Width; cb[21] = Height; cb[22] = inW; cb[23] = inH; cb[26] = 1;
+                gpu.Target(outRtv, Width, Height, false);
+                gpu.Draw(lib.VsFull, lib.Pixel("copy"), prev.Srv, cb, 3);
+                pool.Return(prev, now);
+                prev = null;
             }
             if (layers.Count > 0)
             {
@@ -416,6 +414,23 @@ namespace Raptoru.Chaos
                 }
             }
             gpu.Unbind();
+        }
+
+        void RetainFrom(Gpu gpu, ShaderLibrary lib, RetainedImage r, IntPtr srv)
+        {
+            if (r.Tex == IntPtr.Zero || r.W != Width || r.H != Height)
+            {
+                r.Release();
+                r.W = Width; r.H = Height;
+                r.Tex = gpu.Texture(Width, Height, 0, 0x8 | 0x20, 0x1, 0, 0);
+                r.Srv = gpu.Srv(r.Tex); r.Rtv = gpu.Rtv(r.Tex);
+            }
+            Array.Clear(cb, 0, cb.Length);
+            cb[18] = 1; cb[19] = 1; cb[20] = Width; cb[21] = Height; cb[22] = Width; cb[23] = Height;
+            gpu.Target(r.Rtv, Width, Height, false);
+            gpu.Draw(lib.VsFull, lib.Pixel("copy"), srv, cb, 3);
+            gpu.GenerateMips(r.Srv);
+            r.Pending = false; r.Ready = true;
         }
 
         /// Calque shader plein écran : directement dans la cible (pleine résolution), ou dans une cible réduite du pool

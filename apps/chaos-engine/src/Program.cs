@@ -57,6 +57,7 @@ namespace Raptoru.Chaos
                 case "--render-effects": return EffectPreview.Run(args.Length > 1 ? args[1] : ".", args.Skip(2).Where((x, i) => !x.StartsWith("--") && !args.Skip(1).ElementAt(i).StartsWith("--w") && !args.Skip(1).ElementAt(i).StartsWith("--h")).ToList(), args.Contains("--frames"), (uint)IntArg(args, "--w", 480), (uint)IntArg(args, "--h", 270));
                 case "--strip": return EffectPreview.Strip(args[1], args[2], args[3], long.Parse(args[4]), long.Parse(args[5]), int.Parse(args[6]), (uint)IntArg(args, "--w", 480), (uint)IntArg(args, "--h", 270));
                 case "--preview-anim": return EffectPreview.Anim(args[1], args[2], args[3], args[4], (uint)IntArg(args, "--w", 320), (uint)IntArg(args, "--h", 180), StrArg(args, "--cache", null));
+                case "--combo": return EffectPreview.Combo(args[1], args[2], long.Parse(args[3]), long.Parse(args[4]), int.Parse(args[5]));
                 case "--bench-effects": return EffectPreview.Bench(IntArg(args, "--w", 2560), IntArg(args, "--h", 1440), IntArg(args, "--frames", 300));
                 case "--describe":
                     var reg = Registry.Embedded();
