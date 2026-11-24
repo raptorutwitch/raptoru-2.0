@@ -147,7 +147,12 @@ en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.m
 - flou : sous-échantillonnage à 13 lectures si le flou très fort ondule en mouvement ;
 - point visé : miniature capturée du vrai écran, si l'écran miniature ne suffit pas ;
 - lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
-- **mode C** (écran + OBS, choisi par Antoni, construit le 24/11 : [chaos/MODE_C.md](chaos/MODE_C.md)). Restes :
+- **capture directe par « Écran »** (24/11 soir, priorité d'Antoni après la sonde DXGI : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md)) :
+  - construite et testée hors écran ; Studio part en « Écran uniquement » ;
+  - reste la validation visible d'Antoni (Miroir, Clignement, Brouillard, Zoom ; version de test `0.1.44-chaos.5`) ;
+  - reste aussi la mesure à l'écran du coût de composition du mode E ;
+- **mode C** (écran + OBS, choisi par Antoni, construit le 24/11, **alternative** depuis la capture directe :
+  [chaos/MODE_C.md](chaos/MODE_C.md)). Restes :
   - test d'exclusion visible ;
   - GO puis préparation des filtres dans l'OBS réel et essai contrôlé ;
   - banc 1440p (écran et OBS) ;

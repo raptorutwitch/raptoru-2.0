@@ -94,10 +94,24 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.3** (installée par Antoni le 24/11).
+Studio installé aujourd'hui : **0.1.44-chaos.4** (installée par Antoni le 24/11).
 
-Version de test **0.1.44-chaos.4** (24/11, mode C : écran + source gameplay d'OBS), construite en local, **ni publiée
-ni installée** :
+Version de test **0.1.44-chaos.5** (24/11 soir, capture directe par « Écran », sans filtre), construite en local,
+**ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.5.exe`
+- 126 750 834 o, SHA-256 `57fef362e01788e4c025e0c2ba18a30e1487ef61f4000625042a5df9133e3b34`
+- contenu : tout ce que contenait 0.1.44-chaos.4, plus la **capture directe** ([CAPTURE_DIRECTE.md](CAPTURE_DIRECTE.md)) :
+  - une fiche « écran » sans sortie OBS passe toujours en mode E, calque jamais exclu, donc vu par « Écran » ;
+  - Diffusion OBS part en « Écran uniquement » ;
+  - le mode C à filtres reste au choix ;
+- commit `f0c544d5` de `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton dans le paquet (vérifié) ;
+- installer comme ci-dessous (jeu fermé, Studio et Chaos Lab fermés). Essais : CAPTURE_DIRECTE.md § 5. Rien n'est à
+  changer dans OBS ;
+- retour arrière : relancer `Raptoru Studio Setup 0.1.44-chaos.4.exe` (SHA-256 `42659f76…`).
+
+Version de test précédente **0.1.44-chaos.4** (24/11, mode C : écran + source gameplay d'OBS), installée par Antoni
+le 24/11 :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.4.exe`
 - 126 780 284 o, SHA-256 `42659f7647858d6bf6ba83f171ce90ad8be3210d8dcee3eb6bdab7e7f0b4bc44`

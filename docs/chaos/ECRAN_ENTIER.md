@@ -4,6 +4,11 @@
 `Capture/Capture.cs` (`ComposedScreenSource`), `Present/Surface.cs` (modes et exclusion), `Host/Engine.cs` (exclusion
 pilotée par la capture). **Rien n'a encore été vu sur un vrai écran** : la garde de jeu est restée occupée.
 
+> **Mise à jour du 24/11 (soir), [CAPTURE_DIRECTE.md](CAPTURE_DIRECTE.md)** : sans sortie OBS, une fiche « écran » ne
+> passe plus jamais en mode C, dont le calque exclu restait invisible pour « Écran ». Elle passe toujours en mode E :
+> la fenêtre qui occupe l'écran, à défaut la plus haute qui en couvre 25 %, ou l'image de l'écran seule. Le mode C ne
+> sert plus qu'avec la sortie OBS (filtres).
+
 ## 1. Le défaut constaté
 
 Essais d'Antoni dans Studio 0.1.44-chaos.2 : l'écran ivre et le clignement s'appliquaient à la fenêtre principale, mais

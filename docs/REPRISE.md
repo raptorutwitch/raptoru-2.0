@@ -218,8 +218,20 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     la sonde `chaos-bench.exe --capture-probe --screen \\.\DISPLAY1` (à lancer par Antoni).
   - Garde de jeu corrigée : les « plein écran » du 24/11 venaient des deux fenêtres Halloween de Studio (calques
     traversables, « Overlay actif » allumé), pas d'un jeu.
-- **Mode C (24/11, décision d'Antoni, par défaut)** : l'écran du streamer ET la source gameplay « Écran » d'OBS, sans
-  double application. Doc : [chaos/MODE_C.md](chaos/MODE_C.md).
+- **Capture directe par « Écran » (24/11 soir, priorité d'Antoni)** : un seul rendu, vu à l'écran et capturé tel quel
+  par « Écran » (DXGI), sans filtre. Doc : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md).
+  - **Cause du Miroir absent d'OBS** : sans fenêtre couvrant 90 % de l'écran, la fiche partait en mode C, dont le
+    calque est exclu des captures pendant tout l'effet.
+  - **Correctif** (commits `21833432` et `f0c544d5`, locaux) :
+    - écran seul → toujours mode E (fenêtre du dessus en direct, reste de l'écran figé), jamais exclu ;
+    - mode C seulement avec les filtres ;
+    - Studio part en « Écran uniquement » ;
+    - sonde du vrai chemin `chaos-bench.exe --capture-probe --engine`.
+  - **Tests** : unitaires moteur 35/35, Studio ciblés 25/25, page e2e non visible 36/36.
+  - **Reste** : la validation visible d'Antoni (CAPTURE_DIRECTE.md § 5), avec la version de test `0.1.44-chaos.5`
+    (GUIDE_STUDIO_CHAOS.md § 4).
+- **Mode C (24/11, décision d'Antoni ; alternative depuis la capture directe)** : l'écran du streamer ET la source
+  gameplay « Écran » d'OBS, sans double application. Doc : [chaos/MODE_C.md](chaos/MODE_C.md).
   - **Construit** : une activation à deux sorties (le moteur calcule la partition OBS avant la première image) ; calque
     exclu des captures pendant la sortie OBS ; panneau « Diffusion OBS » ; filtres « Raptoru Chaos V2 » préparés
     seulement sur clic, avec sauvegarde, sans toucher aux V1.

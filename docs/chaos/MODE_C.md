@@ -4,6 +4,12 @@
 subit l'effet sur son écran ; les spectateurs voient le même effet sur la source « Écran » d'OBS ; la webcam, les
 alertes et l'habillage restent normaux, au-dessus.
 
+> **24/11 (soir)** : la sonde a montré que « Écran » (DXGI) voit le calque quand il n'est pas exclu.
+>
+> - La priorité passe à la **capture directe** ([CAPTURE_DIRECTE.md](CAPTURE_DIRECTE.md)), sans filtre.
+> - Studio part désormais en « Écran uniquement ».
+> - Ce mode C reste l'alternative, à choisir dans Diffusion OBS (« Écran + OBS »).
+
 Étude préalable (architectures comparées, prototype) : [OBS_SOURCE_GAMEPLAY.md](OBS_SOURCE_GAMEPLAY.md). Ce document
 décrit ce qui est **construit**, ce qui est **prouvé** et à quel niveau, et ce qui reste à faire par Antoni.
 
