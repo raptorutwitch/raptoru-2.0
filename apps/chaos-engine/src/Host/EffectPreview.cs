@@ -19,6 +19,8 @@ namespace Raptoru.Chaos
 {
     static class EffectPreview
     {
+        /// Niveau d'intensité appliqué par les outils (--level), sauf s'ils en donnent un.
+        public static string DefaultLevel;
         sealed class Rig
         {
             public Gpu Gpu; public ShaderLibrary Lib; public TexturePool Pool; public GpuTimer Timer; public TextRaster Text;
@@ -49,9 +51,9 @@ namespace Raptoru.Chaos
         {
             public ResolvedParams P; public Animator Anim; public Effect Fx; public readonly EffectFrame F = new EffectFrame();
             public long Total;
-            public Sim(Registry reg, Rig rig, EffectDef def, string variant, int seed, Preset preset = null)
+            public Sim(Registry reg, Rig rig, EffectDef def, string variant, int seed, Preset preset = null, string level = null)
             {
-                P = Params.Resolve(def, variant, preset, null, null, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true);
+                P = Params.Resolve(def, variant, preset, null, null, null, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }, true, level ?? DefaultLevel);
                 Anim = new Animator(P.In, P.Out);
                 Anim.Start(0);
                 Fx = EffectCatalog.Create(def.Id);
@@ -69,6 +71,104 @@ namespace Raptoru.Chaos
                 Fx.Update(F);
                 Fx.Render(fb, F);
             }
+        }
+
+        /// --measure <effet> <variante|-> <t1,t2,…> [--w --h] : couverture d'un calque à chaque instant demandé, hors écran.
+        /// Alpha par pixel = 1 − (rendu sur blanc − rendu sur noir) : min, moyenne, quantiles, part de l'écran couverte
+        /// (≥ 95 %, ≥ 99,9 %), part encore bien visible (< 30 %), cases d'un quadrillage 16×9 presque masquées (≥ 90 %) ou
+        /// dégagées (< 40 %), profil radial (distance au point focal, en hauteurs d'écran). Sortie JSON (tests, réglages).
+        public static int Measure(string effect, string variant, string times, uint W, uint H, string level = null)
+        {
+            var reg = Registry.Embedded();
+            EffectDef def;
+            if (!reg.Effects.TryGetValue(effect, out def)) { Console.Error.WriteLine("effet inconnu : " + effect); return 2; }
+            if (variant == "-") variant = null;
+            var rig = new Rig(W, H, true);
+            IntPtr srcRtv = rig.Gpu.Rtv(rig.Src);
+            var sim = new Sim(reg, rig, def, variant, 4242, null, level);
+            // « peak » : toutes les images (33 ms) jusqu'à la fin de la sortie ; on garde la plus couvrante et la plus dégagée.
+            bool peak = times == "peak";
+            var ts = peak ? Enumerable.Range(0, (int)(sim.Total / 33) + 1).Select(i => (long)i * 33).ToList() : times.Split(',').Select(long.Parse).ToList();
+            var black = Shots(reg, rig, def, variant, ts, srcRtv, 0f, level);
+            var white = Shots(reg, rig, def, variant, ts, srcRtv, 1f, level);
+            double fx = sim.P.Values.ContainsKey("focus_x") ? sim.P.Num("focus_x") : 0.5, fy = sim.P.Values.ContainsKey("focus_y") ? sim.P.Num("focus_y") : 0.5;
+            sim.Fx.Dispose();
+            var res = new List<Dictionary<string, object>>();
+            for (int i = 0; i < ts.Count; i++) res.Add(Coverage(black[i], white[i], (int)W, (int)H, fx, fy, ts[i]));
+            if (peak)
+            {
+                var most = res.OrderByDescending(x => (double)x["mean"]).First();
+                res = new List<Dictionary<string, object>> { most };
+            }
+            Console.WriteLine(J.Write(J.Map("effect", effect, "variant", variant, "level", level, "size", W + "x" + H, "duration_ms", sim.P.DurationMs, "shots", res.Cast<object>().ToArray())));
+            return 0;
+        }
+
+        static List<byte[]> Shots(Registry reg, Rig rig, EffectDef def, string variant, List<long> ts, IntPtr srcRtv, float grey, string level)
+        {
+            var sim = new Sim(reg, rig, def, variant, 4242, null, level);
+            var fb = new FrameBuilder(rig.W, rig.H, true);
+            var res = new List<byte[]>();
+            int k = 0;
+            for (long t = 0; k < ts.Count; t += 33)
+            {
+                bool shot = t >= ts[k];
+                long tt = shot ? ts[k] : t;
+                rig.Gpu.Clear(srcRtv, grey, grey, grey, 1);
+                rig.Gpu.GenerateMips(rig.SrcSrv);
+                fb.Reset(rig.W, rig.H, true);
+                sim.Render(fb, tt);
+                fb.Execute(rig.Gpu, rig.Lib, rig.Pool, null, rig.SrcSrv, rig.OutRtv, tt, tt / 1000f);
+                if (!shot) continue;
+                rig.Gpu.Copy(rig.Staging, rig.Out, 0, 0, rig.W, rig.H);
+                res.Add(rig.Gpu.ReadBack(rig.Staging, rig.W, rig.H));
+                k++;
+            }
+            sim.Fx.Dispose();
+            return res;
+        }
+
+        static Dictionary<string, object> Coverage(byte[] b, byte[] w, int W, int H, double fx, double fy, long t)
+        {
+            int n = W * H;
+            var a = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                int j = i * 4;
+                double d = ((w[j] - b[j]) + (w[j + 1] - b[j + 1]) + (w[j + 2] - b[j + 2])) / (3 * 255.0);
+                a[i] = Math.Max(0, Math.Min(1, 1 - d));
+            }
+            var sorted = (double[])a.Clone();
+            Array.Sort(sorted);
+            Func<double, double> q = p => sorted[Math.Min(n - 1, (int)(p * (n - 1)))];
+            int c95 = 0, c999 = 0, v30 = 0;
+            foreach (var x in a) { if (x >= 0.95) c95++; if (x >= 0.999) c999++; if (x < 0.3) v30++; }
+            // Quadrillage 16×9 : régions presque masquées et régions dégagées au même instant.
+            int masked = 0, clear = 0;
+            for (int cy = 0; cy < 9; cy++)
+                for (int cx = 0; cx < 16; cx++)
+                {
+                    double s = 0; int m = 0;
+                    for (int y = cy * H / 9; y < (cy + 1) * H / 9; y++)
+                        for (int x = cx * W / 16; x < (cx + 1) * W / 16; x++) { s += a[y * W + x]; m++; }
+                    s /= Math.Max(1, m);
+                    if (s >= 0.9) masked++;
+                    if (s < 0.4) clear++;
+                }
+            // Profil radial autour du point focal (distance en hauteurs d'écran, pas de 0,05).
+            var sum = new double[24]; var cnt = new int[24];
+            for (int y = 0; y < H; y += 2)
+                for (int x = 0; x < W; x += 2)
+                {
+                    double dx = (x + 0.5) / H - fx * W / H, dy = (y + 0.5) / H - fy;
+                    int bin = Math.Min(23, (int)(Math.Sqrt(dx * dx + dy * dy) / 0.05));
+                    sum[bin] += a[y * W + x]; cnt[bin]++;
+                }
+            var prof = new List<object>();
+            for (int i = 0; i < 24; i++) if (cnt[i] > 0) prof.Add(Math.Round(sum[i] / cnt[i], 3));
+            return J.Map("t_ms", t, "min", Math.Round(sorted[0], 4), "mean", Math.Round(a.Average(), 4), "p05", Math.Round(q(0.05), 3), "p50", Math.Round(q(0.5), 3),
+                "p95", Math.Round(q(0.95), 3), "covered95", Math.Round(c95 / (double)n, 4), "covered999", Math.Round(c999 / (double)n, 4),
+                "visible30", Math.Round(v30 / (double)n, 4), "cells_masked90", masked, "cells_clear40", clear, "radial", prof.ToArray());
         }
 
         static IEnumerable<EffectDef> Catalogue(Registry reg, IList<string> only)

@@ -17,6 +17,8 @@ namespace Raptoru.Chaos
         public string Id, Label, Help, Unit;
         public ParamType Type;
         public double Min = double.MinValue, Max = double.MaxValue;
+        /// Plafond en mode sûr (registre safe_max) : mouvements trop agressifs bornés ; NaN = aucun.
+        public double SafeMax = double.NaN;
         public object Default, Neutral;
         public bool Animatable, Exposed = true;
         public List<string> Values = new List<string>();
@@ -62,6 +64,10 @@ namespace Raptoru.Chaos
         public List<ParamDef> Params = new List<ParamDef>();
         /// Variantes (préréglages du registre) : paramètres, et facultativement durée et transitions.
         public Dictionary<string, Preset> Variants = new Dictionary<string, Preset>();
+        /// Niveaux d'intensité (registre levels, dans l'ordre : Léger, Marqué, Extrême…) : valeurs des réglages
+        /// principaux, appliquées par-dessus la variante (la variante dit le style, le niveau la force).
+        public List<KeyValuePair<string, Preset>> Levels = new List<KeyValuePair<string, Preset>>();
+        public Preset Level(string id) { foreach (var kv in Levels) if (kv.Key == id) return kv.Value; return null; }
         public TransitionDef In = new TransitionDef(), Out = new TransitionDef();
         public List<string> StopConditions = new List<string>();
         public Dictionary<string, object> Raw;
@@ -196,6 +202,17 @@ namespace Raptoru.Chaos
                 catch (ParamError pe) { throw new RegistryError(where + "variante " + vid + " : " + pe.Message); }
                 e.Variants[vid] = vp;
             }
+            foreach (var lo in J.Arr(o, "levels"))
+            {
+                var l = lo as Dictionary<string, object>;
+                string lid = J.Str(l, "id", "");
+                if (string.IsNullOrEmpty(lid) || e.Level(lid) != null) throw new RegistryError(where + "niveau sans identifiant ou en double : " + lid);
+                var lp = Preset.FromJson(l);
+                if (lp.DurationMs.HasValue || lp.InKind != null || lp.OutKind != null) throw new RegistryError(where + "niveau " + lid + " : réglages seulement (ni durée, ni transition)");
+                try { Params.CheckPreset(e, lp, reg.Limits, new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs }); }
+                catch (ParamError pe) { throw new RegistryError(where + "niveau " + lid + " : " + pe.Message); }
+                e.Levels.Add(new KeyValuePair<string, Preset>(lid, lp));
+            }
             e.StopConditions = J.Strs(o, "stop_conditions");
             if (!e.StopConditions.Contains("stop_all")) throw new RegistryError(where + "stop_all doit toujours arrêter l'effet");
             return e;
@@ -218,6 +235,8 @@ namespace Raptoru.Chaos
                     if (double.IsNaN(p.Min) || double.IsNaN(p.Max) || p.Min > p.Max) throw new RegistryError(where + p.Id + " : bornes manquantes");
                     p.Default = J.Num(o, "default", double.NaN);
                     if ((double)p.Default < p.Min || (double)p.Default > p.Max) throw new RegistryError(where + p.Id + " : défaut hors bornes");
+                    p.SafeMax = J.Num(o, "safe_max", double.NaN);
+                    if (!double.IsNaN(p.SafeMax) && (p.SafeMax < p.Min || p.SafeMax > p.Max)) throw new RegistryError(where + p.Id + " : safe_max hors bornes");
                     if (p.Animatable)
                     {
                         p.Neutral = J.Num(o, "neutral", double.NaN);

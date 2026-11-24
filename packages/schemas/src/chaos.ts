@@ -65,6 +65,8 @@ export const chaosEffectRequestSchema = z
     request_id: id,
     effect: z.string().regex(/^[a-z][a-z0-9_.]{0,40}$/),
     variant: z.string().max(40).optional(),
+    /** Niveau d'intensité (registre levels : leger, marque, extreme…), appliqué par-dessus la variante. */
+    level: z.string().max(20).optional(),
     preset: z.string().max(40).optional(),
     params: z
       .record(z.string(), z.union([z.number(), z.string(), z.boolean()]))
@@ -143,6 +145,8 @@ export const chaosParamSchema = z.discriminatedUnion('type', [
     step: z.number().positive().optional(),
     animatable: z.boolean().optional(),
     neutral: z.number().optional(),
+    /** Plafond appliqué en mode sûr (mouvements trop agressifs bornés). */
+    safe_max: z.number().optional(),
   }),
   z.object({
     ...paramBase,
@@ -197,13 +201,15 @@ export const chaosEffectDefSchema = z.object({
   /** Effet lumineux brusque : refusé en mode sûr. */
   photosensitive: z.boolean().optional(),
   /**
-   * Préparation de l'achat par les viewers (aucune boutique active) : durées proposées, paliers = variantes
-   * proposées, variante de l'aperçu, et si l'intensité peut changer le prix. Les prix restent l'affaire du Core.
+   * Préparation de l'achat par les viewers (aucune boutique active) : durées proposées, paliers (niveaux
+   * d'intensité si `tier_kind` = `level`, sinon variantes), variante de l'aperçu, et si l'intensité peut changer le
+   * prix. Les prix restent l'affaire du Core.
    */
   viewer: z
     .object({
       durations_ms: z.array(z.number().int().positive()).min(1),
       tiers: z.array(z.string()).min(1),
+      tier_kind: z.enum(['variant', 'level']).optional(),
       preview: z.string(),
       intensity_affects_price: z.boolean(),
     })
@@ -240,6 +246,20 @@ export const chaosEffectDefSchema = z.object({
     }),
   ),
   transitions: z.object({ in: transitionDef, out: transitionDef }),
+  /**
+   * Niveaux d'intensité, dans l'ordre (Léger, Marqué, Extrême…) : valeurs des réglages principaux, appliquées
+   * par-dessus la variante (la variante dit le style, le niveau la force).
+   */
+  levels: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[a-z][a-z0-9_]{0,20}$/),
+        label: z.string(),
+        help: z.string().optional(),
+        params: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .optional(),
   stop_conditions: z
     .array(z.string())
     .refine(

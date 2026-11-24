@@ -136,6 +136,12 @@ namespace Raptoru.Chaos
             var box = new D3D11_BOX { Left = x, Top = y, Front = 0, Right = x + w, Bottom = y + h, Back = 1 };
             copyRegion(Context, dst, 0, 0, 0, 0, src, 0, ref box);
         }
+        /// Copie la région (x, y, w, h) de src en (dx, dy) dans dst (niveau 0).
+        public void CopyAt(IntPtr dst, uint dx, uint dy, IntPtr src, uint x, uint y, uint w, uint h)
+        {
+            var box = new D3D11_BOX { Left = x, Top = y, Front = 0, Right = x + w, Bottom = y + h, Back = 1 };
+            copyRegion(Context, dst, 0, dx, dy, 0, src, 0, ref box);
+        }
         public void GenerateMips(IntPtr srv) { genMips(Context, srv); }
         static readonly float[] Transparent = new float[4];
         public void Clear(IntPtr rtv, float r, float g, float b, float a)

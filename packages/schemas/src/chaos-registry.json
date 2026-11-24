@@ -274,9 +274,10 @@
       "order": 18,
       "viewer": {
         "durations_ms": [5000, 10000, 20000, 30000],
-        "tiers": ["leger", "secousse", "seisme"],
+        "tiers": ["leger", "marque", "extreme"],
         "preview": "secousse",
-        "intensity_affects_price": true
+        "intensity_affects_price": true,
+        "tier_kind": "level"
       },
       "gpu": {
         "primitive": "transform",
@@ -307,7 +308,7 @@
           "label": "Intensité",
           "min": 0.05,
           "max": 1,
-          "default": 0.6,
+          "default": 0.7,
           "step": 0.01
         },
         {
@@ -510,6 +511,29 @@
         "target_lost",
         "capture_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "intensity": 0.35
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "intensity": 0.7
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "intensity": 1
+          }
+        }
       ]
     },
     {
@@ -526,9 +550,10 @@
       "order": 14,
       "viewer": {
         "durations_ms": [5000, 10000, 20000, 30000],
-        "tiers": ["progressif", "pulsations", "extreme"],
+        "tiers": ["leger", "marque", "extreme"],
         "preview": "pulsations",
-        "intensity_affects_price": true
+        "intensity_affects_price": true,
+        "tier_kind": "level"
       },
       "gpu": {
         "primitive": "transform",
@@ -741,6 +766,29 @@
         "target_lost",
         "capture_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "factor": 1.8
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "factor": 2.5
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "factor": 6
+          }
+        }
       ]
     },
     {
@@ -757,9 +805,10 @@
       "order": 16,
       "viewer": {
         "durations_ms": [5000, 10000, 20000, 30000],
-        "tiers": ["pompette", "ivre", "ivre_mort"],
+        "tiers": ["leger", "marque", "extreme"],
         "preview": "ivre",
-        "intensity_affects_price": true
+        "intensity_affects_price": true,
+        "tier_kind": "level"
       },
       "gpu": {
         "primitive": "transform",
@@ -776,7 +825,7 @@
           "label": "Intensité",
           "min": 0.05,
           "max": 1,
-          "default": 0.6,
+          "default": 0.65,
           "step": 0.01
         },
         {
@@ -794,43 +843,59 @@
           "type": "number",
           "label": "Balancement",
           "min": 0,
-          "max": 12,
+          "max": 20,
           "default": 4,
           "unit": "°",
           "step": 0.1,
-          "advanced": true
+          "advanced": true,
+          "safe_max": 6
         },
         {
           "id": "drift",
           "type": "number",
           "label": "Dérive",
           "min": 0,
-          "max": 6,
+          "max": 12,
           "default": 2,
           "unit": "%",
           "step": 0.1,
-          "advanced": true
+          "advanced": true,
+          "safe_max": 4
+        },
+        {
+          "id": "stagger",
+          "type": "number",
+          "label": "Titubations",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "step": 0.05,
+          "advanced": true,
+          "safe_max": 0,
+          "help": "L’image part d’un côté, s’y attarde, puis repart ailleurs : changements de direction francs mais amortis."
         },
         {
           "id": "breathing",
           "type": "number",
           "label": "Respiration du zoom",
           "min": 0,
-          "max": 10,
+          "max": 20,
           "default": 3,
           "unit": "%",
           "step": 0.1,
-          "advanced": true
+          "advanced": true,
+          "safe_max": 6
         },
         {
           "id": "warp",
           "type": "number",
           "label": "Ondulation",
           "min": 0,
-          "max": 1,
+          "max": 2,
           "default": 0.5,
           "step": 0.01,
-          "advanced": true
+          "advanced": true,
+          "safe_max": 0.8
         },
         {
           "id": "double",
@@ -867,11 +932,12 @@
           "type": "number",
           "label": "Vitesse",
           "min": 0.2,
-          "max": 2,
+          "max": 3,
           "default": 0.7,
           "step": 0.05,
           "help": "Les mouvements restent lents (moins de 0,6 oscillation par seconde).",
-          "advanced": true
+          "advanced": true,
+          "safe_max": 1
         }
       ],
       "variants": [
@@ -901,26 +967,31 @@
           "params": {
             "intensity": 1,
             "progression": 0.3,
-            "sway": 7,
-            "drift": 3.5,
-            "double": 0.8,
-            "blur": 0.55,
-            "warp": 0.8,
-            "vignette": 0.6
+            "sway": 13,
+            "drift": 7,
+            "breathing": 7,
+            "double": 0.85,
+            "blur": 0.6,
+            "warp": 1.4,
+            "vignette": 0.65,
+            "speed": 1.3,
+            "stagger": 0.85
           }
         },
         {
           "id": "vertige",
           "label": "Vertige",
           "params": {
-            "intensity": 0.8,
-            "progression": 0.2,
-            "sway": 10,
-            "drift": 1,
-            "double": 0.1,
-            "warp": 0.25,
-            "breathing": 6,
-            "speed": 1.1
+            "intensity": 1,
+            "progression": 0.15,
+            "sway": 18,
+            "drift": 2.5,
+            "double": 0.15,
+            "warp": 0.6,
+            "breathing": 12,
+            "speed": 1.9,
+            "stagger": 0.45,
+            "blur": 0.3
           }
         }
       ],
@@ -945,6 +1016,29 @@
         "target_lost",
         "capture_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "intensity": 0.35
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "intensity": 0.65
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "intensity": 1
+          }
+        }
       ]
     },
     {
@@ -961,9 +1055,10 @@
       "order": 15,
       "viewer": {
         "durations_ms": [5000, 10000, 20000, 30000],
-        "tiers": ["doux", "marque", "extreme"],
-        "preview": "marque",
-        "intensity_affects_price": true
+        "tiers": ["leger", "marque", "extreme"],
+        "preview": "focus",
+        "intensity_affects_price": true,
+        "tier_kind": "level"
       },
       "gpu": {
         "primitive": "transform",
@@ -1014,26 +1109,36 @@
           "label": "Taille de la zone",
           "min": 0.04,
           "max": 0.8,
-          "default": 0.3,
+          "default": 0.28,
           "step": 0.01,
           "help": "Rayon de la zone visible, en part de la hauteur de l’écran."
         },
         {
           "id": "darkness",
           "type": "number",
-          "label": "Obscurité",
+          "label": "Obscurité de la périphérie",
           "min": 0,
           "max": 1,
-          "default": 0.9,
+          "default": 0.93,
           "step": 0.01
+        },
+        {
+          "id": "gradient",
+          "type": "number",
+          "label": "Largeur du dégradé",
+          "min": 0,
+          "max": 1,
+          "default": 0.45,
+          "step": 0.01,
+          "help": "Distance sur laquelle l’ombre s’épaissit depuis le bord de la zone visible jusqu’à la périphérie la plus sombre."
         },
         {
           "id": "zoom",
           "type": "number",
           "label": "Zoom",
           "min": 1,
-          "max": 4,
-          "default": 1.4,
+          "max": 6,
+          "default": 1.5,
           "unit": "×",
           "step": 0.05
         },
@@ -1064,12 +1169,13 @@
         {
           "id": "feather",
           "type": "number",
-          "label": "Douceur du contour",
+          "label": "Douceur du bord",
           "min": 0,
           "max": 1,
           "default": 0.45,
           "step": 0.01,
-          "advanced": true
+          "advanced": true,
+          "help": "Début du dégradé : 0 = bord net, 1 = l’assombrissement commence en douceur dès l’intérieur de la zone."
         },
         {
           "id": "inner",
@@ -1123,39 +1229,13 @@
       ],
       "variants": [
         {
-          "id": "doux",
-          "label": "Focus doux",
+          "id": "focus",
+          "label": "Focus",
           "params": {
             "mode": "fixe",
-            "radius": 0.42,
-            "darkness": 0.6,
-            "zoom": 1.15,
-            "feather": 0.8,
-            "shape": "ellipse"
-          }
-        },
-        {
-          "id": "marque",
-          "label": "Focus marqué",
-          "params": {
-            "mode": "fixe",
-            "radius": 0.3,
-            "darkness": 0.95,
-            "zoom": 1.4,
-            "feather": 0.4
-          }
-        },
-        {
-          "id": "extreme",
-          "label": "Focus extrême",
-          "params": {
-            "mode": "fixe",
-            "radius": 0.16,
-            "darkness": 1,
-            "zoom": 2.6,
-            "feather": 0.25,
-            "shape": "cercle",
-            "recenter": 0.8
+            "shape": "ellipse",
+            "feather": 0.4,
+            "gradient": 0.45
           }
         },
         {
@@ -1165,9 +1245,10 @@
             "mode": "retrecit",
             "radius": 0.4,
             "darkness": 1,
-            "zoom": 2.2,
-            "shrink": 0.35,
-            "feather": 0.35,
+            "zoom": 2.6,
+            "shrink": 0.3,
+            "feather": 0.3,
+            "gradient": 0.35,
             "shape": "cercle",
             "recenter": 1
           },
@@ -1178,12 +1259,10 @@
           "label": "Cinéma",
           "params": {
             "mode": "fixe",
-            "radius": 0.36,
-            "darkness": 0.85,
-            "zoom": 1.25,
             "shape": "rectangle",
             "stretch": 2.2,
-            "feather": 0.3
+            "feather": 0.3,
+            "gradient": 0.3
           }
         },
         {
@@ -1191,10 +1270,8 @@
           "label": "Regard qui dérive",
           "params": {
             "mode": "derive",
-            "radius": 0.26,
-            "darkness": 0.92,
-            "zoom": 1.5,
-            "drift": 0.7
+            "drift": 0.7,
+            "gradient": 0.45
           }
         }
       ],
@@ -1219,6 +1296,35 @@
         "target_lost",
         "capture_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "radius": 0.42,
+            "darkness": 0.6,
+            "zoom": 1.15
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "radius": 0.28,
+            "darkness": 0.93,
+            "zoom": 1.5
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "radius": 0.11,
+            "darkness": 1,
+            "zoom": 3.4
+          }
+        }
       ]
     },
     {
@@ -1298,7 +1404,7 @@
           "label": "Maintien",
           "min": 0,
           "max": 5000,
-          "default": 70,
+          "default": 100,
           "unit": "ms",
           "step": 10,
           "advanced": true
@@ -1403,7 +1509,7 @@
             "mode": "naturel",
             "interval_ms": 1800,
             "close_ms": 170,
-            "hold_ms": 70,
+            "hold_ms": 100,
             "open_ms": 150
           }
         },
@@ -1414,9 +1520,9 @@
             "mode": "serie",
             "count": 3,
             "interval_ms": 1400,
-            "close_ms": 70,
-            "hold_ms": 20,
-            "open_ms": 90
+            "close_ms": 110,
+            "hold_ms": 45,
+            "open_ms": 120
           }
         },
         {
@@ -1447,9 +1553,9 @@
             "mode": "serie",
             "count": 4,
             "interval_ms": 1800,
-            "close_ms": 120,
-            "hold_ms": 60,
-            "open_ms": 130
+            "close_ms": 140,
+            "hold_ms": 70,
+            "open_ms": 160
           }
         },
         {
@@ -1506,6 +1612,32 @@
         "stop_all",
         "target_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "intensity": 0.55
+          },
+          "help": "Paupières mi-closes."
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "intensity": 0.85
+          },
+          "help": "Presque fermées : un mince filet de jeu reste visible."
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "intensity": 1
+          },
+          "help": "Fermeture complète : plus rien ne se voit."
+        }
       ]
     },
     {
@@ -1573,7 +1705,7 @@
           "label": "Image fantôme",
           "min": 0,
           "max": 1,
-          "default": 0.75,
+          "default": 0.9,
           "step": 0.01,
           "help": "Opacité de l’image restée imprimée."
         },
@@ -1586,6 +1718,17 @@
           "default": 3500,
           "unit": "ms",
           "step": 50
+        },
+        {
+          "id": "persistence",
+          "type": "number",
+          "label": "Persistance",
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "step": 0.05,
+          "advanced": true,
+          "help": "Part de la rémanence pendant laquelle l’image figée reste presque opaque avant de se dissoudre."
         },
         {
           "id": "rise_ms",
@@ -1641,11 +1784,12 @@
           "id": "court",
           "label": "Court",
           "params": {
-            "intensity": 0.85,
+            "intensity": 0.9,
             "blind_ms": 300,
             "recovery_ms": 900,
-            "ghost": 0.5,
-            "ghost_ms": 1500
+            "ghost": 0.85,
+            "ghost_ms": 1800,
+            "persistence": 0.45
           },
           "duration_ms": 3000
         },
@@ -1656,8 +1800,9 @@
             "intensity": 1,
             "blind_ms": 1400,
             "recovery_ms": 2600,
-            "ghost": 0.85,
-            "ghost_ms": 4000
+            "ghost": 1,
+            "ghost_ms": 4500,
+            "persistence": 0.7
           },
           "duration_ms": 6000
         },
@@ -1668,9 +1813,10 @@
             "intensity": 1,
             "blind_ms": 1000,
             "recovery_ms": 5500,
-            "ghost": 0.9,
-            "ghost_ms": 7500,
-            "blur": 0.5
+            "ghost": 1,
+            "ghost_ms": 8000,
+            "blur": 0.5,
+            "persistence": 0.85
           },
           "duration_ms": 9000
         }
@@ -1695,6 +1841,32 @@
         "stop_all",
         "target_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "intensity": 0.75,
+            "ghost": 0.6
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "intensity": 0.9,
+            "ghost": 0.85
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "intensity": 1,
+            "ghost": 1
+          }
+        }
       ]
     },
     {
@@ -1709,9 +1881,10 @@
       "on_conflict": "queue",
       "viewer": {
         "durations_ms": [5000, 10000, 20000, 30000],
-        "tiers": ["brume", "dense", "opaque"],
-        "preview": "dense",
-        "intensity_affects_price": true
+        "tiers": ["leger", "marque", "dense", "extreme"],
+        "preview": "nappes",
+        "intensity_affects_price": true,
+        "tier_kind": "level"
       },
       "gpu": {
         "primitive": "overlay",
@@ -1753,6 +1926,26 @@
           "default": 0.85,
           "step": 0.01,
           "help": "Opacité maximale des nappes les plus épaisses."
+        },
+        {
+          "id": "thickness",
+          "type": "number",
+          "label": "Épaisseur",
+          "min": 0,
+          "max": 1,
+          "default": 0.2,
+          "step": 0.01,
+          "help": "Le cœur des nappes devient opaque : au maximum, elles cachent complètement ce qu’elles recouvrent."
+        },
+        {
+          "id": "masses",
+          "type": "number",
+          "label": "Masses qui passent",
+          "min": 0,
+          "max": 1,
+          "default": 0.5,
+          "step": 0.01,
+          "help": "De grandes masses épaisses traversent l’écran avec le vent ; entre elles, des trouées laissent voir le jeu un moment."
         },
         {
           "id": "speed",
@@ -1854,7 +2047,7 @@
           "label": "Voile",
           "min": 0,
           "max": 1,
-          "default": 0.5,
+          "default": 0.45,
           "step": 0.01,
           "help": "Brume uniforme entre les nappes.",
           "advanced": true
@@ -1883,35 +2076,10 @@
       ],
       "variants": [
         {
-          "id": "brume",
-          "label": "Brume",
+          "id": "nappes",
+          "label": "Nappes",
           "params": {
-            "mode": "stable",
-            "density": 0.45,
-            "opacity": 0.8,
-            "haze": 1,
-            "turbulence": 0.4,
-            "contrast": 0.25
-          }
-        },
-        {
-          "id": "dense",
-          "label": "Dense",
-          "params": {
-            "mode": "stable",
-            "density": 0.7,
-            "opacity": 0.88
-          }
-        },
-        {
-          "id": "opaque",
-          "label": "Très opaque",
-          "params": {
-            "mode": "stable",
-            "density": 0.95,
-            "opacity": 0.97,
-            "haze": 0.9,
-            "contrast": 0.35
+            "mode": "stable"
           }
         },
         {
@@ -1919,19 +2087,25 @@
           "label": "Bancs mouvants",
           "params": {
             "mode": "intermittent",
-            "density": 0.75,
-            "opacity": 0.9,
             "banks": 0.8,
             "speed": 0.6
+          }
+        },
+        {
+          "id": "passages",
+          "label": "Nappes qui passent",
+          "params": {
+            "mode": "stable",
+            "speed": 0.65,
+            "banks": 0,
+            "ground": 0.2
           }
         },
         {
           "id": "arrivee",
           "label": "Arrive peu à peu",
           "params": {
-            "mode": "montee",
-            "density": 0.85,
-            "opacity": 0.92
+            "mode": "montee"
           },
           "duration_ms": 25000
         },
@@ -1939,9 +2113,7 @@
           "id": "dissipe",
           "label": "Se dissipe",
           "params": {
-            "mode": "dissipation",
-            "density": 0.9,
-            "opacity": 0.93
+            "mode": "dissipation"
           },
           "duration_ms": 15000
         }
@@ -1966,6 +2138,56 @@
         "stop_all",
         "target_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Brume légère",
+          "params": {
+            "density": 0.4,
+            "opacity": 0.65,
+            "thickness": 0,
+            "masses": 0,
+            "haze": 0.8
+          },
+          "help": "Un voile qui laisse tout voir."
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "density": 0.6,
+            "opacity": 0.85,
+            "thickness": 0.2,
+            "masses": 0.5,
+            "haze": 0.45
+          },
+          "help": "Des nappes nettes qui gênent par moments."
+        },
+        {
+          "id": "dense",
+          "label": "Dense",
+          "params": {
+            "density": 0.78,
+            "opacity": 0.95,
+            "thickness": 0.55,
+            "masses": 0.65,
+            "haze": 0.55
+          },
+          "help": "Des nappes épaisses : une bonne part de l’écran est cachée."
+        },
+        {
+          "id": "extreme",
+          "label": "Occultant",
+          "params": {
+            "density": 0.95,
+            "opacity": 1,
+            "thickness": 0.9,
+            "masses": 0.9,
+            "haze": 0.6
+          },
+          "help": "Des masses presque opaques traversent l’écran ; seules des trouées laissent voir le jeu."
+        }
       ]
     },
     {
@@ -1980,9 +2202,10 @@
       "on_conflict": "queue",
       "viewer": {
         "durations_ms": [5000, 10000, 20000, 30000],
-        "tiers": ["leger", "moyen", "intense"],
-        "preview": "moyen",
-        "intensity_affects_price": true
+        "tiers": ["leger", "marque", "extreme"],
+        "preview": "constant",
+        "intensity_affects_price": true,
+        "tier_kind": "level"
       },
       "gpu": {
         "primitive": "shader",
@@ -2013,7 +2236,7 @@
           "label": "Intensité",
           "min": 1,
           "max": 100,
-          "default": 45,
+          "default": 55,
           "step": 1,
           "help": "30 : flou ; 60 : très flou ; 90 et plus : illisible."
         },
@@ -2041,35 +2264,10 @@
       ],
       "variants": [
         {
-          "id": "leger",
-          "label": "Léger",
+          "id": "constant",
+          "label": "Flou constant",
           "params": {
-            "mode": "constant",
-            "amount": 28
-          }
-        },
-        {
-          "id": "moyen",
-          "label": "Moyen",
-          "params": {
-            "mode": "constant",
-            "amount": 48
-          }
-        },
-        {
-          "id": "intense",
-          "label": "Intense",
-          "params": {
-            "mode": "constant",
-            "amount": 70
-          }
-        },
-        {
-          "id": "extreme",
-          "label": "Extrême",
-          "params": {
-            "mode": "constant",
-            "amount": 95
+            "mode": "constant"
           }
         },
         {
@@ -2077,7 +2275,6 @@
           "label": "Pulsé",
           "params": {
             "mode": "pulsation",
-            "amount": 65,
             "minimum": 15,
             "period_ms": 1400
           }
@@ -2086,10 +2283,16 @@
           "id": "progressif",
           "label": "Progressif",
           "params": {
-            "mode": "progressif",
-            "amount": 80
+            "mode": "progressif"
           },
           "duration_ms": 10000
+        },
+        {
+          "id": "vague",
+          "label": "Vague",
+          "params": {
+            "mode": "vague"
+          }
         }
       ],
       "transitions": {
@@ -2113,6 +2316,29 @@
         "target_lost",
         "capture_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "amount": 28
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "amount": 55
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "amount": 90
+          }
+        }
       ]
     },
     {
@@ -2127,9 +2353,10 @@
       "on_conflict": "queue",
       "viewer": {
         "durations_ms": [5000, 10000, 20000, 30000],
-        "tiers": ["leger", "forte", "blocs"],
-        "preview": "forte",
-        "intensity_affects_price": true
+        "tiers": ["leger", "marque", "extreme"],
+        "preview": "constante",
+        "intensity_affects_price": true,
+        "tier_kind": "level"
       },
       "gpu": {
         "primitive": "shader",
@@ -2158,7 +2385,7 @@
           "label": "Taille des pixels",
           "min": 2,
           "max": 160,
-          "default": 24,
+          "default": 28,
           "unit": "px",
           "step": 1,
           "help": "Taille en 1080p (adaptée à la résolution de l’écran)."
@@ -2198,35 +2425,17 @@
       ],
       "variants": [
         {
-          "id": "leger",
-          "label": "Légère",
+          "id": "constante",
+          "label": "Pixelisation",
           "params": {
-            "mode": "constant",
-            "block": 10
-          }
-        },
-        {
-          "id": "forte",
-          "label": "Forte",
-          "params": {
-            "mode": "constant",
-            "block": 28
-          }
-        },
-        {
-          "id": "blocs",
-          "label": "Très gros blocs",
-          "params": {
-            "mode": "constant",
-            "block": 80
+            "mode": "constant"
           }
         },
         {
           "id": "progressive",
           "label": "Progressive",
           "params": {
-            "mode": "progressif",
-            "block": 90
+            "mode": "progressif"
           },
           "duration_ms": 10000
         },
@@ -2234,8 +2443,7 @@
           "id": "intermittente",
           "label": "Intermittente",
           "params": {
-            "mode": "intermittent",
-            "block": 40
+            "mode": "intermittent"
           }
         },
         {
@@ -2270,6 +2478,29 @@
         "target_lost",
         "capture_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "block": 10
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "block": 28
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "block": 80
+          }
+        }
       ]
     },
     {
@@ -2655,6 +2886,29 @@
         "target_lost",
         "capture_lost",
         "error"
+      ],
+      "levels": [
+        {
+          "id": "leger",
+          "label": "Léger",
+          "params": {
+            "intensity": 0.4
+          }
+        },
+        {
+          "id": "marque",
+          "label": "Marqué",
+          "params": {
+            "intensity": 0.7
+          }
+        },
+        {
+          "id": "extreme",
+          "label": "Extrême",
+          "params": {
+            "intensity": 1
+          }
+        }
       ]
     },
     {

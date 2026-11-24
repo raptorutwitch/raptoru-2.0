@@ -1,5 +1,6 @@
 // Cibles : écrans (rangés de gauche à droite), fenêtres proposables, et résolution d'une cible demandée : écran du
-// streamer (« screen » : la fenêtre qui l'occupe, sinon l'écran entier), fenêtre, premier plan, écran entier.
+// streamer (« screen » : tout l'écran, composé autour de la fenêtre qui l'occupe, sinon l'écran entier capturé),
+// fenêtre, premier plan, écran entier.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -86,8 +87,11 @@ namespace Raptoru.Chaos
         }
 
         /// spec : {kind:"screen", device} | {kind:"window", hwnd} | {kind:"foreground"} | {kind:"monitor", device? | hwnd?}.
-        /// « screen » (fiche d'un effet) : la fenêtre qui occupe l'écran, retournée en calque sans devoir être au premier
-        /// plan, donc visible dans la capture d'écran d'OBS ; à défaut, l'écran entier (calque exclu des captures).
+        /// « screen » (fiche d'un effet) : TOUT l'écran (barre des tâches comprise). S'il est occupé par une fenêtre (jeu,
+        /// fenêtre agrandie) : mode E, la fenêtre capturée en direct posée sur une image de l'écran prise au départ, calque
+        /// jamais exclu des captures (visible dans la capture d'écran d'OBS), sans devoir être au premier plan. Sinon :
+        /// mode C, l'écran capturé (calque exclu des captures tant qu'il la lit). Clé « screen:<écran> » dans les deux cas :
+        /// les effets d'un même écran partagent une seule surface.
         /// « foreground » vise l'écran du jeu au premier plan (default_mode = monitor) ou sa fenêtre seule (window).
         public static TargetRef Resolve(Dictionary<string, object> spec, string defaultMode, int selfPid, EffectDef def, bool inputEffects)
         {
@@ -102,8 +106,9 @@ namespace Raptoru.Chaos
                     IntPtr sm = N.MonitorByDevice(screenDevice);
                     if (sm == IntPtr.Zero) throw new ProtocolError("screen_missing", "écran introuvable : " + screenDevice + " (débranché ?)");
                     h = WindowFilling(sm, selfPid);
-                    if (h == IntPtr.Zero) { kind = "monitor"; hmon = sm; h = N.GetDesktopWindow(); }
-                    else kind = "window";
+                    hmon = sm;
+                    if (h == IntPtr.Zero) { kind = "monitor"; h = N.GetDesktopWindow(); }
+                    else kind = "composed";
                     break;
                 case "window":
                     h = new IntPtr((long)J.Num(spec, "hwnd", 0));
@@ -132,15 +137,22 @@ namespace Raptoru.Chaos
             int quns;
             if (def.RequiresCapture && N.SHQueryUserNotificationState(out quns) == 0 && quns == N.QUNS_RUNNING_D3D_FULL_SCREEN)
                 throw new ProtocolError("exclusive_fullscreen", "un jeu est en plein écran exclusif : rien ne peut s'afficher au-dessus et l'écran ne peut pas être retourné ; passer en fenêtré sans bordure");
-            var t = new TargetRef { Kind = monitor ? "monitor" : "window", Hwnd = h };
-            if (monitor)
+            var t = new TargetRef { Kind = monitor ? "monitor" : kind == "composed" ? "screen" : "window", Hwnd = h };
+            if (kind == "composed")
+            {
+                t.Hmon = hmon;
+                t.Device = screenDevice;
+                t.Key = "screen:" + screenDevice;
+                t.Info = J.Map("kind", "screen", "mode", "E", "device", screenDevice, "hwnd", h.ToInt64(), "process", ProcName(pid), "title", N.WindowText(h),
+                    "input", null, "follow_foreground", false, "screen", ScreenTitle(screenDevice));
+            }
+            else if (monitor)
             {
                 if (hmon == IntPtr.Zero) hmon = N.MonitorFromWindow(h, 2);
                 t.Hmon = hmon;
                 t.Device = N.MonitorDevice(hmon);
                 if (t.Device == null) throw new ProtocolError("no_monitor", "écran introuvable");
-                RECT r = N.MonitorRectOf(hmon);
-                t.Key = "monitor:" + t.Device;
+                t.Key = screenDevice != null ? "screen:" + screenDevice : "monitor:" + t.Device;
                 t.Info = J.Map("kind", "monitor", "mode", "C", "device", t.Device, "title", ScreenTitle(t.Device),
                     "process", foreground ? ProcName(pid) : null, "input", inputEffects ? def.Input : null, "follow_foreground", false);
                 if (screenDevice != null) t.Info["screen"] = ScreenTitle(screenDevice);

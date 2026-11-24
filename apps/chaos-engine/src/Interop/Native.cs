@@ -200,7 +200,7 @@ namespace Raptoru.Chaos
         public const int SW_HIDE = 0, SW_SHOWNOACTIVATE = 4;
         public const uint WM_DESTROY = 2, WM_PAINT = 0xF, WM_ERASEBKGND = 0x14, WM_MOUSEACTIVATE = 0x21, WM_NCHITTEST = 0x84, WM_HOTKEY = 0x312;
         public const uint QS_ALLINPUT = 0x4FF, MWMO_INPUTAVAILABLE = 4, PM_REMOVE = 1, GA_ROOTOWNER = 3, GW_OWNER = 4;
-        public const uint WDA_EXCLUDEFROMCAPTURE = 0x11, LWA_ALPHA = 2;
+        public const uint WDA_NONE = 0, WDA_EXCLUDEFROMCAPTURE = 0x11, LWA_ALPHA = 2;
         public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9, DWMWA_CLOAKED = 14;
         public const int QUNS_RUNNING_D3D_FULL_SCREEN = 3;
 

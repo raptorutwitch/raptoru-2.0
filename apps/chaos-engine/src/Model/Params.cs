@@ -63,6 +63,8 @@ namespace Raptoru.Chaos
         public int DurationMs;
         public TransitionPlan In, Out;
         public readonly List<string> Adjusted = new List<string>();
+        /// Niveau d'intensité demandé (null : aucun, ou réglages explicites).
+        public string Level;
 
         public double Num(string id) { return Convert.ToDouble(Values[id], CultureInfo.InvariantCulture); }
         public string Str(string id) { return Convert.ToString(Values[id], CultureInfo.InvariantCulture); }
@@ -81,7 +83,7 @@ namespace Raptoru.Chaos
             return J.Map("params", J.Copy(Values), "duration_ms", DurationMs,
                 "transition", J.Map("in", J.Map("kind", In.Kind, "duration_ms", In.DurationMs, "curve", In.Curve),
                                     "out", J.Map("kind", Out.Kind, "duration_ms", Out.DurationMs, "curve", Out.Curve)),
-                "adjusted", Adjusted.ToArray());
+                "adjusted", Adjusted.ToArray(), "level", Level);
         }
     }
 
@@ -132,19 +134,31 @@ namespace Raptoru.Chaos
         }
 
         public static ResolvedParams Resolve(EffectDef def, string variant, Preset preset, Dictionary<string, object> overrides,
-            int? durationMs, Dictionary<string, object> transition, EngineLimits lim, SafetyConfig safety, bool trusted)
+            int? durationMs, Dictionary<string, object> transition, EngineLimits lim, SafetyConfig safety, bool trusted, string level = null)
         {
             var r = new ResolvedParams { Def = def };
             foreach (var p in def.Params) r.Values[p.Id] = p.Default;
-            // Couches : défauts → variante (paramètres, durée, transitions) → préréglage → demande.
+            // Couches : défauts → variante (style : paramètres, durée, transitions) → niveau (force) → préréglage → demande.
             Preset vp = null;
             if (!string.IsNullOrEmpty(variant))
             {
                 if (!def.Variants.TryGetValue(variant, out vp)) throw new ParamError("unknown_variant", "variante inconnue : " + variant);
                 Apply(def, r, vp.Params, true);
             }
+            if (!string.IsNullOrEmpty(level))
+            {
+                var lv = def.Level(level);
+                if (lv == null) throw new ParamError("unknown_level", "niveau inconnu : " + level);
+                Apply(def, r, lv.Params, true);
+                r.Level = level;
+            }
             if (preset != null) Apply(def, r, preset.Params, true);
             if (overrides != null) Apply(def, r, overrides, trusted);
+            // Mode sûr : mouvements bornés (registre safe_max), signalé dans « adjusted ».
+            if (safety.SafeMode)
+                foreach (var p in def.Params)
+                    if (p.Type == ParamType.Number && !double.IsNaN(p.SafeMax) && Convert.ToDouble(r.Values[p.Id], CultureInfo.InvariantCulture) > p.SafeMax)
+                    { r.Values[p.Id] = p.SafeMax; r.Adjusted.Add(p.Id + ".safe_mode"); }
 
             int maxDuration = Math.Min(lim.MaxDurationMs, safety.MaxDurationMs);
             int dur = durationMs ?? (preset != null && preset.DurationMs.HasValue ? preset.DurationMs.Value

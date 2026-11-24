@@ -262,12 +262,15 @@ try {
   await page.locator('[data-open="fog"]').click();
   await page.locator('.cx-sheet__id h2', { hasText: 'Brouillard' }).waitFor();
   const chips = await page.locator('[data-variant]').allInnerTexts();
+  const levels = await page.locator('[data-level]').allInnerTexts();
   check(
-    chips.includes('Brume') &&
-      chips.includes('Très opaque') &&
+    chips.includes('Nappes') &&
+      chips.includes('Bancs mouvants') &&
+      levels.join('|') === 'Brume légère|Marqué|Dense|Occultant|Personnalisé' &&
+      (await page.locator('[data-level="marque"].on').count()) === 1 &&
       (await page.locator('details.cx-adv:not([open])').count()) === 1,
-    'fiche du brouillard : préréglages en un clic, réglages avancés repliés',
-    chips.join(' | '),
+    'fiche du brouillard : style (préréglages) et intensité (Brume légère → Occultant, Personnalisé) en un clic, réglages avancés repliés ; fiche neuve = Marqué',
+    `${chips.join(' | ')} — ${levels.join(' | ')}`,
   );
   const animLoaded = await until(
     async () =>
@@ -281,17 +284,34 @@ try {
     'aperçu animé rendu par le moteur hors écran, avec les réglages de la fiche',
   );
   await page.waitForTimeout(1200);
-  await page.locator('.cx-sheet').screenshot({ path: join(OUT, '5-fiche-brouillard.png') });
-  await page.locator('[data-variant="opaque"]').click();
+  await page
+    .locator('.cx-sheet')
+    .screenshot({ path: join(OUT, '5-fiche-brouillard.png') });
+  await page.locator('[data-level="extreme"]').click();
   check(
     await until(async () => {
       const p = await presetOf('fog');
-      return p.params?.density === 0.95 && p.params?.opacity === 0.97;
+      return (
+        p.params?.density === 0.95 &&
+        p.params?.thickness === 0.9 &&
+        p.params?.masses === 0.9
+      );
     }, 5000),
-    'préréglage « Très opaque » : enregistré par le moteur',
+    'intensité « Occultant » : enregistrée par le moteur',
   );
-  await page.locator('[data-variant="opaque"].on').waitFor({ timeout: 4000 });
-  check(true, 'le préréglage choisi est montré comme actif');
+  await page.locator('[data-level="extreme"].on').waitFor({ timeout: 4000 });
+  check(true, 'le niveau choisi est montré comme actif');
+  await page.locator('[data-variant="bancs"]').click();
+  check(
+    await until(async () => {
+      const p = await presetOf('fog');
+      return p.params?.mode === 'intermittent' && p.params?.thickness === 0.9;
+    }, 5000),
+    'changer de style garde l’intensité choisie (bancs mouvants, toujours occultant)',
+  );
+  await page.locator('[data-variant="bancs"].on').waitFor({ timeout: 4000 });
+  await page.locator('[data-level="extreme"].on').waitFor({ timeout: 4000 });
+  check(true, 'style et intensité montrés actifs ensemble');
   await page.locator('details.cx-adv > summary').click();
   check(
     (await page.locator('details.cx-adv[open] [data-param-num]').count()) >= 5,
@@ -329,11 +349,15 @@ try {
     'point visé au clavier (flèches)',
   );
   await page.waitForTimeout(1500);
-  await page.locator('.cx-sheet').screenshot({ path: join(OUT, '6-fiche-tunnel.png') });
+  await page
+    .locator('.cx-sheet')
+    .screenshot({ path: join(OUT, '6-fiche-tunnel.png') });
   await page.locator('[data-open="blink"]').click();
   await page.locator('.cx-sheet__id h2', { hasText: 'Clignement' }).waitFor();
   await page.waitForTimeout(2500);
-  await page.locator('.cx-sheet').screenshot({ path: join(OUT, '7-fiche-clignement.png') });
+  await page
+    .locator('.cx-sheet')
+    .screenshot({ path: join(OUT, '7-fiche-clignement.png') });
   const bad = (await (
     await post('/preview', {
       effect: 'zoom',

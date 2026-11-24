@@ -1,5 +1,7 @@
-// Surface de présentation : une fenêtre DirectComposition traversable posée sur une cible (la fenêtre du jeu en mode D,
-// tout l'écran en mode C, exclu des captures). Elle n'existe que tant qu'un effet l'utilise : au repos, aucune fenêtre.
+// Surface de présentation : une fenêtre DirectComposition traversable posée sur une cible : la fenêtre seule (mode D),
+// l'écran entier (mode C : exclue des captures tant qu'elle lit la capture de l'écran, sinon visible d'OBS), ou l'écran
+// entier autour de la fenêtre qui l'occupe (mode E, cible « écran » des fiches : jamais exclue, la capture lue est celle
+// de la fenêtre). Elle n'existe que tant qu'un effet l'utilise : au repos, aucune fenêtre.
 // Jamais activée, jamais de clic ni de clavier, absente de la barre des tâches. Montrée seulement avec une image prête.
 using System;
 using System.Runtime.InteropServices;
@@ -12,7 +14,11 @@ namespace Raptoru.Chaos
         static bool registered;
 
         public readonly string Key;
+        /// Couvre l'écran entier (modes C et E).
         public readonly bool MonitorMode;
+        /// "C" écran entier, "D" fenêtre seule, "E" écran entier composé autour de la fenêtre Target.
+        public readonly string Mode;
+        public bool Excluded { get { return excluded; } }
         public readonly IntPtr Target, TargetRoot;
         public IntPtr Hwnd { get { return hwnd; } }
         readonly Gpu gpu;
@@ -23,7 +29,7 @@ namespace Raptoru.Chaos
         readonly DcGetFrameStatistics compStats;
         RECT bounds;
         uint w, h;
-        bool shown;
+        bool shown, excluded;
         long shownSince, visibleMs;
         public long Presented;
         /// Fréquence de l'écran qui porte la cible (Hz).
@@ -37,10 +43,12 @@ namespace Raptoru.Chaos
         /// Rectangle de la cible à l'écran (fenêtre suivie, ou écran entier) : le curseur est « au-dessus » s'il y est.
         public RECT Bounds { get { return bounds; } }
 
-        /// hmon ≠ 0 : l'écran entier (mode C) ; sinon la fenêtre target (mode D).
-        public Surface(Gpu gpu, string key, IntPtr target, IntPtr hmon, uint width, uint height)
+        /// hmon ≠ 0 : l'écran entier (mode C, ou E si composed : la fenêtre target l'occupe) ; sinon la fenêtre target
+        /// (mode D). exclude : exclue des captures dès sa création (elle lira la capture de son écran).
+        public Surface(Gpu gpu, string key, IntPtr target, IntPtr hmon, uint width, uint height, bool composed, bool exclude)
         {
             this.gpu = gpu; Key = key; Target = target; MonitorMode = hmon != IntPtr.Zero;
+            Mode = !MonitorMode ? "D" : composed ? "E" : "C";
             bool monitorMode = MonitorMode;
             TargetRoot = N.GetAncestor(target, N.GA_ROOTOWNER);
             if (TargetRoot == IntPtr.Zero) TargetRoot = target;
@@ -49,7 +57,7 @@ namespace Raptoru.Chaos
             RefreshHz = N.RefreshHz(Hmon);
             w = width; h = height;
             hwnd = CreateWindow(bounds.Left, bounds.Top, (int)w, (int)h);
-            if (monitorMode && !N.SetWindowDisplayAffinity(hwnd, N.WDA_EXCLUDEFROMCAPTURE))
+            if (exclude && !SetExcluded(true))
             {
                 N.DestroyWindow(hwnd);
                 throw new CaptureError("exclusion_failed", "impossible d'exclure la fenêtre des captures (mode C)");
@@ -123,8 +131,19 @@ namespace Raptoru.Chaos
             N.SetWindowPos(hwnd, N.HWND_TOPMOST, r.Left, r.Top, (int)w, (int)h, N.SWP_NOACTIVATE);
         }
 
-        public bool TargetAlive { get { return MonitorMode || N.IsWindow(Target); } }
-        public bool TargetMinimized { get { return !MonitorMode && N.IsIconic(Target); } }
+        /// Exclue des captures (WDA_EXCLUDEFROMCAPTURE) : invisible pour la capture d'écran d'OBS comme pour la nôtre.
+        /// Seulement pendant que la surface lit une capture de son propre écran (sinon elle se verrait elle-même).
+        public bool SetExcluded(bool on)
+        {
+            if (on == excluded) return true;
+            if (!N.SetWindowDisplayAffinity(hwnd, on ? N.WDA_EXCLUDEFROMCAPTURE : N.WDA_NONE)) return false;
+            excluded = on;
+            return true;
+        }
+
+        /// Mode C : l'écran existe tant qu'il est branché. Modes D et E : la fenêtre doit exister et ne pas être réduite.
+        public bool TargetAlive { get { return Mode == "C" || N.IsWindow(Target); } }
+        public bool TargetMinimized { get { return Mode != "C" && N.IsIconic(Target); } }
 
         public bool TargetForeground()
         {

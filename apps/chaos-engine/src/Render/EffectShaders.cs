@@ -169,11 +169,14 @@ float4 ps(V i) : SV_Target {
   float m = 0.06;
   float hu = (1 - u0.x) * (0.5 + m + u1.x) / side, hl = (1 - u0.y) * (0.5 + m - u1.x) / side;
   float s = 0.012 + u0.w * 0.11;
+  // Fermeture complète : au-delà de 90 % de fermeture, les bords des paupières se croisent (recouvrement jusqu'à
+  // 1,6 × la douceur du bord) ; dès 97 %, plus aucun interstice, cils compris : occlusion totale de l'écran.
+  float ov = 1.6 * s * smoothstep(0.9, 0.97, cm);
   // Cils : bord irrégulier (bruit étiré verticalement), surtout la paupière haute, atténué quand l'œil est presque clos.
   float gap = (hu + hl) * sh;
   float lash = u1.z * s * 0.45 * saturate(gap * 6) * gnoise(float2(x * 38 + u2.y, (y - yc) * 3));
-  float au = smoothstep(-s, s, (yc - hu * sh) - y + lash);
-  float al = smoothstep(-s, s, y - (yc + hl * sh) + lash * 0.3);
+  float au = smoothstep(-s, s, (yc - hu * sh) + ov - y + lash);
+  float al = smoothstep(-s, s, y - (yc + hl * sh) + ov + lash * 0.3);
   float lid = 1 - (1 - au) * (1 - al);
   float c = 0.5 * (u0.x + u0.y);
   float r = length(float2(x / a.x, y) * float2(1.6, 1.9));
@@ -185,9 +188,11 @@ float4 ps(V i) : SV_Target {
 }");
 
             // ---------- Vision tunnel (calque, sans capture) ----------
-            // Masque à distance signée autour du point focal (cercle, ellipse ou rectangle arrondi) : contour très doux,
-            // ombre intérieure légère. u0 = (centre x, centre y (écran), rayon (hauteur d'écran), douceur) ;
-            // u1 = (obscurité, forme, allongement, rondeur des coins) ; u2.x = ombre intérieure ; color.rgb = voile.
+            // Masque à distance signée autour du point focal (cercle, ellipse ou rectangle arrondi). Vrai dégradé : zone
+            // nette, puis assombrissement qui croît avec la distance au bord sur toute la largeur du dégradé (début doux
+            // réglé par la douceur), jusqu'à l'obscurité maximale en périphérie ; ombre intérieure légère.
+            // u0 = (centre x, centre y (écran), rayon (hauteur d'écran), douceur du bord) ; u1 = (obscurité, forme,
+            // allongement, rondeur des coins) ; u2 = (ombre intérieure, largeur du dégradé, progression) ; color = voile.
             ShaderLibrary.Register("tunnel", @"
 float4 ps(V i) : SV_Target {
   float2 a = aspect(), p = (i.uv - u0.xy) * a;
@@ -196,10 +201,14 @@ float4 ps(V i) : SV_Target {
   if (sh == 0) d = length(p) - r;
   else if (sh == 1) { float2 e = float2(r * u1.z, r); d = (length(p / e) - 1) * min(e.x, e.y); }
   else { float2 b = float2(r * u1.z, r); float cr = min(b.x, b.y) * u1.w; float2 q = abs(p) - b + cr; d = length(max(q, 0)) + min(max(q.x, q.y), 0) - cr; }
-  float f = max(0.003, u0.w);
-  float edge = smoothstep(-0.25 * f, f, d);
-  float tail = 1 - exp(-max(0, d) / (f * 2.5 + 0.02));
-  float m = saturate(max(edge * 0.92, tail));
+  float f = max(0.003, u0.w), g = max(0.01, u2.y);
+  // Distance normalisée : 0 un peu à l'intérieur du bord (douceur), 1 au bout du dégradé.
+  float s = saturate((d + f) / (g + f));
+  float ramp = pow(s, u2.z);
+  ramp = ramp * ramp * (3 - 2 * ramp);
+  // Au-delà du dégradé, la périphérie continue de s'assombrir jusqu'au maximum (jamais un aplat net).
+  float far = 1 - exp(-max(0, d - g) / (g * 0.6 + 0.02));
+  float m = saturate(ramp * (0.9 + 0.1 * far));
   float inner = u2.x * 0.45 * smoothstep(-r * 0.75, 0, d);
   float alpha = u1.x * max(m, inner);
   return float4(color.rgb * alpha, alpha);
@@ -207,17 +216,22 @@ float4 ps(V i) : SV_Target {
 
             // ---------- Flash aveuglant (calque, image retenue) ----------
             // Blanc (montée, maintien, récupération) par-dessus l'image fantôme de l'instant du flash (aux : image
-            // retenue, floue par ses mipmaps, délavée et « brûlée ») ; les zones claires de l'image fantôme restent
-            // imprimées (mélange proche d'un « écran ») pendant que le jeu réapparaît dessous.
-            // u0 = (blanc 0..1, image fantôme 0..1, flou (mip), échelle) ; u1.x = délavage ; color.rgb = teinte.
+            // retenue, floue par ses mipmaps, délavée et « brûlée »). Rémanence : d'abord l'image figée presque opaque
+            // (le jeu, dessous, ne se voit pas), surexposée et auréolée ; puis ses zones sombres se dissolvent les
+            // premières et le jeu réapparaît, les zones claires restant imprimées le plus longtemps.
+            // u0 = (blanc 0..1, image fantôme 0..1, flou (mip), échelle) ; u1 = (délavage, dissolution 0..1 : 0 = image
+            // entière, 1 = zones claires seulement, surexposition, halo) ; color.rgb = teinte.
             ShaderLibrary.Register("flash", @"
 float4 ps(V i) : SV_Target {
   float2 uv = (i.uv - 0.5) / max(0.5, u0.w) + 0.5;
   float3 g = aux.SampleLevel(smp, saturate(uv), u0.z).rgb;
+  // Halo : version très floue ajoutée (les zones claires « bavent », comme une image brûlée sur la rétine).
+  float3 h = aux.SampleLevel(smp, saturate(uv), u0.z + 2.5).rgb;
+  g = g + h * u1.w * 0.6;
   float y = luma(g);
   g = lerp(g, y.xxx, u1.x);
-  g = saturate(g * 1.3 + 0.06) * lerp(float3(1, 1, 1), color.rgb, 0.5);
-  float ga = u0.y * saturate(y * 1.25 + 0.08);
+  g = saturate(g * (1.3 + u1.z) + 0.06 + 0.1 * u1.z) * lerp(float3(1, 1, 1), color.rgb, 0.5);
+  float ga = u0.y * lerp(1, saturate(y * 1.35 + 0.04), u1.y);
   // Le blanc n'est pas un aplat : un peu plus intense au centre (lumière, pas un écran blanc).
   float w = saturate(u0.x * (1.04 - 0.1 * dot(i.uv - 0.5, i.uv - 0.5)));
   float3 rgb = color.rgb * w + g * ga * (1 - w);
@@ -234,7 +248,10 @@ float4 ps(V i) : SV_Target {
             // u0 = (densité, opacité max, taille des structures, turbulence) ; u1 = (contraste, profondeur, au sol,
             // bancs) ; u2 = (front, dissolution, vent x, vent y) ; u3 = (dérive proche x, y, dérive lointaine x, y) ;
             // u4 = (évolution proche x, y, évolution lointaine x, y) ; u5 = (graine x, graine y, relief, voile) ;
-            // color.rgb = couleur.
+            // u6 = (masses, épaisseur, dérive des masses x, y) ; u7.xy = évolution des masses ; color.rgb = couleur.
+            // Masses : un champ très large qui traverse l'écran avec le vent ; dedans, la densité monte (nappes
+            // épaisses) ; entre deux masses, une trouée laisse voir le jeu un moment. Épaisseur : les nappes deviennent
+            // opaques en leur cœur (l'occlusion monte vraiment), sans aplatir leurs bords ni leurs volutes.
             ShaderLibrary.Register("fog", @"
 float nappe(float2 p, float2 off, float2 evo, float turb, out float lit) {
   float2 q = float2(fbm(p * 0.65 + evo, 3), fbm(p * 0.65 + float2(5.2, 1.3) - evo.yx, 3));
@@ -250,7 +267,11 @@ float4 ps(V i) : SV_Target {
   float litN, litF;
   float nN = nappe(p * 0.8, u3.xy, u4.xy, u0.w, litN);
   float nF = nappe(p * 1.7 + 31.7, u3.zw, u4.zw, u0.w * 0.8, litF);
-  float D = saturate(u0.x);
+  // Masses : M = 1 dans une masse, 0 dans une trouée ; plus la densité est forte, plus les masses sont grandes.
+  float D0 = saturate(u0.x), M = 1;
+  if (u6.x > 0.001) M = smoothstep(-0.16, 0.16, fbm(c * 1.15 + u6.zw + u7.xy, 3) + (D0 - 0.75) * 0.5);
+  float Mw = lerp(1, M, u6.x);
+  float D = saturate(D0 + 0.35 * u6.x * M);
   float bank = lerp(1, saturate(0.55 + 1.1 * gnoise(p * 0.22 + u4.xy * 0.35)), u1.w);
   float ground = lerp(1, 0.55 + 0.9 * smoothstep(-0.45, 0.5, c.y), u1.z);
   float2 wind = normalize(u2.zw + 1e-5);
@@ -259,17 +280,21 @@ float4 ps(V i) : SV_Target {
   float front = smoothstep(fr + 0.35, fr - 0.15, along);
   float th = lerp(0.66, 0.3, D) + u2.y * 0.45;
   float soft = lerp(0.42, 0.1, saturate(u1.x));
-  float k = bank * ground * front;
+  float k = bank * ground * front * Mw;
   float aN = cover(nN, th, soft) * k;
   float aF = cover(nF, th + 0.06, soft * 1.2) * k * lerp(0.55, 0.85, u1.y);
-  float haze = u5.w * (0.25 + 0.75 * D) * front * (1 - u2.y) * ground * 0.55;
+  float haze = u5.w * (0.25 + 0.75 * D) * front * (1 - u2.y) * ground * 0.55 * lerp(1, 0.1 + 0.9 * M, u6.x);
   float3 col = color.rgb;
   float3 cF = lerp(col, col * float3(0.94, 0.97, 1.04) + 0.04, 0.6) * (0.92 + 0.1 * u5.z * saturate(-litF * 4));
   float3 cN = col * (0.8 + 0.28 * u5.z * saturate(0.5 - litN * 5)) * lerp(1, 0.92, aN);
   float A = haze; float3 C = col * haze;
   C = cF * aF + C * (1 - aF); A = aF + A * (1 - aF);
   C = cN * aN + C * (1 - aN); A = aN + A * (1 - aN);
-  float o = saturate(u0.y) * (1 - smoothstep(0.55, 1, u2.y));
+  // Épaisseur : cœur des nappes opaque (1 − (1 − A)^k), surtout dans les masses ; plafond d'opacité relevé.
+  float kk = 1 + 6 * u6.y * M;
+  float A2 = 1 - pow(saturate(1 - A), kk);
+  C = A > 1e-4 ? C * (A2 / A) : C; A = A2;
+  float o = saturate(u0.y + u6.y * (1 - u0.y)) * (1 - smoothstep(0.55, 1, u2.y));
   A = saturate(A * o + (hash12(i.uv * view.xy) - 0.5) / 255);
   return float4(C * o, A);
 }");

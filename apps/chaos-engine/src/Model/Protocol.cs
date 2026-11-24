@@ -77,7 +77,7 @@ namespace Raptoru.Chaos
             int? dur = J.Has(b, "duration_ms") ? (int?)(int)J.Num(b, "duration_ms", -1) : null;
             // Les sources externes (Core, extension, points de chaîne) ne règlent jamais un paramètre non exposé.
             bool trusted = kind == "studio" || kind == "test";
-            var resolved = Params.Resolve(def, J.Str(b, "variant", null), preset, J.Obj(b, "params"), dur, J.Obj(b, "transition"), reg.Limits, cfg.Safety, trusted);
+            var resolved = Params.Resolve(def, J.Str(b, "variant", null), preset, J.Obj(b, "params"), dur, J.Obj(b, "transition"), reg.Limits, cfg.Safety, trusted, J.Str(b, "level", null));
             var target = resolveTarget(J.Obj(b, "target") ?? J.Map("kind", "foreground"), def);
             // Couche Entrées (Windows retourne l'affichage, EXPÉRIMENTALE) : jamais pour une activation communautaire
             // (Core, extension, points de chaîne), même si elle est activée : l'effet passe par le calque GPU.
@@ -90,7 +90,7 @@ namespace Raptoru.Chaos
             {
                 RequestId = rid, Def = def, Variant = J.Str(b, "variant", null), PresetName = presetName, Policy = policy, Priority = (int)prio,
                 SourceKind = kind, SourceRef = J.Str(src, "ref", null), Resolved = resolved, TargetKey = target.Key, TargetInfo = target.Info,
-                TargetHwnd = target.Hwnd, TargetMonitor = target.Kind == "monitor", TargetHmon = target.Hmon, TargetDevice = target.Device
+                TargetHwnd = target.Hwnd, TargetMonitor = target.Kind == "monitor", TargetComposed = target.Kind == "screen", TargetHmon = target.Hmon, TargetDevice = target.Device
             };
         }
 

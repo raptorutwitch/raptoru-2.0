@@ -84,8 +84,10 @@ namespace Raptoru.Chaos
                     {
                         for (int k = 0; k < count && tt < dur - 0.3; k++)
                         {
-                            one(tt, close, hold, open, depth * Fx.Range(seed, i, 2, 0.85, 1));
-                            tt = blink.End + 0.06 + irr * 0.12 * Fx.Hash(seed, i, 3);
+                            one(tt, close, hold, open, Depth(depth, i));
+                            // Entre deux clignements d'une série, l'œil se rouvre vraiment (mouvement des paupières
+                            // visible, pas un simple noir qui clignote).
+                            tt = blink.End + 0.12 + irr * 0.14 * Fx.Hash(seed, i, 3);
                         }
                         tt += vary(interval);
                     }
@@ -139,13 +141,17 @@ namespace Raptoru.Chaos
                     tt = Fx.Range(seed, 0, 9, 0.15, 0.45);
                     while (tt < dur - 0.2)
                     {
-                        one(tt, close, hold, open, depth * Fx.Range(seed, i, 2, 0.88, 1));
+                        one(tt, close, hold, open, Depth(depth, i));
                         if (Fx.Hash(seed, i, 10) < 0.18 * irr && blink.End < dur - 0.6) one(blink.End + 0.05, close * 0.8, hold * 0.5, open * 0.9, depth);
                         tt = blink.End + vary(interval);
                     }
                     break;
             }
         }
+
+        /// Profondeur d'un clignement : à l'intensité maximale, toujours une fermeture complète (≥ 97 % : le shader
+        /// referme alors tout l'écran) ; en dessous, une légère variation organique.
+        double Depth(double depth, int i) { return depth >= 0.97 ? Fx.Range(seed, i, 2, 0.98, 1) : depth * Fx.Range(seed, i, 2, 0.9, 1); }
 
         public override void Render(FrameBuilder fb, EffectFrame f)
         {
@@ -187,12 +193,16 @@ namespace Raptoru.Chaos
             double t = f.ElapsedMs / 1000.0;
             double rise = p.Num("rise_ms") / 1000, blind = p.Num("blind_ms") / 1000, rec = p.Num("recovery_ms") / 1000, ghostS = p.Num("ghost_ms") / 1000;
             double w = t < rise ? Fx.EaseOut(t / rise, 2) : t < rise + blind ? 1 : Math.Pow(1 - Fx.Clamp01((t - rise - blind) / rec), 2.2);
+            // Rémanence : l'image figée tient presque opaque une part de sa durée (persistance), puis se dissout, zones
+            // sombres d'abord ; elle se floute, se délave et dérive peu à peu (dégradation pendant le retour).
             double after = Fx.Clamp01((t - rise - blind) / ghostS);
-            double g = snap.Ready ? p.Num("ghost") * (1 - Fx.EaseInOut(after)) : 0;
+            double hold = 0.08 + 0.5 * p.Num("persistence");
+            double g = snap.Ready ? p.Num("ghost") * (1 - Fx.Smooth(hold, 1, after)) : 0;
             double pr = f.Presence;
             u[0] = (float)(w * p.Num("intensity") * pr); u[1] = (float)(g * pr);
-            u[2] = (float)(1 + p.Num("blur") * 3 + 1.5 * after); u[3] = (float)(1 + 0.035 * p.Num("drift") * after);
-            u[4] = (float)p.Num("desat");
+            u[2] = (float)(1 + p.Num("blur") * 3 + 1.8 * after); u[3] = (float)(1 + 0.035 * p.Num("drift") * after);
+            u[4] = (float)(p.Num("desat") * (0.35 + 0.65 * after)); u[5] = (float)Fx.Smooth(hold * 0.5, Math.Min(1, hold + 0.45), after);
+            u[6] = (float)(0.55 * (1 - after)); u[7] = (float)(0.9 * (1 - 0.5 * after));
             var c = p.Color("tint");
             col[0] = c[0]; col[1] = c[1]; col[2] = c[2]; col[3] = 1;
             if (u[0] < 0.002 && u[1] < 0.002) return;
@@ -233,6 +243,10 @@ namespace Raptoru.Chaos
             u[12] = (float)(-wx * t % 500); u[13] = (float)(-wy * t % 500); u[14] = (float)(-wx * 0.45 * t % 500); u[15] = (float)(-wy * 0.45 * t % 500);
             u[16] = (float)(evo * t % 500); u[17] = (float)(-evo * 0.7 * t % 500); u[18] = (float)(-evo * 0.6 * t % 500); u[19] = (float)(evo * 0.8 * t % 500);
             u[20] = (float)(Fx.Hash(seed, 1) * 100); u[21] = (float)(Fx.Hash(seed, 2) * 100); u[22] = (float)p.Num("relief"); u[23] = (float)p.Num("haze");
+            // Masses : traversent l'écran avec le vent (environ 2,2 × la dérive des nappes proches) en se déformant.
+            u[24] = (float)p.Num("masses"); u[25] = (float)p.Num("thickness");
+            u[26] = (float)(-wx * 2.2 * t % 500); u[27] = (float)(-wy * 2.2 * t % 500);
+            u[28] = (float)(evo * 0.6 * t % 500); u[29] = (float)(-evo * 0.45 * t % 500);
             var c = p.Color("color");
             col[0] = c[0]; col[1] = c[1]; col[2] = c[2]; col[3] = 1;
             double scale = p.Str("quality") == "haute" ? 0.75 : p.Str("quality") == "economie" ? 0.33 : 0.5;

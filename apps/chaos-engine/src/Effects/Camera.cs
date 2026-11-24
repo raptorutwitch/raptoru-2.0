@@ -142,8 +142,22 @@ namespace Raptoru.Chaos
             double rot = swayA * (0.65 * Math.Sin(2 * Math.PI * 0.11 * sp * t + seed % 6) + 0.35 * Fx.Noise(seed, t * 0.21 * sp));
             double dx = driftA * Fx.Noise(seed + 1, t * 0.09 * sp), dy = driftA * 0.6 * Fx.Noise(seed + 2, t * 0.08 * sp);
             double breath = 1 + p.Num("breathing") / 100 * I * (0.5 + 0.5 * Math.Sin(2 * Math.PI * 0.17 * sp * t));
-            double r = Math.Max(ax, 1 / ax);
-            double cover = (Math.Cos(swayA) + r * Math.Sin(swayA)) * (1 + 2 * Math.Max(driftA / ax, driftA * 0.6));
+            // Titubations : l'image part d'un côté, s'y attarde, repart ailleurs (cibles tirées de la graine, trajets
+            // amortis) : des changements de direction francs mais jamais secs.
+            double st = p.Num("stagger") * I, stRot = 0;
+            if (st > 0)
+            {
+                double L = 1.9 / Math.Max(0.2, sp), q = t / L;
+                int k = (int)Math.Floor(q);
+                double e = Fx.EaseInOut(Fx.Clamp01((q - k) / 0.55));
+                Func<int, double> H = j => Fx.Lerp(Fx.Hash(seed + 31, k - 1, j) * 2 - 1, Fx.Hash(seed + 31, k, j) * 2 - 1, e);
+                stRot = st * 7 * Math.PI / 180;
+                rot += stRot * H(1);
+                dx += st * 0.035 * H(2); dy += st * 0.02 * H(3);
+                breath *= 1 + st * 0.05 * Math.Abs(H(4));
+            }
+            double r = Math.Max(ax, 1 / ax), rotMax = swayA + stRot, driftMax = driftA + st * 0.035;
+            double cover = (Math.Cos(rotMax) + r * Math.Sin(rotMax)) * (1 + 2 * Math.Max(driftMax / ax, driftMax * 0.6));
             fb.Transform(rot, cover * breath, cover * breath, dx, dy, "clamp");
             double dbl = p.Num("double") * I;
             u[0] = (float)(p.Num("warp") * I); u[1] = 1.6f; u[2] = (float)dbl;
@@ -184,9 +198,9 @@ namespace Raptoru.Chaos
             int shape = p.Str("shape") == "ellipse" ? 1 : p.Str("shape") == "rectangle" ? 2 : 0;
             u[0] = (float)sx; u[1] = (float)sy;
             u[2] = (float)Fx.Lerp(1.6, radius, pr);
-            u[3] = (float)(0.01 + p.Num("feather") * 0.32);
+            u[3] = (float)(0.005 + p.Num("feather") * 0.15);
             u[4] = (float)(p.Num("darkness") * Fx.Smooth(0, 0.55, pr)); u[5] = shape; u[6] = (float)p.Num("stretch"); u[7] = 0.45f;
-            u[8] = (float)p.Num("inner");
+            u[8] = (float)p.Num("inner"); u[9] = (float)(0.03 + p.Num("gradient") * 0.6); u[10] = 1.25f;
             var c = p.Color("color");
             col[0] = c[0]; col[1] = c[1]; col[2] = c[2]; col[3] = 1;
             fb.Overlay("tunnel", u, 1, IntPtr.Zero, 1, col);

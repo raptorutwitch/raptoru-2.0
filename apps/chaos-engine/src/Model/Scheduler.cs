@@ -28,6 +28,8 @@ namespace Raptoru.Chaos
         public Dictionary<string, object> TargetInfo = new Dictionary<string, object>();
         public IntPtr TargetHwnd;
         public bool TargetMonitor;
+        /// Cible « écran » occupée par une fenêtre (mode E) : TargetHwnd = la fenêtre, TargetHmon = l'écran.
+        public bool TargetComposed;
         /// Écran entier : HMONITOR et nom Windows (\\.\DISPLAYn) ; null en mode fenêtre.
         public IntPtr TargetHmon;
         public string TargetDevice;

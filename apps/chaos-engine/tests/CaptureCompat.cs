@@ -6,6 +6,9 @@
 //   DXGI écran              OBS « Capture d'écran », méthode DXGI (Desktop Duplication)
 //   WGC fenêtre du jeu      OBS « Capture de fenêtre », méthode Windows 10
 //   WGC fenêtre du calque   une source OBS « Capture de fenêtre » qui viserait le calque lui-même
+// Cas : calque sur la fenêtre (mode D), écran entier (mode C, exclu des captures), et cible « écran » des fiches occupée
+// par une fenêtre agrandie (mode E : la mire couvre l'écran sauf une bande en bas, comme la barre des tâches ; le calque
+// doit couvrir aussi la bande, et la capture d'écran doit le voir).
 // OBS « Capture de jeu » s'accroche au jeu (injection) : elle lit les images du jeu, jamais une autre fenêtre. Non
 // reproduite (aucune injection), conclusion par construction.
 // VISIBLE (mire retournée sur l'écran secondaire) : garde de jeu, jamais lancé par les contrôles automatiques.
@@ -49,6 +52,7 @@ namespace Raptoru.Chaos
         /// Points de mesure : centres des quatre quadrants de la mire (coordonnées écran).
         static Point[] Points()
         {
+            if (pointsOverride != null) return pointsOverride;
             return new[] { new Point(where.X + where.Width / 5, where.Y + where.Height / 5), new Point(where.X + where.Width * 4 / 5, where.Y + where.Height / 5),
                            new Point(where.X + where.Width / 5, where.Y + where.Height * 4 / 5), new Point(where.X + where.Width * 4 / 5, where.Y + where.Height * 4 / 5) };
         }
@@ -122,6 +126,13 @@ namespace Raptoru.Chaos
             }
             finally { Com.Release(ref staging); }
         }
+
+        static string Hex(Color c) { return c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2"); }
+
+        /// Pixels aux points donnés (coordonnées écran), capturés par WGC ou DXGI (pas les quatre points de la mire).
+        static Color[] WgcAt(IntPtr hwnd, IntPtr hmon, int ox, int oy, Point[] pts) { var keep = pointsOverride; pointsOverride = pts; try { return Wgc(hwnd, hmon, ox, oy); } finally { pointsOverride = keep; } }
+        static Color[] DxgiAt(IntPtr hmon, int ox, int oy, Point[] pts) { var keep = pointsOverride; pointsOverride = pts; try { return Dxgi(hmon, ox, oy); } finally { pointsOverride = keep; } }
+        static Point[] pointsOverride;
 
         static Color[] Wgc(IntPtr hwnd, IntPtr hmon, int ox, int oy)
         {
@@ -252,6 +263,35 @@ namespace Raptoru.Chaos
                 if (e.Event("effect.started", 5000, x => J.Str(x, "request_id", "") == "compat-c") == null) Console.WriteLine("  l'effet écran entier n'a pas démarré");
                 Thread.Sleep(400);
                 report("Calque sur l'écran entier (mode C, exclu des captures)");
+                e.Call("stop_all");
+                e.Event("effect.ended", 3000);
+                Thread.Sleep(300);
+                // Mode E : fenêtre « agrandie » (toute la largeur, une bande libre en bas), cible « écran » des fiches.
+                target.StandardInput.Close(); target.WaitForExit(3000);
+                int strip = 60, bw = mon.Right - mon.Left, bh = mon.Bottom - mon.Top - strip;
+                target = Process.Start(new ProcessStartInfo(engineExe, "--test-target --x " + mon.Left + " --y " + mon.Top + " --w " + bw + " --h " + bh)
+                { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true });
+                hwnd = new IntPtr((long)J.Num(J.Parse(target.StandardOutput.ReadLine()), "hwnd", 0));
+                Thread.Sleep(500);
+                tr = N.FrameBounds(hwnd);
+                where = new Rectangle(tr.Left, tr.Top, tr.Right - tr.Left, tr.Bottom - tr.Top);
+                // Bande du bas (hors fenêtre) et haut de l'écran : retournés, ils échangent leur contenu.
+                Func<string> stripView = () =>
+                {
+                    var pts = new[] { new Point(mon.Left + bw / 2, mon.Bottom - strip / 2), new Point(mon.Left + bw / 2, mon.Top + strip / 2) };
+                    Func<Color[], string> fmt = px => px == null ? "indisponible" : "bas " + Hex(px[0]) + " · haut " + Hex(px[1]);
+                    return "WGC écran : " + fmt(WgcAt(IntPtr.Zero, hmon, mon.Left, mon.Top, pts)) + " ; DXGI écran : " + fmt(DxgiAt(hmon, mon.Left, mon.Top, pts));
+                };
+                string before = stripView();
+                Console.WriteLine("  Mode E, sans effet : " + before);
+                var screen = J.Map("kind", "screen", "device", dev);
+                var resp = e.Call("effect.request", J.Map("request_id", "compat-e", "effect", "flip", "source", J.Map("kind", "test"), "target", screen, "transition", cut, "duration_ms", 20000));
+                if (e.Event("effect.started", 5000, x => J.Str(x, "request_id", "") == "compat-e") == null) Console.WriteLine("  l'effet « écran » (mode E) n'a pas démarré");
+                Thread.Sleep(600);
+                report("Cible « écran » occupée par une fenêtre agrandie (mode E), retournée");
+                string after = stripView();
+                Console.WriteLine("  Mode E, retourné : " + after);
+                results.Add(J.Map("case", "mode_e_strip", "before", before, "after", after, "request", resp));
                 e.Call("stop_all");
                 e.Event("effect.ended", 3000);
             }

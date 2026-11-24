@@ -17,6 +17,7 @@ import {
 } from '../ds/ds.js';
 import { getJson, postJson } from '../http.js';
 import {
+  activeLevel,
   catalogHtml,
   type EffectDef,
   type EffectView,
@@ -911,14 +912,35 @@ export function mountChaosPage(root: HTMLElement) {
       const d = current();
       if (c && d && !PREVIEWS[d.id]) previewEngine(c, d, true);
       else preview();
+    } else if (b.hasAttribute('data-level')) {
+      const d = current();
+      const id = b.getAttribute('data-level');
+      if (d && id === 'custom') {
+        // Personnalisé : les réglages avancés s'ouvrent (rien ne change tant qu'un réglage n'est pas modifié).
+        const adv =
+          document.querySelector<HTMLDetailsElement>('details[data-adv]');
+        if (adv) {
+          adv.open = true;
+          adv.scrollIntoView({ block: 'nearest' });
+        }
+      } else {
+        const l = d?.levels?.find((x) => x.id === id);
+        if (d && l)
+          savePreset(d.id, (x) => {
+            x.params = { ...(x.params ?? {}), ...l.params };
+          });
+      }
     } else if (b.hasAttribute('data-variant')) {
+      const c = ctx();
       const d = current();
       const v = d?.variants?.find(
         (x) => x.id === b.getAttribute('data-variant'),
       );
+      // Le style change, la force reste : le niveau choisi est gardé pour les réglages que la variante ne fixe pas.
+      const lv = d && v ? activeLevel(c!, d) : null;
       if (d && v)
         savePreset(d.id, (x) => {
-          x.params = { ...v.params };
+          x.params = { ...(lv?.params ?? {}), ...v.params };
           if (v.duration_ms) x.duration_ms = v.duration_ms;
           if (v.transition)
             x.transition = JSON.parse(

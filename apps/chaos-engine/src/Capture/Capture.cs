@@ -44,6 +44,12 @@ namespace Raptoru.Chaos
         bool ZeroCopy { get; set; }
         /// Intervalle minimal entre deux images livrées par Windows (cadence plafonnée), en ms.
         void SetMinInterval(double ms);
+        /// La capture voit l'écran entier, donc le calque posé dessus : il doit être exclu des captures tant qu'elle tourne.
+        bool CapturesScreen { get; }
+        /// Images composées avant cet instant (QPC) ignorées : elles peuvent contenir le calque, pas encore exclu.
+        void NotBefore(long qpc);
+        /// Capture réutilisée par un nouvel effet (image de l'écran à reprendre).
+        void Refresh();
     }
 
     sealed class CaptureError : Exception
@@ -64,7 +70,9 @@ namespace Raptoru.Chaos
         readonly Direct3D11CaptureFramePool pool;
         readonly GraphicsCaptureSession session;
         readonly string border, borderAccess;
-        IntPtr tex, srv, staging;
+        readonly bool screen;
+        IntPtr tex, srv, staging, currentTex;
+        long notBefore;
         // Lecture directe : trame empruntée (rendue jusqu'à la suivante) et vues sur les tampons du pool (≤ PoolBuffers).
         Direct3D11CaptureFrame held;
         IntPtr current;
@@ -81,6 +89,11 @@ namespace Raptoru.Chaos
         public uint Width { get { return w; } }
         public uint Height { get { return h; } }
         public IntPtr Srv { get { return current; } }
+        /// Texture de l'image courante (trame du pool ou copie persistante), pour une copie vers une autre cible.
+        internal IntPtr CurrentTexture { get { return currentTex; } }
+        public bool CapturesScreen { get { return screen; } }
+        public void NotBefore(long qpc) { notBefore = qpc; }
+        public void Refresh() { }
         /// Copie persistante (outils de test : lecture des pixels après une capture avec ZeroCopy = false).
         internal IntPtr CopyTexture { get { return tex; } }
         public bool ZeroCopy { get; set; }
@@ -98,7 +111,7 @@ namespace Raptoru.Chaos
         /// cursor : curseur inclus dans l'image (prototype du curseur ; le moteur l'exclut toujours).
         public WgcCaptureSource(Gpu gpu, GpuTimer timer, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon, bool cursor = false)
         {
-            this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; Key = key;
+            this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; Key = key; screen = hmon != IntPtr.Zero;
             if (!GraphicsCaptureSession.IsSupported()) throw new CaptureError("capture_unsupported", "Windows.Graphics.Capture indisponible");
             var interop = (IGraphicsCaptureItemInterop)WindowsRuntimeMarshal.GetActivationFactory(typeof(GraphicsCaptureItem));
             Guid iid = Iid.GraphicsCaptureItem;
@@ -143,7 +156,7 @@ namespace Raptoru.Chaos
             ClearFrameViews();
             Com.Release(ref srv); Com.Release(ref tex);
             w = nw; h = nh;
-            current = IntPtr.Zero;
+            current = IntPtr.Zero; currentTex = IntPtr.Zero;
             HasFrame = false;
         }
 
@@ -199,14 +212,19 @@ namespace Raptoru.Chaos
                 Guid tid = Iid.Texture2D;
                 IntPtr frameTex = access.GetInterface(ref tid);
                 // SystemRelativeTime : instant QPC de la composition de l'image, exprimé en unités de 100 ns.
-                lastFrameQpc = (long)(latest.SystemRelativeTime.Ticks * (N.QpcFreq() / 1e7));
+                long frameQpc = (long)(latest.SystemRelativeTime.Ticks * (N.QpcFreq() / 1e7));
+                // Image composée avant l'exclusion du calque : gardée seulement s'il n'y a encore rien (secours d'une
+                // image de l'écran qui ne viendrait pas), jamais signalée comme nouvelle.
+                bool stale = frameQpc < notBefore;
+                if (stale && HasFrame) { Marshal.Release(frameTex); Marshal.ReleaseComObject(surface); return false; }
+                lastFrameQpc = frameQpc;
                 IntPtr view = ZeroCopy && zeroCopyOk ? FrameSrv(frameTex) : IntPtr.Zero;
                 if (view != IntPtr.Zero)
                 {
                     // Lecture directe : la trame précédente retourne au pool, celle-ci reste empruntée jusqu'à la suivante.
                     ReleaseHeld();
                     held = latest; keep = true;
-                    current = view; copyCurrent = false; direct++;
+                    current = view; currentTex = frameTex; copyCurrent = false; direct++;
                 }
                 else
                 {
@@ -216,8 +234,9 @@ namespace Raptoru.Chaos
                 if (now >= nextBlackAt) CheckBlack(now, frameTex);
                 Marshal.Release(frameTex);
                 Marshal.ReleaseComObject(surface);
-                HasFrame = true;
                 mipsDirty = true;
+                if (stale) return false;
+                HasFrame = true;
                 return true;
             }
             finally { if (!keep) latest.Dispose(); }
@@ -229,7 +248,7 @@ namespace Raptoru.Chaos
             if (timer != null) timer.Begin("capture:copy");
             gpu.Copy(tex, frameTex, 0, 0, w, h);
             if (timer != null) timer.End();
-            current = srv; copyCurrent = true; copies++;
+            current = srv; currentTex = tex; copyCurrent = true; copies++;
         }
 
         public void EnsureMips()
@@ -291,6 +310,159 @@ namespace Raptoru.Chaos
         }
     }
 
+    /// Cible « écran » occupée par une fenêtre (jeu, fenêtre agrandie) : l'écran entier, fait de la fenêtre capturée en
+    /// direct, posée à sa place, sur une image de l'écran prise une fois au départ (barre des tâches, bords, bureau).
+    /// Le calque couvre ainsi tout l'écran SANS être exclu des captures (la capture d'écran d'OBS le voit) : la capture de
+    /// la fenêtre ne le contient jamais, et l'image de l'écran est prise avant qu'il s'affiche (ou calque exclu le temps de
+    /// la prendre, CapturesScreen). Limite : le reste de l'écran est figé pendant l'effet (horloge, survol de la barre).
+    /// Fenêtre qui couvre tout l'écran (jeu en fenêtré sans bordure) : sa capture est lue directement, sans composition.
+    sealed class ComposedScreenSource : ICaptureSource
+    {
+        const int SnapTimeoutMs = 500;
+        readonly Gpu gpu;
+        readonly GpuTimer timer;
+        readonly AutoResetEvent frameEvt;
+        readonly WgcCaptureSource win;
+        readonly IntPtr hwnd, hmon;
+        readonly RECT mon;
+        readonly uint w, h;
+        WgcCaptureSource snap;
+        IntPtr tex, srv;
+        long snapStart = -1, notBefore, snapMs = -1, composes;
+        bool snapped, direct, mipsDirty, composed;
+
+        public ComposedScreenSource(Gpu gpu, GpuTimer timer, AutoResetEvent frameEvt, string key, IntPtr hwnd, IntPtr hmon)
+        {
+            this.gpu = gpu; this.timer = timer; this.frameEvt = frameEvt; this.hwnd = hwnd; this.hmon = hmon;
+            mon = N.MonitorRectOf(hmon);
+            w = (uint)Math.Max(16, mon.Right - mon.Left); h = (uint)Math.Max(16, mon.Bottom - mon.Top);
+            win = new WgcCaptureSource(gpu, timer, frameEvt, key, hwnd, IntPtr.Zero) { ZeroCopy = true };
+            direct = Covers();
+        }
+
+        public string Key { get { return win.Key; } }
+        public string Backend { get { return "wgc-screen"; } }
+        public uint Width { get { return w; } }
+        public uint Height { get { return h; } }
+        public IntPtr Srv { get { return direct ? win.Srv : srv; } }
+        public bool HasFrame { get { return win.HasFrame && (direct || composed); } }
+        public bool Lost { get { return win.Lost; } }
+        public string LostReason { get { return win.LostReason; } }
+        public bool Black { get { return win.Black; } }
+        public long Frames { get { return win.Frames; } }
+        public long Dropped { get { return win.Dropped; } }
+        public long LastArrivalQpc { get { return win.LastArrivalQpc; } }
+        public long LastFrameQpc { get { return win.LastFrameQpc; } }
+        /// Lecture directe de la fenêtre toujours (la composition est déjà une copie).
+        public bool ZeroCopy { get; set; }
+        public bool CapturesScreen { get { return !direct && !snapped; } }
+        public void NotBefore(long qpc) { notBefore = qpc; if (snap != null) snap.NotBefore(qpc); }
+        public void Refresh() { snapped = false; composed = false; DisposeSnap(); }
+        public void SetMinInterval(double ms) { win.SetMinInterval(ms); }
+        /// Diagnostic : image de l'écran prise, composition directe.
+        internal bool Snapped { get { return snapped; } }
+        internal bool Direct { get { return direct; } }
+        internal IntPtr ComposedTexture { get { return direct ? win.CurrentTexture : tex; } }
+
+        /// La fenêtre couvre tout l'écran, à la taille de l'écran : rien d'autre à montrer.
+        bool Covers()
+        {
+            RECT r = N.FrameBounds(hwnd);
+            return r.Left <= mon.Left && r.Top <= mon.Top && r.Right >= mon.Right && r.Bottom >= mon.Bottom && win.Width == w && win.Height == h;
+        }
+
+        void EnsureTex()
+        {
+            if (tex != IntPtr.Zero) return;
+            tex = gpu.Texture(w, h, 0, 0x8 | 0x20, 0x1, 0, 0);
+            srv = gpu.Srv(tex);
+        }
+
+        public bool Acquire(long now)
+        {
+            bool fresh = win.Acquire(now);
+            bool covers = win.HasFrame && Covers();
+            if (covers != direct) { direct = covers; mipsDirty = true; if (!direct) { snapped = false; composed = false; } }
+            if (direct) return fresh;
+            bool justSnapped = false;
+            if (!snapped)
+            {
+                if (!Snap(now)) return false;
+                justSnapped = true;
+            }
+            if (!win.HasFrame || (!fresh && !justSnapped)) return false;
+            Compose();
+            return true;
+        }
+
+        /// Image de l'écran (sans curseur) : la première composée après l'exclusion du calque ; à défaut, après
+        /// SnapTimeoutMs, la plus récente reçue.
+        bool Snap(long now)
+        {
+            if (snap == null)
+            {
+                snap = new WgcCaptureSource(gpu, null, frameEvt, Key + "#screen", IntPtr.Zero, hmon) { ZeroCopy = true };
+                snap.NotBefore(notBefore);
+                snapStart = now;
+            }
+            bool got = snap.Acquire(now) || snap.HasFrame;
+            if (!got && now - snapStart >= SnapTimeoutMs && snap.CurrentTexture != IntPtr.Zero) got = true;
+            if (!got || snap.CurrentTexture == IntPtr.Zero) return false;
+            EnsureTex();
+            if (timer != null) timer.Begin("capture:screen");
+            gpu.CopyAt(tex, 0, 0, snap.CurrentTexture, 0, 0, Math.Min(snap.Width, w), Math.Min(snap.Height, h));
+            if (timer != null) timer.End();
+            snapMs = now - snapStart;
+            snapped = true;
+            DisposeSnap();
+            return true;
+        }
+
+        /// La fenêtre, à sa place sur l'écran (découpée aux bords de l'écran).
+        void Compose()
+        {
+            IntPtr src = win.CurrentTexture;
+            if (src == IntPtr.Zero) return;
+            RECT r = N.FrameBounds(hwnd);
+            int ox = r.Left - mon.Left, oy = r.Top - mon.Top;
+            int sx = Math.Max(0, -ox), sy = Math.Max(0, -oy), dx = Math.Max(0, ox), dy = Math.Max(0, oy);
+            int cw = Math.Min((int)win.Width - sx, (int)w - dx), ch = Math.Min((int)win.Height - sy, (int)h - dy);
+            if (cw <= 0 || ch <= 0) return;
+            EnsureTex();
+            if (timer != null) timer.Begin("capture:compose");
+            gpu.CopyAt(tex, (uint)dx, (uint)dy, src, (uint)sx, (uint)sy, (uint)cw, (uint)ch);
+            if (timer != null) timer.End();
+            composed = true; mipsDirty = true; composes++;
+        }
+
+        public void EnsureMips()
+        {
+            if (direct) { win.EnsureMips(); return; }
+            if (!composed || !mipsDirty) return;
+            if (timer != null) timer.Begin("capture:mips");
+            gpu.GenerateMips(srv);
+            if (timer != null) timer.End();
+            mipsDirty = false;
+        }
+
+        public Dictionary<string, object> Info()
+        {
+            var d = win.Info();
+            d["backend"] = Backend;
+            d["screen"] = J.Map("size", w + "x" + h, "direct", direct, "snapshot_ms", snapMs, "composes", composes);
+            return d;
+        }
+
+        void DisposeSnap() { if (snap != null) { snap.Dispose(); snap = null; } }
+
+        public void Dispose()
+        {
+            win.Dispose();
+            DisposeSnap();
+            Com.Release(ref srv); Com.Release(ref tex);
+        }
+    }
+
     sealed class CaptureManager
     {
         sealed class Entry { public ICaptureSource Source; public int Refs; public long ReleasedAt; }
@@ -304,13 +476,18 @@ namespace Raptoru.Chaos
         public int Count { get { return entries.Count; } }
         public IEnumerable<ICaptureSource> Sources { get { return entries.Values.Select(e => e.Source); } }
 
-        /// Ouvre (ou réutilise) la capture d'une cible : la fenêtre hwnd (mode D) ou l'écran hmon (mode C, hmon ≠ 0).
-        public ICaptureSource Acquire(string key, IntPtr hwnd, IntPtr hmon)
+        /// Clé de capture d'une cible : la même cible « écran » peut changer de technique (composé ou écran entier).
+        public static string KeyOf(string target, IntPtr hmon, bool composed) { return target + (composed ? "#e" : hmon != IntPtr.Zero ? "#c" : ""); }
+
+        /// Ouvre (ou réutilise) la capture d'une cible : la fenêtre hwnd (mode D), l'écran hmon (mode C, hmon ≠ 0) ou
+        /// l'écran composé autour de la fenêtre hwnd (mode E, composed).
+        public ICaptureSource Acquire(string key, IntPtr hwnd, IntPtr hmon, bool composed)
         {
             Entry e;
-            if (entries.TryGetValue(key, out e) && !e.Source.Lost) { e.Refs++; Reused++; return e.Source; }
+            if (entries.TryGetValue(key, out e) && !e.Source.Lost) { e.Refs++; Reused++; e.Source.Refresh(); return e.Source; }
             if (e != null) { e.Source.Dispose(); entries.Remove(key); }
-            e = new Entry { Source = new WgcCaptureSource(gpu, timer, frameEvt, key, hwnd, hmon), Refs = 1 };
+            ICaptureSource src = composed ? (ICaptureSource)new ComposedScreenSource(gpu, timer, frameEvt, key, hwnd, hmon) : new WgcCaptureSource(gpu, timer, frameEvt, key, hwnd, hmon);
+            e = new Entry { Source = src, Refs = 1 };
             entries[key] = e;
             Opened++;
             return e.Source;

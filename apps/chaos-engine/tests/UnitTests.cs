@@ -511,7 +511,9 @@ namespace Raptoru.Chaos
                     object v;
                     True(e.Raw.TryGetValue("viewer", out v), e.Id + " : bloc viewer");
                     var vw = (Dictionary<string, object>)v;
-                    foreach (var t in J.Strs(vw, "tiers")) True(e.Variants.ContainsKey(t), e.Id + " : palier " + t + " = une variante");
+                    bool byLevel = J.Str(vw, "tier_kind", "variant") == "level";
+                    foreach (var t in J.Strs(vw, "tiers"))
+                        True(byLevel ? e.Level(t) != null : e.Variants.ContainsKey(t), e.Id + " : palier " + t + (byLevel ? " = un niveau" : " = une variante"));
                     True(e.Variants.ContainsKey(J.Str(vw, "preview", "")), e.Id + " : aperçu = une variante");
                     foreach (var d in J.Arr(vw, "durations_ms")) { double ms = Convert.ToDouble(d); True(ms >= r.Limits.MinDurationMs && ms <= r.Limits.MaxDurationMs, e.Id + " : durée proposée dans les bornes"); }
                     True(e.StopConditions.Contains("stop_all"), e.Id + " : STOP ALL");
@@ -537,6 +539,35 @@ namespace Raptoru.Chaos
                 Eq("param_out_of_range", Throws<ParamError>(() => Params.Resolve(r.Get("zoom"), null, null, J.Map("factor", 20.0), null, null, r.Limits, s, false)), "zoom x20 refusé");
                 Eq("unknown_variant", Throws<ParamError>(() => Params.Resolve(r.Get("fog"), "purée", null, null, null, null, r.Limits, s, true)), "variante inconnue");
             });
+            Case("niveaux d'intensité : la variante dit le style, le niveau la force ; préréglage et demande passent devant", () =>
+            {
+                var r = Reg();
+                var s = new SafetyConfig { MaxDurationMs = r.Limits.MaxDurationMs };
+                foreach (var id in new[] { "shake", "zoom", "drunk", "tunnel", "blink", "flash", "fog", "blur", "pixelate", "vhs" })
+                {
+                    var e = r.Get(id);
+                    True(e.Levels.Count >= 3, id + " : au moins trois niveaux");
+                    Eq("leger", e.Levels[0].Key, id + " : Léger d'abord");
+                    Eq("extreme", e.Levels[e.Levels.Count - 1].Key, id + " : Extrême en dernier");
+                    // Les réglages du niveau « Marqué » sont les défauts : une fiche neuve est au niveau Marqué.
+                    if (id != "blink" && id != "flash" && id != "vhs" && id != "zoom")
+                        foreach (var kv in e.Level("marque").Params) Eq(Convert.ToDouble(e.Param(kv.Key).Default), Convert.ToDouble(kv.Value), id + " : défaut = Marqué (" + kv.Key + ")");
+                }
+                var ivre = Params.Resolve(r.Get("drunk"), "pompette", null, null, null, null, r.Limits, s, true, "extreme");
+                Eq(1.0, ivre.Num("intensity"), "Pompette au niveau Extrême : intensité 1");
+                Eq(2.5, ivre.Num("sway"), "… le style de Pompette reste (balancement)");
+                Eq("extreme", ivre.Level, "niveau retenu");
+                var pre = new Preset(); pre.Params["intensity"] = 0.5;
+                Eq(0.5, Params.Resolve(r.Get("drunk"), "pompette", pre, null, null, null, r.Limits, s, true, "extreme").Num("intensity"), "préréglage devant le niveau");
+                Eq("unknown_level", Throws<ParamError>(() => Params.Resolve(r.Get("drunk"), null, null, null, null, null, r.Limits, s, false, "apocalypse")), "niveau inconnu refusé");
+                var fog = Params.Resolve(r.Get("fog"), "bancs", null, null, null, null, r.Limits, s, true, "extreme");
+                True(fog.Num("thickness") >= 0.85 && fog.Num("masses") >= 0.8 && fog.Num("opacity") == 1, "brouillard occultant : épaisseur et masses au maximum");
+                Eq("intermittent", fog.Str("mode"), "… en bancs mouvants");
+                var safe = Params.Resolve(r.Get("drunk"), "ivre_mort", null, null, null, null, r.Limits, new SafetyConfig { MaxDurationMs = r.Limits.MaxDurationMs, SafeMode = true }, true);
+                True(safe.Num("sway") <= 6 && safe.Num("stagger") == 0 && safe.Num("speed") <= 1, "mode sûr : mouvements bornés (safe_max)");
+                True(safe.Adjusted.Contains("sway.safe_mode"), "… et signalé");
+                Eq(13.0, Params.Resolve(r.Get("drunk"), "ivre_mort", null, null, null, null, r.Limits, s, true).Num("sway"), "hors mode sûr : Ivre mort entier");
+            });
             Case("registre : une variante hors bornes, une capture inconnue ou un délai négatif sont refusés au démarrage", () =>
             {
                 Func<Action<List<Dictionary<string, object>>>, string> mutate = change =>
@@ -549,6 +580,8 @@ namespace Raptoru.Chaos
                 Throws<RegistryError>(() => Registry.Parse(mutate(l => ((Dictionary<string, object>)J.Arr(fx(l, "zoom"), "variants")[0])["params"] = J.Map("factor", 50.0))));
                 Throws<RegistryError>(() => Registry.Parse(mutate(l => fx(l, "flash")["capture"] = "video")));
                 Throws<RegistryError>(() => Registry.Parse(mutate(l => fx(l, "flash")["cooldown_ms"] = -5.0)));
+                Throws<RegistryError>(() => Registry.Parse(mutate(l => ((Dictionary<string, object>)J.Arr(fx(l, "fog"), "levels")[0])["params"] = J.Map("density", 3.0))));
+                Throws<RegistryError>(() => Registry.Parse(mutate(l => ((Dictionary<string, object>)J.Arr(fx(l, "fog"), "levels")[1])["id"] = "leger")));
             });
             Case("délai minimal entre deux flashs : la suivante attend en file, ou est refusée (reject)", () =>
             {

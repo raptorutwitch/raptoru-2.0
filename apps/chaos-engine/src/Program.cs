@@ -32,6 +32,8 @@ namespace Raptoru.Chaos
         {
             string mode = args.Length > 0 ? args[0] : "";
             N.SetProcessDpiAwarenessContext(new IntPtr(-4)); // pixels physiques
+            // Outils hors écran : niveau d'intensité appliqué aux effets rendus (--level leger|marque|extreme…).
+            if (mode != "--serve") EffectPreview.DefaultLevel = StrArg(args, "--level", null);
             switch (mode)
             {
                 case "--serve":
@@ -58,6 +60,7 @@ namespace Raptoru.Chaos
                 case "--strip": return EffectPreview.Strip(args[1], args[2], args[3], long.Parse(args[4]), long.Parse(args[5]), int.Parse(args[6]), (uint)IntArg(args, "--w", 480), (uint)IntArg(args, "--h", 270));
                 case "--preview-anim": return EffectPreview.Anim(args[1], args[2], args[3], args[4], (uint)IntArg(args, "--w", 320), (uint)IntArg(args, "--h", 180), StrArg(args, "--cache", null));
                 case "--combo": return EffectPreview.Combo(args[1], args[2], long.Parse(args[3]), long.Parse(args[4]), int.Parse(args[5]));
+                case "--measure": return EffectPreview.Measure(args[1], args[2], args[3], (uint)IntArg(args, "--w", 640), (uint)IntArg(args, "--h", 360), StrArg(args, "--level", null));
                 case "--bench-effects": return EffectPreview.Bench(IntArg(args, "--w", 2560), IntArg(args, "--h", 1440), IntArg(args, "--frames", 300));
                 case "--describe":
                     var reg = Registry.Embedded();

@@ -213,7 +213,7 @@ namespace Raptoru.Chaos
             // dessine : image du vrai curseur (forme et position courantes) dessinée retournée au point miroir.
             bool drawn = Arg(a, "--curseur", "dessine") != "capture";
             var cap = new WgcCaptureSource(gpu, null, evt, "demo", target, IntPtr.Zero, !drawn) { ZeroCopy = true };
-            var surf = new Surface(gpu, "demo", target, IntPtr.Zero, cap.Width, cap.Height);
+            var surf = new Surface(gpu, "demo", target, IntPtr.Zero, cap.Width, cap.Height, false, false);
             var fb = new FrameBuilder(cap.Width, cap.Height, true);
             var pacer = new Pacer(gpu, surf.Hmon, surf.RefreshHz, evt);
             pacer.Need(drawn);

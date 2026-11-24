@@ -25,6 +25,7 @@ namespace Raptoru.Chaos
     {
         public Surface S;
         public ICaptureSource Cap;
+        public string CapKey;
         public int CaptureUsers;
         public string Device; // écran entier : nom Windows (couche Entrées) ; null en mode fenêtre
         public readonly List<EffectInstance> Effects = new List<EffectInstance>();
@@ -207,17 +208,20 @@ namespace Raptoru.Chaos
             if (!surfaces.TryGetValue(r.TargetKey, out s))
             {
                 ICaptureSource cap = null;
+                string capKey = CaptureManager.KeyOf(r.TargetKey, r.TargetHmon, r.TargetComposed);
                 uint w, h;
-                if (a.Def.RequiresCapture) { cap = caps.Acquire(r.TargetKey, r.TargetHwnd, r.TargetHmon); w = cap.Width; h = cap.Height; }
+                if (a.Def.RequiresCapture) { cap = caps.Acquire(capKey, r.TargetHwnd, r.TargetHmon, r.TargetComposed); w = cap.Width; h = cap.Height; }
                 else
                 {
-                    RECT b = r.TargetMonitor ? N.MonitorRectOf(r.TargetHmon) : N.FrameBounds(r.TargetHwnd);
+                    // Calque sans capture : la surface couvre la cible (l'écran entier pour une cible « écran »).
+                    RECT b = r.TargetHmon != IntPtr.Zero ? N.MonitorRectOf(r.TargetHmon) : N.FrameBounds(r.TargetHwnd);
                     w = (uint)Math.Max(16, b.Right - b.Left); h = (uint)Math.Max(16, b.Bottom - b.Top);
                 }
                 Surface surf;
-                try { surf = new Surface(gpu, r.TargetKey, r.TargetHwnd, r.TargetHmon, w, h); }
-                catch (Exception) { if (cap != null) caps.Release(r.TargetKey, Now); throw; }
-                s = new SurfaceEntry { S = surf, Cap = cap, CaptureUsers = cap != null ? 1 : 0, FirstWaitAt = Now, Device = r.TargetDevice, Fb = new FrameBuilder(w, h, cap != null) };
+                // Exclue des captures dès sa création seulement si elle lit la capture de son propre écran (mode C).
+                try { surf = new Surface(gpu, r.TargetKey, r.TargetHwnd, r.TargetHmon, w, h, r.TargetComposed, cap != null && cap.CapturesScreen && !r.TargetComposed); }
+                catch (Exception) { if (cap != null) caps.Release(capKey, Now); throw; }
+                s = new SurfaceEntry { S = surf, Cap = cap, CapKey = cap != null ? capKey : null, CaptureUsers = cap != null ? 1 : 0, FirstWaitAt = Now, Device = r.TargetDevice, Fb = new FrameBuilder(w, h, cap != null) };
                 surfaces[r.TargetKey] = s;
                 return s;
             }
@@ -228,13 +232,18 @@ namespace Raptoru.Chaos
 
         void TakeCapture(SurfaceEntry s, EffectRequest r)
         {
-            if (s.Cap == null) { s.Cap = caps.Acquire(r.TargetKey, r.TargetHwnd, r.TargetHmon); s.S.Resize(s.Cap.Width, s.Cap.Height); }
+            if (s.Cap == null)
+            {
+                s.CapKey = CaptureManager.KeyOf(r.TargetKey, r.TargetHmon, r.TargetComposed);
+                s.Cap = caps.Acquire(s.CapKey, r.TargetHwnd, r.TargetHmon, r.TargetComposed);
+                s.S.Resize(s.Cap.Width, s.Cap.Height);
+            }
             s.CaptureUsers++;
         }
 
         void DropCapture(SurfaceEntry s, string key)
         {
-            if (--s.CaptureUsers <= 0 && s.Cap != null) { caps.Release(key, Now); s.Cap = null; s.CaptureUsers = 0; }
+            if (--s.CaptureUsers <= 0 && s.Cap != null) { caps.Release(s.CapKey, Now); s.Cap = null; s.CapKey = null; s.CaptureUsers = 0; }
         }
 
         void FinishInstance(Activation a)
@@ -341,6 +350,18 @@ namespace Raptoru.Chaos
             }
             if (StepInput(s, live, now)) { s.S.SetShown(false, now); return; }
             bool needsCapture = s.Cap != null;
+            // Exclusion des captures (docs/chaos/ECRAN_ENTIER.md) : seulement tant que la surface lit une capture de son
+            // propre écran ; sinon la capture d'écran d'OBS la voit. Images composées avant l'exclusion ignorées.
+            bool excl = needsCapture && s.Cap.CapturesScreen;
+            if (excl != s.S.Excluded)
+            {
+                if (!s.S.SetExcluded(excl))
+                {
+                    foreach (var e in live) sched.MarkFailed(e.A.Req.RequestId, "exclusion_failed", "impossible d'exclure le calque des captures : il se capturerait lui-même");
+                    return;
+                }
+                if (excl && s.S.Shown) s.Cap.NotBefore(N.QpcNow());
+            }
             double rate = RateHz(s);
             bool capped = rate < s.S.RefreshHz - 0.5;
             if (needsCapture) { s.Cap.ZeroCopy = cfg.Performance.ZeroCopy; s.Cap.SetMinInterval(capped ? 1000.0 / rate : 1); }
@@ -598,7 +619,7 @@ namespace Raptoru.Chaos
             foreach (var s in surfaces.Values)
             {
                 long frames = s.Cap != null ? s.Cap.Frames : 0, dropped = s.Cap != null ? s.Cap.Dropped : 0;
-                list.Add(J.Map("key", s.S.Key, "mode", s.S.MonitorMode ? "C" : "D", "visible", s.S.Shown, "size", s.S.Width + "x" + s.S.Height,
+                list.Add(J.Map("key", s.S.Key, "mode", s.S.Mode, "visible", s.S.Shown, "excluded", s.S.Excluded, "size", s.S.Width + "x" + s.S.Height,
                     "effects", s.Effects.Select(e => e.A.Def.Id).ToArray(),
                     "capture_fps", tel.LastAt == 0 ? 0 : Math.Round((frames - s.Stats.CapFramesAt) / secs, 1),
                     "present_fps", tel.LastAt == 0 ? 0 : Math.Round((s.S.Presented - s.Stats.PresentedAt) / secs, 1),
@@ -846,7 +867,7 @@ namespace Raptoru.Chaos
                 "engine", Hello(),
                 "active", sched.Running.Select(a => (object)Protocol.View(a, now)).ToArray(),
                 "queued", sched.Queued.Select(a => (object)Protocol.View(a, now)).ToArray(),
-                "surfaces", surfaces.Values.Select(s => (object)J.Map("key", s.S.Key, "mode", s.S.MonitorMode ? "C" : "D", "visible", s.S.Shown,
+                "surfaces", surfaces.Values.Select(s => (object)J.Map("key", s.S.Key, "mode", s.S.Mode, "visible", s.S.Shown, "excluded", s.S.Excluded,
                     "size", s.S.Width + "x" + s.S.Height, "capture", s.Cap != null ? s.Cap.Info() : null, "effects", s.Effects.Select(e => e.A.Req.RequestId).ToArray())).ToArray(),
                 "captures_open", caps.Count, "degraded", tel.Degraded,
                 "guardian", J.Map("pid", io.GuardianPid, "hotkey", io.HotkeyState),

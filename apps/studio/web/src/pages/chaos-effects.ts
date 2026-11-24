@@ -38,6 +38,13 @@ export interface Variant {
   duration_ms?: number;
   transition?: { in?: Side; out?: Side };
 }
+/** Niveau d'intensité du registre (Léger, Marqué, Extrême…) : valeurs des réglages principaux. */
+export interface Level {
+  id: string;
+  label: string;
+  help?: string;
+  params: Record<string, unknown>;
+}
 export interface EffectDef {
   id: string;
   version: number;
@@ -51,6 +58,7 @@ export interface EffectDef {
   cursor?: string;
   params: Param[];
   variants?: Variant[];
+  levels?: Level[];
   photosensitive?: boolean;
   cooldown_ms?: number;
   capture?: string;
@@ -403,6 +411,44 @@ function variantsRow(c: FxCtx, d: EffectDef) {
     )}</div></div>${on ? '' : `<p class="d-faint cx-help cx-help--row">${Object.keys(preset(c, d.id)).length ? 'Réglages personnels (aucun préréglage ne correspond exactement).' : 'Réglages par défaut (choisir un préréglage pour partir d’un comportement précis).'}</p>`}`;
 }
 
+/** Niveau dont toutes les valeurs sont celles de la fiche, ou null (intensité propre au préréglage, ou personnalisée). */
+export function activeLevel(c: FxCtx, d: EffectDef): Level | null {
+  return (
+    (d.levels ?? []).find((l) =>
+      Object.entries(l.params).every(([k, val]) => {
+        const p = d.params.find((q) => q.id === k);
+        return p && String(paramValue(c, d, p)) === String(val);
+      }),
+    ) ?? null
+  );
+}
+
+/**
+ * Intensité : Léger, Marqué, Extrême (ou les niveaux propres à l'effet), puis Personnalisé. La variante dit le style,
+ * le niveau la force : un clic ne change que les réglages du niveau. Personnalisé = aucun niveau ne correspond (réglage
+ * modifié à la main, ou intensité propre au préréglage choisi) ; un clic dessus ouvre les réglages avancés.
+ */
+function levelsRow(c: FxCtx, d: EffectDef) {
+  const ls = d.levels ?? [];
+  if (ls.length < 2) return '';
+  const on = activeLevel(c, d);
+  const v = on ? null : activeVariant(c, d);
+  const own =
+    v && ls.some((l) => Object.keys(l.params).some((k) => k in v.params));
+  const chip = (id: string, label: string, active: boolean) =>
+    `<button type="button" class="cx-chip${active ? ' on' : ''}" data-level="${esc(id)}" aria-pressed="${active}">${esc(label)}</button>`;
+  const help = on
+    ? (on.help ?? '')
+    : own
+      ? `Intensité propre au préréglage « ${v.label ?? v.id} ».`
+      : 'Réglages personnels : aucun niveau ne correspond exactement.';
+  return `<div class="cx-presets" role="group" aria-label="Intensité" data-k="intensité niveau léger marqué extrême force"><span class="cx-presets__t">Intensité</span><div class="cx-chips">${ls
+    .map((l) => chip(l.id, l.label, on?.id === l.id))
+    .join(
+      '',
+    )}${chip('custom', 'Personnalisé', !on)}</div></div>${help ? `<p class="d-faint cx-help cx-help--row">${esc(help)}</p>` : ''}`;
+}
+
 /** Réglages de la fiche (repeints seulement quand la configuration ou les écrans changent). */
 export function settingsHtml(c: FxCtx, d: EffectDef, advOpen = false) {
   const st = settings(c, d.id);
@@ -434,7 +480,7 @@ export function settingsHtml(c: FxCtx, d: EffectDef, advOpen = false) {
     : 'Curseur qui suit l’image';
   const main = params.filter((p) => !p.advanced);
   const adv = params.filter((p) => p.advanced);
-  return `${variantsRow(c, d)}${
+  return `${variantsRow(c, d)}${levelsRow(c, d)}${
     c.monitors.length
       ? row(
           'Écran',
