@@ -86,8 +86,23 @@ Règles :
   vérifiées au démarrage comme une demande (bornes, durée), et Studio les montre en puces.
 - **Paramètres** : `advanced: true` (replié dans la fiche), `step` (pas du curseur), `widget: "point"` + `pair` (le
   point visé se choisit d'un clic ; le paramètre y porte `widget: "point_y"`).
-- **`viewer`** : préparation de la boutique (durées proposées, paliers = variantes, variante d'aperçu, l'intensité
-  change-t-elle le prix). Les prix restent au Core ([ETUDE_EFFETS_V2.md](ETUDE_EFFETS_V2.md) § 4).
+- **`levels`** (facultatif) : niveaux d'intensité dans l'ordre (`leger`, `marque`, `extreme`, éventuellement
+  d'autres, comme `dense` pour le brouillard). Chacun a un `label`, une `help` facultative et des `params` seulement,
+  sans durée ni transition. Ils sont vérifiés au démarrage comme les variantes, et appliqués par-dessus la variante.
+  - La variante dit le style, le niveau la force.
+  - Une demande peut porter `level`.
+  - Les réglages par défaut doivent être ceux de `marque`, pour qu'une fiche neuve soit au niveau Marqué (test
+    unitaire).
+- **`safe_max`** (paramètre numérique) : plafond appliqué en mode sûr (mouvements trop agressifs), signalé dans
+  `adjusted`.
+- **`viewer`** : préparation de la boutique. Il donne :
+  - les durées proposées ;
+  - les paliers : des niveaux si `tier_kind: "level"`, sinon des variantes ;
+  - la variante d'aperçu ;
+  - si l'intensité change le prix.
+
+  Les prix restent au Core ([ETUDE_EFFETS_V2.md](ETUDE_EFFETS_V2.md) § 4).
+
 - **Paramètre animable** : `animatable` + `neutral`. La transition l'interpole de la valeur neutre à la valeur cible,
   sans code de transition dans l'effet.
 - **`exposed: false`** : réservé aux variantes. Le Core et l'extension ne peuvent pas le régler.

@@ -15,23 +15,104 @@ Vocabulaire des statuts :
 
 ## 0. État par effet
 
-| Effet             | Statut                                   | Technique                                                        | Capture       | Variantes (préréglages)                                                                     | Limites connues                                                                     |
-| ----------------- | ---------------------------------------- | ---------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Miroir            | développé, vérifié hors écran            | transformation affine (retournement de carte), demi-tour         | oui           | gauche ↔ droite, haut ↔ bas, alternance, instantané                                         | carte qui passe par une ligne noire à mi-animation (≈ 60 ms)                        |
-| Tremblement       | développé, vérifié hors écran            | « trauma » + bruit de gradient continu, surcadrage dosé          | oui           | léger, secousse, impact, par rafales, séisme, vibration                                     | fluidité à juger en mouvement réel (planches = images fixes)                        |
-| Zoom chaotique    | développé, vérifié hors écran            | transformation affine, échelle logarithmique, Catmull-Rom ≥ ×1,8 | oui           | progressif, brutal, zoom et dézoom, pulsations, intermittent, très gros zoom                | au-delà de ×6, le jeu est volontairement illisible (pixels du jeu agrandis)         |
-| Écran ivre        | développé, vérifié hors écran            | transformation lente + déformation, double vision, flou mip      | oui           | pompette, ivre, ivre mort, vertige                                                          | 2 passes ; sensation à juger en vrai (mal des transports)                           |
-| Vision tunnel     | développé, vérifié hors écran            | zoom vers un point + masque à distance signée (calque)           | oui           | focus doux, marqué, extrême, zoom dramatique, cinéma, regard qui dérive                     | le curseur suit le zoom, pas le masque                                              |
-| Clignement        | développé, vérifié hors écran            | calque shader « paupières » (amande vue de l'intérieur)          | **non**       | naturel, rapide, lent, yeux fermés, plusieurs, fatigue, paupières qui résistent, irrégulier | n'assombrit pas un jeu en plein écran exclusif (aucun calque ne le peut)            |
-| Flash aveuglant   | développé, vérifié hors écran            | une image retenue + calque blanc et image fantôme                | **une image** | court, intense, récupération longue                                                         | départ après la 1ʳᵉ image capturée (≈ 50 à 150 ms) ; délai de 4 s entre deux flashs |
-| Brouillard        | développé, vérifié hors écran (voir § 3) | calque shader : 2 nappes de fBm déformé + voile, ½ résolution    | **non**       | brume, dense, très opaque, bancs mouvants, arrive peu à peu, se dissipe                     | **à juger en mouvement** avant d'être déclaré réussi (exigence du mandat)           |
-| Flou              | développé, vérifié hors écran            | pyramide de mipmaps + lecture B-spline, niveau continu           | oui           | léger, moyen, intense, extrême, pulsé, progressif                                           | flou « de mipmaps » : très fort, il peut légèrement onduler sur un jeu qui bouge    |
-| Pixelisation      | développée, vérifiée hors écran          | blocs ancrés au centre, moyenne par mip, tailles entières        | oui           | légère, forte, très gros blocs, progressive, intermittente, rétro                           | —                                                                                   |
-| Filtre de couleur | développé, vérifié hors écran            | une passe : luminance en lumière linéaire, modes                 | oui           | noir et blanc, film noir, sépia, inversion (balayage), délavé, saturé, monochrome rouge     | —                                                                                   |
-| VHS / glitch      | développé, vérifié hors écran            | une passe : défauts de signal un par un (YIQ, tracking, têtes)   | oui           | légère, abîmée, tracking instable, glitch bref, glitch violent                              | rendu à juger en mouvement (les défauts sont temporels)                             |
+| Effet             | Statut                           | Technique                                                        | Capture       | Variantes (préréglages)                                                                     | Limites connues                                                                     |
+| ----------------- | -------------------------------- | ---------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Miroir            | développé, vérifié hors écran    | transformation affine (retournement de carte), demi-tour         | oui           | gauche ↔ droite, haut ↔ bas, alternance, instantané                                         | carte qui passe par une ligne noire à mi-animation (≈ 60 ms)                        |
+| Tremblement       | développé, vérifié hors écran    | « trauma » + bruit de gradient continu, surcadrage dosé          | oui           | léger, secousse, impact, par rafales, séisme, vibration                                     | fluidité à juger en mouvement réel (planches = images fixes)                        |
+| Zoom chaotique    | développé, vérifié hors écran    | transformation affine, échelle logarithmique, Catmull-Rom ≥ ×1,8 | oui           | progressif, brutal, zoom et dézoom, pulsations, intermittent, très gros zoom                | au-delà de ×6, le jeu est volontairement illisible (pixels du jeu agrandis)         |
+| Écran ivre        | développé, vérifié hors écran    | transformation lente + déformation, double vision, flou mip      | oui           | pompette, ivre, ivre mort, vertige                                                          | 2 passes ; sensation à juger en vrai (mal des transports)                           |
+| Vision tunnel     | essayé par Antoni, poli le 24/11 | zoom vers un point + masque à distance signée en vrai dégradé    | oui           | focus, zoom dramatique, cinéma, regard qui dérive ; niveaux léger, marqué, extrême          | le curseur suit le zoom, pas le masque                                              |
+| Clignement        | développé, vérifié hors écran    | calque shader « paupières » (amande vue de l'intérieur)          | **non**       | naturel, rapide, lent, yeux fermés, plusieurs, fatigue, paupières qui résistent, irrégulier | n'assombrit pas un jeu en plein écran exclusif (aucun calque ne le peut)            |
+| Flash aveuglant   | développé, vérifié hors écran    | une image retenue + calque blanc et image fantôme                | **une image** | court, intense, récupération longue                                                         | départ après la 1ʳᵉ image capturée (≈ 50 à 150 ms) ; délai de 4 s entre deux flashs |
+| Brouillard        | essayé par Antoni, poli le 24/11 | calque shader : 2 nappes de fBm déformé + voile + masses, ½ rés. | **non**       | nappes, bancs mouvants, nappes qui passent, arrive peu à peu, se dissipe ; 4 niveaux        | **à juger en mouvement** avant d'être déclaré réussi (exigence du mandat)           |
+| Flou              | développé, vérifié hors écran    | pyramide de mipmaps + lecture B-spline, niveau continu           | oui           | constant, pulsé, progressif, vague ; niveaux léger, marqué, extrême                         | flou « de mipmaps » : très fort, il peut légèrement onduler sur un jeu qui bouge    |
+| Pixelisation      | développée, vérifiée hors écran  | blocs ancrés au centre, moyenne par mip, tailles entières        | oui           | constante, progressive, intermittente, rétro ; niveaux léger, marqué, extrême               | —                                                                                   |
+| Filtre de couleur | développé, vérifié hors écran    | une passe : luminance en lumière linéaire, modes                 | oui           | noir et blanc, film noir, sépia, inversion (balayage), délavé, saturé, monochrome rouge     | —                                                                                   |
+| VHS / glitch      | développé, vérifié hors écran    | une passe : défauts de signal un par un (YIQ, tracking, têtes)   | oui           | légère, abîmée, tracking instable, glitch bref, glitch violent                              | rendu à juger en mouvement (les défauts sont temporels)                             |
 
 Coûts GPU : **non mesurés en 1440p** cette nuit (garde de jeu active). Banc prêt : `ChaosEngine.exe --bench-effects`
 (§ 5). Estimations par nombre de lectures de texture dans le § 2.
+
+## 0 bis. Passe de polissage du 24/11 (après les essais d'Antoni dans 0.1.44-chaos.2)
+
+Les essais d'Antoni ont été globalement très positifs. Cette passe corrige seulement ce qui a été constaté, sans
+refaire les effets appréciés (retournement, miroir, tremblement, zoom, flou, pixelisation, couleur, VHS).
+
+**Mesure.** Chaque correction est **mesurée hors écran** par `ChaosEngine.exe --measure <effet> <variante> <instants>
+[--level …]`. L'outil rend le calque sur fond noir puis sur fond blanc et en déduit, pour chaque pixel, la part de
+l'écran qu'il masque. Il en tire la couverture moyenne, la part masquée à 95 % et à 99,9 %, la part encore visible, un
+quadrillage 16×9 de régions masquées ou dégagées, et le profil radial autour du point visé. Ces mesures sont devenues
+des tests automatiques (`apps/studio/server/test/chaos-effects-gpu.test.ts`).
+
+| Défaut constaté par Antoni                                                    | Correction                                                                                                                                                                                                                                                                                                                                               | Mesure avant → après                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tout l'écran** : la barre des tâches reste intacte (ivre, clignement)       | mode E « écran composé » : la fiche couvre tout l'écran, calque visible de la capture d'écran d'OBS ([ECRAN_ENTIER.md](ECRAN_ENTIER.md))                                                                                                                                                                                                                 | non mesurable hors écran ; banc OBS visible prêt                                                                                                                                                                                                                            |
+| **Clignement** : les paupières ne ferment pas tout                            | les bords se croisent au-delà de 90 % de fermeture ; à l'intensité maximale, chaque clignement ferme complètement                                                                                                                                                                                                                                        | « Yeux fermés » : 86,5 % de l'écran masqué → **100 %**. Chaque variante atteint 100 % à son plus fort ; vérifié en 16:9, 21:9, 4:3, 16:10 et portrait                                                                                                                       |
+| Clignement rapide trop rapide pour voir la fermeture ; maintien imperceptible | rapide 70/20/90 → 110/45/120 ms (fermeture/maintien/ouverture) ; naturel : maintien 70 → 100 ms ; série : 140/70/160 ms, et l'œil se rouvre vraiment entre deux clignements                                                                                                                                                                              | —                                                                                                                                                                                                                                                                           |
+| **Brouillard** : trop peu opaque, même intense                                | **épaisseur** (cœur des nappes opaque, bords et volutes intacts) et **masses qui passent** (grandes masses épaisses portées par le vent, avec des trouées entre elles) ; rendu procédural inchangé                                                                                                                                                       | ancien « Très opaque » : couverture moyenne 0,87, aucune région masquée à 99,9 %, aucune trouée. Nouveaux niveaux : brume légère 0,42 · marqué 0,55 · dense 0,78 (≈ 50 % masqué à 95 %) · **occultant** 0,83–0,92, dont **60–66 % masqués à 99,9 %** et des trouées mobiles |
+| **Tunnel** : zones assombries trop uniformes                                  | vrai dégradé : zone nette, puis une ombre qui s'épaissit avec la distance au bord, sur une **largeur du dégradé** réglable (nouveau réglage), avec un début réglé par la **douceur du bord**, jusqu'à une périphérie presque noire ; zoom jusqu'à ×6                                                                                                     | profil radial (Marqué) : 0 → 0,04 → 0,10 → 0,24 → 0,42 → 0,59 → 0,75 → 0,80 de 0,1 à 0,8 hauteur d'écran (avant : 0,92 dès le bord). Extrême : zone de 0,11, zoom ×3,4, périphérie 0,95                                                                                     |
+| **Flash** : rémanence trop faible, « un léger décalage »                      | l'image de l'instant reste **presque opaque** pendant une part réglable de la rémanence (**persistance**), surexposée et auréolée (halo) ; puis ses zones sombres se dissolvent d'abord, et elle se floute, se délave et dérive en s'effaçant                                                                                                            | jugé sur scène en mouvement (`--strip flash intense`) : blanc → image figée qui masque le jeu → double image (ancien et vrai personnage) → retour                                                                                                                           |
+| **Écran ivre** : « Ivre mort » et « Vertige » manquent de puissance           | **titubations** (nouveau réglage) : l'image part d'un côté, s'y attarde, repart ailleurs, en trajets amortis ; bornes élargies (balancement 20°, dérive 12 %, respiration 20 %, déformation ×2, vitesse ×3). Ivre mort : 13°, dérive 7 %, double vision 0,85, titubations 0,85. Vertige : 18°, vitesse 1,9, respiration 12 %. Pompette et Ivre inchangés | bandes `--strip` : inclinaisons, zoom et changements de direction nets d'une image à l'autre                                                                                                                                                                                |
+
+**Mode sûr.** Les mouvements de l'écran ivre sont bornés par le nouveau mot-clé `safe_max` du registre :
+
+- balancement 6° ;
+- dérive 4 % ;
+- respiration 6 % ;
+- déformation 0,8 ;
+- vitesse 1 ;
+- pas de titubations.
+
+La réduction est signalée dans `adjusted`. Le flash reste refusé en mode sûr, avec 4 s au minimum entre deux flashs.
+
+**Allocations.** Le banc hors écran a trouvé des allocations à chaque image : 1,4 Ko sur le retournement (recherche d'un
+réglage), environ 140 o sur l'écran ivre et le brouillard (pool de textures, fermeture des titubations). Elles sont
+supprimées : **0 octet par image** pour chaque effet.
+
+**Intensité : Léger, Marqué, Extrême, Personnalisé** (nouveau mot-clé `levels` du registre).
+
+_Principe._
+
+- La **variante dit le style** (Pompette, Ivre mort, Fatigue, Glitch violent, Bancs mouvants…), le **niveau dit la
+  force**.
+- Un niveau fixe seulement les réglages principaux de l'effet, en valeurs absolues. Il s'applique par-dessus la
+  variante.
+
+_Valeurs par effet :_
+
+- tremblement, ivre, clignement, VHS : l'intensité ;
+- zoom : le facteur (1,8 / 2,5 / 6) ;
+- tunnel : la taille de la zone, l'obscurité et le zoom ;
+- flash : l'intensité et l'image fantôme ;
+- flou : la quantité (28 / 55 / 90) ;
+- pixelisation : la taille des blocs (10 / 28 / 80) ;
+- brouillard : **quatre niveaux** (brume légère, marqué, dense, occultant).
+- Miroir, retournement et couleur n'ont pas de niveau : leur mode est l'offre.
+
+_Variantes fusionnées._ Les variantes qui n'étaient que des forces sont devenues des niveaux :
+
+- tunnel : doux, marqué, extrême ;
+- brouillard : brume, dense, très opaque ;
+- flou : léger, moyen, intense, extrême ;
+- pixelisation : légère, forte, gros blocs.
+
+Il n'y a donc pas d'explosion de préréglages presque identiques. Les réglages par défaut sont ceux du niveau Marqué :
+une fiche neuve est au niveau Marqué.
+
+_Dans la fiche._ Une ligne « Intensité » avec Léger, Marqué, Extrême et Personnalisé.
+
+- Un niveau ne change que ses réglages.
+- Changer de style garde le niveau choisi.
+- Un réglage modifié à la main passe en Personnalisé. Un clic sur Personnalisé ouvre les réglages avancés.
+- Si une variante fixe sa propre force, la fiche l'écrit (« Intensité propre au préréglage »).
+
+_Moteur._ Les niveaux sont validés au démarrage comme les variantes, et une demande peut porter `level`. Ordre
+d'application : défauts → variante → niveau → préréglage → demande.
+
+_Viewers._ Les paliers des viewers peuvent être des niveaux (`tier_kind: "level"` : tremblement, zoom, ivre, tunnel,
+brouillard, flou, pixelisation). Une offre se lit alors : effet, niveau, durée.
+
+**Mesure des coûts.** Elle passe désormais par le Chaos Performance Lab ([PERFORMANCE_LAB.md](PERFORMANCE_LAB.md)).
 
 ## 1. Architecture : un moteur, plusieurs familles
 
@@ -340,7 +421,8 @@ dense restent dix secondes de brouillard dense.
   - aucune capture pour le clignement et le brouillard ;
   - une seule image capturée pour le flash ;
   - une passe par effet, sauf l'écran ivre (2) ;
-  - aucune allocation par image dans les effets (tableaux réutilisés) ;
+  - aucune allocation par image dans les effets : **mesuré à 0 octet par image** pour chacun par le Performance Lab
+    (après correction de trois allocations le 24/11) ;
   - cibles intermédiaires du pool, rendues au repos ;
   - shaders compilés au démarrage du moteur et gardés sur disque ;
   - le brouillard en ½ résolution ;
@@ -355,11 +437,15 @@ dense restent dix secondes de brouillard dense.
   - ivre : 2 passes, 2 lectures ;
   - tunnel : 1 + masque sans lecture ;
   - paupières et brouillard : calcul seul, brouillard sur ¼ des pixels.
-- **Mesure** : `ChaosEngine.exe --bench-effects [--w 2560 --h 1440 --frames 300]` donne le temps GPU par passe de
-  chaque effet, sur une image fixe de la taille donnée. **Non lancé cette nuit** : la garde de jeu a vu une
-  application plein écran toute la nuit, et un banc charge le GPU. À lancer jeu fermé ; résultats à reporter ici et
-  dans [PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md).
-- **Aucune mesure en jeu.** L'impact sur Overwatch reste à mesurer, effet par effet, avec le banc A–F existant.
+- **Mesure** : le Chaos Performance Lab ([PERFORMANCE_LAB.md](PERFORMANCE_LAB.md)) remplace `--bench-effects`. Il
+  donne le temps GPU par image (médiane, p95, p99), le CPU, les allocations, la mémoire vidéo et le surcoût par rapport
+  à une référence, sur une scène qui bouge, pour chaque effet en Marqué et Extrême et pour des combinaisons.
+  - **24/11 : seul le banc de fumée (160×90) a tourné.** Il valide la chaîne de mesure, pas les coûts.
+  - Le vrai banc (1440p et 1080p) attend une garde de jeu libre : un banc charge le GPU, et une application plein
+    écran est restée au premier plan.
+  - Résultats à reporter ici et dans [PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md).
+- **Aucune mesure en jeu.** L'impact sur Overwatch se mesure avec la validation en jeu du Performance Lab (protocole :
+  PERFORMANCE_LAB.md § 4). Les images/s du jeu restent à lire dans le jeu ou dans OBS.
 
 ## 6. Tests
 
