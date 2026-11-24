@@ -2,6 +2,8 @@
 // Twitch d'un téléphone (version « Local Test » de la console), sans ZIP et sans toucher à la Production.
 //   node scripts/mobile-lab.mjs            démarre tout (base, Core Lab, serveur, tunnel) ; Ctrl+C arrête tout
 //   node scripts/mobile-lab.mjs --reset    idem, après avoir remis la base du banc à zéro (Jetons fictifs d'origine)
+//   node scripts/mobile-lab.mjs --garder-tunnel   relance tout SAUF le tunnel en cours : même adresse, rien à changer dans
+//                                                 la console Twitch (un nouveau tunnel si l'ancien ne répond plus)
 //   node scripts/mobile-lab.mjs --no-tunnel   sans tunnel (adresse publique fournie autrement, ou essai sur le PC)
 //   node scripts/mobile-lab.mjs --root <dossier>   sert un ZIP extrait au lieu des sources (mêmes octets que le paquet)
 //   node scripts/mobile-lab.mjs stop       arrête ce qu'un lancement interrompu aurait laissé (Core, tunnel, base)
@@ -12,13 +14,14 @@
 // Le diagnostic (shared/diagnostic.js) est actif et son journal arrive EN DIRECT dans ce terminal (relais injecté).
 import http from 'node:http';
 import { Buffer } from 'node:buffer';
-import { clearTimeout, setTimeout } from 'node:timers';
+import { setTimeout } from 'node:timers';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
 import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   writeFileSync,
   rmSync,
@@ -273,7 +276,13 @@ export function createBenchServer({ root, buildId, coreUrl, secret }) {
       const file = normalize(join(ext, rel));
       if (!file.startsWith(ext)) return done(403, 'text/plain', 'refusé');
       if (rel === '/shared/runtime-config.js')
-        return done(200, TYPES['.js'], benchRuntimeConfig(buildId));
+        return done(
+          200,
+          TYPES['.js'],
+          benchRuntimeConfig(
+            typeof buildId === 'function' ? buildId() : buildId,
+          ),
+        );
       let data = await readFile(file);
       if (extname(file) === '.html')
         data = data
@@ -466,25 +475,28 @@ function startTunnel(children) {
     );
     return Promise.resolve(null);
   }
+  // Sortie dans un fichier, pas un tube : le tunnel survit à une relance du banc (--garder-tunnel).
+  const out = join(STATE, 'tunnel.log');
+  const fd = openSync(out, 'w');
   const p = spawn(
     bin,
     ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${PORT}`],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
+    { stdio: ['ignore', fd, fd] },
   );
   children.push(p);
   return new Promise((ok) => {
-    const timer = setTimeout(() => ok(null), 45000);
-    const scan = (chunk) => {
+    const end = Date.now() + 45000;
+    let exited = false;
+    p.on('exit', () => (exited = true));
+    const scan = () => {
       const m = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/.exec(
-        chunk.toString(),
+        readFileSync(out, 'utf8'),
       );
-      if (!m) return;
-      clearTimeout(timer);
-      ok(`${m[0]}/`);
+      if (m) return ok(`${m[0]}/`);
+      if (exited || Date.now() > end) return ok(null);
+      setTimeout(scan, 300);
     };
-    p.stdout.on('data', scan);
-    p.stderr.on('data', scan);
-    p.on('exit', () => ok(null));
+    scan();
   });
 }
 
@@ -500,11 +512,11 @@ function gitBuildId() {
   return `banc-mobile-${sha}${dirty}`;
 }
 
-function stopAll() {
+function stopAll(keep = null) {
   const pids = join(STATE, 'pids.json');
   if (existsSync(pids)) {
     for (const pid of JSON.parse(readFileSync(pids, 'utf8')))
-      if (pid !== process.pid)
+      if (pid !== process.pid && pid !== keep)
         run('taskkill', ['/PID', String(pid), '/T', '/F']);
     rmSync(pids, { force: true });
   }
@@ -524,7 +536,15 @@ async function main() {
   const root = rootArg >= 0 ? resolve(args[rootArg + 1]) : EXT_APP;
   if (!existsSync(join(root, 'extension', 'mobile.html')))
     throw new Error(`${root}\\extension\\mobile.html introuvable`);
-  stopAll(); // un lancement précédent interrompu
+  // --garder-tunnel : le tunnel du lancement précédent (tunnel.json) est épargné, puis réutilisé s'il répond encore.
+  let kept = null;
+  try {
+    if (args.includes('--garder-tunnel'))
+      kept = JSON.parse(readFileSync(join(STATE, 'tunnel.json'), 'utf8'));
+  } catch {
+    // pas de tunnel précédent : un nouveau sera ouvert
+  }
+  stopAll(kept?.pid); // un lancement précédent interrompu
   const s = secrets();
   log('1/4 base PostgreSQL du banc (Docker, données fictives)…');
   startDatabase(s);
@@ -545,23 +565,42 @@ async function main() {
   core.stderr.on('data', (c) => appendFileSync(coreLog, c));
   if (!(await waitFor(`http://127.0.0.1:${CORE_PORT}/health`)))
     throw new Error(`le Core Lab ne démarre pas : voir ${coreLog}`);
-  const buildId = gitBuildId();
   log(
-    `3/4 serveur du banc sur http://127.0.0.1:${PORT}/ (build ${buildId}, sources ${root})`,
+    `3/4 serveur du banc sur http://127.0.0.1:${PORT}/ (build ${gitBuildId()}, relu à chaque ouverture ; sources ${root})`,
   );
   const server = createBenchServer({
     root,
-    buildId,
+    buildId: gitBuildId,
     coreUrl: `http://127.0.0.1:${CORE_PORT}`,
     secret: Buffer.from(s.ext, 'base64'),
   });
   await new Promise((ok) => server.listen(PORT, '127.0.0.1', ok));
-  const tunnel = args.includes('--no-tunnel')
-    ? null
-    : (log('4/4 tunnel HTTPS…'), await startTunnel(children));
+  let tunnel = null;
+  if (kept && (await waitFor(`${kept.url}mobile.html`, 15000))) {
+    tunnel = kept.url;
+    log(`4/4 tunnel conservé : ${tunnel} (pid ${kept.pid})`);
+  } else if (!args.includes('--no-tunnel')) {
+    if (kept) run('taskkill', ['/PID', String(kept.pid), '/T', '/F']);
+    log('4/4 tunnel HTTPS…');
+    tunnel = await startTunnel(children);
+  }
+  const tunnelPid = tunnel
+    ? kept?.url === tunnel
+      ? kept.pid
+      : children.at(-1).pid
+    : null;
+  if (tunnel)
+    writeFileSync(
+      join(STATE, 'tunnel.json'),
+      JSON.stringify({ pid: tunnelPid, url: tunnel }),
+    );
   writeFileSync(
     join(STATE, 'pids.json'),
-    JSON.stringify([process.pid, ...children.map((c) => c.pid)]),
+    JSON.stringify([
+      process.pid,
+      ...children.map((c) => c.pid),
+      ...(kept?.url === tunnel && tunnelPid ? [tunnelPid] : []),
+    ]),
   );
   if (tunnel) {
     writeFileSync(join(STATE, 'adresse.txt'), tunnel);
@@ -585,8 +624,11 @@ async function main() {
   const stop = () => {
     log('arrêt du banc…');
     server.close();
-    for (const c of children)
-      run('taskkill', ['/PID', String(c.pid), '/T', '/F']);
+    for (const pid of [
+      ...children.map((c) => c.pid),
+      ...(kept?.url === tunnel && tunnelPid ? [tunnelPid] : []),
+    ])
+      run('taskkill', ['/PID', String(pid), '/T', '/F']);
     rmSync(join(STATE, 'pids.json'), { force: true });
     run('docker', ['stop', PG.container]);
     process.exit(0);

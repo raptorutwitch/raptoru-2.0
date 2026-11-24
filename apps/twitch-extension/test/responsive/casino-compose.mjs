@@ -34,7 +34,8 @@ const DIMS = arg('dims')?.split(','); // e.g. --dims=563x376,393x484
 const PAGES = {
   video: 'video_component.html?anchor=component',
   panel: 'panel.html?anchor=panel',
-  mobile: 'mobile.html?anchor=panel&platform=mobile',
+  // What the Twitch app really sends (24/11, real phone): the anchor of the channel's activation, here a component.
+  mobile: 'mobile.html?platform=mobile&anchor=component&mode=viewer',
 };
 // [surface, w, h, label]
 const SIZES = [
@@ -47,6 +48,7 @@ const SIZES = [
   ['video', 1053, 702, 'vidéo plein écran 1080p'],
   ['panel', 318, 496, 'panneau'],
   // Twitch app, portrait: the extension only gets the area under the video (23/11), not the whole screen.
+  ['mobile', 382, 444, 'Android réel du 24/11 (cadre parti de 0 × 0)', 'from0'],
   ['mobile', 393, 484, 'Android courant, sous la vidéo'],
   ['mobile', 360, 409, 'petit Android, sous la vidéo'],
   ['mobile', 412, 515, 'grand Android, sous la vidéo'],
@@ -171,6 +173,10 @@ function measure({ keys, touch }) {
   const body = R?.getElementById('body');
   if (!body) return { error: 'no casino body' };
   const B = body.getBoundingClientRect();
+  if (B.width < 2 || B.height < 2)
+    return {
+      error: `zone de jeu ${Math.round(B.width)}×${Math.round(B.height)} (vide)`,
+    };
   const visible = (el) => {
     if (!el) return false;
     const r = el.getBoundingClientRect();
@@ -316,12 +322,15 @@ const TILE = {
   roulette: 'casino_roulette',
 };
 
-async function run(game, [surface, w, h, label]) {
+async function run(game, [surface, w, h, label, from0]) {
   const touch = surface === 'mobile';
+  // The Twitch app's WebView reports 0 × 0 first, then its frame (real phone, 24/11): that row starts at 1 × 1. Without
+  // Chromium's mobile emulation there: it keeps the page zoomed in after such a start (an emulation artefact; the real
+  // WebView reported scale 1).
   const ctx = await browser.newContext({
-    viewport: { width: w, height: h },
+    viewport: from0 ? { width: 1, height: 1 } : { width: w, height: h },
     hasTouch: touch,
-    isMobile: touch,
+    isMobile: touch && !from0,
     deviceScaleFactor: Number(arg('dpr') ?? 1),
   });
   const page = await ctx.newPage();
@@ -330,6 +339,7 @@ async function run(game, [surface, w, h, label]) {
   await page.goto(
     `http://127.0.0.1:${port}/casino-v2/${PAGES[surface]}&casinoGame=${TILE[game]}`,
   );
+  if (from0) await page.setViewportSize({ width: w, height: h });
   await page
     .waitForFunction(
       () =>
@@ -403,7 +413,7 @@ const md = [
   '',
   flagged.length
     ? `## Cibles tactiles signalées\n\n${flagged
-        .filter((r) => r.small.length)
+        .filter((r) => r.small?.length)
         .map((r) => `- ${r.game} ${r.size} ${r.state} : ${r.small.join(', ')}`)
         .join('\n')}`
     : '',
@@ -412,3 +422,5 @@ writeFileSync(join(OUT, 'RAPPORT.md'), md);
 console.log(
   `\n${rows.length} états · ${flagged.length} à regarder · rapport : ${join(OUT, 'RAPPORT.md')}`,
 );
+// An empty game area (0 px high, the real phone of 24/11) is a regression, not a « to look at ».
+if (rows.some((r) => r.error)) process.exitCode = 1;

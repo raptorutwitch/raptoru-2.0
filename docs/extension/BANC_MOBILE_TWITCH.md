@@ -41,6 +41,8 @@ jamais contactés.
 1. Double-cliquez sur `apps/twitch-extension/Banc mobile Twitch.cmd`, ou lancez `node scripts/mobile-lab.mjs`.
    - `--reset` remet les Jetons fictifs à zéro.
    - `--root <dossier>` sert un ZIP extrait à la place des sources.
+   - `--garder-tunnel` relance tout sauf le tunnel en cours : même adresse, rien à changer dans la console. Le build
+     affiché (badge, rapport Diag) est relu à chaque ouverture de l'extension : un commit n'exige pas de relance.
 2. Le banc affiche la **Testing Base URI**.
    - Elle change à chaque lancement du tunnel : collez-la dans la console (version de test, Asset Hosting), puis
      enregistrez.
@@ -77,5 +79,8 @@ jamais contactés.
   connaît l'adresse aléatoire du tunnel peut jouer avec les Jetons fictifs, mais seulement pendant la session.
 - L'adresse `trycloudflare.com` change à chaque lancement. Pour une adresse fixe, il faudrait un tunnel nommé, ce qui
   demande un compte Cloudflare et un domaine.
+- L'application Twitch ouvre `mobile.html?platform=mobile&anchor=component&mode=viewer` quand l'extension est activée
+  en composant vidéo sur la chaîne : un essai depuis le PC doit utiliser cette adresse, pas `anchor=panel`
+  (le 24/11, `anchor=component` faisait passer la page en surface « video » et le Casino à 0 px de haut).
 - Un essai réussi depuis le PC (navigateur automatisé, faux helper Twitch) prouve seulement que le banc fonctionne. Ce
   n'est jamais une validation sur téléphone.
