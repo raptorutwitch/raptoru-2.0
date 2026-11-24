@@ -233,7 +233,9 @@ fois exclu ?
 C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\chaos-engine\bin\chaos-bench.exe --capture-probe --screen \\.\DISPLAY1
 ```
 
-`\\.\DISPLAY1` est ton écran droit, celui que capture « Écran » (journal OBS : `alt_id: \\.\DISPLAY1`).
+`\\.\DISPLAY1` est ton écran droit, celui que capture « Écran » (journal OBS : `alt_id: \\.\DISPLAY1`). Le binaire est
+construit (24/11) ; après une mise à jour du code : `apps\chaos-engine\build.cmd`. Les résultats vont aussi dans
+`%TEMP%\chaos-capture-probe-*.json`.
 
 **La garde de jeu (24/11, corrigée).**
 
@@ -250,8 +252,6 @@ C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\chaos-engine\bin
 - `ChaosEngine.exe --game-check` affiche la règle, le processus, la fenêtre, l'écran et les notes.
 - Conseil : éteindre « Overlay actif » dans Studio › Halloween (événement fermé). Ces fenêtres restent au-dessus de
   ton jeu en permanence (composition forcée par Windows, RECHERCHE § 3 C3) et Windows te croit en plein écran.
-
-Après `npm run chaos:lab` ou `apps\chaos-engine\build.cmd` ; les résultats vont dans `%TEMP%\chaos-capture-probe-*.json`.
 
 | Résultat attendu (DOC)                                           | Conséquence                                                          |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------- |
