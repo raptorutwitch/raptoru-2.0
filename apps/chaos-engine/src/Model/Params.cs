@@ -67,7 +67,14 @@ namespace Raptoru.Chaos
         public double Num(string id) { return Convert.ToDouble(Values[id], CultureInfo.InvariantCulture); }
         public string Str(string id) { return Convert.ToString(Values[id], CultureInfo.InvariantCulture); }
         public bool Bool(string id) { return (bool)Values[id]; }
-        public float[] Color(string id) { return Params.ParseColor(Str(id)); }
+        /// Couleur RVB (0..1), lue une fois par activation : aucune allocation par image dans les effets.
+        public float[] Color(string id)
+        {
+            float[] c;
+            if (!colors.TryGetValue(id, out c)) colors[id] = c = Params.ParseColor(Str(id));
+            return c;
+        }
+        readonly Dictionary<string, float[]> colors = new Dictionary<string, float[]>();
 
         public Dictionary<string, object> ToJson()
         {
