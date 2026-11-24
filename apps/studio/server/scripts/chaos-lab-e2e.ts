@@ -7,7 +7,7 @@
 //   B. VISIBLE (garde de jeu) : « Tester » puis « Arrêter », « Activer » puis STOP ALL, sur l'écran choisi, état réel
 //      du moteur dans la fiche et sur la carte.
 // Les réglages du Lab sont relus au départ et remis à l'identique à la fin. Captures dans --out <dossier>.
-// Usage : tsx apps/studio/server/scripts/chaos-lab-e2e.ts [--out <dossier>] [--port 4120] [--autorise-pendant-un-jeu]
+// Usage : tsx apps/studio/server/scripts/chaos-lab-e2e.ts [--out <dossier>] [--port 4120] [--non-visible] [--autorise-pendant-un-jeu]
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -425,8 +425,55 @@ try {
     'Performance Lab refermé',
   );
 
+  // ---------- A4. Diffusion OBS (mode C, rien d'affiché ; le Lab n'a pas d'OBS) ----------
+  await page.locator('[data-obs-open]').click();
+  await page
+    .locator('.cx-obs:not([hidden]) h2', { hasText: 'Diffusion OBS' })
+    .waitFor({ timeout: 10_000 });
+  const modeOn = async () =>
+    (
+      await page
+        .locator('.cx-obs [data-obs-mode][aria-pressed="true"]')
+        .innerText()
+    ).trim();
+  const obsText = await page.locator('.cx-obs').innerText();
+  check(
+    (await modeOn()) === 'Écran + OBS',
+    'Diffusion OBS : « Écran + OBS » par défaut',
+    await modeOn(),
+  );
+  check(
+    /OBS non connecté/.test(obsText) && /Écran \+ OBS incomplet/.test(obsText),
+    'sans OBS : le mode C se dit incomplet, avec la raison (les effets partent sur l’écran seul)',
+  );
+  check(
+    await page.locator('.cx-obs [data-obs-preview]').isDisabled(),
+    '« Préparer les filtres OBS… » indisponible sans OBS (rien ne peut être créé)',
+  );
+  await page.locator('.cx-obs [data-obs-mode="screen"]').click();
+  await page.waitForTimeout(600);
+  const obsSaved = (await (
+    await fetch(`${BASE}/api/chaos/obs`, { headers: H })
+  ).json()) as { config: { mode: string } };
+  check(
+    obsSaved.config.mode === 'screen' && (await modeOn()) === 'Écran uniquement',
+    'mode « Écran uniquement » enregistré',
+  );
+  await page.locator('.cx-obs [data-obs-mode="both"]').click();
+  await page.waitForTimeout(600);
+  check((await modeOn()) === 'Écran + OBS', 'mode « Écran + OBS » rétabli');
+  await page
+    .locator('.cx-obs')
+    .screenshot({ path: join(OUT, '9-diffusion-obs.png') });
+  await page.locator('[data-obs-open]').click();
+  check(
+    (await page.locator('.cx-obs[hidden]').count()) === 1,
+    'Diffusion OBS refermé',
+  );
+
   // ---------- B. Visible : Tester, Arrêter, Activer, STOP ALL ----------
-  const why = guard();
+  // --non-visible : jamais la partie B (lancement automatique par un agent : aucun test visible, garde libre ou non).
+  const why = args.includes('--non-visible') ? 'option --non-visible' : guard();
   if (why && !args.includes('--autorise-pendant-un-jeu'))
     console.log(
       `  ··  partie visible NON lancée : ${why} (accord d’Antoni : --autorise-pendant-un-jeu)`,

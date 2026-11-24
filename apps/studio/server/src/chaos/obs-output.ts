@@ -278,6 +278,8 @@ export class ChaosObsOutput {
       incident: this.lastIncident,
     };
     if (this.config.mode !== 'screen') {
+      // Le plan vient du moteur (pas d'OBS) : les effets disponibles se lisent même OBS fermé.
+      await this.loadPlan().catch(() => null);
       if (!o?.connected) reasons.push('OBS non connecté (réglages du Bonk)');
       else {
         try {
