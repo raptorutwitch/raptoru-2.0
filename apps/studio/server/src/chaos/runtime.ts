@@ -10,6 +10,7 @@ import {
   ChaosError,
   type ChaosEngineOptions,
 } from './engine-client.js';
+import { PreviewError, renderPreview } from './preview.js';
 
 // Studio › Chaos (docs/chaos/ARCHITECTURE_MOTEUR.md) : l'API locale de la page Chaos. Elle ne décide rien : elle relaie
 // au moteur (démarré à la première demande, puis gardé tant que Studio tourne) et garde les derniers événements pour
@@ -31,7 +32,8 @@ export class ChaosRuntime {
   private telemetry: ChaosEvent | null = null;
   private registry: Record<string, unknown> | null = null;
 
-  constructor(o: ChaosEngineOptions) {
+  constructor(private readonly opts: ChaosEngineOptions) {
+    const o = opts;
     this.client = new ChaosEngineClient(o);
     this.client.on('event', (e: ChaosEvent) => {
       if (e.event === 'engine.telemetry') this.telemetry = e;
@@ -245,6 +247,21 @@ export class ChaosRuntime {
             ),
             true
           );
+        case 'POST /preview':
+          // Aperçu animé de la fiche : processus court et séparé, hors écran (preview.ts).
+          return (
+            reply(
+              200,
+              await renderPreview(
+                this.opts.exe,
+                this.opts.stateDir,
+                String(body.effect ?? ''),
+                typeof body.variant === 'string' ? body.variant : null,
+                body.preset ?? {},
+              ),
+            ),
+            true
+          );
         case 'POST /engine/restart':
           await c.stop();
           this.registry = null;
@@ -254,7 +271,10 @@ export class ChaosRuntime {
       }
       return (reply(404, { error: 'not_found' }), true);
     } catch (e) {
-      const code = e instanceof ChaosError ? e.code : 'internal';
+      const code =
+        e instanceof ChaosError || e instanceof PreviewError
+          ? e.code
+          : 'internal';
       return (
         reply(STATUS[code] ?? 409, {
           error: code,

@@ -32,7 +32,18 @@ import {
   sheetHeadHtml,
   sheetNote,
   side,
+  viewerNote,
 } from './chaos-effects.js';
+
+/** Aperçu rendu par le moteur (POST /api/chaos/preview) : grille d'images JPEG, deux séquences (début, fin). */
+interface Anim {
+  image: string;
+  frames: number;
+  cols: number;
+  fps: number;
+  head_ms: number;
+  tail_from_ms: number;
+}
 
 // Studio › Chaos (docs/chaos/GUIDE_STUDIO_CHAOS.md) : le catalogue des effets d'écran et la fiche de chaque effet.
 // On ouvre un effet, on le règle une fois (écran, durée, transitions, paramètres propres, curseur), puis on le teste ou
@@ -384,17 +395,27 @@ export function mountChaosPage(root: HTMLElement) {
       return;
     }
     const pv = PREVIEWS[d.id];
-    morph(z('sheet-head'), sheetHeadHtml(c, d, !!pv));
+    const engineAnim = !pv && !d.internal;
+    morph(z('sheet-head'), sheetHeadHtml(c, d, !!pv || engineAnim));
     morph(z('sheet-run'), runBarHtml(c, d));
     const missing = st?.engine.missing_commands ?? [];
     patch(
       z('sheet-note'),
       missing.length
         ? `<span class="d-note bad">Le moteur en marche est plus ancien que Studio (il ne connaît pas : ${esc(missing.join(', '))}). « Relancer » dans le panneau Moteur ; s’il reste ancien, reconstruire le moteur (apps/chaos-engine/build.cmd) ou mettre Studio à jour.</span>`
-        : esc(sheetNote(d)),
+        : `${esc(sheetNote(d))}${viewerNote(d) ? `<br>${esc(viewerNote(d))}` : ''}`,
     );
     const box = z('sheet-pv');
-    box.hidden = !pv;
+    box.hidden = !pv && !engineAnim;
+    if (engineAnim && pvFor !== d.id) {
+      pvFor = d.id;
+      animKey = '';
+      patch(
+        box,
+        `<div class="cx-anim" data-z="anim" role="img" aria-label="Aperçu de l’effet avec ces réglages"><div class="cx-anim__img"></div><span class="cx-anim__t" data-z="anim-t">Aperçu…</span></div><p class="d-faint cx-help">Rendu par le moteur, hors écran, avec ces réglages, sur une scène de démonstration : rien ne s’affiche sur tes écrans.</p>`,
+      );
+    }
+    if (engineAnim) previewEngine(c, d);
     if (pv && pvFor !== d.id) {
       pvFor = d.id;
       patch(
@@ -412,7 +433,76 @@ export function mountChaosPage(root: HTMLElement) {
       a.type !== 'checkbox'
     )
       return;
-    morph(cfgEl, settingsHtml(c, d));
+    morph(cfgEl, settingsHtml(c, d, advOpen.has(d.id)));
+  }
+
+  // ---------- Aperçu rendu par le moteur ----------
+  // Demandé seulement quand la fiche s'ouvre ou qu'un réglage change (après 400 ms de calme), mis en cache par le
+  // serveur ; ensuite ce n'est qu'une image animée (aucun rendu permanent).
+  const advOpen = new Set<string>();
+  let animKey = '';
+  let animWait = 0;
+  let animTick = 0;
+  let animReq = 0;
+  function previewEngine(c: FxCtx, d: EffectDef, force = false) {
+    const pr = pending[d.id] ?? c.presets[d.id]?.default ?? {};
+    const key = `${d.id}|${JSON.stringify(pr)}`;
+    if (key === animKey && !force) return;
+    animKey = key;
+    clearTimeout(animWait);
+    const label = z('anim-t');
+    animWait = window.setTimeout(async () => {
+      const id = ++animReq;
+      if (label) label.textContent = 'Aperçu…';
+      try {
+        const r = await postJson<Anim>('/api/chaos/preview', {
+          effect: d.id,
+          preset: pr,
+        });
+        if (id === animReq) playAnim(r);
+      } catch (e) {
+        if (id === animReq && label)
+          label.textContent = `Aperçu indisponible : ${(e as Error).message}`;
+      }
+    }, 400);
+  }
+  function playAnim(r: Anim) {
+    const box = p.body.querySelector<HTMLElement>('[data-z="anim"]');
+    const img = box?.querySelector<HTMLElement>('.cx-anim__img');
+    const label = z('anim-t');
+    if (!box || !img) return;
+    clearInterval(animTick);
+    const rows = Math.ceil(r.frames / r.cols);
+    img.style.backgroundImage = `url("${r.image}")`;
+    img.style.backgroundSize = `${r.cols * 100}% ${rows * 100}%`;
+    const step = 1000 / r.fps;
+    const head = Math.ceil(r.head_ms / step);
+    const show = (f: number) => {
+      const col = f % r.cols;
+      const row = Math.floor(f / r.cols);
+      img.style.backgroundPosition = `${r.cols > 1 ? (col / (r.cols - 1)) * 100 : 0}% ${rows > 1 ? (row / (rows - 1)) * 100 : 0}%`;
+      if (label)
+        label.textContent =
+          f < head
+            ? `${((f * step) / 1000).toFixed(1)} s`
+            : `fin · ${((r.tail_from_ms + (f - head) * step) / 1000).toFixed(1)} s`;
+    };
+    if (!motionOk())
+      return show(Math.min(r.frames - 1, Math.round(1000 / step)));
+    // Début, courte pause, dernière seconde (sortie), pause, et on recommence.
+    let f = 0;
+    let hold = 0;
+    animTick = window.setInterval(() => {
+      if (!box.isConnected) return clearInterval(animTick);
+      if (hold > 0) return void hold--;
+      show(f);
+      f++;
+      if (f === head && head < r.frames) hold = 6;
+      if (f >= r.frames) {
+        f = 0;
+        hold = 14;
+      }
+    }, step);
   }
 
   // Aperçus animés propres à un effet (facultatifs) : un futur effet en ajoute un ici, sinon sa fiche n'en a pas.
@@ -427,6 +517,7 @@ export function mountChaosPage(root: HTMLElement) {
     const c = ctx();
     const d = current();
     const el = p.body.querySelector<HTMLElement>('[data-z="screen"]');
+    if (c && d && !PREVIEWS[d.id] && !d.internal) return previewEngine(c, d);
     if (!c || !d || !el || !PREVIEWS[d.id]) return;
     PREVIEWS[d.id]!(el, c, d);
   }
@@ -815,8 +906,35 @@ export function mountChaosPage(root: HTMLElement) {
         ? stopEffect(b, b.dataset.actRun)
         : activate(b, b.dataset.actRun, 'manual'));
     else if (b.dataset.act === 'test') void activate(b, sheetEffect(), 'test');
-    else if (b.matches('[data-replay]')) preview();
-    else if (b.dataset.cancel)
+    else if (b.matches('[data-replay]')) {
+      const c = ctx();
+      const d = current();
+      if (c && d && !PREVIEWS[d.id]) previewEngine(c, d, true);
+      else preview();
+    } else if (b.hasAttribute('data-variant')) {
+      const d = current();
+      const v = d?.variants?.find(
+        (x) => x.id === b.getAttribute('data-variant'),
+      );
+      if (d && v)
+        savePreset(d.id, (x) => {
+          x.params = { ...v.params };
+          if (v.duration_ms) x.duration_ms = v.duration_ms;
+          if (v.transition)
+            x.transition = JSON.parse(
+              JSON.stringify(v.transition),
+            ) as Preset['transition'];
+          else delete x.transition;
+        });
+    } else if (b.dataset.point && b.dataset.pair) {
+      // Clic dans l'écran miniature : le point focal (coordonnées relatives, valables à toutes les résolutions).
+      const ev = e as MouseEvent;
+      if (ev.detail === 0) return; // clavier : flèches (keydown)
+      const r = b.getBoundingClientRect();
+      const fx = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+      const fy = Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height));
+      setPoint(b.dataset.point, b.dataset.pair, fx, fy);
+    } else if (b.dataset.cancel)
       void run(b, async () => {
         await postJson('/api/chaos/cancel', { request_id: b.dataset.cancel });
         await refresh();
@@ -961,6 +1079,50 @@ export function mountChaosPage(root: HTMLElement) {
       void setCfg(t.dataset.cfg, (t as HTMLInputElement).checked);
     else if (t.dataset.cfgNum) void setCfg(t.dataset.cfgNum, Number(t.value));
   });
+  function setPoint(px: string, py: string, fx: number, fy: number) {
+    const r2 = (v: number) =>
+      Math.round(Math.min(1, Math.max(0, v)) * 100) / 100;
+    savePreset(sheetEffect(), (x) => {
+      x.params ??= {};
+      x.params[px] = r2(fx);
+      x.params[py] = r2(fy);
+    });
+  }
+  // Point focal au clavier : flèches (pas de 5 %).
+  root.addEventListener('keydown', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-point]');
+    const keys: Record<string, [number, number]> = {
+      ArrowLeft: [-0.05, 0],
+      ArrowRight: [0.05, 0],
+      ArrowUp: [0, -0.05],
+      ArrowDown: [0, 0.05],
+    };
+    const k = keys[e.key];
+    const c = ctx();
+    const d = current();
+    if (!b || !k || !c || !d) return;
+    e.preventDefault();
+    const p = d.params.find((q) => q.id === b.dataset.point);
+    const q = d.params.find((q2) => q2.id === b.dataset.pair);
+    if (p && q)
+      setPoint(
+        p.id,
+        q.id,
+        Number(paramValue(c, d, p)) + k[0],
+        Number(paramValue(c, d, q)) + k[1],
+      );
+  });
+  // Réglages avancés : ouverts ou repliés, gardés pendant la session (la fiche est repeinte à chaque relevé).
+  root.addEventListener(
+    'toggle',
+    (e) => {
+      const el = e.target as HTMLElement;
+      if (!(el instanceof HTMLDetailsElement) || !el.dataset.adv) return;
+      if (el.open) advOpen.add(el.dataset.adv);
+      else advOpen.delete(el.dataset.adv);
+    },
+    true,
+  );
   // Curseur d'un nombre : la valeur suit la main, l'enregistrement se fait au lâcher (change).
   root.addEventListener('input', (e) => {
     const t = e.target as HTMLInputElement;
@@ -980,6 +1142,8 @@ export function mountChaosPage(root: HTMLElement) {
       } else {
         poll.stop();
         pollScreens.stop();
+        clearInterval(animTick);
+        animKey = '';
       }
     },
   };

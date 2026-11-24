@@ -354,5 +354,40 @@ describe.runIf(process.platform === 'win32' && existsSync(REAL))(
       await c.stop();
       expect(c.state.status).toBe('stopped');
     }, 30_000);
+
+    it('aperçu d’une fiche : rendu par le moteur hors écran avec les réglages, refus comme le moteur, mis en cache', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'chaos-preview-'));
+      cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+      const rt = new ChaosRuntime({ exe: REAL, stateDir: dir, pingMs: 500 });
+      cleanup.push(() => rt.stop());
+      const call = await serve(rt);
+      const ok = await call('/preview', {
+        effect: 'blink',
+        preset: { params: { mode: 'serie', count: 2 } },
+      });
+      expect(ok.status).toBe(200);
+      expect(ok.body).toMatchObject({ cols: 8, fps: 15, w: 320, h: 180 });
+      expect(Number(ok.body.frames)).toBeGreaterThan(40);
+      expect(String(ok.body.image)).toMatch(/^data:image\/jpeg;base64,\/9j\//);
+      const t0 = Date.now();
+      const again = await call('/preview', {
+        effect: 'blink',
+        preset: { params: { mode: 'serie', count: 2 } },
+      });
+      expect(again.body.image).toBe(ok.body.image);
+      expect(Date.now() - t0).toBeLessThan(200);
+      const bad = await call('/preview', {
+        effect: 'zoom',
+        preset: { params: { factor: 99 } },
+      });
+      expect(bad.body.error).toBe('param_out_of_range');
+      expect(
+        (await call('/preview', { effect: '../x', preset: {} })).status,
+      ).toBe(400);
+      expect(
+        (await call('/preview', { effect: 'diag.tint', preset: {} })).body
+          .error,
+      ).toBe('unknown_effect');
+    }, 60_000);
   },
 );

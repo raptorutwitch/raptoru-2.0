@@ -2,7 +2,8 @@
 // (npm run chaos:lab -- --no-open). Deux parties :
 //   A. sans rien afficher à l'écran (toujours) : catalogue lu dans le registre, fiche du retournement, écrans rangés de
 //      gauche à droite, chaque réglage enregistré par le moteur puis relu après rechargement, ni sélecteur global ni
-//      compte à rebours, méthode technique seulement dans « Diagnostic avancé » ;
+//      compte à rebours, méthode technique seulement dans « Diagnostic avancé » ; catalogue V2 (préréglages en un clic,
+//      réglages avancés repliés, point visé choisi d'un clic, aperçu rendu par le moteur hors écran) ;
 //   B. VISIBLE (garde de jeu) : « Tester » puis « Arrêter », « Activer » puis STOP ALL, sur l'écran choisi, état réel
 //      du moteur dans la fiche et sur la carte.
 // Les réglages du Lab sont relus au départ et remis à l'identique à la fin. Captures dans --out <dossier>.
@@ -94,6 +95,17 @@ function guard(): string | null {
 const before = await state();
 const savedFx = before.status.config.effects.flip;
 const savedPreset = before.status.config.presets.flip?.default ?? {};
+// Fiches du catalogue V2 touchées par le parcours : remises à l'identique à la fin.
+const V2 = ['fog', 'tunnel', 'blink'];
+const savedV2 = Object.fromEntries(
+  V2.map((id) => [id, before.status.config.presets[id]?.default ?? {}]),
+);
+interface V2Preset {
+  params?: Record<string, unknown>;
+  duration_ms?: number;
+}
+const presetOf = async (id: string) =>
+  ((await state()).status.config.presets[id]?.default ?? {}) as V2Preset;
 const browser = await chromium.launch();
 const sheetSays = (page: Page) => page.locator('.cx-run').innerText();
 const diagSwitch = (page: Page) =>
@@ -241,6 +253,100 @@ try {
     'STOP ALL depuis la page : accepté par le moteur, aucune erreur',
   );
 
+  // ---------- A2. Catalogue V2, sans rien afficher ----------
+  check(
+    (await page.locator('.cx-fx:not(.is-diag)').count()) >= 13,
+    'catalogue V2 : 13 effets (miroir, tremblement, zoom, ivre, tunnel, clignement, flash, brouillard, flou, pixelisation, couleur, VHS)',
+    `${await page.locator('.cx-fx:not(.is-diag)').count()} carte(s)`,
+  );
+  await page.locator('[data-open="fog"]').click();
+  await page.locator('.cx-sheet__id h2', { hasText: 'Brouillard' }).waitFor();
+  const chips = await page.locator('[data-variant]').allInnerTexts();
+  check(
+    chips.includes('Brume') &&
+      chips.includes('Très opaque') &&
+      (await page.locator('details.cx-adv:not([open])').count()) === 1,
+    'fiche du brouillard : préréglages en un clic, réglages avancés repliés',
+    chips.join(' | '),
+  );
+  const animLoaded = await until(
+    async () =>
+      (await page
+        .locator('.cx-anim__img')
+        .evaluate((el) => (el as HTMLElement).style.backgroundImage)) !== '',
+    20_000,
+  );
+  check(
+    animLoaded,
+    'aperçu animé rendu par le moteur hors écran, avec les réglages de la fiche',
+  );
+  await page.waitForTimeout(1200);
+  await page.locator('.cx-sheet').screenshot({ path: join(OUT, '5-fiche-brouillard.png') });
+  await page.locator('[data-variant="opaque"]').click();
+  check(
+    await until(async () => {
+      const p = await presetOf('fog');
+      return p.params?.density === 0.95 && p.params?.opacity === 0.97;
+    }, 5000),
+    'préréglage « Très opaque » : enregistré par le moteur',
+  );
+  await page.locator('[data-variant="opaque"].on').waitFor({ timeout: 4000 });
+  check(true, 'le préréglage choisi est montré comme actif');
+  await page.locator('details.cx-adv > summary').click();
+  check(
+    (await page.locator('details.cx-adv[open] [data-param-num]').count()) >= 5,
+    'réglages avancés dépliés : densité des nappes, vent, turbulence…',
+  );
+  await page.locator('[data-open="tunnel"]').click();
+  await page
+    .locator('.cx-sheet__id h2', { hasText: 'Vision tunnel' })
+    .waitFor();
+  const pick = page.locator('.cx-point');
+  const box = await pick.boundingBox();
+  if (box)
+    await pick.click({
+      position: { x: box.width * 0.25, y: box.height * 0.75 },
+    });
+  check(
+    await until(async () => {
+      const p = await presetOf('tunnel');
+      return (
+        Math.abs(Number(p.params?.focus_x) - 0.25) <= 0.02 &&
+        Math.abs(Number(p.params?.focus_y) - 0.75) <= 0.02
+      );
+    }, 5000),
+    'vision tunnel : point visé choisi d’un clic dans l’écran miniature (coordonnées relatives)',
+  );
+  await pick.focus();
+  await page.keyboard.press('ArrowRight');
+  check(
+    await until(
+      async () =>
+        Math.abs(Number((await presetOf('tunnel')).params?.focus_x) - 0.3) <=
+        0.02,
+      5000,
+    ),
+    'point visé au clavier (flèches)',
+  );
+  await page.waitForTimeout(1500);
+  await page.locator('.cx-sheet').screenshot({ path: join(OUT, '6-fiche-tunnel.png') });
+  await page.locator('[data-open="blink"]').click();
+  await page.locator('.cx-sheet__id h2', { hasText: 'Clignement' }).waitFor();
+  await page.waitForTimeout(2500);
+  await page.locator('.cx-sheet').screenshot({ path: join(OUT, '7-fiche-clignement.png') });
+  const bad = (await (
+    await post('/preview', {
+      effect: 'zoom',
+      preset: { params: { factor: 99 } },
+    })
+  ).json()) as { error?: string };
+  check(
+    bad.error === 'param_out_of_range',
+    'aperçu : réglage hors bornes refusé comme le moteur le refuserait',
+    bad.error ?? '',
+  );
+  await page.locator('[data-open="flip"]').click();
+
   // ---------- B. Visible : Tester, Arrêter, Activer, STOP ALL ----------
   const why = guard();
   if (why && !args.includes('--autorise-pendant-un-jeu'))
@@ -294,6 +400,12 @@ try {
     name: 'default',
     value: savedPreset,
   }).catch(() => null);
+  for (const id of V2)
+    await post('/preset', {
+      effect: id,
+      name: 'default',
+      value: savedV2[id],
+    }).catch(() => null);
   await browser.close();
 }
 console.log(`Total : ${ok} ok, ${ko} KO · captures : ${OUT}`);

@@ -5,7 +5,10 @@ import { esc, ic, type IcName, row, seg, stateChip, sw } from '../ds/ds.js';
 // définition d'effet n'est recopiée ici. Un futur effet obtient sa carte et sa fiche sans changer ce fichier :
 //   - ses paramètres exposés deviennent des contrôles selon leur type (choix, nombre, couleur, texte) ;
 //   - ses transitions, sa durée, son écran et sa disponibilité sont communs à tous les effets ;
-//   - un aperçu animé propre à l'effet est facultatif (PREVIEWS, dans chaos.ts).
+//   - ses variantes du registre deviennent des préréglages en un clic ; ses réglages fins (advanced) sont repliés ;
+//     un point (widget point) se choisit d'un clic dans un écran miniature ;
+//   - son aperçu animé est rendu par le moteur lui-même, hors écran (POST /api/chaos/preview) ; le retournement garde
+//     son aperçu dessiné (PREVIEWS, dans chaos.ts).
 // Réglages enregistrés dans le moteur : paramètres, durée et transitions → presets.<effet>.default ; écran,
 // disponibilité et curseur → effects.<effet>.
 
@@ -22,6 +25,18 @@ export interface Param {
   exposed?: boolean;
   unit?: string;
   max_length?: number;
+  step?: number;
+  advanced?: boolean;
+  animatable?: boolean;
+  widget?: 'point' | 'point_y';
+  pair?: string;
+}
+export interface Variant {
+  id: string;
+  label?: string;
+  params: Record<string, unknown>;
+  duration_ms?: number;
+  transition?: { in?: Side; out?: Side };
 }
 export interface EffectDef {
   id: string;
@@ -35,6 +50,16 @@ export interface EffectDef {
   input?: string;
   cursor?: string;
   params: Param[];
+  variants?: Variant[];
+  photosensitive?: boolean;
+  cooldown_ms?: number;
+  capture?: string;
+  viewer?: {
+    durations_ms: number[];
+    tiers: string[];
+    preview: string;
+    intensity_affects_price: boolean;
+  };
   duration: { default_ms: number };
   transitions: Record<
     'in' | 'out',
@@ -108,6 +133,9 @@ export interface FxCtx {
 
 const NBSP = String.fromCharCode(160);
 const ICONS = new Set<string>([
+  'activity',
+  'copy',
+  'search',
   'repeat',
   'filter',
   'layers',
@@ -251,18 +279,23 @@ export function runBarHtml(c: FxCtx, d: EffectDef) {
   </div>`;
 }
 
+/** Rotation animée en degrés (retournement) : sa transition est une rotation, plafonnée en vitesse. */
+const rotates = (d: EffectDef) =>
+  d.params.some((p) => p.unit === 'deg' && p.animatable);
 const kindLabel = (d: EffectDef, k: string) =>
   k === 'cut'
     ? 'Instantanée'
-    : d.gpu.primitive === 'transform'
+    : rotates(d)
       ? 'Rotation'
-      : 'Fondu';
+      : d.slot === 'transform' || d.slot === 'camera'
+        ? 'Animée'
+        : 'Fondu';
 
 function transitionRow(c: FxCtx, d: EffectDef, k: 'in' | 'out', max: number) {
   const s = side(c, d, k);
   const kinds = d.transitions[k].kinds ?? [d.transitions[k].kind];
   // Rotation : 545 ms au moins (vitesse maximale du registre, 520°/s pour 180°).
-  const min = d.gpu.primitive === 'transform' ? 545 : 100;
+  const min = rotates(d) ? 545 : 50;
   return row(
     k === 'in' ? 'Entrée' : 'Sortie',
     `<span class="cx-ctl">${
@@ -296,9 +329,10 @@ function paramRow(c: FxCtx, d: EffectDef, p: Param) {
     const min = p.min ?? 0;
     const max = p.max ?? 1;
     const step =
-      Number.isInteger(min) && Number.isInteger(max) && max - min >= 4
+      p.step ??
+      (Number.isInteger(min) && Number.isInteger(max) && max - min >= 4
         ? 1
-        : (max - min) / 100;
+        : (max - min) / 100);
     ctl = `<span class="cx-range"><input type="range" data-param-num="${esc(p.id)}" min="${min}" max="${max}" step="${step}" value="${esc(v)}" aria-label="${esc(label)}"><output>${esc(v)}${p.unit ? NBSP + esc(p.unit) : ''}</output></span>`;
   } else if (p.type === 'color')
     ctl = `<input type="color" class="cx-color" data-param-color="${esc(p.id)}" value="${esc(v)}" aria-label="${esc(label)}">`;
@@ -308,8 +342,69 @@ function paramRow(c: FxCtx, d: EffectDef, p: Param) {
   return `${row(label, ctl, `${p.id} paramètre`)}${p.help ? `<p class="d-faint cx-help cx-help--row">${esc(p.help)}</p>` : ''}`;
 }
 
+/** Point choisi d'un clic (point focal) : un écran miniature, le point dessus ; deux paramètres x et y (0..1). */
+function pointRow(c: FxCtx, d: EffectDef, p: Param) {
+  const py = d.params.find((q) => q.id === p.pair);
+  if (!py) return '';
+  const x = Number(paramValue(c, d, p));
+  const y = Number(paramValue(c, d, py));
+  const pct = (v: number) => `${Math.round(v * 100)}${NBSP}%`;
+  return `${row(
+    p.label ?? 'Point',
+    `<button type="button" class="cx-point" data-point="${esc(p.id)}" data-pair="${esc(py.id)}" aria-label="${esc(p.label ?? 'Point')} : ${pct(x)} depuis la gauche, ${pct(y)} depuis le haut. Cliquer pour le déplacer."><span class="cx-point__dot" style="left:${(x * 100).toFixed(1)}%;top:${(y * 100).toFixed(1)}%"></span></button>`,
+    `${p.id} point focal centre`,
+  )}${p.help ? `<p class="d-faint cx-help cx-help--row">${esc(p.help)}</p>` : ''}`;
+}
+
+/** Variante dont les valeurs sont celles de la fiche (la plus précise d'abord), ou null (réglages personnels). */
+export function activeVariant(c: FxCtx, d: EffectDef): Variant | null {
+  const vs = [...(d.variants ?? [])].sort(
+    (a, b) =>
+      Object.keys(b.params).length +
+      (b.transition ? 1 : 0) -
+      (Object.keys(a.params).length + (a.transition ? 1 : 0)),
+  );
+  const pr = preset(c, d.id);
+  return (
+    vs.find((v) => {
+      const same = Object.entries(v.params).every(([k, val]) => {
+        const p = d.params.find((q) => q.id === k);
+        return p && String(paramValue(c, d, p)) === String(val);
+      });
+      const others = Object.entries(pr.params ?? {}).every(
+        ([k, val]) =>
+          k in v.params ||
+          String(val) === String(d.params.find((q) => q.id === k)?.default),
+      );
+      const tr = (['in', 'out'] as const).every(
+        (k) =>
+          !v.transition?.[k]?.kind ||
+          side(c, d, k).kind === v.transition[k]!.kind,
+      );
+      const dur = !v.duration_ms || durationOf(c, d) === v.duration_ms;
+      return same && others && tr && dur;
+    }) ?? null
+  );
+}
+
+/** Préréglages du registre (variantes) : un clic applique les paramètres, la durée et les transitions de la variante. */
+function variantsRow(c: FxCtx, d: EffectDef) {
+  const vs = d.variants ?? [];
+  if (vs.length < 2) return '';
+  const on = activeVariant(c, d);
+  // Liste de puces qui passe à la ligne (un sélecteur segmenté ne tient pas 6 à 8 préréglages sur une ligne).
+  return `<div class="cx-presets" role="group" aria-label="Préréglages" data-k="préréglage variante style"><span class="cx-presets__t">Préréglage</span><div class="cx-chips">${vs
+    .map(
+      (v) =>
+        `<button type="button" class="cx-chip${on?.id === v.id ? ' on' : ''}" data-variant="${esc(v.id)}" aria-pressed="${on?.id === v.id}">${esc(v.label ?? v.id)}</button>`,
+    )
+    .join(
+      '',
+    )}</div></div>${on ? '' : `<p class="d-faint cx-help cx-help--row">${Object.keys(preset(c, d.id)).length ? 'Réglages personnels (aucun préréglage ne correspond exactement).' : 'Réglages par défaut (choisir un préréglage pour partir d’un comportement précis).'}</p>`}`;
+}
+
 /** Réglages de la fiche (repeints seulement quand la configuration ou les écrans changent). */
-export function settingsHtml(c: FxCtx, d: EffectDef) {
+export function settingsHtml(c: FxCtx, d: EffectDef, advOpen = false) {
   const st = settings(c, d.id);
   const sc = screenChoice(c, d.id);
   const screenOpts: [string, string][] = c.monitors.map((m) => [
@@ -329,8 +424,17 @@ export function settingsHtml(c: FxCtx, d: EffectDef) {
     ? DURATIONS
     : [...DURATIONS, [durKey, secs(dur)] as [string, string]];
   const maxTr = c.reg.engine_limits.max_transition_ms ?? 3000;
-  const params = d.params.filter((p) => p.exposed !== false);
-  return `${
+  const params = d.params.filter(
+    (p) => p.exposed !== false && p.widget !== 'point_y',
+  );
+  const one = (p: Param) =>
+    p.widget === 'point' ? pointRow(c, d, p) : paramRow(c, d, p);
+  const curLabel = rotates(d)
+    ? 'Curseur retourné avec l’image'
+    : 'Curseur qui suit l’image';
+  const main = params.filter((p) => !p.advanced);
+  const adv = params.filter((p) => p.advanced);
+  return `${variantsRow(c, d)}${
     c.monitors.length
       ? row(
           'Écran',
@@ -357,9 +461,10 @@ export function settingsHtml(c: FxCtx, d: EffectDef) {
     )}
     ${transitionRow(c, d, 'in', maxTr)}
     ${transitionRow(c, d, 'out', maxTr)}
-    ${params.map((p) => paramRow(c, d, p)).join('')}
-    ${d.cursor === 'follow' ? row('Curseur retourné avec l’image', sw(st.cursor, 'data-fxcfg="cursor"', 'Curseur retourné avec l’image'), 'curseur souris clic miroir') : ''}
-    ${d.cursor === 'follow' ? `<p class="d-faint cx-help cx-help--row">${st.cursor ? 'Un seul curseur visible : l’image du vrai curseur, retournée avec l’image. Le clic tombe dessous ; la souris et les clics de Windows ne changent pas.' : 'Curseur de Windows inchangé : le clic tombe au point symétrique de ce que l’on voit.'}</p>` : ''}`;
+    ${main.map(one).join('')}
+    ${adv.length ? `<details class="cx-adv" data-adv="${esc(d.id)}"${advOpen ? ' open' : ''}><summary>Réglages avancés <small>${adv.length}</small></summary>${adv.map(one).join('')}</details>` : ''}
+    ${d.cursor === 'follow' ? row(curLabel, sw(st.cursor, 'data-fxcfg="cursor"', curLabel), 'curseur souris clic miroir') : ''}
+    ${d.cursor === 'follow' ? `<p class="d-faint cx-help cx-help--row">${st.cursor ? `Un seul curseur visible : l’image du vrai curseur, ${rotates(d) ? 'retournée' : 'déplacée'} avec l’image. Le clic tombe dessous ; la souris et les clics de Windows ne changent pas.` : `Curseur de Windows inchangé : le clic tombe ${rotates(d) ? 'au point symétrique de' : 'à côté de'} ce que l’on voit.`}</p>` : ''}`;
 }
 
 /** En-tête de la fiche : icône, nom, description, disponibilité. */
@@ -378,7 +483,26 @@ export function sheetHeadHtml(c: FxCtx, d: EffectDef, preview: boolean) {
 export function sheetNote(d: EffectDef) {
   const cost =
     d.gpu.cost === 'low' ? 'faible' : d.gpu.cost === 'high' ? 'élevé' : 'moyen';
-  return d.gpu.primitive === 'transform'
-    ? `Calque GPU sur la fenêtre qui occupe l’écran (visible dans la capture d’écran d’OBS), sans toucher à l’affichage de Windows · coût GPU ${cost}`
-    : `Calque GPU · coût GPU ${cost}${d.gpu.passes ? ` · ${d.gpu.passes} passe(s) au plus` : ''}`;
+  const how =
+    d.gpu.primitive === 'transform'
+      ? 'Calque GPU sur la fenêtre qui occupe l’écran (visible dans la capture d’écran d’OBS), sans toucher à l’affichage de Windows'
+      : d.capture === 'snapshot'
+        ? 'Calque transparent par-dessus le jeu ; une seule image capturée (l’instant du flash), puis plus aucune capture'
+        : d.gpu.primitive === 'overlay'
+          ? 'Calque transparent par-dessus le jeu, sans capture : le jeu reste affiché tel quel dessous'
+          : 'Filtre GPU sur l’image capturée du jeu';
+  const safety = d.photosensitive
+    ? ` · effet lumineux : refusé en mode sûr, ${Math.round((d.cooldown_ms ?? 0) / 1000)}${NBSP}s au moins entre deux`
+    : '';
+  return `${how} · coût GPU ${cost}${d.gpu.passes && d.gpu.passes > 1 ? ` · ${d.gpu.passes} passes` : ''}${safety}`;
+}
+
+/** Viewers (à venir, aucune boutique active) : paliers et durées que l'extension proposera. */
+export function viewerNote(d: EffectDef) {
+  const v = d.viewer;
+  if (!v) return '';
+  const names = v.tiers
+    .map((t) => d.variants?.find((x) => x.id === t)?.label ?? t)
+    .join(', ');
+  return `Prévu pour les viewers (pas encore en boutique) : ${names} · ${v.durations_ms.map((ms) => secs(ms)).join(' / ')}${v.intensity_affects_price ? ' · l’intensité pourra changer le prix' : ''}`;
 }

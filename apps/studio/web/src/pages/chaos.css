@@ -433,3 +433,115 @@ kbd {
   font: inherit;
   text-overflow: ellipsis;
 }
+
+/* Aperçu rendu par le moteur (fiche d'un effet) : une grille d'images JPEG jouée comme une petite vidéo. */
+.cx-anim {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  box-shadow:
+    0 0 0 1px var(--hair2),
+    0 10px 30px var(--shade);
+}
+.cx-anim__img {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+}
+.cx-anim__t {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+  font: 600 11px var(--num);
+}
+
+/* Point visé : un écran miniature, clic pour placer le point (flèches au clavier). */
+.cx-point {
+  position: relative;
+  width: 192px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background:
+    linear-gradient(var(--hair2) 1px, transparent 1px) 0 0 / 25% 25%,
+    linear-gradient(90deg, var(--hair2) 1px, transparent 1px) 0 0 / 12.5% 25%,
+    var(--raise);
+  cursor: crosshair;
+}
+.cx-point:focus-visible {
+  outline: 2px solid var(--mod);
+  outline-offset: 2px;
+}
+.cx-point__dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--mod);
+  box-shadow: 0 0 0 3px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+/* Réglages avancés : repliés par défaut, la fiche reste courte. */
+.cx-adv {
+  margin: 6px 0 2px;
+  border-top: 1px solid var(--hair2);
+}
+.cx-adv > summary {
+  padding: 10px 0 6px;
+  color: var(--ink2);
+  font-weight: 600;
+  cursor: pointer;
+}
+.cx-adv > summary small {
+  margin-left: 4px;
+  color: var(--ink2);
+  font: 600 11px var(--num);
+}
+
+/* Préréglages de la fiche (variantes du registre) : des puces qui passent à la ligne. */
+.cx-presets {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.cx-presets__t {
+  color: var(--ink2);
+  font-size: 13px;
+}
+.cx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cx-chip {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--hair2);
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--ink2);
+  font: 500 12.5px var(--text);
+  cursor: pointer;
+}
+.cx-chip:hover {
+  color: var(--ink);
+}
+.cx-chip.on {
+  border-color: var(--mod);
+  background: var(--raise3);
+  color: var(--ink);
+}
+.cx-chip:focus-visible {
+  outline: 2px solid var(--mod);
+  outline-offset: 2px;
+}
