@@ -1,5 +1,8 @@
 # Chaos sur la source gameplay d'OBS (et seulement elle)
 
+> **Suite (24/11) :** Antoni a choisi le mode C (écran + OBS, sans double application). Ce qui est construit, prouvé et
+> à faire : [MODE_C.md](MODE_C.md). Cette page reste l'étude des architectures et le premier prototype.
+
 État au 24/11/2026, branche locale `feat/chaos-studio`. **Rien n'a été modifié dans l'OBS d'Antoni** : sa collection de
 scènes a été lue, sans écriture. Le prototype tourne dans le vrai moteur d'OBS installé (libobs 33.0.1 et
 obs-shaderfilter 2.6.1), chargé hors de l'application OBS, sans fenêtre. Code : `apps/chaos-engine/src/Host/ObsExport.cs`

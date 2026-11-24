@@ -94,9 +94,28 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.2** (13 effets, essayée par Antoni le 24/11).
+Studio installé aujourd'hui : **0.1.44-chaos.3** (installée par Antoni le 24/11).
 
-Version de test **0.1.44-chaos.3** (24/11), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.4** (24/11, mode C : écran + source gameplay d'OBS), construite en local, **ni publiée
+ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.4.exe`
+- 126 780 284 o, SHA-256 `42659f7647858d6bf6ba83f171ce90ad8be3210d8dcee3eb6bdab7e7f0b4bc44`
+- contenu : tout ce que contenait 0.1.44-chaos.3, plus le **mode C**
+  ([MODE_C.md](MODE_C.md)) :
+  - panneau Chaos › « Diffusion OBS » ;
+  - sorties « écran », « OBS » ou les deux (par défaut) ;
+  - calque exclu des captures pendant un effet diffusé par OBS ;
+  - filtres « Raptoru Chaos V2 » préparés seulement sur ton clic ;
+- commit `560d88a4` de `feat/chaos-studio` (local) ;
+- aucun `.env`, aucun jeton, aucune valeur secrète locale dans le paquet (vérifié) ;
+- installer comme la 0.1.44-chaos.3 ci-dessous (jeu fermé, Studio et Chaos Lab fermés) ; essais du mode C :
+  [MODE_C.md](MODE_C.md) § 9. **Rien n'est créé dans OBS** tant que tu ne cliques pas sur « Préparer les filtres
+  OBS… » ;
+- retour arrière : relancer `Raptoru Studio Setup 0.1.44-chaos.3.exe` (SHA-256 `9ffcc0c1…`). Les filtres V2 éventuels
+  se retirent avant, depuis Diffusion OBS (« Retirer les filtres V2… »).
+
+Version de test précédente **0.1.44-chaos.3** (24/11), installée par Antoni :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.3.exe`
 - 126 729 317 o, SHA-256 `9ffcc0c11327f8efbec304bcd78e042de22bea613e93d2e57ccec73b67236418`

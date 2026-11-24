@@ -211,6 +211,16 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 
   Mesures et choix : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md) § 0 bis.
 
+- **Mode C (24/11, décision d'Antoni, par défaut)** : l'écran du streamer ET la source gameplay « Écran » d'OBS, sans
+  double application. Doc : [chaos/MODE_C.md](chaos/MODE_C.md).
+  - **Construit** : une activation à deux sorties (le moteur calcule la partition OBS avant la première image) ; calque
+    exclu des captures pendant la sortie OBS ; panneau « Diffusion OBS » ; filtres « Raptoru Chaos V2 » préparés
+    seulement sur clic, avec sauvegarde, sans toucher aux V1.
+  - **Prouvé hors écran** : vrai moteur avec OBS simulé, et libobs 33.0.1 sans fenêtre (parité, arrêt anticipé,
+    fenêtre de validité, décalage de départ).
+  - **Reste à faire, côté Antoni** : test d'exclusion visible, GO pour les filtres dans son OBS, essai contrôlé.
+    Le banc 1440p attend la garde de jeu ; le flash reste « écran seulement ».
+  - Version de test `0.1.44-chaos.4` (non installée) : [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md) § 4.
 - **Chaos sur la source gameplay d'OBS seulement** (24/11, demande d'Antoni : webcam et alertes intactes) : étude et
   prototype, [chaos/OBS_SOURCE_GAMEPLAY.md](chaos/OBS_SOURCE_GAMEPLAY.md).
   - Architecture retenue : filtres obs-shaderfilter sur « Écran », shaders du moteur réécrits, logique en partition
@@ -219,7 +229,7 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
   - Rien de touché dans l'OBS d'Antoni ; banc 1440p en attente de la garde de jeu.
 - **Études OBS** (aucune modification d'OBS) : [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md) (ralenti global +
   rattrapage) et [chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md) (replay des dernières secondes).
-- **Studio installé** : `0.1.44-chaos.2`, essayée par Antoni le 24/11.
+- **Studio installé** : `0.1.44-chaos.3` (installée par Antoni le 24/11).
   - **Version de test `0.1.44-chaos.3`** (polissage + Performance Lab) : construite, **non installée, non publiée**.
   - Chemin, empreinte, essais et protocole Overwatch + OBS : [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md)
     § 4.

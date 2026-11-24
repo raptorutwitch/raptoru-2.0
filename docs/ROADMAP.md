@@ -34,7 +34,8 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
    et 23/11 en local (`apps/chaos-engine`, branche `feat/chaos-studio`, `npm run chaos:lab`). Retournement essayé par
    Antoni dans Studio installé (`0.1.44-chaos.1`). **24/11 : 12 effets de plus** (miroir, tremblement, zoom, ivre,
    tunnel, clignement, flash, brouillard, flou, pixelisation, couleur, VHS), fiches Studio, études OBS Wasted et Replay ;
-   version de test commune `0.1.44-chaos.2`, essayée par Antoni (retours positifs).
+   version de test commune `0.1.44-chaos.2`, essayée par Antoni (retours positifs). 24/11 : mode C (écran + OBS)
+   construit, version de test `0.1.44-chaos.4` non installée.
    **Polissage du 24/11** :
    - effets sur tout l'écran (mode E) ;
    - clignement fermé à 100 %, brouillard occultant, tunnel en dégradé, flash, ivre ;
@@ -146,9 +147,13 @@ en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.m
 - flou : sous-échantillonnage à 13 lectures si le flou très fort ondule en mouvement ;
 - point visé : miniature capturée du vrai écran, si l'écran miniature ne suffit pas ;
 - lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
-- diffusion par filtre OBS sur la source gameplay ([chaos/OBS_SOURCE_GAMEPLAY.md](chaos/OBS_SOURCE_GAMEPLAY.md),
-  prototype vérifié dans libobs) : choix d'Antoni (filtre, calque ou les deux), « Diffusion OBS » dans Studio, préparation
-  des filtres sur GO, flash par `previous_output`, banc 1440p ;
+- **mode C** (écran + OBS, choisi par Antoni, construit le 24/11 : [chaos/MODE_C.md](chaos/MODE_C.md)). Restes :
+  - test d'exclusion visible ;
+  - GO puis préparation des filtres dans l'OBS réel et essai contrôlé ;
+  - banc 1440p (écran et OBS) ;
+  - flash dans OBS (Source Clone + Freeze, sur GO) ;
+  - parité en 1440p et sur scène animée ;
+  - brouillard à demi-résolution dans OBS si le banc le demande ;
 - OBS : prototype isolé « replay » puis « Wasted », sur GO ([chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md),
   [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md)).
 
