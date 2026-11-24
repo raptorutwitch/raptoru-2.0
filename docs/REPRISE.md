@@ -211,6 +211,12 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 
   Mesures et choix : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md) § 0 bis.
 
+- **Chaos sur la source gameplay d'OBS seulement** (24/11, demande d'Antoni : webcam et alertes intactes) : étude et
+  prototype, [chaos/OBS_SOURCE_GAMEPLAY.md](chaos/OBS_SOURCE_GAMEPLAY.md).
+  - Architecture retenue : filtres obs-shaderfilter sur « Écran », shaders du moteur réécrits, logique en partition
+    (`ChaosEngine.exe --obs-export`).
+  - 12 effets sur 13 vérifiés dans le vrai moteur d'OBS 33.0.1 sans fenêtre (`chaos-obs-check.exe`) ; flash à venir.
+  - Rien de touché dans l'OBS d'Antoni ; banc 1440p en attente de la garde de jeu.
 - **Études OBS** (aucune modification d'OBS) : [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md) (ralenti global +
   rattrapage) et [chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md) (replay des dernières secondes).
 - **Studio installé** : `0.1.44-chaos.2`, essayée par Antoni le 24/11.

@@ -146,6 +146,9 @@ en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.m
 - flou : sous-échantillonnage à 13 lectures si le flou très fort ondule en mouvement ;
 - point visé : miniature capturée du vrai écran, si l'écran miniature ne suffit pas ;
 - lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
+- diffusion par filtre OBS sur la source gameplay ([chaos/OBS_SOURCE_GAMEPLAY.md](chaos/OBS_SOURCE_GAMEPLAY.md),
+  prototype vérifié dans libobs) : choix d'Antoni (filtre, calque ou les deux), « Diffusion OBS » dans Studio, préparation
+  des filtres sur GO, flash par `previous_output`, banc 1440p ;
 - OBS : prototype isolé « replay » puis « Wasted », sur GO ([chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md),
   [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md)).
 
