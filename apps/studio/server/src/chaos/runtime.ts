@@ -21,6 +21,7 @@ import {
 import type { ObsLike } from '../channel-points/obs-actions.js';
 import { ChaosObsError, ChaosObsOutput } from './obs-output.js';
 import { ChaosObsCursor } from './obs-cursor.js';
+import { ChaosObsRelay } from './obs-relay.js';
 import { PreviewError, renderPreview } from './preview.js';
 
 // Studio › Chaos (docs/chaos/ARCHITECTURE_MOTEUR.md) : l'API locale de la page Chaos. Elle ne décide rien : elle relaie
@@ -50,6 +51,9 @@ export class ChaosRuntime {
   readonly obsOut: ChaosObsOutput;
   /** Curseur d'OBS (docs/chaos/CURSEUR_OBS.md) : « Capturer le curseur » coupé pendant un effet à curseur dessiné. */
   readonly obsCursor: ChaosObsCursor;
+  /** Relais anti-coupure du curseur d'OBS (docs/chaos/CURSEUR_OBS.md § 5) : créé et retiré seulement sur un geste. */
+  readonly obsRelay: ChaosObsRelay;
+  private relayCache: { at: number; value: unknown } | null = null;
 
   constructor(
     private readonly opts: ChaosEngineOptions & {
@@ -81,6 +85,11 @@ export class ChaosRuntime {
       o.log,
     );
     void this.obsCursor.load().then(() => this.obsCursor.start());
+    this.obsRelay = new ChaosObsRelay(
+      o.obs ?? (() => null),
+      () => this.obsOut.config.source,
+      o.log,
+    );
     this.client.on('exit', () => {
       this.obsOut.onEngineExit();
       void this.obsCursor.releaseAll();
@@ -114,6 +123,15 @@ export class ChaosRuntime {
       new Promise((r) => setTimeout(r, 1500)),
     ]);
     return this.client.stop();
+  }
+
+  /** État du relais pour la page, relevé au plus toutes les 2 s (quelques requêtes à OBS). */
+  private async relayStatus(force: boolean) {
+    if (!force && this.relayCache && Date.now() - this.relayCache.at < 2000)
+      return this.relayCache.value;
+    const value = await this.obsRelay.status();
+    this.relayCache = { at: Date.now(), value };
+    return value;
   }
 
   private async describe() {
@@ -329,6 +347,7 @@ export class ChaosRuntime {
             reply(200, {
               ...(await this.obsOut.status(url.searchParams.has('force'))),
               cursor: this.obsCursor.status(),
+              relay: await this.relayStatus(url.searchParams.has('force')),
             }),
             true
           );
@@ -380,6 +399,24 @@ export class ChaosRuntime {
             reply(200, await this.obsOut.disableAll('coupure depuis Studio')),
             true
           );
+        case 'GET /obs/relay':
+          return (reply(200, await this.obsRelay.plan()), true);
+        case 'POST /obs/relay/prepare':
+        case 'POST /obs/relay/remove': {
+          if (body.confirm !== true)
+            return (
+              reply(400, {
+                error: 'invalid_request',
+                message: 'confirmation obligatoire',
+              }),
+              true
+            );
+          const res = route.endsWith('prepare')
+            ? await this.obsRelay.prepare()
+            : await this.obsRelay.remove();
+          this.relayCache = null;
+          return (reply(200, res), true);
+        }
         case 'POST /obs/remove':
           if (body.confirm !== true)
             return (

@@ -464,6 +464,11 @@ try {
     onSaved === true && (await cursorSaved()) === false,
     'curseur d’OBS : « Masquer pendant les effets » enregistré, puis « Laisser » rétabli',
   );
+  check(
+    (await page.locator('.cx-obs [data-obs-relay-prepare]').isDisabled()) &&
+      (await page.locator('.cx-obs [data-obs-relay-remove]').isDisabled()),
+    'relais anti-coupure : « Préparer » et « Retirer » indisponibles sans OBS (rien ne peut être créé)',
+  );
   await page.locator('.cx-obs [data-obs-mode="both"]').click();
   await page.waitForTimeout(600);
   const obsText = await page.locator('.cx-obs').innerText();

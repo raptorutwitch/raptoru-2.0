@@ -68,6 +68,24 @@ export interface ObsStatus {
     pending_restore: string | null;
     incident: { at: string; message: string } | null;
   };
+  /** Relais anti-coupure (docs/chaos/CURSEUR_OBS.md § 5) : capture sans curseur du même écran, hors du cadre. */
+  relay?: {
+    source: string | null;
+    ready: boolean;
+    reason?: string;
+    relay?: string;
+    exists?: boolean;
+    same_screen?: boolean;
+    scenes?: string[];
+    missing?: string[];
+    program_covered?: boolean;
+  };
+}
+interface RelayPlan {
+  relay: string;
+  exists: boolean;
+  scenes: string[];
+  missing: string[];
 }
 interface Preview {
   source: string;
@@ -164,6 +182,7 @@ export function mountObsPanel(
             : '')
       : stateChip('r', 'OBS non connecté');
     const cur = st.cursor;
+    const rel = st.relay;
     const cursorRows = `${row(
       'Curseur d’OBS',
       `${seg('data-obs-cursor', CURSOR, cur?.enabled ? 'on' : 'off')}${
@@ -176,7 +195,27 @@ export function mountObsPanel(
               : ''
       }${cur?.enabled && !(c.source && c.device) ? '<span class="d-tag bad">choisir la source et l’écran capturé</span>' : ''}`,
     )}
-      <p class="d-faint cx-obs__note">Miroir, retournement, tremblement, zoom, ivre et tunnel dessinent leur curseur transformé, qu’OBS capture avec l’image : « Masquer » coupe « Capturer le curseur » de la source pendant ces effets (un seul curseur dans le stream), puis rétablit la valeur d’avant. OBS redémarre alors sa capture : une ou deux images vides au début et à la fin de l’effet.${cur?.incident ? ` <b>${esc(new Date(cur.incident.at).toLocaleTimeString('fr-FR'))} · ${esc(cur.incident.message)}</b>` : ''}</p>`;
+      ${row(
+        'Relais anti-coupure',
+        `<span class="cx-ctl">${
+          rel?.ready
+            ? stateChip(
+                'live',
+                `prêt dans ${rel.scenes?.length ?? 0} scène${(rel.scenes?.length ?? 0) > 1 ? 's' : ''}`,
+              )
+            : rel?.exists
+              ? stateChip(
+                  'w',
+                  rel.same_screen === false
+                    ? 'sur un autre écran que la source'
+                    : `manque dans ${(rel.missing ?? []).map(esc).join(', ')}`,
+                )
+              : stateChip('off', rel?.reason ? esc(rel.reason) : 'absent')
+        }</span><span class="d-sp"></span>
+        <button type="button" class="d-btn sm" data-obs-relay-prepare ${st.obs.connected && c.source && !rel?.ready ? '' : 'disabled'}>${ic('layers')}Préparer le relais…</button>
+        <button type="button" class="d-btn ghost sm" data-obs-relay-remove ${st.obs.connected && rel?.exists ? '' : 'disabled'}>Retirer le relais…</button>`,
+      )}
+      <p class="d-faint cx-obs__note">Miroir, retournement, tremblement, zoom, ivre et tunnel dessinent leur curseur transformé, qu’OBS capture avec l’image : « Masquer » coupe « Capturer le curseur » de la source pendant ces effets (un seul curseur dans le stream), puis rétablit la valeur d’avant. Seule capture de son écran, la source redémarre alors sa capture (flash noir) ; le <b>relais</b>, une petite capture sans curseur du même écran, hors du cadre, garde cette capture partagée en vie : la bascule devient instantanée.${cur?.incident ? ` <b>${esc(new Date(cur.incident.at).toLocaleTimeString('fr-FR'))} · ${esc(cur.incident.message)}</b>` : ''}</p>`;
     const sourceRows = `${row(
       'Source gameplay',
       `<select data-obs-source aria-label="Source gameplay d’OBS"><option value="">Choisir…</option>${(
@@ -279,6 +318,44 @@ export function mountObsPanel(
         await postJson('/api/chaos/obs/config', { mode: b.dataset.obsMode });
         await load(true);
       });
+    else if (b.matches('[data-obs-relay-prepare]'))
+      void (async () => {
+        const p = await getJson<RelayPlan>('/api/chaos/obs/relay');
+        const ok = await confirmBox({
+          title: 'Préparer le relais anti-coupure dans OBS ?',
+          body: `${p.exists ? `« ${p.relay} » existe déjà.` : `Création de « ${p.relay} » : capture du même écran que « ${st?.config.source ?? ''} », sans curseur.`} Ajout ${p.missing.length ? `à : ${p.missing.join(', ')}` : 'à aucune scène (déjà partout)'} — tout en bas, verrouillé, minuscule et hors du cadre (invisible dans le stream). Aucune autre source, aucun filtre ni réglage n’est modifié ; « Retirer le relais » annule tout.`,
+          yes: 'Préparer dans OBS',
+          no: 'Annuler',
+          danger: false,
+        });
+        if (!ok) return;
+        await run(
+          b,
+          async () => {
+            await postJson('/api/chaos/obs/relay/prepare', { confirm: true });
+            await load(true);
+          },
+          'Relais anti-coupure prêt',
+        );
+      })();
+    else if (b.matches('[data-obs-relay-remove]'))
+      void (async () => {
+        const ok = await confirmBox({
+          title: 'Retirer le relais anti-coupure d’OBS ?',
+          body: `« ${st?.relay?.relay ?? 'le relais'} » est supprimé de toutes les scènes. Le curseur d’OBS fonctionne comme avant (coupure possible à chaque bascule).`,
+          yes: 'Retirer',
+          no: 'Garder',
+        });
+        if (!ok) return;
+        await run(
+          b,
+          async () => {
+            await postJson('/api/chaos/obs/relay/remove', { confirm: true });
+            await load(true);
+          },
+          'Relais retiré',
+        );
+      })();
     else if (b.dataset.obsCursor)
       void run(b, async () => {
         await postJson('/api/chaos/obs/config', {
