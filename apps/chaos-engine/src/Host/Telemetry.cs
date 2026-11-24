@@ -9,7 +9,9 @@ namespace Raptoru.Chaos
 {
     sealed class Samples
     {
-        readonly List<double> v = new List<double>();
+        readonly List<double> v;
+        /// capacity : réservée d'avance (bancs : aucune allocation pendant la mesure).
+        public Samples(int capacity = 0) { v = new List<double>(capacity); }
         public int Count { get { return v.Count; } }
         public void Add(double x) { if (v.Count < 10000) v.Add(x); }
         public void Clear() { v.Clear(); }

@@ -218,8 +218,11 @@ export class PerfLab {
         st.status = 'done';
         st.ended_at = new Date().toISOString();
         this.save('offscreen-last.json', st);
-      } else if (m.type === 'error')
+      } else if (m.type === 'error') {
+        // Refus ou arrêt du moteur (jeu ouvert, échéance…) : montré tout de suite, jamais remplacé par « annulé ».
         st.error = { code: String(m.code), message: String(m.message) };
+        if (st.status === 'running') st.status = 'failed';
+      }
     });
     p.on('error', (e) => {
       st.error = { code: 'spawn', message: e.message };
@@ -241,7 +244,8 @@ export class PerfLab {
   }
 
   cancelOffscreen() {
-    if (!this.offProc) return this.offscreen;
+    if (!this.offProc || this.offscreen.status !== 'running')
+      return this.offscreen;
     this.offscreen.status = 'cancelled';
     this.offscreen.error = { code: 'cancelled', message: 'banc annulé' };
     this.offProc.kill();

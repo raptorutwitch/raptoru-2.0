@@ -130,6 +130,9 @@ namespace Raptoru.Chaos
     {
         readonly float[] u = new float[16];
 
+        /// Titubation k (cible tirée de la graine), atteinte depuis la précédente selon e ; sans allocation.
+        static double Lurch(int seed, int k, double e, int j) { return Fx.Lerp(Fx.Hash(seed + 31, k - 1, j) * 2 - 1, Fx.Hash(seed + 31, k, j) * 2 - 1, e); }
+
         public override void Render(FrameBuilder fb, EffectFrame f)
         {
             var p = f.P;
@@ -150,11 +153,10 @@ namespace Raptoru.Chaos
                 double L = 1.9 / Math.Max(0.2, sp), q = t / L;
                 int k = (int)Math.Floor(q);
                 double e = Fx.EaseInOut(Fx.Clamp01((q - k) / 0.55));
-                Func<int, double> H = j => Fx.Lerp(Fx.Hash(seed + 31, k - 1, j) * 2 - 1, Fx.Hash(seed + 31, k, j) * 2 - 1, e);
                 stRot = st * 7 * Math.PI / 180;
-                rot += stRot * H(1);
-                dx += st * 0.035 * H(2); dy += st * 0.02 * H(3);
-                breath *= 1 + st * 0.05 * Math.Abs(H(4));
+                rot += stRot * Lurch(seed, k, e, 1);
+                dx += st * 0.035 * Lurch(seed, k, e, 2); dy += st * 0.02 * Lurch(seed, k, e, 3);
+                breath *= 1 + st * 0.05 * Math.Abs(Lurch(seed, k, e, 4));
             }
             double r = Math.Max(ax, 1 / ax), rotMax = swayA + stRot, driftMax = driftA + st * 0.035;
             double cover = (Math.Cos(rotMax) + r * Math.Sin(rotMax)) * (1 + 2 * Math.Max(driftMax / ax, driftMax * 0.6));

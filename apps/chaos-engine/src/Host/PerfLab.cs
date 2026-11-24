@@ -269,7 +269,7 @@ namespace Raptoru.Chaos
             uint W = od.Width, H = od.Height;
             var fb = new FrameBuilder(W, H, true);
             var frame = new EffectFrame { Seed = 777, Width = W, Height = H, Presence = 1 };
-            var gpuMs = new Samples(); var cpuMs = new Samples();
+            var gpuMs = new Samples(frames + 64); var cpuMs = new Samples(frames + 64);
             Action<string, double> add = (l, ms) => gpuMs.Add(ms);
             double vram0 = gpu.VideoMemoryMB();
             long alloc0 = 0;

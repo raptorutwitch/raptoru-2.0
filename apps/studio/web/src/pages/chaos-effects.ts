@@ -65,6 +65,7 @@ export interface EffectDef {
   viewer?: {
     durations_ms: number[];
     tiers: string[];
+    tier_kind?: 'variant' | 'level';
     preview: string;
     intensity_affects_price: boolean;
   };
@@ -373,6 +374,10 @@ export function activeVariant(c: FxCtx, d: EffectDef): Variant | null {
       (Object.keys(a.params).length + (a.transition ? 1 : 0)),
   );
   const pr = preset(c, d.id);
+  // Les réglages d'intensité (niveaux) ne disent rien du style : ils ne font pas sortir d'une variante.
+  const levelKeys = new Set(
+    (d.levels ?? []).flatMap((l) => Object.keys(l.params)),
+  );
   return (
     vs.find((v) => {
       const same = Object.entries(v.params).every(([k, val]) => {
@@ -382,6 +387,7 @@ export function activeVariant(c: FxCtx, d: EffectDef): Variant | null {
       const others = Object.entries(pr.params ?? {}).every(
         ([k, val]) =>
           k in v.params ||
+          levelKeys.has(k) ||
           String(val) === String(d.params.find((q) => q.id === k)?.default),
       );
       const tr = (['in', 'out'] as const).every(
@@ -547,8 +553,14 @@ export function sheetNote(d: EffectDef) {
 export function viewerNote(d: EffectDef) {
   const v = d.viewer;
   if (!v) return '';
+  // Paliers = niveaux d'intensité (tier_kind « level ») ou variantes : toujours leurs noms lisibles.
   const names = v.tiers
-    .map((t) => d.variants?.find((x) => x.id === t)?.label ?? t)
+    .map(
+      (t) =>
+        (v.tier_kind === 'level'
+          ? d.levels?.find((x) => x.id === t)?.label
+          : d.variants?.find((x) => x.id === t)?.label) ?? t,
+    )
     .join(', ');
   return `Prévu pour les viewers (pas encore en boutique) : ${names} · ${v.durations_ms.map((ms) => secs(ms)).join(' / ')}${v.intensity_affects_price ? ' · l’intensité pourra changer le prix' : ''}`;
 }

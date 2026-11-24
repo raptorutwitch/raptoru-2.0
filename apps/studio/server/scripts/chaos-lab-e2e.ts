@@ -371,6 +371,60 @@ try {
   );
   await page.locator('[data-open="flip"]').click();
 
+  // ---------- A3. Performance Lab (rien d'affiché : banc refusé pendant un jeu, sinon annulé aussitôt) ----------
+  await page.locator('[data-perf-open]').click();
+  await page
+    .locator('.cx-perf:not([hidden]) h2', { hasText: 'Performance Lab' })
+    .waitFor();
+  check(
+    await until(
+      async () =>
+        (await page.locator('.cx-perf__sys dd').count()) >= 5 &&
+        !(
+          await page.locator('.cx-perf__sys dd').first().innerText()
+        ).startsWith('—'),
+      20_000,
+    ),
+    'Performance Lab : matériel lu (carte graphique, processeur, mémoire, système, écrans)',
+  );
+  const perfText = await page.locator('.cx-perf').innerText();
+  check(
+    (await page.locator('[data-perf-screen]').count()) >= 1 &&
+      (await page.locator('[data-perf-live-start]').count()) === 1 &&
+      perfText.includes('Banc hors écran') &&
+      perfText.includes('Validation en jeu') &&
+      perfText.includes('ne sont pas mesurées'),
+    'deux modes séparés : banc hors écran (écran de référence) et validation en jeu manuelle ; images/s du jeu dites non mesurées',
+  );
+  await page.locator('[data-perf-start]').click();
+  // Lancé pour de bon = un cas en cours affiché (« n/N · effet ») ; sinon le refus du moteur, avec sa raison.
+  const started = await until(
+    async () =>
+      (await page.locator('.cx-perf__run .d-faint', { hasText: '·' }).count()) >
+        0 ||
+      (await page.locator('.cx-perf .d-note', { hasText: 'jeu' }).count()) > 0,
+    20_000,
+  );
+  const perfRefused =
+    (await page.locator('.cx-perf .d-note', { hasText: 'jeu' }).count()) > 0;
+  if (!perfRefused && (await page.locator('[data-perf-cancel]').count()))
+    await page.locator('[data-perf-cancel]').click();
+  check(
+    started,
+    perfRefused
+      ? 'banc hors écran refusé pendant un jeu, raison affichée'
+      : 'banc hors écran lancé (progression), puis annulé',
+  );
+  await page.waitForTimeout(800);
+  await page
+    .locator('.cx-perf')
+    .screenshot({ path: join(OUT, '8-performance-lab.png') });
+  await page.locator('[data-perf-close]').click();
+  check(
+    (await page.locator('.cx-perf[hidden]').count()) === 1,
+    'Performance Lab refermé',
+  );
+
   // ---------- B. Visible : Tester, Arrêter, Activer, STOP ALL ----------
   const why = guard();
   if (why && !args.includes('--autorise-pendant-un-jeu'))

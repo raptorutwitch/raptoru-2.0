@@ -72,7 +72,8 @@ namespace Raptoru.Chaos
         public List<string> StopConditions = new List<string>();
         public Dictionary<string, object> Raw;
         public bool RequiresCapture { get { return Slot != null && Slot.RequiresCapture || CaptureMode == "snapshot"; } }
-        public ParamDef Param(string id) { return Params.FirstOrDefault(p => p.Id == id); }
+        /// Sans allocation (appelé à chaque image par les effets animés, comme le retournement).
+        public ParamDef Param(string id) { foreach (var p in Params) if (p.Id == id) return p; return null; }
     }
 
     sealed class EngineLimits

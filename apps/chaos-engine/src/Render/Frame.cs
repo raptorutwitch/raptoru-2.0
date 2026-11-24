@@ -30,8 +30,10 @@ namespace Raptoru.Chaos
 
         public PooledTarget Rent(uint w, uint h, long now)
         {
-            var t = free.FirstOrDefault(x => x.W == w && x.H == h);
-            if (t != null) free.Remove(t);
+            // Sans allocation (chaque image) : recherche à la main plutôt qu'une requête LINQ.
+            PooledTarget t = null;
+            for (int i = 0; i < free.Count; i++) if (free[i].W == w && free[i].H == h) { t = free[i]; free.RemoveAt(i); break; }
+            if (t != null) { }
             else
             {
                 t = new PooledTarget { W = w, H = h, Tex = gpu.Texture(w, h, 0, 0x8 | 0x20, 0x1, 0, 0) };
