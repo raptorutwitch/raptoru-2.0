@@ -15,14 +15,20 @@ Code : [`apps/studio/web/src/pages/chaos.ts`](../../apps/studio/web/src/pages/ch
    l'interrupteur « Diagnostic ».
 3. **Le régler** (enregistré dans le moteur à chaque clic, retrouvé à la réouverture) :
 
-   | Réglage                       | Ce que c'est                                                                                                                                                           |
-   | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | Écran                         | « Écran gauche », « Écran droit », « Écran du milieu », « Tous les écrans », rangés selon leur vraie position dans Windows ; nom Windows, taille et fréquence en petit |
-   | Durée                         | 5, 10, 20 ou 30 s, ou n'importe quelle valeur dans les limites de sécurité                                                                                             |
-   | Entrée, sortie                | transition animée (rotation pour le retournement) ou instantanée, et sa durée                                                                                          |
-   | Paramètres propres à l'effet  | ceux que le registre expose, avec le bon contrôle (choix, curseur numérique, couleur, texte)                                                                           |
-   | Curseur retourné avec l'image | pour les effets qui le déclarent (retournement)                                                                                                                        |
-   | Disponible                    | les déclenchements des viewers (à venir) ne passent que si l'effet est disponible ; Tester et Activer restent possibles ici                                            |
+   | Réglage                      | Ce que c'est                                                                                                                                                            |
+   | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | Préréglage                   | les variantes du registre en un clic (ex. tremblement : léger, secousse, impact, séisme) : paramètres, et parfois durée et transitions ; le préréglage actif est montré |
+   | Écran                        | « Écran gauche », « Écran droit », « Écran du milieu », « Tous les écrans », rangés selon leur vraie position dans Windows ; nom Windows, taille et fréquence en petit  |
+   | Durée                        | 5, 10, 20 ou 30 s, ou n'importe quelle valeur dans les limites de sécurité                                                                                              |
+   | Entrée, sortie               | transition animée (rotation pour le retournement) ou instantanée, et sa durée                                                                                           |
+   | Paramètres propres à l'effet | ceux que le registre expose, avec le bon contrôle (choix, curseur numérique, couleur, texte) ; les réglages fins sont repliés dans « Réglages avancés »                 |
+   | Point visé                   | zoom et vision tunnel : un clic dans l'écran miniature (ou les flèches) ; coordonnées relatives, valables à toutes les résolutions                                      |
+   | Curseur qui suit l'image     | pour les effets qui déplacent l'image (retournement, miroir, zoom, tremblement, ivre, tunnel)                                                                           |
+   | Disponible                   | les déclenchements des viewers (à venir) ne passent que si l'effet est disponible ; Tester et Activer restent possibles ici                                             |
+
+   **Aperçu** (à gauche de la fiche) : le moteur rend l'effet avec ces réglages, hors écran, sur une scène de jeu de
+   démonstration (rien ne s'affiche sur tes écrans) : le début, puis la dernière seconde, en boucle. Il est refait
+   après chaque changement (en 2 s environ, puis gardé en mémoire). Le retournement garde son aperçu dessiné.
 
 4. **Tester** : l'effet part tout de suite sur l'écran choisi, avec ses réglages, pendant 5 s au plus. Aucun délai,
    aucun Jeton, aucun point de chaîne.

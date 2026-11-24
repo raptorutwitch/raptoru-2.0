@@ -11,18 +11,24 @@ Tous les shaders vivent dans `apps/chaos-engine/src/Render/ShaderLibrary.cs`.
 
 ```hlsl
 cbuffer Frame : register(b0) {
-  float4 u0, u1, u2, u3; // 16 constantes propres à la passe (FrameBuilder.Filter(..., u))
+  float4 u0, u1, u2, u3; // constantes propres à la passe (FrameBuilder.Filter / Overlay, u[0..15])
   float4 rect;           // calque : x, y, largeur, hauteur (0..1) ; plein écran : 0, 0, 1, 1
   float4 view;           // largeur et hauteur de sortie, de la source
   float4 misc;           // temps (s), présence, opacité, niveau de flou (mip)
-  float4 color;          // couleur RVBA (calques)
+  float4 color;          // couleur RVBA (calques, calques shader)
+  float4 u4, u5, u6, u7; // 16 constantes de plus (u[16..31])
 };
 Texture2D src : register(t0);      // l'image d'entrée (capture ou passe précédente)
+Texture2D aux : register(t1);      // seconde texture facultative (image retenue)
 SamplerState smp : register(s0);   // linéaire, bords bloqués, mipmaps
 struct V { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 ```
 
-Fonctions disponibles : `aspect()`, `mirror_uv(uv)` et `inside(uv)`.
+Fonctions disponibles : `aspect()`, `mirror_uv(uv)`, `inside(uv)`, `luma(c)`, et les bruits procéduraux `hash12`,
+`hash22` (D. Hoskins, « Hash without Sine », MIT), `gnoise` (bruit de gradient 2D) et `fbm(p, octaves)`. Ils ne sont
+compilés que dans les shaders qui les appellent. Les shaders des effets du catalogue sont dans
+`Render/EffectShaders.cs` ; un shader ne lit jamais l'horloge du moteur : l'effet lui passe ses temps en constantes
+(double précision, temps de l'effet).
 
 Entrées et sorties :
 

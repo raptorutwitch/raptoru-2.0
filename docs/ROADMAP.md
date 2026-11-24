@@ -31,9 +31,12 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 ### 0.2 Ensuite (déjà décidé ou demandé)
 
 1. **Chaos V2 (« Chaos Overlay », que tu appelles « KO Overlay »)** : moteur, curseur retourné et **catalogue d'effets** de Studio construits les 22
-   et 23/11 en local (`apps/chaos-engine`, branche `feat/chaos-engine`, `npm run chaos:lab`). Retournement seul ;
-   essai Overwatch d'Antoni positif (fluide). **Essais d'Antoni sur la nouvelle page attendus**
-   ([chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md)), puis nouveaux effets (conçus à part) et lot 2.
+   et 23/11 en local (`apps/chaos-engine`, branche `feat/chaos-studio`, `npm run chaos:lab`). Retournement essayé par
+   Antoni dans Studio installé (`0.1.44-chaos.1`). **24/11 : 12 effets de plus** (miroir, tremblement, zoom, ivre,
+   tunnel, clignement, flash, brouillard, flou, pixelisation, couleur, VHS), fiches Studio, études OBS Wasted et Replay ;
+   version de test commune `0.1.44-chaos.2` construite, non installée
+   ([chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md)). **Essais d'Antoni attendus**, puis lot 2 (achat par les
+   viewers).
    Le lot 0 (mesures PresentMon) reste à faire : § 2.0.
 2. **Validations réelles en attente** (temps d'Antoni, en live) : premier vrai tirage de la Roue du Sub V3 ; « Envoyer
    une vraie annonce test » de Level Up ; commande d'Aouh (expressions, latence, édition déléguée) ; parcours viewer de
@@ -122,6 +125,17 @@ Colonnes : état réel · ce qui reste · document. « Public » = dans l'extens
 ## 2. Chantiers
 
 ### 2.0 Chaos V2 : priorité majeure suivante, après les Chatbox (en conception)
+
+**24/11 : bibliothèque d'effets.** 13 effets publics développés et intégrés à Studio, vérifiés hors écran, jamais vus
+en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md). Restes :
+
+- essais d'Antoni effet par effet (le brouillard ne compte comme réussi qu'après son avis en mouvement) ;
+- banc GPU des effets en 1440p (`--bench-effects`) et mesure en jeu (banc A–F) ;
+- flou : sous-échantillonnage à 13 lectures si le flou très fort ondule en mouvement ;
+- point visé : miniature capturée du vrai écran, si l'écran miniature ne suffit pas ;
+- lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
+- OBS : prototype isolé « replay » puis « Wasted », sur GO ([chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md),
+  [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md)).
 
 La recherche est terminée ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Un retournement local propre, avec un seul vrai
 curseur, est **possible pour le curseur Windows** grâce à une capture native WGC. Architecture recommandée : un lecteur

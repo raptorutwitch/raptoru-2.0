@@ -192,37 +192,30 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
    remboursements, spectateurs, blackjack à plusieurs, nouvelles tables, réactions, téléphone).
 5. Corriger **uniquement** les problèmes observés.
 
-**C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : moteur, curseur retourné et catalogue
-d'effets construits les 22 et 23/11, en local.
+**C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : moteur, curseur retourné, page Studio
+(22–23/11), puis **bibliothèque de 13 effets** (nuit du 23 au 24/11), en local.
 
-- **Où** : branche locale **`feat/chaos-studio`** (= `feat/chaos-engine` + `origin/main` fusionné le 23/11), worktree
+- **Où** : branche locale **`feat/chaos-studio`** (`origin/main` refusionné le 24/11 : Soundboard), worktree
   `Raptoru 2.0 - Worktrees\chaos-v2`. Lancer : `npm run chaos:lab` (recompile moteur et page).
-- **Studio installé** : le paquet embarque le moteur ; Studio le démarre, le relance et l'arrête seul. Version de
-  test **0.1.44-chaos.1** construite, **non installée, non publiée** : chemin, empreinte et procédure dans
-  [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md) § 4. L'installation est faite par Antoni.
-- **23/11, « commande inconnue : effect.activate »** : `Protocol.Commands` n'avait ni `effect.activate` ni
-  `effect.stop`. Corrigé (moteur 0.4.0) ; le moteur annonce ses commandes et Studio signale un moteur trop ancien.
-- **Quoi** :
-  - moteur natif C# ([apps/chaos-engine](../apps/chaos-engine/README.md)) : registre partagé, configuration,
-    ordonnanceur, transitions, capture partagée sans copie, rendu cadencé par écran, profils de performance, gardien,
-    Ctrl+Maj+F11 ([chaos/ARCHITECTURE_MOTEUR.md](chaos/ARCHITECTURE_MOTEUR.md),
-    [chaos/PERFORMANCES_MOTEUR.md](chaos/PERFORMANCES_MOTEUR.md)) ;
-  - **retournement 180° = calque GPU + curseur retourné** (décision d'Antoni du 23/11, essai Overwatch fluide) : le
-    curseur de Windows est masqué au-dessus de la cible et son image est redessinée au point miroir, entrées intactes
-    ([chaos/ETUDE_CURSEUR.md](chaos/ETUDE_CURSEUR.md)) ;
-  - rotation native de Windows **expérimentale, coupée**, jamais pour une activation communautaire ;
-  - **page Studio › Chaos = catalogue d'effets** : une carte et une fiche par effet (écran gauche / droit / tous,
-    durée, transitions, paramètres, curseur, disponibilité), Tester et Activer / Arrêter, états du moteur
-    ([chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md)).
-- **Tests** : 27 unitaires ; 17 contrôles sans écran ; curseur hors écran 8/8 ; 12 Studio (dont le vrai moteur) ;
-  parcours de la page sans affichage 15/15 (Tester, Arrêter, STOP ALL jusqu'au vrai moteur). **Non lancés** (garde de jeu, jeu ou plein écran actif) : contrôles visibles, `--cursor-check`,
-  banc A/B, `--obs-compat`, partie visible du parcours.
-- **Règle** : aucun essai visible (mire, calque, rotation, banc, curseur) pendant qu'un jeu tourne. La garde le refuse ;
+- **Effets** : retournement, miroir, tremblement, zoom, écran ivre, vision tunnel, clignement des paupières, flash
+  aveuglant avec rémanence, brouillard, flou, pixelisation, filtres de couleur, VHS / glitch. Chacun a sa fiche dans
+  Studio (préréglages en un clic, réglages avancés repliés, point visé, aperçu rendu par le moteur hors écran). État,
+  techniques, sources, limites : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md).
+- **Études OBS** (aucune modification d'OBS) : [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md) (ralenti global +
+  rattrapage) et [chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md) (replay des dernières secondes).
+- **Studio installé** : `0.1.44-chaos.1` (retournement seul). **Version de test commune `0.1.44-chaos.2`**
+  (Soundboard de `main` + Chaos V2 complet) construite, **non installée, non publiée** : chemin, empreinte et
+  procédure dans [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md) § 4. L'installation est faite par Antoni.
+- **Tests** : 33 unitaires du moteur ; 13 Studio (dont le vrai moteur et l'aperçu) ; parcours de la page sans
+  affichage 24/24 ; chaque effet examiné image par image hors écran (`--render-effects`, `--strip`, `--combo`).
+  **Non lancés** (garde de jeu : plein écran au premier plan toute la nuit) : tout essai visible, banc GPU des effets
+  (`--bench-effects`), essais en jeu et dans OBS.
+- **Règle** : aucun essai visible (calque, rotation, banc, curseur) pendant qu'un jeu tourne. La garde le refuse ;
   `--autorise-pendant-un-jeu` seulement sur accord d'Antoni.
-- **Prochaine étape** : essais d'Antoni sur la nouvelle page (Tester / Activer sur l'écran choisi, C1 à C5 de
-  [chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md)) ; mesures visibles quand aucun jeu ne tourne ; puis les
-  nouveaux effets, conçus séparément, et le lot 2 (module payant, Core).
-- **Rien n'est poussé, fusionné ni publié** : le Studio installé (0.1.43) ne contient pas encore la page.
+- **Prochaine étape** : installer `0.1.44-chaos.2` et essayer chaque effet (liste dans GUIDE_STUDIO_CHAOS § 4), le
+  brouillard en premier (il ne compte comme réussi qu'après son avis en mouvement) ; banc GPU jeu fermé ; puis le
+  lot 2 (achat par les viewers, Core) et un prototype OBS isolé si Antoni le décide.
+- **Rien n'est poussé, fusionné ni publié.**
 
 **D. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (validations réelles en attente, finitions Studio).
 
@@ -231,8 +224,8 @@ d'effets construits les 22 et 23/11, en local.
 sauvegarde Coolify 16:43:40 UTC, retour arrière `deploy core 2a41e06e… --rollback --go`) ; la réaction blackjack r6
 (ICANT, réservée aux abonnés, PR #122) part avec, sur GO d'Antoni. Bot non redéployé. **Studio 0.1.44 Soundboard
 construit, NON publié** (artefact `raptoru-studio-0.1.44` du run 45220697767, conservé jusqu'au 21/02/2027) : le Studio
-installé est `0.1.44-chaos.1` (chantier Chaos, autre session) ; ne rien installer par-dessus. Soundboard et Chaos seront
-réunis dans un build commun quand Chaos Overlay V2 sera prêt (décision d'Antoni du 23/11). Finitions Casino du 23/11
+installé est `0.1.44-chaos.1` (chantier Chaos, autre session) ; ne rien installer par-dessus. Soundboard et Chaos sont
+réunis dans le build de test commun `0.1.44-chaos.2` (24/11, non installé : § C). Finitions Casino du 23/11
 fusionnées (PR #127, `ed70a107`). **ZIP consolidé** Soundboard + Casino (36 commits, sans diagnostic actif, Hosted Test
 seulement) : inventaire `INVENTAIRE-ed70a107018f.md` en attente de la ligne de validation d'Antoni.
 
