@@ -323,6 +323,12 @@ apps\chaos-engine\bin\chaos-obs-check.exe --effects-load --engine apps\chaos-eng
 
 ## 8. Mesure en jeu du 25/11 (14 h 07) : analyse et corrections
 
+> **Correction (§ 9.2).** Les chiffres de PresentMon **en mode composé** de cette section (images de 33 ms, 4,9 %,
+> 40,7 %, 27,9 i/s) sont faux. PresentMon sous-compte les images d'Overwatch quand le calque est affiché : le jeu
+> gardait ses ~58 i/s, d'après la capture du moteur, son processeur et le ressenti. Restent valables : le passage en
+> composition à l'apparition du calque, les chiffres sans calque et l'analyse des défauts du collecteur. La cause des
+> ralentissements ressentis avec Miroir est au § 9.3.
+
 Données : `docs/chaos/bench/jeu-2026-11-25-14h07/`, avec PresentMon et les relevés par processus compressés en `.gz`.
 L'analyse les lit telles quelles. `rapport-initial.md` est le rapport produit sur le moment, faux sur plusieurs points
 (§ 8.1) ; `rapport.md` est l'analyse corrigée.
@@ -527,3 +533,139 @@ cohérentes (−196 ms à l'apparition, +19 ms à la disparition).
 
 C'est bien plus fort que pendant la première séance (4,9 %). Un seul essai, sans Miroir ni Brouillard dans les mêmes
 conditions, ne permet **pas** de conclure : c'est l'objet des six essais.
+
+## 9. A/B du 25/11 (15 h 39) : PresentMon contre le ressenti, cause dans le moteur, correction
+
+Données : `docs/chaos/bench/jeu-2026-11-25-15h39/`, 6 essais sur 6 : calque neutre, Miroir, Brouillard, Brouillard,
+Miroir, calque neutre. S'y ajoute la télémétrie du moteur enregistrée par Studio pour chaque essai
+(`perf/live-results.json`, lu sans rien modifier).
+
+Ressenti d'Antoni :
+
+- Brouillard : aucun ralentissement perceptible ;
+- Miroir et calque neutre : quelques ralentissements ;
+- la fluidité variait selon l'endroit du champ de tir ;
+- le jeu restait jouable.
+
+### 9.1 Ce que disent les mesures
+
+| Essai         | PresentMon : images du jeu/s | Moteur : captures du jeu/s | Moteur : images présentées/s | Moteur : attente capture → rendu (p95) | Processeur d'Overwatch avant / pendant / après |
+| ------------- | ---------------------------- | -------------------------- | ---------------------------- | -------------------------------------- | ---------------------------------------------- |
+| Sans calque   | 57,4                         | —                          | —                            | —                                      | —                                              |
+| Calque neutre | 27,8 (deux essais)           | 59,5 et 57,5               | 59,5 et 57,5                 | 1,0 et 16,8 ms                         | 6,5 / 6,8 / 8,9 % et 8,3 / 8,1 / 6,4 %         |
+| Miroir        | 28,9 (deux essais)           | 59,1 et 58,5               | **50,7 et 52,5**             | **15,9 et 16,4 ms**                    | 8,9 / 7,2 / 6,3 % et 6,1 / 6,9 / 6,1 %         |
+| Brouillard    | 21,1 (deux essais)           | (pas de capture)           | 59,0 et 58,8                 | —                                      | 8,0 / 7,6 / 6,1 % et 6,9 / 7,7 / 8,4 %         |
+
+Carte graphique (nvidia-smi) :
+
+| Condition   | Fréquence | Puissance | Charge |
+| ----------- | --------- | --------- | ------ |
+| Sans calque | 800 MHz   | 57 W      | 64,5 % |
+| Avec calque | 1888 MHz  | 110 W     | 40,9 % |
+
+La charge baisse parce que la carte tourne 2,4 fois plus vite, pas parce qu'elle travaille moins.
+
+### 9.2 Le contraste avec le ressenti : PresentMon sous-compte les images d'Overwatch quand le calque est affiché
+
+**Démontré.** Quatre signaux indépendants contredisent les 21 à 29 i/s de PresentMon et ses pauses de 1 à 2 s :
+
+1. La capture de la fenêtre du jeu par le moteur reçoit **57,5 à 59,5 images neuves par seconde**. Elle n'en reçoit
+   qu'à chaque changement de l'image du jeu.
+2. Le processeur d'Overwatch ne bouge pas : avant, pendant et après, 6 à 9 %. Un jeu tombé à la moitié de sa cadence
+   en consommerait nettement moins.
+3. La charge GPU totale reste la même (≈ 40 %).
+4. Le ressenti : une pause de 1,8 s pendant Brouillard ne pourrait pas passer inaperçue.
+
+**Hypothèse sur la cause de l'erreur.** Quand le jeu est composé avec le calque, PresentMon perd des événements de
+présentation, ou n'arrive pas à suivre ces présentations jusqu'au bout. Il compte alors les intervalles entre les
+images qu'il a vues.
+
+**Conséquences :**
+
+- les chiffres de PresentMon **en mode composé** sont faux ici (§ 8.2 à 8.6 : 4,9 %, 40,7 %, 27,9 i/s…) ;
+- ceux du jeu **seul**, en Independent Flip, restent valables ;
+- le passage en composition lui-même reste démontré : le mode change à l'instant où le calque apparaît et disparaît.
+
+**Ce qu'Antoni voit vraiment pendant un effet.**
+
+- **Brouillard** est un calque sans capture : on voit le jeu lui-même, à travers. Il garde ses ~58 i/s, d'où
+  l'absence de ralentissement.
+- **Miroir et le calque neutre** remplacent l'écran par l'image redessinée par le moteur : on voit la cadence du
+  moteur, et ses pertes.
+
+### 9.3 Cause concrète dans le moteur (Miroir et les effets cadencés), corrigée
+
+- **Mesuré.** Miroir présentait **50,7 à 52,5 images/s pour 58,5 à 59,1 captures/s** : une image du jeu sur sept ou
+  huit n'était jamais montrée. Une capture attendait aussi ~16 ms (p95) avant d'être redessinée. Le calque neutre, lui,
+  présentait autant qu'il capturait.
+- **Cause.**
+  - Un effet « cadencé » (curseur suivi, animation par l'horloge, transition) ne se redessinait qu'au retour de
+    balayage de l'écran. C'est le cas de Miroir, Écran retourné, Zoom, Tremblement, Écran ivre, Vision tunnel et VHS.
+  - Les captures du jeu arrivent à ~58 par seconde, en tremblant autour de ce retour. Quand deux tombaient entre deux
+    retours, la première était remplacée sans avoir été montrée.
+  - Le calque neutre se redessine à chaque capture, il ne perdait rien.
+- **Correction** (commit `ddbe54bd`, `Model/Cadence.cs` et `Host/Engine.cs`) :
+  - un effet cadencé redessine **chaque nouvelle capture dès son arrivée** ;
+  - le retour de balayage ne redessine que s'il n'a vu aucune capture depuis le précédent (animation, curseur, image
+    figée) ;
+  - inchangés : la cadence plafonnée (profil économie), les filtres sans cadence, les calques sans capture, la capture
+    directe vers OBS, le curseur unique et sa transformation, le relais anti-écran noir.
+- **Coût** : au plus un rendu de plus dans une période où la capture arrive juste après le retour de balayage (jamais
+  plus de 2 par période ; 0,1 à 0,6 ms de GPU chacun).
+- **Tests** (`chaos-unit`, 38/38) : la nouvelle règle, les cas inchangés, et une simulation de 60 s (écran à
+  59,94 Hz, jeu à 58 i/s, arrivées à ±3 ms du retour de balayage). Résultat : **25,5 % des images du jeu jamais
+  montrées avec l'ancienne règle, 0 % avec la nouvelle**.
+- **Résultat attendu en jeu.** Mesurable dans Studio › Chaos › Performance Lab › Validation en jeu, sans PresentMon :
+  - pour Miroir, « images présentées » ≈ « captures » (≈ 58 au lieu de ~51) ;
+  - l'attente capture → rendu passe de ~16 ms à 1–2 ms, donc une image de latence en moins.
+
+### 9.4 Configuration relevée (lecture seule, rien changé)
+
+| Où           | Réglage                                                                                                                                               |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Écrans       | principal XB273U 2560×1440 à **59,94 Hz** (capable de 144 Hz) ; secondaire 1920×1080 à **144 Hz** ; HAGS coupé                                        |
+| Overwatch    | plein écran fenêtré (sans bordure), **V-Sync activée**, **triple buffering activé**, **Reflex « Activé + Boost »**, cible 60 i/s (`DesiredFrameRate`) |
+| Comportement | seul : Independent Flip, ~58 i/s très réguliers (V-Sync + Reflex se calent juste sous 60 Hz) ; avec un calque ou sans le focus : composé, synchronisé |
+
+### 9.5 Manipulations discriminantes et réversibles (après la 0.1.44-chaos.10, une à la fois)
+
+Mesure de chacune, hors live, 1 min : Performance Lab › Validation en jeu, **Miroir**, 10 / 25 / 10 s. On relève
+« images présentées », « captures » et l'attente capture → rendu, plus le ressenti. Puis la même chose avec le calque
+neutre si tu veux.
+
+**1. Écran gauche à 60 Hz** (teste la composition à fréquences mélangées, la grille 144 Hz du § 8.3).
+
+- Réglage : Paramètres › Système › Écran › écran gauche › Affichage avancé › Fréquence d'actualisation : 144 → 60 Hz.
+- Retour : remettre 144 Hz au même endroit.
+- Si la saccade restante disparaît, la configuration conseillée est des fréquences identiques pendant les sessions
+  Chaos.
+
+**2. G-SYNC en fenêtré, dans le panneau NVIDIA.** C'est elle qui décide si la composition suit la cadence du jeu.
+
+- Réglage : Affichage › Configurer G-SYNC. Note d'abord le réglage actuel (activé ou non ; « plein écran
+  uniquement » ou « fenêtré et plein écran »), puis essaie l'autre mode de l'écran XB273U.
+- Retour : remettre le réglage noté.
+
+**3. V-Sync d'Overwatch**, qui détermine le comportement du jeu une fois composé.
+
+- Réglage : Options › Vidéo › Synchronisation verticale : Activée → Désactivée. Garde Reflex et la limite d'images
+  telles quelles ; si le jeu dépasse 60 i/s, règle la limite personnalisée à 58.
+- Retour : la réactiver.
+
+### 9.6 Verdict
+
+- **Cause la plus probable des ralentissements ressentis** : le moteur perdait une image du jeu sur sept ou huit dans
+  les effets cadencés comme Miroir. C'est mesuré et corrigé. Le reste vient de la composition de Windows, imposée par
+  tout calque par-dessus le jeu.
+- **Les chiffres catastrophiques de PresentMon** pendant les effets sont une erreur de mesure en mode composé ; le jeu
+  gardait ses ~58 i/s.
+- **Première action** : installer la 0.1.44-chaos.10 et refaire la mesure Miroir du Performance Lab (1 min).
+- **Résultat attendu** : présentées ≈ captures, une image de latence en moins, Miroir aussi fluide que le calque
+  neutre.
+- **Limites** :
+  - la composition de Windows reste inévitable tant qu'une fenêtre couvre le jeu ;
+  - pendant un effet, la carte graphique quitte son mode économe (800 → 1900 MHz, +53 W), sans effet sur les i/s du
+    jeu ;
+  - il peut rester une légère irrégularité liée à la synchronisation 60 Hz et à l'écran à 144 Hz : c'est à confirmer
+    par les manipulations 1 à 3 ;
+  - PresentMon n'est pas fiable en mode composé : se fier au Performance Lab.

@@ -1,0 +1,866 @@
+[
+ {
+  "at": "2026-11-25T14:45:05.739Z",
+  "effect": "diag.watermark",
+  "label": "A/B diag.watermark",
+  "phases_s": {
+   "reference": 10,
+   "effect": 25,
+   "after": 10
+  },
+  "game_active": "jeu en cours : Overwatch.exe",
+  "phases": {
+   "reference": {
+    "samples": 19,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 1.5,
+     "working_set_mb": 160
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 8.3,
+     "working_set_mb": 3216
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 6.3,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 19.3,
+     "cpu_pct": 1.3,
+     "working_set_mb": 507
+    },
+    "gpu_all_pct": 39.8
+   },
+   "effect": {
+    "samples": 47,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 2,
+     "cpu_pct": 1.9,
+     "working_set_mb": 160
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 8.1,
+     "working_set_mb": 3211
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 15.4,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 14,
+     "cpu_pct": 1.6,
+     "working_set_mb": 508
+    },
+    "gpu_all_pct": 40
+   },
+   "after": {
+    "samples": 20,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0.1,
+     "cpu_pct": 1.4,
+     "working_set_mb": 159
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.4,
+     "working_set_mb": 3205
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 8.9,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 18.4,
+     "cpu_pct": 1.6,
+     "working_set_mb": 507
+    },
+    "gpu_all_pct": 42.2
+   }
+  },
+  "deltas": {
+   "game_gpu_pct": 0,
+   "game_cpu_pct": -0.2,
+   "chaos_gpu_pct": 2,
+   "chaos_cpu_pct": 0.4,
+   "dwm_gpu_pct": 9.1,
+   "obs_gpu_pct": -5.3,
+   "gpu_all_pct": 0.2
+  },
+  "chaos": {
+   "processing_p95_ms_max": 16.777,
+   "present_fps_mean": 57.5,
+   "capture_fps_mean": 57.5,
+   "added_latency_p95_ms_max": 48.616,
+   "dropped": 1,
+   "telemetry_samples": 25
+  },
+  "game_fps": null,
+  "stutters": null,
+  "not_measured": [
+   "images/s du jeu et à-coups : il faut PresentMon (traces de Windows, droits d’administrateur)",
+   "temps GPU d’OBS par source : lire le dock « Statistiques » d’OBS pendant l’essai"
+  ]
+ },
+ {
+  "at": "2026-11-25T14:44:19.379Z",
+  "effect": "mirror",
+  "label": "A/B mirror",
+  "phases_s": {
+   "reference": 10,
+   "effect": 25,
+   "after": 10
+  },
+  "game_active": "jeu en cours : Overwatch.exe",
+  "phases": {
+   "reference": {
+    "samples": 19,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 1.4,
+     "working_set_mb": 159
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.1,
+     "working_set_mb": 3212
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 6.4,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 19.4,
+     "cpu_pct": 1.5,
+     "working_set_mb": 505
+    },
+    "gpu_all_pct": 39.5
+   },
+   "effect": {
+    "samples": 47,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 3.1,
+     "cpu_pct": 1.8,
+     "working_set_mb": 160
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.9,
+     "working_set_mb": 3214
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 11.2,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 16.1,
+     "cpu_pct": 1.3,
+     "working_set_mb": 506
+    },
+    "gpu_all_pct": 38.9
+   },
+   "after": {
+    "samples": 19,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0.1,
+     "cpu_pct": 1.4,
+     "working_set_mb": 160
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.1,
+     "working_set_mb": 3215
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 5.5,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 20.3,
+     "cpu_pct": 1.3,
+     "working_set_mb": 507
+    },
+    "gpu_all_pct": 38.9
+   }
+  },
+  "deltas": {
+   "game_gpu_pct": 0,
+   "game_cpu_pct": 0.8,
+   "chaos_gpu_pct": 3.1,
+   "chaos_cpu_pct": 0.4,
+   "dwm_gpu_pct": 4.8,
+   "obs_gpu_pct": -3.3,
+   "gpu_all_pct": -0.6
+  },
+  "chaos": {
+   "processing_p95_ms_max": 16.407,
+   "present_fps_mean": 52.49,
+   "capture_fps_mean": 58.47,
+   "added_latency_p95_ms_max": 20.836,
+   "dropped": 1,
+   "telemetry_samples": 23
+  },
+  "game_fps": null,
+  "stutters": null,
+  "not_measured": [
+   "images/s du jeu et à-coups : il faut PresentMon (traces de Windows, droits d’administrateur)",
+   "temps GPU d’OBS par source : lire le dock « Statistiques » d’OBS pendant l’essai"
+  ]
+ },
+ {
+  "at": "2026-11-25T14:43:32.513Z",
+  "effect": "fog",
+  "label": "A/B fog",
+  "phases_s": {
+   "reference": 10,
+   "effect": 25,
+   "after": 10
+  },
+  "game_active": "jeu en cours : Overwatch.exe",
+  "phases": {
+   "reference": {
+    "samples": 19,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 1.4,
+     "working_set_mb": 159
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.9,
+     "working_set_mb": 3211
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 6.6,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 20.3,
+     "cpu_pct": 1.4,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 43.1
+   },
+   "effect": {
+    "samples": 47,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 5.8,
+     "cpu_pct": 1.8,
+     "working_set_mb": 159
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 7.7,
+     "working_set_mb": 3213
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 11.9,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 15.4,
+     "cpu_pct": 1.4,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 41.7
+   },
+   "after": {
+    "samples": 20,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 1.5,
+     "cpu_pct": 1.5,
+     "working_set_mb": 159
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 8.4,
+     "working_set_mb": 3213
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 10.1,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 17.3,
+     "cpu_pct": 1.3,
+     "working_set_mb": 505
+    },
+    "gpu_all_pct": 42.5
+   }
+  },
+  "deltas": {
+   "game_gpu_pct": 0,
+   "game_cpu_pct": 0.8,
+   "chaos_gpu_pct": 5.8,
+   "chaos_cpu_pct": 0.4,
+   "dwm_gpu_pct": 5.3,
+   "obs_gpu_pct": -4.9,
+   "gpu_all_pct": -1.4
+  },
+  "chaos": {
+   "processing_p95_ms_max": -1,
+   "present_fps_mean": 58.82,
+   "capture_fps_mean": 0,
+   "added_latency_p95_ms_max": -1,
+   "dropped": 0,
+   "telemetry_samples": 22
+  },
+  "game_fps": null,
+  "stutters": null,
+  "not_measured": [
+   "images/s du jeu et à-coups : il faut PresentMon (traces de Windows, droits d’administrateur)",
+   "temps GPU d’OBS par source : lire le dock « Statistiques » d’OBS pendant l’essai"
+  ]
+ },
+ {
+  "at": "2026-11-25T14:42:46.058Z",
+  "effect": "fog",
+  "label": "A/B fog",
+  "phases_s": {
+   "reference": 10,
+   "effect": 25,
+   "after": 10
+  },
+  "game_active": "jeu en cours : Overwatch.exe",
+  "phases": {
+   "reference": {
+    "samples": 20,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 1.4,
+     "working_set_mb": 159
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 8,
+     "working_set_mb": 3211
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 6.8,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 20.1,
+     "cpu_pct": 1.3,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 41.1
+   },
+   "effect": {
+    "samples": 48,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 5.8,
+     "cpu_pct": 1.8,
+     "working_set_mb": 159
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 7.6,
+     "working_set_mb": 3212
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 11.4,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 17.1,
+     "cpu_pct": 1.6,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 40.7
+   },
+   "after": {
+    "samples": 19,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 2,
+     "cpu_pct": 1.5,
+     "working_set_mb": 160
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.1,
+     "working_set_mb": 3211
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 7.7,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 16.4,
+     "cpu_pct": 1.5,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 39.3
+   }
+  },
+  "deltas": {
+   "game_gpu_pct": 0,
+   "game_cpu_pct": -0.4,
+   "chaos_gpu_pct": 5.8,
+   "chaos_cpu_pct": 0.4,
+   "dwm_gpu_pct": 4.6,
+   "obs_gpu_pct": -3,
+   "gpu_all_pct": -0.4
+  },
+  "chaos": {
+   "processing_p95_ms_max": -1,
+   "present_fps_mean": 58.97,
+   "capture_fps_mean": 0,
+   "added_latency_p95_ms_max": -1,
+   "dropped": 0,
+   "telemetry_samples": 22
+  },
+  "game_fps": null,
+  "stutters": null,
+  "not_measured": [
+   "images/s du jeu et à-coups : il faut PresentMon (traces de Windows, droits d’administrateur)",
+   "temps GPU d’OBS par source : lire le dock « Statistiques » d’OBS pendant l’essai"
+  ]
+ },
+ {
+  "at": "2026-11-25T14:41:52.678Z",
+  "effect": "mirror",
+  "label": "A/B mirror",
+  "phases_s": {
+   "reference": 10,
+   "effect": 25,
+   "after": 10
+  },
+  "game_active": "jeu en cours : Overwatch.exe",
+  "phases": {
+   "reference": {
+    "samples": 20,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 1.4,
+     "working_set_mb": 158
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 8.9,
+     "working_set_mb": 3354
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 4.9,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 18.7,
+     "cpu_pct": 1.4,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 36.8
+   },
+   "effect": {
+    "samples": 48,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 3.3,
+     "cpu_pct": 1.7,
+     "working_set_mb": 158
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 7.2,
+     "working_set_mb": 3209
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 13.3,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 4.1,
+     "cpu_pct": 1.2,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 32.4
+   },
+   "after": {
+    "samples": 18,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0.1,
+     "cpu_pct": 1.5,
+     "working_set_mb": 158
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.3,
+     "working_set_mb": 3210
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 9.6,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 20.8,
+     "cpu_pct": 1.6,
+     "working_set_mb": 505
+    },
+    "gpu_all_pct": 46.3
+   }
+  },
+  "deltas": {
+   "game_gpu_pct": 0,
+   "game_cpu_pct": -1.7,
+   "chaos_gpu_pct": 3.3,
+   "chaos_cpu_pct": 0.3,
+   "dwm_gpu_pct": 8.4,
+   "obs_gpu_pct": -14.6,
+   "gpu_all_pct": -4.4
+  },
+  "chaos": {
+   "processing_p95_ms_max": 15.931,
+   "present_fps_mean": 50.67,
+   "capture_fps_mean": 59.14,
+   "added_latency_p95_ms_max": 20.836,
+   "dropped": 3,
+   "telemetry_samples": 22
+  },
+  "game_fps": null,
+  "stutters": null,
+  "not_measured": [
+   "images/s du jeu et à-coups : il faut PresentMon (traces de Windows, droits d’administrateur)",
+   "temps GPU d’OBS par source : lire le dock « Statistiques » d’OBS pendant l’essai"
+  ]
+ },
+ {
+  "at": "2026-11-25T14:40:54.113Z",
+  "effect": "diag.watermark",
+  "label": "A/B diag.watermark",
+  "phases_s": {
+   "reference": 10,
+   "effect": 25,
+   "after": 10
+  },
+  "game_active": "jeu en cours : Overwatch.exe",
+  "phases": {
+   "reference": {
+    "samples": 19,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 1.4,
+     "working_set_mb": 156
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.5,
+     "working_set_mb": 3199
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 4,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 19.6,
+     "cpu_pct": 1.6,
+     "working_set_mb": 503
+    },
+    "gpu_all_pct": 35.8
+   },
+   "effect": {
+    "samples": 48,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 1.9,
+     "cpu_pct": 1.7,
+     "working_set_mb": 157
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 6.8,
+     "working_set_mb": 3201
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 17.2,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 4.1,
+     "cpu_pct": 1.4,
+     "working_set_mb": 503
+    },
+    "gpu_all_pct": 34.8
+   },
+   "after": {
+    "samples": 18,
+    "chaos": {
+     "names": [
+      "ChaosEngine"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 1.3,
+     "working_set_mb": 158
+    },
+    "foreground": {
+     "names": [
+      "Overwatch"
+     ],
+     "gpu_pct": 0,
+     "cpu_pct": 8.9,
+     "working_set_mb": 3215
+    },
+    "dwm": {
+     "names": [
+      "dwm"
+     ],
+     "gpu_pct": 12.5,
+     "cpu_pct": null,
+     "working_set_mb": null
+    },
+    "obs": {
+     "names": [
+      "obs64"
+     ],
+     "gpu_pct": 21.8,
+     "cpu_pct": 1.3,
+     "working_set_mb": 504
+    },
+    "gpu_all_pct": 49.8
+   }
+  },
+  "deltas": {
+   "game_gpu_pct": 0,
+   "game_cpu_pct": 0.3,
+   "chaos_gpu_pct": 1.9,
+   "chaos_cpu_pct": 0.3,
+   "dwm_gpu_pct": 13.2,
+   "obs_gpu_pct": -15.5,
+   "gpu_all_pct": -1
+  },
+  "chaos": {
+   "processing_p95_ms_max": 1.018,
+   "present_fps_mean": 59.53,
+   "capture_fps_mean": 59.54,
+   "added_latency_p95_ms_max": 13.891,
+   "dropped": 1,
+   "telemetry_samples": 21
+  },
+  "game_fps": null,
+  "stutters": null,
+  "not_measured": [
+   "images/s du jeu et à-coups : il faut PresentMon (traces de Windows, droits d’administrateur)",
+   "temps GPU d’OBS par source : lire le dock « Statistiques » d’OBS pendant l’essai"
+  ]
+ }
+]

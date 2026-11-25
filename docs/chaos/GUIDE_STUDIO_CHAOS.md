@@ -94,10 +94,26 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.8**, validée par Antoni le 25/11 dans son OBS réel : Miroir, Écran
-retourné, relais anti-coupure, curseur transformé ; aucun flash noir perceptible, un seul curseur.
+Studio installé aujourd'hui : **0.1.44-chaos.9** (mesures en jeu du 25/11). La 0.1.44-chaos.8 avait été validée par
+Antoni le 25/11 dans son OBS réel : Miroir, Écran retourné, relais anti-coupure, curseur transformé ; aucun flash noir
+perceptible, un seul curseur.
 
-Version de test **0.1.44-chaos.9** (25/11), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.10** (25/11 soir), construite en local, **ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.10.exe`
+- 126 764 181 o, SHA-256 `4d8952649c6e26a4933d0ed55d09023f3f334e1bf90b60f516759c24a65f5b08`
+- contenu : tout ce que contenait 0.1.44-chaos.9, plus deux correctifs ([BENCH_EFFETS.md](BENCH_EFFETS.md) § 8.6 et § 9.3) :
+  - les effets cadencés (Miroir, Écran retourné, Zoom, Tremblement, Écran ivre, Vision tunnel, VHS) redessinent chaque
+    image du jeu dès qu'elle est capturée, sans en sauter (Miroir présentait 50,7 à 52,5 images/s pour 58,5 à 59,1
+    captures) ;
+  - les mesures en jeu du Performance Lab s'enchaînent sans refus « déjà en cours » ;
+- inchangés : capture directe vers OBS, curseur unique et sa transformation, relais anti-écran noir ;
+- commit `ddbe54bd` de `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton dans le paquet (vérifié) ;
+- installer comme ci-dessous (jeu fermé, Studio et Chaos Lab fermés). Vérification : Performance Lab › Validation en
+  jeu, Miroir : « images présentées » ≈ « captures » ;
+- retour arrière : relancer `Raptoru Studio Setup 0.1.44-chaos.9.exe` (SHA-256 `64cb9429…`).
+
+Version de test **0.1.44-chaos.9** (25/11), installée par Antoni pour les mesures en jeu :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.9.exe`
 - 126 763 483 o, SHA-256 `64cb942994175424bf70f887f48127f7b0bf7ef92dae1074a05b2eeac65ef3bf`

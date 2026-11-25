@@ -234,6 +234,13 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     état vérifié côté serveur, « busy » redemandé tant que le serveur le dit, nettoyage), test de six essais enchaînés
     sur le vrai runtime (BENCH_EFFETS.md § 8.6). Le calque neutre seul a fortement perturbé le jeu (27,9 i/s, 40,7 %
     d'images doublées) sans que le moteur cale : à confirmer par les six essais.
+  - **A/B complet (15 h 39, 6/6)** : PresentMon sous-compte les images d'Overwatch en mode composé (21 à 29 i/s
+    affichées alors que la capture du moteur reçoit 57,5 à 59,5 images neuves/s, processeur du jeu inchangé, ressenti
+    fluide sur Brouillard) : ses chiffres en mode composé sont faux (BENCH_EFFETS.md § 9.2). Cause réelle des
+    ralentissements de Miroir : le moteur ne redessinait les effets cadencés qu'au retour de balayage et perdait une
+    image du jeu sur sept ou huit (50,7–52,5 présentées pour 58,5–59,1 captures) ; corrigé (`ddbe54bd`, captures rendues
+    dès leur arrivée), simulation 25,5 % → 0 % d'images perdues. Version de test 0.1.44-chaos.10 ; manipulations
+    Windows/NVIDIA/Overwatch réversibles au § 9.5, à faire par Antoni.
   - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
   - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
     phase C. La version installée est chaos.8 ; le relais a été validé par Antoni dans son OBS le 25/11.
