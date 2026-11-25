@@ -1,8 +1,9 @@
 # Banc des 13 effets Chaos V2 (25/11/2026)
 
 > **Statut** : phases A (moteur hors écran) et B (OBS isolé) **mesurées** le 25/11, PC au repos, aucun jeu. Phase C
-> (Overwatch réel) **préparée**, elle attend Antoni (§ 6). Aucune perte d'images/s n'est mesurée ici : les chiffres
-> d'images/s du § 4 sont des **estimations**, marquées comme telles. Branche locale `feat/chaos-studio`.
+> (Overwatch réel) **mesurée une première fois le 25/11 à 14 h 07** par Antoni : analyse et corrections au **§ 8**,
+> test A/B de confirmation prêt (§ 8.5). Aucune perte d'images/s n'est donnée tant que l'A/B n'a pas tourné : les
+> chiffres d'images/s du § 4 restent des **estimations**. Branche locale `feat/chaos-studio`.
 
 ## 0. En bref
 
@@ -19,8 +20,10 @@
   - le processeur : 5 à 8 µs par image, moins de 0,05 % d'un cœur ;
   - l'activation : moins de 0,3 ms de processeur, première image ≤ 1,1 ms de GPU ;
   - la mémoire vidéo : 20 Mo de plus au maximum, pour Écran ivre et Flash.
-- **Pas encore mesuré** : l'effet sur les images/s d'Overwatch et le coût de la composition de Windows quand le calque
-  couvre le jeu. C'est la phase C (§ 6).
+- **En jeu (§ 8, première mesure)** : quand le calque est visible, Overwatch quitte l'« Independent Flip » pour la
+  composition de Windows, synchronisée sur 60 Hz. Le jeu produit autant d'images, mais **4,9 % d'entre elles durent
+  deux rafraîchissements (33 ms)**, contre 0,0 % sans calque. C'est le cas avec les effets légers comme avec
+  Brouillard : la cause n'est pas le coût des shaders. Le test A/B du § 8.5 doit le confirmer avec un calque neutre.
 
 ## 1. Conditions
 
@@ -317,3 +320,149 @@ apps\chaos-engine\bin\chaos-obs-check.exe --effects-load --engine apps\chaos-eng
 ```
 
 `chaos-obs-check.exe` cherche `obs-nvenc-test.exe` à côté de lui : copie-le depuis `C:\Program Files\obs-studio\bin\64bit`.
+
+## 8. Mesure en jeu du 25/11 (14 h 07) : analyse et corrections
+
+Données : `docs/chaos/bench/jeu-2026-11-25-14h07/`, avec PresentMon et les relevés par processus compressés en `.gz`.
+L'analyse les lit telles quelles. `rapport-initial.md` est le rapport produit sur le moment, faux sur plusieurs points
+(§ 8.1) ; `rapport.md` est l'analyse corrigée.
+
+### 8.1 Défauts du collecteur, corrigés
+
+| Constat dans `rapport-initial.md`               | Cause                                                                                                                                                                | Correction                                                                                                 |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| FPS moyens inférieurs au 1 % bas (34 contre 51) | Durée prise de la première à la dernière image, **trous des Alt+Tab compris**                                                                                        | FPS = images retenues / somme de leurs durées                                                              |
+| GPU du jeu toujours à 0 %                       | Le compteur Windows « GPU Engine, 3D » ne voit pas Overwatch (0 sur 982 relevés)                                                                                     | GPU du jeu lu dans PresentMon (`MsGPUBusy`, par image)                                                     |
+| Segments de durée nulle ou de 0,2 à 2 s         | Effets lancés à la main **qui se chevauchent** (jusqu'à 4 ensemble), et lancés pendant que Studio avait le focus : la quasi-totalité de leur durée tombe hors du jeu | Segment = état du calque (aucun effet, un effet, une combinaison) ; phases seulement pour un effet seul    |
+| Saccades dans des segments « sans effet »       | Le jeu passe en composition et saccade jusqu'à **1,3 s avant** que le relevé du premier plan (2 fois/s) ne voie l'Alt+Tab                                            | Exclusion de 1,5 s avant la perte du focus à 1 s après son retour ; 0,3 s de marge après chaque changement |
+| Horloges                                        | **Pas de décalage** : le jeu revient en Independent Flip de −174 à +20 ms autour du relevé de Studio qui voit la fin des effets (relevés toutes les 250 ms)          | Contrôle d'horloge ajouté au rapport, à chaque apparition et disparition du calque                         |
+
+Ce qui reste exploitable : **433 s sans calque**, jeu au premier plan, et **41 s avec calque**. Ces 41 s se
+répartissent ainsi : Brouillard 10 s, Brouillard + Écran retourné 10 s, Écran ivre + Couleur 10 s, Flou + Miroir + Zoom
+4 s, quelques secondes pour d'autres combinaisons. **Aucun effet n'est mesurable seul** : pas de coût par effet à tirer
+de cette séance. Hors Chaos, une pause du jeu de 2,4 s à 189 s (étape « OBS », Studio fermé, GPU à 0 %) vient
+d'Overwatch lui-même.
+
+### 8.2 Ce que montrent les données brutes (images PresentMon retenues)
+
+| Condition                                          | FPS  | 1 % bas | p99 (ms) | Images ≈ 1 période | **Images de 2 périodes (33 ms)** | Mode de présentation             | SyncInterval | GPU du jeu (ms/image) |
+| -------------------------------------------------- | ---- | ------- | -------- | ------------------ | -------------------------------- | -------------------------------- | ------------ | --------------------- |
+| Jeu au premier plan, **sans calque** (433 s)       | 57,7 | 33,3¹   | 19,6     | 98,9 %             | **0,0 %** (2 images)             | Hardware: Independent Flip 100 % | 0 (tearing)  | 9,4                   |
+| Jeu au premier plan, **avec calque** (41 s)        | 57,2 | 29,1    | 33,9     | 92,1 %             | **4,9 %** (116 images)           | Composed: Flip 99 %              | 1            | 4,5                   |
+| Jeu en arrière-plan, composé **sans Chaos** (32 s) | 60,0 | —       | —        | 97,7 %             | **0,0 %**                        | Composed: Flip 100 %             | 1            | 3,7                   |
+
+¹ Tiré vers le bas par la pause de 2,4 s d'Overwatch à 189 s ; hors de cette pause, le 1 % bas est de 49 à 51.
+
+Détail des périodes avec calque : Brouillard 2,5 % d'images doublées, Brouillard + Écran retourné 3,3 %, Écran ivre +
+Couleur 8,9 %, Flou + Miroir + Zoom 11,8 %. Brouillard seul, ses 5 premières secondes : 0 %.
+
+### 8.3 Diagnostic
+
+**Démontré :**
+
+- **Le calque visible fait passer Overwatch de « Hardware: Independent Flip » à « Composed: Flip »** : 99 % des
+  images avec calque, 0 % sans. Le jeu revient en Independent Flip au moment où le calque disparaît, à la précision
+  des relevés de Studio (250 ms). Il fait la même chose quand il perd le focus : c'est la composition de Windows, pas
+  un effet particulier.
+- **En composition, Overwatch présente avec `SyncInterval 1`, sans tearing.** En Independent Flip, il présente avec
+  `SyncInterval 0` et tearing permis. La corrélation est de 100 % sur 45 334 images. Ses images sont alors calées sur
+  le rafraîchissement : 16,7 / 33,4 / 50 ms.
+- **Ce n'est pas le coût des shaders.** Les images doublées apparaissent avec des effets légers (Miroir, Zoom, Flou :
+  0,16–0,23 ms de GPU) comme avec Brouillard (0,6 ms). Avec les mêmes effets actifs, on passe de 0 à 10 images
+  doublées par seconde selon les moments. Le GPU du jeu par image **baisse** avec le calque (4,5 contre 9,4 ms) au
+  lieu de monter.
+
+**Mesuré :** avec calque, le jeu produit **autant d'images** (57,2 contre 57,7 i/s). La différence est leur
+régularité : 4,9 % durent 2 périodes (33 ms), suivies d'images de rattrapage plus courtes ; sans calque, 0,0 %. Le
+p99 passe de 19,6 à 33,9 ms.
+
+**Probable — le mécanisme : un jeu à ~58 i/s dans une composition à 59,94 Hz.**
+
+- Au premier plan, Overwatch se limite à ~58 i/s : 17,2 ms par image en Independent Flip, très régulier.
+- Dans une composition synchronisée à 59,94 Hz, 58 images par seconde ne peuvent pas tomber régulièrement. Environ
+  2 rafraîchissements par seconde n'ont pas d'image neuve, et l'image précédente reste 33 ms.
+- Attendu : (59,94 − 57,7) / 57,7 ≈ 3,5 à 4 % d'images doublées ; mesuré : 4,9 %.
+- Indice concordant : en arrière-plan, le jeu composé tourne à 60 i/s et n'a aucune image doublée.
+- L'origine de la limite à 58 (réglage d'Overwatch, Reflex ou G-SYNC) n'est pas connue.
+
+**Observé, cause hypothétique :** avec calque, les instants d'affichage (`MsBetweenDisplayChange`) tombent à 49 % sur
+une grille de 6,94 ms (144 Hz, la fréquence de l'écran gauche) au lieu de 16,68 ms. Sans Chaos, en composition, 89 %
+tombent sur la grille 60 Hz. Hypothèse : la composition de Windows se cale sur l'écran à 144 Hz quand le calque est
+présent, ce qui rend l'affichage encore moins régulier. À confirmer seulement si l'A/B le justifie.
+
+**Non mesuré :** le coût propre à chaque effet en jeu ; le coût GPU de la composition par `dwm` (10 à 30 % selon les
+relevés, sans référence propre) ; la latence ajoutée.
+
+**Réponse provisoire.** Oui, Chaos introduit des micro-saccades mesurables pendant qu'un effet est visible : environ
+une image sur vingt reste affichée 33 ms au lieu de 16,7.
+
+- **Cause principale, telle que mesurée** : le passage du jeu en composition par Windows, synchronisée sur 60 Hz,
+  combiné à la limite à ~58 i/s d'Overwatch. Ce n'est **pas** le calcul des effets.
+- **Aucune perte d'images/s n'est donnée** : le nombre d'images ne baisse pas de façon mesurable, et 41 s de données
+  avec des effets mêlés ne suffisent pas à conclure.
+
+### 8.4 Ce qui a été corrigé dans l'outil
+
+`apps/chaos-engine/tools/mesure-jeu.mjs` :
+
+- les calculs (FPS, 1 % bas, segments, exclusions, GPU du jeu, contrôle d'horloge) ;
+- de nouvelles colonnes : images de 2 rafraîchissements ou plus, affichage hors de la grille du rafraîchissement (et
+  sur celle de l'autre écran), mode de présentation, `SyncInterval` ;
+- un tableau « par condition », en plus du tableau « par segment » ;
+- la lecture des données compressées ;
+- le mode `--ab` (§ 8.5).
+
+Auto-tests : `--self-test` (analyse, 9 vérifications, dont « FPS jamais sous le 1 % bas », effets chevauchés,
+Alt+Tab, horloge) et `--self-test-ab` (déroulé A/B contre un faux Studio, 3 vérifications). Le moteur, la capture
+directe, le curseur et le relais ne changent pas.
+
+### 8.5 Test A/B de confirmation (à faire par Antoni, après son accord)
+
+**But.** Isoler le coût fixe du calque et de la composition, indépendamment des shaders :
+
+- **sans calque** : Overwatch + OBS ;
+- **calque neutre** : l'effet interne `diag.watermark`, qui suit exactement le trajet d'un Miroir (capture, image
+  plein écran, présentation continue) avec un filigrane de 2/255, invisible ;
+- **Miroir** ;
+- **Brouillard**.
+
+**Prédiction si le diagnostic est juste** : le calque neutre a **autant** d'images doublées que Miroir et
+Brouillard, et la période sans calque n'en a aucune.
+
+**Déroulé automatique, ~5 min, sans Alt+Tab.** L'ordre est : calque neutre, Miroir, Brouillard, Brouillard, Miroir,
+calque neutre. Chacun passe par le Performance Lab de Studio, comme le bouton « Lancer la mesure » : 10 s sans effet,
+25 s d'effet sur l'écran de sa fiche, 10 s sans effet. Rien ne pilote le jeu, la souris, le clavier ni OBS.
+
+1. Studio ouvert (0.1.44-chaos.9 pour les compteurs d'OBS), puis **réduit**. OBS ouvert sur la scène Fullscreen, sans
+   diffuser. Overwatch en fenêtré sans bordure, Champ d'entraînement, réglages inchangés.
+2. Terminal **administrateur** :
+
+   ```bat
+   cd "C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2"
+   node apps\chaos-engine\tools\mesure-jeu.mjs --ab
+   ```
+
+3. Appuie sur Entrée, puis reviens **dans le jeu dans les 10 s**. Joue ensuite toujours au même endroit et de la même
+   façon, **sans quitter le jeu**, jusqu'à ce que la console affiche le rapport (environ 5 min). `q` puis Entrée
+   arrête tout.
+4. Le rapport s'écrit dans `docs\chaos\bench\jeu-<date>` : tableau « A/B · aucun effet / diag.watermark / mirror /
+   fog ».
+
+**À me dire en même temps, sans rien changer** : dans Overwatch, la limite d'images/s, V-Sync, triple buffering et
+Reflex ; dans le panneau NVIDIA, la synchronisation verticale, G-SYNC (et si elle est active en fenêtré) et le mode
+faible latence. C'est ce qui permettra d'expliquer la limite à ~58 i/s.
+
+**Témoin optionnel, sans Chaos, 1 min.** Il montre si une fenêtre ordinaire par-dessus le jeu fait la même chose :
+
+1. Gestionnaire des tâches › Options › « Toujours visible », petite fenêtre posée sur un coin de l'écran du jeu.
+2. `node apps\chaos-engine\tools\mesure-jeu.mjs`, puis tape `temoin` et Entrée, et joue 30 s.
+3. Reviens à la console : tape `fenetre` et Entrée, puis joue 30 s avec le Gestionnaire visible par-dessus.
+4. `q` puis Entrée.
+
+**Ensuite seulement**, selon le résultat :
+
+- explication de la limite à 58 i/s, ou de la grille 144 Hz (un essai avec l'écran gauche à 60 Hz suffirait) ;
+- puis, si le diagnostic est confirmé, une étude de ce qui permettrait au jeu de rester en Independent Flip sous le
+  calque, par exemple un plan d'incrustation matériel (MPO).
+
+Rien n'est proposé ni modifié avant ces mesures.

@@ -139,8 +139,10 @@ en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.m
 
 - essais d'Antoni effet par effet (le brouillard ne compte comme réussi qu'après son avis en mouvement) ;
 - banc des 13 effets ([chaos/BENCH_EFFETS.md](chaos/BENCH_EFFETS.md)) : phases A et B mesurées le 25/11 (moteur hors
-  écran à 1440p, OBS isolé : aucune image perdue). Reste la phase C sur Overwatch réel (procédure et outil prêts, à
-  faire par Antoni). Optimisations possibles de Brouillard, Écran ivre et VHS décrites, non faites sans besoin démontré ;
+  écran à 1440p, OBS isolé : aucune image perdue). Phase C : première mesure en jeu analysée le 25/11 (§ 8 : le calque
+  fait passer Overwatch en composition à 60 Hz, 4,9 % d'images de 33 ms) ; reste le test A/B de confirmation
+  (`mesure-jeu.mjs --ab`, par Antoni), puis, seulement s'il confirme, l'étude d'un calque qui laisse le jeu en
+  Independent Flip. Optimisations possibles de Brouillard, Écran ivre et VHS décrites, non faites sans besoin démontré ;
 - images/s du jeu dans le Performance Lab : intégration de PresentMon (droits d'administrateur) si la lecture à la
   main ne suffit pas ;
 - mode E : barre des tâches figée pendant un effet qui lit l'image (horloge, survol) ; « barre vivante » possible

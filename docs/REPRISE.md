@@ -224,8 +224,11 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
   - **Phase B, OBS isolé** réglé comme le profil Twitch (DXGI, relais, NVENC 1080p60) : 0 image en retard, sautée
     ou noire, sur tous les effets.
   - **Classement** : 11 effets « légers », Brouillard et Écran ivre « modérés », aucun « lourd ».
-  - **Phase C, Overwatch réel** : préparée, à faire par Antoni (`apps/chaos-engine/tools/mesure-jeu.mjs`, PresentMon 2.6
-    dans `.tools/`). Les images/s en jeu ne sont pas encore mesurées.
+  - **Phase C, Overwatch réel** : première mesure d'Antoni le 25/11 à 14 h 07, analysée et collecteur corrigé
+    (BENCH_EFFETS.md § 8). Avec calque, le jeu passe en composition Windows (SyncInterval 1, 60 Hz) : autant d'images,
+    mais 4,9 % durent 33 ms (0,0 % sans calque), même avec Miroir ; pas le coût des shaders. Cause probable : ~58 i/s
+    d'Overwatch dans une composition à 59,94 Hz. **Test A/B prêt** (`mesure-jeu.mjs --ab` : calque neutre
+    `diag.watermark`, Miroir, Brouillard), à lancer par Antoni ; aucune perte d'images/s annoncée avant.
   - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
   - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
     phase C. La version installée est chaos.8 ; le relais a été validé par Antoni dans son OBS le 25/11.
