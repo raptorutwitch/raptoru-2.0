@@ -37,6 +37,8 @@ namespace Raptoru.Chaos
         public readonly List<string> FrameLabels = new List<string>();
         public long LastSig, LastRenderQpc, PacerSeen;
         public bool HasSig, PendingFresh, WantsTicks;
+        /// Une capture a été rendue dès son arrivée depuis le dernier retour de balayage (Cadence.Due).
+        public bool FreshSinceTick;
         public Pacer Pacer;
         public double GpuFrameEstMs = -1;
         /// Curseur : un effet de la surface le fait suivre l'image, et le vrai curseur est au-dessus de la cible.
@@ -423,9 +425,12 @@ namespace Raptoru.Chaos
             s.WantsTicks = timed;
             bool tick = s.Pacer != null && s.Pacer.Ticks != s.PacerSeen;
             if (tick) s.PacerSeen = s.Pacer.Ticks;
-            // Images cadencées : une par retour de balayage (avec la capture la plus récente), jamais deux par période ;
-            // sinon une par nouvelle capture.
-            bool due = Cadence.Due(s.S.Shown, timed, tick, s.PendingFresh);
+            // Images cadencées : chaque nouvelle capture tout de suite (aucune n'est sautée), et le retour de balayage
+            // seulement s'il n'a vu aucune capture ; cadence plafonnée : une par retour de balayage. Sinon une par
+            // nouvelle capture.
+            bool due = Cadence.Due(s.S.Shown, timed, tick, s.PendingFresh, capped, s.FreshSinceTick);
+            if (tick) s.FreshSinceTick = false;
+            bool freshRender = due && !tick && s.PendingFresh;
             // Cadence plafonnée : au plus une image (la plus récente) par période.
             if (due && capped && s.S.Shown && N.QpcNow() - s.LastRenderQpc < (long)(N.QpcFreq() / rate * 0.9)) due = false;
             if (!due) { UpdateStarting(s, live, now); return; }
@@ -509,6 +514,7 @@ namespace Raptoru.Chaos
                 io.Send(Protocol.Event("engine.error", now, J.Map("code", "gpu_error", "message", "Present 0x" + hr.ToString("X8") + " : le moteur s'arrête (Studio le relance)")));
                 io.Quit("gpu_error", 4);
             }
+            if (freshRender) s.FreshSinceTick = true;
             s.LastSig = sig; s.HasSig = true; s.LastRenderQpc = N.QpcNow(); s.PendingFresh = false;
             s.FrameLabels.Clear();
             fb.Labels(s.FrameLabels);

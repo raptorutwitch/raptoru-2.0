@@ -116,7 +116,7 @@ namespace Raptoru.Chaos
                     if (t > sim.Total) break;
                     if (t >= sim.ExitAt) sim.Anim.BeginExit(sim.ExitAt);
                     bool timed = Cadence.Timed(sim.Anim.Animating(t), def.RequiresCapture, false, false, !oldRule && clockDriven);
-                    bool due = Cadence.Due(shown, timed, true, fresh), hold = t >= holdA && t < holdB;
+                    bool due = Cadence.Due(shown, timed, true, fresh, false, false), hold = t >= holdA && t < holdB;
                     if (hold) holdTicks++;
                     if (due)
                     {

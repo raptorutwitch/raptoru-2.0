@@ -499,7 +499,7 @@ namespace Raptoru.Chaos
                 bool animating = false;
                 if (sim != null) { if (t >= exitAt) sim.Anim.BeginExit(exitAt); animating = sim.Anim.Animating(t); }
                 bool timed = Cadence.Timed(animating, needsCapture, false, false, clockDriven);
-                if (!Cadence.Due(shown, timed, true, needsCapture)) { A.Skipped++; continue; }
+                if (!Cadence.Due(shown, timed, true, needsCapture, false, false)) { A.Skipped++; continue; }
                 cpu.Restart();
                 fb.Reset(W, H, needsCapture);
                 fb.LowQuality = false;

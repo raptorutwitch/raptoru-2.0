@@ -18,11 +18,22 @@ namespace Raptoru.Chaos
             return transition || !needsCapture || cappedFresh || followsCursor || clockDriven;
         }
 
-        /// Une image est due : la première (calque pas encore affiché), puis une par rafraîchissement si elle est
-        /// cadencée, sinon une par nouvelle capture.
-        public static bool Due(bool shown, bool timed, bool tick, bool pendingFresh)
+        /// Une image est due :
+        /// - la première (calque pas encore affiché) ;
+        /// - sans cadence : une par nouvelle capture ;
+        /// - cadencée et plafonnée (cadence max sous la fréquence de l'écran) : une par rafraîchissement ;
+        /// - cadencée sans plafond : CHAQUE nouvelle capture tout de suite, et un rafraîchissement seulement s'il n'a vu
+        ///   aucune capture depuis le précédent (animation, curseur, image figée).
+        /// Avant le 25/11, une image cadencée n'était rendue qu'au rafraîchissement : quand deux captures du jeu (~58 i/s,
+        /// légèrement décalé de l'écran) arrivaient entre deux retours de balayage, la première n'était jamais montrée.
+        /// Mesuré en jeu : Miroir présentait 50,7 à 52,5 images/s pour 58,5 à 59,1 captures/s, avec ~16 ms d'attente
+        /// (p95) entre l'arrivée de la capture et son rendu ; le calque neutre, rendu à chaque capture, n'en perdait aucune.
+        public static bool Due(bool shown, bool timed, bool tick, bool pendingFresh, bool capped, bool freshSinceTick)
         {
-            return !shown || (timed ? tick : pendingFresh);
+            if (!shown) return true;
+            if (!timed) return pendingFresh;
+            if (capped) return tick;
+            return pendingFresh || (tick && !freshSinceTick);
         }
     }
 }

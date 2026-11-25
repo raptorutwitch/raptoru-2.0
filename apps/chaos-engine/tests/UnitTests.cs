@@ -519,11 +519,67 @@ namespace Raptoru.Chaos
                 // Maintien (pas de transition), filtre sur capture, aucune capture nouvelle, pas de curseur suivi.
                 True(!Cadence.Timed(false, true, false, false, false), "filtre immobile (couleur) : une image par nouvelle capture seulement");
                 True(Cadence.Timed(false, true, false, false, true), "filtre animé par l'horloge (VHS) : une image par rafraîchissement");
-                True(Cadence.Due(true, Cadence.Timed(false, true, false, false, true), true, false), "VHS au maintien, capture inchangée : image due à chaque rafraîchissement");
-                True(!Cadence.Due(true, Cadence.Timed(false, true, false, false, false), true, false), "ancienne règle : aucune image due (gel jusqu'à la sortie)");
+                True(Cadence.Due(true, Cadence.Timed(false, true, false, false, true), true, false, false, false), "VHS au maintien, capture inchangée : image due à chaque rafraîchissement");
+                True(!Cadence.Due(true, Cadence.Timed(false, true, false, false, false), true, false, false, false), "ancienne règle : aucune image due (gel jusqu'à la sortie)");
                 True(Cadence.Timed(true, true, false, false, false) && Cadence.Timed(false, false, false, false, false) && Cadence.Timed(false, true, false, true, false),
                     "inchangé : transitions, calques sans capture, curseur suivi");
-                True(Cadence.Due(false, false, false, false), "première image toujours due");
+                True(Cadence.Due(false, false, false, false, false, false), "première image toujours due");
+            });
+            Case("cadence : une image cadencée (Miroir, curseur suivi, horloge) rend chaque nouvelle capture tout de suite, aucune n'est sautée (25/11)", () =>
+            {
+                // Règle : cadencée sans plafond → la capture neuve est due sans attendre le rafraîchissement ; le
+                // rafraîchissement ne redessine que s'il n'a vu aucune capture depuis le précédent.
+                True(Cadence.Due(true, true, false, true, false, false), "capture neuve entre deux rafraîchissements : due tout de suite");
+                True(!Cadence.Due(true, true, true, false, false, true), "rafraîchissement juste après une capture rendue : pas d'image en double");
+                True(Cadence.Due(true, true, true, false, false, false), "rafraîchissement sans capture : due (animation, curseur, image figée)");
+                True(!Cadence.Due(true, true, false, true, true, false) && Cadence.Due(true, true, true, true, true, false), "cadence plafonnée : au rafraîchissement seulement (inchangé)");
+                True(Cadence.Due(true, false, false, true, false, false) && !Cadence.Due(true, false, true, false, false, false), "sans cadence : une image par capture (inchangé)");
+                True(Cadence.Due(true, true, true, false, false, false) && Cadence.Due(true, true, true, false, false, false), "calque sans capture : chaque rafraîchissement (inchangé)");
+
+                // Simulation, 60 s : écran à 59,94 Hz, jeu à 58 i/s ; chaque image du jeu est livrée par la capture à
+                // la composition suivante, ± 3 ms (suite pseudo-aléatoire fixe ; une demi-période de l'écran à 144 Hz,
+                // dont la grille apparaît dans les instants d'affichage mesurés le 25/11) : les arrivées tombent tantôt
+                // juste avant, tantôt juste après le retour de balayage.
+                double period = 1000 / 59.94, game = 1000 / 58.0;
+                var arrivals = new List<double>();
+                uint rnd = 12345;
+                for (double g = 0; g < 60000; g += game)
+                {
+                    rnd = rnd * 1664525 + 1013904223;
+                    double jitter = (rnd >> 8) / (double)(1 << 24) * 6.0 - 3.0;
+                    arrivals.Add(Math.Ceiling(g / period) * period + jitter);
+                }
+                Func<bool, int[]> run = (newRule) =>
+                {
+                    // Rejoue la boucle du moteur : événements « capture » et « rafraîchissement » dans l'ordre du temps.
+                    int shownCaptures = 0, renders = 0, maxInPeriod = 0, inPeriod = 0, a = 0;
+                    bool pending = false, freshSinceTick = false;
+                    for (double t = 0; t < 60000; t += period)
+                    {
+                        while (a < arrivals.Count && arrivals[a] < t + period)
+                        {
+                            pending = true; a++; // une capture encore en attente est remplacée : perdue
+                            if (newRule && Cadence.Due(true, true, false, true, false, freshSinceTick))
+                            { renders++; inPeriod++; shownCaptures++; pending = false; freshSinceTick = true; }
+                        }
+                        // Ancienne règle d'une image cadencée = celle d'une cadence plafonnée : au rafraîchissement seulement.
+                        bool due = newRule ? Cadence.Due(true, true, true, pending, false, freshSinceTick) : Cadence.Due(true, true, true, pending, true, false);
+                        freshSinceTick = false;
+                        if (due) { renders++; inPeriod++; if (pending) shownCaptures++; pending = false; }
+                        maxInPeriod = Math.Max(maxInPeriod, inPeriod); inPeriod = 0;
+                    }
+                    return new[] { shownCaptures, renders, maxInPeriod };
+                };
+                var before = run(false);
+                var after = run(true);
+                int total = arrivals.Count;
+                Console.WriteLine("      simulation : " + total + " images du jeu ; ancienne règle " + before[0] + " montrées (" + (100.0 * (total - before[0]) / total).ToString("0.0") +
+                    " % perdues) ; nouvelle règle " + after[0] + " (" + (100.0 * (total - after[0]) / total).ToString("0.0") + " %), " + after[1] + " rendus en 60 s, au plus " + after[2] + " par période");
+                True(total - before[0] > total / 50, "ancienne règle : des captures perdues (au moins 2 %)");
+                True(after[0] == total, "nouvelle règle : aucune capture perdue");
+                // Coût : au plus un rendu par capture, plus un par rafraîchissement qui n'a vu aucune capture (une capture
+                // arrivée juste après le retour de balayage) ; jamais plus de 2 par période.
+                True(after[2] <= 2 && after[1] <= total + (int)(60000 / period) + 1, "nouvelle règle : ≤ 1 rendu par capture et par rafraîchissement vide, ≤ 2 par période");
             });
             Case("cible écran (mode E) : une fenêtre protégée contre la capture n'est jamais la source en direct (Discord, 24/11)", () =>
             {
