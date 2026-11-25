@@ -13,6 +13,7 @@ namespace Raptoru.Chaos
         /// capacity : réservée d'avance (bancs : aucune allocation pendant la mesure).
         public Samples(int capacity = 0) { v = new List<double>(capacity); }
         public int Count { get { return v.Count; } }
+        public double At(int i) { return v[i]; }
         public void Add(double x) { if (v.Count < 10000) v.Add(x); }
         public void Clear() { v.Clear(); }
         public double P(int pct)

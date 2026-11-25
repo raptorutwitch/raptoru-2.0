@@ -342,6 +342,212 @@ namespace Raptoru.Chaos
                 "note", "Temps GPU du moteur Chaos seul, hors écran (pas de capture, pas de présentation, pas de jeu) : un coût relatif entre effets, pas les images/s d'un jeu.");
         }
 
+        // ---------- Banc par phases (docs/chaos/BENCH_EFFETS.md) ----------
+        /// --perf-phases [--w 2560 --h 1440] [--hz 60] [--repeats 3] [--effects a,b] [--all-variants] [--pace] [--raw <fichier>]
+        /// Chaque effet, à chacun de ses paliers (niveaux ou variantes proposés aux viewers) et à son réglage par défaut,
+        /// joué EN ENTIER (entrée, maintien, sortie) sur la scène de synthèse qui bouge, HORS ÉCRAN. La cadence du moteur est
+        /// rejouée à « hz » (une nouvelle image du jeu à chaque rafraîchissement ; Cadence.Timed/Due et l'empreinte de
+        /// l'image, comme Engine.cs) : une image n'est rendue que si le moteur la rendrait. Relevés par phase : images
+        /// rendues, temps GPU (horodatages) p50/p95/p99/max, GPU par seconde, CPU de préparation des commandes. Activation
+        /// (préparation, première image) et désactivation (libération, mémoire vidéo rendue) à part. --pace : temps réel
+        /// (banc OBS : la charge arrive au rythme du vrai moteur) ; sinon au plus vite, GPU à pleine fréquence comme en jeu.
+        /// Lignes JSON ; « phase » horodatée (QPC en ms, même horloge pour tous les processus). Garde de jeu au départ et
+        /// entre deux mesures.
+        sealed class PCase { public string Id, Effect, Variant, Level, Tier; public bool Extra; }
+        sealed class PhaseAcc
+        {
+            public int Ticks, Renders, Static, Skipped, MaxPasses;
+            public readonly Samples Gpu = new Samples(4096), Cpu = new Samples(4096);
+            public Dictionary<string, object> ToJson(int hz)
+            {
+                double secs = Ticks / (double)hz, sum = 0;
+                for (int i = 0; i < Gpu.Count; i++) sum += Gpu.At(i);
+                // GPU par seconde : sur les images mesurées, rapporté à toutes les images rendues de la phase.
+                double perS = Gpu.Count > 0 && secs > 0 ? sum / Gpu.Count * Renders / secs : 0;
+                return J.Map("ticks", Ticks, "renders", Renders, "static_skips", Static, "not_due", Skipped,
+                    "renders_per_s", secs > 0 ? (object)Math.Round(Renders / secs, 1) : null, "gpu_samples", Gpu.Count,
+                    "gpu_ms_p50", Gpu.Count > 0 ? (object)Gpu.P(50) : null, "gpu_ms_p95", Gpu.Count > 0 ? (object)Gpu.P(95) : null,
+                    "gpu_ms_p99", Gpu.Count > 0 ? (object)Gpu.P(99) : null, "gpu_ms_max", Gpu.Count > 0 ? (object)Gpu.P(100) : null,
+                    "gpu_ms_per_s", Math.Round(perS, 2), "cpu_ms_p50", Cpu.Count > 0 ? (object)Cpu.P(50) : null,
+                    "cpu_ms_p95", Cpu.Count > 0 ? (object)Cpu.P(95) : null, "cpu_ms_max", Cpu.Count > 0 ? (object)Cpu.P(100) : null,
+                    "passes", MaxPasses);
+            }
+        }
+        static double QpcMs() { return Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency; }
+
+        public static int Phases(string[] a)
+        {
+            outw = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = false };
+            int w = IntArg(a, "--w", 2560), h = IntArg(a, "--h", 1440), hz = Math.Max(30, Math.Min(240, IntArg(a, "--hz", 60)));
+            int repeats = Math.Max(1, Math.Min(10, IntArg(a, "--repeats", 3)));
+            bool pace = a.Contains("--pace"), allVariants = a.Contains("--all-variants"), smoke = a.Contains("--smoke");
+            string only = Arg(a, "--effects", null), rawFile = Arg(a, "--raw", null), tierOnly = Arg(a, "--tiers", null);
+            int parent = IntArg(a, "--parent", 0);
+            long deadline = IntArg(a, "--deadline-ms", 3600000);
+            if (smoke) { w = 160; h = 90; repeats = 1; }
+            var total = Stopwatch.StartNew();
+            string game = N.GameActivity();
+            if (game != null && !smoke)
+            {
+                Emit(J.Map("type", "error", "code", "game_active", "message", "Un jeu ou une application plein écran est actif (" + game + ") : banc refusé."));
+                return 3;
+            }
+            AppDomain.MonitoringIsEnabled = true;
+            var reg = Registry.Embedded();
+            var gpu = new Gpu();
+            var lib = new ShaderLibrary(gpu, null);
+            lib.Warm();
+            var pool = new TexturePool(gpu);
+            var timer = new GpuTimer(gpu);
+            var text = new TextRaster(gpu);
+            var rig = new Bench3Rig(gpu, (uint)w, (uint)h);
+            var perf = PerformanceConfig.For("qualite");
+            var safety = new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs };
+            var raw = rawFile != null ? new StreamWriter(rawFile, false, new UTF8Encoding(false)) : null;
+
+            // Plan : référence (copie seule), puis chaque effet : réglage par défaut, chaque palier ; --all-variants : les autres variantes.
+            var cases = new List<PCase>();
+            if (only == null || only.Split(',').Contains("reference")) cases.Add(new PCase { Id = "reference" });
+            foreach (var d in reg.Effects.Values.Where(x => !x.Internal && (only == null || only.Split(',').Contains(x.Id))).OrderBy(x => x.Order))
+            {
+                object pv;
+                var viewer = d.Raw.TryGetValue("viewer", out pv) ? pv as Dictionary<string, object> : null;
+                bool byLevel = viewer != null && J.Str(viewer, "tier_kind", null) == "level";
+                var tiers = viewer != null ? J.Arr(viewer, "tiers").Select(x => Convert.ToString(x, CultureInfo.InvariantCulture)).ToList() : new List<string>();
+                if (tierOnly == null || tierOnly.Split(',').Contains("defaut")) cases.Add(new PCase { Id = d.Id + "@defaut", Effect = d.Id, Tier = "defaut" });
+                foreach (var t in tiers)
+                {
+                    if (tierOnly != null && !tierOnly.Split(',').Contains(t)) continue;
+                    if (byLevel && d.Level(t) == null || !byLevel && !d.Variants.ContainsKey(t)) continue;
+                    cases.Add(new PCase { Id = d.Id + "@" + t, Effect = d.Id, Tier = t, Level = byLevel ? t : null, Variant = byLevel ? null : t });
+                }
+                if (allVariants)
+                    foreach (var v in d.Variants.Keys)
+                        if (byLevel || !tiers.Contains(v)) cases.Add(new PCase { Id = d.Id + "~" + v, Effect = d.Id, Tier = "variante " + v, Variant = v, Extra = true });
+            }
+            if (smoke) cases = cases.Take(3).ToList();
+            Emit(J.Map("type", "start", "mode", "phases", "resolution", w + "x" + h, "hz", hz, "repeats", repeats, "pace", pace, "smoke", smoke,
+                "cases", cases.Count, "system", SysInfo(gpu), "qpc_ms", Math.Round(QpcMs(), 1)));
+            int caseNo = 0;
+            foreach (var cs in cases)
+            {
+                caseNo++;
+                int reps = cs.Extra ? 1 : repeats;
+                for (int rep = 1; rep <= reps; rep++)
+                {
+                    string why = Abort(parent, total, deadline) ?? (!smoke && N.GameActivity() != null ? "game_active" : null);
+                    if (why != null)
+                    {
+                        Emit(J.Map("type", "error", "code", why, "message", why == "game_active" ? "Un jeu ou une application plein écran vient de démarrer : banc arrêté." : "banc arrêté (" + why + ")"));
+                        if (raw != null) raw.Dispose();
+                        return 5;
+                    }
+                    Emit(J.Map("type", "progress", "case", cs.Id, "n", caseNo, "of", cases.Count, "rep", rep));
+                    Dictionary<string, object> res;
+                    try { res = PhaseRun(reg, gpu, lib, pool, timer, text, rig, perf, safety, cs, rep, hz, pace, raw); }
+                    catch (Exception e) { res = J.Map("status", "failed", "error", e.GetType().Name + " : " + e.Message); }
+                    res["case"] = cs.Id; res["effect"] = cs.Effect; res["tier"] = cs.Tier; res["variant"] = cs.Variant; res["level"] = cs.Level; res["rep"] = rep;
+                    res["extra"] = cs.Extra;
+                    Emit(J.Map("type", "result", "result", res));
+                }
+            }
+            if (raw != null) raw.Dispose();
+            Emit(J.Map("type", "end", "ok", true, "elapsed_ms", total.ElapsedMilliseconds));
+            return 0;
+        }
+
+        static Dictionary<string, object> PhaseRun(Registry reg, Gpu gpu, ShaderLibrary lib, TexturePool pool, GpuTimer timer, TextRaster text, Bench3Rig rig,
+            PerformanceConfig perf, SafetyConfig safety, PCase cs, int rep, int hz, bool pace, StreamWriter raw)
+        {
+            D3D11_TEXTURE2D_DESC od; Com.Fn<TexGetDesc>(rig.Out, 10)(rig.Out, out od);
+            uint W = od.Width, H = od.Height;
+            pool.Trim(long.MaxValue / 2, 0);
+            double vram0 = gpu.VideoMemoryMB();
+            var sw = Stopwatch.StartNew();
+            EffectPreview.Sim sim = null;
+            long inMs = 0, exitAt = 10000, end = 10000;
+            if (cs.Effect != null)
+            {
+                var P = Params.Resolve(reg.Get(cs.Effect), cs.Variant, null, null, null, null, reg.Limits, safety, true, cs.Level);
+                sim = new EffectPreview.Sim(P, 777 + rep, gpu, lib, text, W, H, -1);
+                inMs = P.In.Instant ? 0 : P.In.DurationMs; exitAt = sim.ExitAt; end = sim.Total;
+            }
+            double actCpu = sw.Elapsed.TotalMilliseconds, vramAct = gpu.VideoMemoryMB(), vramPeak = vramAct;
+            var acc = new Dictionary<string, PhaseAcc> { { "in", new PhaseAcc() }, { "hold", new PhaseAcc() }, { "out", new PhaseAcc() } };
+            var first = new Samples(4);
+            Action<string, double> add = (l, ms) => { if (l == "first") first.Add(ms); else acc[l].Gpu.Add(ms); };
+            var fb = new FrameBuilder(W, H, true);
+            bool shown = false, hasSig = false, clockDriven = false, anyClock = false;
+            long lastSig = 0;
+            string current = null;
+            long alloc0 = AppDomain.CurrentDomain.MonitoringTotalAllocatedMemorySize;
+            var proc = Process.GetCurrentProcess();
+            double cpuProc0 = proc.TotalProcessorTime.TotalMilliseconds;
+            var clock = Stopwatch.StartNew();
+            var cpu = new Stopwatch();
+            for (int n = 0; ; n++)
+            {
+                long t = (long)Math.Round(n * 1000.0 / hz);
+                if (t > end) break;
+                if (pace) { long wait = t - clock.ElapsedMilliseconds; if (wait > 1) Thread.Sleep((int)wait - 1); while (clock.ElapsedMilliseconds < t) Thread.SpinWait(50); }
+                string phase = t < inMs ? "in" : t < exitAt ? "hold" : "out";
+                if (phase != current) { current = phase; Emit(J.Map("type", "phase", "case", cs.Id, "rep", rep, "phase", phase, "t_ms", t, "qpc_ms", Math.Round(QpcMs(), 1))); }
+                var A = acc[phase];
+                A.Ticks++;
+                rig.Pan(t); // nouvelle image du jeu à chaque rafraîchissement
+                bool needsCapture = sim == null || sim.Fx.NeedsCapture;
+                bool animating = false;
+                if (sim != null) { if (t >= exitAt) sim.Anim.BeginExit(exitAt); animating = sim.Anim.Animating(t); }
+                bool timed = Cadence.Timed(animating, needsCapture, false, false, clockDriven);
+                if (!Cadence.Due(shown, timed, true, needsCapture)) { A.Skipped++; continue; }
+                cpu.Restart();
+                fb.Reset(W, H, needsCapture);
+                fb.LowQuality = false;
+                fb.Scale = perf.RenderScale;
+                if (sim != null) { sim.F.ClockRead = false; sim.Render(fb, t); clockDriven = sim.F.ClockRead; anyClock |= clockDriven; }
+                long sig = fb.Signature(lib, t / 1000f);
+                if (!needsCapture && shown && hasSig && sig == lastSig) { A.Static++; continue; }
+                timer.Begin(shown ? phase : "first");
+                if (needsCapture && fb.NeedsInputMips) gpu.GenerateMips(rig.SrcSrv);
+                fb.Execute(gpu, lib, pool, null, needsCapture ? rig.SrcSrv : IntPtr.Zero, rig.OutRtv, t, t / 1000f);
+                timer.End();
+                A.Cpu.Add(cpu.Elapsed.TotalMilliseconds);
+                gpu.Flush();
+                A.Renders++; A.MaxPasses = Math.Max(A.MaxPasses, fb.PassCount);
+                shown = true; hasSig = true; lastSig = sig;
+                timer.Collect(add);
+                for (int k = 0; timer.Pending > 6 && k < 2000; k++) { Thread.Sleep(1); timer.Collect(add); }
+                if ((n & 31) == 0) vramPeak = Math.Max(vramPeak, gpu.VideoMemoryMB());
+            }
+            for (int k = 0; k < 50 && timer.Pending > 0; k++) { Thread.Sleep(5); timer.Collect(add); }
+            proc.Refresh();
+            double cpuProc = proc.TotalProcessorTime.TotalMilliseconds - cpuProc0, wall = clock.Elapsed.TotalMilliseconds;
+            long alloc = AppDomain.CurrentDomain.MonitoringTotalAllocatedMemorySize - alloc0;
+            double vramEnd = gpu.VideoMemoryMB();
+            sw.Restart();
+            if (sim != null) { sim.Fx.Stop(); sim.Fx.Dispose(); }
+            double disposeCpu = sw.Elapsed.TotalMilliseconds, vramDisposed = gpu.VideoMemoryMB();
+            pool.Trim(long.MaxValue / 2, 0);
+            double vramTrim = gpu.VideoMemoryMB();
+            int renders = acc.Values.Sum(x => x.Renders);
+            if (raw != null)
+            {
+                foreach (var kv in acc)
+                    raw.WriteLine(J.Write(J.Map("case", cs.Id, "rep", rep, "phase", kv.Key, "gpu_ms", Enumerable.Range(0, kv.Value.Gpu.Count).Select(i => (object)Math.Round(kv.Value.Gpu.At(i), 4)).ToArray(),
+                        "cpu_ms", Enumerable.Range(0, kv.Value.Cpu.Count).Select(i => (object)Math.Round(kv.Value.Cpu.At(i), 4)).ToArray())));
+                raw.Flush();
+            }
+            return J.Map("status", "ok", "resolution", W + "x" + H, "hz", hz, "paced", pace,
+                "duration_ms", exitAt, "in_ms", inMs, "out_ms", end - exitAt, "clock_driven", anyClock,
+                "needs_capture", sim == null || sim.P.Def.RequiresCapture,
+                "phases", J.Map("in", acc["in"].ToJson(hz), "hold", acc["hold"].ToJson(hz), "out", acc["out"].ToJson(hz)),
+                "activation", J.Map("cpu_ms", Math.Round(actCpu, 3), "first_gpu_ms", first.Count > 0 ? (object)first.P(100) : null),
+                "deactivation", J.Map("cpu_ms", Math.Round(disposeCpu, 3)),
+                "vram_mb", J.Map("before", vram0, "after_prepare", vramAct, "peak", vramPeak, "end", vramEnd, "after_dispose", vramDisposed, "after_trim", vramTrim),
+                "process_cpu_ms_per_s", wall > 0 ? (object)Math.Round(cpuProc / wall * 1000, 1) : null,
+                "alloc_bytes_per_render", renders > 0 ? (object)Math.Round(alloc / (double)renders) : null);
+        }
+
         // ---------- MODE B : télémétrie pendant un essai en jeu ----------
         public static int Monitor(string[] a)
         {
