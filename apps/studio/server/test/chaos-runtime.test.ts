@@ -250,6 +250,44 @@ describe('API locale Studio › Chaos', () => {
     });
   });
 
+  it('statistiques d’OBS en lecture seule (banc en jeu) : GetStats par la connexion de Studio, rien d’autre', async () => {
+    const sent: string[] = [];
+    let connected = false;
+    const obs = {
+      get connected() {
+        return connected;
+      },
+      request: async (type: string) => {
+        sent.push(type);
+        return { renderSkippedFrames: 3, outputSkippedFrames: 1 };
+      },
+    };
+    const rt = new ChaosRuntime({
+      exe: 'x',
+      stateDir: mkdtempSync(join(tmpdir(), 'chaos-stats-')),
+      spawnImpl: fake(),
+      pingMs: 50,
+      obs: () => obs,
+    });
+    cleanup.push(() => rt.stop());
+    const call = await serve(rt);
+    expect((await call('/obs/stats')).status).toBe(503);
+    connected = true;
+    const st = await call('/obs/stats');
+    expect(st.status).toBe(200);
+    expect(st.body).toEqual({ renderSkippedFrames: 3, outputSkippedFrames: 1 });
+    expect(sent.filter((t) => t === 'GetStats')).toHaveLength(1);
+    expect(
+      sent.filter(
+        (t) =>
+          t.startsWith('Set') ||
+          t.startsWith('Create') ||
+          t.startsWith('Remove'),
+      ),
+    ).toEqual([]);
+    expect((await call('/obs/stats', undefined, false)).status).toBe(403);
+  });
+
   it('moteur plus ancien que Studio : la page reçoit les commandes qu’il ne connaît pas', async () => {
     for (const [env, missing] of [
       [{}, []],

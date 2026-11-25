@@ -399,6 +399,18 @@ export class ChaosRuntime {
             reply(200, await this.obsOut.disableAll('coupure depuis Studio')),
             true
           );
+        case 'GET /obs/stats': {
+          // Lecture seule, par la connexion existante de Studio (aucune nouvelle connexion à OBS) : compteurs d'OBS
+          // (images en retard au rendu, sautées à l'encodage, temps de rendu) pour le banc en jeu
+          // (apps/chaos-engine/tools/mesure-jeu.mjs, docs/chaos/BENCH_EFFETS.md).
+          const o = this.opts.obs?.();
+          if (!o?.connected)
+            return (
+              reply(503, { error: 'obs_offline', message: 'OBS non connecté' }),
+              true
+            );
+          return (reply(200, await o.request('GetStats', {})), true);
+        }
         case 'GET /obs/relay':
           return (reply(200, await this.obsRelay.plan()), true);
         case 'POST /obs/relay/prepare':
