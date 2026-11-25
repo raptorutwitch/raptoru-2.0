@@ -59,6 +59,8 @@ export class ChaosRuntime {
     private readonly opts: ChaosEngineOptions & {
       /** La seule connexion OBS de Studio (celle du Bonk) ; absente : diffusion OBS indisponible. */
       obs?: () => ObsLike | null;
+      /** Durée minimale d'une phase de mesure en jeu par l'API (5 s ; les tests enchaînent des phases de 1 s). */
+      perfMinPhaseS?: number;
     },
   ) {
     const o = opts;
@@ -94,8 +96,12 @@ export class ChaosRuntime {
       this.obsOut.onEngineExit();
       void this.obsCursor.releaseAll();
     });
-    this.perf = new PerfLab(o.exe, o.stateDir, (cmd, args) =>
-      this.client.call(cmd as Parameters<ChaosEngineClient['call']>[0], args),
+    this.perf = new PerfLab(
+      o.exe,
+      o.stateDir,
+      (cmd, args) =>
+        this.client.call(cmd as Parameters<ChaosEngineClient['call']>[0], args),
+      o.spawnImpl,
     );
     this.client.on('event', (e: ChaosEvent) => {
       if (e.event === 'engine.telemetry') {
@@ -511,7 +517,8 @@ export class ChaosRuntime {
           );
         case 'POST /perf/offscreen/cancel':
           return (reply(200, this.perf.cancelOffscreen()), true);
-        case 'POST /perf/live/start':
+        case 'POST /perf/live/start': {
+          const min = this.opts.perfMinPhaseS ?? 5;
           return (
             reply(
               200,
@@ -519,13 +526,14 @@ export class ChaosRuntime {
                 effect: String(body.effect ?? ''),
                 label: typeof body.label === 'string' ? body.label : undefined,
                 // Phases de 5 à 60 s depuis la page (la classe accepte moins pour ses tests).
-                reference_s: Math.max(5, Number(body.reference_s ?? 10)),
-                effect_s: Math.max(5, Number(body.effect_s ?? 10)),
-                after_s: Math.max(5, Number(body.after_s ?? 10)),
+                reference_s: Math.max(min, Number(body.reference_s ?? 10)),
+                effect_s: Math.max(min, Number(body.effect_s ?? 10)),
+                after_s: Math.max(min, Number(body.after_s ?? 10)),
               }),
             ),
             true
           );
+        }
         case 'POST /perf/live/stop':
           return (reply(200, await this.perf.stopLive()), true);
         case 'POST /perf/live/clear':

@@ -28,6 +28,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { AB_PHASES, AB_PLAN, abRun } from './ab-run.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const args = process.argv.slice(2);
@@ -268,7 +269,7 @@ async function record() {
     });
     return { status: r.status, body: await r.json().catch(() => null) };
   };
-  if (args.includes('--ab')) await abRun(mark, get, post, log);
+  if (args.includes('--ab')) await abFromConsole(mark, get, post, log);
   else
     await new Promise((done) => {
       const rl = createInterface({ input: process.stdin });
@@ -311,172 +312,61 @@ async function record() {
 }
 
 // ---------------------------------------------------------------- A/B (--ab)
-// docs/chaos/BENCH_EFFETS.md § 8 : isoler le coût fixe du calque et de la composition, indépendamment des shaders.
-// Calque neutre (diag.watermark : même trajet qu'un Miroir — capture, image plein écran, présentation continue — avec
-// un filigrane de 2/255, invisible), Miroir, Brouillard, deux fois en ordre inversé. Chacun par le Performance Lab de
-// Studio, comme « Lancer la mesure » : 10 s sans effet, 25 s d'effet sur l'écran de sa fiche, 10 s sans effet. Antoni
-// reste dans le jeu du début à la fin (aucun Alt+Tab). Rien ne touche au jeu, aux entrées ni à OBS.
-export const AB_PLAN = [
-  'diag.watermark',
-  'mirror',
-  'fog',
-  'fog',
-  'mirror',
-  'diag.watermark',
-];
+// docs/chaos/BENCH_EFFETS.md § 8.5 : isoler le coût fixe du calque et de la composition, indépendamment des shaders.
+// Le déroulé (plan, phases, cycle de vie vérifié côté serveur, nettoyage) est dans ab-run.mjs, testé avec le vrai
+// runtime de Studio (apps/studio/server/test/chaos-perf-chain.test.ts). Ici : la console seulement.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-/** o.auto (auto-test) : départ immédiat, sans console ; o.prepMs, o.pollMs : délais (10 s, 1 s en vrai). */
-async function abRun(mark, get, post, log, o = {}) {
-  const prepMs = o.prepMs ?? 10000,
-    pollMs = o.pollMs ?? 1000;
+async function abFromConsole(mark, get, post, log) {
+  const min = Math.round(
+    (AB_PLAN.length *
+      (AB_PHASES.reference_s + AB_PHASES.effect_s + AB_PHASES.after_s + 2)) /
+      60,
+  );
   console.log(
-    `\nA/B : ${AB_PLAN.join(', ')}. Chacun : 10 s sans effet, 25 s d'effet, 10 s sans effet (≈ ${Math.round((AB_PLAN.length * 47) / 60)} min).`,
+    `\nA/B : ${AB_PLAN.join(', ')}. Chacun : ${AB_PHASES.reference_s} s sans effet, ${AB_PHASES.effect_s} s d'effet, ${AB_PHASES.after_s} s sans effet (≈ ${min} min).`,
   );
   console.log(
     "Studio réduit ; Overwatch au premier plan, Champ d'entraînement, toujours au même endroit et de la même façon.",
   );
   console.log(
-    'Entrée = départ (10 s pour revenir dans le jeu, puis ne quitte plus le jeu) ; « q » puis Entrée = arrêt.',
+    'Entrée = départ (10 s pour revenir dans le jeu, puis ne quitte plus le jeu) ; « q » puis Entrée = arrêt propre.',
   );
-  const rl = o.auto ? null : createInterface({ input: process.stdin });
+  const rl = createInterface({ input: process.stdin });
   let stop = false;
-  if (rl) {
-    await new Promise((r) =>
-      rl.once('line', (l) => {
-        if (l.trim() === 'q') stop = true;
-        r();
-      }),
-    );
-    rl.on('line', (l) => {
+  await new Promise((r) =>
+    rl.once('line', (l) => {
       if (l.trim() === 'q') stop = true;
-    });
-    process.on('SIGINT', () => {
-      stop = true;
-    });
-  }
+      r();
+    }),
+  );
+  rl.on('line', (l) => {
+    if (l.trim() === 'q') stop = true;
+  });
+  process.on('SIGINT', () => {
+    stop = true;
+  });
   if (!stop) {
     mark('ab-preparation');
-    await sleep(prepMs);
+    // Le temps de revenir dans le jeu (geste d'Antoni), pas une attente de Studio : Studio est vérifié par abRun.
+    for (let k = 0; k < 40 && !stop; k++) await sleep(250);
   }
-  for (let i = 0; i < AB_PLAN.length && !stop; i++) {
-    const effect = AB_PLAN[i];
-    mark(`ab-${i + 1}-${effect}`);
-    const r = await post('/api/chaos/perf/live/start', {
-      effect,
-      label: `A/B ${effect}`,
-      reference_s: 10,
-      effect_s: 25,
-      after_s: 10,
-    }).catch((e) => ({ status: 0, body: { message: e.message } }));
-    if (r.status !== 200) {
-      console.log(
-        `  ✗ ${effect} : ${r.body?.message ?? r.body?.error ?? r.status}`,
-      );
-      log('steps.jsonl', { step: 'ab-erreur', effect, error: r.body });
-      break;
-    }
-    let status = 'running';
-    for (let k = 0; k < 120 && status === 'running' && !stop; k++) {
-      await sleep(pollMs);
-      try {
-        status = (await get('/api/chaos/perf')).body?.live?.status ?? status;
-      } catch {
-        /* Studio occupé : on réessaie */
-      }
-    }
-    if (stop) {
-      await post('/api/chaos/perf/live/stop', {}).catch(() => {});
-      console.log('  arrêt demandé : effet et mesure arrêtés');
-      break;
-    }
-    console.log(`  ${status === 'done' ? '✓' : '✗'} ${effect} (${status})`);
-    if (status !== 'done') {
-      log('steps.jsonl', { step: 'ab-erreur', effect, status });
-      break;
-    }
-  }
-  rl?.close();
-}
-
-/** --self-test-ab : le déroulé A/B contre un faux Studio local (aucun effet réel, aucune trace) : chaque effet du plan
- *  lancé une fois, dans l'ordre, avec ses phases ; un refus de Studio arrête le déroulé. */
-async function selfTestAb() {
-  const { createServer } = await import('node:http');
-  const started = [];
-  let refuseAt = -1;
-  const server = createServer((req, res) => {
-    const send = (code, body) => {
-      res.writeHead(code, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(body));
-    };
-    if (req.headers['x-raptoru-studio'] !== '1') return send(403, {});
-    if (req.url === '/api/chaos/perf/live/start') {
-      let b = '';
-      req.on('data', (d) => (b += d));
-      req.on('end', () => {
-        if (started.length === refuseAt) return send(409, { error: 'busy' });
-        started.push({ ...JSON.parse(b), at: Date.now() });
-        send(200, { status: 'running' });
-      });
-      return;
-    }
-    const last = started.at(-1);
-    if (req.url === '/api/chaos/perf')
-      return send(200, {
-        live: {
-          status: last && Date.now() - last.at > 150 ? 'done' : 'running',
+  const r = stop
+    ? { done: 0, failed: { reason: 'arrêt demandé' }, clean: true }
+    : await abRun(
+        { get, post },
+        {
+          mark,
+          note: (o) => log('steps.jsonl', o),
+          say: (t) => console.log(t),
+          shouldStop: () => stop,
         },
-      });
-    send(404, {});
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const get = async (p) => {
-    const r = await fetch(base + p, { headers: { 'x-raptoru-studio': '1' } });
-    return { status: r.status, body: await r.json() };
-  };
-  const post = async (p, body) => {
-    const r = await fetch(base + p, {
-      method: 'POST',
-      headers: { 'x-raptoru-studio': '1' },
-      body: JSON.stringify(body),
-    });
-    return { status: r.status, body: await r.json() };
-  };
-  const marks = [],
-    logs = [];
-  const run = () =>
-    abRun(
-      (m) => marks.push(m),
-      get,
-      post,
-      (f, o) => logs.push(o),
-      { auto: true, prepMs: 0, pollMs: 50 },
-    );
-  await run();
-  const okPlan =
-    started.map((s) => s.effect).join() === AB_PLAN.join() &&
-    started.every(
-      (s) => s.reference_s === 10 && s.effect_s === 25 && s.after_s === 10,
-    );
-  const okMarks =
-    marks[0] === 'ab-preparation' &&
-    marks.slice(1).join() === AB_PLAN.map((e, i) => `ab-${i + 1}-${e}`).join();
-  started.length = 0;
-  marks.length = 0;
-  refuseAt = 2;
-  await run();
-  const okStop =
-    started.length === 2 && logs.some((l) => l.step === 'ab-erreur');
-  server.close();
-  const checks = [
-    [okPlan, 'plan lancé dans l’ordre, phases 10 / 25 / 10 s'],
-    [okMarks, 'étapes marquées'],
-    [okStop, 'un refus de Studio arrête le déroulé'],
-  ];
-  for (const [ok, what] of checks)
-    console.log(`${ok ? 'ok    ' : 'ÉCHEC '} ${what}`);
-  process.exit(checks.every(([ok]) => ok) ? 0 : 1);
+      );
+  console.log(
+    r.failed
+      ? `\nA/B interrompu (${r.done}/${AB_PLAN.length} essais) : ${r.failed.reason}. État de Studio : ${r.clean ? 'propre, aucun effet actif' : 'À VÉRIFIER — fais STOP ALL'}.`
+      : `\nA/B terminé : ${r.done}/${AB_PLAN.length} essais.`,
+  );
+  rl.close();
 }
 
 // ---------------------------------------------------------------- analyse
@@ -1048,8 +938,7 @@ function selfTest() {
 }
 
 // Après toutes les déclarations (constantes d'aide comprises).
-if (args.includes('--self-test-ab')) await selfTestAb();
-else if (args.includes('--self-test')) selfTest();
+if (args.includes('--self-test')) selfTest();
 else if (args.includes('--analyse')) {
   const dir = resolve(arg('--analyse'));
   const r = analyse(dir);

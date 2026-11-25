@@ -1,11 +1,13 @@
 // Faux moteur Chaos (tests du pilote Studio) : parle le protocole v2 sur stdin/stdout, sans GPU ni fenêtre.
 // FAKE_CHAOS_CRASH_AFTER=n : quitte brutalement (code 7) à la n-ième commande, pour éprouver la relance.
 // FAKE_CHAOS_OLD=1 : moteur d'avant le catalogue d'effets (n'annonce pas ses commandes).
+// FAKE_CHAOS_EFFECTS=a,b : effets que « effect.activate » accepte (défaut : flip).
 import process from 'node:process';
 import { createInterface } from 'node:readline';
 
 const out = (o) => process.stdout.write(`${JSON.stringify({ v: 2, ...o })}\n`);
 const crashAfter = Number(process.env.FAKE_CHAOS_CRASH_AFTER ?? 0);
+const activable = (process.env.FAKE_CHAOS_EFFECTS ?? 'flip').split(',');
 const active = [];
 let n = 0;
 let pings = 0;
@@ -89,7 +91,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
         target: c.target,
       });
     case 'effect.activate':
-      if (c.effect !== 'flip')
+      if (!activable.includes(c.effect))
         return err('unknown_effect', `effet inconnu : ${c.effect}`);
       active.push({ request_id: c.request_id, effect: c.effect });
       return res({

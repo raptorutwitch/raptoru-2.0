@@ -84,6 +84,8 @@ export class PerfLab {
     private readonly exe: string,
     stateDir: string,
     private readonly call: EngineCall,
+    /** Lancement de la télémétrie (tests : faux moteur) ; par défaut, le moteur lui-même. */
+    private readonly spawnImpl?: (args: string[]) => ChildProcess,
   ) {
     this.dir = join(stateDir, 'perf');
     try {
@@ -129,6 +131,9 @@ export class PerfLab {
       offscreen: this.offscreen,
       live: this.live,
       live_results: this.liveResults,
+      /** Une mesure en jeu peut démarrer maintenant (rien en cours, aucune télémétrie ni banc hors écran en vie). */
+      live_available:
+        this.live.status !== 'running' && !this.liveProc && !this.offProc,
     };
   }
 
@@ -284,28 +289,29 @@ export class PerfLab {
       samples: 0,
     };
     const st = this.live;
-    const p = spawn(
-      this.exe,
-      [
-        '--perf-monitor',
-        '--interval-ms',
-        '500',
-        '--parent',
-        String(process.pid),
-        '--deadline-ms',
-        String((phases.reference + phases.effect + phases.after + 30) * 1000),
-      ],
-      { windowsHide: true },
-    );
+    const args = [
+      '--perf-monitor',
+      '--interval-ms',
+      '500',
+      '--parent',
+      String(process.pid),
+      '--deadline-ms',
+      String((phases.reference + phases.effect + phases.after + 30) * 1000),
+    ];
+    const p = this.spawnImpl
+      ? this.spawnImpl(args)
+      : spawn(this.exe, args, { windowsHide: true });
     this.liveProc = p;
-    createInterface({ input: p.stdout }).on('line', (line) => {
+    // stdout toujours en tube (spawn par défaut ; les lanceurs de test le gardent aussi).
+    createInterface({ input: p.stdout! }).on('line', (line) => {
       let m: Json;
       try {
         m = JSON.parse(line) as Json;
       } catch {
         return;
       }
-      if (this.live !== st) return;
+      // Lignes d'une télémétrie déjà libérée (mesure finie, ou suivante commencée) : ignorées.
+      if (this.live !== st || st.status !== 'running') return;
       if (m.type === 'start') {
         this.liveSystem = (m.system as Json) ?? null;
         const cpu = (this.liveSystem?.cpu as Json | undefined)?.logical_cores;
@@ -318,7 +324,8 @@ export class PerfLab {
       }
     });
     p.on('exit', () => {
-      this.liveProc = null;
+      // La sortie (asynchrone) d'une ancienne télémétrie ne doit jamais libérer celle de la mesure suivante.
+      if (this.liveProc === p) this.liveProc = null;
       if (st.status === 'running') {
         st.status = 'failed';
         st.error = {
@@ -394,15 +401,25 @@ export class PerfLab {
     this.liveTimers = [];
   }
 
+  /**
+   * Fin de la télémétrie, libérée TOUT DE SUITE : « done » (ou « failed », « cancelled ») et Studio libre au même
+   * instant. Avant le 25/11, la place n'était rendue qu'à la sortie du processus, signalée plus tard par Windows : une
+   * mesure demandée juste après « done » était refusée (« une mesure en jeu est déjà en cours », A/B interrompu).
+   */
   private endLive() {
     this.clearTimers();
-    this.liveProc?.stdin?.end();
-    this.liveProc?.kill();
+    const p = this.liveProc;
+    this.liveProc = null;
+    p?.stdin?.end();
+    p?.kill();
   }
 
   /** Arrêt immédiat : l'effet s'arrête, la télémétrie aussi ; la mesure partielle n'est pas gardée. */
   async stopLive() {
-    if (this.live.status !== 'running') return this.live;
+    if (this.live.status !== 'running') {
+      this.endLive(); // une télémétrie restée en vie sans mesure en cours
+      return this.live;
+    }
     const effect = this.live.effect;
     this.live.status = 'cancelled';
     this.endLive();
