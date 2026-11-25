@@ -555,8 +555,313 @@ namespace Raptoru.Chaos
             return failures == 0 ? 0 : 1;
         }
 
+        // ---------- --effects-load : coût des effets Chaos pour OBS (docs/chaos/BENCH_EFFETS.md, phase B) ----------
+        [StructLayout(LayoutKind.Sequential)] struct AudioInfo { public uint Rate; public int Speakers; }
+        [DllImport("obs.dll", CallingConvention = C)] [return: MarshalAs(UnmanagedType.U1)] static extern bool obs_reset_audio(ref AudioInfo a);
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_get_video();
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_get_audio();
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_video_encoder_create(string id, byte[] name, IntPtr settings, IntPtr hotkeys);
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_audio_encoder_create(string id, byte[] name, IntPtr settings, UIntPtr mixer, IntPtr hotkeys);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_encoder_set_video(IntPtr e, IntPtr video);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_encoder_set_audio(IntPtr e, IntPtr audio);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_encoder_release(IntPtr e);
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_output_create(string id, byte[] name, IntPtr settings, IntPtr hotkeys);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_output_set_video_encoder(IntPtr o, IntPtr e);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_output_set_audio_encoder(IntPtr o, IntPtr e, UIntPtr idx);
+        [DllImport("obs.dll", CallingConvention = C)] [return: MarshalAs(UnmanagedType.U1)] static extern bool obs_output_start(IntPtr o);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_output_stop(IntPtr o);
+        [DllImport("obs.dll", CallingConvention = C)] [return: MarshalAs(UnmanagedType.U1)] static extern bool obs_output_active(IntPtr o);
+        [DllImport("obs.dll", CallingConvention = C)] static extern IntPtr obs_output_get_last_error(IntPtr o);
+        [DllImport("obs.dll", CallingConvention = C)] static extern void obs_output_release(IntPtr o);
+        [DllImport("obs.dll", CallingConvention = C)] static extern uint video_output_get_skipped_frames(IntPtr video);
+        [DllImport("obs.dll", CallingConvention = C)] static extern uint video_output_get_total_frames(IntPtr video);
+        [DllImport("obs.dll", CallingConvention = C)] static extern ulong obs_get_average_frame_time_ns();
+
+        /// Image NV12 reçue (plan de luminance) : part de pixels noirs (Y ≤ 20, plage partielle) et horodatage.
+        struct YSample { public long Ts; public double Zero; }
+        static readonly List<YSample> ySamples = new List<YSample>();
+        static readonly RawVideo onNv12 = (p, f) =>
+        {
+            IntPtr data = Marshal.ReadIntPtr(f, 0);
+            int pitch = Marshal.ReadInt32(f, 8 * IntPtr.Size);
+            long ts = Marshal.ReadInt64(f, 8 * IntPtr.Size + 32);
+            int zero = 0, n = 0;
+            for (int y = H / 40; y < H; y += H / 40)
+                for (int x = W / 50; x < W; x += W / 50) { if (Marshal.ReadByte(new IntPtr(data.ToInt64() + (long)y * pitch + x)) <= 20) zero++; n++; }
+            lock (gate) ySamples.Add(new YSample { Ts = ts, Zero = (double)zero / n });
+        };
+
+        /// Compteurs Windows par processus : temps GPU cumulé (ms) du moteur 3D et de l'encodeur vidéo, sur l'adaptateur où
+        /// ce processus rend (trouvé au premier relevé).
+        sealed class GpuCounters
+        {
+            IntPtr q, c3d, cEnc;
+            public string Luid;
+            public GpuCounters()
+            {
+                if (PdhOpenQueryW(null, IntPtr.Zero, out q) != 0) return;
+                PdhAddEnglishCounterW(q, @"\GPU Engine(*engtype_3D)\Running Time", IntPtr.Zero, out c3d);
+                PdhAddEnglishCounterW(q, @"\GPU Engine(*engtype_VideoEncode)\Running Time", IntPtr.Zero, out cEnc);
+            }
+            public void Sample(out Dictionary<int, double> g3d, out Dictionary<int, double> enc)
+            {
+                PdhCollectQueryData(q);
+                g3d = Read(c3d, true); enc = Read(cEnc, false);
+            }
+            Dictionary<int, double> Read(IntPtr counter, bool findLuid)
+            {
+                var r = new Dictionary<int, double>();
+                uint size = 0, count;
+                PdhGetRawCounterArrayW(counter, ref size, out count, IntPtr.Zero);
+                if (size == 0) return r;
+                IntPtr buf = Marshal.AllocHGlobal((int)size);
+                try
+                {
+                    if (PdhGetRawCounterArrayW(counter, ref size, out count, buf) != 0) return r;
+                    string me = "pid_" + System.Diagnostics.Process.GetCurrentProcess().Id + "_";
+                    for (int i = 0; i < count; i++)
+                    {
+                        IntPtr item = new IntPtr(buf.ToInt64() + i * 48L);
+                        string name = Marshal.PtrToStringUni(Marshal.ReadIntPtr(item));
+                        if (name == null) continue;
+                        double v = Marshal.ReadInt64(item, 24) / 10000.0;
+                        int li = name.IndexOf("luid_", StringComparison.Ordinal);
+                        string luid = li < 0 ? "" : name.Substring(li, Math.Min(name.Length - li, 26));
+                        if (Luid == null && findLuid && name.Contains(me) && v > 0) Luid = luid;
+                        if (Luid == null || luid != Luid) continue;
+                        int a = name.IndexOf("pid_", StringComparison.Ordinal), b = a < 0 ? -1 : name.IndexOf('_', a + 4);
+                        int pid;
+                        if (b < 0 || !int.TryParse(name.Substring(a + 4, b - a - 4), out pid)) continue;
+                        double cur; r.TryGetValue(pid, out cur); r[pid] = cur + v;
+                    }
+                }
+                finally { Marshal.FreeHGlobal(buf); }
+                return r;
+            }
+        }
+
+        sealed class ObsTick { public double Qpc; public uint Frames, Lagged, EncSkipped, EncTotal; public double AvgFrameMs, OwnGpu, EngineGpu, AllGpu, OwnEnc; }
+        static double QpcMs() { return System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency; }
+
+        /// chaos-obs-check.exe --effects-load --engine <ChaosEngine.exe> --out <dossier> [--effects a,b] [--tiers defaut,…]
+        ///   [--repeats 2] [--canvas 1920x1080] [--monitor "@ 0,0"] [--bitrate 8000] [--no-encode]
+        /// OBS isolé (libobs sans fenêtre, configuration jetable, OBS réel non touché) réglé comme le profil Twitch d'Antoni :
+        /// canevas et sortie 1920×1080 à 60 i/s, NV12 709 partiel ; « Écran » = capture DXGI de l'écran 2560×1440 avec
+        /// curseur, ajustée au canevas ; relais sans curseur, minuscule, hors du canevas ; NVENC H.264 (texture) CBR comme
+        /// le stream, écrit dans un fichier jetable du dossier --out (supprimé à la fin, jamais lu).
+        /// Pour chaque effet, ChaosEngine.exe --perf-phases --pace rend l'effet HORS ÉCRAN au rythme réel (60 Hz) : la
+        /// charge GPU du moteur arrive comme en vrai, mais l'effet n'est pas affiché, donc pas capturé par OBS. Par phase
+        /// (entrée, maintien, sortie) : images rendues par OBS, en retard (rendu), sautées (encodage), temps moyen de rendu
+        /// d'une image, temps GPU d'OBS et du moteur, GPU 3D total de l'adaptateur, NVENC, images noires, plus grand écart
+        /// entre deux images de la sortie. Références : OBS seul (début et fin), le moteur qui recopie l'image sans effet.
+        static int EffectsLoad(string[] args)
+        {
+            string obsDir = @"C:\Program Files\obs-studio", outDir = null, match = "@ 0,0", engine = null, effects = null, tiers = "defaut";
+            int cw = 1920, ch = 1080, bitrate = 8000, repeats = 2;
+            bool encode = !args.Contains("--no-encode");
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
+                else if (args[i] == "--obs" && i + 1 < args.Length) obsDir = args[++i];
+                else if (args[i] == "--monitor" && i + 1 < args.Length) match = args[++i];
+                else if (args[i] == "--engine" && i + 1 < args.Length) engine = args[++i];
+                else if (args[i] == "--effects" && i + 1 < args.Length) effects = args[++i];
+                else if (args[i] == "--tiers" && i + 1 < args.Length) tiers = args[++i];
+                else if (args[i] == "--repeats" && i + 1 < args.Length) repeats = int.Parse(args[++i]);
+                else if (args[i] == "--bitrate" && i + 1 < args.Length) bitrate = int.Parse(args[++i]);
+                else if (args[i] == "--canvas" && i + 1 < args.Length) { var c = args[++i].Split('x'); cw = int.Parse(c[0]); ch = int.Parse(c[1]); }
+            }
+            if (outDir == null || engine == null) { Console.Error.WriteLine("--out et --engine obligatoires"); return 2; }
+            outDir = Path.GetFullPath(outDir); engine = Path.GetFullPath(engine);
+            Directory.CreateDirectory(outDir);
+            SetProcessDpiAwarenessContext(new IntPtr(-4));
+            W = cw; H = ch;
+            string bin = Path.Combine(obsDir, @"bin\64bit");
+            SetDllDirectory(bin);
+            Directory.SetCurrentDirectory(bin);
+            if (LoadLibrary(Path.Combine(bin, "obs.dll")) == IntPtr.Zero) { Console.Error.WriteLine("obs.dll introuvable : " + bin); return 2; }
+            string cfg = Path.Combine(outDir, "obs-config").Replace('\\', '/') + "/";
+            Directory.CreateDirectory(cfg);
+            if (!obs_startup("fr-FR", cfg, IntPtr.Zero)) { Console.Error.WriteLine("obs_startup"); return 1; }
+            var report = new Dictionary<string, object>();
+            int failures = 0;
+            string recFile = Path.Combine(outDir, "jetable-encodage.mkv");
+            IntPtr output = IntPtr.Zero, venc = IntPtr.Zero, aenc = IntPtr.Zero, ecran = IntPtr.Zero, relay = IntPtr.Zero, scene = IntPtr.Zero;
+            var ticks = new List<ObsTick>();
+            bool sampling = true;
+            Thread sampler = null;
+            try
+            {
+                var vi = new VideoInfo { Module = Marshal.StringToHGlobalAnsi("libobs-d3d11"), FpsNum = 60, FpsDen = 1, BaseW = (uint)cw, BaseH = (uint)ch, OutW = (uint)cw, OutH = (uint)ch, Format = 2 /* NV12 */, GpuConv = true, Cs = 2 /* 709 */, Range = 1 /* partielle */, Scale = 2 };
+                int rv = obs_reset_video(ref vi);
+                if (rv != 0) throw new InvalidOperationException("obs_reset_video " + rv);
+                var ai = new AudioInfo { Rate = 48000, Speakers = 2 };
+                if (!obs_reset_audio(ref ai)) throw new InvalidOperationException("obs_reset_audio");
+                string plugins = obsDir.Replace('\\', '/');
+                foreach (var m in new[] { "win-capture", "obs-ffmpeg", "obs-nvenc" })
+                {
+                    IntPtr mod;
+                    int r = obs_open_module(out mod, plugins + "/core/" + m + "/" + m + ".dll", plugins + "/core/" + m + "/data");
+                    if (r != 0 || !obs_init_module(mod)) throw new InvalidOperationException(m + " non chargé (" + r + ")");
+                }
+                report["obs"] = FileVersion(Path.Combine(bin, "obs64.exe"));
+                report["canvas"] = cw + "x" + ch + "@60 NV12 709 partielle";
+                string id = null, name = null;
+                var probe = Source("monitor_capture", "sonde", new Dictionary<string, object> { { "method", 1 } });
+                IntPtr props = obs_source_properties(probe), prop = obs_properties_get(props, "monitor_id");
+                for (uint i = 0; prop != IntPtr.Zero && i < (uint)obs_property_list_item_count(prop); i++)
+                {
+                    string nm = Utf8At(obs_property_list_item_name(prop, (UIntPtr)i));
+                    if (id == null && nm.Contains(match)) { id = Utf8At(obs_property_list_item_string(prop, (UIntPtr)i)); name = nm; }
+                }
+                obs_properties_destroy(props);
+                obs_source_release(probe);
+                if (id == null) throw new InvalidOperationException("écran introuvable (« " + match + " »)");
+                report["monitor"] = name;
+                ecran = Source("monitor_capture", "Écran (banc)", new Dictionary<string, object> { { "method", 1 }, { "monitor_id", id }, { "capture_cursor", true } });
+                relay = Source("monitor_capture", "Relais (banc)", new Dictionary<string, object> { { "method", 1 }, { "monitor_id", id }, { "capture_cursor", false } });
+                scene = obs_scene_create("Fullscreen (banc)");
+                var rit = obs_scene_add(scene, relay);
+                var rs = new Vec2 { X = 0.002f, Y = 0.002f }; obs_sceneitem_set_scale(rit, ref rs);
+                var rp = new Vec2 { X = -4000, Y = -4000 }; obs_sceneitem_set_pos(rit, ref rp);
+                var it = obs_scene_add(scene, ecran);
+                obs_sceneitem_set_bounds_type(it, 2);
+                var bb = new Vec2 { X = cw, Y = ch }; obs_sceneitem_set_bounds(it, ref bb);
+                obs_set_output_source(0, obs_scene_get_source(scene));
+                obs_add_raw_video_callback(IntPtr.Zero, onNv12, IntPtr.Zero);
+                if (encode)
+                {
+                    var vs = Data(new Dictionary<string, object> { { "rate_control", "CBR" }, { "bitrate", bitrate }, { "keyint_sec", 2 }, { "multipass", "disabled" }, { "adaptive_quantization", false }, { "lookahead", false } });
+                    venc = obs_video_encoder_create("obs_nvenc_h264_tex", Utf8("nvenc (banc)"), vs, IntPtr.Zero);
+                    obs_data_release(vs);
+                    if (venc == IntPtr.Zero) throw new InvalidOperationException("encodeur obs_nvenc_h264_tex indisponible");
+                    obs_encoder_set_video(venc, obs_get_video());
+                    var asx = Data(new Dictionary<string, object> { { "bitrate", 160 } });
+                    aenc = obs_audio_encoder_create("ffmpeg_aac", Utf8("aac (banc)"), asx, UIntPtr.Zero, IntPtr.Zero);
+                    obs_data_release(asx);
+                    if (aenc == IntPtr.Zero) throw new InvalidOperationException("encodeur ffmpeg_aac indisponible");
+                    obs_encoder_set_audio(aenc, obs_get_audio());
+                    var os = Data(new Dictionary<string, object> { { "path", recFile.Replace('\\', '/') } });
+                    output = obs_output_create("ffmpeg_muxer", Utf8("enregistrement jetable (banc)"), os, IntPtr.Zero);
+                    obs_data_release(os);
+                    obs_output_set_video_encoder(output, venc);
+                    obs_output_set_audio_encoder(output, aenc, UIntPtr.Zero);
+                    if (!obs_output_start(output)) throw new InvalidOperationException("sortie non démarrée : " + Utf8At(obs_output_get_last_error(output)));
+                    report["encodeur"] = "obs_nvenc_h264_tex CBR " + bitrate + " kb/s, keyint 2 s, sans multipasse, sans AQ ni lookahead (streamEncoder.json du profil Twitch)";
+                }
+                Thread.Sleep(3000);
+                var counters = new GpuCounters();
+                int self = System.Diagnostics.Process.GetCurrentProcess().Id;
+                int enginePid = 0;
+                sampler = new Thread(() =>
+                {
+                    var video = obs_get_video();
+                    while (sampling)
+                    {
+                        Dictionary<int, double> g3, ge;
+                        counters.Sample(out g3, out ge);
+                        double own, eng = 0, oe;
+                        g3.TryGetValue(self, out own); ge.TryGetValue(self, out oe);
+                        int ep = enginePid; if (ep != 0) g3.TryGetValue(ep, out eng);
+                        var t = new ObsTick { Qpc = QpcMs(), Frames = obs_get_total_frames(), Lagged = obs_get_lagged_frames(),
+                            EncSkipped = video_output_get_skipped_frames(video), EncTotal = video_output_get_total_frames(video), AvgFrameMs = obs_get_average_frame_time_ns() / 1e6,
+                            OwnGpu = own, EngineGpu = eng, AllGpu = g3.Values.Sum(), OwnEnc = oe };
+                        lock (ticks) ticks.Add(t);
+                        Thread.Sleep(200);
+                    }
+                }) { IsBackground = true };
+                sampler.Start();
+                Func<double, double, Dictionary<string, object>> window = (a0, a1) =>
+                {
+                    List<ObsTick> w; lock (ticks) w = ticks.Where(x => x.Qpc >= a0 && x.Qpc <= a1).ToList();
+                    List<YSample> ys; lock (gate) ys = ySamples.Where(x => x.Ts / 1e6 >= a0 && x.Ts / 1e6 <= a1).OrderBy(x => x.Ts).ToList();
+                    if (w.Count < 2) return J.Map("releves", w.Count);
+                    var f = w.First(); var l = w.Last(); double secs = (l.Qpc - f.Qpc) / 1000.0;
+                    uint frames = l.Frames - f.Frames;
+                    double gap = 0; for (int i = 1; i < ys.Count; i++) gap = Math.Max(gap, (ys[i].Ts - ys[i - 1].Ts) / 1e6);
+                    return J.Map("secondes", Math.Round(secs, 2), "images", frames, "images_par_s", Math.Round(frames / secs, 1),
+                        "en_retard_rendu", l.Lagged - f.Lagged, "sautees_encodage", l.EncSkipped - f.EncSkipped, "images_encodage", l.EncTotal - f.EncTotal,
+                        "rendu_obs_ms_moy", Math.Round(w.Average(x => x.AvgFrameMs), 3), "rendu_obs_ms_max", Math.Round(w.Max(x => x.AvgFrameMs), 3),
+                        "gpu_obs_ms_par_image", frames > 0 ? (object)Math.Round((l.OwnGpu - f.OwnGpu) / frames, 3) : null,
+                        "nvenc_obs_pct", Math.Round((l.OwnEnc - f.OwnEnc) / secs / 10, 2),
+                        "gpu_moteur_pct", Math.Round((l.EngineGpu - f.EngineGpu) / secs / 10, 2),
+                        "gpu_3d_total_pct", Math.Round((l.AllGpu - f.AllGpu) / secs / 10, 2),
+                        "images_sortie", ys.Count, "noires", ys.Count(x => x.Zero > 0.97), "ecart_max_ms", Math.Round(gap, 1),
+                        "memoire", Memory());
+                };
+                double b0 = QpcMs(); Thread.Sleep(10000);
+                report["obs_seul"] = window(b0, QpcMs());
+                Console.WriteLine("OBS seul : " + J.Write(report["obs_seul"]));
+                var runs = new List<object>();
+                var plan = new List<string> { "reference" };
+                plan.AddRange((effects ?? "flip,mirror,shake,zoom,drunk,tunnel,blink,flash,fog,blur,pixelate,color,vhs").Split(','));
+                foreach (var ef in plan)
+                {
+                    string eargs = "--perf-phases --pace --hz 60 --repeats " + repeats + " --effects " + ef + (ef == "reference" ? "" : " --tiers " + tiers);
+                    var psi = new System.Diagnostics.ProcessStartInfo(engine, eargs) { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true, StandardOutputEncoding = new UTF8Encoding(false) };
+                    var marks = new List<Dictionary<string, object>>();
+                    var results = new List<Dictionary<string, object>>();
+                    string err = null;
+                    using (var pr = System.Diagnostics.Process.Start(psi))
+                    {
+                        enginePid = pr.Id;
+                        string line;
+                        while ((line = pr.StandardOutput.ReadLine()) != null)
+                        {
+                            Dictionary<string, object> o;
+                            try { o = J.Parse(line); } catch (Exception) { continue; }
+                            string ty = J.Str(o, "type", "");
+                            if (ty == "phase") marks.Add(o);
+                            else if (ty == "result") { var r = (Dictionary<string, object>)o["result"]; results.Add(r); marks.Add(J.Map("type", "done", "qpc_ms", QpcMs())); }
+                            else if (ty == "error") err = J.Str(o, "message", "?");
+                        }
+                        pr.WaitForExit();
+                        enginePid = 0;
+                    }
+                    if (err != null) { Console.WriteLine(ef + " : " + err); report["arret"] = err; break; }
+                    Thread.Sleep(400);
+                    // Fenêtres : de chaque « phase » à l'événement suivant (phase suivante ou fin de la mesure).
+                    for (int i = 0; i + 1 < marks.Count; i++)
+                    {
+                        var p = marks[i];
+                        if (J.Str(p, "type", "") != "phase") continue;
+                        string cs = J.Str(p, "case", "");
+                        double a0 = Convert.ToDouble(p["qpc_ms"], CultureInfo.InvariantCulture), a1 = Convert.ToDouble(marks[i + 1]["qpc_ms"], CultureInfo.InvariantCulture);
+                        var res = results.FirstOrDefault(r => J.Str(r, "case", "") == cs && Convert.ToInt32(r["rep"]) == Convert.ToInt32(p["rep"]));
+                        object engPhase = null;
+                        if (res != null && res.ContainsKey("phases")) engPhase = ((Dictionary<string, object>)res["phases"])[J.Str(p, "phase", "")];
+                        var wnd = window(a0, a1);
+                        runs.Add(J.Map("case", cs, "rep", p["rep"], "phase", p["phase"], "obs", wnd, "moteur", engPhase));
+                        Console.WriteLine(cs.PadRight(20) + " r" + p["rep"] + " " + J.Str(p, "phase", "").PadRight(5) + J.Write(wnd));
+                    }
+                }
+                double e0 = QpcMs(); Thread.Sleep(10000);
+                report["obs_seul_fin"] = window(e0, QpcMs());
+                Console.WriteLine("OBS seul (fin) : " + J.Write(report["obs_seul_fin"]));
+                report["mesures"] = runs.ToArray();
+            }
+            catch (Exception e) { report["error"] = e.Message; failures++; Console.Error.WriteLine(e.Message); }
+            sampling = false;
+            if (sampler != null) sampler.Join(2000);
+            if (output != IntPtr.Zero) { obs_output_stop(output); for (int i = 0; i < 50 && obs_output_active(output); i++) Thread.Sleep(100); obs_output_release(output); }
+            if (venc != IntPtr.Zero) obs_encoder_release(venc);
+            if (aenc != IntPtr.Zero) obs_encoder_release(aenc);
+            obs_remove_raw_video_callback(onNv12, IntPtr.Zero);
+            obs_set_output_source(0, IntPtr.Zero);
+            if (scene != IntPtr.Zero) obs_scene_release(scene);
+            if (ecran != IntPtr.Zero) obs_source_release(ecran);
+            if (relay != IntPtr.Zero) obs_source_release(relay);
+            Thread.Sleep(500);
+            try { if (File.Exists(recFile)) { report["enregistrement_jetable_mo"] = Math.Round(new FileInfo(recFile).Length / 1048576.0, 1); File.Delete(recFile); } } catch (Exception e) { report["suppression"] = e.Message; }
+            File.WriteAllText(Path.Combine(outDir, "report.json"), J.Write(report), new UTF8Encoding(false));
+            Console.Out.Flush();
+            obs_shutdown();
+            return failures == 0 ? 0 : 1;
+        }
+
         public static int Main(string[] args)
         {
+            if (args.Contains("--effects-load")) return EffectsLoad(args);
             if (args.Contains("--cursor-toggle")) return CursorToggle(args);
             if (args.Contains("--cursor-relay")) return CursorRelay(args);
             string obsDir = @"C:\Program Files\obs-studio", outDir = null;
