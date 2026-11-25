@@ -229,6 +229,11 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     mais 4,9 % durent 33 ms (0,0 % sans calque), même avec Miroir ; pas le coût des shaders. Cause probable : ~58 i/s
     d'Overwatch dans une composition à 59,94 Hz. **Test A/B prêt** (`mesure-jeu.mjs --ab` : calque neutre
     `diag.watermark`, Miroir, Brouillard), à lancer par Antoni ; aucune perte d'images/s annoncée avant.
+  - **Premier A/B (14 h 56) interrompu au 2e essai** : le Performance Lab rendait sa place à la sortie (asynchrone) du
+    processus de télémétrie, après « done ». Corrigé (Studio : libération immédiate, `live_available` ; collecteur :
+    état vérifié côté serveur, « busy » redemandé tant que le serveur le dit, nettoyage), test de six essais enchaînés
+    sur le vrai runtime (BENCH_EFFETS.md § 8.6). Le calque neutre seul a fortement perturbé le jeu (27,9 i/s, 40,7 %
+    d'images doublées) sans que le moteur cale : à confirmer par les six essais.
   - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
   - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
     phase C. La version installée est chaos.8 ; le relais a été validé par Antoni dans son OBS le 25/11.

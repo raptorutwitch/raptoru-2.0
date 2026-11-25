@@ -413,8 +413,8 @@ une image sur vingt reste affichée 33 ms au lieu de 16,7.
 - le mode `--ab` (§ 8.5).
 
 Auto-tests : `--self-test` (analyse, 9 vérifications, dont « FPS jamais sous le 1 % bas », effets chevauchés,
-Alt+Tab, horloge) et `--self-test-ab` (déroulé A/B contre un faux Studio, 3 vérifications). Le moteur, la capture
-directe, le curseur et le relais ne changent pas.
+Alt+Tab, horloge) ; le déroulé A/B est testé avec le vrai runtime de Studio (§ 8.6). Le moteur, la capture directe,
+le curseur et le relais ne changent pas.
 
 ### 8.5 Test A/B de confirmation (à faire par Antoni, après son accord)
 
@@ -466,3 +466,64 @@ faible latence. C'est ce qui permettra d'expliquer la limite à ~58 i/s.
   calque, par exemple un plan d'incrustation matériel (MPO).
 
 Rien n'est proposé ni modifié avant ces mesures.
+
+### 8.6 Premier A/B (25/11, 14 h 56) : interrompu au 2e essai, cause et correction
+
+**Ce qui s'est passé.**
+
+| Temps    | Événement                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| 190,7 s  | 1er essai démarré : le calque neutre                                                                 |
+| 201,8 s  | calque neutre affiché (25 s)                                                                         |
+| 226,8 s  | calque neutre retiré                                                                                 |
+| ~236,7 s | fin de la phase « après » (`done`)                                                                   |
+| 237,13 s | le collecteur demande Miroir 0,4 s plus tard : Studio répond « une mesure en jeu est déjà en cours » |
+
+**Cause** (code de `apps/studio/server/src/chaos/perf.ts`, reproduite par un test) :
+
+- À la fin d'une mesure, le Performance Lab passe à `done`, puis tue le processus de télémétrie.
+- Mais sa place (`liveProc`, qui sert au refus « déjà en cours ») n'était rendue que lorsque Windows signalait la sortie
+  de ce processus, un peu plus tard.
+- Une demande arrivée entre les deux était refusée. Le collecteur, lui, ne regardait que le texte du statut.
+- Second défaut, latent : la sortie tardive d'une ancienne télémétrie pouvait libérer la place de la mesure suivante.
+
+**Correction côté Studio (prochaine version de test) :**
+
+- la télémétrie est libérée au moment même où la mesure se termine (`done`, `failed` ou `cancelled`) ;
+- la sortie d'un processus ne libère que sa propre place ;
+- l'état publie `live_available` (une mesure peut démarrer maintenant) ;
+- `stopLive` termine aussi une télémétrie restée en vie.
+
+**Correction côté collecteur.** Le déroulé est dans `apps/chaos-engine/tools/ab-run.mjs`, partagé avec les tests. À
+chaque essai, il vérifie l'état **sur le serveur** :
+
+1. Studio libre (`live_available`, ou statut et effets actifs avec chaos.9) ;
+2. démarrage ; un refus « busy » est redemandé **tant que le serveur le répond**, jusqu'à 15 s, sans délai fixe ;
+3. mesure de cet effet confirmée par le serveur ;
+4. `done` et nouveau résultat enregistré pour cet effet ;
+5. effet retiré du moteur.
+
+En cas d'échec ou d'arrêt (`q`) : mesure arrêtée, effet arrêté, vérification qu'aucun effet ne reste actif (sinon
+STOP ALL), puis l'état final est affiché.
+
+**Tests.** `apps/studio/server/test/chaos-perf-chain.test.ts`, avec le vrai Performance Lab et le vrai runtime Studio
+(API HTTP), un faux moteur et une fausse télémétrie, sans rien afficher :
+
+- six mesures enchaînées dans la boucle même où `done` apparaît (ce test échoue avec l'ancien code) ;
+- l'A/B complet par l'API : six essais confirmés, ni mesure ni effet restants ;
+- un essai qui échoue : arrêt et état propre ;
+- un Studio d'avant le correctif (chaos.9) qui répond « busy » juste après `done` : redemandé sans échec.
+
+**Données du calque neutre (essai 1, valides).** Jeu au premier plan tout du long, 24,4 s exploitables, horloges
+cohérentes (−196 ms à l'apparition, +19 ms à la disparition).
+
+- **Moteur Chaos** (télémétrie enregistrée par Studio) : 58,5 images présentées et capturées par seconde, traitement
+  p95 de 0,8 ms. Il n'a pas calé.
+- **Overwatch pendant le calque** : 27,9 i/s, p99 217 ms, 40,7 % d'images de 2 rafraîchissements ou plus, une image de
+  3,1 s, 2 s sans aucune image. Avant et après : 58 i/s, stables.
+- **Lecture** : le jeu attend la composition de Windows. Ses intervalles sont des multiples du rafraîchissement (33 à
+  500 ms) avec 4 à 5 ms de GPU par image. Le GPU de `dwm` passe de 8 à 16,5 %, et OBS reçoit moins d'images de
+  l'écran (GPU d'OBS de 20 à 8 %).
+
+C'est bien plus fort que pendant la première séance (4,9 %). Un seul essai, sans Miroir ni Brouillard dans les mêmes
+conditions, ne permet **pas** de conclure : c'est l'objet des six essais.
