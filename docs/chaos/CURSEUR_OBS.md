@@ -297,6 +297,9 @@ Studio › Chaos › Diffusion OBS › **Relais anti-coupure** (`apps/studio/ser
 
 ### E. Validation par Antoni (après son accord, hors live, jeu fermé)
 
+**Faite le 25/11 avec `0.1.44-chaos.8` dans son OBS réel** : Miroir, Écran retourné, relais anti-coupure et curseur
+transformé ; aucun flash noir perceptible, un seul curseur, transformation correcte.
+
 1. Installer `0.1.44-chaos.8` ([GUIDE_STUDIO_CHAOS.md](GUIDE_STUDIO_CHAOS.md) § 4).
 2. Diffusion OBS :
    - source « Écran » et écran capturé choisis ;

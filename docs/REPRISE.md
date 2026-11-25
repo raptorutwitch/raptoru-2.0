@@ -218,6 +218,17 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     la sonde `chaos-bench.exe --capture-probe --screen \\.\DISPLAY1` (à lancer par Antoni).
   - Garde de jeu corrigée : les « plein écran » du 24/11 venaient des deux fenêtres Halloween de Studio (calques
     traversables, « Overlay actif » allumé), pas d'un jeu.
+- **Banc des 13 effets (25/11)** : [chaos/BENCH_EFFETS.md](chaos/BENCH_EFFETS.md).
+  - **Phase A, moteur hors écran à 1440p** : 0,09 ms (Flash) à 0,60 ms (Brouillard) de GPU par image au maintien, soit
+    0,4 à 3,6 % du GPU à 60 Hz. Les plus coûteux : Brouillard, Écran ivre, VHS. Processeur et mémoire négligeables.
+  - **Phase B, OBS isolé** réglé comme le profil Twitch (DXGI, relais, NVENC 1080p60) : 0 image en retard, sautée
+    ou noire, sur tous les effets.
+  - **Classement** : 11 effets « légers », Brouillard et Écran ivre « modérés », aucun « lourd ».
+  - **Phase C, Overwatch réel** : préparée, à faire par Antoni (`apps/chaos-engine/tools/mesure-jeu.mjs`, PresentMon 2.6
+    dans `.tools/`). Les images/s en jeu ne sont pas encore mesurées.
+  - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
+  - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
+    phase C. La version installée est chaos.8 ; le relais a été validé par Antoni dans son OBS le 25/11.
 - **Flash noir de la bascule du curseur d'OBS (24/11 soir)** : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md) § 5.
   - **Cause** : OBS détruit puis recrée la duplication DXGI partagée de l'écran à chaque changement de réglage de sa
     seule capture.
@@ -228,7 +239,8 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
   - **Corrigé en passant** : les réglages de fiche tapés coup sur coup ne se perdent plus. Le e2e de la page passe
     de 37 à 39/39.
   - **Commits** `6387c1e0`, `256308f3`, `dbb5aee2`, `dbe78017`, `984591ac`, `84b297e9` (locaux).
-  - **Version de test** `0.1.44-chaos.8` (non installée). Le relais n'est créé dans OBS que sur le clic d'Antoni.
+  - **Version** `0.1.44-chaos.8`, installée et **validée par Antoni le 25/11** dans son OBS : aucun flash noir
+    perceptible, un seul curseur, transformation correcte (Miroir, Écran retourné).
 - **« Aucune image capturée » (Miroir, Écran retourné) avec chaos.6 (24/11 soir)** : la cible « écran » avait choisi
   Discord, qui s'exclut des captures (affinité 0x11). WGC ne livrait aucune image et l'effet échouait au bout de 3 s.
   - Correctif `badada91` : une fenêtre protégée n'est plus jamais choisie.

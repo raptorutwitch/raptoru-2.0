@@ -94,10 +94,21 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.7** (installée par Antoni le 24/11 ; Miroir validé en capture directe
-avec la 0.1.44-chaos.5, un seul curseur dans OBS confirmé avec la suppression du double curseur).
+Studio installé aujourd'hui : **0.1.44-chaos.8**, validée par Antoni le 25/11 dans son OBS réel : Miroir, Écran
+retourné, relais anti-coupure, curseur transformé ; aucun flash noir perceptible, un seul curseur.
 
-Version de test **0.1.44-chaos.8** (24/11 soir), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.9** (25/11), construite en local, **ni publiée ni installée** :
+
+- `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.9.exe`
+- 126 763 483 o, SHA-256 `64cb942994175424bf70f887f48127f7b0bf7ef92dae1074a05b2eeac65ef3bf`
+- contenu : tout ce que contenait 0.1.44-chaos.8, plus la lecture seule des compteurs d'OBS (images en retard et
+  sautées, temps de rendu) par la connexion existante de Studio, pour la mesure en jeu
+  ([BENCH_EFFETS.md](BENCH_EFFETS.md) § 6). Rien d'autre ne change ; elle n'est utile que pour cette mesure ;
+- commit `f7dc31a4` de `feat/chaos-studio` (local) ; aucun `.env`, aucun jeton dans le paquet (vérifié) ;
+- installer comme ci-dessous (jeu fermé, Studio et Chaos Lab fermés) ;
+- retour arrière : relancer `Raptoru Studio Setup 0.1.44-chaos.8.exe` (SHA-256 `ce5f31fe…`).
+
+Version **0.1.44-chaos.8** (24/11 soir), installée par Antoni et validée le 25/11 :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.8.exe`
 - 126 760 063 o, SHA-256 `ce5f31fe63adbd2713f309fc92422e8d0f8cdc74116a2c57757d3082f07de43a`

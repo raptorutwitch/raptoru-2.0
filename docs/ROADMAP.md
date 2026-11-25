@@ -138,8 +138,9 @@ Colonnes : état réel · ce qui reste · document. « Public » = dans l'extens
 en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md). Restes :
 
 - essais d'Antoni effet par effet (le brouillard ne compte comme réussi qu'après son avis en mouvement) ;
-- banc hors écran du Performance Lab en 1440p et 1080p (jeu fermé), puis validation en jeu sur Overwatch + OBS
-  ([chaos/PERFORMANCE_LAB.md](chaos/PERFORMANCE_LAB.md)) ;
+- banc des 13 effets ([chaos/BENCH_EFFETS.md](chaos/BENCH_EFFETS.md)) : phases A et B mesurées le 25/11 (moteur hors
+  écran à 1440p, OBS isolé : aucune image perdue). Reste la phase C sur Overwatch réel (procédure et outil prêts, à
+  faire par Antoni). Optimisations possibles de Brouillard, Écran ivre et VHS décrites, non faites sans besoin démontré ;
 - images/s du jeu dans le Performance Lab : intégration de PresentMon (droits d'administrateur) si la lecture à la
   main ne suffit pas ;
 - mode E : barre des tâches figée pendant un effet qui lit l'image (horloge, survol) ; « barre vivante » possible
@@ -149,8 +150,8 @@ en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.m
 - lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
 - **curseur d'OBS et VHS animé** (24/11 soir : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md)), construits et testés hors
   écran. Restes :
-  - flash noir de la bascule : relais anti-coupure mesuré à 0 image noire (CURSEUR_OBS.md § 5). Reste la validation
-    d'Antoni avec `0.1.44-chaos.8`, puis son clic « Préparer le relais » dans son OBS ;
+  - flash noir de la bascule : relais anti-coupure, **validé par Antoni le 25/11** dans son OBS avec `0.1.44-chaos.8`
+    (CURSEUR_OBS.md § 5) ;
   - validation d'Antoni avec `0.1.44-chaos.7`, qui inclut le correctif de la fenêtre protégée
     ([chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md) § 6) : VHS au maintien, un seul curseur, coupure visible ou
     non, Miroir et Écran retourné avec Discord ouvert ;

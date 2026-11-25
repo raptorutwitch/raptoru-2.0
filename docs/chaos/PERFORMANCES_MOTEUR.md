@@ -140,7 +140,8 @@ performance.zero_copy=false`.
 
 ## 7. Résultats (laboratoire)
 
-_À compléter par la campagne de mesures : tableaux avant / après, conditions exactes, fichiers JSON._
+Coût de chaque effet (moteur hors écran, OBS isolé) : [BENCH_EFFETS.md](BENCH_EFFETS.md) (25/11). Le coût fixe de la
+capture, de la présentation et de la composition à l'écran se mesure en jeu (BENCH_EFFETS.md § 6).
 
 ## 8. Le curseur et OBS
 

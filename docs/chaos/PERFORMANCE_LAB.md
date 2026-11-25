@@ -119,5 +119,6 @@ environ.
 
 ## 5. Résultats obtenus
 
-Voir `ETUDE_EFFETS_V2.md` § 5. Au 24/11, seul le banc de fumée (`--smoke`, 160×90) a tourné ; le vrai banc attend que
-la garde de jeu soit libre.
+Voir [BENCH_EFFETS.md](BENCH_EFFETS.md) (25/11) : banc par phases des 13 effets à 1440p (`--perf-phases`), OBS isolé
+(`chaos-obs-check.exe --effects-load`), classement, et la procédure Overwatch avec l'outil
+`apps/chaos-engine/tools/mesure-jeu.mjs` (PresentMon).
