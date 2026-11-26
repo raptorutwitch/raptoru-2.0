@@ -60,9 +60,23 @@
 .ix :focus-visible { outline: 2px solid var(--ix-rose); outline-offset: 2px; }
 
 /* --- En-tête : sélecteur Chaos · Bonk · Régie à la place du titre ---------------------------------------------- */
-/* L'en-tête est une grille 1fr | auto | 1fr (titre centré) : le sélecteur prend la place du titre, centré lui aussi ;
-   le nom « Interactions » reste le nom accessible de l'en-tête (aria-label posé par l'hôte). */
-.ix-head .jdm-module__screen-title { max-width: 100%; overflow: visible; }
+/* Le sélecteur prend la place du titre ; le nom « Interactions » reste le nom accessible de l'en-tête (aria-label posé
+   par l'hôte). Grille « retour (+ raccourci Tombola) | sélecteur | solde » : le milieu prend la place qui reste et le
+   sélecteur s'y range au centre ; trop étroit (panneau de 318 px, trois onglets, Tombola ouverte) : pictogrammes seuls,
+   jamais sous le solde. */
+.ix-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+.ix-head .jdm-module__screen-title {
+  justify-self: stretch;
+  justify-content: center;
+  width: auto;
+  max-width: none;
+  overflow: visible;
+  container: ixhead / inline-size;
+}
+@container ixhead (max-width: 150px) {
+  .ix-switch__tab .ix-switch__label { display: none; }
+  .ix-switch__tab { padding: 0 calc(8 * var(--g)); }
+}
 .ix-head .jdm-module__screen-icon,
 .ix-head .jdm-module__screen-name { display: none; }
 .ix-headbar { display: flex; align-items: center; gap: calc(6 * var(--g)); min-width: 0; }
@@ -503,7 +517,7 @@
   .ix-tile__main { grid-template-columns: calc(44 * var(--g)) minmax(0, 1fr); gap: calc(6 * var(--g)); }
   .ix-tile__name { font-size: var(--fs-11); }
   .ix-tile .ix-tile__fav { left: calc(7 * var(--g) + 44 * var(--g) - 20 * var(--g)); }
-  .ix-tile .ix-tile__badge::before { content: none; }
+  .ix-tile .ix-tile__badge[data-kind]::before { content: none; }
 }
 .ix-tile__meta { display: flex; align-items: center; gap: calc(3 * var(--g)); color: var(--ix-muted); font-size: var(--fs-11); }
 .ix-from { color: var(--ix-faint); }
