@@ -245,6 +245,8 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     validait la phase « effet » contre la durée maximale des effets du stream (Sécurité, 30 s) et refusait 40 s.
     Corrigé (`ec7406c0`) : phase « effet » d’une mesure bornée par le registre (60 s), refus montré aussitôt ; tests
     chaos-unit 39/39 et `chaos-perf-phases` (10 / 40 / 10 simulé). Version de test 0.1.44-chaos.11 (PERFORMANCE_LAB.md).
+  - **26/11 : chaos.11 installée et validée par Antoni** (Miroir fluide, Brouillard sans lag, 10 / 40 / 10, curseur
+    unique, aucun flash noir). Stabilisation des performances close. Suite : lot 2 (ROADMAP_CHAOS_V2.md, état en tête).
   - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
   - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
     phase C. Version installée : chaos.10 (26/11) ; le relais a été validé par Antoni dans son OBS le 25/11 (chaos.8).

@@ -1,6 +1,18 @@
 # Roadmap Chaos V2
 
 10/11/2026. Lots verticaux, chacun testable dans le Lab puis en vrai par Antoni. Aucun lot ne démarre sans son GO.
+
+> **État au 26/11** (le plan ci-dessous est l'historique du 10/11) :
+>
+> - **Lot 0** : fait autrement. Fenêtres permanentes d'Halloween coupées (« Overlay actif » off), mesures en jeu
+>   PresentMon et A/B du 25/11 ([BENCH_EFFETS.md](BENCH_EFFETS.md) § 8 et 9). Écran principal laissé à 59,94 Hz (Q10).
+> - **Lot 1** : dépassé et **validé** (moteur C#, 13 effets, capture directe vers OBS, curseur unique, relais, Performance
+>   Lab ; 0.1.44-chaos.11 validée le 26/11 sur Overwatch). Non essayés : Dofus (R2), un autre jeu (R4).
+> - **Lot 2** : non commencé. Prêts : registre (durées, paliers, aperçu, `viewer`), sources `core` / `extension` /
+>   `channel_points` et file du moteur. Manquent : module `chaos` du Core (Jetons, file, remboursements), boucle
+>   Studio ↔ Core, module de l'extension, prix (Q2 à Q8).
+> - **Lot 3** : en partie avancé (VHS, pixelisation, couleur, flou déjà là) ; le reste non développé.
+> - **Lots 4 et 5** : non commencés. Tout Chaos V2 est sur la branche locale `feat/chaos-studio`, hors `main`.
 Architecture : [ARCHITECTURE_CHAOS_V2.md](ARCHITECTURE_CHAOS_V2.md). Effets : [CATALOGUE](CATALOGUE_EFFETS_CHAOS_V2.md).
 
 ## Lot 0 — Mesurer avant de construire (aucun code ; 45 min d'Antoni)

@@ -94,11 +94,13 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.10** (26/11). La 0.1.44-chaos.8 avait été validée par
+Studio installé aujourd'hui : **0.1.44-chaos.11**, **validée par Antoni le 26/11** en jeu : Miroir fluide, Brouillard sans
+lag, mesure 10 / 40 / 10 du Performance Lab, curseur unique, aucun flash noir ; capture OBS sans régression signalée.
+Phase de stabilisation des performances close. La 0.1.44-chaos.8 avait été validée par
 Antoni le 25/11 dans son OBS réel : Miroir, Écran retourné, relais anti-coupure, curseur transformé ; aucun flash noir
 perceptible, un seul curseur.
 
-Version de test **0.1.44-chaos.11** (26/11), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.11** (26/11), installée et validée par Antoni le 26/11 (non publiée) :
 
 - `C:UsersAntoniDocumentsRaptoru 2.0 - Worktreeschaos-v2appsstudiodesktopeleaseRaptoru Studio Setup 0.1.44-chaos.11.exe`
 - 126 764 330 o, SHA-256 `bdee527e3c5fc3bbc5fb24ccbbcd2f1f02a2cb13a6d81fc5ffec58428e061640`
