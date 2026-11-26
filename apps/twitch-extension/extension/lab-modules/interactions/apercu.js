@@ -1,7 +1,7 @@
 // LAB ONLY — page apercu.html : la maquette « Interactions » dans les tailles réelles de l'extension, côte à côte.
 // Tailles et adresses : celles du banc Casino (test/responsive/casino-compose.mjs), dont l'adresse réelle de l'appli
 // Twitch mobile (mobile.html?platform=mobile&anchor=component, correctif du 24/11).
-import { EFFECTS } from './catalog.js';
+import { EFFECTS } from '../../modules/interactions/catalog.js';
 import { SCENARIOS } from './model.js';
 
 const VIDEO = 'video_component.html?anchor=component';

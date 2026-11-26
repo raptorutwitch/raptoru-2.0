@@ -4,7 +4,7 @@
 // (sessionStorage) : achats en cours, file, crédits et charges se retrouvent. Le futur Core garde tout cela en base ;
 // favoris, ordre et derniers réglages restent dans le navigateur (prefs.js). Réglages Lab lus dans l'adresse.
 import { everySecond } from '../../app/store.js';
-import { ENGINE, usePriceGrid } from './catalog.js';
+import { ENGINE, usePriceGrid } from '../../modules/interactions/catalog.js';
 import { SCENARIOS, createChaosMock } from './model.js';
 
 const KEY = 'raptoru-lab:interactions:mock:v1';

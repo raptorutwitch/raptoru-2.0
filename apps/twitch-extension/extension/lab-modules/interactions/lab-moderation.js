@@ -10,7 +10,7 @@
 import { registerDemoSource, registerModerationSection } from '../../shared/module-registry.js';
 import { loadStyles } from '../../app/styles.js';
 import { lab, getMock, subscribe } from './store.js';
-import { glyph } from './glyphs.js';
+import { glyph } from '../../modules/interactions/glyphs.js';
 
 const FX_COLOR = '#b8405c';
 const ALL_GRANTS = ['modules', 'perms', 'sensitive', 'wallet', 'words'];
@@ -87,7 +87,7 @@ registerModerationSection({
     let view = null;
     let unsub = null;
     let gone = false;
-    void Promise.all([loadStyles(['lab-modules/interactions/moderation-fx.css']), import('./moderation-fx.js')]).then(([, m]) => {
+    void Promise.all([loadStyles(['modules/interactions/moderation-fx.css']), import('../../modules/interactions/moderation-fx.js')]).then(([, m]) => {
       if (gone) return;
       view = m.createFxModeration({ document, getMock, capS: () => lab.cap, repaint });
       host.replaceChildren(view.node);

@@ -528,6 +528,10 @@ export function createClient({
       idempotencyKey,
     }),
     /** Moderation V2 (D4): Core read models (overview, whoami, search, viewer card, audit). */
+    // Chaos V2 (docs/chaos/CONTRAT_LOT2.md § 2.4) : état, devis et achat décidés par le Core ; une clé par intention.
+    chaosState: () => call('GET', '/chaos/state'),
+    chaosQuote: (body) => call('POST', '/chaos/quote', { body }),
+    chaosBuy: (body, key = newIdempotencyKey()) => call('POST', '/chaos/buy', { body, idempotencyKey: key }),
     modV2: (path) => call('GET', `/moderation/v2/${path}`),
     /** Moderation V2 command, executed and audited by Core with the caller's permissions. */
     modV2Act: (command, key) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: key ?? newIdempotencyKey() }),

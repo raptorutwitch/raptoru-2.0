@@ -10,13 +10,12 @@
 import { loadLazyView } from '../../app/lazy-views.js';
 import { moduleVariant } from '../../shared/module-registry.js';
 import { EFFECTS, ENGINE, GROUPS, PLANNED, usePriceGrid, controlsFor, defaultChoice, durationRange, effectById, engineRequest, hueHex, normalizeChoice } from './catalog.js';
-import { SCENARIOS, conditionsFor, creditTerms, mmss } from './model.js';
-import { getMock, lab, changed as mockChanged, resetMock, subscribe } from './store.js';
+import { conditionsFor, creditTerms, mmss } from './rules.js';
+import { createBackend } from './backend.js';
 import { glyph, token } from './glyphs.js';
 import { preview } from './preview.js';
 import { createPrefs } from './prefs.js';
 import { createReorder } from './reorder.js';
-import { createLocalPlay } from './local-play.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 const nth = (n) => (n === 1 ? '1er' : `${n}e`);
@@ -36,12 +35,18 @@ export function view(ctx) {
   const memory = ctx.host.memory;
   // Faux Core et réglages Lab (scénario, rôle, plafond Sécurité 30 / 60 s, effets à venir) : store.js, partagés avec la
   // section FX de la console de modération ; il avance seul chaque seconde et survit à un rechargement.
-  let mock = getMock();
+  let latest = ctx.state;
+  // Source des données : le Core (achats réels, devis du serveur) ou, en Lab, le faux Core de la maquette (backend.js).
+  const backend = createBackend(ctx, () => latest);
+  let mock = backend.mock;
+  const SCENARIOS = backend.scenarios ?? {};
+  const lab = backend.lab ?? { scenario: null, role: ctx.team === true ? 'mod' : 'viewer', cap: ENGINE.safetyDurationS, planned: false, prices: 'fourchettes' };
+  const subscribe = (fn) => backend.subscribe(fn);
+  const mockChanged = () => backend.changed();
   // « Jouer sur mon PC » (Lab servi par Studio seulement) : coupé à chaque ouverture, jamais déclenché tout seul.
-  const localPlay = createLocalPlay({ win });
+  const localPlay = backend.localPlay ?? { isAvailable: () => false, isOn: () => false, setOn: () => false, probe: async () => false, play: async () => null, stopAll: async () => false };
   const prefs = createPrefs([...EFFECTS, ...PLANNED].map((e) => e.id));
   const choices = (memory.choices ??= {});
-  let latest = ctx.state;
   let tab = TABS.some(([id]) => id === query.get('ixTab')) ? query.get('ixTab') : (memory.tab ?? 'chaos');
   let group = memory.group ?? 'all';
   let destroyed = false;
@@ -218,7 +223,8 @@ export function view(ctx) {
   labBtn.title = 'Maquette : scénario, rôle, plafond de durée, effets à venir (Lab seulement)';
   labBtn.setAttribute('aria-expanded', 'false');
   const filterRow = el('div', 'ix-filterrow');
-  filterRow.append(filters, labBtn);
+  // Bouton « Lab » : seulement avec le faux Core de la maquette (jamais en Production).
+  filterRow.append(filters, ...(backend.lab ? [labBtn] : []));
   const tip = el('p', 'ix-tip');
   tip.append(glyph(document, 'grip'), el('span', null, 'Appui long sur un effet pour le déplacer · ☆ pour le garder en favori.'));
   const tipClose = btn('ix-tip__close', null, 'close');
@@ -256,7 +262,7 @@ export function view(ctx) {
   }
   scenarioSelect.addEventListener('change', () => {
     lab.scenario = scenarioSelect.value;
-    mock = resetMock();
+    mock = backend.reset().mock;
     closeSheet({ instant: true });
     paint();
   });
@@ -415,7 +421,7 @@ export function view(ctx) {
   // ---------------------------------------------------------------------------------------------------------------
   // Contrôles génériques de la fiche (les mêmes pour tous les effets : catalog.js décrit lesquels).
   let sheet = null;
-  const cap = () => lab.cap;
+  const cap = () => (backend.capS ? backend.capS() : lab.cap);
 
   function chipRow({ label, options, current, onPick, meter = false, disabled = () => false }) {
     const row = el('div', 'ix-field');
@@ -823,12 +829,12 @@ export function view(ctx) {
     foot.append(payBox, bill, bar, error);
     if (localPlay.isAvailable()) {
       const row = el('div', 'ix-localplay');
-      const lab = el('label', 'ix-localplay__toggle');
+      const lbl = el('label', 'ix-localplay__toggle');
       const box = el('input');
       box.type = 'checkbox';
       box.checked = localPlay.isOn();
       box.addEventListener('change', () => (box.checked = localPlay.setOn(box.checked)));
-      lab.append(box, el('span', null, 'Jouer sur mon PC (Studio Lab)'));
+      lbl.append(box, el('span', null, 'Jouer sur mon PC (Studio Lab)'));
       const stop = btn('ix-localplay__stop', 'Tout arrêter', 'stop');
       stop.title = 'STOP ALL du moteur Chaos';
       stop.addEventListener('click', async () => {
@@ -837,7 +843,7 @@ export function view(ctx) {
         lastKey = '';
         update();
       });
-      row.append(glyph(document, 'lab'), lab, stop);
+      row.append(glyph(document, 'lab'), lbl, stop);
       foot.append(row);
     }
     billBtn.addEventListener('click', () => {
@@ -965,7 +971,7 @@ export function view(ctx) {
       lastKey = '';
       update();
     });
-    /** Envoi au faux Core (après un court délai réseau). Une intention = une clé : jamais deux débits pour un clic. */
+    /** Envoi au Core (ou au faux Core du Lab). Une intention = une clé : jamais deux débits pour un clic. */
     function submit() {
       if (busy || !q || q.block) return;
       armed = false;
@@ -974,10 +980,12 @@ export function view(ctx) {
       intent ??= `ix-${e.id}-${now()}-${Math.random().toString(36).slice(2, 8)}`;
       const sent = { choice: structuredClone(choice), price: q.price, credit: payCredit, key: intent };
       update();
-      win.setTimeout(() => {
+      // Le faux Core du Lab répond tout de suite : un court délai réseau simulé ; le Core répond quand il a décidé.
+      const ask = () => Promise.resolve(mock.buy(e.id, sent.choice, sent.price, now(), undefined, { credit: sent.credit, key: sent.key }));
+      const answer = backend.lab ? new Promise((r) => win.setTimeout(() => r(ask()), 350)) : ask();
+      void answer.then((out) => {
         busy = false;
         if (destroyed || sheet?.card !== card) return;
-        const out = mock.buy(e.id, sent.choice, sent.price, now(), undefined, { credit: sent.credit, key: sent.key });
         intent = null;
         if (!out.ok) {
           error.textContent = out.message;
@@ -1006,7 +1014,7 @@ export function view(ctx) {
         ctx.host.refresh?.(); // le solde de l'en-tête (Lab : celui du faux Core)
         win.clearTimeout(doneTimer);
         doneTimer = win.setTimeout(() => update(), 2700);
-      }, 350);
+      });
     }
     // Deux temps par défaut, comme shared/purchase.js : le prix, puis « Confirmer » (4 s pour confirmer) ; un seul si le
     // viewer a coché « Ne plus demander confirmation ». Le prix est toujours sur le bouton ; le Core revérifie tout.

@@ -7,7 +7,7 @@
 // `/moderation/v2/chaos/*` et commandes `/moderation/v2/actions` (permissions vérifiées par le Core), comme TTS et
 // Soundboard — contrat : docs/chaos/EXTENSION_INTERACTIONS.md § 9.
 import { EFFECTS, durationRange, defaultChoice, effectById, normalizeChoice } from './catalog.js';
-import { creditTerms, mmss } from './model.js';
+import { creditTerms, mmss } from './rules.js';
 import { glyph } from './glyphs.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -69,7 +69,7 @@ export function createFxModeration({ document, getMock, capS, now = Date.now, re
         ? `<select data-f="level" aria-label="Force au plus"><option value="">Toutes les forces</option>${e.levels.map((l, i) => `<option value="${l.id}"${l.id === draft.level ? ' selected' : ''}>${esc(e.levels.slice(0, i + 1).map((x) => x.label).join(' ou '))}</option>`).join('')}</select>`
         : '';
       return `<div class="ixm-ask"><p>Offrir un crédit : le viewer lancera cet effet plus tard, gratuitement, une fois.</p>
-        <div class="ixm-form"><select data-f="viewer" aria-label="Viewer"><option value="">Viewer…</option>${viewers}</select><select data-f="effect" aria-label="Effet">${effects}</select><select data-f="maxS" aria-label="Durée au plus">${durs}</select>${levels}</div>
+        <div class="ixm-form">${snap.viewers.length ? `<select data-f="viewer" aria-label="Viewer"><option value="">Viewer…</option>${viewers}</select>` : `<input class="ixm-reason" data-viewer maxlength="40" placeholder="Pseudo du viewer" aria-label="Pseudo du viewer" value="${esc(draft.viewerName ?? '')}">`}<select data-f="effect" aria-label="Effet">${effects}</select><select data-f="maxS" aria-label="Durée au plus">${durs}</select>${levels}</div>
         <input class="ixm-reason" data-reason maxlength="80" placeholder="Motif (obligatoire)" value="${esc(draft.reason)}">
         <div class="ixm-acts"><button class="btn btn--sm btn--primary" data-fx="do-credit">Offrir le crédit</button>${keep}</div></div>`;
     }
@@ -164,18 +164,26 @@ export function createFxModeration({ document, getMock, capS, now = Date.now, re
       paint();
     }, 3500);
   };
-  const done = (out, ok) => {
-    if (!out.ok) {
-      say(out.message, 'error');
-      return paint();
-    }
-    ask = null;
-    gift = null;
-    draft = { ...draft, reason: '' };
-    say(ok);
-    paint();
-    repaint();
-  };
+  // Une commande répond tout de suite (faux Core du Lab) ou plus tard (Core : vérifiée et tracée côté serveur).
+  const done = (result, ok) =>
+    Promise.resolve(result).then(
+      (out) => {
+        if (!out?.ok) {
+          say(out?.message ?? 'Refusé.', 'error');
+          return paint();
+        }
+        ask = null;
+        gift = null;
+        draft = { ...draft, reason: '' };
+        say(ok);
+        paint();
+        repaint();
+      },
+      () => {
+        say('Le Core ne répond pas : rien n’a changé.', 'error');
+        paint();
+      },
+    );
 
   function act(name, id) {
     const mock = getMock();
@@ -188,16 +196,15 @@ export function createFxModeration({ document, getMock, capS, now = Date.now, re
       draft.reason = '';
     } else if (name === 'toggle-pause') {
       const paused = mock.snapshot(t).status === 'paused';
-      mock.moderation.setPaused(!paused);
-      say(paused ? 'Achats repris.' : 'Achats suspendus : la file attend.');
-      repaint();
+      return done(mock.moderation.setPaused(!paused), paused ? 'Achats repris.' : 'Achats suspendus : la file attend.');
     } else if (name === 'toggle-history') allHistory = !allHistory;
     else if (name === 'do-stopall') return done(mock.moderation.stopAll(t), 'Tout est arrêté, achats suspendus.');
     else if (name === 'do-stop' || name === 'do-cancel') return null; // traité avec le bouton (remboursement)
     else if (name === 'do-refund') return done(mock.moderation.refund(ask.id, draft.reason.trim(), t), 'Rendu au viewer.');
     else if (name === 'do-revoke') return done(mock.moderation.revokeCredit(ask.id, draft.reason.trim(), t), 'Crédit retiré.');
     else if (name === 'do-credit') {
-      const viewer = mock.snapshot(t).viewers.find((v) => v.id === draft.viewer);
+      // Faux Core : la liste des viewers ; Core : le pseudo, retrouvé par le Core (recherche de la console).
+      const viewer = mock.snapshot(t).viewers.find((v) => v.id === draft.viewer) ?? (draft.viewerName?.trim() ? { id: null, name: draft.viewerName.trim() } : null);
       const constraints = { maxS: draft.maxS };
       if (draft.level) {
         const e = effectById(draft.effect);
@@ -214,6 +221,7 @@ export function createFxModeration({ document, getMock, capS, now = Date.now, re
 
   node.addEventListener('input', (event) => {
     if (event.target.matches('[data-reason]')) draft.reason = event.target.value;
+    if (event.target.matches('[data-viewer]')) draft.viewerName = event.target.value;
   });
   node.addEventListener('change', (event) => {
     const { f, g } = event.target.dataset;

@@ -121,8 +121,8 @@ export function moduleVariant(env) {
 // A module whose moderation is not one of the console's own (TTS, Soundboard, Bonk, Tombola) adds a section here: one
 // more line in the console's navigation, its view drawn in the console's pane (same styles). Lab today (FX of Chaos V2,
 // lab-modules/interactions); a production section registers the same way once its Core read models exist.
-//   def = { key, label, icon (inline SVG), color?, summary() → { st: 'active'|'paused'|'off', text },
-//           mount({ document, repaint() }) → { node, headEnd?() → HTML string, action?(name, el), paint?(), destroy?() } }
+//   def = { key, label, icon (inline SVG), color?, available?(overview) → boolean, summary(overview) → { st, text },
+//           mount({ document, client, repaint(), overview() }) → { node, headEnd?() → HTML, action?(name, el), paint?(), destroy?() } }
 // Buttons of `headEnd()` carry `data-xact="<name>"`: the console hands their clicks to `action(name, el)`.
 const moderationDefs = new Map();
 

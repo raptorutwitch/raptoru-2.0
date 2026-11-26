@@ -4,7 +4,7 @@
 // feat/chaos-studio). 2. Les prix suivent la gêne mesurée sur les vraies valeurs. 3. Le futur module `chaos` du Core
 // devra donner les mêmes réponses que le faux Core (file, remboursements, crédits) ; ces cas serviront à ses tests.
 import { describe, expect, it } from 'vitest';
-import { REGISTRY } from '../extension/lab-modules/interactions/registry.js';
+import { REGISTRY } from '../extension/modules/interactions/registry.js';
 import {
   EFFECTS,
   ENGINE,
@@ -22,7 +22,7 @@ import {
   normalizeChoice,
   priceOf,
   resolveParams,
-} from '../extension/lab-modules/interactions/catalog.js';
+} from '../extension/modules/interactions/catalog.js';
 import {
   FAILURES,
   REFUND_POLICY,
@@ -33,7 +33,7 @@ import {
   conditionsFor,
   createChaosMock,
 } from '../extension/lab-modules/interactions/model.js';
-import { blinkTimeline } from '../extension/lab-modules/interactions/preview.js';
+import { blinkTimeline } from '../extension/modules/interactions/preview.js';
 
 const T0 = 1_800_000_000_000;
 const calm = (opts = {}) =>

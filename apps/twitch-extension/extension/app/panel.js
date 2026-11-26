@@ -36,6 +36,9 @@ import '../shared/events-shop.js';
 import '../shared/tombola-v2.js';
 // Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests' entry — a tiny file; its view and sheet load on opening.
 import '../modules/music/module.js';
+// Interactions (Chaos V2, docs/chaos/EXTENSION_INTERACTIONS.md): its entry — proposed only when the session says
+// `chaos.enabled`; its view and sheets load on opening.
+import '../modules/interactions/module.js';
 // Tombola V1 for the sessions without V2 (its « open » rule is also the Hub's and the header's).
 import { raffleIsActive } from '../shared/tombola-v1.js';
 // The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.

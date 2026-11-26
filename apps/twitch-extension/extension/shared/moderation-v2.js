@@ -270,10 +270,10 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   // Extra sections (module-registry.js registerModerationSection): one more line in the navigation each, their own view
   // drawn in the pane, created on first opening and kept across repaints (live DOM, like « Autres modules »).
   const xdef = (m) => moderationSections().find((d) => d.key === m) ?? null;
-  const navKeys = () => [...MOD_KEYS, ...moderationSections().map((d) => d.key)];
+  const navKeys = () => [...MOD_KEYS, ...moderationSections().filter((d) => d.available?.(overview) !== false).map((d) => d.key)];
   const xsecs = new Map();
   const xsec = (m) => {
-    if (!xsecs.has(m)) xsecs.set(m, xdef(m).mount({ document, repaint: () => render() }));
+    if (!xsecs.has(m)) xsecs.set(m, xdef(m).mount({ document, client, repaint: () => render(), overview: () => overview }));
     return xsecs.get(m);
   };
   // Opened from a module's shield (app/panel.js): straight to that module's section.
@@ -647,7 +647,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   function modLine(m, sel) {
     const x = xdef(m);
     if (x) {
-      const xs = x.summary?.() ?? { st: 'active', text: '' };
+      const xs = x.summary?.(overview) ?? { st: 'active', text: '' };
       return `<button class="mod${sel ? ' is-sel' : ''}" data-act="go-module" data-m="${esc(m)}" style="--c:${x.color ?? 'var(--accent)'}" aria-current="${sel}">
       <span class="mod__top"><span class="mod__ic">${x.icon}</span><span class="mod__name">${esc(x.label)}</span><span class="grow"></span>${sdot(xs.st)}</span>
       <span class="mod__sum">${xs.text}</span></button>`;

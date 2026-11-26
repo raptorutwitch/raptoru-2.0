@@ -5,13 +5,13 @@
 import { describe, expect, it } from 'vitest';
 import realRegistry from '../../../packages/schemas/src/chaos-registry.json';
 import { chaosEffectRequestSchema } from '../../../packages/schemas/src/chaos.ts';
-import { REGISTRY } from '../extension/lab-modules/interactions/registry.js';
+import { REGISTRY } from '../extension/modules/interactions/registry.js';
 import {
   EFFECTS,
   controlsFor,
   engineRequest,
   normalizeChoice,
-} from '../extension/lab-modules/interactions/catalog.js';
+} from '../extension/modules/interactions/catalog.js';
 
 const real = Object.fromEntries(
   realRegistry.effects.filter((e) => !e.internal).map((e) => [e.id, e]),
