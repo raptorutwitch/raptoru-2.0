@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- LAB ONLY — page de comparaison de la maquette « Effets live » : l'extension en mode démo, dans ses vraies tailles,
+     côte à côte. Servie par test/responsive/server.mjs (« Aperçu Effets live.cmd ») ; jamais embarquée dans un paquet. -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aperçu Effets live</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0b0716; --card: #17102a; --line: rgba(196, 164, 255, .18); --ink: #f4efff; --muted: #a99cc4; --acc: #d946ef; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at 10% 0, #2a1150, transparent 40%), var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); background: rgba(11, 7, 22, .92); backdrop-filter: blur(8px); }
+    h1 { margin: 0; font-size: 16px; }
+    h1 small { color: var(--muted); font-weight: 500; }
+    .ctl { display: flex; align-items: center; gap: 6px; }
+    .ctl > span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .seg { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; }
+    .seg button { padding: 5px 11px; border: 0; border-radius: 999px; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+    .seg button[aria-pressed="true"] { background: linear-gradient(135deg, #c026d3, #7c3aed); color: #fff; }
+    select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-size: 13px; }
+    main { display: flex; flex-wrap: wrap; gap: 22px; padding: 18px; align-items: flex-start; }
+    figure { margin: 0; display: grid; gap: 6px; }
+    figcaption { color: var(--muted); font-size: 12px; }
+    figcaption b { color: var(--ink); }
+    iframe { display: block; border: 1px solid var(--line); border-radius: 14px; background: #000; }
+    .note { padding: 0 18px 18px; color: var(--muted); font-size: 12px; max-width: 980px; }
+  </style>
+  <script type="module" src="apercu.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Effets live <small>· maquette Chaos V2 + Bonk · données fictives</small></h1>
+    <div class="ctl"><span>Direction</span><div class="seg" data-k="ixDir"><button data-v="a">A · Vitrine</button><button data-v="b">B · Liste</button><button data-v="c">C · Scène</button></div></div>
+    <div class="ctl"><span>Onglet</span><div class="seg" data-k="ixTab"><button data-v="chaos">Chaos</button><button data-v="bonk">Bonk</button><button data-v="regie">Régie</button></div></div>
+    <div class="ctl"><span>Rôle</span><div class="seg" data-k="ixRole"><button data-v="viewer">Viewer</button><button data-v="mod">Modérateur</button></div></div>
+    <div class="ctl"><span>Scénario</span><select data-k="ixScenario"></select></div>
+    <div class="ctl"><span>Fiche ouverte</span><select data-k="ixOpen"></select></div>
+  </header>
+  <main id="frames"></main>
+  <p class="note">Chaque cadre est la vraie extension (shell v2, mode démo) à la taille que Twitch lui donne. Clique dedans comme un viewer : achat en deux temps, suivi, file, Régie… Le bouton « Lab » dans le module change aussi la direction, le scénario et le rôle de ce cadre seul. Aucun appel au Core, à Twitch ni au Studio installé.</p>
+</body>
+</html>

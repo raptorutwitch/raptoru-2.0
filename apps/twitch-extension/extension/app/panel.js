@@ -124,6 +124,8 @@ const HUB_MODULE_STYLES = Object.freeze({
   music: { icon: 'music', color: '#16a34a', color2: '#0f766e' },
   // Mini-jeux V3: crimson to wine — an arcade at night, apart from Tombola's pink-violet and the TTS violet.
   random_ban_ext: { icon: 'games', color: '#ff2f55', color2: '#6d0d2a' },
+  // Effets live (Chaos V2 + Bonk, maquette Lab) : fuchsia vers cyan, l’écart RVB d’un glitch.
+  effets_live: { icon: 'chaos', color: '#d946ef', color2: '#0e7490' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 const MODERATION_MODULE = Object.freeze({
@@ -1427,8 +1429,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
       // Modules du carousel : les vrais modules (Historique reste un accès secondaire).
       const raffleOpen = raffleIsActive(state?.raffle ?? {});
+      // A session module that groups others (its `groups`) shows them inside its own view: their cards leave the Hub.
+      const grouped = new Set(sessionModules().filter((s) => s.groups && modules.some((m) => m.id === s.id)).flatMap((s) => s.groups));
       const hubModules = modules
-        .filter((candidate) => candidate.id !== ACTIONS_MODULE.id)
+        .filter((candidate) => candidate.id !== ACTIONS_MODULE.id && !grouped.has(candidate.id))
         .map((mod) => {
           const style = HUB_MODULE_STYLES[mod.id] ?? HUB_DEFAULT_STYLE;
           const off = state?.module_states?.[mod.id]?.enabled === false;

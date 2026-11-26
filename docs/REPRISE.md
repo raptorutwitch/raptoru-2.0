@@ -194,6 +194,11 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 
 **C. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (Chaos V2 lot 0, validations réelles en attente, finitions Studio).
 
+**C bis. Chaos V2 côté viewer : maquette « Effets live » (26/11)** — [chaos/EXTENSION_EFFETS_LIVE.md](chaos/EXTENSION_EFFETS_LIVE.md).
+Module de l'extension (Chaos + Bonk + Régie), Lab seulement, faux Core ; branche locale `feat/ext-interactions`
+(worktree `agent`), non poussée. Aperçu : `apps/twitch-extension/Apercu Effets live.cmd`. Direction et prix attendus
+d'Antoni avant le lot 2 (Core `chaos`, Jetons, branchement). Chaos V2 lui-même : branche `feat/chaos-studio`.
+
 **D. Soundboard : ajouter un son depuis Studio (23/11)** — [SOUNDBOARD.md](SOUNDBOARD.md) § 3. PR #126 fusionnée
 (`408f201a`). **Core `408f201a` déployé le 23/11 (déploiement lancé à 16:44 UTC)** (migration `20261205130000_sound_files.sql` appliquée,
 sauvegarde Coolify 16:43:40 UTC, retour arrière `deploy core 2a41e06e… --rollback --go`) ; la réaction blackjack r6

@@ -74,7 +74,9 @@ const sessionDefs = new Map();
  * `def` = { id, card(state) → { id, label, icon, description }, available({ state, client, document }) → boolean,
  * view({ document, client, module, team }) → { node, start(), attached?(), destroy?() }, hubFirst?: boolean (top of the
  * Hub), intro?: boolean (the host's intro above the view, default true), headLabel?: string (the open module's header
- * title, when it should say more than the Hub card's label), bodyData?: { [key]: value } (body dataset) }.
+ * title, when it should say more than the Hub card's label), bodyData?: { [key]: value } (body dataset), groups?: [id]
+ * (other modules this one shows inside its own view — Effets live holds Bonk: their cards leave the Hub while it is
+ * offered; they stay openable by id) }.
  * Shell v2 only — `lazy: { load: () => import('./view.js'), styles?: [href], prefetch?: boolean }` in place of `view`:
  * the entry file stays tiny (card + availability), the view file (exporting `view`) and its sheets are loaded when
  * the module is opened (app/lazy-views.js). The legacy panel (ui.js) never imports such a module.
