@@ -16,7 +16,7 @@ fluidité, modération dans la vraie console, bouclier, badge Tombola).
   60 s simulé), effets à venir.
 - Paramètres d'URL : `ixTab` (chaos, bonk), `ixRole` (viewer, mod : la session de démo devient celle d'un modérateur
   sur la console D4), `ixMod=1` (le bouclier est touché au chargement), `ixScenario`, `ixOpen` (id d'effet), `ixCap`
-  (30, 60), `ixPlanned=1`. Bouton **Lab** du catalogue : les mêmes réglages (changer de rôle recharge la page).
+  (30, 60), `ixPlanned=1`, `ixPrices=proposee` (grille proposée, TARIFS_PROPOSITION.md). Bouton **Lab** du catalogue : les mêmes réglages (changer de rôle recharge la page).
 - Le faux Core survit à un rechargement de l'onglet (sessionStorage) : achat en cours, file, crédits, charges, solde.
 
 ## 1. Structure et identité
@@ -55,12 +55,14 @@ bas de l'écran.
 - **Achats répétés** : la fiche reste ouverte après un achat ; « c'est parti ! » ou « réservé : 2e dans la file » s'affiche
   dans la fiche, le solde (en-tête), la file, le bandeau, les charges et la modération se mettent à jour tout de suite ;
   une demande refusée dit sa raison sans quitter la fiche.
-- **Confirmation** : deux temps par défaut (prix, puis « Confirmer » pendant 4 s). Case **« Ne plus demander »** au moment
-  de confirmer (décochée par défaut), réversible dans « Prix » (« Confirmer chaque achat »), gardée dans le navigateur.
-  Le prix est toujours sur le bouton. Protection : bouton bloqué pendant l'envoi, puis 0,7 s après la réponse (double clic
-  involontaire) ; chaque intention a une **clé d'idempotence** (un renvoi de la même intention ne débite jamais deux
-  fois, testé). Rien ne contourne les règles du Core, les plafonds ou le solde : tout est revérifié à l'achat. En vrai
-  (Jetons réels), le mode sans confirmation est à valider avant la Production.
+- **Confirmation** : deux temps par défaut (prix, puis « Confirmer » pendant 4 s). Case **« Ne plus demander
+  confirmation »** toujours visible dans le pied de la fiche (sur sa ligne quand la fiche est étroite), décochée par
+  défaut, gardée dans le navigateur, réversible à tout moment ; cochée, un clic sur « Lancer » achète directement et la
+  fiche reste ouverte. Le prix est toujours sur le bouton. Protection : rien pendant l'envoi (une requête à la fois) ; deux
+  clics à moins de 0,25 s = un double clic, un seul achat ; un clic volontaire après la réponse = un nouvel achat, avec
+  une nouvelle **clé d'idempotence** (un renvoi de la même intention ne débite jamais deux fois, testé). Rien ne contourne
+  les règles du Core, les plafonds, les charges ou le solde : tout est revérifié à chaque achat. En vrai (Jetons réels),
+  le mode sans confirmation est à valider avant la Production.
 
 ## 4. Les 13 effets : réel ou simulé
 
@@ -122,17 +124,44 @@ Constats dans le moteur (code lu, aucune modification) :
   mais un déclenchement « un clignement » natif (sans 1,6 s d'yeux ouverts autour) et une limite de cadence du moteur
   lui-même seraient plus sûrs.
 
-## 5. Durées : trois plafonds
+## 5. Durées : trois plafonds, et 60 s
 
-1. **Registre (moteur)** : 1 à 60 s, la borne absolue de toute activation.
-2. **Sécurité de Studio** (Chaos › Sécurité › durée maximale) : 30 s par défaut, réglable jusqu'à 60 s ; le moteur
-   refuse au-delà, quelle que soit la source (Studio, Core, test). C'est ce qui bloquait la glissière à 30 s.
+1. **Registre (moteur)** : 1 à 60 s (`engine_limits.max_duration_ms` = 60 000), la borne absolue de toute activation.
+2. **Sécurité de Studio** (Studio › Chaos › Sécurité › « Durée maximale d'un effet ») : 30 s par défaut ; le champ
+   accepte déjà jusqu'à 60 000 ms (la borne du registre). Le moteur l'applique à toute activation ordinaire (Core,
+   extension, test : `Params.Resolve`, `Scheduler` : min(registre, Sécurité)) ; seules les activations manuelles de
+   Studio (« Activer » avec une durée, Performance Lab) vont jusqu'au registre.
 3. **Autorisation viewer** (futur Core) : la plage vendue par effet et par préréglage, toujours sous les deux autres.
 
-La maquette suit ces trois plafonds : glissière jusqu'au plafond Sécurité (Lab : « 30 s · Sécurité actuelle » ou « 60 s ·
-simulé »), plages propres (Flash 3–9 s, Yeux fermés 3–15 s, Répétés 5–30 s, Brouillard dès 10 s, Impact 3 s fixe,
-Un clignement fixe, pulsations 15–20 s au plus). Pour vendre 60 s : relever la Sécurité dans Studio (réglage d'Antoni),
-puis le Core autorise la plage effet par effet (§ 13).
+**60 s réelles : aucun changement de code du moteur ni de Studio.** Il suffit de régler la Sécurité de Studio sur
+60 000 ms (réglage d'Antoni) ; ensuite le futur Core lira ce plafond (état de Studio) et le donnera à l'extension, qui
+n'impose rien en dessous. Dans la maquette, sous un plafond de 60 s (Lab : « 60 s · simulé »), chaque effet va jusqu'à
+60 s, sauf les variantes courtes par nature (testé) : Flash 3–9 s, Impact 3 s, Un clignement (durée fixe), Yeux fermés
+15 s (choix de gêne, décision d'Antoni), zooms Pulsations / Intermittent 20 s et Zoom et dézoom 15 s (nombre fixe de
+zooms dans le moteur). Paupières (Naturel, Lent, Somnolence, Lutte, Répétés) passe de 30 à 60 s le 28/11. Une activation
+de 60 s dure 60 s plus la transition de sortie (≤ 3 s).
+
+## 5 bis. Image du jeu et plein écran
+
+Le moteur ne refuse un effet que dans un cas précis : **au moment de l'activation**, pour un effet qui transforme l'image
+du jeu (`requires_capture`), si Windows signale un **vrai plein écran exclusif Direct3D**
+(`SHQueryUserNotificationState` = `QUNS_RUNNING_D3D_FULL_SCREEN`, `Targets.cs`). Il ne lit pas le mode d'affichage
+choisi dans le jeu :
+
+- « Plein écran » dans un jeu récent (Overwatch) avec les optimisations plein écran de Windows : le jeu présente en
+  **flip** (Independent Flip quand rien ne le recouvre) ; Windows ne signale pas d'exclusif ; la capture WGC fonctionne
+  et le calque de Chaos s'affiche (DWM repasse en composition, Composed Flip, tant qu'il est visible). C'est le cas
+  d'Antoni : Chaos fonctionne sur Overwatch en plein écran, capture directe dans OBS.
+- Vrai exclusif (anciens jeux, optimisations désactivées) : rien ne peut s'afficher au-dessus ; le moteur refuse les
+  effets à capture (`exclusive_fullscreen`).
+- Autres causes réelles d'indisponibilité, constatées par le moteur : fenêtre cible introuvable ou réduite, capture sans
+  image, exclusion du calque impossible.
+
+La maquette ne déduit plus rien du mode d'affichage : le scénario Lab « Image du jeu indisponible (Studio) » simule ce
+que Studio signalerait (« Studio ne capte pas l'image du jeu en ce moment »), et « Conditions » ne mentionne plus le
+plein écran. **À faire** (Studio + Core) : une **disponibilité réelle par effet** (`available`, `reason` : capture
+sans image, exclusif détecté, fenêtre absente, effet désactivé, mode doux) tirée de l'état du moteur et relayée au Core,
+au lieu d'une approximation.
 
 ## 6. Prix (fictifs) : la logique
 
@@ -155,6 +184,8 @@ puis le Core autorise la plage effet par effet (§ 13).
   (référence : yeux fermés tout du long).
 - Exemples (10 s) : Couleur 2 000, Secousse 4 000, Séisme 8 050, Brouillard marqué 6 000 / occultant 15 800, Yeux fermés
   13 450, Un clignement 1 700, Écran retourné 12 000 (30 s : 28 800).
+- **Proposition de grille définitive (28/11)** : [TARIFS_PROPOSITION.md](TARIFS_PROPOSITION.md) — bases 1,3 à 3 ×
+  selon la gêne, scénarios occasionnel / régulier / très actif ; testable en Lab (Tarifs › Proposition 28/11).
 - Fréquence d'utilisation : traitée par les délais (1 min par viewer et par effet, 1 min commune pour le Flash), pas par
   le prix ; un prix dynamique (selon l'affluence) serait une décision Core. Aucune valeur n'est définitive.
 
@@ -224,6 +255,13 @@ fictive, annoncée comme telle (capture du stream : § 13).
   retirée au moment où elle démarre est arrêtée avec le remboursement voulu. Hors live, Chaos coupé ou Studio
   interrompu ne se lèvent pas d'ici.
 
+**Restrictions par viewer (réutilisées, rien à recréer)** : les commandes D4 `set_restriction`, `set_cooldown`,
+`clear_cooldown` (`packages/schemas/src/lab-moderation.ts`) sont déjà découpées par module (`tts`, `soundboard`,
+`bonk`, `raffle`, `random_ban`) ; Chaos y entre en ajoutant le module `chaos` aux énumérations, en vérifiant la
+restriction dans le chemin d'achat du Core (comme `random-ban/service.ts`), et en la montrant dans l'extension par le
+mécanisme existant (`restrictionsOf(module)` de `app/panel.js`, puces de restriction de l'en-tête) ; la fiche viewer de
+la console (interdiction, délai personnel) s'applique telle quelle.
+
 **Contrat de branchement (Core, lot 2)** : enregistrer la section FX en production (même `registerModerationSection`,
 ou une entrée `chaos` dans `MOD_KEYS`), read models `/moderation/v2/chaos/overview` (actifs, file, burst, récents,
 crédits en attente, état) et commandes `/moderation/v2/actions` (`chaos.stop`, `chaos.cancel`, `chaos.refund`,
@@ -240,6 +278,28 @@ confirmation ; durée hors plafond refusée ; même clé d'idempotence = même r
 3 min = remboursée intégralement ; arrêtée avant 25 % = remboursement proposé ; sans remboursement = motif obligatoire ;
 Tout arrêter suspend les achats ; Chaos désactivé, Studio interrompu, hors live : refusé avant tout débit, avec la raison
 (Studio interrompu : ce qui jouait est rendu, la file attend son retour puis expire remboursée).
+
+## 10 bis. Remboursements automatiques (règle des achats réels)
+
+**Un effet payé qui ne démarre jamais, ou échoue techniquement avant son démarrage, est intégralement remboursé** —
+les Jetons, ou le **crédit** utilisé (rendu, pas converti), et la **charge** d'un clignement. Causes reconnues
+(`FAILURES`, model.js) : Studio déconnecté (après 30 s de grâce pour ce qui attendait), moteur indisponible, effet
+refusé, image du jeu indisponible, erreur au déclenchement, liaison perdue, démarrage jamais confirmé, file de plus de
+3 min. Démarré puis interrompu par une panne : **politique distincte, réglable et tracée** (`REFUND_POLICY` :
+rendu s'il a joué moins de la moitié, motif « Studio interrompu à 60 % : non remboursé ») ; arrêté par la modération :
+rendu d'office avant 25 %, sinon au choix (motif obligatoire sans remboursement).
+
+Garanties (faux Core, testées pour chaque cause) : achat idempotent (clé d'intention), remboursement idempotent (clé
+`refund:<demande>`), aucun double débit, aucun double remboursement, **journal des transactions** (débit,
+remboursement, crédit utilisé, crédit rendu), état clair dans l'extension (« Pas démarré (Studio déconnecté) : 3 000
+Jetons rendus » dans la fiche, « n'a pas pu démarrer » dans Mes effets et dans la section FX).
+
+**Contrat pour le vrai Core** : une demande passe `queued` → `starting` (commande envoyée à Studio, échéance
+d'accusé de réception) → `active` (accusé du moteur avec `request_id`) → `done` ; ou `failed` (code moteur / Studio
+/ réseau / échéance) avec remboursement dans la **même transaction** que le changement d'état ; débit et remboursement
+écrits au registre du Wallet avec une clé unique (`chaos:buy:<intent>`, `chaos:refund:<request>`), rejouables sans
+effet ; Studio rapporte `started` / `failed` / `interrupted (played_ms)` par `request_id` ; le Core applique la
+politique d'interruption et l'écrit dans l'audit.
 
 ### Ce que le Core devra garder, ce qui reste dans le navigateur
 
@@ -285,27 +345,28 @@ Ce qui a changé :
 - les vignettes du catalogue restent figées (animées seulement au survol) ; `prefers-reduced-motion` : aucune
   animation (fiche, panneaux, points, aperçus figés).
 
-## 12. Pont local de test : extension Lab → Studio → moteur → écran / OBS
+## 12. Prochain jalon : vrais effets depuis l'extension de test (plan court, sans achat réel)
 
-Ce qui existe (branche `feat/chaos-studio`) : Studio sert l'extension Lab sur la même origine
-(`http://127.0.0.1:4100/ext/`, CSP `connect-src 'self'`) ; `POST /api/chaos/test` accepte exactement la forme de
-`engineRequest()` (`effect, variant, level, params, duration_ms, transition`) et la valide (schéma strict) ; le moteur
-valide, met en file, joue ; STOP et STOP ALL existent.
+Parcours : **fiche Interactions (Lab) → `fetch` local → Studio → moteur Chaos → écran d'Antoni / OBS**, avec le faux
+Core (aucun Jeton, aucun Core, aucune publication Twitch).
 
-Interface minimale à ajouter (passe Studio, pas encore faite) :
+Ce qui existe déjà (relu dans `feat/chaos-studio`) : Studio sert l'extension Lab sur **la même origine que son API**
+(`http://127.0.0.1:4100/ext/`, `extension-lab/serve.ts`, `labModules` autorisé, CSP `connect-src 'self'`) ;
+`POST /api/chaos/test` (`chaos/runtime.ts`, en-tête `x-raptoru-studio: 1`) accepte exactement la demande que la fiche
+construit (`engineRequest()` : `effect, variant, level, params, duration_ms, transition`), la valide
+(`chaosEffectRequestSchema`) et l'envoie au moteur (`effect.request` : registre, Sécurité, file) ; STOP et STOP ALL
+existent ; le schéma connaît déjà la source `extension`.
 
-1. Une route **Lab seulement** `POST /api/chaos/lab-activate` dans `runtime.ts` : même corps que `engineRequest()`,
-   `source: { kind: 'extension', ref: 'Lab' }` (pour être traité comme un viewer : paramètres exposés seulement, pas de
-   couche d'entrée, effet désactivé refusé), sorties OBS du mode actuel, garde **même hôte** + en-tête Studio + **profil
-   Lab** obligatoire ; réponse : `request_id`, état (démarré, en file, refusé + raison).
-2. Dans la maquette, un interrupteur Lab « Jouer pour de vrai sur mon PC » : à la confirmation, un `fetch` vers cette
-   route en plus du faux Core (aucun Jeton, aucun Core, aucune publication Twitch ; inopérant hors de Studio Lab).
-3. Fusionner les deux branches dans un même arbre de travail (la maquette est sur `feat/ext-interactions`, Studio Chaos sur
-   `feat/chaos-studio`) ou lancer Studio depuis un arbre qui contient les deux.
+| Étape | Qui    | Contenu                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Effort |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1     | agent  | Worktree `feat/chaos-lab-bridge` depuis `feat/chaos-studio`, fusion de `feat/ext-interactions` (conflits attendus : docs seulement) ; tests moteur, Studio, extension                                                                                                                                                                                                                                                                                                     | 30 min |
+| 2     | agent  | **Phase A, sans toucher Studio** : dans la fiche, un interrupteur Lab « Jouer sur mon PC » visible seulement quand la page est servie par Studio (`/ext/`) ; après un achat réussi du faux Core, `POST /api/chaos/test` avec `engineRequest()` ; la fiche affiche la réponse du moteur (démarré, en file, refusé + raison). Effet sur l'écran (source `studio`, sans OBS)                                                                                                 | 1 h    |
+| 3     | agent  | **Phase B, petite route Studio** : `POST /api/chaos/lab-activate` (profil Lab obligatoire, même hôte + en-tête Studio) : source `{ kind: 'extension', ref: 'Lab Interactions' }` (règles d'un viewer : paramètres exposés seulement, effet désactivé refusé), sorties OBS du mode actuel, réponse `request_id` + état ; arrêt d'un effet depuis la section FX (STOP existant) ; tests de la route (hors Lab refusé, paramètre non exposé refusé, demande valide acceptée) | 2–3 h  |
+| 4     | Antoni | Fermer le Studio installé, lancer `npm run studio` depuis le worktree du pont (ou un paquet local), ouvrir `http://127.0.0.1:4100/ext/video_component.html?anchor=component&shell=v2&labModules=interactions`, cocher « Jouer sur mon PC », lancer des effets ; décider quand (jamais imposé pendant un jeu)                                                                                                                                                              | —      |
+| 5     | agent  | Ensuite, lot 2 : module `chaos` du Core (§ 9, § 10 bis, § 13)                                                                                                                                                                                                                                                                                                                                                                                                             | —      |
 
-Dépendances : garde de jeu (jamais pendant un jeu actif sans l'accord d'Antoni), Studio Lab lancé par Antoni, moteur
-installé. Validation possible dès que (1) à (3) sont faits : quelques heures de travail Studio, testable seulement sur le
-PC d'Antoni.
+Rien de cela ne touche les Jetons, la Production, Twitch, Windows, OBS (hors sortie de test du moteur) ni Overwatch.
+Étapes 1 à 3 : sur ton GO (elles modifient Studio et créent une branche) ; l'étape 4 est la tienne.
 
 ## 13. Travaux ultérieurs (Studio, moteur, Core) — rien de cela ne fonctionne aujourd'hui
 
@@ -314,11 +375,14 @@ PC d'Antoni.
 | Module `chaos` du Core : catalogue viewer, devis, achat idempotent, file, délais, remboursements, read models                                                                                                                                            | Core                           | lot 2             |
 | Préréglage du streamer appliqué après le style du viewer : le Core envoie tous les paramètres du réglage, ou le moteur ignore le préréglage pour une source externe                                                                                      | Core ou moteur                 | décision d'Antoni |
 | Bloc `viewer` du registre élargi : préréglages vendus, forces, contrôles (paramètre + bornes viewer), plages de durée par préréglage                                                                                                                     | registre + Core                | lot 2             |
-| 60 s vendues : Sécurité relevée dans Studio + plage autorisée par le Core                                                                                                                                                                                | Studio (réglage) + Core        | décision d'Antoni |
+| 60 s : Sécurité de Studio réglée sur 60 000 ms (champ existant, aucun code) ; le Core relaie ce plafond à l'extension                                                                                                                                    | Studio (réglage) + Core        | décision d'Antoni |
 | Brouillard « 5 s de montée non décomptées » : soit le Core ajoute la montée à `duration_ms` (≤ 3 s, plafond des transitions, et il faut de la marge sous la Sécurité), soit le moteur gagne une montée hors durée et une limite de transition plus haute | Core ou moteur                 | décision d'Antoni |
 | Bouclier de modération et point d'extension D4 : déjà dans le shell (branche locale) ; à embarquer avec le prochain ZIP de l'extension                                                                                                                   | extension                      | GO d'Antoni       |
 | Crédits d'effets : tables, commandes, réservation atomique, journal                                                                                                                                                                                      | Core                           | lot 2+            |
 | Capture du stream pour viser (scène de programme d'OBS, au plus toutes les 15 s, seulement fiche ouverte ; domaine d'images autorisé dans la console Twitch)                                                                                             | Studio + Core + console Twitch | après lot 2       |
+| Disponibilité réelle par effet (`available`, `reason` : capture sans image, exclusif détecté, fenêtre absente, effet désactivé, mode doux) tirée de l'état du moteur, relayée au Core (§ 5 bis)                                                          | Studio + Core                  | lot 2             |
+| Remboursements : états `starting` / accusé de démarrage, `failed` avec remboursement dans la même transaction, clés Wallet `chaos:buy` / `chaos:refund`, politique d'interruption tracée (§ 10 bis)                                                      | Core + Studio                  | lot 2             |
+| Restrictions par viewer : module `chaos` dans `set_restriction` / `set_cooldown` / `clear_cooldown`, vérifiées à l'achat (§ 9)                                                                                                                           | Core + schémas                 | lot 2             |
 | Pont local de test (§ 12)                                                                                                                                                                                                                                | Studio                         | GO d'Antoni       |
 | Confettis, Pluie d'emotes (calques moteur visibles sur l'écran)                                                                                                                                                                                          | moteur + registre              | lot 3             |
 | Charges « Un clignement » : état par viewer (`n`, `at`) et file `burst` en base, plafonds communs sous verrou ; reçus d'idempotence                                                                                                                      | Core                           | lot 2             |
@@ -339,10 +403,15 @@ PC d'Antoni.
   ouverte, rechargement de la page (achat en cours, crédits et solde retrouvés), bouclier → FX → Tout arrêter → retour à
   Interactions, Soundboard → section Soundboard → « Retour à Soundboard », Bonk → section Bonk, viewer sans bouclier,
   badge Tombola (Hub et modules) → vraie Tombola, badge absent une fois dedans.
-- Tests : `test/interactions-model.test.js` (40 cas : fidélité au registre, durées, prix, file, crédits, modération,
-  charges et cadence, deux viewers, idempotence, annulation pendant le démarrage, Tout arrêter, Chaos coupé / Studio
-  interrompu / hors live, persistance, glissières Flou et Pixelisation) ; `test/module-host.test.js` (point d'extension
-  de la console, source de démo jamais utilisée hors démo) ; suite de l'extension ; banc `test/responsive/lab-module.mjs`.
+- Tests : `test/interactions-model.test.js` (46 cas : fidélité au registre, durées dont 60 s par effet, prix, file,
+  crédits, modération, charges et cadence, deux viewers, idempotence, annulation pendant le démarrage, Tout arrêter, Chaos
+  coupé / Studio interrompu / hors live / image du jeu indisponible, remboursement de chaque échec avant démarrage, crédit
+  et charge rendus, renvoi réseau, double remboursement refusé, grâce de Studio, politique des interruptions,
+  persistance, glissières) ; `test/module-host.test.js` (point d'extension de la console, source de démo jamais utilisée
+  hors démo) ; suite de l'extension ; banc `test/responsive/lab-module.mjs`.
+- Lab, 28/11 : cinq « Un clignement » d'affilée sans confirmation (charges 10 → 5, solde −5 × 1 700, fiche ouverte), un
+  double clic = un achat, case toujours cochée après rechargement ; achat qui échoue au démarrage → « Pas démarré (Studio
+  déconnecté) : 3 000 Jetons rendus », solde intact.
 - **Non vérifié** : vrai téléphone (Android, iPhone) dans l'appli Twitch ; la console D4 sur un vrai Core avec la section
   FX (elle n'existe qu'en Lab).
 - **Tombola en Lab** : l'état de la tombola vient de la session de démo (`shared/demo-data.js`), mais le badge, son
@@ -369,11 +438,13 @@ transitions ; emplacements ; limites) au même format — le test de fidélité 
 
 ## 16. Décisions qui restent à Antoni
 
-1. Les vrais prix (bases, part fixe de la durée) et la grille de gêne.
-2. Relever la Sécurité à 60 s, et pour quels effets.
+1. Les vrais prix : la proposition du 28/11 ([TARIFS_PROPOSITION.md](TARIFS_PROPOSITION.md)) ou autre.
+2. Régler la Sécurité de Studio sur 60 000 ms (quand tu veux) ; Yeux fermés reste à 15 s ?
 3. Préréglage du streamer contre style du viewer (§ 13).
 4. Brouillard : montée hors durée (Core) ou changement moteur.
 5. Crédits : qui peut en offrir (modérateurs ? permission dédiée), expiration, contraintes par défaut.
 6. Miroir haut ↔ bas à essayer en jeu ; nom de l'acheteur affiché à l'écran (oui par défaut).
 7. Charges du clignement : 10 et 6 s de recharge ? plafonds communs (10 en attente, 20 par minute) ? prix d'un clignement.
 8. « Ne plus demander confirmation » avec de vrais Jetons (proposé désactivé par défaut).
+9. Politique des effets interrompus par une panne : rendu sous 50 % de la durée jouée (proposé), au prorata, ou toujours.
+10. GO pour le prochain jalon (§ 12 : branche du pont, phase A puis petite route Studio).

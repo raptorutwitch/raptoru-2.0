@@ -195,7 +195,12 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 **C. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (Chaos V2 lot 0, validations réelles en attente, finitions Studio).
 
 **C bis. Chaos V2 côté viewer : module « Interactions » (26–28/11)** — [chaos/EXTENSION_INTERACTIONS.md](chaos/EXTENSION_INTERACTIONS.md).
-Direction validée par Antoni le 26/11 ; finitions 27/11 et 28/11 : effets, préréglages et contrôles réels du registre,
+**Interface validée par Antoni le 28/11** (plus de refonte). Dernière passe 28/11 : achats sans confirmation (case
+visible), 60 s (réglage Studio seulement, § 5), plein écran (§ 5 bis : le moteur ne refuse qu'un vrai exclusif
+Windows), remboursements automatiques et journal (§ 10 bis), aperçus Brouillard / Paupières / Tunnel / Tremblement,
+proposition de tarifs ([chaos/TARIFS_PROPOSITION.md](chaos/TARIFS_PROPOSITION.md)). **Suite : § 12, vrais effets
+depuis l'extension de test (sur GO d'Antoni).**
+Direction validée le 26/11 ; finitions 27/11 et 28/11 : effets, préréglages et contrôles réels du registre,
 prix selon la gêne, crédits (popover compact), « Conditions », achats répétés sans fermer la fiche, charges d'« Un
 clignement », glissière Flou, fluidité ; modération FX dans la **vraie console D4** (point d'extension générique) et
 **bouclier** générique des modérateurs dans le shell ; badge « Tombola » compact. Interactions = Lab seulement, faux Core ;
