@@ -195,6 +195,9 @@ export class ChaosObsCursor {
     if (this.lingerTimer) clearTimeout(this.lingerTimer);
     this.lingerTimer = setTimeout(() => {
       this.lingerTimer = null;
+      // The delay is over when its timer fires: a timer can fire a little before the wall clock reaches
+      // `lingerUntil`, and the cursor would then stay off until the next effect (CI, PR #130).
+      this.lingerUntil = 0;
       this.kick();
     }, this.lingerMs);
     this.lingerTimer.unref?.();

@@ -52,7 +52,14 @@ class FakeObs {
 }
 
 let n = 0;
-function rig(opts: { enabled?: boolean; obs?: FakeObs; file?: string } = {}) {
+function rig(
+  opts: {
+    enabled?: boolean;
+    obs?: FakeObs;
+    file?: string;
+    now?: () => number;
+  } = {},
+) {
   const obs = opts.obs ?? new FakeObs();
   const file = opts.file ?? join(dir, `c${++n}.json`);
   const c = new ChaosObsCursor(
@@ -61,7 +68,7 @@ function rig(opts: { enabled?: boolean; obs?: FakeObs; file?: string } = {}) {
     () => ({ source: 'Écran', device: D1 }),
     async (effect) => CURSOR_FX.has(effect),
     () => {},
-    Date.now,
+    opts.now ?? Date.now,
     40,
   );
   return { obs, c, file };
@@ -161,6 +168,18 @@ describe('Chaos › curseur d’OBS pendant les effets à curseur dessiné', () 
     await wait(80);
     expect(obs.settings.capture_cursor).toBe(false);
     c.onEngineEvent(ev('canceled', 'c'));
+    await vi.waitFor(() => expect(obs.settings.capture_cursor).toBe(true));
+    expect(obs.sets()).toEqual([false, true]);
+  });
+
+  it('fin du délai : rétabli quand son minuteur sonne, même si l’horloge n’a pas encore atteint l’échéance', async () => {
+    // Horloge figée = le cas extrême d'un minuteur qui sonne avant que Date.now() atteigne la fin du délai.
+    const frozen = Date.now();
+    const { obs, c } = rig({ now: () => frozen });
+    await c.setEnabled(true);
+    c.onEngineEvent(ev('accepted', 'a', 'mirror'));
+    await vi.waitFor(() => expect(obs.settings.capture_cursor).toBe(false));
+    c.onEngineEvent(ev('ended', 'a'));
     await vi.waitFor(() => expect(obs.settings.capture_cursor).toBe(true));
     expect(obs.sets()).toEqual([false, true]);
   });
