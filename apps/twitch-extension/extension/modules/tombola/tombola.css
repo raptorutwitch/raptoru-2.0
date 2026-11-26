@@ -1095,3 +1095,52 @@ html:where([data-mq~="m19"]):has(body.component-view){
     animation: rl-marquee var(--mq-t, 4s) ease-in-out infinite;
     mask-image: linear-gradient(90deg, #000 calc(100% - 10px), transparent);
   }
+
+/* « Tombola ouverte » : raccourci du socle vers la Tombola (app/panel.js, raffleShortcut), sur le Hub (barre du bas)
+   et dans l'en-tête de chaque module, tant qu'elle est ouverte et que le viewer n'y est pas inscrit. Discret : le billet
+   et un point qui respire ; le nom quand la place le permet (lu dans tous les cas : aria-label et infobulle). */
+.jdm-raffle-chip {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: calc(5 * var(--g));
+  min-height: calc(26 * var(--g));
+  padding: 0 calc(8 * var(--g));
+  border: 1px solid rgba(236, 72, 153, .5);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(236, 72, 153, .22), rgba(168, 85, 247, .14));
+  color: #ffd6ec;
+  font-size: var(--fs-11);
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.jdm-raffle-chip:hover { border-color: #f472b6; color: #fff; }
+.jdm-raffle-chip:focus-visible { outline: 2px solid #f9a8d4; outline-offset: 2px; }
+.jdm-raffle-chip__icon { width: calc(15 * var(--g)); height: calc(15 * var(--g)); flex: none; }
+.jdm-raffle-chip__dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: calc(7 * var(--g));
+  height: calc(7 * var(--g));
+  border-radius: 50%;
+  background: #f472b6;
+  box-shadow: 0 0 0 2px #1a1029;
+  animation: jdm-raffle-breathe 2.4s ease-in-out infinite;
+}
+@keyframes jdm-raffle-breathe { 50% { opacity: .4; } }
+.jdm-raffle-chip.is-new { animation: jdm-raffle-in .28s cubic-bezier(.3, .7, .2, 1); }
+@keyframes jdm-raffle-in { from { opacity: 0; transform: translateY(-3px) scale(.96); } }
+/* En-tête d'un module : le côté gauche prend la largeur du retour et du billet, le titre (ou le sélecteur) se range
+   au milieu de ce qui reste : rien ne se chevauche, même dans le panneau de 318 px. */
+.jdm-module__screen-head:has(.jdm-module__screen-side--left .jdm-raffle-chip) { grid-template-columns: auto minmax(0, 1fr) auto; }
+:root:not([data-surface="video"]) .jdm-module__screen-side--left .jdm-raffle-chip { padding: 0 calc(7 * var(--g)); }
+/* En-tête d'un module : sur téléphone et dans le panneau, le billet seul ; sur le lecteur du PC, « Tombola ouverte ». */
+:root:not([data-surface="video"]) .jdm-module__screen-side--left .jdm-raffle-chip__label { display: none; }
+.mobile .jdm-raffle-chip { min-height: calc(36 * var(--g)); }
+@media (prefers-reduced-motion: reduce) {
+  .jdm-raffle-chip,
+  .jdm-raffle-chip__dot { animation: none; }
+}

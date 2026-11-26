@@ -588,6 +588,35 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     restoreScrollPositions();
   }
 
+  // « Tombola ouverte » : un raccourci vers la Tombola depuis le Hub et chaque module, tant qu'elle est ouverte et que
+  // le viewer n'y est pas inscrit (état de la session : state.raffle, lu par le sondage du socle et par le signal
+  // Twitch). Le même bouton est gardé d'un rendu à l'autre ; il ne s'anime qu'à l'ouverture d'une nouvelle tombola.
+  // Jamais une notification (experience.js : raffle.open est un état du direct).
+  let raffleChip = null;
+  let raffleChipWindow = null;
+  function raffleShortcut() {
+    const raffle = state?.raffle;
+    const offered = (state?.modules ?? []).some((mod) => mod.id === 'raffle_join');
+    if (!offered || !raffleIsActive(raffle) || raffle?.joined === true || openModule === 'raffle_join') return null;
+    if (!raffleChip) {
+      raffleChip = el('button', 'jdm-raffle-chip');
+      raffleChip.type = 'button';
+      raffleChip.setAttribute('aria-label', 'Tombola ouverte : la rejoindre');
+      raffleChip.title = 'Tombola ouverte : la rejoindre';
+      const dot = el('span', 'jdm-raffle-chip__dot');
+      dot.setAttribute('aria-hidden', 'true');
+      raffleChip.append(dot, hubIcon(document, 'raffle_join', 'jdm-raffle-chip__icon'), el('span', 'jdm-raffle-chip__label', 'Tombola ouverte'));
+      raffleChip.addEventListener('click', () => navigateTo('raffle_join'));
+    }
+    const windowId = String(raffle?.window_id ?? raffle?.token ?? 'open');
+    if (raffleChipWindow !== windowId) {
+      raffleChipWindow = windowId;
+      raffleChip.classList.add('is-new');
+      raffleChip.addEventListener('animationend', () => raffleChip.classList.remove('is-new'), { once: true });
+    }
+    return raffleChip;
+  }
+
   function flash(node, message, kind = 'error') {
     const box = el('p', `jdm-flash jdm-flash--${kind}`, message);
     node.append(box);
@@ -1488,6 +1517,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       tutorial.title = 'Tutoriel';
       tutorial.append(el('span', 'rh-tuto__q', '?'));
       tutorial.addEventListener('click', openTutorial);
+      const hubRaffleChip = raffleShortcut();
+      if (hubRaffleChip) utilLeft.append(hubRaffleChip);
       util.append(utilLeft, launcherHost, utilRight, tutorial);
       dock.append(rail, util);
       hub.append(top, stage, dock, allModules);
@@ -1580,6 +1611,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         navigateTo(null);
       });
       headLeft.append(back);
+      const raffleChipNode = raffleShortcut();
+      if (raffleChipNode) headLeft.append(raffleChipNode);
       if (isRaffle) {
         const raffleHeader = state?.raffle ?? {};
         const raffleOpen = raffleIsActive(raffleHeader);
