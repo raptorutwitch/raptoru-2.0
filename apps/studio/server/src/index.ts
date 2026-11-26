@@ -100,6 +100,7 @@ import { CosmeticsRelay } from './cosmetics/relay.js';
 import { ChallengesRelay } from './challenges/relay.js';
 import { LevelUpRuntime } from './level-up/runtime.js';
 import { ChaosRuntime } from './chaos/runtime.js';
+import { ChaosCoreLoop } from './chaos/core-loop.js';
 import { createChatboxHost, type ChatboxHost } from './chatbox/host.js';
 import { ProgressionRelay } from './progression/relay.js';
 import {
@@ -643,12 +644,26 @@ export function createStudioServer(o: StudioServerOptions) {
       }
       // Halloween: overlay page / media (its key), Electron main (screens), Studio's panel and the shop relay.
       if (halloween && (await halloween.handle(req, res, url))) return;
-      // Security (architecture audit S2): these relays answered without the same-host check (DNS rebinding).
+      // Security (architecture audit S2): these relays answered without the same-host check (DNS rebinding). Chaos V2
+      // lot 2: the engine's local API too (it plays effects on the streamer's screen).
       if (
-        /^\/api\/(progression|cosmetics|challenges)(\/|$)/.test(url.pathname) &&
+        /^\/api\/(progression|cosmetics|challenges|chaos)(\/|$)/.test(
+          url.pathname,
+        ) &&
         !sameHost(req)
       )
         return send(res, 403, { error: 'forbidden_host' });
+      // Chaos V2 lot 2: the Lab Interactions « Jouer sur mon PC » exists in the Lab profile only (as the Extension Lab).
+      if (
+        url.pathname.startsWith('/api/chaos/lab/') &&
+        profile?.plan.effective === 'production'
+      )
+        return send(res, 409, {
+          ok: false,
+          error: 'production_profile',
+          code: 'production_profile',
+          message: PRODUCTION_NO_EXT_LAB,
+        });
       if (progression && (await progression.handle(req, res, url))) return;
       if (cosmetics && (await cosmetics.handle(req, res, url))) return;
       if (challenges && (await challenges.handle(req, res, url))) return;
@@ -984,6 +999,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   let halloweenRef: HalloweenRuntime | null = null;
   let levelUpRef: LevelUpRuntime | null = null;
   let chaosRef: ChaosRuntime | null = null;
+  let chaosCoreRef: ChaosCoreLoop | null = null;
   let chatboxRef: ChatboxHost | null = null;
   let pointsRef: ChannelPointsRuntime | null = null;
   let twitchConnectionsRef: TwitchConnections | null = null;
@@ -1012,6 +1028,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     seRef?.close();
     void dockRef?.server.close();
     halloweenRef?.stop();
+    // Before the engine stops: nothing claimed while Studio leaves (the journal keeps the reports to send).
+    chaosCoreRef?.stop();
     levelUpRef?.stop();
     chatboxRef?.stop();
     pointsRef?.stop();
@@ -1659,6 +1677,31 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         }
       : null,
   });
+  // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md § 3): the viewers' effects sold by the profile's Core, played by the
+  // engine. Only with a Core and an engine (the loop never starts the engine: it says « not ready » until it runs).
+  if (chaosRef?.client.available() && alertsCore && alertsEnv)
+    chaosCoreRef = await ChaosCoreLoop.open({
+      runtime: chaosRef,
+      core: alertsCore,
+      environment: alertsEnv,
+      channelId: cockpitChannel,
+      studioId:
+        (plan.production?.installation ?? mainLab?.installation)
+          ?.installationId ?? 'studio-lab-chaos',
+      journal:
+        alertsEnv === 'production'
+          ? join(paths.runtimeDir, 'production', 'chaos', 'core-journal.json')
+          : join(labModuleDir('chaos'), 'core-journal.json'),
+      log: (line) => lab.logs.add('studio', line),
+    }).catch((e: Error) => {
+      lab.logs.add(
+        'studio',
+        `Chaos : boucle du Core indisponible (${lab.deps.redact(e.message)})`,
+        'error',
+      );
+      return null;
+    });
+  chaosCoreRef?.start();
   supervisor.start();
   if (dock)
     dock.server.listen().then(

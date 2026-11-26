@@ -23,6 +23,7 @@ import { ChaosObsError, ChaosObsOutput } from './obs-output.js';
 import { ChaosObsCursor } from './obs-cursor.js';
 import { ChaosObsRelay } from './obs-relay.js';
 import { PreviewError, renderPreview } from './preview.js';
+import { submitViewerEffect } from './viewer-effect.js';
 
 // Studio › Chaos (docs/chaos/ARCHITECTURE_MOTEUR.md) : l'API locale de la page Chaos. Elle ne décide rien : elle relaie
 // au moteur (démarré à la première demande, puis gardé tant que Studio tourne) et garde les derniers événements pour
@@ -54,6 +55,8 @@ export class ChaosRuntime {
   /** Relais anti-coupure du curseur d'OBS (docs/chaos/CURSEUR_OBS.md § 5) : créé et retiré seulement sur un geste. */
   readonly obsRelay: ChaosObsRelay;
   private relayCache: { at: number; value: unknown } | null = null;
+  /** STOP ALL de la page (lot 2) : la boucle du Core (core-loop.ts) le dit au Core. */
+  onStopAll: (() => void) | null = null;
 
   constructor(
     private readonly opts: ChaosEngineOptions & {
@@ -308,6 +311,26 @@ export class ChaosRuntime {
             true
           );
         }
+        case 'POST /lab/play': {
+          // Lab Interactions « Jouer sur mon PC » (profil Lab seulement : index.ts refuse en Production) : la demande
+          // de la fiche, aux règles d'un viewer (source extension), par la même fonction que les achats du Core.
+          const r = await submitViewerEffect(this, body, {
+            source: 'extension',
+            ref: 'Lab Interactions',
+            requestId: `lab-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`,
+          });
+          return (
+            r.ok
+              ? reply(200, {
+                  ok: true,
+                  request_id: r.request_id,
+                  state: r.state,
+                  ...(r.note ? { note: r.note } : {}),
+                })
+              : reply(STATUS[r.code] ?? 409, r),
+            true
+          );
+        }
         case 'POST /stop':
           return (
             reply(
@@ -336,6 +359,8 @@ export class ChaosRuntime {
             this.obsOut.disableAll('STOP ALL'),
             this.obsCursor.releaseAll(),
           ]);
+          // Lot 2 : le Core annule aussi les achats en attente (core-loop.ts), même si le moteur ne répond pas.
+          this.onStopAll?.();
           if (engine.status === 'rejected') throw engine.reason;
           return (
             reply(200, {

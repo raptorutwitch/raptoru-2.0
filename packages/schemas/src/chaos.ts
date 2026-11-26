@@ -112,6 +112,14 @@ export const chaosEffectRequestSchema = z
             hwnd: z.number().int().positive().optional(),
           })
           .strict(),
+        // Écran d'une fiche (mode E, docs/chaos/CONTRAT_LOT2.md § 3) : la fenêtre qui l'occupe, capturée en direct ;
+        // la capture d'écran d'OBS voit le calque. Cible des demandes des viewers (Core, extension).
+        z
+          .object({
+            kind: z.literal('screen'),
+            device: z.string().regex(/^\\\\\.\\DISPLAY\d{1,2}$/),
+          })
+          .strict(),
       ])
       .optional(),
   })
