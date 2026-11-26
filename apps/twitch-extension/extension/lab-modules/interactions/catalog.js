@@ -437,6 +437,23 @@ export const EFFECTS = Object.freeze([
 ].map((e) => ({ slot: reg(e.id).slot, levels: null, ...e })));
 
 /**
+ * Grilles de prix (bases de 10 s au réglage de référence ; la gêne et la durée s'appliquent ensuite). « maquette » =
+ * les bases ci-dessus ; « proposee » = la proposition du 28/11 (docs/chaos/TARIFS_PROPOSITION.md), à décider par Antoni.
+ * Lab : ?ixPrices=proposee ou le panneau Lab ; rien de tout cela n'est un prix de Production.
+ */
+export const PRICE_GRIDS = Object.freeze({
+  maquette: Object.freeze(Object.fromEntries(EFFECTS.map((e) => [e.id, e.base]))),
+  proposee: Object.freeze({ color: 3000, vhs: 4000, shake: 6000, zoom: 10000, blur: 10000, pixelate: 10000, drunk: 12000, fog: 12000, tunnel: 14000, flash: 20000, mirror: 25000, flip: 35000, blink: 40000 }),
+});
+let grid = 'maquette';
+export const priceGrid = () => grid;
+/** Lab : change la grille appliquée (les bases des effets) ; inconnue → maquette. */
+export function usePriceGrid(id) {
+  grid = PRICE_GRIDS[id] ? id : 'maquette';
+  for (const e of EFFECTS) e.base = PRICE_GRIDS[grid][e.id];
+}
+
+/**
  * Effets prévus, pas encore dans le moteur (EXTENSION_INTERACTIONS.md § 12) : visibles seulement avec le réglage Lab
  * « Effets à venir », jamais achetables. Ils montrent qu'un effet s'ajoute par ses métadonnées.
  */

@@ -4,7 +4,7 @@
 // (sessionStorage) : achats en cours, file, crédits et charges se retrouvent. Le futur Core garde tout cela en base ;
 // favoris, ordre et derniers réglages restent dans le navigateur (prefs.js). Réglages Lab lus dans l'adresse.
 import { everySecond } from '../../app/store.js';
-import { ENGINE } from './catalog.js';
+import { ENGINE, usePriceGrid } from './catalog.js';
 import { SCENARIOS, createChaosMock } from './model.js';
 
 const KEY = 'raptoru-lab:interactions:mock:v1';
@@ -16,7 +16,10 @@ export const lab = {
   role: query.get('ixRole') === 'mod' ? 'mod' : 'viewer',
   cap: query.get('ixCap') === '60' ? 60 : ENGINE.safetyDurationS,
   planned: query.get('ixPlanned') === '1',
+  // Grille de prix : celle de la maquette, ou la proposition du 28/11 (docs/chaos/TARIFS_PROPOSITION.md).
+  prices: query.get('ixPrices') === 'proposee' ? 'proposee' : 'maquette',
 };
+usePriceGrid(lab.prices);
 
 let mock = null;
 let stop = null;

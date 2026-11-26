@@ -15,7 +15,7 @@ const FRAMES = [
   ['Panneau', '318 × 496', 'panel.html?anchor=panel', 318, 496],
   ['Plein écran', '1053 × 702', VIDEO, 1053, 702],
 ];
-const state = { ixTab: 'chaos', ixRole: 'viewer', ixScenario: 'normal', ixOpen: '', ixCap: '30', ixPlanned: '' };
+const state = { ixTab: 'chaos', ixRole: 'viewer', ixScenario: 'normal', ixOpen: '', ixCap: '30', ixPlanned: '', ixPrices: '' };
 const base = new URL('../../', import.meta.url); // racine de l'extension servie
 
 const scen = document.querySelector('[data-k="ixScenario"]');

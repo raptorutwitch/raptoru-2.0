@@ -9,7 +9,7 @@
 // Données : faux Core partagé (store.js → model.js) ; aucun appel réseau, aucun Jeton réel ; préférences : prefs.js.
 import { loadLazyView } from '../../app/lazy-views.js';
 import { moduleVariant } from '../../shared/module-registry.js';
-import { EFFECTS, ENGINE, GROUPS, PLANNED, controlsFor, defaultChoice, durationRange, effectById, engineRequest, hueHex, normalizeChoice } from './catalog.js';
+import { EFFECTS, ENGINE, GROUPS, PLANNED, usePriceGrid, controlsFor, defaultChoice, durationRange, effectById, engineRequest, hueHex, normalizeChoice } from './catalog.js';
 import { SCENARIOS, conditionsFor, creditTerms, mmss } from './model.js';
 import { getMock, lab, changed as mockChanged, resetMock, subscribe } from './store.js';
 import { glyph, token } from './glyphs.js';
@@ -288,6 +288,15 @@ export function view(ctx) {
       if (sheet) sheet.rebuild();
     }),
     'Studio › Chaos › Sécurité borne toute activation (30 s aujourd’hui) ; « 60 s » simule ce plafond relevé. Le registre du moteur va jusqu’à 60 s.',
+  );
+  labRow(
+    'Tarifs',
+    labSeg([['maquette', 'Maquette'], ['proposee', 'Proposition 28/11']], () => lab.prices, (v) => {
+      lab.prices = v;
+      usePriceGrid(v);
+      if (sheet) sheet.rebuild();
+    }),
+    'Grille proposée (docs/chaos/TARIFS_PROPOSITION.md) : à décider, aucun prix de Production.',
   );
   labRow('À venir', labSeg([[false, 'Masqués'], [true, 'Montrer']], () => lab.planned, (v) => {
     lab.planned = v;
