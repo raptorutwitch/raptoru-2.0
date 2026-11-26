@@ -31,7 +31,7 @@ OBS fermé, aucun stream.
   automatiques, pas en vrai.
 - Panne Studio **avant** la prise en charge, expiration, redémarrage du Core : tests automatiques (PostgreSQL réel),
   pas provoqués sur le banc.
-- Tarifs : calculés, **non validés**.
+- Tarifs : calculés, **non validés** ; réglables dans Studio › Chaos › Tarifs (§ 8).
 - Décision à prendre (Antoni) : un effet démarré dont Studio ne confirme jamais la fin (Studio coupé plus longtemps que
   la durée de l'effet + 15 s) finit en « fin inconnue », compté joué, **non remboursé automatiquement** (la modération
   peut rembourser). Alternative : rembourser d'office si Studio a disparu avant la moitié de l'effet.
@@ -84,5 +84,22 @@ Twitch n'a pas été validé par Antoni, et les tarifs ne sont pas validés. Rie
 3. `npm run studio:release` depuis `main`, puis installer la version (Antoni).
 4. Inscrire « Validé par Antoni : oui » dans `release-inventory/INVENTAIRE-a4fd2972be05.md` → ZIP → Hosted Test.
 5. `CHAOS_EXTENSION=testers:<son id>` + `chaos.enabled = 1` pour l'essai réel sur son compte (§ 5 de DEPLOIEMENT).
-6. Valider les tarifs (TARIFS.md) ; Sécurité à 60 000 ms s'il veut 60 s.
+6. Valider les tarifs (TARIFS.md, ou les régler dans Studio › Chaos › Tarifs) ; Sécurité à 60 000 ms s'il veut 60 s.
 7. Revue Twitch, puis `CHAOS_EXTENSION=on`.
+
+## 8. Éditeur de tarifs (26/11 soir, même branche, rien de publié)
+
+- **Studio › Chaos › Tarifs** : une ligne par effet (minimum, maximum, fourchette en vigueur, « personnalisé » avec la
+  date), « Enregistrer » (confirmé par le serveur), « Par défaut » (avec confirmation) ; en ouvrant un effet, aperçu du
+  prix par préréglage, force et durée avec les montants en cours de saisie, plafond du live (Sécurité) indiqué.
+- **Core** : `GET` / `POST /v1/lab/chaos/<chaîne>/prices` (Lab) et `/v1/studio/cockpit/chaos/<chaîne>/prices` (Production,
+  installation appairée, chaîne du Core seulement) ; contrôle : effet connu, Jetons entiers, pas de 50, 50 à 1 000 000,
+  min ≤ max ; stockage : réglages de module masqués `chaos.price_<effet>_min|max` (table existante, **aucune
+  migration**), écrits par paire sous le verrou de la chaîne (le même que l'achat), tracés au journal de modération.
+- **Calcul** : le moteur de prix existant, normalisé entre le réglage le plus doux et le plus sévère (le minimum est
+  désormais atteint : Écran retourné dès 25 000 au lieu de 35 850 ; tableaux régénérés dans TARIFS.md).
+- **Extension** : l'état du Core porte `prices` ; « dès » et le détail du prix suivent ; un changement relance chaque
+  devis (relu toutes les 2 s) ; un ancien prix confirmé → `price_changed`, rien débité, le nouveau s'affiche.
+- **Testé** (automatique, et banc isolé dans un vrai navigateur : vraie page Studio › Chaos, vrai relais, Core Lab en
+  mémoire) : Flou 15 000 – 100 000 → 10 000 – 75 000, aperçu = devis du Core (25 100 → 17 700 à 10 s), valeurs
+  retrouvées après rechargement, « Par défaut » confirmé. Pas encore dans le Studio installé ni sur le vrai Core.

@@ -20,6 +20,9 @@ Branche : `feat/chaos-integration` (locale, **non poussée**) = `feat/ext-intera
 - Core, réglages de module (`module_settings`, par chaîne) : `chaos.enabled` (0/1, défaut 0) ;
   `chaos.interrupted_refund_below` (pourcentage joué en dessous duquel un effet interrompu par une panne est remboursé,
   défaut 50, provisoire).
+- Tarifs : Studio › Chaos › **Tarifs** (minimum et maximum de chaque effet, sans code ni redéploiement). Réglages de
+  module masqués `chaos.price_<effet>_min` / `_max` (absents = fourchettes par défaut de TARIFS.md), écrits par paire et
+  contrôlés par le Core ; jamais par « Paramètres des modules ».
 - Studio › Chaos › Sécurité › « Durée maximale d'un effet » : 30 000 ms aujourd'hui ; **60 000 ms pour ouvrir 60 s**
   (le moteur l'applique, Studio l'envoie au Core au heartbeat, l'extension propose alors jusqu'à 60 s).
 - Permissions D4 : arrêter / retirer = `queue.stop` / `queue.cancel` (+ `refund` pour rembourser en même temps) ;
@@ -31,6 +34,9 @@ Branche : `feat/chaos-integration` (locale, **non poussée**) = `feat/ext-intera
 - Viewer (JWT de l'extension, `Idempotency-Key` pour l'achat) : `GET /v1/ext/chaos/state`, `POST /v1/ext/chaos/quote`,
   `POST /v1/ext/chaos/buy` ; la session porte `chaos: { enabled, cap_s }`.
 - Studio Production (jeton d'installation) : `/v1/studio/chaos/heartbeat`, `/claim`, `/requests/:id/ack`, `/stop-all`.
+- Tarifs : `GET` / `POST /v1/lab/chaos/<chaîne>/prices` (Lab, secret Studio) ; en Production par le cockpit de
+  l'installation appairée, `/v1/studio/cockpit/chaos/<chaîne>/prices` (seule route `chaos` du cockpit, chaîne du Core
+  seulement) ; l'état viewer porte `prices` (fourchettes en vigueur).
 - Lab : `/v1/lab/chaos/<chaîne>/…` (secret Studio) ; l'extension du Lab de Studio passe par `/ext-lab/api/chaos/*`.
 - Modération : commande `{ action: 'chaos', command: { action: stop | cancel | refund | pause | stop_all | gift |
 credit_grant | credit_revoke, … } }` par `/moderation/v2/actions` ; aperçu D4 clé `chaos`.
@@ -48,7 +54,8 @@ credit_grant | credit_revoke, … } }` par `/moderation/v2/actions` ; aperçu D4
 4. **Extension** : ZIP `--target production --shell v2` (déjà construit localement, voir § 7) → Hosted Test par Antoni.
 5. **Essai réel sur le seul compte d'Antoni** : `CHAOS_EXTENSION=testers:<id Twitch d'Antoni>` puis `chaos.enabled = 1`.
    Liste au § 5.
-6. **Tarifs** : valider [TARIFS.md](TARIFS.md) (fourchettes du 28/11) ou demander d'autres bornes.
+6. **Tarifs** : valider [TARIFS.md](TARIFS.md) (fourchettes du 28/11), ou les régler soi-même dans Studio › Chaos ›
+   Tarifs (le Core les applique au devis suivant, l'extension suit en quelques secondes).
 7. **Ouverture** : revue Twitch de la version, puis `CHAOS_EXTENSION=on`.
 
 ## 4. OBS (rien à modifier)
@@ -60,13 +67,15 @@ reste « principal ». STOP ALL : Studio › Chaos, ou console FX de l'extension
 
 ## 5. Essai réel (étape 5, compte d'Antoni seulement)
 
-1. Acheter un Clin d'œil ponctuel (8 000) : débit une fois, effet à l'écran et dans OBS, fin, historique « joué ».
+1. Acheter un Clin d'œil ponctuel (7 250 aux fourchettes par défaut) : débit une fois, effet à l'écran et dans OBS, fin, historique « joué ».
 2. Rejouer vite trois fois (« Ne plus demander confirmation ») : trois débits, trois effets, charges décomptées.
 3. Couper Studio (ou son moteur) puis acheter : refus « Studio ne répond plus », **rien débité**.
 4. Acheter un effet de 20 s puis STOP ALL au bout de 3 s : fin, **remboursé** (joué < 50 %).
-5. Console FX (bouclier) : suspendre → la fiche dit « Suspendu » ; reprendre ; rembourser un effet récent ; un second
+5. Studio › Chaos › Tarifs : changer une fourchette pendant que la fiche de l'effet est ouverte dans l'extension ; le
+   prix affiché change en quelques secondes ; confirmer un ancien prix est refusé sans débit.
+6. Console FX (bouclier) : suspendre → la fiche dit « Suspendu » ; reprendre ; rembourser un effet récent ; un second
    remboursement est refusé.
-6. Vérifier le solde dans le Wallet / raptoru.fr après chaque étape.
+7. Vérifier le solde dans le Wallet / raptoru.fr après chaque étape.
 
 ## 6. Retour arrière
 

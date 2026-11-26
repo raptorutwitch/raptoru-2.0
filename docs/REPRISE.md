@@ -258,6 +258,9 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     [chaos/DEPLOIEMENT_CHAOS.md](chaos/DEPLOIEMENT_CHAOS.md) ; état et tests :
     [chaos/LIVRAISON_CHAOS_2026-11-26.md](chaos/LIVRAISON_CHAOS_2026-11-26.md). Banc Lab réel : lanceur bonk-lab avec
     `CHAOS_ENGINE_EXE` (moteur installé) et `chaos.enabled = 1` dans la base isolée `raptoru_bonk_lab` (remis à 0).
+    Éditeur de tarifs (26/11 soir, même branche) : Studio › Chaos › Tarifs, fourchettes par effet enregistrées par le
+    Core (réglages masqués `chaos.price_<effet>_min|max`, aucune migration) ; minimum atteint au réglage le plus doux
+    (TARIFS.md § Modèle) ; livraison : LIVRAISON_CHAOS_2026-11-26.md § 8.
   - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
   - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
     phase C. Version installée : chaos.10 (26/11) ; le relais a été validé par Antoni dans son OBS le 25/11 (chaos.8).
