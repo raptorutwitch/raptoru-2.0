@@ -1,7 +1,10 @@
 // Synthèse du banc OBS isolé (phase B) : node analyse-b.mjs b-report.json > b-synthese.json ; tableau sur stderr.
 import { readFileSync } from 'node:fs';
 const rep = JSON.parse(
-  readFileSync(process.argv[2] ?? 'b-report.json', 'utf8').replace(/^\uFEFF/, ''),
+  readFileSync(process.argv[2] ?? 'b-report.json', 'utf8').replace(
+    /^\uFEFF/,
+    '',
+  ),
 );
 const m = (rep.mesures ?? []).filter((x) => x.obs && x.obs.images);
 const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);

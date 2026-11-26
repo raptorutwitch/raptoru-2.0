@@ -13,7 +13,7 @@
 >   Studio ↔ Core, module de l'extension, prix (Q2 à Q8).
 > - **Lot 3** : en partie avancé (VHS, pixelisation, couleur, flou déjà là) ; le reste non développé.
 > - **Lots 4 et 5** : non commencés. Tout Chaos V2 est sur la branche locale `feat/chaos-studio`, hors `main`.
-Architecture : [ARCHITECTURE_CHAOS_V2.md](ARCHITECTURE_CHAOS_V2.md). Effets : [CATALOGUE](CATALOGUE_EFFETS_CHAOS_V2.md).
+>   Architecture : [ARCHITECTURE_CHAOS_V2.md](ARCHITECTURE_CHAOS_V2.md). Effets : [CATALOGUE](CATALOGUE_EFFETS_CHAOS_V2.md).
 
 ## Lot 0 — Mesurer avant de construire (aucun code ; 45 min d'Antoni)
 
