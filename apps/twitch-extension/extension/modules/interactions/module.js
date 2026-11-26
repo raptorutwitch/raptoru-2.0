@@ -46,7 +46,7 @@ registerModerationSection({
   label: 'FX',
   color: FX_COLOR,
   icon: CHAOS_ICON,
-  available: (overview) => Boolean(overview?.chaos),
+  available: (overview) => overview?.chaos?.enabled === true,
   summary: (overview) => {
     const c = overview?.chaos ?? {};
     const waiting = (c.queue?.length ?? 0) + (c.burst?.length ?? 0);

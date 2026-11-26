@@ -453,6 +453,59 @@ export class LabEbs {
   }
 
   /** Free Tombola entry, decided by Core (open round, module state, block, global pause). */
+  private async chaosViaCore(
+    method: string,
+    path: string,
+    body: unknown,
+    caller: { identity: LabIdentity; identityShared: boolean },
+    key: string | undefined,
+  ): Promise<Reply> {
+    const viewer = caller.identityShared
+      ? {
+          id: caller.identity.twitchUserId,
+          display_name: caller.identity.displayName,
+        }
+      : null;
+    const base = `/v1/lab/chaos/${LAB_CHANNEL.id}`;
+    const extra =
+      body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+    try {
+      if (method === 'GET' && path === '/chaos/state') {
+        const q = viewer
+          ? `?viewer_id=${encodeURIComponent(viewer.id)}&viewer_name=${encodeURIComponent(viewer.display_name)}`
+          : '';
+        return this.ok(
+          await this.labCore!<Json>(`${base}/state${q}`, undefined, {
+            timeoutMs: 2500,
+          }),
+        );
+      }
+      if (method === 'POST' && path === '/chaos/quote')
+        return this.ok(
+          await this.labCore!<Json>(`${base}/quote`, { ...extra, viewer }),
+        );
+      if (method === 'POST' && path === '/chaos/buy') {
+        if (!viewer) return this.fail(403, 'identity_required');
+        if (!key) return this.fail(400, 'idempotency_key_required');
+        return this.ok(
+          await this.labCore!<Json>(`${base}/buy`, {
+            ...extra,
+            viewer,
+            idempotency_key: key,
+          }),
+        );
+      }
+      return this.fail(404, 'not_found');
+    } catch (e) {
+      // The Core's refusal goes back as it is (code, message, details): the extension says why.
+      const err = e as { status?: number; message: string; body?: Json };
+      return {
+        status: err.status ?? 503,
+        body: err.body ?? { ok: false, error: err.message },
+      };
+    }
+  }
+
   private async joinRaffleCore(
     caller: { identity: LabIdentity; identityShared: boolean },
     key: string | undefined,
@@ -1201,6 +1254,16 @@ export class LabEbs {
       );
       if (out) return out;
     }
+    // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md § 2.4): state, quotes and purchases decided by the Lab Core (the same
+    // service as the Production façade, simulated Jetons); the caller's verified identity, never the page's.
+    if (this.labCore && path.startsWith('/chaos/'))
+      return this.chaosViaCore(
+        method,
+        path,
+        body,
+        caller,
+        headers.idempotencyKey,
+      );
     // The module host (architecture socle): the SAME door as the Production façade (@raptoru/schemas moduleFacade).
     if (this.labCore && path.startsWith('/modules/v3')) {
       const out = await moduleFacade({
