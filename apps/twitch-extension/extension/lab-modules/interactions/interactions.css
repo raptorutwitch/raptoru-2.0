@@ -1472,10 +1472,15 @@
 /* --- Achat : confirmation dans la fiche, « Ne plus demander » ------------------------------------------------- */
 .ix-outcome[data-kind="ok"] { color: var(--ix-sage); font-weight: 700; }
 .ix-outcome[data-kind="burst"] { color: var(--ix-rose); }
-.ix-quick { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: calc(5 * var(--g)); color: var(--ix-muted); font-size: var(--fs-11); cursor: pointer; }
-.ix-quick input,
-.ix-bill__confirm input { width: calc(15 * var(--g)); height: calc(15 * var(--g)); margin: 0; accent-color: var(--ix-wine-hi); }
-.ix-bill__confirm { display: flex; align-items: center; gap: calc(6 * var(--g)); color: var(--ix-muted); font-size: var(--fs-11); cursor: pointer; }
+/* « Ne plus demander confirmation » : toujours visible ; dans la barre sur une fiche large, sur sa ligne au-dessus sinon. */
+.ix-sheet__bar { flex-wrap: wrap; row-gap: calc(4 * var(--g)); }
+.ix-quick { flex: none; display: inline-flex; align-items: center; gap: calc(6 * var(--g)); min-height: calc(24 * var(--g)); color: var(--ix-muted); font-size: var(--fs-11); cursor: pointer; }
+.ix-quick:has(input:checked) { color: var(--ix-ink); }
+.ix-quick input { width: calc(15 * var(--g)); height: calc(15 * var(--g)); margin: 0; accent-color: var(--ix-wine-hi); }
+:root[data-touch] .ix-quick { min-height: calc(30 * var(--g)); }
+@container ixsheet (max-width: 699px) {
+  .ix-quick { order: -1; flex-basis: 100%; }
+}
 
 /* --- Mes effets / Mes crédits : sélecteur compact, lignes courtes, historique replié -------------------------- */
 .ix-pop--mine { left: auto; width: min(100%, calc(360 * var(--g))); }

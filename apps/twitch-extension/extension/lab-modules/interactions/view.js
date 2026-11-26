@@ -790,12 +790,12 @@ export function view(ctx) {
     gauge.append(glyph(document, 'bolt'), gaugeBar, gaugeText);
     const outcome = el('p', 'ix-outcome');
     outcome.setAttribute('aria-live', 'polite');
-    // « Ne plus demander » : proposé au moment de confirmer ; décoché par défaut, réversible dans « Prix ».
+    // « Ne plus demander confirmation » : toujours visible, décochée par défaut, gardée dans le navigateur ; cochée, un
+    // clic sur « Lancer » achète directement (rien d'autre ne change : règles, charges, solde revérifiés à chaque achat).
     const quick = el('label', 'ix-quick');
     const quickBox = el('input');
     quickBox.type = 'checkbox';
-    quick.append(quickBox, el('span', null, 'Ne plus demander'));
-    quick.hidden = true;
+    quick.append(quickBox, el('span', null, 'Ne plus demander confirmation'));
     const billBtn = btn('ix-billbtn', 'Prix', 'info');
     billBtn.setAttribute('aria-expanded', 'false');
     billBtn.setAttribute('aria-controls', bill.id);
@@ -846,7 +846,7 @@ export function view(ctx) {
     let busy = false;
     let armTimer = 0;
     let doneTimer = 0;
-    let lockUntil = 0; // un clic juste après un achat n'en relance pas un second (double clic involontaire)
+    let lastClick = 0; // deux clics à moins de 0,25 s = un double clic involontaire, un seul achat
     let intent = null; // clé d'idempotence de l'intention en cours : un renvoi ne débite jamais deux fois
     let done = null; // { text, until } : la confirmation d'un achat, dans la fiche
     let q = null;
@@ -896,10 +896,7 @@ export function view(ctx) {
       else if (q.outcome.kind === 'now') outcome.append(glyph(document, 'play'), el('span', null, 'Démarre tout de suite'));
       else if (q.outcome.kind === 'burst') outcome.append(glyph(document, 'queue'), el('span', null, `Après ${q.outcome.position - 1} clignement${q.outcome.position > 2 ? 's' : ''} · ~${mmss(q.outcome.eta)}`));
       else outcome.append(glyph(document, 'queue'), el('span', null, `${nth(q.outcome.position)} dans la file · ~${mmss(q.outcome.eta)}`));
-      // En attente de confirmation : « Ne plus demander » prend la place de l'issue (déjà lue au premier temps).
-      quick.hidden = !armed;
-      quickBox.checked = false;
-      outcome.hidden = armed && !flash;
+      quickBox.checked = !confirmOn;
       gauge.hidden = !q.charges;
       if (q.charges) {
         const { n, max, nextS } = q.charges;
@@ -913,35 +910,30 @@ export function view(ctx) {
       cta.disabled = busy || Boolean(q.block);
       cta.dataset.state = busy ? 'busy' : armed ? 'armed' : 'idle';
       cta.dataset.pay = q.credit ? 'credit' : 'jetons';
-      ctaText.textContent = busy ? 'Envoi…' : armed ? 'Confirmer' : q.credit ? 'Utiliser mon crédit' : q.outcome.kind === 'now' ? 'Lancer' : 'Réserver';
+      ctaText.textContent = busy ? 'Envoi…' : armed ? 'Confirmer' : q.credit ? 'Utiliser mon crédit' : q.outcome.kind === 'now' || q.charges ? 'Lancer' : 'Réserver';
       ctaPrice.replaceChildren(q.credit ? glyph(document, 'ticket') : price(q.price, 'ix-price ix-price--cta'));
       cta.setAttribute('aria-label', `${ctaText.textContent} ${e.label}${q.credit ? ' avec ton crédit' : ` pour ${q.price ? `${fmt(q.price)} Jetons` : 'rien (offert)'}`}`);
       if (favBtn) favBtn.setAttribute('aria-pressed', String(prefs.isFavorite(e.id)));
       if (bill.hidden) return;
-      // Détail du prix : chaque facteur (gêne mesurée sur le réglage réel, durée), le total, le solde après achat ; la
-      // confirmation en deux temps (réversible) ; en Lab, la demande exacte envoyée au moteur.
+      // Détail du prix : chaque facteur (gêne mesurée sur le réglage réel, durée), le total, le solde après achat ; en
+      // Lab, la demande exacte envoyée au moteur.
       bill.replaceChildren();
       const list = el('dl', 'ix-bill__list');
       for (const line of q.lines) list.append(el('dt', null, line.label), el('dd', null, line.value != null ? fmt(line.value) : mult(line.mult)));
       list.append(el('dt', 'ix-bill__total', 'Prix'), el('dd', 'ix-bill__total', fmt(q.fullPrice)));
       if (q.credit) list.append(el('dt', 'ix-bill__credit', 'Payé avec ton crédit'), el('dd', 'ix-bill__credit', '0'));
       bill.append(list, el('p', 'ix-bill__after', q.credit ? `Ton solde ne bouge pas (${fmt(snap.balance)} Jetons, fictifs). Le crédit est rendu si l’effet ne démarre pas.` : `Solde (fictif) ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`));
-      const conf = el('label', 'ix-bill__confirm');
-      const box = el('input');
-      box.type = 'checkbox';
-      box.checked = confirmOn;
-      box.addEventListener('change', () => {
-        prefs.setQuickBuy(!box.checked);
-        armed = false;
-        lastKey = '';
-        update();
-      });
-      conf.append(box, el('span', null, 'Confirmer chaque achat (deux temps)'));
       const req = el('details', 'ix-bill__engine');
       req.append(el('summary', null, 'Lab · demande envoyée au moteur'), el('code', null, JSON.stringify(engineRequest(e, choice))));
-      bill.append(conf, req);
+      bill.append(req);
     }
-    quickBox.addEventListener('change', () => prefs.setQuickBuy(quickBox.checked));
+    quickBox.addEventListener('change', () => {
+      prefs.setQuickBuy(quickBox.checked);
+      armed = false;
+      win.clearTimeout(armTimer);
+      lastKey = '';
+      update();
+    });
     /** Envoi au faux Core (après un court délai réseau). Une intention = une clé : jamais deux débits pour un clic. */
     function submit() {
       if (busy || !q || q.block) return;
@@ -956,7 +948,6 @@ export function view(ctx) {
         if (destroyed || sheet?.card !== card) return;
         const out = mock.buy(e.id, sent.choice, sent.price, now(), undefined, { credit: sent.credit, key: sent.key });
         intent = null;
-        lockUntil = now() + 700;
         if (!out.ok) {
           error.textContent = out.message;
           lastKey = '';
@@ -974,9 +965,14 @@ export function view(ctx) {
       }, 350);
     }
     // Deux temps par défaut, comme shared/purchase.js : le prix, puis « Confirmer » (4 s pour confirmer) ; un seul si le
-    // viewer a choisi « Ne plus demander ». Le prix est toujours sur le bouton ; le Core revérifie tout.
+    // viewer a coché « Ne plus demander confirmation ». Le prix est toujours sur le bouton ; le Core revérifie tout.
+    // Protection : rien pendant l'envoi (une requête à la fois), et un double clic (< 0,25 s) ne compte qu'une fois ; un
+    // clic volontaire après la réponse est un nouvel achat.
     cta.addEventListener('click', () => {
-      if (busy || q?.block || now() < lockUntil) return;
+      const t = now();
+      const double = t - lastClick < 250;
+      lastClick = t;
+      if (busy || q?.block || double) return;
       if (!armed && !prefs.quickBuy()) {
         armed = true;
         win.clearTimeout(armTimer);
