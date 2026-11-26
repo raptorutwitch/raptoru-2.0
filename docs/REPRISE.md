@@ -194,12 +194,13 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
 
 **C. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (Chaos V2 lot 0, validations réelles en attente, finitions Studio).
 
-**C bis. Chaos V2 côté viewer : module « Interactions » (26/11)** — [chaos/EXTENSION_INTERACTIONS.md](chaos/EXTENSION_INTERACTIONS.md).
-Chaos (13 effets réglables avec les vraies variantes, niveaux et paramètres du registre), Bonk et Régie ; sélecteur dans
-l'en-tête, favoris, ordre (geste de la Soundboard), fiche agrandie, durée à glissière, prix fictifs détaillés.
+**C bis. Chaos V2 côté viewer : module « Interactions » (26–27/11)** — [chaos/EXTENSION_INTERACTIONS.md](chaos/EXTENSION_INTERACTIONS.md).
+Direction validée par Antoni le 26/11 ; passe de finition le 27/11 : Chaos (13 effets, préréglages, forces et contrôles
+réels du registre, extrait `registry.js`), Bonk avec ses couleurs, section **FX** de la console de modération (format
+D4, équipe), crédits d'effets offerts (simulés), prix selon la gêne mesurée, durées sous les trois plafonds (§ 5).
 Lab seulement, faux Core ; branche locale `feat/ext-interactions` (worktree `agent`), non poussée. Aperçu :
-`apps/twitch-extension/Apercu Effets live.cmd`. Décisions d'Antoni (§ 14 : prix, plafond 30/60 s, préréglage du
-streamer vs style du viewer) avant le lot 2 (Core `chaos`, Jetons). Chaos V2 lui-même : branche `feat/chaos-studio`.
+`apps/twitch-extension/Apercu Effets live.cmd`. Travaux Studio / moteur / Core : § 13 ; décisions d'Antoni : § 16 ;
+pont de test local extension → Studio → moteur : § 12. Chaos V2 lui-même : branche `feat/chaos-studio`.
 
 **C ter. Trois correctifs extension (26/11)** — [extension/CORRECTIFS_2026-11-26.md](extension/CORRECTIFS_2026-11-26.md) :
 solde Mini-jeux à 4 chiffres (`0d295667`), raccourci « Tombola ouverte » partout (`6d894bbc`), « conditions » = écran de
