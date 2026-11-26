@@ -442,15 +442,78 @@ export const EFFECTS = Object.freeze([
  * Lab : ?ixPrices=proposee ou le panneau Lab ; rien de tout cela n'est un prix de Production.
  */
 export const PRICE_GRIDS = Object.freeze({
+  fourchettes: null, // modèle par fourchettes (PRICE_RANGES) : la grille retenue par Antoni le 28/11, par défaut
   maquette: Object.freeze(Object.fromEntries(EFFECTS.map((e) => [e.id, e.base]))),
   proposee: Object.freeze({ color: 3000, vhs: 4000, shake: 6000, zoom: 10000, blur: 10000, pixelate: 10000, drunk: 12000, fog: 12000, tunnel: 14000, flash: 20000, mirror: 25000, flip: 35000, blink: 40000 }),
 });
-let grid = 'maquette';
+let grid = 'fourchettes';
 export const priceGrid = () => grid;
-/** Lab : change la grille appliquée (les bases des effets) ; inconnue → maquette. */
+/** Lab : change la grille appliquée ; inconnue → fourchettes. */
 export function usePriceGrid(id) {
-  grid = PRICE_GRIDS[id] ? id : 'maquette';
-  for (const e of EFFECTS) e.base = PRICE_GRIDS[grid][e.id];
+  grid = id in PRICE_GRIDS ? id : 'fourchettes';
+  if (PRICE_GRIDS[grid]) for (const e of EFFECTS) e.base = PRICE_GRIDS[grid][e.id];
+}
+
+/**
+ * Fourchettes retenues par Antoni le 28/11 : prix d'UNE activation, du réglage le plus doux au plus sévère (en Jetons).
+ * Elles préparent l'économie ; elles ne sont pas une autorisation de les activer sur les vrais comptes.
+ */
+export const PRICE_RANGES = Object.freeze({
+  color: [8000, 25000],
+  vhs: [5000, 25000],
+  pixelate: [15000, 100000],
+  blur: [15000, 100000],
+  shake: [5000, 35000],
+  zoom: [10000, 75000],
+  drunk: [10000, 75000],
+  tunnel: [10000, 75000],
+  mirror: [15000, 75000],
+  fog: [15000, 100000],
+  blink: [5000, 90000],
+  flash: [8000, 25000],
+  flip: [25000, 100000],
+});
+
+/** Sévérité brute d'un réglage : gêne mesurée sur les vraies valeurs × facteur de durée (part fixe + part par seconde). */
+export const severity = (e, c) => gene(e, c) * durationFactor(c.duration);
+
+/** Tous les réglages atteignables d'un effet sous un plafond (préréglages × forces × extrêmes des contrôles × durées). */
+export function* reachableSettings(e, capS = ENGINE.maxDurationS) {
+  for (const style of e.presets?.map((x) => x.id) ?? [null])
+    for (const level of e.levels?.map((l) => l.id) ?? [null]) {
+      const c0 = normalizeChoice(e, { style, level }, capS, { reset: true });
+      const variants = [c0];
+      for (const k of controlsFor(e, c0)) {
+        const values = k.kind === 'choice' ? k.options.map((o) => o.id) : k.kind === 'slider' ? (k.stops ? [k.stops[0], k.stops.at(-1)] : [k.min, k.max]) : k.kind === 'toggle' ? [true, false] : [];
+        for (const v of values) variants.push(normalizeChoice(e, { ...c0, opts: { ...c0.opts, [k.id]: v } }, capS));
+      }
+      for (const c of variants) {
+        const r = durationRange(e, c, capS);
+        for (const d of r.fixed ? [r.def] : [r.min, r.max]) yield normalizeChoice(e, { ...c, duration: d }, capS);
+      }
+    }
+}
+
+const maxSeverityMemo = new Map();
+/** Le réglage le plus sévère de l'effet (sous le plafond absolu de 60 s) : c'est lui qui coûte le maximum. */
+export function maxSeverity(e) {
+  if (!maxSeverityMemo.has(e.id)) {
+    let m = 0;
+    for (const c of reachableSettings(e)) m = Math.max(m, severity(e, c));
+    maxSeverityMemo.set(e.id, m);
+  }
+  return maxSeverityMemo.get(e.id);
+}
+
+/**
+ * Prix par fourchette : min + (max − min) × S, S = sévérité du réglage / sévérité maximale de l'effet (0 < S ≤ 1).
+ * Le maximum n'est atteint qu'au réglage le plus sévère sur la durée la plus longue de l'effet : pas de plateau (30 s
+ * et 60 s ne coûtent pas pareil), et un effet court par nature (Flash, Un clignement) se place dans SA fourchette.
+ */
+export function rangePrice(e, c) {
+  const [lo, hi] = PRICE_RANGES[e.id];
+  const share = Math.min(1, severity(e, c) / maxSeverity(e));
+  return { total: Math.round((lo + (hi - lo) * share) / 50) * 50, share, range: [lo, hi] };
 }
 
 /**
@@ -607,6 +670,20 @@ export function gene(e, c) {
 export function priceOf(e, c) {
   const p = resolveParams(e, c);
   const g = gene(e, c);
+  if (grid === 'fourchettes') {
+    const r = rangePrice(e, c);
+    const fmt = (n) => n.toLocaleString('fr-FR');
+    return {
+      total: r.total,
+      share: r.share,
+      lines: [
+        { label: `Fourchette ${e.label} : ${fmt(r.range[0])} à ${fmt(r.range[1])}`, value: null, text: '' },
+        { label: `Gêne de ce réglage : ${e.why(p, c)}`, mult: Math.round(g * 100) / 100 },
+        { label: `Durée ${num(c.duration, 1)} s`, mult: durationFactor(c.duration) },
+        { label: 'Place dans la fourchette (sévérité / réglage le plus sévère)', pct: Math.round(r.share * 100) },
+      ],
+    };
+  }
   const lines = [
     { label: 'Base · 10 s, réglage de référence', value: e.base },
     { label: `Gêne de ce réglage : ${e.why(p, c)}`, mult: Math.round(g * 100) / 100 },

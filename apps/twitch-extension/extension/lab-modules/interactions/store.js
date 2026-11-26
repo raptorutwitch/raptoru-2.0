@@ -16,8 +16,8 @@ export const lab = {
   role: query.get('ixRole') === 'mod' ? 'mod' : 'viewer',
   cap: query.get('ixCap') === '60' ? 60 : ENGINE.safetyDurationS,
   planned: query.get('ixPlanned') === '1',
-  // Grille de prix : celle de la maquette, ou la proposition du 28/11 (docs/chaos/TARIFS_PROPOSITION.md).
-  prices: query.get('ixPrices') === 'proposee' ? 'proposee' : 'maquette',
+  // Grille de prix : les fourchettes retenues le 28/11 (défaut), l'ancienne maquette ou la proposition du 28/11.
+  prices: ['maquette', 'proposee'].includes(query.get('ixPrices')) ? query.get('ixPrices') : 'fourchettes',
 };
 usePriceGrid(lab.prices);
 

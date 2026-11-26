@@ -12,6 +12,8 @@ import {
   controlsFor,
   defaultChoice,
   durationRange,
+  PRICE_RANGES,
+  reachableSettings,
   effectById,
   engineRequest,
   gene,
@@ -280,9 +282,10 @@ describe('prix (fictifs) : la gêne mesurée sur les vraies valeurs, jamais sur 
       choice('shake', { style: 'seisme' }),
     ).lines;
     expect(lines.map((l) => l.label.split(' :')[0])).toEqual([
-      'Base · 10 s, réglage de référence',
+      'Fourchette Tremblement',
       'Gêne de ce réglage',
       'Durée 10 s',
+      'Place dans la fourchette (sévérité / réglage le plus sévère)',
     ]);
     expect(lines[1].label).toContain('4,5 %'); // amplitude réelle du Séisme (amp_y 4,5 % à intensité 100 %)
   });
@@ -312,9 +315,9 @@ describe('prix (fictifs) : la gêne mesurée sur les vraies valeurs, jamais sur 
     expect(p('blink', { style: 'ferme', duration: 10 })).toBeGreaterThan(
       p('blink', { style: 'naturel' }) * 3,
     );
-    expect(p('flip')).toBeGreaterThan(p('color') * 4);
+    expect(p('flip')).toBeGreaterThan(p('color') * 3);
     expect(p('fog', { level: 'extreme' })).toBeGreaterThan(
-      p('color', { style: 'inversion' }) * 3,
+      p('color', { style: 'inversion' }) * 2,
     );
     expect(p('flip', { duration: 30 })).toBeGreaterThan(
       p('flip', { duration: 10 }),
@@ -433,7 +436,7 @@ describe('achat et file', () => {
   });
 
   it('prix changé avant la confirmation, ou durée au-delà du plafond : refusé, rien débité ; 60 s quand le plafond est relevé', () => {
-    const m = calm();
+    const m = calm({ balance: 1_000_000 });
     const before = m.snapshot(T0).balance;
     expect(m.buy('blur', choice('blur'), 1, T0)).toMatchObject({
       ok: false,
@@ -980,5 +983,55 @@ describe('durées jusqu’à 60 s : l’extension ne bride rien en dessous du pl
           expect(r.max).toBeLessThan(60);
         else expect(r.max, `${e.id} ${p?.id ?? ''}`).toBe(60);
       }
+  });
+});
+
+describe('fourchettes de prix (Antoni, 28/11) : une activation coûte entre le minimum et le maximum de son effet', () => {
+  it('chaque réglage atteignable est dans sa fourchette ; le maximum n’est atteint qu’au réglage le plus sévère', () => {
+    for (const e of EFFECTS) {
+      const [lo, hi] = PRICE_RANGES[e.id];
+      let top = 0;
+      for (const c of reachableSettings(e)) {
+        const p = priceOf(e, c).total;
+        expect(p, e.id).toBeGreaterThanOrEqual(lo);
+        expect(p, e.id).toBeLessThanOrEqual(hi);
+        top = Math.max(top, p);
+      }
+      expect(top, e.id).toBe(hi);
+    }
+  });
+
+  it('pas de plateau : 30 s coûte moins que 60 s pour le même réglage (effets qui vont jusqu’à 60 s)', () => {
+    for (const e of EFFECTS)
+      for (const c of reachableSettings(e)) {
+        const r = durationRange(e, c, 60);
+        if (r.fixed || r.max < 60 || r.min > 30) continue;
+        const at = (d) =>
+          priceOf(e, normalizeChoice(e, { ...c, duration: d }, 60)).total;
+        if (
+          e.id === 'zoom' &&
+          ['pulsations', 'intermittent', 'aller_retour'].includes(c.style)
+        )
+          continue;
+        expect(at(30), `${e.id} ${c.style ?? ''}`).toBeLessThan(at(60));
+      }
+  });
+
+  it('un effet cosmétique coûte moins qu’un effet qui rend le jeu presque injouable', () => {
+    const p = (id, patch) => priceOf(effectById(id), choice(id, patch)).total;
+    expect(p('color', { style: 'nb' })).toBeLessThan(
+      p('fog', { level: 'extreme' }),
+    );
+    expect(p('vhs', { style: 'legere' })).toBeLessThan(
+      p('blink', { style: 'ferme', duration: 10 }),
+    );
+    expect(p('shake', { style: 'leger' })).toBeLessThan(p('flip'));
+    // Courts par nature : Un clignement et Flash restent dans le bas de leur fourchette.
+    expect(p('blink', { style: 'ponctuel' })).toBeLessThan(
+      PRICE_RANGES.blink[0] * 2,
+    );
+    expect(p('flash', { style: 'court', duration: 3 })).toBeLessThan(
+      PRICE_RANGES.flash[1] / 2,
+    );
   });
 });

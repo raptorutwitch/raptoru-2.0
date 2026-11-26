@@ -291,12 +291,12 @@ export function view(ctx) {
   );
   labRow(
     'Tarifs',
-    labSeg([['maquette', 'Maquette'], ['proposee', 'Proposition 28/11']], () => lab.prices, (v) => {
+    labSeg([['fourchettes', 'Fourchettes'], ['proposee', 'Proposition'], ['maquette', 'Maquette']], () => lab.prices, (v) => {
       lab.prices = v;
       usePriceGrid(v);
       if (sheet) sheet.rebuild();
     }),
-    'Grille proposée (docs/chaos/TARIFS_PROPOSITION.md) : à décider, aucun prix de Production.',
+    'Fourchettes retenues le 28/11 (min–max par activation, docs/chaos/TARIFS.md) ; aucun prix de Production.',
   );
   labRow('À venir', labSeg([[false, 'Masqués'], [true, 'Montrer']], () => lab.planned, (v) => {
     lab.planned = v;
@@ -928,7 +928,7 @@ export function view(ctx) {
       // Lab, la demande exacte envoyée au moteur.
       bill.replaceChildren();
       const list = el('dl', 'ix-bill__list');
-      for (const line of q.lines) list.append(el('dt', null, line.label), el('dd', null, line.value != null ? fmt(line.value) : mult(line.mult)));
+      for (const line of q.lines) list.append(el('dt', null, line.label), el('dd', null, line.value != null ? fmt(line.value) : line.pct != null ? `${line.pct} %` : line.mult != null ? mult(line.mult) : ''));
       list.append(el('dt', 'ix-bill__total', 'Prix'), el('dd', 'ix-bill__total', fmt(q.fullPrice)));
       if (q.credit) list.append(el('dt', 'ix-bill__credit', 'Payé avec ton crédit'), el('dd', 'ix-bill__credit', '0'));
       bill.append(list, el('p', 'ix-bill__after', q.credit ? `Ton solde ne bouge pas (${fmt(snap.balance)} Jetons, fictifs). Le crédit est rendu si l’effet ne démarre pas.` : `Solde (fictif) ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`));
