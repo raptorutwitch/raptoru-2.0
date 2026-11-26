@@ -8,6 +8,7 @@ import type { Clock } from '../clock.js';
 import type { Db, Queryable } from '../db/db.js';
 import { labEconomy, type EconomyPort } from '../economy/economy.js';
 import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
+import { ChaosService } from '../chaos/service.js';
 import type { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { nominalStreamDay, streamDayWindow } from '../stream/stream-day.js';
@@ -175,6 +176,8 @@ export class LabModerationService {
       SpotifyService,
       'moderationRefund'
     > | null = null,
+    /** Chaos V2 lot 2: the FX section (overview key `chaos`, the `chaos` commands). Absent: none. */
+    private readonly chaos: ChaosService | null = null,
   ) {}
 
   /** The Lab test-wallet tool (set / reset the fictitious balances) only exists on the Lab ledger. */
@@ -257,6 +260,8 @@ export class LabModerationService {
       case 'raffle_close':
       case 'raffle_draw':
         return ['raffle.manage'];
+      case 'chaos':
+        return ChaosService.needs(cmd.command);
     }
   }
 
@@ -617,6 +622,20 @@ export class LabModerationService {
         case 'raffle_close':
         case 'raffle_draw':
           return this.raffle.applyModeration(q, channelId, cmd, actor, role);
+        // Chaos V2 (before the module routing below: an unknown module would otherwise reach Bonk).
+        case 'chaos':
+          if (!this.chaos)
+            throw new LabModerationError(
+              'unsupported',
+              'Chaos is not available on this Core',
+            );
+          return this.chaos.applyModeration(
+            q,
+            channelId,
+            cmd.command,
+            actor,
+            role,
+          );
         default: {
           const module = cmd.module;
           if (module === 'music') {
@@ -774,14 +793,16 @@ export class LabModerationService {
 
   /** Console overview: module states and queues, Tombola, global pause. */
   async overview(channelId: string) {
-    const [tts, sound, bonk, raffle, raffleV2, global] = await Promise.all([
-      this.tts.moderationQueue(channelId),
-      this.sound.moderationQueue(channelId),
-      this.bonk.moderationQueue(channelId),
-      this.raffle.state(channelId),
-      this.raffle.moderationView(channelId),
-      globalState(this.db, channelId),
-    ]);
+    const [tts, sound, bonk, raffle, raffleV2, global, chaos] =
+      await Promise.all([
+        this.tts.moderationQueue(channelId),
+        this.sound.moderationQueue(channelId),
+        this.bonk.moderationQueue(channelId),
+        this.raffle.state(channelId),
+        this.raffle.moderationView(channelId),
+        globalState(this.db, channelId),
+        this.chaos?.moderationView(channelId) ?? null,
+      ]);
     return {
       tts,
       soundboard: sound,
@@ -789,6 +810,7 @@ export class LabModerationService {
       raffle,
       raffle_v2: raffleV2,
       global,
+      ...(chaos ? { chaos } : {}),
     };
   }
 

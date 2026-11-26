@@ -65,6 +65,7 @@ const CASINO_FEED = '20261202130000_casino_feed.sql';
 const CASINO_SKIP = '20261203130000_casino_feed_skip.sql';
 const CASINO_V1 = '20261204130000_casino_v1.sql';
 const SOUND_FILES = '20261205130000_sound_files.sql';
+const CHAOS = '20261206130000_chaos.sql';
 
 const STUDIO = { id: 'studio', role: 'broadcaster', via: 'studio' } as const;
 const notice = (
@@ -675,7 +676,8 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
           f !== CASINO_FEED &&
           f !== CASINO_SKIP &&
           f !== CASINO_V1 &&
-          f !== SOUND_FILES,
+          f !== SOUND_FILES &&
+          f !== CHAOS,
       ),
       lab: [
         ...MIGRATION_SCOPES.lab,
@@ -712,6 +714,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
         CASINO_SKIP,
         CASINO_V1,
         SOUND_FILES,
+        CHAOS,
       ],
       // Refonte H8: a main Core file production did not hold on 25/10.
       mainCore: MIGRATION_SCOPES.mainCore!.filter(
@@ -785,6 +788,7 @@ describe.skipIf(!isLocal)('Roue du Sub V2 — R1, real Postgres', () => {
       CASINO_SKIP,
       CASINO_V1,
       SOUND_FILES,
+      CHAOS,
     ]);
     // BLOCKING (RV2-0): the existing rows survived and every origin is still accepted after the Roue V2 files.
     expect(

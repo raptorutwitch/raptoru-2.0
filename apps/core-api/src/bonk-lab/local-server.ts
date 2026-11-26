@@ -25,6 +25,7 @@ const {
   spotify,
   challenges,
   modules,
+  chaos,
 } = createLabCore({
   db,
   clock: systemClock,
@@ -34,6 +35,20 @@ const {
 });
 // The module host's periodic jobs, as on the main Core (one loop for every module).
 setInterval(() => void modules.tick(), 5000);
+// Chaos V2: overdue effects settled every 5 s and once at the start (what never started is refunded).
+let chaosSweeping = false;
+const chaosSweep = () => {
+  if (chaosSweeping) return;
+  chaosSweeping = true;
+  chaos
+    .sweepExpired()
+    .catch((e: unknown) =>
+      console.error('[bonk-lab-core] chaos sweep failed', e),
+    )
+    .finally(() => (chaosSweeping = false));
+};
+chaosSweep();
+const chaosTick = setInterval(chaosSweep, 5000);
 // 4301 by default (Studio runtime); another port only for isolated end-to-end tests.
 const port = Number(process.env.BONK_LAB_CORE_PORT ?? 4301);
 server.listen(port, '127.0.0.1', () =>
@@ -105,6 +120,7 @@ const challengesTick = setInterval(() => {
 }, 60_000);
 const stop = () => {
   clearInterval(challengesTick);
+  clearInterval(chaosTick);
   clearInterval(raffleTick);
   clearInterval(votekickTick);
   clearInterval(spotifyTick);

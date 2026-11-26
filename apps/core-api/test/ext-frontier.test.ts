@@ -11,6 +11,7 @@ import {
   verifyExtensionJwt,
 } from '../src/ext/twitch-jwt.js';
 import { createApp } from '../src/http/server.js';
+import { editWallet } from '../src/lab-moderation/store.js';
 import { sha256, STUDIO_PROTOCOL_HEADER } from '../src/studio/installations.js';
 import { setup } from './helpers.js';
 
@@ -184,7 +185,7 @@ async function fixture(
         [STUDIO_PROTOCOL_HEADER]: '1',
       },
     });
-  return { core, send, ext, studio };
+  return { core, send, ext, studio, installation: id };
 }
 
 const viewer = (id = '4242', role = 'viewer') => token({ user_id: id, role });
@@ -1224,5 +1225,211 @@ describe('Music Hub in Production (MUSIC_HUB_EXTENSION, release 10/11)', () => {
   it('on: every identified viewer', async () => {
     const { ext } = await fixture(undefined, { MUSIC_HUB_EXTENSION: 'on' });
     expect((await ext('/music/state', other)).status).toBe(200);
+  });
+});
+
+describe('Chaos V2 in Production (CHAOS_EXTENSION + chaos.enabled, lot 2)', () => {
+  const tester = viewer('4242');
+  const other = viewer('5555');
+  const ready = (core: Awaited<ReturnType<typeof fixture>>['core']) =>
+    core.chaos.heartbeat(CHANNEL, {
+      studio_instance_id: 'studio-x',
+      engine_ready: true,
+      safety_max_ms: 30_000,
+      safe_mode: false,
+      effects: { color: { enabled: true } },
+      inflight: [],
+    });
+
+  it('off (default): the Hub has no Interactions, the state says closed, nothing can be bought', async () => {
+    const { ext, core } = await fixture();
+    await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 1, 'test');
+    expect((await ext('/session', tester)).body.chaos).toEqual({
+      enabled: false,
+      cap_s: null,
+    });
+    expect((await ext('/chaos/state', tester)).body).toEqual({
+      ok: true,
+      enabled: false,
+    });
+    expect(
+      (
+        await ext('/chaos/buy', tester, {
+          effect: 'color',
+          choice: {},
+          expected_price: 8000,
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it('testers + chaos.enabled: the tester buys through the JWT door (identity and Idempotency-Key required), the Core prices', async () => {
+    const { ext, core } = await fixture(undefined, {
+      CHAOS_EXTENSION: 'testers:4242',
+    });
+    // Studio's switch still at 0: the tester sees the module closed.
+    expect((await ext('/session', tester)).body.chaos).toMatchObject({
+      enabled: false,
+    });
+    await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 1, 'test');
+    await ready(core);
+    expect((await ext('/session', tester)).body.chaos).toEqual({
+      enabled: true,
+      cap_s: 30,
+    });
+    expect((await ext('/session', other)).body.chaos).toEqual({
+      enabled: false,
+      cap_s: null,
+    });
+    expect((await ext('/chaos/state', other)).body.enabled).toBe(false);
+    const q = await ext('/chaos/quote', tester, {
+      effect: 'color',
+      choice: { style: 'sepia' },
+    });
+    expect(q.status).toBe(200);
+    await editWallet(
+      core.db,
+      core.clock.now(),
+      CHANNEL,
+      '4242',
+      'set',
+      { tokens: 100_000 },
+      'test',
+    );
+    const body = {
+      effect: 'color',
+      choice: { style: 'sepia' },
+      expected_price: q.body.price,
+      viewer: { id: '1', display_name: 'spoof' },
+    };
+    // An unshared identity is never a tester: the door stays closed to it.
+    expect(
+      (await ext('/chaos/buy', token({ role: 'viewer' }), body)).status,
+    ).toBe(404);
+    // A stale price is refused before anything is debited.
+    const changed = await ext(
+      '/chaos/buy',
+      tester,
+      { ...body, expected_price: 1 },
+      randomUUID(),
+    );
+    expect([changed.status, changed.body.code]).toEqual([409, 'price_changed']);
+    const key = randomUUID();
+    const a = await ext('/chaos/buy', tester, body, key);
+    expect(a.status).toBe(200);
+    expect(a.body.request).toMatchObject({
+      effect: 'color',
+      price: q.body.price,
+      mine: true,
+    });
+    const again = await ext('/chaos/buy', tester, body, key);
+    expect(again.body).toMatchObject({
+      duplicate: true,
+      request: { id: a.body.request.id },
+    });
+    const state = await ext('/chaos/state', tester);
+    expect(state.body.mine[0]).toMatchObject({ id: a.body.request.id });
+  });
+
+  it('on: an anonymous viewer reads but cannot buy; a purchase needs its Idempotency-Key', async () => {
+    const { ext, send, core } = await fixture(undefined, {
+      CHAOS_EXTENSION: 'on',
+    });
+    await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 1, 'test');
+    const anonymous = token({ role: 'viewer' });
+    expect((await ext('/chaos/state', anonymous)).body.enabled).toBe(true);
+    const body = { effect: 'color', choice: {}, expected_price: 8000 };
+    expect((await ext('/chaos/buy', anonymous, body)).body).toMatchObject({
+      code: 'identity_required',
+    });
+    const noKey = await send('/v1/ext/chaos/buy', {
+      body,
+      headers: {
+        authorization: `Bearer ${tester}`,
+        origin: 'https://abcdef123.ext-twitch.tv',
+      },
+    });
+    expect(noKey.body).toMatchObject({ code: 'idempotency_key_required' });
+  });
+
+  it('the paired Studio plays through /v1/studio/chaos/* with its own installation only', async () => {
+    const { studio, core, installation } = await fixture();
+    await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 1, 'test');
+    const hb = {
+      studio_instance_id: installation,
+      engine_ready: true,
+      safety_max_ms: 30_000,
+      safe_mode: false,
+      effects: { color: { enabled: true } },
+      inflight: [],
+    };
+    expect((await studio('/v1/studio/chaos/heartbeat', hb)).body).toEqual({
+      ok: true,
+      stop: [],
+      enabled: true,
+    });
+    expect(
+      (
+        await studio('/v1/studio/chaos/heartbeat', {
+          ...hb,
+          studio_instance_id: 'other',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await studio('/v1/studio/chaos/heartbeat', { ...hb, channel_id: '1' }))
+        .status,
+    ).toBe(409);
+    await editWallet(
+      core.db,
+      core.clock.now(),
+      CHANNEL,
+      '4242',
+      'set',
+      { tokens: 100_000 },
+      'test',
+    );
+    const price = (
+      await core.chaos.quote(CHANNEL, null, { effect: 'color', choice: {} })
+    ).price;
+    const bought = await core.chaos.buy(CHANNEL, {
+      viewer: { id: '4242', display_name: 'V' },
+      idempotency_key: randomUUID(),
+      effect: 'color',
+      choice: {},
+      expected_price: price,
+    });
+    const claim = await studio('/v1/studio/chaos/claim', {
+      studio_instance_id: installation,
+      startable: ['color'],
+    });
+    expect(claim.body.item).toMatchObject({
+      id: bought.request.id,
+      engine_request: { effect: 'color' },
+    });
+    const ack = await studio(
+      `/v1/studio/chaos/requests/${bought.request.id}/ack`,
+      {
+        studio_instance_id: installation,
+        attempt_id: claim.body.item.attempt_id,
+        event: 'failed',
+        code: 'no_frame',
+      },
+    );
+    expect(ack.body).toMatchObject({
+      status: 'failed',
+      refund_status: 'refunded',
+    });
+    expect(
+      (
+        await studio('/v1/studio/chaos/stop-all', {
+          studio_instance_id: installation,
+        })
+      ).body,
+    ).toMatchObject({ ok: true });
+    // The viewer's purchase never goes through the cockpit (it belongs to the JWT door).
+    expect(
+      (await studio(`/v1/studio/cockpit/chaos/${CHANNEL}/state`)).status,
+    ).toBe(404);
   });
 });

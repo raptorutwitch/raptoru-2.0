@@ -2,6 +2,10 @@ import {
   BonkLabAckRequest,
   BonkLabClaimRequest,
   BonkLabHeartbeat,
+  ChaosAckRequest,
+  ChaosClaimRequest,
+  ChaosHeartbeat,
+  ChaosStopAllRequest,
   SoundLabAckRequest,
   SoundLabClaimRequest,
   SoundLabHeartbeat,
@@ -11,6 +15,8 @@ import {
 } from '@raptoru/schemas';
 import { z } from 'zod';
 import type { BonkLabService } from '../bonk-lab/bonk-lab-service.js';
+import type { ChaosService } from '../chaos/service.js';
+import { mappedChaos } from './chaos-routes.js';
 import type { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import type { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { STUDIO_PROTOCOL } from '../studio/installations.js';
@@ -132,11 +138,77 @@ function executionRoutes<
   ];
 }
 
+/**
+ * Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md § 2.4): the same execution protocol for the effects — heartbeat (engine
+ * state, Safety, soft mode, effects, in-flight leases → stops), claim of the effects Studio can start, ACK of an attempt,
+ * Studio's STOP ALL — on the Core's channel, for the authenticated installation only.
+ */
+function chaosExecutionRoutes(chaos: ChaosService, channelId: string): Route[] {
+  const base = '^\\/v1\\/studio\\/chaos';
+  const own = <T extends { studio_instance_id: string; channel_id?: string }>(
+    installation: string,
+    schema: z.ZodType<T>,
+    body: unknown,
+  ) => {
+    const req = ownBody(installation, schema, body);
+    assertChannel(channelId, req.channel_id);
+    return req;
+  };
+  return [
+    {
+      method: 'POST',
+      pattern: new RegExp(`${base}\\/heartbeat$`),
+      auth: 'studio_installation',
+      handle: ({ body, installation }) =>
+        mappedChaos(() =>
+          chaos.heartbeat(channelId, own(installation!, ChaosHeartbeat, body)),
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${base}\\/claim$`),
+      auth: 'studio_installation',
+      handle: ({ body, installation }) =>
+        mappedChaos(() =>
+          chaos.claim(
+            channelId,
+            installation!,
+            own(installation!, ChaosClaimRequest, body).startable,
+          ),
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${base}\\/requests\\/([^/]+)\\/ack$`),
+      auth: 'studio_installation',
+      handle: ({ params, body, installation }) =>
+        mappedChaos(() =>
+          chaos.ack(
+            channelId,
+            parse(Uuid, params[0]),
+            ownBody(installation!, ChaosAckRequest, body),
+          ),
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: new RegExp(`${base}\\/stop-all$`),
+      auth: 'studio_installation',
+      handle: ({ body, installation }) =>
+        mappedChaos(() => {
+          own(installation!, ChaosStopAllRequest, body);
+          return chaos.stopAll(channelId, installation!);
+        }),
+    },
+  ];
+}
+
 export function studioTransportRoutes(
   services: {
     bonk?: BonkLabService;
     sound?: SoundLabService;
     tts?: TtsLabService;
+    chaos?: ChaosService;
   },
   /** The Core's channel; undefined = no channel check (no channel configured). */
   channelId?: string,
@@ -190,6 +262,9 @@ export function studioTransportRoutes(
           ttsMapped,
           channelId,
         )
+      : []),
+    ...(services.chaos && channelId
+      ? chaosExecutionRoutes(services.chaos, channelId)
       : []),
   ];
 }

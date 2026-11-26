@@ -112,6 +112,7 @@ export const LAB_MIGRATIONS = [
   '20261203120000_casino_feed_skip_lab.sql',
   '20261204120000_casino_v1_lab.sql',
   '20261205120000_sound_files_lab.sql',
+  '20261206120000_chaos_lab.sql',
 ];
 
 export type ServiceState =

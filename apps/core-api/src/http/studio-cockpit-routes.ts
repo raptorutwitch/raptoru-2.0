@@ -23,7 +23,7 @@ const CHANNEL_ROUTES =
  * a progress, a share, a viewer's state or history are the extension's).
  */
 const BOT_ONLY =
-  /^(commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)|modules\/\d{1,32}\/[a-z0-9_]+\/viewer(\/.*)?|casino\/\d{1,32}(?!\/admin\/)(\/.*)?)$/;
+  /^(commands\/\d{1,32}\/steps\/(claim|[0-9a-f-]{36}\/ack)|modules\/\d{1,32}\/[a-z0-9_]+\/viewer(\/.*)?|casino\/\d{1,32}(?!\/admin\/)(\/.*)?|chaos\/\d{1,32}\/buy)$/;
 // Channel-less: TTS rules; Soundboard bank configuration (prices, cooldowns, stack / queue / ignore,
 // enabled, volume protection) — the « Soundboard config » screen — and its sounds added in Studio (a published file,
 // a new sound, a removal).

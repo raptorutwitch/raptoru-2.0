@@ -14,7 +14,11 @@ export type PaidModule =
   // Boutique d'événement: the Jetons of a Bonbons conversion (docs/HALLOWEEN.md).
   | 'event_shop'
   // Music Hub: a song request from the extension, paid in Jetons (docs/music/MUSIC_HUB_STATE.md).
-  | 'music';
+  | 'music'
+  // Chaos V2 (docs/chaos/CONTRAT_LOT2.md): an effect bought from the extension, paid in Jetons.
+  | 'chaos';
+/** Modules with their own D4 blocks and personal cooldowns (lab_viewer_blocks / lab_viewer_cooldowns). */
+export type RestrictedModule = LabModule | 'chaos';
 export type ModuleState = 'active' | 'paused' | 'disabled';
 export type LabRole = 'broadcaster' | 'supermod' | 'moderator' | 'viewer';
 export type WalletCurrency = 'tokens' | 'credits_tts' | 'credits_soundboard';
@@ -109,6 +113,10 @@ export const PERMISSIONS: Record<
   // Music Hub V2 (docs/music/MUSIC_HUB_STATE.md): the player of the stream (pause, resume, skip, volume) from the
   // extension — supermods and the broadcaster only (a moderator's removals stay « queue.cancel » / « refund »).
   'music.player': 'supermod',
+  // Chaos V2 (docs/chaos/CONTRAT_LOT2.md § 2.4): a free effect offered on the stream, an effect credit granted or
+  // revoked — economic value, so « Admin Wallet » (no new grant); stopping, removing and refunding stay every moderator's.
+  'chaos.gift': 'wallet',
+  'chaos.credits': 'wallet',
 };
 const RANK: Record<LabRole, number> = {
   viewer: 0,
@@ -269,7 +277,7 @@ export interface AuditEntry {
   channelId: string;
   actor: Actor;
   role?: LabRole;
-  module?: LabModule | 'all' | 'music' | 'random_ban' | null;
+  module?: LabModule | 'all' | 'music' | 'random_ban' | 'chaos' | null;
   action: string;
   viewerId?: string | null;
   interactionId?: string | null;
@@ -408,7 +416,7 @@ export async function activeBlock(
   channelId: string,
   viewerId: string,
   /** A module, or 'all' (a module without its own block — Halloween — honours the « everywhere » one only). */
-  module: LabModule | 'random_ban' | 'all',
+  module: RestrictedModule | 'random_ban' | 'all',
   now: Date,
 ) {
   return (
@@ -426,6 +434,7 @@ const USE_TABLE = {
   tts: 'tts_lab_interactions',
   soundboard: 'sound_lab_interactions',
   bonk: 'bonk_lab_interactions',
+  chaos: 'chaos_requests',
 } as const;
 
 /**
@@ -437,7 +446,7 @@ export async function personalCooldownMs(
   q: Queryable,
   channelId: string,
   viewerId: string,
-  module: LabModule,
+  module: RestrictedModule,
   now: Date,
 ) {
   if (module === 'raffle') return 0;

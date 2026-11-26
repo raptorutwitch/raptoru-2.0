@@ -22,6 +22,7 @@ import type { AppDeps } from '../http/server.js';
 import { soundLabRoutes } from '../http/sound-lab-routes.js';
 import { subWheelRoutes } from '../http/sub-wheel-routes.js';
 import { casinoRoutes } from '../http/casino-routes.js';
+import { chaosLabRoutes } from '../http/chaos-routes.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { AvatarCache, twitchAppUserLookup } from '../raffle-lab/avatars.js';
@@ -97,6 +98,8 @@ export function createPublicFrontier(
     core.economy,
     // Music Hub: its Jetons purchases in the moderation history and the manual refund (post-live 11/11).
     core.spotify,
+    // Chaos V2 lot 2: the FX section of the D4 console (overview `chaos`, the `chaos` commands).
+    core.chaos,
   );
   // The Lab environment (CORE_ENVIRONMENT=lab) carries the whole Lab table behind the same in-process call.
   const lab = config.CORE_ENVIRONMENT === 'lab';
@@ -176,6 +179,8 @@ export function createPublicFrontier(
     ...subWheelRoutes(core.subWheel, core.alerts),
     // Casino (docs/CASINO.md): the extension's spins, rounds, history, progress, shares; Studio's admin reads.
     ...casinoRoutes(core.casino, core.blackjack),
+    // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md): the extension's state, quote and purchase, in-process only.
+    ...chaosLabRoutes(core.chaos),
     // Music Hub (docs/music/MUSIC_HUB_STATE.md): the extension's song requests on Spotify V2, in-process only.
     ...musicExtRoutes(core.spotify),
     // Boutique d'événement (docs/HALLOWEEN.md): the viewer's state, purchase and conversion, in-process only.
@@ -214,6 +219,9 @@ export function createPublicFrontier(
   const casinoAudience = parseMusicAudience(config.CASINO_EXTENSION);
   core.casino.productionApproved = casinoAudience.mode !== 'off';
   core.casino.labEnvironment = lab;
+  // Chaos V2: the same hard switch inside the service (nothing sold on the canonical economy while CHAOS_EXTENSION=off).
+  core.chaos.productionApproved =
+    parseMusicAudience(config.CHAOS_EXTENSION).mode !== 'off';
   const facade = new ExtFacade(
     call,
     new TwitchNames(app),
@@ -225,6 +233,8 @@ export function createPublicFrontier(
       lab,
       music: parseMusicAudience(config.MUSIC_HUB_EXTENSION),
       casino: casinoAudience,
+      // Chaos V2: closed by default (CHAOS_EXTENSION=off), and `chaos.enabled` = 0 until Studio turns it on.
+      chaos: parseMusicAudience(config.CHAOS_EXTENSION),
     },
     core.twitchViewers,
   );
@@ -315,6 +325,21 @@ export function createPublicFrontier(
             );
         })().finally(() => (sweeping = false));
       }, 15_000);
+      // Chaos V2 (CONTRAT_LOT2 § 2.3): overdue effects settled every 5 s and once at the start (a restart never keeps
+      // Jetons: what never started is refunded, what started and never ended is closed).
+      let chaosSweeping = false;
+      const chaosSweep = () => {
+        if (chaosSweeping) return;
+        chaosSweeping = true;
+        core.chaos
+          .sweepExpired()
+          .catch((e: Error) =>
+            console.error('[core-api] chaos sweep failed', e.message),
+          )
+          .finally(() => (chaosSweeping = false));
+      };
+      chaosSweep();
+      const chaosTick = setInterval(chaosSweep, 5000);
       // Jeu des mots: the 5–15 min cycle of a live channel (one word when due), like the Lab Core process.
       let wordTicking = false;
       const wordGameTick = setInterval(() => {
@@ -425,6 +450,7 @@ export function createPublicFrontier(
         clearInterval(blackjackTick);
         clearInterval(avatarTick);
         clearInterval(expirySweep);
+        clearInterval(chaosTick);
       };
     },
   };
