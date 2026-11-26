@@ -10,6 +10,17 @@ export const FAVORITES_KEY = 'raptoru-live:interactions-favorites';
 export const ORDER_KEY = 'raptoru-live:interactions-order';
 export const CHOICES_KEY = 'raptoru-live:interactions-choices';
 export const TIP_KEY = 'raptoru-live:interactions-tip-seen';
+/** « Ne plus demander confirmation » : désactivé par défaut, réversible (Lab ; en vrai, à valider avant la Production). */
+export const QUICK_KEY = 'raptoru-live:interactions-quick-buy';
+export const HELP_KEY = 'raptoru-live:interactions-help-seen';
+
+const readFlag = (key) => {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+};
 
 function readObject(key) {
   try {
@@ -62,11 +73,16 @@ export function createPrefs(catalogIds) {
       }
     },
     markTipSeen: () => writeValue(TIP_KEY, '1'),
+    quickBuy: () => readFlag(QUICK_KEY),
+    setQuickBuy: (on) => writeValue(QUICK_KEY, on ? '1' : '0'),
+    /** Aide ponctuelle (crédits…) : montrée une fois, puis jamais plus. */
+    helpSeen: () => readFlag(HELP_KEY),
+    markHelpSeen: () => writeValue(HELP_KEY, '1'),
     reset() {
       order = [...ids];
       favorites = [];
       for (const k of Object.keys(choices)) delete choices[k];
-      for (const key of [ORDER_KEY, FAVORITES_KEY, CHOICES_KEY, TIP_KEY]) {
+      for (const key of [ORDER_KEY, FAVORITES_KEY, CHOICES_KEY, TIP_KEY, QUICK_KEY, HELP_KEY]) {
         try {
           localStorage.removeItem(key);
         } catch {

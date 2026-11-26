@@ -56,7 +56,8 @@ const visibleArea = (r) => Math.min(1, (Math.PI * r * r) / (16 / 9));
  *              l'effet (fixe : `fixed(c)`) ; `status: 'to_validate'` = présent dans le moteur, pas encore essayé en jeu ;
  *  `levels`   forces = niveaux du registre (ids réels, libellés viewer) ;
  *  `controls` contrôles génériques (slider, choice, toggle, hue, point), chacun lié à des paramètres exposés ;
- *  `capture`  l'effet lit l'image du jeu (impossible en plein écran exclusif) ; `studio` : ce qui reste au streamer.
+ *  `capture`  l'effet lit l'image du jeu (impossible en plein écran exclusif) ; `note` : une condition propre à l'effet ;
+ *  `charges`  (préréglage) achats rapides : N charges qui reviennent avec le temps au lieu du délai par viewer.
  */
 export const EFFECTS = Object.freeze([
   {
@@ -85,7 +86,6 @@ export const EFFECTS = Object.freeze([
     gene: () => 1,
     why: () => 'image et souris inversées',
     note: 'La souris est inversée elle aussi (haut ↔ bas, gauche ↔ droite) ; le clic tombe sous le curseur.',
-    studio: ['coins pendant la rotation', 'écran visé'],
   },
   {
     id: 'mirror',
@@ -127,7 +127,6 @@ export const EFFECTS = Object.freeze([
     // Un seul axe inversé : gêne de référence. L'alternance empêche de s'habituer : chaque changement d'axe compte.
     gene: (p, c) => (c.style === 'alterne' ? 1 + 1.5 / (p.interval_ms / 1000) : 1),
     why: (p, c) => (c.style === 'alterne' ? `un changement d’axe toutes les ${sec(p.interval_ms)}` : 'un axe inversé'),
-    studio: ['écran visé'],
   },
   {
     id: 'shake',
@@ -156,7 +155,6 @@ export const EFFECTS = Object.freeze([
       return (amp * duty) / (2.4 * 0.7);
     },
     why: (p) => `amplitude ${pct(Math.max(p.amp_x, p.amp_y) * p.intensity)} de l’écran`,
-    studio: ['amplitudes', 'roulis', 'fréquence', 'amortissement', 'bords'],
   },
   {
     id: 'zoom',
@@ -186,7 +184,6 @@ export const EFFECTS = Object.freeze([
       return (hidden * durationFactor(zoomedS)) / durationFactor(c.duration);
     },
     why: (p, c) => `${Math.round((1 - 1 / (p.factor * p.factor)) * 100)} % de l’écran hors champ${p.mode === 'pulsations' ? `, ${sec(p.pulses * (p.attack_ms + p.hold_ms + p.release_ms))} zoomé sur ${c.duration} s` : ''}`,
-    studio: ['recentrage', 'rythme des pulsations', 'zoom au-delà de ×6'],
   },
   {
     id: 'drunk',
@@ -215,7 +212,6 @@ export const EFFECTS = Object.freeze([
       return (Math.sqrt(d) * p.intensity * (1 - p.progression / 2)) / (0.65 * 0.75);
     },
     why: (p) => `balancement ${num(p.sway, 1)}°, vision double ${Math.round(p.double * 100)} %, intensité ${Math.round(p.intensity * 100)} %`,
-    studio: ['dérive', 'ondulation', 'flou', 'respiration du zoom', 'vitesse'],
   },
   {
     id: 'tunnel',
@@ -255,7 +251,6 @@ export const EFFECTS = Object.freeze([
       return raw / (0.93 * (1 - visibleArea(0.28)) + visibleArea(0.28) * (1 - 1 / 2.25));
     },
     why: (p) => `${Math.round((1 - visibleArea(p.radius)) * 100)} % de l’écran assombri à ${Math.round(p.darkness * 100)} %${p.zoom > 1 ? `, zoom ×${num(p.zoom, 1)}` : ''}`,
-    studio: ['forme', 'douceur du bord', 'couleur du voile'],
   },
   {
     id: 'blink',
@@ -267,7 +262,7 @@ export const EFFECTS = Object.freeze([
     // Préréglages viewer construits sur les modes RÉELS du moteur (naturel, série, fermé, somnolence, résistance).
     presets: [
       { id: 'naturel', label: 'Naturel', default: true, hint: 'Des clignements naturels pendant toute la durée.' },
-      { id: 'ponctuel', variant: 'naturel', label: 'Un clignement', hint: 'Une seule fermeture puis la réouverture. Plusieurs achats = plusieurs clignements, à la suite.', duration: { fixed: (c) => Math.max(2, Math.ceil((c.opts.shut ?? 0.4) + 1.6)) } },
+      { id: 'ponctuel', variant: 'naturel', label: 'Un clignement', hint: 'Une fermeture, puis la réouverture. Chaque achat utilise une charge.', duration: { fixed: (c) => Math.max(2, Math.ceil((c.opts.shut ?? 0.4) + 1.6)) }, charges: { max: 10, rechargeS: 6 } },
       { id: 'serie', label: 'Répétés', hint: 'Des séries de clignements, avec une pause entre chaque série.', duration: { min: 5, max: 30, step: 5, def: 10 } },
       { id: 'lent', label: 'Lent', hint: 'Les paupières tombent lentement et se rouvrent lentement.' },
       { id: 'fatigue', label: 'Somnolence', hint: 'Paupières lourdes qui tombent peu à peu, deux micro-sommeils, réveil en sursaut.' },
@@ -303,7 +298,6 @@ export const EFFECTS = Object.freeze([
       return Math.min(1, frac) * Math.min(1, p.intensity);
     },
     why: (p, c) => `yeux fermés environ ${Math.round(Math.min(1, EFFECTS_BY_ID.blink.gene(p, c) / Math.min(1, p.intensity)) * 100)} % du temps`,
-    studio: ['courbure', 'cils', 'teinte'],
   },
   {
     id: 'flash',
@@ -325,7 +319,6 @@ export const EFFECTS = Object.freeze([
     gene: (p) => (p.blind_ms + p.recovery_ms / 2 + (p.ghost_ms * p.ghost) / 6) / (1400 + 1300 + 750),
     why: (p) => `aveuglé ${sec(p.blind_ms)}, vue rendue en ${sec(p.recovery_ms)}`,
     note: 'Effet lumineux : refusé en mode doux ; un seul flash par minute pour tout le chat.',
-    studio: ['teinte du flash'],
   },
   {
     id: 'fog',
@@ -348,7 +341,6 @@ export const EFFECTS = Object.freeze([
     gene: (p) => (p.density * p.opacity * (0.6 + 0.4 * p.thickness)) / (0.6 * 0.85 * 0.68),
     why: (p) => `densité ${Math.round(p.density * 100)} %, opacité ${Math.round(p.opacity * 100)} %`,
     note: 'Le brouillard monte en 2,5 s (comptées dans la durée) et se dissipe en 3 s après elle ; il dérive avec le vent pendant toute la durée.',
-    studio: ['couleur', 'vent', 'résolution du rendu', 'brume légère'],
   },
   {
     id: 'blur',
@@ -363,12 +355,11 @@ export const EFFECTS = Object.freeze([
       { id: 'progressif', label: 'Progressif', hint: 'De net au flou choisi, jusqu’à la fin.' },
       { id: 'vague', label: 'Vague', hint: 'Le flou ondule.' },
     ],
-    levels: [
-      { id: 'leger', label: 'Léger' },
-      { id: 'marque', label: 'Marqué', default: true },
-      { id: 'extreme', label: 'Extrême' },
+    controls: [
+      // Paramètre réel `amount` (1 à 100) ; les anciens niveaux valaient 28, 55 et 90. Pas de 5 : en dessous, l'écart ne
+      // se voit pas sur le stream.
+      { kind: 'slider', id: 'amount', param: 'amount', label: 'Puissance du flou', min: 15, max: 95, step: 5, def: 55, format: (v) => `${v <= 25 ? 'Léger' : v <= 45 ? 'Net' : v <= 65 ? 'Marqué' : v <= 80 ? 'Fort' : 'Illisible'} · ${v}` },
     ],
-    controls: [],
     duration: DUR(10),
     // Flou moyen réel sur la durée (pulsé et vague : entre le minimum et le maximum ; progressif : la moitié).
     gene: (p) => {
@@ -376,7 +367,6 @@ export const EFFECTS = Object.freeze([
       return avg / 55;
     },
     why: (p) => `flou moyen ${Math.round(p.mode === 'constant' ? p.amount : p.mode === 'progressif' ? p.amount / 2 : (p.amount + p.minimum) / 2)} sur 100`,
-    studio: ['flou minimal', 'période'],
   },
   {
     id: 'pixelate',
@@ -397,7 +387,6 @@ export const EFFECTS = Object.freeze([
     duration: DUR(10),
     gene: (p) => Math.sqrt(p.block / 28) * (p.mode === 'constant' ? 1 : 0.55),
     why: (p) => `pixels de ${p.block} px${p.mode === 'constant' ? '' : ', une partie du temps'}`,
-    studio: ['grille', 'couleurs par canal', 'style Rétro'],
   },
   {
     id: 'color',
@@ -424,7 +413,6 @@ export const EFFECTS = Object.freeze([
     // moins bien l'interface ; délavé et saturé : on garde l'information de couleur.
     gene: (p) => ({ inversion: 1.5, nb: p.contrast > 1.3 ? 1.2 : 1, sepia: 0.9, teinte: 1, desature: 0.6, sature: 0.5 + 0.2 * (p.saturation - 1.5) })[p.mode] ?? 1,
     why: (p) => ({ inversion: 'couleurs en négatif', desature: 'couleurs atténuées', sature: 'couleurs exagérées' })[p.mode] ?? 'couleurs perdues',
-    studio: ['force', 'contraste fin'],
   },
   {
     id: 'vhs',
@@ -445,7 +433,6 @@ export const EFFECTS = Object.freeze([
     // Usure, tracking et glitchs réels du préréglage (valeurs du registre).
     gene: (p) => (0.4 * p.intensity + 0.3 * p.tracking + 0.3 * p.glitch * (0.5 + 0.5 * p.glitch_rate)) / (0.4 * 0.85 + 0.3 * 0.5 + 0.3 * 0.3 * 0.65),
     why: (p) => `usure ${Math.round(p.intensity * 100)} %, tracking ${Math.round(p.tracking * 100)} %, glitchs ${Math.round(p.glitch * 100)} %`,
-    studio: ['grain', 'bavure des couleurs', 'pertes de bande'],
   },
 ].map((e) => ({ slot: reg(e.id).slot, levels: null, ...e })));
 

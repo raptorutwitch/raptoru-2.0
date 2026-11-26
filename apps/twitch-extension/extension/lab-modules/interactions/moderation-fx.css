@@ -1,0 +1,38 @@
+/* LAB ONLY — section FX (Chaos V2) de la console de modération D4 (moderation-fx.js). La console fournit ses classes et
+   ses styles (modules/moderation/moderation.css) ; ici, seulement ce qui est propre à FX. Chargée par lab-moderation.js. */
+.ix-fxmod .ixm-row .txt { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--fs-11); text-overflow: ellipsis; white-space: nowrap; }
+.ix-fxmod .ixm-row .txt b { margin-right: calc(4 * var(--g)); color: var(--ink); font-size: var(--fs-12); }
+.ix-fxmod .ixm-pos { flex: none; width: calc(16 * var(--g)); color: var(--faint); font-size: var(--fs-11); text-align: center; }
+.ix-fxmod .ixm-h { display: flex; align-items: center; gap: calc(6 * var(--g)); min-height: calc(30 * var(--g)); }
+.ix-fxmod .ixm-h .h__what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ix-fxmod .ixm-ask {
+  display: grid;
+  gap: calc(6 * var(--g));
+  margin: calc(4 * var(--g)) 0 calc(6 * var(--g));
+  padding: calc(8 * var(--g));
+  border: 1px solid var(--line-2);
+  border-radius: calc(10 * var(--g));
+  background: var(--surface);
+}
+.ix-fxmod .ixm-ask--danger { border-color: rgba(255, 122, 138, .45); }
+.ix-fxmod .ixm-ask p { margin: 0; color: var(--muted); font-size: var(--fs-11); }
+.ix-fxmod .ixm-acts,
+.ix-fxmod .ixm-form,
+.ix-fxmod .ixm-gifts { display: flex; flex-wrap: wrap; gap: calc(5 * var(--g)); }
+.ix-fxmod .ixm-reason,
+.ix-fxmod .ixm-form select {
+  min-height: calc(28 * var(--g));
+  padding: 0 calc(8 * var(--g));
+  border: 1px solid var(--line-2);
+  border-radius: calc(8 * var(--g));
+  background: var(--bg-2);
+  color: var(--ink);
+  font-size: var(--fs-11);
+}
+.ix-fxmod .ixm-note { margin-bottom: calc(6 * var(--g)); }
+.ix-fxmod .ixm-note--ok { border-color: rgba(94, 230, 160, .35); color: #c6f7dd; }
+.ix-fxmod .ixm-note--error { border-color: rgba(255, 122, 138, .45); color: #ffc2cb; }
+.ix-fxmod .ixm-gifts .icon-btn { color: #f0b5c1; }
+.ix-fxmod .ixm-lab { margin: 0 0 calc(6 * var(--g)); color: var(--faint); font-size: var(--fs-10); }
+.ix-fxmod .ixm-gifts .icon-btn.is-sel { border-color: #f0b5c1; background: rgba(184, 64, 92, .25); }
+.ix-fxmod .ixm-gift-name { align-self: center; color: var(--ink); font-size: var(--fs-12); }

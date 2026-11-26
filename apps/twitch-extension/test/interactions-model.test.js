@@ -623,3 +623,222 @@ describe('divers', () => {
     expect(hueHex(0)).toBe('#d22d2d');
   });
 });
+
+describe('Un clignement : charges (10, recharge progressive) ; plafonds distincts des demandes, de la cadence et de la sécurité', () => {
+  const blinkOnce = (patch = {}) =>
+    choice('blink', { style: 'ponctuel', ...patch });
+  const quick = (m, t, buyer, key) => {
+    const c = blinkOnce();
+    const q = m.quote('blink', c, t, buyer);
+    return m.buy('blink', c, q.price, t, buyer, key ? { key } : {});
+  };
+
+  it('10 charges au plus, une par clignement confirmé, une revient toutes les 6 s ; pas de délai d’une minute', () => {
+    const m = calm({ balance: 1_000_000 });
+    const c = blinkOnce();
+    expect(m.quote('blink', c, T0).charges).toMatchObject({ n: 10, max: 10 });
+    for (let i = 0; i < 10; i += 1)
+      expect(quick(m, T0 + i * 100).ok).toBe(true);
+    const empty = m.quote('blink', c, T0 + 1000);
+    expect(empty.block).toMatchObject({ code: 'no_charge' });
+    expect(empty.charges).toMatchObject({ n: 0, nextS: 5 });
+    expect(m.quote('blink', c, T0 + 6000).charges.n).toBe(1);
+    expect(m.quote('blink', c, T0 + 61_000).charges.n).toBe(10);
+    // Les autres préréglages gardent leurs règles (délai, une demande en attente).
+    expect(m.quote('blink', choice('blink'), T0 + 1000).charges).toBeNull();
+  });
+
+  it('dix clignements demandés d’un coup : joués un par un, dans l’ordre, sans chevauchement ni doublon', () => {
+    const m = calm({ balance: 1_000_000 });
+    const ids = [];
+    for (let i = 0; i < 10; i += 1) ids.push(quick(m, T0 + i * 50).request.id);
+    expect(new Set(ids).size).toBe(10);
+    const started = [];
+    for (let t = T0; t < T0 + 60_000; t += 250) {
+      m.tick(t);
+      const s = m.snapshot(t);
+      expect(
+        s.active.filter((a) => a.effect === 'blink').length,
+      ).toBeLessThanOrEqual(1);
+      for (const a of s.active) if (!started.includes(a.id)) started.push(a.id);
+    }
+    expect(started).toEqual(ids);
+    const done = m
+      .snapshot(T0 + 60_000)
+      .history.filter((r) => ids.includes(r.id));
+    expect(done.every((r) => r.state === 'done')).toBe(true);
+    // Jamais deux à la fois, et au moins BURST.gapS entre la fin de l’un et le départ du suivant.
+    const sorted = [...done].sort((a, b) => a.started - b.started);
+    for (let i = 1; i < sorted.length; i += 1)
+      expect(sorted[i].started - sorted[i - 1].finished).toBeGreaterThanOrEqual(
+        500,
+      );
+  });
+
+  it('deux viewers ne cumulent pas au-delà des plafonds communs (file de 10, 20 par minute) ; double clic = un seul achat', () => {
+    const m = calm({ balance: 1_000_000 });
+    let ok = 0;
+    for (let i = 0; i < 10; i += 1) ok += quick(m, T0 + i * 10).ok ? 1 : 0;
+    // Le premier joue, neuf attendent : un autre viewer prend la 10e place d’attente, le suivant est refusé.
+    expect(ok).toBe(10);
+    expect(quick(m, T0 + 200, other(1)).ok).toBe(true);
+    expect(m.snapshot(T0 + 200).burst).toHaveLength(10);
+    expect(quick(m, T0 + 210, other(2))).toMatchObject({
+      ok: false,
+      code: 'burst_full',
+    });
+    // Minute glissante : 20 départs + en attente au plus, quel que soit le nombre de viewers.
+    const r = calm({ balance: 1_000_000 });
+    let accepted = 0;
+    for (let t = T0; t < T0 + 50_000; t += 1000) {
+      r.tick(t);
+      for (const v of [other(1), other(2), other(3)])
+        accepted += quick(r, t, v).ok ? 1 : 0;
+    }
+    expect(accepted).toBeLessThanOrEqual(20);
+    // Idempotence : la même intention envoyée deux fois ne débite et ne consomme qu’une fois.
+    const d = calm();
+    const before = d.snapshot(T0).balance;
+    const a = quick(d, T0, undefined, 'k-1');
+    const b = quick(d, T0 + 30, undefined, 'k-1');
+    expect(b).toMatchObject({ ok: true, duplicate: true });
+    expect(b.request.id).toBe(a.request.id);
+    expect(before - d.snapshot(T0 + 30).balance).toBe(a.request.price);
+    expect(d.quote('blink', blinkOnce(), T0 + 30).charges.n).toBe(9);
+  });
+
+  it('jamais joué (retiré) : Jetons et charge rendus ; la modération voit les clignements en attente', () => {
+    const m = calm({ balance: 1_000_000 });
+    quick(m, T0);
+    const second = quick(m, T0 + 10).request;
+    expect(m.snapshot(T0 + 10).burst.map((r) => r.id)).toEqual([second.id]);
+    const before = m.snapshot(T0 + 20).balance;
+    expect(m.moderation.cancel(second.id, {}, T0 + 20).ok).toBe(true);
+    expect(m.snapshot(T0 + 20).balance).toBe(before + second.price);
+    expect(m.quote('blink', blinkOnce(), T0 + 20).charges.n).toBe(9);
+  });
+});
+
+describe('parcours : achats simultanés, file, incompatibilités', () => {
+  it('plusieurs viewers, effets compatibles : ensemble à l’écran ; familles différentes cumulées jusqu’à la sécurité (4)', () => {
+    const m = calm();
+    expect(buy(m, 'fog').outcome.kind).toBe('now');
+    expect(buy(m, 'blur', {}, T0, other(1)).outcome.kind).toBe('now');
+    expect(buy(m, 'shake', {}, T0, other(2)).outcome.kind).toBe('now');
+    expect(buy(m, 'flip', {}, T0, other(3)).outcome.kind).toBe('now');
+    expect(m.snapshot(T0).active).toHaveLength(4);
+    expect(buy(m, 'color', {}, T0, other(4)).outcome.kind).toBe('queue');
+  });
+
+  it('deux viewers, même effet : le second attend la fin du premier ; incompatibles (même emplacement) : en file', () => {
+    const m = calm();
+    buy(m, 'zoom');
+    const second = buy(m, 'zoom', {}, T0, other(1));
+    expect(second.outcome).toMatchObject({ kind: 'queue', position: 1 });
+    buy(m, 'flip', {}, T0, other(2));
+    expect(buy(m, 'mirror', {}, T0, other(3)).outcome.kind).toBe('queue');
+  });
+
+  it('annulé pendant son démarrage : la demande a démarré entre-temps, elle est arrêtée avec le remboursement voulu', () => {
+    const m = calm();
+    buy(m, 'flip', { duration: 5 }, T0, other(1));
+    const waiting = buy(m, 'mirror').request;
+    m.tick(T0 + 5000); // le retournement finit, le miroir démarre…
+    expect(m.snapshot(T0 + 5000).active.map((a) => a.id)).toContain(waiting.id);
+    const before = m.snapshot(T0 + 5000).balance;
+    const out = m.moderation.cancel(waiting.id, {}, T0 + 5000); // … pendant que la modération le retirait
+    expect(out).toMatchObject({ ok: true, started: true, refunded: true });
+    expect(m.snapshot(T0 + 5000).balance).toBe(before + waiting.price);
+  });
+
+  it('tout arrêter pendant plusieurs effets : tout s’arrête, remboursés s’ils avaient joué moins de 25 %', () => {
+    const m = calm();
+    const a = buy(m, 'fog', { duration: 20 }).request;
+    buy(m, 'blur', { duration: 20 }, T0, other(1));
+    const before = m.snapshot(T0).balance;
+    m.moderation.stopAll(T0 + 2000);
+    const s = m.snapshot(T0 + 2000);
+    expect(s.active).toHaveLength(0);
+    expect(s.status).toBe('paused');
+    expect(s.balance).toBe(before + a.price);
+  });
+
+  it('Chaos désactivé, Studio interrompu, hors live : refusé avant tout débit, avec la raison ; Studio interrompu rend ce qui jouait', () => {
+    for (const [scenario, code] of [
+      ['desactive', 'disabled'],
+      ['studio_coupe', 'engine_down'],
+      ['hors_live', 'offline'],
+    ]) {
+      const m = createChaosMock({ scenario, now: T0, simulate: false });
+      const before = m.snapshot(T0).balance;
+      const out = buy(m, 'blur');
+      expect(out).toMatchObject({ ok: false, code });
+      expect(out.message.length).toBeGreaterThan(10);
+      expect(m.snapshot(T0).balance).toBe(before);
+      // La modération ne lève pas ces états avec « Reprendre les achats ».
+      m.moderation.setPaused(false);
+      expect(m.snapshot(T0).status).not.toBe('open');
+    }
+    const cut = createChaosMock({
+      scenario: 'studio_coupe',
+      now: T0,
+      simulate: false,
+    });
+    const interrupted = cut
+      .snapshot(T0)
+      .history.filter((r) => r.state === 'interrupted');
+    expect(interrupted.length).toBeGreaterThan(0);
+    expect(interrupted.every((r) => r.refunded)).toBe(true);
+  });
+});
+
+describe('persistance (Lab) : ce que le Core gardera en base', () => {
+  it('un rechargement retrouve solde, demandes en cours, file, crédits et charges', () => {
+    const m = calm({ balance: 100_000 });
+    buy(m, 'fog', { duration: 20 });
+    const c = choice('blink', { style: 'ponctuel' });
+    m.buy('blink', c, m.quote('blink', c, T0).price, T0);
+    const saved = m.exportState();
+    const r = createChaosMock({
+      scenario: 'calme',
+      now: T0 + 3000,
+      simulate: false,
+      restore: saved,
+    });
+    expect(r.restored).toBe(true);
+    const a = m.snapshot(T0 + 3000);
+    const b = r.snapshot(T0 + 3000);
+    expect(b.balance).toBe(a.balance);
+    expect(b.active.map((x) => x.id)).toEqual(a.active.map((x) => x.id));
+    expect(b.credits.map((x) => x.id)).toEqual(a.credits.map((x) => x.id));
+    expect(r.quote('blink', c, T0 + 3000).charges.n).toBe(9);
+    // Un autre scénario repart de zéro.
+    expect(
+      createChaosMock({
+        scenario: 'normal',
+        now: T0,
+        simulate: false,
+        restore: saved,
+      }).restored,
+    ).toBe(false);
+  });
+});
+
+describe('Flou et Pixelisation : une glissière sur le vrai paramètre', () => {
+  it('Flou : puissance = `amount` (1 à 100 au moteur), sans boutons de force ; Pixelisation : une seule glissière (`block`)', () => {
+    const blur = effectById('blur');
+    expect(blur.levels).toBeNull();
+    const k = blur.controls.find((x) => x.id === 'amount');
+    const p = REGISTRY.effects.blur.params.amount;
+    expect(k.min).toBeGreaterThanOrEqual(p.min);
+    expect(k.max).toBeLessThanOrEqual(p.max);
+    const strong = choice('blur', { opts: { amount: 90 } });
+    expect(engineRequest(blur, strong).params.amount).toBe(90);
+    expect(priceOf(blur, strong).total).toBeGreaterThan(
+      priceOf(blur, choice('blur', { opts: { amount: 25 } })).total,
+    );
+    const pix = effectById('pixelate');
+    expect(pix.levels).toBeNull();
+    expect(pix.controls.filter((x) => x.kind === 'slider')).toHaveLength(1);
+  });
+});

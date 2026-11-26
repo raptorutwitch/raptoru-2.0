@@ -38,6 +38,9 @@ const P = {
   ticket: '<path d="M4 7.5h16v3a1.5 1.5 0 0 0 0 3v3H4v-3a1.5 1.5 0 0 0 0-3Z"/><path d="M14 7.5v9" stroke-dasharray="1.6 2"/>',
   confetti: '<path d="M4 20 9 9l6 6Z"/><path d="M14 4v2M19 9h2M17 6l1.5-1.5M12 8c1-1 1-3 3-3M16 12c1-1 3-1 3 1"/>',
   emote_rain: '<circle cx="12" cy="10" r="5"/><path d="M10 9h.01M14 9h.01M10 12c1 1 3 1 4 0M6 19l1-2M12 21l1-2M18 19l1-2"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/>',
+  bolt: '<path d="M13 2 5 13.5h6L10 22l9-12.5h-6Z"/>',
+  refund: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/><path d="M12 8v8M9.5 10.2c0-1 1.1-1.7 2.5-1.7s2.5.7 2.5 1.7-1.1 1.4-2.5 1.8-2.5.8-2.5 1.8 1.1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/>',
   grip: '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>',
 };
 

@@ -3,6 +3,8 @@
 // lab-modules/), chargée seulement si le runtime l'autorise (Lab, banc) ET que la page demande ?labModules=interactions.
 // Entrée seulement (carte du Hub, disponibilité) ; la vue et sa feuille arrivent à l'ouverture.
 import { registerSessionModule } from '../../shared/module-registry.js';
+// La section FX de la vraie console de modération (D4) et la session de démo d'un modérateur (?ixRole=mod).
+import './lab-moderation.js';
 
 registerSessionModule({
   id: 'interactions',
@@ -22,10 +24,12 @@ registerSessionModule({
   headClass: 'ix-head',
   headAfter: (view) => view.headbar(),
   rendered: (view, ctx) => view.rendered?.(ctx),
-  onState: (view, next) => view.onState?.(next) === true,
+  // Bouclier de l'en-tête (modérateurs) : la section de la console qui correspond à l'onglet ouvert.
+  moderationSection: (view) => view?.moderationSection?.() ?? 'chaos',
+  // Absorbé (pas de redessin de l'hôte), sauf si le solde change : l'en-tête doit le montrer.
+  onState: (view, next, prev) => view.onState?.(next, prev) === true,
   lazy: {
     load: () => import('./view.js'),
-    // La section FX de la modération réutilise les styles de la console (D4) : chargés avant ceux du module.
-    styles: ['modules/moderation/moderation.css', 'lab-modules/interactions/interactions.css'],
+    styles: ['lab-modules/interactions/interactions.css'],
   },
 });

@@ -1,21 +1,21 @@
 // LAB ONLY — vue du module « Interactions » (entrée : module.js ; spécification : docs/chaos/EXTENSION_INTERACTIONS.md).
 // Un conteneur et une navigation : Chaos (effets de stream, palette framboise) et Bonk (le vrai écran Bonk, embarqué tel
 // quel, avec ses couleurs), choisis dans l'en-tête de l'extension. La modération des effets n'est pas un onglet viewer :
-// c'est la section « FX » de la console de modération (moderation-fx.js), ouverte ici par l'équipe seulement.
+// c'est la section « FX » de la vraie console de modération (lab-moderation.js), ouverte par le bouclier de l'en-tête
+// (app/panel.js, modérateurs seulement ; `moderationSection()` dit laquelle : FX sur Chaos, Bonk sur Bonk).
 // Chaos : bandeau « en direct » (ce qui joue, la file, ma place, Mes effets, mes crédits), filtres + favoris, catalogue
 // compact réordonnable (appui long), fiche générique qui s'agrandit depuis sa carte (aperçu, préréglages, force,
 // contrôles, durée, paiement en Jetons ou avec un crédit). Tout est décrit par catalog.js : aucun cas par effet ici.
-// Données : faux Core (model.js) ; aucun appel réseau, aucun Jeton réel ; préférences : prefs.js (localStorage).
-import { everySecond } from '../../app/store.js';
+// Données : faux Core partagé (store.js → model.js) ; aucun appel réseau, aucun Jeton réel ; préférences : prefs.js.
 import { loadLazyView } from '../../app/lazy-views.js';
 import { moduleVariant } from '../../shared/module-registry.js';
-import { EFFECTS, ENGINE, GROUPS, PLANNED, SLOTS, controlsFor, defaultChoice, durationRange, effectById, engineRequest, hueHex, normalizeChoice } from './catalog.js';
-import { SCENARIOS, createChaosMock, creditTerms, mmss } from './model.js';
+import { EFFECTS, ENGINE, GROUPS, PLANNED, controlsFor, defaultChoice, durationRange, effectById, engineRequest, hueHex, normalizeChoice } from './catalog.js';
+import { SCENARIOS, conditionsFor, creditTerms, mmss } from './model.js';
+import { getMock, lab, changed as mockChanged, resetMock, subscribe } from './store.js';
 import { glyph, token } from './glyphs.js';
 import { preview } from './preview.js';
 import { createPrefs } from './prefs.js';
 import { createReorder } from './reorder.js';
-import { createFxModeration } from './moderation-fx.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 const nth = (n) => (n === 1 ? '1er' : `${n}e`);
@@ -33,17 +33,9 @@ export function view(ctx) {
   const win = document.defaultView;
   const query = new URLSearchParams(win?.location?.search ?? '');
   const memory = ctx.host.memory;
-  const lab = (memory.lab ??= {
-    scenario: SCENARIOS[query.get('ixScenario')] ? query.get('ixScenario') : 'normal',
-    // Rôle simulé : celui de la page (?ixRole), sinon celui de la session (modérateur de la démo). Le panneau Lab le
-    // change ; le vrai Core vérifiera le rôle côté serveur (aucune protection ici).
-    role: query.get('ixRole') ? (query.get('ixRole') === 'mod' ? 'mod' : 'viewer') : ctx.team === true ? 'mod' : 'viewer',
-    // Plafond Sécurité de Studio simulé : 30 s (réglage actuel), 60 s (s'il est relevé dans Studio).
-    cap: query.get('ixCap') === '60' ? 60 : ENGINE.safetyDurationS,
-    planned: query.get('ixPlanned') === '1',
-  });
-  const fresh = () => createChaosMock({ scenario: lab.scenario, simulate: lab.scenario !== 'calme', capS: lab.cap });
-  let mock = (memory.mock ??= fresh());
+  // Faux Core et réglages Lab (scénario, rôle, plafond Sécurité 30 / 60 s, effets à venir) : store.js, partagés avec la
+  // section FX de la console de modération ; il avance seul chaque seconde et survit à un rechargement.
+  let mock = getMock();
   const prefs = createPrefs([...EFFECTS, ...PLANNED].map((e) => e.id));
   const choices = (memory.choices ??= {});
   let latest = ctx.state;
@@ -52,7 +44,6 @@ export function view(ctx) {
   let destroyed = false;
   let stopClock = null;
   const now = () => Date.now();
-  const isTeam = () => lab.role === 'mod';
   const reduced = () => Boolean(win?.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   const canHover = () => Boolean(win?.matchMedia?.('(hover: hover) and (pointer: fine)').matches);
 
@@ -103,10 +94,6 @@ export function view(ctx) {
     switcher.append(b);
   }
   const headExtra = el('span', 'ix-headbar__extra');
-  // Équipe seulement : la section FX de la console de modération (jamais un onglet que le viewer ne peut pas ouvrir).
-  const modBtn = btn('ix-modbtn', 'FX', 'shield');
-  modBtn.title = 'Modération des effets (équipe)';
-  modBtn.setAttribute('aria-label', 'Modération des effets FX (équipe)');
   headbar.append(switcher, headExtra);
   const shownTabs = () => TABS.map(([id]) => id).filter((id) => !tabButtons[id].hidden);
   function placeThumb() {
@@ -120,7 +107,6 @@ export function view(ctx) {
     if (!id || id === tab) return;
     tab = memory.tab = id;
     closeSheet({ instant: true });
-    closeModeration();
     closePops();
     paint();
     if (focus) tabButtons[id].focus();
@@ -182,9 +168,7 @@ export function view(ctx) {
   }
   const sheetLayer = el('div', 'ix-sheet');
   sheetLayer.hidden = true;
-  const modLayer = el('div', 'ix-modlayer');
-  modLayer.hidden = true;
-  panes.append(chaosPane, bonkPane, modLayer, sheetLayer);
+  panes.append(chaosPane, bonkPane, sheetLayer);
   root.append(panes);
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -269,7 +253,7 @@ export function view(ctx) {
   }
   scenarioSelect.addEventListener('change', () => {
     lab.scenario = scenarioSelect.value;
-    mock = memory.mock = fresh();
+    mock = resetMock();
     closeSheet({ instant: true });
     paint();
   });
@@ -289,9 +273,12 @@ export function view(ctx) {
     }
     return s;
   };
+  // Le rôle est celui de la session (démo d'un modérateur : lab-moderation.js) : la page repart avec le rôle choisi.
   labRow('Rôle', labSeg([['viewer', 'Viewer'], ['mod', 'Modérateur']], () => lab.role, (v) => {
-    lab.role = v;
-    if (v !== 'mod') closeModeration();
+    if (v === lab.role) return;
+    const u = new URL(win.location.href);
+    u.searchParams.set('ixRole', v);
+    win.location.replace(u.href);
   }));
   labRow(
     'Durée max',
@@ -620,14 +607,40 @@ export function view(ctx) {
 
     // En-tête : retour, nom, favori.
     const head = el('header', 'ix-sheet__head');
-    const back = btn('ix-sheet__back', mode === 'mod' ? 'FX' : 'Effets', 'chevL');
-    back.setAttribute('aria-label', mode === 'mod' ? 'Retour à la modération FX' : 'Retour au catalogue');
+    const back = btn('ix-sheet__back', 'Effets', 'chevL');
+    back.setAttribute('aria-label', 'Retour au catalogue');
     const title = el('div', 'ix-sheet__title');
     const h = el('h3', null, e.label);
     h.id = nextId('title');
     card.setAttribute('aria-labelledby', h.id);
     title.append(glyph(document, e.id), h);
     head.append(back, title);
+    // « Conditions » (lien jaune) : les règles qui touchent CET achat, à la demande ; ce qui l'empêche reste écrit en
+    // clair au-dessus du bouton. Se ferme au second clic, au clic à côté, avec Échap.
+    const condBtn = btn('ix-condlink', 'Conditions');
+    const cond = el('div', 'ix-cond');
+    cond.hidden = true;
+    cond.id = nextId('cond');
+    cond.setAttribute('role', 'region');
+    cond.setAttribute('aria-label', `Conditions : ${e.label}`);
+    condBtn.setAttribute('aria-expanded', 'false');
+    condBtn.setAttribute('aria-controls', cond.id);
+    const paintCond = () =>
+      cond.replaceChildren(
+        ...conditionsFor(e, choice, cap()).map(({ icon, text }) => {
+          const p = el('p');
+          p.append(glyph(document, icon), el('span', null, text));
+          return p;
+        }),
+      );
+    const toggleCond = (open = cond.hidden) => {
+      if (open) paintCond();
+      cond.hidden = !open;
+      condBtn.setAttribute('aria-expanded', String(open));
+      return true;
+    };
+    condBtn.addEventListener('click', () => toggleCond());
+    head.append(condBtn);
     let favBtn = null;
     if (mode === 'viewer') {
       favBtn = btn('ix-sheet__fav', null, 'star');
@@ -646,7 +659,6 @@ export function view(ctx) {
     const visual = el('div', 'ix-sheet__visual');
     const pv = preview(document, e.id, { big: true });
     pv.set(e, choice);
-    pv.live(true);
     const tag = el('span', 'ix-pv__tag', 'Aperçu simulé');
     tag.title = 'Une approximation pour se faire une idée : le vrai rendu est celui du moteur, sur le stream.';
     pv.node.append(tag);
@@ -760,25 +772,30 @@ export function view(ctx) {
     }
     buildExtra();
     buildDuration();
-    const info = el('div', 'ix-sheet__info');
-    const infoLine = (icon, text) => {
-      const p = el('p');
-      p.append(glyph(document, icon), el('span', null, text));
-      info.append(p);
-    };
-    infoLine('queue', `${SLOTS[e.slot].rule}. Le même effet déjà à l’écran : le tien passe juste après.`);
-    if (e.note) infoLine('info', e.note);
-    if (e.studio?.length) infoLine('shield', `Réglé par le streamer : ${e.studio.join(', ')}.`);
-    controls.append(info);
     body.append(visual, controls);
 
-    // Pied : moyen de paiement (Jetons ou crédit), issue, détail du prix, bouton compact en deux temps.
+    // Pied : moyen de paiement (Jetons ou crédit), charges, issue, détail du prix, bouton compact. La fiche reste ouverte
+    // après un achat : solde, charges et file se mettent à jour, on relance si les règles le permettent.
     const foot = el('footer', 'ix-sheet__foot');
     const payBox = el('div', 'ix-pay');
     const bill = el('div', 'ix-bill');
     bill.hidden = true;
     bill.id = nextId('bill');
+    // Charges (Un clignement) : dix segments, discrets, dans la barre du bouton.
+    const gauge = el('span', 'ix-charges');
+    gauge.hidden = true;
+    gauge.setAttribute('role', 'img');
+    const gaugeBar = el('span', 'ix-charges__bar');
+    const gaugeText = el('span', 'ix-charges__text');
+    gauge.append(glyph(document, 'bolt'), gaugeBar, gaugeText);
     const outcome = el('p', 'ix-outcome');
+    outcome.setAttribute('aria-live', 'polite');
+    // « Ne plus demander » : proposé au moment de confirmer ; décoché par défaut, réversible dans « Prix ».
+    const quick = el('label', 'ix-quick');
+    const quickBox = el('input');
+    quickBox.type = 'checkbox';
+    quick.append(quickBox, el('span', null, 'Ne plus demander'));
+    quick.hidden = true;
     const billBtn = btn('ix-billbtn', 'Prix', 'info');
     billBtn.setAttribute('aria-expanded', 'false');
     billBtn.setAttribute('aria-controls', bill.id);
@@ -790,17 +807,19 @@ export function view(ctx) {
     const error = el('p', 'ix-error');
     error.setAttribute('role', 'alert');
     const bar = el('div', 'ix-sheet__bar');
-    bar.append(outcome, billBtn, cta);
+    bar.append(gauge, outcome, quick, billBtn, cta);
     foot.append(payBox, bill, bar, error);
     billBtn.addEventListener('click', () => {
       bill.hidden = !bill.hidden;
       billBtn.setAttribute('aria-expanded', String(!bill.hidden));
+      update();
     });
     content.append(head, body, foot);
+    card.append(cond);
 
     function paintPay(snap) {
       payBox.replaceChildren();
-      const mine = mode === 'viewer' ? snap.credits.filter((c) => c.effect === e.id) : [];
+      const mine = snap.credits.filter((c) => c.effect === e.id);
       if (payCredit && !mine.some((c) => c.id === payCredit)) payCredit = null;
       payBox.hidden = !mine.length;
       if (!mine.length) return;
@@ -826,9 +845,15 @@ export function view(ctx) {
     let armed = false;
     let busy = false;
     let armTimer = 0;
+    let doneTimer = 0;
+    let lockUntil = 0; // un clic juste après un achat n'en relance pas un second (double clic involontaire)
+    let intent = null; // clé d'idempotence de l'intention en cours : un renvoi ne débite jamais deux fois
+    let done = null; // { text, until } : la confirmation d'un achat, dans la fiche
     let q = null;
+    let lastKey = '';
     function changed(commit, restructure = false) {
       armed = false;
+      intent = null;
       error.textContent = '';
       if (restructure) {
         choice = normalizeChoice(e, choice, cap(), { reset: true });
@@ -842,53 +867,117 @@ export function view(ctx) {
       if (range.fixed) choice.duration = range.def;
       if (durFixed) durFixed.textContent = `${choice.duration} s`;
       choices[e.id] = choice;
-      if (commit && mode === 'viewer') prefs.saveChoice(e.id, choice);
+      if (commit) prefs.saveChoice(e.id, choice);
       pv.set(e, choice);
       presetRow?.sync(choice.style);
       levelRow?.sync(choice.level);
       if (durRow) durRow.sync(choice.duration);
+      picker?.sync();
+      for (const sync of extraSync) sync();
+      if (!cond.hidden) paintCond();
+      lastKey = '';
       update();
     }
+    /** Le pied d'après le faux Core ; appelé chaque seconde : rien n'est reconstruit si rien n'a changé. */
     function update() {
       const t = now();
       const snap = mock.snapshot(t);
+      q = mock.quote(e.id, choice, t, undefined, payCredit ? { credit: payCredit } : {});
+      const confirmOn = !prefs.quickBuy();
+      const flash = done && done.until > t ? done : null;
+      const key = JSON.stringify([q.price, q.block, q.outcome, q.charges && [q.charges.n, q.charges.nextS], payCredit, armed, busy, flash?.text, snap.balance, snap.credits.map((c) => c.id), bill.hidden, confirmOn, prefs.isFavorite(e.id)]);
+      if (key === lastKey) return;
+      lastKey = key;
       paintPay(snap);
-      q = mode === 'mod' ? { price: 0, fullPrice: 0, lines: [], outcome: { kind: 'now' }, block: null } : mock.quote(e.id, choice, t, undefined, payCredit ? { credit: payCredit } : {});
       outcome.replaceChildren();
-      outcome.dataset.kind = q.block ? 'block' : q.outcome.kind;
-      if (mode === 'mod') outcome.append(glyph(document, 'gift'), el('span', null, 'Offert · passe devant la file'));
-      else if (q.block) outcome.append(glyph(document, 'clock'), el('span', null, q.block.detail));
+      outcome.dataset.kind = flash ? 'ok' : q.block ? 'block' : q.outcome.kind;
+      if (flash) outcome.append(glyph(document, 'check'), el('span', null, flash.text));
+      else if (q.block) outcome.append(glyph(document, q.block.code === 'no_charge' ? 'bolt' : 'clock'), el('span', null, q.block.detail));
       else if (q.outcome.kind === 'now') outcome.append(glyph(document, 'play'), el('span', null, 'Démarre tout de suite'));
+      else if (q.outcome.kind === 'burst') outcome.append(glyph(document, 'queue'), el('span', null, `Après ${q.outcome.position - 1} clignement${q.outcome.position > 2 ? 's' : ''} · ~${mmss(q.outcome.eta)}`));
       else outcome.append(glyph(document, 'queue'), el('span', null, `${nth(q.outcome.position)} dans la file · ~${mmss(q.outcome.eta)}`));
+      // En attente de confirmation : « Ne plus demander » prend la place de l'issue (déjà lue au premier temps).
+      quick.hidden = !armed;
+      quickBox.checked = false;
+      outcome.hidden = armed && !flash;
+      gauge.hidden = !q.charges;
+      if (q.charges) {
+        const { n, max, nextS } = q.charges;
+        if (gaugeBar.childElementCount !== max) gaugeBar.replaceChildren(...Array.from({ length: max }, () => el('i')));
+        [...gaugeBar.children].forEach((seg, i) => seg.classList.toggle('is-on', i < n));
+        gaugeText.textContent = nextS ? `${n}/${max} · +1 dans ${nextS} s` : `${n}/${max}`;
+        gauge.dataset.empty = String(n === 0);
+        gauge.setAttribute('aria-label', nextS ? `Charges : ${n} sur ${max}, la prochaine revient dans ${nextS} secondes` : `Charges : ${max} sur ${max}`);
+        gauge.title = gauge.getAttribute('aria-label');
+      }
       cta.disabled = busy || Boolean(q.block);
       cta.dataset.state = busy ? 'busy' : armed ? 'armed' : 'idle';
       cta.dataset.pay = q.credit ? 'credit' : 'jetons';
-      ctaText.textContent = busy ? 'Envoi…' : armed ? 'Confirmer' : mode === 'mod' ? 'Offrir au stream' : q.credit ? 'Utiliser mon crédit' : q.outcome.kind === 'now' ? 'Lancer' : 'Réserver';
+      ctaText.textContent = busy ? 'Envoi…' : armed ? 'Confirmer' : q.credit ? 'Utiliser mon crédit' : q.outcome.kind === 'now' ? 'Lancer' : 'Réserver';
       ctaPrice.replaceChildren(q.credit ? glyph(document, 'ticket') : price(q.price, 'ix-price ix-price--cta'));
       cta.setAttribute('aria-label', `${ctaText.textContent} ${e.label}${q.credit ? ' avec ton crédit' : ` pour ${q.price ? `${fmt(q.price)} Jetons` : 'rien (offert)'}`}`);
       if (favBtn) favBtn.setAttribute('aria-pressed', String(prefs.isFavorite(e.id)));
-      // Détail du prix : chaque facteur (gêne mesurée sur le réglage réel, durée), le total, le solde après achat ; en
-      // Lab, la demande exacte envoyée au moteur.
+      if (bill.hidden) return;
+      // Détail du prix : chaque facteur (gêne mesurée sur le réglage réel, durée), le total, le solde après achat ; la
+      // confirmation en deux temps (réversible) ; en Lab, la demande exacte envoyée au moteur.
       bill.replaceChildren();
-      if (mode === 'viewer') {
-        const list = el('dl', 'ix-bill__list');
-        for (const line of q.lines) list.append(el('dt', null, line.label), el('dd', null, line.value != null ? fmt(line.value) : mult(line.mult)));
-        list.append(el('dt', 'ix-bill__total', 'Prix'), el('dd', 'ix-bill__total', fmt(q.fullPrice)));
-        if (q.credit) list.append(el('dt', 'ix-bill__credit', 'Payé avec ton crédit'), el('dd', 'ix-bill__credit', '0'));
-        bill.append(list, el('p', 'ix-bill__after', q.credit ? `Ton solde ne bouge pas (${fmt(snap.balance)} Jetons, fictifs). Le crédit est rendu si l’effet ne démarre pas.` : `Solde (fictif) ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`));
-      }
+      const list = el('dl', 'ix-bill__list');
+      for (const line of q.lines) list.append(el('dt', null, line.label), el('dd', null, line.value != null ? fmt(line.value) : mult(line.mult)));
+      list.append(el('dt', 'ix-bill__total', 'Prix'), el('dd', 'ix-bill__total', fmt(q.fullPrice)));
+      if (q.credit) list.append(el('dt', 'ix-bill__credit', 'Payé avec ton crédit'), el('dd', 'ix-bill__credit', '0'));
+      bill.append(list, el('p', 'ix-bill__after', q.credit ? `Ton solde ne bouge pas (${fmt(snap.balance)} Jetons, fictifs). Le crédit est rendu si l’effet ne démarre pas.` : `Solde (fictif) ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`));
+      const conf = el('label', 'ix-bill__confirm');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = confirmOn;
+      box.addEventListener('change', () => {
+        prefs.setQuickBuy(!box.checked);
+        armed = false;
+        lastKey = '';
+        update();
+      });
+      conf.append(box, el('span', null, 'Confirmer chaque achat (deux temps)'));
       const req = el('details', 'ix-bill__engine');
       req.append(el('summary', null, 'Lab · demande envoyée au moteur'), el('code', null, JSON.stringify(engineRequest(e, choice))));
-      bill.append(req);
-      picker?.sync();
-      for (const s of extraSync) s();
-      levelRow?.sync(choice.level);
-      presetRow?.sync(choice.style);
+      bill.append(conf, req);
     }
-    // Deux temps, comme shared/purchase.js : le prix, puis « Confirmer » (4 s pour confirmer).
+    quickBox.addEventListener('change', () => prefs.setQuickBuy(quickBox.checked));
+    /** Envoi au faux Core (après un court délai réseau). Une intention = une clé : jamais deux débits pour un clic. */
+    function submit() {
+      if (busy || !q || q.block) return;
+      armed = false;
+      busy = true;
+      win.clearTimeout(armTimer);
+      intent ??= `ix-${e.id}-${now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const sent = { choice: structuredClone(choice), price: q.price, credit: payCredit, key: intent };
+      update();
+      win.setTimeout(() => {
+        busy = false;
+        if (destroyed || sheet?.card !== card) return;
+        const out = mock.buy(e.id, sent.choice, sent.price, now(), undefined, { credit: sent.credit, key: sent.key });
+        intent = null;
+        lockUntil = now() + 700;
+        if (!out.ok) {
+          error.textContent = out.message;
+          lastKey = '';
+          return update();
+        }
+        error.textContent = '';
+        if (sent.credit) payCredit = null;
+        const o = out.outcome;
+        done = { text: o.kind === 'now' ? `${e.label} : c’est parti !` : o.kind === 'burst' ? `Clignement envoyé (${nth(o.position)} en attente)` : `Réservé : ${nth(o.position)} dans la file`, until: now() + 2600 };
+        toast = { id: out.request.id, until: now() + 5000 };
+        mockChanged(); // solde, file, modération : à jour partout tout de suite
+        ctx.host.refresh?.(); // le solde de l'en-tête (Lab : celui du faux Core)
+        win.clearTimeout(doneTimer);
+        doneTimer = win.setTimeout(() => update(), 2700);
+      }, 350);
+    }
+    // Deux temps par défaut, comme shared/purchase.js : le prix, puis « Confirmer » (4 s pour confirmer) ; un seul si le
+    // viewer a choisi « Ne plus demander ». Le prix est toujours sur le bouton ; le Core revérifie tout.
     cta.addEventListener('click', () => {
-      if (busy || q?.block) return;
-      if (!armed) {
+      if (busy || q?.block || now() < lockUntil) return;
+      if (!armed && !prefs.quickBuy()) {
         armed = true;
         win.clearTimeout(armTimer);
         armTimer = win.setTimeout(() => {
@@ -897,36 +986,34 @@ export function view(ctx) {
         }, 4000);
         return update();
       }
-      armed = false;
-      busy = true;
-      update();
-      // Le faux Core répond après un court délai réseau.
-      win.setTimeout(() => {
-        busy = false;
-        if (destroyed || sheet?.card !== card) return;
-        const t = now();
-        const out = mode === 'mod' ? mock.moderation.trigger(e.id, choice, t) : mock.buy(e.id, choice, q.price, t, undefined, payCredit ? { credit: payCredit } : {});
-        if (!out.ok) {
-          error.textContent = out.message;
-          return update();
-        }
-        if (mode === 'mod') modView?.say?.(`${e.label} offert au stream.`);
-        else toast = { id: out.request.id, until: now() + 5000 };
-        closeSheet();
-        paint();
-      }, 350);
+      submit();
     });
     update();
-    return { card, content, back, update, destroy: () => win.clearTimeout(armTimer), e, mode };
+    return {
+      card,
+      content,
+      back,
+      update,
+      startLive: () => pv.live(true),
+      condOpen: () => !cond.hidden,
+      inCond: (target) => cond.contains(target) || condBtn.contains(target),
+      closeCond: () => !cond.hidden && toggleCond(false),
+      destroy: () => {
+        win.clearTimeout(armTimer);
+        win.clearTimeout(doneTimer);
+      },
+      e,
+      mode,
+    };
   }
 
-  function openSheet(effectId, fromNode, { mode = 'viewer', credit = null } = {}) {
+  function openSheet(effectId, fromNode, { credit = null } = {}) {
     if (reorder.dragging()) return;
     closePops();
     closeSheet({ instant: true });
-    const s = buildSheet(effectId, mode, { credit });
+    const s = buildSheet(effectId, 'viewer', { credit });
     s.from = fromNode ?? null;
-    s.rebuild = () => openSheet(effectId, null, { mode });
+    s.rebuild = () => openSheet(effectId, null);
     sheet = s;
     sheetLayer.replaceChildren(s.card);
     sheetLayer.hidden = false;
@@ -934,15 +1021,23 @@ export function view(ctx) {
     for (const t of tiles.values()) t.pv.live(false);
     const from = fromNode?.isConnected ? fromNode.getBoundingClientRect() : null;
     const to = s.card.getBoundingClientRect();
-    if (from && to.width && !reduced() && typeof s.card.animate === 'function') {
+    let anim = null;
+    if (from && to.width && to.height && !reduced() && typeof s.card.animate === 'function') {
       try {
-        const clip = `inset(${from.top - to.top}px ${to.right - from.right}px ${to.bottom - from.bottom}px ${from.left - to.left}px round 12px)`;
-        s.card.animate([{ clipPath: clip }, { clipPath: 'inset(0px 0px 0px 0px round 14px)' }], { duration: 300, easing: 'cubic-bezier(.2,.75,.25,1)' });
-        s.content.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 200, delay: 110, easing: 'ease-out', fill: 'backwards' });
+        // La fiche part de sa carte : transformation et opacité seulement (composées par le GPU, rien à repeindre à
+        // chaque image, même avec un aperçu chargé comme VHS) ; le contenu apparaît à la fin.
+        s.card.style.transformOrigin = '0 0';
+        const t0 = `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`;
+        anim = s.card.animate([{ transform: t0, opacity: 0.5 }, { transform: 'none', opacity: 1 }], { duration: 230, easing: 'cubic-bezier(.2,.75,.25,1)' });
+        s.content.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, delay: 120, easing: 'ease-out', fill: 'backwards' });
       } catch {
-        /* sans animation */
+        anim = null;
       }
     }
+    // L'aperçu animé démarre une fois la fiche en place : jamais deux animations lourdes en même temps.
+    const live = () => sheet === s && s.startLive();
+    if (anim?.finished) anim.finished.then(live, live);
+    else live();
     s.back.focus({ preventScroll: true, focusVisible: false });
   }
 
@@ -952,19 +1047,20 @@ export function view(ctx) {
     sheet = null;
     s.destroy();
     root.classList.remove('has-sheet');
-    const tile = s.mode === 'viewer' ? tiles.get(s.e.id) : null;
+    const tile = tiles.get(s.e.id);
     const done = () => {
       if (sheet) return; // une autre fiche s'est ouverte entre-temps
       s.card.remove();
       sheetLayer.hidden = true;
     };
-    const target = tile?.node.isConnected && modLayer.hidden ? tile.node.getBoundingClientRect() : null;
+    const target = tile?.node.isConnected ? tile.node.getBoundingClientRect() : null;
     const box = s.card.getBoundingClientRect();
-    if (!instant && !reduced() && target && box.width && typeof s.card.animate === 'function') {
+    if (!instant && !reduced() && target?.width && box.width && typeof s.card.animate === 'function') {
       try {
-        const clip = `inset(${target.top - box.top}px ${box.right - target.right}px ${box.bottom - target.bottom}px ${target.left - box.left}px round 12px)`;
+        s.card.style.transformOrigin = '0 0';
+        const t1 = `translate(${target.left - box.left}px, ${target.top - box.top}px) scale(${target.width / box.width}, ${target.height / box.height})`;
         s.content.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, fill: 'forwards' });
-        s.card.animate([{ clipPath: 'inset(0px 0px 0px 0px round 14px)' }, { clipPath: clip }], { duration: 200, easing: 'cubic-bezier(.4,0,.8,.4)', fill: 'forwards' }).finished.then(done, done);
+        s.card.animate([{ transform: 'none', opacity: 1 }, { transform: t1, opacity: 0.35 }], { duration: 190, easing: 'cubic-bezier(.4,0,.8,.4)', fill: 'forwards' }).finished.then(done, done);
       } catch {
         done();
       }
@@ -973,46 +1069,23 @@ export function view(ctx) {
   }
 
   // ---------------------------------------------------------------------------------------------------------------
-  // Modération FX (équipe) : la section de la console de modération, par-dessus le module.
-  let modView = null;
-  function openModeration() {
-    if (!isTeam()) return;
-    closePops();
-    closeSheet({ instant: true });
-    modView ??= createFxModeration({
-      document,
-      getMock: () => mock,
-      now,
-      onClose: () => closeModeration(),
-      onGift: (effectId, from) => openSheet(effectId, from, { mode: 'mod' }),
-    });
-    modLayer.replaceChildren(modView.node);
-    modLayer.hidden = false;
-    root.classList.add('has-mod');
-    modView.paint();
-    modView.focus();
-  }
-  function closeModeration() {
-    if (modLayer.hidden) return;
-    modLayer.hidden = true;
-    root.classList.remove('has-mod');
-    modBtn.focus({ preventScroll: true });
-  }
-  modBtn.addEventListener('click', () => (modLayer.hidden ? openModeration() : closeModeration()));
-
-  // ---------------------------------------------------------------------------------------------------------------
   // Popovers : en direct (ce qui joue et la file), Mes effets / Mes crédits, Lab.
   const pops = [
     [livePop, liveMain],
     [histPop, histBtn],
     [labPop, labBtn],
   ];
+  let logOpen = false; // historique des crédits : petit panneau dans « Crédits », fermé par défaut
+  let creditInfo = null; // le crédit dont on lit le détail (origine, motif)
+  let histKey = '';
   function closePops() {
     for (const [pop, trigger] of pops) {
       pop.hidden = true;
       trigger.setAttribute('aria-expanded', 'false');
     }
     creditBtn.setAttribute('aria-expanded', 'false');
+    logOpen = false;
+    creditInfo = null;
   }
   function togglePop(pop, trigger) {
     const open = pop.hidden;
@@ -1021,45 +1094,60 @@ export function view(ctx) {
     trigger.setAttribute('aria-expanded', String(open));
     if (open) paint();
   }
+  const openHist = (which, trigger) => {
+    if (!histPop.hidden && histTab === which) return closePops();
+    histTab = which;
+    closePops();
+    histPop.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    histKey = '';
+    paint();
+  };
   liveMain.addEventListener('click', () => togglePop(livePop, liveMain));
-  histBtn.addEventListener('click', () => {
-    if (!histPop.hidden && histTab === 'effects') return closePops();
-    histTab = 'effects';
-    closePops();
-    histPop.hidden = false;
-    histBtn.setAttribute('aria-expanded', 'true');
-    paint();
-  });
-  creditBtn.addEventListener('click', () => {
-    if (!histPop.hidden && histTab === 'credits') return closePops();
-    histTab = 'credits';
-    closePops();
-    histPop.hidden = false;
-    creditBtn.setAttribute('aria-expanded', 'true');
-    paint();
-  });
+  histBtn.addEventListener('click', () => openHist('effects', histBtn));
+  creditBtn.addEventListener('click', () => openHist('credits', creditBtn));
   labBtn.addEventListener('click', () => togglePop(labPop, labBtn));
+  function closeLog() {
+    logOpen = false;
+    const log = histPop.querySelector('.ix-pop__log');
+    if (log) log.hidden = true;
+    histPop.querySelector('.ix-logbtn')?.setAttribute('aria-expanded', 'false');
+    histKey = '';
+  }
+  // Clic à côté : ferme le panneau ouvert (Conditions de la fiche, historique des crédits, puis le popover).
   const onDocDown = (event) => {
+    const t = event.target;
+    if (sheet?.condOpen() && !sheet.inCond(t)) sheet.closeCond();
     if (pops.every(([p]) => p.hidden)) return;
-    if (pops.some(([p, t]) => p.contains(event.target) || t.contains(event.target)) || creditBtn.contains(event.target)) return;
+    if (logOpen && !histPop.querySelector('.ix-pop__log')?.contains(t) && !histPop.querySelector('.ix-logbtn')?.contains(t)) {
+      closeLog();
+      if (histPop.contains(t)) return;
+    }
+    if (pops.some(([p, tr]) => p.contains(t) || tr.contains(t)) || creditBtn.contains(t)) return;
     closePops();
   };
   document.addEventListener('pointerdown', onDocDown, true);
-  root.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || reorder.dragging()) return;
-    if (pops.some(([p]) => !p.hidden)) {
+  // Échap : sur tout le document tant que le module est affiché (un repeint du popover peut ôter le focus).
+  const onKey = (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented || !root.isConnected || reorder.dragging()) return;
+    if (logOpen) {
+      event.preventDefault();
+      closeLog();
+      histPop.querySelector('.ix-logbtn')?.focus();
+    } else if (pops.some(([p]) => !p.hidden)) {
       event.preventDefault();
       const open = pops.find(([p]) => !p.hidden);
+      const trigger = open?.[0] === histPop && histTab === 'credits' ? creditBtn : open?.[1];
       closePops();
-      open?.[1].focus();
+      trigger?.focus();
+    } else if (sheet?.closeCond()) {
+      event.preventDefault();
     } else if (sheet) {
       event.preventDefault();
       closeSheet();
-    } else if (!modLayer.hidden) {
-      event.preventDefault();
-      closeModeration();
     }
-  });
+  };
+  document.addEventListener('keydown', onKey);
 
   function describeMine(r) {
     const back = r.credit ? 'crédit rendu' : `${fmt(r.price)} remboursés`;
@@ -1069,10 +1157,14 @@ export function view(ctx) {
     if (r.state === 'expired') return [`jamais démarré · ${back}`, 'refunded'];
     if (r.state === 'removed') return [`arrêté par la modération${r.refunded ? ` · ${back}` : ''}`, 'removed'];
     if (r.state === 'cancelled') return [`retiré par la modération${r.refunded ? ` · ${back}` : ''}`, 'removed'];
+    if (r.state === 'interrupted') return [`interrompu (Studio)${r.refunded ? ` · ${back}` : ''}`, 'refunded'];
     return [r.state, 'done'];
   }
   const who = (r) => (r.by === 'mod' ? 'Modération' : r.mine ? 'Toi' : r.buyer.name);
-  const LOG = { granted: 'reçu', used: 'utilisé', restored: 'rendu (l’effet n’a pas joué)', revoked: 'retiré par la modération' };
+  const LOG = { granted: 'Reçu', used: 'Utilisé', restored: 'Restitué', revoked: 'Annulé' };
+  const LOG_HINT = { granted: 'offert', used: 'effet lancé', restored: 'l’effet n’a pas joué', revoked: 'retiré par la modération' };
+  /** La contrainte essentielle d'un crédit, en quelques caractères (le détail s'ouvre au clic). */
+  const shortTerms = (c) => (c.constraints?.maxS ? `${c.constraints.maxS} s max` : 'au choix') + (c.constraints?.levels?.length || c.constraints?.presets?.length ? ' · +' : '');
 
   let toast = null; // { id, until } : la confirmation qui suit un achat, dans le bandeau
   function paintLive(snap) {
@@ -1097,7 +1189,7 @@ export function view(ctx) {
       if (snap.active.length > 1) liveMain.append(el('span', 'ix-live__more', `+${snap.active.length - 1}`));
     } else {
       liveMain.dataset.kind = 'idle';
-      liveMain.append(el('span', 'ix-live__idle', snap.status === 'open' ? 'Rien à l’écran' : snap.status === 'paused' ? 'Achats suspendus' : 'Hors live'));
+      liveMain.append(el('span', 'ix-live__idle', { open: 'Rien à l’écran', paused: 'Achats suspendus', disabled: 'Chaos désactivé', engine_down: 'Studio interrompu' }[snap.status] ?? 'Hors live'));
     }
     const qn = el('span', 'ix-live__queue');
     qn.dataset.full = String(snap.queue.length >= snap.queueMax);
@@ -1139,53 +1231,115 @@ export function view(ctx) {
       livePop.append(el('p', 'ix-pop__rules', `${snap.maxActive} effets à la fois au plus · le même effet passe l’un après l’autre · une demande en attente par viewer · jamais démarrée en 3 min : remboursée.`));
     }
     if (!histPop.hidden) {
-      histPop.replaceChildren();
-      const tabs = el('div', 'ix-pop__tabs');
-      tabs.setAttribute('role', 'tablist');
-      for (const [id, label] of [['effects', 'Mes effets'], ['credits', `Mes crédits${snap.credits.length ? ` · ${snap.credits.length}` : ''}`]]) {
-        const b = btn('ix-pop__tab', label);
-        b.setAttribute('role', 'tab');
-        b.setAttribute('aria-selected', String(histTab === id));
-        b.addEventListener('click', () => {
-          histTab = id;
-          paint();
-        });
-        tabs.append(b);
+      // Reconstruit seulement si son contenu change (un clic n'est jamais perdu dans un repeint).
+      const key = JSON.stringify([histTab, logOpen, creditInfo, snap.mine.map((r) => [r.id, r.state, r.position, r.eta, r.remaining, r.refunded]), snap.credits.map((c) => c.id), snap.creditLog.length, prefs.helpSeen()]);
+      if (key !== histKey) {
+        histKey = key;
+        paintHist(snap);
       }
-      histPop.append(tabs);
-      if (histTab === 'effects') {
-        if (!snap.mine.length) histPop.append(el('p', 'ix-pop__empty', 'Tes achats de ce live apparaîtront ici.'));
-        for (const r of snap.mine) {
-          const [text, kind] = describeMine(r);
-          const row = el('div', 'ix-line ix-line--mine');
-          row.dataset.kind = kind;
-          const main = el('span', 'ix-line__main');
-          main.append(el('strong', null, r.label), el('span', 'ix-line__sub', r.summary));
-          row.append(glyph(document, r.effect), main, el('span', 'ix-line__state', text), r.credit ? el('span', 'ix-line__paid', 'crédit') : price(r.price, 'ix-price ix-price--sm'));
-          histPop.append(row);
-        }
-      } else {
-        histPop.append(el('p', 'ix-pop__intro', 'Un crédit lance un effet précis gratuitement, une seule fois. Rendu si l’effet ne démarre pas.'));
-        if (!snap.credits.length) histPop.append(el('p', 'ix-pop__empty', 'Aucun crédit pour l’instant.'));
-        for (const c of snap.credits) {
-          const e = effectById(c.effect);
-          const row = el('div', 'ix-line ix-line--credit');
-          const main = el('span', 'ix-line__main');
-          main.append(el('strong', null, e.label), el('span', 'ix-line__sub', `${creditTerms(c)} · ${SOURCE[c.source.kind] ?? ''} (${c.source.by}) · « ${c.reason} »`));
-          const use = btn('ix-mini ix-mini--use', 'Utiliser', 'ticket');
-          use.addEventListener('click', () => openSheet(c.effect, tiles.get(c.effect)?.node, { credit: c.id }));
-          row.append(glyph(document, c.effect), main, use);
-          histPop.append(row);
-        }
-        if (snap.creditLog.length) {
-          histPop.append(el('h4', 'ix-pop__title', 'Historique des crédits'));
-          for (const l of snap.creditLog.slice(0, 6)) {
-            const row = el('div', 'ix-line ix-line--log');
-            row.append(glyph(document, l.effect), el('span', 'ix-line__sub', `${effectById(l.effect).label} · ${LOG[l.kind] ?? l.kind}${l.reason ? ` · « ${l.reason} »` : ''}`), el('span', 'ix-line__state', new Date(l.at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })));
-            histPop.append(row);
-          }
-        }
+    }
+  }
+
+  function paintHist(snap) {
+    // Le focus reste sur le même bouton après le repeint (clavier, lecteur d'écran).
+    const active = histPop.contains(document.activeElement) ? document.activeElement : null;
+    const refocus = active ? [active.className, active.textContent] : null;
+    queueMicrotask(() => {
+      if (!refocus || histPop.contains(document.activeElement)) return;
+      [...histPop.querySelectorAll('button')].find((b) => b.className === refocus[0] && b.textContent === refocus[1])?.focus({ preventScroll: true });
+    });
+    histPop.replaceChildren();
+    const head = el('div', 'ix-pop__head');
+    const seg = el('div', 'ix-seg ix-seg--pop');
+    seg.setAttribute('role', 'tablist');
+    seg.setAttribute('aria-label', 'Mes effets ou mes crédits');
+    for (const [id, label, count] of [
+      ['effects', 'Effets', 0],
+      ['credits', 'Crédits', snap.credits.length],
+    ]) {
+      const b = btn('ix-seg__opt', label);
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(histTab === id));
+      if (count) b.append(el('b', 'ix-seg__count', String(count)));
+      b.addEventListener('click', () => {
+        histTab = id;
+        logOpen = false;
+        creditInfo = null;
+        paint();
+      });
+      seg.append(b);
+    }
+    head.append(seg);
+    if (histTab === 'credits' && snap.creditLog.length) {
+      const logBtn = btn('ix-logbtn', null, 'history');
+      logBtn.title = 'Historique des crédits';
+      logBtn.setAttribute('aria-label', 'Historique des crédits');
+      logBtn.setAttribute('aria-expanded', String(logOpen));
+      logBtn.addEventListener('click', () => {
+        logOpen = !logOpen;
+        paint();
+      });
+      head.append(logBtn);
+    }
+    histPop.append(head);
+    if (histTab === 'effects') {
+      if (!snap.mine.length) histPop.append(el('p', 'ix-pop__empty', 'Tes achats de ce live apparaîtront ici.'));
+      for (const r of snap.mine) {
+        const [text, kind] = describeMine(r);
+        const row = el('div', 'ix-line ix-line--mine');
+        row.dataset.kind = kind;
+        const main = el('span', 'ix-line__main');
+        main.append(el('strong', null, r.label), el('span', 'ix-line__sub', r.summary));
+        row.append(glyph(document, r.effect), main, el('span', 'ix-line__state', text), r.credit ? el('span', 'ix-line__paid', 'crédit') : price(r.price, 'ix-price ix-price--sm'));
+        histPop.append(row);
       }
+      return;
+    }
+    // Aide ponctuelle : une fois, puis plus jamais (pas d'explication permanente).
+    if (!prefs.helpSeen() && snap.credits.length) {
+      const help = el('p', 'ix-pop__help');
+      help.append(el('span', null, 'Un crédit lance cet effet une fois, sans Jetons ; il est rendu si l’effet ne joue pas.'));
+      const ok = btn('ix-pop__helpx', null, 'close');
+      ok.setAttribute('aria-label', 'Compris');
+      ok.title = 'Compris';
+      ok.addEventListener('click', () => {
+        prefs.markHelpSeen();
+        paint();
+      });
+      help.append(ok);
+      histPop.append(help);
+    }
+    if (!snap.credits.length) histPop.append(el('p', 'ix-pop__empty', 'Aucun crédit pour l’instant.'));
+    for (const c of snap.credits) {
+      const e = effectById(c.effect);
+      const row = el('div', 'ix-cline');
+      const main = btn('ix-cline__main');
+      main.setAttribute('aria-expanded', String(creditInfo === c.id));
+      main.title = 'Détail du crédit';
+      main.append(glyph(document, c.effect), el('strong', null, e.label), el('span', 'ix-cline__terms', shortTerms(c)));
+      main.addEventListener('click', () => {
+        creditInfo = creditInfo === c.id ? null : c.id;
+        paint();
+      });
+      const use = btn('ix-mini ix-mini--use', 'Utiliser');
+      use.setAttribute('aria-label', `Utiliser mon crédit ${e.label}`);
+      use.addEventListener('click', () => openSheet(c.effect, tiles.get(c.effect)?.node, { credit: c.id }));
+      row.append(main, use);
+      histPop.append(row);
+      if (creditInfo === c.id) histPop.append(el('p', 'ix-cline__more', `${creditTerms(c)} · ${SOURCE[c.source.kind] ?? ''} (${c.source.by}) · « ${c.reason} »`));
+    }
+    if (logOpen) {
+      const log = el('div', 'ix-pop__log');
+      log.setAttribute('role', 'region');
+      log.setAttribute('aria-label', 'Historique des crédits');
+      for (const l of snap.creditLog.slice(0, 8)) {
+        const row = el('div', 'ix-logline');
+        const kind = el('span', `ix-logkind ix-logkind--${l.kind}`, LOG[l.kind] ?? l.kind);
+        kind.title = LOG_HINT[l.kind] ?? '';
+        row.append(kind, el('span', 'ix-logline__what', `${effectById(l.effect).label}${l.reason ? ` · « ${l.reason} »` : ''}`), el('span', 'ix-logline__at', new Date(l.at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })));
+        log.append(row);
+      }
+      histPop.append(log);
     }
   }
 
@@ -1247,7 +1401,6 @@ export function view(ctx) {
     if (destroyed) return;
     const t = now();
     const snap = mock.snapshot(t);
-    const team = isTeam();
     tabButtons.bonk.hidden = !bonkModule(latest);
     if (tabButtons[tab].hidden) tab = 'chaos';
     root.dataset.tab = tab;
@@ -1260,18 +1413,17 @@ export function view(ctx) {
     placeThumb();
     chaosPane.hidden = tab !== 'chaos';
     bonkPane.hidden = tab !== 'bonk';
-    if (tab === 'chaos') {
-      headExtra.replaceChildren(...(team ? [modBtn] : []));
-      modBtn.setAttribute('aria-expanded', String(!modLayer.hidden));
-      modBtn.dataset.count = snap.queue.length ? String(snap.queue.length) : '';
-    }
-    if (!team && !modLayer.hidden) closeModeration();
+    if (tab === 'chaos') headExtra.replaceChildren();
 
     // Bandeau d'état : ce qui concerne tout le module, en une phrase.
     const bannerText =
       snap.status === 'offline'
         ? ['offline', 'clock', 'Hors live : les effets reviennent au prochain live.']
-        : snap.status === 'paused'
+        : snap.status === 'disabled'
+          ? ['offline', 'shield', 'Chaos est désactivé pendant ce live.']
+          : snap.status === 'engine_down'
+            ? ['paused', 'pause', 'Studio ne répond plus : rien n’est débité, les achats reprennent dès son retour.']
+            : snap.status === 'paused'
           ? ['paused', 'pause', 'Les achats d’effets sont suspendus. Ta place en file est gardée.']
           : snap.exclusive
             ? ['info', 'shield', `${snap.game} est en plein écran exclusif : seuls Brouillard, Paupières et Flash passent.`]
@@ -1293,6 +1445,10 @@ export function view(ctx) {
     for (const info of snap.effects) {
       const tile = tiles.get(info.id);
       const [kind, badge, reason, help] = tileState(info);
+      // Une carte n'est repeinte que si son état change (pas 13 cartes reconstruites chaque seconde).
+      const key = JSON.stringify([kind, badge, reason, help, info.minPrice, info.credits]);
+      if (tile.key === key) continue;
+      tile.key = key;
       tile.node.dataset.state = kind;
       tile.badge.hidden = !badge;
       tile.badge.dataset.kind = kind;
@@ -1312,7 +1468,6 @@ export function view(ctx) {
       tile.fav.setAttribute('aria-pressed', String(fav));
     }
     if (!reorder.dragging()) sheet?.update();
-    if (!modLayer.hidden) modView?.paint();
     if (tab === 'bonk') void showBonk();
   }
 
@@ -1328,22 +1483,19 @@ export function view(ctx) {
       return headbar;
     },
     start() {
-      stopClock = everySecond((t) => {
-        mock.tick(t);
-        paint();
-      });
+      // Le faux Core avance seul (store.js) : la vue se repeint à chaque seconde et après chaque achat ou action.
+      stopClock = subscribe(() => paint());
       paint();
       if (askOpen && effectById(askOpen) && !effectById(askOpen).planned && tab === 'chaos') win.requestAnimationFrame?.(() => openSheet(askOpen, tiles.get(askOpen)?.node));
-      else if (askMod && isTeam()) win.requestAnimationFrame?.(() => openModeration());
+      // Lab (?ixMod=1) : le bouclier de l'en-tête, comme un modérateur le toucherait.
+      else if (askMod && ctx.team === true) win.setTimeout(() => document.querySelector('.jdm-modshield')?.click(), 60);
     },
-    /** Le ‹ de l'en-tête referme d'abord ce qui est ouvert (fiche, modération, détail) avant de revenir au Hub. */
+    /** Section de la console de modération du bouclier de l'en-tête : FX sur Chaos, Bonk sur Bonk. */
+    moderationSection: () => (tab === 'bonk' ? 'bonk' : 'chaos'),
+    /** Le ‹ de l'en-tête referme d'abord ce qui est ouvert (fiche, détail) avant de revenir au Hub. */
     back() {
       if (sheet) {
         closeSheet();
-        return true;
-      }
-      if (!modLayer.hidden) {
-        closeModeration();
         return true;
       }
       if (pops.some(([p]) => !p.hidden)) {
@@ -1356,20 +1508,20 @@ export function view(ctx) {
       latest = c.state ?? latest;
       if (tab === 'bonk') drawBonk();
     },
-    onState(next) {
+    onState(next, prev) {
       latest = next;
       if (tab === 'bonk') drawBonk();
-      return true;
+      return JSON.stringify(next?.wallet ?? null) === JSON.stringify(prev?.wallet ?? null);
     },
     destroy() {
       destroyed = true;
       stopClock?.();
       stopClock = null;
       sheet?.destroy();
-      modView?.destroy();
       reorder.destroy();
       resize?.disconnect();
       document.removeEventListener('pointerdown', onDocDown, true);
+      document.removeEventListener('keydown', onKey);
       bonk?.view.destroy?.();
       bonk = null;
     },

@@ -121,39 +121,6 @@
 .ix-headbar[data-tab="bonk"] .ix-switch__thumb { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 calc(2 * var(--g)) calc(8 * var(--g)) rgba(239, 68, 68, .3); }
 .ix-switch { transition: border-color .3s ease; }
 .ix-headbar[data-tab="bonk"] .ix-switch { border-color: rgba(245, 158, 11, .35); }
-.ix-modbtn {
-  position: relative;
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: calc(3 * var(--g));
-  min-height: calc(26 * var(--g));
-  padding: 0 calc(8 * var(--g));
-  border: 1px solid rgba(196, 164, 255, .3);
-  border-radius: 999px;
-  background: rgba(30, 22, 51, .8);
-  color: #e4d6ff;
-  font-size: var(--fs-11);
-  font-weight: 750;
-}
-.ix-modbtn .ix-ico { width: calc(13 * var(--g)); height: calc(13 * var(--g)); }
-.ix-modbtn[aria-expanded="true"] { border-color: #c4a4ff; background: rgba(168, 85, 247, .25); }
-.ix-modbtn[data-count]:not([data-count=""])::after {
-  content: attr(data-count);
-  position: absolute;
-  top: calc(-5 * var(--g));
-  right: calc(-5 * var(--g));
-  min-width: calc(14 * var(--g));
-  padding: 0 calc(3 * var(--g));
-  border-radius: 999px;
-  background: var(--ix-rose);
-  color: var(--ix-s0);
-  font-size: var(--fs-10);
-  line-height: calc(14 * var(--g));
-  text-align: center;
-}
-:root:not([data-surface="video"]) .ix-modbtn > span { display: none; }
-.mobile .ix-modbtn { min-height: calc(34 * var(--g)); }
 .ix-switch__tab {
   position: relative;
   z-index: 1;
@@ -211,7 +178,6 @@
   transition: opacity .2s, transform .25s var(--ix-ease);
 }
 .ix.has-sheet .ix-pane > .ix-scroll,
-.ix.has-mod .ix-pane > .ix-scroll { opacity: .35; transform: scale(.985); }
 
 /* --- Bandeau « en direct » ------------------------------------------------------------------------------------ */
 .ix-live {
@@ -244,13 +210,17 @@
   border-radius: 50%;
   background: var(--ix-faint);
 }
-.ix-live[data-status="open"] .ix-live__main:not([data-kind="idle"]) .ix-live__dot {
-  background: var(--ix-sage);
-  box-shadow: 0 0 0 calc(3 * var(--g)) rgba(159, 203, 184, .16);
-  animation: ix-beat 2.4s ease-in-out infinite;
+.ix-live[data-status="open"] .ix-live__main:not([data-kind="idle"]) .ix-live__dot { position: relative; background: var(--ix-sage); }
+.ix-live[data-status="open"] .ix-live__main:not([data-kind="idle"]) .ix-live__dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(159, 203, 184, .35);
+  animation: ix-beat 2.4s ease-out infinite;
 }
 .ix-live[data-status="paused"] .ix-live__dot { background: var(--ix-amber); }
-@keyframes ix-beat { 50% { box-shadow: 0 0 0 calc(5 * var(--g)) rgba(159, 203, 184, 0); } }
+@keyframes ix-beat { from { transform: scale(1); opacity: .8; } 70%, to { transform: scale(2.6); opacity: 0; } }
 .ix-live__now {
   position: relative;
   min-width: 0;
@@ -393,10 +363,6 @@
 .ix-pop__title:first-child { margin-top: 0; }
 .ix-pop__title b { color: var(--ix-faint); font-weight: 600; }
 .ix-pop__empty { margin: 0; color: var(--ix-faint); font-size: var(--fs-11); }
-.ix-pop__tabs { display: flex; gap: calc(3 * var(--g)); padding: calc(2 * var(--g)); border-radius: 999px; background: rgba(0, 0, 0, .25); }
-.ix-pop__tab { flex: 1 1 0; min-height: calc(26 * var(--g)); border: 0; border-radius: 999px; background: none; color: var(--ix-muted); font-size: var(--fs-11); font-weight: 700; }
-.ix-pop__tab[aria-selected="true"] { background: var(--ix-wine); color: #fff; }
-.ix-pop__intro { margin: 0; color: var(--ix-faint); font-size: var(--fs-11); }
 .ix-lab__hint { margin: calc(-2 * var(--g)) 0 0; color: var(--ix-faint); font-size: var(--fs-10); }
 .ix-pop__rules { margin: calc(4 * var(--g)) 0 0; padding-top: calc(6 * var(--g)); border-top: 1px solid var(--ix-line); color: var(--ix-faint); font-size: var(--fs-11); }
 .ix-line {
@@ -442,11 +408,6 @@
 .ix-line.is-mine { box-shadow: inset 0 0 0 1px var(--ix-wine-hi); background: rgba(158, 41, 65, .2); }
 .ix-line.is-mine .ix-line__pos { background: var(--ix-wine); color: #fff; }
 .ix-line--mine { grid-template-columns: auto minmax(0, 1fr) auto auto; }
-.ix-line--credit { grid-template-columns: auto minmax(0, 1fr) auto; box-shadow: inset 0 0 0 1px rgba(238, 176, 188, .22); }
-.ix-line--credit::after,
-.ix-line--log::after { display: none; }
-.ix-line--log { grid-template-columns: auto minmax(0, 1fr) auto; min-height: calc(24 * var(--g)); background: transparent; }
-.ix-line--credit .ix-line__sub { white-space: normal; }
 .ix-line__paid { color: var(--ix-rose); font-size: var(--fs-11); font-weight: 700; }
 .ix-mini--use { border-color: var(--ix-wine-hi); background: var(--ix-wine); color: #fff; }
 .ix-mini--use .ix-ico { width: calc(12 * var(--g)); height: calc(12 * var(--g)); }
@@ -761,9 +722,6 @@
 .ix-sheet__pitch { margin: 0; color: var(--ix-muted); font-size: var(--fs-12); }
 .ix-sheet__extra { display: grid; gap: calc(8 * var(--g)); }
 .ix-sheet__extra:empty { display: none; }
-.ix-sheet__info { display: grid; gap: calc(3 * var(--g)); padding-top: calc(4 * var(--g)); border-top: 1px solid var(--ix-line); }
-.ix-sheet__info p { display: flex; align-items: flex-start; gap: calc(5 * var(--g)); margin: 0; color: var(--ix-faint); font-size: var(--fs-11); }
-.ix-sheet__info .ix-ico { width: calc(12 * var(--g)); height: calc(12 * var(--g)); margin-top: 1px; }
 /* Fiche large (composant vidéo, plein écran) : aperçu à gauche, réglages à droite ; le pied reste dessous. */
 @container ixsheet (min-width: 540px) {
   .ix-sheet__body { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); align-items: start; column-gap: calc(10 * var(--g)); }
@@ -1057,57 +1015,6 @@
 .ix-bill__engine { color: var(--ix-amber); font-size: var(--fs-10); }
 .ix-bill__engine summary { cursor: pointer; }
 .ix-bill__engine code { display: block; margin-top: calc(3 * var(--g)); color: #e7d6b8; font: var(--fs-10) / 1.35 ui-monospace, Consolas, monospace; word-break: break-all; }
-
-/* --- Modération FX : la section de la console de modération (D4), ses classes et ses styles -------------------- */
-/* (modules/moderation/moderation.css, chargé avec ce module) ; ici, seulement le cadre et les ajouts propres à FX. */
-.ix-modlayer {
-  position: absolute;
-  inset: 0;
-  z-index: 35;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-  border-radius: calc(12 * var(--g));
-  box-shadow: 0 calc(14 * var(--g)) calc(30 * var(--g)) rgba(0, 0, 0, .5);
-}
-.ix-modlayer > .modv2 { height: 100%; min-height: 0; border: 1px solid rgba(196, 164, 255, .2); border-radius: inherit; }
-.ix-fxmod .layout,
-.ix-fxmod .stage,
-.ix-fxmod .stage__body { min-height: 0; height: 100%; }
-.ix-fxmod .pane__body { padding-bottom: calc(8 * var(--g)); }
-.ix-fxmod .ixm-row .txt { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--fs-11); text-overflow: ellipsis; white-space: nowrap; }
-.ix-fxmod .ixm-row .txt b { margin-right: calc(4 * var(--g)); color: var(--ink); font-size: var(--fs-12); }
-.ix-fxmod .ixm-pos { flex: none; width: calc(16 * var(--g)); color: var(--faint); font-size: var(--fs-11); text-align: center; }
-.ix-fxmod .ixm-h { display: flex; align-items: center; gap: calc(6 * var(--g)); min-height: calc(30 * var(--g)); }
-.ix-fxmod .ixm-h .h__what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ix-fxmod .ixm-ask {
-  display: grid;
-  gap: calc(6 * var(--g));
-  margin: calc(4 * var(--g)) 0 calc(6 * var(--g));
-  padding: calc(8 * var(--g));
-  border: 1px solid var(--line-2);
-  border-radius: calc(10 * var(--g));
-  background: var(--surface);
-}
-.ix-fxmod .ixm-ask--danger { border-color: rgba(255, 122, 138, .45); }
-.ix-fxmod .ixm-ask p { margin: 0; color: var(--muted); font-size: var(--fs-11); }
-.ix-fxmod .ixm-acts,
-.ix-fxmod .ixm-form,
-.ix-fxmod .ixm-gifts { display: flex; flex-wrap: wrap; gap: calc(5 * var(--g)); }
-.ix-fxmod .ixm-reason,
-.ix-fxmod .ixm-form select {
-  min-height: calc(28 * var(--g));
-  padding: 0 calc(8 * var(--g));
-  border: 1px solid var(--line-2);
-  border-radius: calc(8 * var(--g));
-  background: var(--bg-2);
-  color: var(--ink);
-  font-size: var(--fs-11);
-}
-.ix-fxmod .ixm-note { margin-bottom: calc(6 * var(--g)); }
-.ix-fxmod .ixm-note--ok { border-color: rgba(94, 230, 160, .35); color: #c6f7dd; }
-.ix-fxmod .ixm-note--error { border-color: rgba(255, 122, 138, .45); color: #ffc2cb; }
-.ix-fxmod .ixm-gifts .icon-btn { color: #f0b5c1; }
 
 /* --- Bonk embarqué --------------------------------------------------------------------------------------------- */
 .ix-bonk { display: flex; flex-direction: column; min-height: 0; height: 100%; }
@@ -1451,13 +1358,15 @@
 @keyframes ix-track { from { transform: translateY(-1100%); } to { transform: translateY(600%); } }
 @keyframes ix-roll { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-3%) skewX(-2deg); } 55% { transform: translateY(2%) skewX(1.5deg); } }
 @keyframes ix-glitch {
-  0%, 100% { clip-path: none; transform: none; }
-  20% { clip-path: inset(30% 0 52% 0); transform: translateX(calc(var(--v) * 6%)); }
-  24% { clip-path: inset(62% 0 18% 0); transform: translateX(calc(var(--v) * -5%)); }
-  28% { clip-path: none; transform: none; }
-  70% { clip-path: inset(10% 0 74% 0); transform: translateX(calc(var(--v) * -4%)); }
-  74% { clip-path: none; transform: none; }
+  0%, 100% { transform: none; }
+  20% { transform: translateX(calc(var(--v) * 6%)) skewX(calc(var(--v) * -6deg)); }
+  24% { transform: translateX(calc(var(--v) * -5%)) skewX(calc(var(--v) * 4deg)); }
+  28% { transform: none; }
+  70% { transform: translateX(calc(var(--v) * -4%)) skewX(calc(var(--v) * 3deg)); }
+  74% { transform: none; }
 }
+/* Le grand aperçu a sa propre couche : ses filtres (VHS, flou…) sont calculés une fois, ses mouvements composés. */
+.ix-pv--big .ix-pv__world { will-change: transform; }
 
 /* Effets à venir (aucun rendu moteur) : une simple pluie pour la carte. */
 .ix-pv__rain {
@@ -1487,11 +1396,9 @@
   .ix-grid.is-dragging .ix-tile { transition: none !important; }
 }
 
-/* Fiche ou modération ouverte : les pastilles du bandeau (qui débordent vers le haut) ne dépassent pas au-dessus. */
+/* Fiche ouverte : les pastilles du bandeau (qui débordent vers le haut) ne dépassent pas au-dessus. */
 .ix.has-sheet .ix-live__count,
-.ix.has-sheet .ix-live__ccount,
-.ix.has-mod .ix-live__count,
-.ix.has-mod .ix-live__ccount { visibility: hidden; }
+.ix.has-sheet .ix-live__ccount { visibility: hidden; }
 
 /* Petit bouton (Lab, « Utiliser » un crédit). */
 .ix-mini {
@@ -1513,4 +1420,98 @@
 @container ixsheet (max-height: 330px) and (min-width: 540px) {
   .ix-sheet__pitch { display: none; }
   .ix-sheet__caption { display: none; }
+}
+
+/* --- « Conditions » de la fiche : lien jaune discret, panneau compact sous l'en-tête --------------------------- */
+.ix-condlink {
+  flex: none;
+  min-height: calc(26 * var(--g));
+  padding: 0 calc(4 * var(--g));
+  border: 0;
+  background: none;
+  color: var(--ix-amber);
+  font-size: var(--fs-11);
+  font-weight: 700;
+  text-decoration: underline dotted rgba(233, 189, 122, .6);
+  text-underline-offset: 3px;
+}
+.ix-condlink:hover,
+.ix-condlink[aria-expanded="true"] { color: #ffd79c; text-decoration-style: solid; }
+:root[data-touch] .ix-condlink { min-height: calc(34 * var(--g)); }
+.ix-cond {
+  position: absolute;
+  z-index: 6;
+  top: calc(40 * var(--g));
+  right: calc(8 * var(--g));
+  width: min(calc(100% - 16 * var(--g)), calc(360 * var(--g)));
+  max-height: calc(100% - 50 * var(--g));
+  overflow-y: auto;
+  display: grid;
+  gap: calc(5 * var(--g));
+  padding: calc(8 * var(--g)) calc(10 * var(--g));
+  border: 1px solid rgba(233, 189, 122, .45);
+  border-radius: calc(10 * var(--g));
+  background: #241820;
+  box-shadow: 0 calc(12 * var(--g)) calc(26 * var(--g)) rgba(0, 0, 0, .55);
+  animation: ix-drop .16s var(--ix-ease);
+}
+.ix-cond p { display: flex; align-items: flex-start; gap: calc(6 * var(--g)); margin: 0; color: var(--ix-muted); font-size: var(--fs-11); line-height: 1.35; }
+.ix-cond .ix-ico { flex: none; width: calc(13 * var(--g)); height: calc(13 * var(--g)); margin-top: 1px; color: var(--ix-amber); }
+
+/* --- Charges (Un clignement) : dix segments dans la barre du bouton -------------------------------------------- */
+.ix-charges { flex: none; display: inline-flex; align-items: center; gap: calc(4 * var(--g)); color: var(--ix-amber); font-size: var(--fs-10); font-weight: 700; white-space: nowrap; }
+.ix-charges > .ix-ico { width: calc(12 * var(--g)); height: calc(12 * var(--g)); }
+.ix-charges__bar { display: inline-flex; gap: calc(2 * var(--g)); }
+.ix-charges__bar i { width: calc(4 * var(--g)); height: calc(12 * var(--g)); border-radius: 1px; background: rgba(233, 189, 122, .18); }
+.ix-charges__bar i.is-on { background: var(--ix-amber); box-shadow: 0 0 calc(4 * var(--g)) rgba(233, 189, 122, .45); }
+.ix-charges[data-empty="true"] { color: var(--ix-faint); }
+@container ixsheet (max-width: 479px) {
+  .ix-charges__text { font-size: var(--fs-10); }
+}
+
+/* --- Achat : confirmation dans la fiche, « Ne plus demander » ------------------------------------------------- */
+.ix-outcome[data-kind="ok"] { color: var(--ix-sage); font-weight: 700; }
+.ix-outcome[data-kind="burst"] { color: var(--ix-rose); }
+.ix-quick { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: calc(5 * var(--g)); color: var(--ix-muted); font-size: var(--fs-11); cursor: pointer; }
+.ix-quick input,
+.ix-bill__confirm input { width: calc(15 * var(--g)); height: calc(15 * var(--g)); margin: 0; accent-color: var(--ix-wine-hi); }
+.ix-bill__confirm { display: flex; align-items: center; gap: calc(6 * var(--g)); color: var(--ix-muted); font-size: var(--fs-11); cursor: pointer; }
+
+/* --- Mes effets / Mes crédits : sélecteur compact, lignes courtes, historique replié -------------------------- */
+.ix-pop--mine { left: auto; width: min(100%, calc(360 * var(--g))); }
+.ix-pop__head { display: flex; align-items: center; gap: calc(6 * var(--g)); }
+.ix-seg--pop { flex: none; flex-wrap: nowrap; padding: calc(2 * var(--g)); border-radius: 999px; background: rgba(0, 0, 0, .25); }
+.ix-seg--pop .ix-seg__opt { display: inline-flex; align-items: center; gap: calc(4 * var(--g)); min-height: calc(24 * var(--g)); border: 0; font-weight: 700; }
+.ix-seg--pop .ix-seg__opt[aria-selected="true"] { background: var(--ix-wine); color: #fff; }
+.ix-seg__count { min-width: calc(15 * var(--g)); padding: 0 calc(3 * var(--g)); border-radius: 999px; background: rgba(238, 176, 188, .22); color: var(--ix-ink); font-size: var(--fs-10); line-height: calc(15 * var(--g)); text-align: center; }
+.ix-logbtn { display: grid; place-items: center; width: calc(26 * var(--g)); height: calc(26 * var(--g)); margin-left: auto; padding: 0; border: 1px solid var(--ix-line); border-radius: 50%; background: none; color: var(--ix-muted); }
+.ix-logbtn[aria-expanded="true"] { border-color: var(--ix-rose); color: var(--ix-rose); }
+.ix-logbtn .ix-ico { width: calc(14 * var(--g)); height: calc(14 * var(--g)); }
+:root[data-touch] .ix-logbtn { width: calc(34 * var(--g)); height: calc(34 * var(--g)); }
+.ix-pop__help { display: flex; align-items: center; gap: calc(6 * var(--g)); margin: 0; padding: calc(5 * var(--g)) calc(6 * var(--g)) calc(5 * var(--g)) calc(8 * var(--g)); border-radius: calc(8 * var(--g)); background: rgba(238, 176, 188, .08); color: var(--ix-muted); font-size: var(--fs-11); }
+.ix-pop__help > span { flex: 1 1 auto; }
+.ix-pop__helpx { flex: none; display: grid; place-items: center; width: calc(22 * var(--g)); height: calc(22 * var(--g)); padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ix-faint); }
+.ix-pop__helpx .ix-ico { width: calc(12 * var(--g)); height: calc(12 * var(--g)); }
+.ix-cline { display: flex; align-items: center; gap: calc(6 * var(--g)); }
+.ix-cline__main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: calc(6 * var(--g)); min-height: calc(30 * var(--g)); padding: 0 calc(6 * var(--g)); border: 0; border-radius: calc(8 * var(--g)); background: rgba(255, 255, 255, .03); color: var(--ix-ink); text-align: left; }
+.ix-cline__main:hover,
+.ix-cline__main[aria-expanded="true"] { background: rgba(238, 176, 188, .08); }
+.ix-cline__main > .ix-ico { flex: none; width: calc(14 * var(--g)); height: calc(14 * var(--g)); color: var(--ix-rose); }
+.ix-cline__main strong { flex: 0 1 auto; min-width: 0; overflow: hidden; font-size: var(--fs-12); text-overflow: ellipsis; white-space: nowrap; }
+.ix-cline__terms { flex: none; margin-left: auto; color: var(--ix-faint); font-size: var(--fs-11); white-space: nowrap; }
+:root[data-touch] .ix-cline__main { min-height: calc(36 * var(--g)); }
+.ix-cline__more { margin: calc(-2 * var(--g)) 0 calc(2 * var(--g)) calc(26 * var(--g)); color: var(--ix-faint); font-size: var(--fs-11); }
+.ix-pop__log { display: grid; gap: calc(2 * var(--g)); margin-top: calc(2 * var(--g)); padding: calc(6 * var(--g)); border: 1px solid var(--ix-line); border-radius: calc(8 * var(--g)); background: rgba(0, 0, 0, .2); animation: ix-drop .16s var(--ix-ease); }
+.ix-logline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: calc(6 * var(--g)); min-height: calc(22 * var(--g)); font-size: var(--fs-11); }
+.ix-logkind { padding: 0 calc(6 * var(--g)); border-radius: 999px; font-size: var(--fs-10); font-weight: 750; line-height: calc(17 * var(--g)); }
+.ix-logkind--granted { background: rgba(238, 176, 188, .16); color: var(--ix-rose); }
+.ix-logkind--used { background: rgba(159, 203, 184, .16); color: var(--ix-sage); }
+.ix-logkind--restored { background: rgba(233, 189, 122, .16); color: var(--ix-amber); }
+.ix-logkind--revoked { background: rgba(255, 255, 255, .08); color: var(--ix-faint); }
+.ix-logline__what { min-width: 0; overflow: hidden; color: var(--ix-muted); text-overflow: ellipsis; white-space: nowrap; }
+.ix-logline__at { color: var(--ix-faint); font-size: var(--fs-10); }
+@media (prefers-reduced-motion: reduce) {
+  .ix-cond,
+  .ix-pop__log,
+  .ix-live__dot::after { animation: none !important; }
 }
