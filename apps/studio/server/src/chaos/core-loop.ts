@@ -355,30 +355,38 @@ export class ChaosCoreLoop {
     }
     this.lastBeat = this.now();
     try {
-      const r = await this.d.core<{ stop?: { id: string; reason?: string }[] }>(
-        `${this.base}/heartbeat`,
-        {
-          studio_instance_id: this.d.studioId,
-          engine_ready: this.engineReady() && !!this.registry && !!this.config,
-          safety_max_ms: this.config?.safety?.max_duration_ms ?? 30_000,
-          safe_mode: this.config?.safety?.safe_mode === true,
-          effects: this.effectsView(),
-          inflight: this.state.entries
-            .filter((e) => e.delivered && !final(e))
-            .map((e) => e.id),
-        },
-      );
+      const r = await this.d.core<{
+        stop?: { id: string; reason?: string }[];
+        enabled?: boolean;
+      }>(`${this.base}/heartbeat`, {
+        studio_instance_id: this.d.studioId,
+        engine_ready: this.engineReady() && !!this.registry && !!this.config,
+        safety_max_ms: this.config?.safety?.max_duration_ms ?? 30_000,
+        safe_mode: this.config?.safety?.safe_mode === true,
+        effects: this.effectsView(),
+        inflight: this.state.entries
+          .filter((e) => e.delivered && !final(e))
+          .map((e) => e.id),
+      });
       if (!this.coreOk) this.log('Core joint');
       this.coreOk = true;
       this.fails = 0;
       this.downLogged = false;
       for (const s of r?.stop ?? []) await this.stopRequest(s.id);
+      // Chaos ouvert par le Core pour cette chaîne : le moteur démarre (au repos) pour que les achats soient possibles
+      // sans ouvrir la page Chaos de Studio ; il ne joue que ce qui est livré.
+      if (r?.enabled === true && !this.engineReady())
+        void this.d.runtime.client.ready().catch(() => {});
     } catch (e) {
       this.coreOk = false;
       this.fails++;
       this.error = (e as Error).message;
       if (!this.downLogged)
-        this.log(`Core injoignable : ${(e as Error).message}`);
+        this.log(
+          (e as { status?: number }).status === 404
+            ? 'Le Core ne propose pas encore Chaos (404) : nouvel essai espacé'
+            : `Core injoignable : ${(e as Error).message}`,
+        );
       this.downLogged = true;
     }
   }

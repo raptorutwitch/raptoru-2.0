@@ -122,7 +122,7 @@ const item = (id: string, effect: string, extra = {}): Item => ({
 });
 
 /** Faux Core Lab (Studio secret) : la file de `items`, les arrêts de `stops`, et tout ce que Studio lui a dit. */
-async function fakeCore(items: Item[] = []) {
+async function fakeCore(items: Item[] = [], opts: { enabled?: boolean } = {}) {
   const log: { path: string; body: Record<string, unknown> }[] = [];
   const stops: string[] = [];
   const port = await listen(
@@ -143,6 +143,7 @@ async function fakeCore(items: Item[] = []) {
           return send(200, {
             ok: true,
             stop: stops.splice(0).map((id) => ({ id, reason: 'modération' })),
+            ...(opts.enabled === undefined ? {} : { enabled: opts.enabled }),
           });
         if (path === '/claim') {
           const i = items.findIndex(
@@ -367,6 +368,19 @@ describe('Chaos lot 2 : route Lab « Jouer sur mon PC »', () => {
 });
 
 describe('Chaos lot 2 : boucle du Core', () => {
+  it('Chaos ouvert par le Core : le moteur démarre au repos (sans la page Chaos) ; fermé : il ne démarre pas', async () => {
+    const closed = studio();
+    const off = await fakeCore([], { enabled: false });
+    await startLoop(closed.rt, off.core, join(closed.dir, 'core-journal.json'));
+    await until(() => off.calls('/heartbeat').length >= 3);
+    expect(closed.rt.client.state.status).not.toBe('ready');
+    const open = studio();
+    const on = await fakeCore([], { enabled: true });
+    await startLoop(open.rt, on.core, join(open.dir, 'core-journal.json'));
+    await until(() => on.calls('/heartbeat').find((c) => c.body.engine_ready));
+    expect(open.rt.client.state.status).toBe('ready');
+  });
+
   it('heartbeat, claim des effets qui peuvent démarrer, livraison (source core, écran, reject), acks started → ended, STOP ALL', async () => {
     const { rt, dir, received } = studio({ FAKE_CHAOS_PLAY_MS: '1200' });
     await rt.client.ready();
