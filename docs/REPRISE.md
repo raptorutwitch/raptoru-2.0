@@ -25,7 +25,7 @@ disponible pour tous ». Gestes restants : Antoni (Hosted Test, revue Twitch) �
 CHATBOX RAPTORU : EN SERVICE MASQUÉE le 22/11 (Core + bot df3adb5e, CHATBOX_RELAY=true, Studio 0.1.43 publiée, 5 sources
 OBS « Chatbox Raptoru — … » ajoutées MASQUÉES au-dessus des anciennes). Reste : Antoni installe 0.1.43, essai en live,
 bascule scène par scène SUR SON GO (docs/CHATBOX.md § 12.2). Ne rendre aucune source visible, ne toucher à aucune source
-StreamElements sans GO. Chantier suivant : KO Overlay (contexte à demander à Antoni).
+StreamElements sans GO. Chantier suivant : KO Overlay = Chaos V2 (§ C).
 Niveaux : restauration WizeBot du 20/11 définitive (NE JAMAIS LA REJOUER).
 Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Méthode : docs/AGENT_WORKFLOW.md § 0.
 ```
@@ -176,7 +176,7 @@ Les états ne se confondent pas (détail : [ROADMAP.md](ROADMAP.md) § 0.4) :
 1. Lire [CHATBOX.md](CHATBOX.md), puis la présentation et le rapport privés qu'il cite (§ 1) ; ne refaire ni la
    reconnaissance ni la présentation. Direction décidée par Antoni le 22/11 (CHATBOX.md § 4).
 2. Core et bot `df3adb5e` déployés le 22/11 (14:10 et 14:13 UTC, bot `CHATBOX_RELAY=true`), Studio 0.1.43 publiée, cinq sources OBS ajoutées **masquées** (CHATBOX.md § 12). Suite : Antoni installe 0.1.43, puis l'essai en live et la bascule scène par scène
-   sur son GO (§ 12.2). Ensuite : KO Overlay (ROADMAP § 0.2, contexte à demander).
+   sur son GO (§ 12.2). Ensuite : KO Overlay = Chaos V2 (§ C ci-dessous).
 3. Aucune source OBS active, widget StreamElements ni Production modifiés sans autorisation explicite d'Antoni.
 
 **B. Casino jusqu'au public (gestes d'Antoni, en parallèle)**. Le Hosted Test ne permet **pas** un essai avec de vrais
@@ -192,7 +192,151 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
    remboursements, spectateurs, blackjack à plusieurs, nouvelles tables, réactions, téléphone).
 5. Corriger **uniquement** les problèmes observés.
 
-**C. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (Chaos V2 lot 0, validations réelles en attente, finitions Studio).
+**C. Chaos V2 (« Chaos Overlay », que tu appelles aussi « KO Overlay »)** : moteur, curseur retourné, page Studio
+(22–23/11), puis **bibliothèque de 13 effets** (nuit du 23 au 24/11), puis **passe de polissage + Performance Lab**
+(24/11, après les essais d'Antoni dans 0.1.44-chaos.2), en local.
+
+- **Où** : branche locale **`feat/chaos-studio`** (`origin/main` refusionné le 24/11 : Soundboard), worktree
+  `Raptoru 2.0 - Worktrees\chaos-v2`. Lancer : `npm run chaos:lab` (recompile moteur et page).
+- **Effets** : retournement, miroir, tremblement, zoom, écran ivre, vision tunnel, clignement des paupières, flash
+  aveuglant avec rémanence, brouillard, flou, pixelisation, filtres de couleur, VHS / glitch. Chacun a sa fiche dans
+  Studio (préréglages en un clic, réglages avancés repliés, point visé, aperçu rendu par le moteur hors écran). État,
+  techniques, sources, limites : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md).
+- **Polissage du 24/11** :
+  - **tout l'écran, barre des tâches comprise** : mode E, [chaos/ECRAN_ENTIER.md](chaos/ECRAN_ENTIER.md) ;
+  - clignement fermé à 100 %, brouillard à quatre niveaux d'occlusion, tunnel en vrai dégradé, flash à forte
+    rémanence, ivre mort et vertige plus forts ;
+  - **intensité** Léger / Marqué / Extrême / Personnalisé dans chaque fiche ;
+  - **Chaos Performance Lab** : banc hors écran et validation en jeu, [chaos/PERFORMANCE_LAB.md](chaos/PERFORMANCE_LAB.md).
+
+  Mesures et choix : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md) § 0 bis.
+
+- **Enquête Halloween / V2 (24/11)** : [chaos/ETUDE_HALLOWEEN_VS_V2.md](chaos/ETUDE_HALLOWEEN_VS_V2.md).
+  - Halloween utilisait déjà des filtres OBS pour le retournement (fenêtre exclue).
+  - Chaos V2 en mode E est vu directement par « Écran » (DXGI).
+  - Recommandation : mode automatique, calque capturé par défaut et filtres seulement sur le bureau, sous réserve de
+    la sonde `chaos-bench.exe --capture-probe --screen \\.\DISPLAY1` (à lancer par Antoni).
+  - Garde de jeu corrigée : les « plein écran » du 24/11 venaient des deux fenêtres Halloween de Studio (calques
+    traversables, « Overlay actif » allumé), pas d'un jeu.
+- **Banc des 13 effets (25/11)** : [chaos/BENCH_EFFETS.md](chaos/BENCH_EFFETS.md).
+  - **Phase A, moteur hors écran à 1440p** : 0,09 ms (Flash) à 0,60 ms (Brouillard) de GPU par image au maintien, soit
+    0,4 à 3,6 % du GPU à 60 Hz. Les plus coûteux : Brouillard, Écran ivre, VHS. Processeur et mémoire négligeables.
+  - **Phase B, OBS isolé** réglé comme le profil Twitch (DXGI, relais, NVENC 1080p60) : 0 image en retard, sautée
+    ou noire, sur tous les effets.
+  - **Classement** : 11 effets « légers », Brouillard et Écran ivre « modérés », aucun « lourd ».
+  - **Phase C, Overwatch réel** : première mesure d'Antoni le 25/11 à 14 h 07, analysée et collecteur corrigé
+    (BENCH_EFFETS.md § 8). Avec calque, le jeu passe en composition Windows (SyncInterval 1, 60 Hz) : autant d'images,
+    mais 4,9 % durent 33 ms (0,0 % sans calque), même avec Miroir ; pas le coût des shaders. Cause probable : ~58 i/s
+    d'Overwatch dans une composition à 59,94 Hz. **Test A/B prêt** (`mesure-jeu.mjs --ab` : calque neutre
+    `diag.watermark`, Miroir, Brouillard), à lancer par Antoni ; aucune perte d'images/s annoncée avant.
+  - **Premier A/B (14 h 56) interrompu au 2e essai** : le Performance Lab rendait sa place à la sortie (asynchrone) du
+    processus de télémétrie, après « done ». Corrigé (Studio : libération immédiate, `live_available` ; collecteur :
+    état vérifié côté serveur, « busy » redemandé tant que le serveur le dit, nettoyage), test de six essais enchaînés
+    sur le vrai runtime (BENCH_EFFETS.md § 8.6). Le calque neutre seul a fortement perturbé le jeu (27,9 i/s, 40,7 %
+    d'images doublées) sans que le moteur cale : à confirmer par les six essais.
+  - **A/B complet (15 h 39, 6/6)** : PresentMon sous-compte les images d'Overwatch en mode composé (21 à 29 i/s
+    affichées alors que la capture du moteur reçoit 57,5 à 59,5 images neuves/s, processeur du jeu inchangé, ressenti
+    fluide sur Brouillard) : ses chiffres en mode composé sont faux (BENCH_EFFETS.md § 9.2). Cause réelle des
+    ralentissements de Miroir : le moteur ne redessinait les effets cadencés qu'au retour de balayage et perdait une
+    image du jeu sur sept ou huit (50,7–52,5 présentées pour 58,5–59,1 captures) ; corrigé (`ddbe54bd`, captures rendues
+    dès leur arrivée), simulation 25,5 % → 0 % d'images perdues. Version de test 0.1.44-chaos.10 ; manipulations
+    Windows/NVIDIA/Overwatch réversibles au § 9.5, à faire par Antoni.
+  - **Validation en jeu arrêtée après la référence (26/11, chaos.10 installée)** : Miroir 10 / 40 / 10 s ; le moteur
+    validait la phase « effet » contre la durée maximale des effets du stream (Sécurité, 30 s) et refusait 40 s.
+    Corrigé (`ec7406c0`) : phase « effet » d’une mesure bornée par le registre (60 s), refus montré aussitôt ; tests
+    chaos-unit 39/39 et `chaos-perf-phases` (10 / 40 / 10 simulé). Version de test 0.1.44-chaos.11 (PERFORMANCE_LAB.md).
+  - **26/11 : chaos.11 installée et validée par Antoni** (Miroir fluide, Brouillard sans lag, 10 / 40 / 10, curseur
+    unique, aucun flash noir). Stabilisation des performances close. Suite : lot 2 (ROADMAP_CHAOS_V2.md, état en tête).
+  - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
+  - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
+    phase C. Version installée : chaos.10 (26/11) ; le relais a été validé par Antoni dans son OBS le 25/11 (chaos.8).
+- **Flash noir de la bascule du curseur d'OBS (24/11 soir)** : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md) § 5.
+  - **Cause** : OBS détruit puis recrée la duplication DXGI partagée de l'écran à chaque changement de réglage de sa
+    seule capture.
+  - **Solution mesurée** : le **relais**, une capture sans curseur du même écran, hors du cadre, dans les scènes où
+    « Écran » est visible ; pas dans Scène PS5.
+  - **Banc isolé 1080p60 et 1440p60** : bascule actuelle, 1 à 2 images noires par bascule ; relais, 0 ; même mémoire
+    vidéo ; changements de scène, 0 ; scène type PS5, aucune capture.
+  - **Corrigé en passant** : les réglages de fiche tapés coup sur coup ne se perdent plus. Le e2e de la page passe
+    de 37 à 39/39.
+  - **Commits** `6387c1e0`, `256308f3`, `dbb5aee2`, `dbe78017`, `984591ac`, `84b297e9` (locaux).
+  - **Version** `0.1.44-chaos.8`, installée et **validée par Antoni le 25/11** dans son OBS : aucun flash noir
+    perceptible, un seul curseur, transformation correcte (Miroir, Écran retourné).
+- **« Aucune image capturée » (Miroir, Écran retourné) avec chaos.6 (24/11 soir)** : la cible « écran » avait choisi
+  Discord, qui s'exclut des captures (affinité 0x11). WGC ne livrait aucune image et l'effet échouait au bout de 3 s.
+  - Correctif `badada91` : une fenêtre protégée n'est plus jamais choisie.
+  - Diagnostic sans affichage : `ChaosEngine.exe --capture-check`.
+  - Version de test `0.1.44-chaos.7` (non installée). Doc : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md) § 6.
+- **Curseur d'OBS et VHS (24/11 soir, après la validation du Miroir en capture directe par Antoni)** :
+  doc [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md).
+  - **VHS figé au maintien** : le moteur ne redessinait plus sans nouvelle capture (tous modes).
+    - Correctif : une image qui lit l'horloge de l'effet est redessinée à chaque rafraîchissement.
+    - Non-régression : `ChaosEngine.exe --check-hold vhs --expect-motion` (0/582 → 582/582).
+  - **Deux curseurs dans OBS** : Studio coupe « Capturer le curseur » de la source pendant les effets à curseur
+    dessiné, puis rétablit la valeur d'avant.
+    - Désactivé par défaut (« Laisser ») : à activer dans Diffusion OBS.
+    - OBS redémarre sa capture à chaque changement : 0 à 2 images vides (DXGI).
+  - Commits `c7e8c582`, `a3f878dd`, `f3ae3b3f` (locaux).
+  - Tests : moteur 36/36, Studio ciblés 34/34, page 38/38.
+  - Version de test `0.1.44-chaos.6` (non installée) : GUIDE_STUDIO_CHAOS.md § 4.
+- **Capture directe par « Écran » (24/11 soir, priorité d'Antoni ; Miroir validé par Antoni en chaos.5)** : un seul rendu, vu à l'écran et capturé tel quel
+  par « Écran » (DXGI), sans filtre. Doc : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md).
+  - **Cause du Miroir absent d'OBS** : sans fenêtre couvrant 90 % de l'écran, la fiche partait en mode C, dont le
+    calque est exclu des captures pendant tout l'effet.
+  - **Correctif** (commits `21833432` et `f0c544d5`, locaux) :
+    - écran seul → toujours mode E (fenêtre du dessus en direct, reste de l'écran figé), jamais exclu ;
+    - mode C seulement avec les filtres ;
+    - Studio part en « Écran uniquement » ;
+    - sonde du vrai chemin `chaos-bench.exe --capture-probe --engine`.
+  - **Tests** : unitaires moteur 35/35, Studio ciblés 25/25, page e2e non visible 36/36.
+  - **Reste** : la validation visible d'Antoni (CAPTURE_DIRECTE.md § 5), avec la version de test `0.1.44-chaos.5`
+    (GUIDE_STUDIO_CHAOS.md § 4).
+- **Mode C (24/11, décision d'Antoni ; alternative depuis la capture directe)** : l'écran du streamer ET la source
+  gameplay « Écran » d'OBS, sans double application. Doc : [chaos/MODE_C.md](chaos/MODE_C.md).
+  - **Construit** : une activation à deux sorties (le moteur calcule la partition OBS avant la première image) ; calque
+    exclu des captures pendant la sortie OBS ; panneau « Diffusion OBS » ; filtres « Raptoru Chaos V2 » préparés
+    seulement sur clic, avec sauvegarde, sans toucher aux V1.
+  - **Prouvé hors écran** : vrai moteur avec OBS simulé, et libobs 33.0.1 sans fenêtre (parité, arrêt anticipé,
+    fenêtre de validité, décalage de départ).
+  - **Reste à faire, côté Antoni** : test d'exclusion visible, GO pour les filtres dans son OBS, essai contrôlé.
+    Le banc 1440p attend la garde de jeu ; le flash reste « écran seulement ».
+  - Version de test `0.1.44-chaos.4` (non installée) : [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md) § 4.
+- **Chaos sur la source gameplay d'OBS seulement** (24/11, demande d'Antoni : webcam et alertes intactes) : étude et
+  prototype, [chaos/OBS_SOURCE_GAMEPLAY.md](chaos/OBS_SOURCE_GAMEPLAY.md).
+  - Architecture retenue : filtres obs-shaderfilter sur « Écran », shaders du moteur réécrits, logique en partition
+    (`ChaosEngine.exe --obs-export`).
+  - 12 effets sur 13 vérifiés dans le vrai moteur d'OBS 33.0.1 sans fenêtre (`chaos-obs-check.exe`) ; flash à venir.
+  - Rien de touché dans l'OBS d'Antoni ; banc 1440p en attente de la garde de jeu.
+- **Études OBS** (aucune modification d'OBS) : [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md) (ralenti global +
+  rattrapage) et [chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md) (replay des dernières secondes).
+- **Studio installé** : `0.1.44-chaos.3` (installée par Antoni le 24/11).
+  - **Version de test `0.1.44-chaos.3`** (polissage + Performance Lab) : construite, **non installée, non publiée**.
+  - Chemin, empreinte, essais et protocole Overwatch + OBS : [chaos/GUIDE_STUDIO_CHAOS.md](chaos/GUIDE_STUDIO_CHAOS.md)
+    § 4.
+  - L'installation est faite par Antoni.
+- **Tests passés** :
+  - 34 tests unitaires du moteur ;
+  - 23 tests Studio Chaos, dont le Performance Lab et les propriétés des effets mesurées hors écran par le vrai
+    moteur (paupières 100 % fermées à toutes les proportions d'écran, niveaux du brouillard, dégradé du tunnel) ;
+  - parcours de la page sans affichage : 30/30.
+- **Non lancés** (garde de jeu, plein écran au premier plan) :
+  - tout essai visible ;
+  - le vrai banc GPU (seul le banc de fumée a tourné) ;
+  - les essais en jeu et dans OBS ;
+  - le banc de compatibilité OBS du mode E.
+- **Règle** : aucun essai visible (calque, rotation, banc, curseur) pendant qu'un jeu tourne. La garde le refuse ;
+  `--autorise-pendant-un-jeu` seulement sur accord d'Antoni.
+- **Prochaine étape** :
+  1. installer `0.1.44-chaos.3` ;
+  2. vérifier la barre des tâches dans l'effet, à l'écran et dans OBS (capture d'écran) ;
+  3. refaire les essais du clignement, du brouillard (Occultant), du tunnel, du flash et de l'écran ivre ;
+  4. lancer le banc hors écran du Performance Lab, jeu fermé ;
+  5. faire la validation en jeu sur Overwatch avec OBS (protocole : [chaos/PERFORMANCE_LAB.md](chaos/PERFORMANCE_LAB.md)
+     § 4) ;
+  6. ensuite, le lot 2 (achat par les viewers, Core) et un prototype OBS isolé si Antoni le décide.
+- **Rien n'est poussé, fusionné ni publié.**
+
+**D. Ensuite** : [ROADMAP.md](ROADMAP.md) § 0.2 (validations réelles en attente, finitions Studio).
 
 **C bis. Chaos V2 côté viewer : module « Interactions » (26–28/11)** — [chaos/EXTENSION_INTERACTIONS.md](chaos/EXTENSION_INTERACTIONS.md).
 **Interface validée par Antoni le 28/11** (plus de refonte). Dernière passe 28/11 : achats sans confirmation (case
@@ -217,8 +361,8 @@ Twitch (mentions avant publication listée), aucun code. Même branche locale, n
 sauvegarde Coolify 16:43:40 UTC, retour arrière `deploy core 2a41e06e… --rollback --go`) ; la réaction blackjack r6
 (ICANT, réservée aux abonnés, PR #122) part avec, sur GO d'Antoni. Bot non redéployé. **Studio 0.1.44 Soundboard
 construit, NON publié** (artefact `raptoru-studio-0.1.44` du run 45220697767, conservé jusqu'au 21/02/2027) : le Studio
-installé est `0.1.44-chaos.1` (chantier Chaos, autre session) ; ne rien installer par-dessus. Soundboard et Chaos seront
-réunis dans un build commun quand Chaos Overlay V2 sera prêt (décision d'Antoni du 23/11). Finitions Casino du 23/11
+installé est `0.1.44-chaos.1` (chantier Chaos, autre session) ; ne rien installer par-dessus. Soundboard et Chaos sont
+réunis dans le build de test commun `0.1.44-chaos.2` (24/11, non installé : § C). Finitions Casino du 23/11
 fusionnées (PR #127, `ed70a107`). **ZIP consolidé** Soundboard + Casino (36 commits, sans diagnostic actif, Hosted Test
 seulement) : inventaire `INVENTAIRE-ed70a107018f.md` en attente de la ligne de validation d'Antoni.
 

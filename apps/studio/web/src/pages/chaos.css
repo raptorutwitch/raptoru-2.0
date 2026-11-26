@@ -1,0 +1,717 @@
+/* Studio › Chaos (pages/chaos.ts) : jetons du design system seulement ; une colonne sous 1100 px. */
+[data-mod='chaos'] {
+  --mod: var(--violet);
+}
+.cx {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 16px;
+  align-items: start;
+}
+.cx__main,
+.cx__side {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.cx-card {
+  padding: 14px 16px;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  background: var(--sheet2);
+  min-width: 0;
+}
+.cx-card > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.cx-card h2 {
+  margin: 0;
+  font: 600 17px var(--num);
+  white-space: nowrap;
+}
+.cx-card > header .d-faint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.cx-facts {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cx-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* Aperçu (fiche du retournement) : un écran stylisé qui rejoue le réglage (rotation, coins, durées) ; le curseur
+   tourne avec l'image (curseur retourné). */
+.cx-sheet__body {
+  display: grid;
+  grid-template-columns: minmax(220px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.cx-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  box-shadow:
+    0 0 0 1px var(--hair2),
+    0 10px 30px var(--shade);
+}
+.cx-screen__bg,
+.cx-screen__fg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: start;
+  padding-top: 10%;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 49.6%,
+      rgb(255 255 255 / 0.25) 50%,
+      transparent 50.4%
+    ),
+    linear-gradient(
+      0deg,
+      transparent 49.4%,
+      rgb(255 255 255 / 0.25) 50%,
+      transparent 50.6%
+    ),
+    conic-gradient(
+      from 90deg at 50% 50%,
+      #2a6b5c 0 25%,
+      #c58b2b 0 50%,
+      #2f4f9c 0 75%,
+      #a63a3a 0
+    );
+  color: #fff;
+  will-change: transform;
+}
+.cx-screen__fg b {
+  font-size: 26px;
+  line-height: 1;
+}
+.cx-screen__fg span {
+  font: 700 18px var(--num);
+  letter-spacing: 0.08em;
+}
+.cx-screen__bg {
+  filter: blur(9px) brightness(0.45);
+}
+.cx-screen__bg > *,
+.cx-screen[data-fill='black'] .cx-screen__bg,
+.cx-screen[data-fill='cover'] .cx-screen__bg {
+  display: none;
+}
+.cx-screen__cursor {
+  position: absolute;
+  left: 63%;
+  top: 58%;
+  width: 0;
+  height: 0;
+  border-left: 7px solid #fff;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  transform: rotate(-35deg);
+  filter: drop-shadow(0 0 2px #000);
+}
+.cx-sheet__cfg {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cx-sheet__cfg .d-row {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.cx-sheet__cfg .d-fld {
+  width: 92px;
+  margin-left: 8px;
+}
+
+kbd {
+  padding: 0 4px;
+  border: 1px solid var(--hair2);
+  border-radius: 4px;
+  font: 600 11px var(--text);
+}
+
+/* En cours */
+.cx-live {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cx-live li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--fill0);
+}
+.cx-live__t {
+  flex: 1 1 160px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Catalogue */
+
+/* Moteur */
+.cx-kv {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.cx-kv dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cx-reset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Journal */
+.cx-log {
+  display: grid;
+  gap: 4px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  font-size: 12.5px;
+}
+.cx-log li span {
+  font-weight: 600;
+}
+.cx-log li.is-bad span {
+  color: var(--red);
+}
+.cx-log small {
+  display: block;
+  opacity: 0.65;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .cx {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .cx-sheet__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Catalogue : une carte par effet du registre ; la carte ouverte est soulignée par la couleur du module. */
+.cx-catcard > header {
+  margin-bottom: 12px;
+}
+.cx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.cx-fx {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 12px;
+  background: var(--raise);
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.cx-fx:hover {
+  background: var(--raise2);
+}
+.cx-fx.is-sel {
+  border-color: var(--mod);
+  box-shadow: inset 0 0 0 1px var(--mod);
+}
+.cx-fx.is-on {
+  background: linear-gradient(
+    180deg,
+    rgb(185 160 255 / 0.14),
+    var(--raise) 70%
+  );
+}
+.cx-fx.is-off .cx-fx__t,
+.cx-fx.is-off .cx-fx__ic {
+  opacity: 0.55;
+}
+.cx-fx.is-diag {
+  border-style: dashed;
+}
+.cx-fx__open {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 12px 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cx-fx__open:focus-visible {
+  outline: 2px solid var(--mod);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+.cx-fx__ic {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgb(185 160 255 / 0.14);
+  color: var(--mod);
+}
+.cx-fx__ic svg {
+  width: 20px;
+  height: 20px;
+}
+.cx-fx__ic--lg {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+.cx-fx__ic--lg svg {
+  width: 26px;
+  height: 26px;
+}
+.cx-fx__t {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.cx-fx__t b {
+  font: 600 15px var(--num);
+}
+.cx-fx__t small {
+  color: var(--ink2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.cx-fx__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 12px 10px;
+  font-size: 12px;
+}
+
+/* Fiche de l'effet : identité, actions (état réel, Tester, Activer / Arrêter), aperçu et réglages. */
+.cx-sheet__h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.cx-sheet__id {
+  min-width: 0;
+}
+.cx-sheet__id h2 {
+  margin: 0;
+  font: 600 19px var(--num);
+}
+.cx-sheet__id p {
+  margin: 2px 0 0;
+  color: var(--ink2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cx-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--raise);
+}
+.cx-run .d-btn {
+  min-width: 110px;
+}
+.cx-sheet__pv[hidden] {
+  display: none;
+}
+.cx-sheet__body:has(.cx-sheet__pv[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cx-ctl {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.cx-fld-s {
+  width: 96px;
+  flex: none;
+}
+.cx-help--row {
+  margin: -2px 0 6px;
+}
+.cx-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.cx-range input {
+  width: 160px;
+  accent-color: var(--mod);
+}
+.cx-range output {
+  min-width: 36px;
+  font: 600 13px var(--num);
+}
+.cx-color {
+  width: 44px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background: none;
+}
+.cx-screen[data-cursor='false'] .cx-screen__cursor {
+  display: none;
+}
+
+/* Diagnostic avancé (panneau) : essai sur une fenêtre précise. */
+.cx-diagtest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.cx-diagtest select {
+  flex: 1 1 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background: var(--raise);
+  color: var(--ink);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+/* Aperçu rendu par le moteur (fiche d'un effet) : une grille d'images JPEG jouée comme une petite vidéo. */
+.cx-anim {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  box-shadow:
+    0 0 0 1px var(--hair2),
+    0 10px 30px var(--shade);
+}
+.cx-anim__img {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+}
+.cx-anim__t {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+  font: 600 11px var(--num);
+}
+
+/* Point visé : un écran miniature, clic pour placer le point (flèches au clavier). */
+.cx-point {
+  position: relative;
+  width: 192px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: 1px solid var(--hair2);
+  border-radius: 8px;
+  background:
+    linear-gradient(var(--hair2) 1px, transparent 1px) 0 0 / 25% 25%,
+    linear-gradient(90deg, var(--hair2) 1px, transparent 1px) 0 0 / 12.5% 25%,
+    var(--raise);
+  cursor: crosshair;
+}
+.cx-point:focus-visible {
+  outline: 2px solid var(--mod);
+  outline-offset: 2px;
+}
+.cx-point__dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--mod);
+  box-shadow: 0 0 0 3px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+/* Réglages avancés : repliés par défaut, la fiche reste courte. */
+.cx-adv {
+  margin: 6px 0 2px;
+  border-top: 1px solid var(--hair2);
+}
+.cx-adv > summary {
+  padding: 10px 0 6px;
+  color: var(--ink2);
+  font-weight: 600;
+  cursor: pointer;
+}
+.cx-adv > summary small {
+  margin-left: 4px;
+  color: var(--ink2);
+  font: 600 11px var(--num);
+}
+
+/* Préréglages de la fiche (variantes du registre) : des puces qui passent à la ligne. */
+.cx-presets {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.cx-presets__t {
+  color: var(--ink2);
+  font-size: 13px;
+}
+.cx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cx-chip {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--hair2);
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--ink2);
+  font: 500 12.5px var(--text);
+  cursor: pointer;
+}
+.cx-chip:hover {
+  color: var(--ink);
+}
+.cx-chip.on {
+  border-color: var(--mod);
+  background: var(--raise3);
+  color: var(--ink);
+}
+.cx-chip:focus-visible {
+  outline: 2px solid var(--mod);
+  outline-offset: 2px;
+}
+
+/* Performance Lab (pages/chaos-perf.ts) : matériel, banc hors écran, validation en jeu ; tableaux défilants. */
+.cx-perf[hidden] {
+  display: none;
+}
+.cx-perf h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cx-perf__sys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.cx-perf__sys dt,
+.cx-perf__sum dt {
+  color: var(--ink3);
+  font-size: 11px;
+}
+.cx-perf__sys dd,
+.cx-perf__sum dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cx-perf__modes {
+  display: grid;
+  gap: 12px;
+}
+.cx-perf__mode {
+  padding: 12px;
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  min-width: 0;
+}
+.cx-perf__mode > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.cx-perf__mode h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 600 15px var(--num);
+}
+.cx-perf__run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+.cx-perf__bar {
+  flex: 1 1 160px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--fill0);
+  overflow: hidden;
+}
+.cx-perf__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--mod);
+  transition: width 0.3s;
+}
+.cx-perf__tw {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.cx-perf__t {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px var(--num);
+  font-variant-numeric: tabular-nums;
+}
+.cx-perf__t th,
+.cx-perf__t td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--hair);
+  text-align: right;
+  white-space: nowrap;
+}
+.cx-perf__t th:first-child,
+.cx-perf__t td:first-child {
+  text-align: left;
+}
+.cx-perf__t th {
+  font-weight: 600;
+}
+.cx-perf__t tr.is-ref td {
+  font-style: italic;
+}
+.cx-perf__t tr.is-combo td:first-child {
+  color: var(--mod);
+}
+.cx-perf__sum {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px 16px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.cx-perf__exp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-perf__bar > i {
+    transition: none;
+  }
+}
+
+/* Diffusion OBS (pages/chaos-obs.ts) : mode C, source gameplay, filtres Chaos V2. */
+.cx-obs[hidden] {
+  display: none;
+}
+.cx-obs > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+.cx-obs .d-row select {
+  max-width: min(320px, 100%);
+}
+.cx-obs .cx-ctl {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cx-obs__note,
+.cx-obs__inc {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.cx-obs__inc {
+  color: var(--warn, var(--ink2));
+}
+.cx-obs__pv,
+.cx-obs__warn {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hair2);
+  border-radius: 10px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.cx-obs__pv p {
+  margin: 6px 0;
+}
+.cx-obs__warn {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+[data-obs-open] .d-state {
+  margin-left: 6px;
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  [data-obs-open] .d-state {
+    display: none;
+  }
+}

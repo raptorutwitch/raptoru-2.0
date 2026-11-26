@@ -29,3 +29,4 @@ export * from './progression.js';
 export * from './cosmetics.js';
 export * from './challenges.js';
 export * from './module-facade.js';
+export * from './chaos.js';

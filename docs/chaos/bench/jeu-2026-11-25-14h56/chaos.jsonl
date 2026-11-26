@@ -1,0 +1,4 @@
+{"qpc_ms":3534177811.1,"studio":true,"active":[]}
+{"qpc_ms":3534379298.2,"studio":true,"active":[{"effect":"diag.watermark","state":"starting","request_id":"studio-perf-mww6xcv8","in_ms":0,"duration_ms":25000,"running_ms":null,"variant":null,"level":null}]}
+{"qpc_ms":3534379489,"studio":true,"active":[{"effect":"diag.watermark","state":"active","request_id":"studio-perf-mww6xcv8","in_ms":0,"duration_ms":25000,"running_ms":176,"variant":null,"level":null}]}
+{"qpc_ms":3534404209.4,"studio":true,"active":[]}
