@@ -1,4 +1,4 @@
-import { registerModuleVariant } from './module-registry.js';
+import { moderationSections, registerModuleVariant } from './module-registry.js';
 import { createCommandsV2View } from './commands-v2.js';
 // Moderation V2 (D4) — the console of the validated prototype `prototypes/moderation-v2-d4` (left
 // column = context, right zone = one intention; compact stack on Panel / Mobile), on the REAL Core:
@@ -230,7 +230,7 @@ const pending = (i) => i.review_status === 'pending';
  * onBack: leave the console (back to the Hub); the console replaces the host header.
  * assetBase: where the extension assets are served (emotes of the Bonk rows).
  */
-export function createModerationV2View({ document, client, onChange, onBack, onCommands, assetBase = '' }) {
+export function createModerationV2View({ document, client, onChange, onBack, onCommands, assetBase = '', section = null, backLabel = null }) {
   const win = document.defaultView;
   const node = document.createElement('div');
   node.className = 'modv2';
@@ -267,6 +267,17 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
   const nav = { stack: [], viewer: null, dir: '', hf: freshFilters(), htab: 'ix', vq: false, auto: false, wtype: 'watch', rf: freshRestrictionFilters() };
   const reset = () => (nav.stack = mode() === 'compact' ? [{ v: 'home' }] : [{ v: 'module', m: 'tts' }]);
   reset();
+  // Extra sections (module-registry.js registerModerationSection): one more line in the navigation each, their own view
+  // drawn in the pane, created on first opening and kept across repaints (live DOM, like « Autres modules »).
+  const xdef = (m) => moderationSections().find((d) => d.key === m) ?? null;
+  const navKeys = () => [...MOD_KEYS, ...moderationSections().map((d) => d.key)];
+  const xsecs = new Map();
+  const xsec = (m) => {
+    if (!xsecs.has(m)) xsecs.set(m, xdef(m).mount({ document, repaint: () => render() }));
+    return xsecs.get(m);
+  };
+  // Opened from a module's shield (app/panel.js): straight to that module's section.
+  if (section && navKeys().includes(section)) nav.stack = mode() === 'compact' ? [{ v: 'home' }, { v: 'module', m: section }] : [{ v: 'module', m: section }];
   const top = () => nav.stack[nav.stack.length - 1];
   const push = (s) => {
     nav.stack.push(s);
@@ -634,6 +645,13 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     return { st, text, hits };
   }
   function modLine(m, sel) {
+    const x = xdef(m);
+    if (x) {
+      const xs = x.summary?.() ?? { st: 'active', text: '' };
+      return `<button class="mod${sel ? ' is-sel' : ''}" data-act="go-module" data-m="${esc(m)}" style="--c:${x.color ?? 'var(--accent)'}" aria-current="${sel}">
+      <span class="mod__top"><span class="mod__ic">${x.icon}</span><span class="mod__name">${esc(x.label)}</span><span class="grow"></span>${sdot(xs.st)}</span>
+      <span class="mod__sum">${xs.text}</span></button>`;
+    }
     const s = summary(m);
     const cur = m === 'tts' ? current() : null;
     return `<button class="mod${sel ? ' is-sel' : ''}" data-act="go-module" data-m="${m}" style="--c:${MODS[m].c}" aria-current="${sel}">
@@ -648,9 +666,10 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     const t = top();
     const selM = t.v === 'module' ? t.m : null;
     // The console replaces the host header: its only addition to D4 is the way back to the Hub.
-    const hub = onBack ? `<button class="icon-btn icon-btn--sm" data-act="hub" data-tip="Retour au Hub" aria-label="Retour au Hub">${ic('hub')}</button>` : '';
+    const back = esc(backLabel ?? 'Retour au Hub');
+    const hub = onBack ? `<button class="icon-btn icon-btn--sm" data-act="hub" data-tip="${back}" aria-label="${back}">${ic(backLabel ? 'back' : 'hub')}</button>` : '';
     return `<div class="side__top">${hub}<label class="search"><span class="sr">Rechercher un viewer</span>${ic('search')}<input data-q placeholder="Viewer…" autocomplete="off"></label></div>
-      <div class="side__scroll" data-scroll="side"><nav class="mods" data-mods aria-label="Modules">${MOD_KEYS.map((m) => modLine(m, selM === m)).join('')}</nav>
+      <div class="side__scroll" data-scroll="side"><nav class="mods" data-mods aria-label="Modules">${navKeys().map((m) => modLine(m, selM === m)).join('')}</nav>
       <button class="sidelink${t.v === 'history' && !t.vid ? ' is-sel' : ''}" data-act="history" data-histlink>${ic('history')}Historique</button>
       <button class="sidelink${t.v === 'restrictions' ? ' is-sel' : ''}" data-act="restrictions" data-restrlink>${ic('ban')}Restrictions</button>
       <button class="sidelink${t.v === 'hostmods' ? ' is-sel' : ''}" data-act="hostmods" data-hostlink>${ic('shield')}Autres modules</button>
@@ -764,6 +783,8 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     return `<span class="hacts">${out}</span>`;
   }
   function moduleView(m) {
+    const x = xdef(m);
+    if (x) return { title: `<span class="ttl-ic" style="--c:${x.color ?? 'var(--accent)'}">${x.icon}</span>${esc(x.label)}`, headEnd: xsec(m).headEnd?.() ?? '', body: '<div data-xsec></div>' };
     const st = stateOf(m);
     const headEnd = `${headActs(m)}<button class="statebtn statebtn--${st}" data-act="state-menu" data-m="${m}" data-tip="État : ${STATE[st]} · changer l’état du module" aria-label="État : ${STATE[st]}">${sdot(st)}${STATE[st]}${ic('down')}</button>`;
     let b = statenote(m);
@@ -911,7 +932,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         side.innerHTML = sideHtml();
         bindSearch();
       } else {
-        side.querySelector('[data-mods]').innerHTML = MOD_KEYS.map((m) => modLine(m, t.v === 'module' && t.m === m)).join('');
+        side.querySelector('[data-mods]').innerHTML = navKeys().map((m) => modLine(m, t.v === 'module' && t.m === m)).join('');
         side.querySelector('[data-histlink]').classList.toggle('is-sel', t.v === 'history' && !t.vid);
         side.querySelector('[data-restrlink]').classList.toggle('is-sel', t.v === 'restrictions');
         side.querySelector('[data-hostlink]')?.classList.toggle('is-sel', t.v === 'hostmods');
@@ -931,13 +952,19 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
         stage.innerHTML = `${banner()}<section class="pane pane--main"><div class="scroll" data-scroll="main"><div class="side side--home">${sideHtml()}</div></div></section>`;
         bindSearch();
       } else {
-        stage.querySelector('[data-mods]').innerHTML = MOD_KEYS.map((m) => modLine(m, false)).join('');
+        stage.querySelector('[data-mods]').innerHTML = navKeys().map((m) => modLine(m, false)).join('');
         stage.querySelector('[data-foot]').innerHTML = footHtml();
       }
     } else stage.innerHTML = banner() + pane('main', viewFor(t), nav.stack.length > 1);
     // The host modules' panels are live DOM (their own form and journal): moved back in after each repaint.
     const hostSlot = stage.querySelector('[data-hostmods]');
     if (hostSlot && hostSection) hostSlot.append(hostSection.node);
+    const xslot = stage.querySelector('[data-xsec]');
+    if (xslot && t.v === 'module' && xdef(t.m)) {
+      const inst = xsec(t.m);
+      xslot.append(inst.node);
+      inst.paint?.();
+    }
     const vcol = L.querySelector('[data-vcol]');
     if (vcol) {
       const show = md === 'window' && nav.viewer;
@@ -1803,6 +1830,13 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     // A click changes the view: a tooltip never outlives its button.
     hideTip();
     if (menuEl && !e.target.closest?.('.menu')) closeMenu();
+    // An extra section's head buttons (headEnd): handed to the section.
+    const xb = e.target.closest?.('[data-xact]');
+    if (xb && !xb.disabled && node.contains(xb) && top().v === 'module' && xdef(top().m)) {
+      e.preventDefault();
+      xsec(top().m).action?.(xb.dataset.xact, xb);
+      return;
+    }
     const b = e.target.closest?.('[data-act]');
     if (!b || b.disabled || !node.contains(b)) return;
     if (menuEl && b.closest('.menu')) closeMenu();
@@ -1896,6 +1930,7 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       win.clearTimeout(pollTimer);
       win.clearInterval(tick);
       ro?.disconnect();
+      for (const inst of xsecs.values()) inst.destroy?.();
     },
   };
 }
@@ -1913,14 +1948,17 @@ registerModuleVariant({
   intro: false,
   bodyData: { modV2: '1' },
   screenClass: 'jdm-module-screen--modv2',
-  view: ({ document, client, host }) => {
+  view: ({ document, client, host, intent }) => {
     let commands = null;
     let commandsShown = false;
     const consoleView = createModerationV2View({
       document,
       client,
       onChange: () => host.refresh(),
-      onBack: () => host.home(),
+      // Opened from a module's shield: its section first, and the way back returns to that module.
+      section: intent?.section ?? null,
+      backLabel: intent?.backLabel ?? null,
+      onBack: () => (host.back ?? host.home)(),
       onCommands:
         client.cmdV2 && !document.body.classList.contains('panel-view')
           ? () => {

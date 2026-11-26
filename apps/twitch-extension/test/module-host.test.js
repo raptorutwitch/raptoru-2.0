@@ -4,6 +4,9 @@ import {
   loadHostModules,
   registerSessionModule,
   registerViewerModule,
+  moderationSections,
+  registerDemoSource,
+  registerModerationSection,
   resetHostModulesForTests,
   sessionModule,
   sessionModules,
@@ -16,6 +19,7 @@ import {
 } from '../extension/shared/purchase.js';
 import { coffreHistoryHtml } from '../extension/shared/coffre-mystere.js';
 import { moduleJournalHtml } from '../extension/shared/module-moderation.js';
+import { createClient } from '../extension/shared/api.js';
 
 // Architecture socle, extension side: the registry (server-listed AND known modules only), the purchase per intent
 // (one key until the server decided), the demo view's pure part. A tiny fake DOM: no browser needed.
@@ -370,5 +374,60 @@ describe('module variants (TTS V2, Tombola V2 take over their module when the se
     expect(
       def.onState(view, { ...onlyTts, wallet: { available: 9 } }, base),
     ).toBe(false); // the balance: host redraws
+  });
+});
+
+describe('Lab hooks: extra moderation sections, demo source', () => {
+  it('an extra section of the moderation console registers once per key', () => {
+    const before = moderationSections().length;
+    registerModerationSection({
+      key: 'lab-test',
+      label: 'Test',
+      icon: '',
+      mount: () => ({ node: null }),
+    });
+    registerModerationSection({
+      key: 'lab-test',
+      label: 'Test 2',
+      icon: '',
+      mount: () => ({ node: null }),
+    });
+    expect(moderationSections().length).toBe(before + 1);
+    expect(moderationSections().find((d) => d.key === 'lab-test').label).toBe(
+      'Test 2',
+    );
+  });
+
+  it('demo mode only: a Lab source answers some routes, the built-in demo the others; never the network', async () => {
+    const fetchImpl = vi.fn();
+    const seen = [];
+    registerDemoSource((method, path, body, next) => {
+      seen.push(path);
+      if (path === '/lab-only') return Promise.resolve({ ok: true, lab: true });
+      if (path === '/session')
+        return next().then((s) => ({ ...s, patched: true }));
+      return next();
+    });
+    try {
+      const api = createClient({
+        getToken: () => null,
+        demoMode: true,
+        fetchImpl,
+      });
+      expect(await api.session()).toMatchObject({ patched: true });
+      expect(seen).toContain('/session');
+      const live = createClient({
+        getToken: () => 'x',
+        apiBase: 'https://example.invalid',
+        demoMode: false,
+        fetchImpl: vi.fn(() => Promise.reject(new Error('offline'))),
+      });
+      seen.length = 0;
+      await live.session().catch(() => null);
+      expect(seen).toEqual([]);
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      registerDemoSource(null);
+    }
   });
 });

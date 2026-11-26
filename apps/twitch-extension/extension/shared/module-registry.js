@@ -116,3 +116,33 @@ export function registerModuleVariant(def) {
 export function moduleVariant(env) {
   return variantDefs.find((d) => d.id === env.module?.id && d.match(env)) ?? null;
 }
+
+// --- Extra sections of the moderation console (D4) ------------------------------------------------------------------
+// A module whose moderation is not one of the console's own (TTS, Soundboard, Bonk, Tombola) adds a section here: one
+// more line in the console's navigation, its view drawn in the console's pane (same styles). Lab today (FX of Chaos V2,
+// lab-modules/interactions); a production section registers the same way once its Core read models exist.
+//   def = { key, label, icon (inline SVG), color?, summary() → { st: 'active'|'paused'|'off', text },
+//           mount({ document, repaint() }) → { node, headEnd?() → HTML string, action?(name, el), paint?(), destroy?() } }
+// Buttons of `headEnd()` carry `data-xact="<name>"`: the console hands their clicks to `action(name, el)`.
+const moderationDefs = new Map();
+
+export function registerModerationSection(def) {
+  moderationDefs.set(def.key, def);
+}
+
+export function moderationSections() {
+  return [...moderationDefs.values()];
+}
+
+// --- Demo source (Lab) --------------------------------------------------------------------------------------------------
+// Demo mode only (shared/api.js): a Lab module may answer some routes in place of the built-in demo, or adjust its
+// answers. `handler(method, path, body, next)` → a Promise, or `next()` for the built-in demo. Never used outside demo.
+let demoHandler = null;
+
+export function registerDemoSource(handler) {
+  demoHandler = handler;
+}
+
+export function demoSource() {
+  return demoHandler;
+}

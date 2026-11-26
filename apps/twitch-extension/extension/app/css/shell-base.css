@@ -5755,3 +5755,29 @@ body .jdm-module[data-module="raffle_join"] .jdm-raffle-footer .jdm-raffle-histo
   :where(:root[data-mq~="m0"]) .jdm-viewer-preferences__title{ font-size: var(--fs-10); }
   :where(:root[data-mq~="m0"]) .jdm-notification-center__mark-all{ font-size: var(--fs-8); }
   :where(:root[data-mq~="m0"]) .jdm-viewer-preferences__label{ font-size: var(--fs-8); }
+
+/* Bouclier de modération (app/panel.js, moderationShortcut) : modérateurs seulement, à gauche du solde ; ouvre la
+   section du module dans la console de modération. Une icône carrée, de la taille des autres commandes de l'en-tête. */
+.jdm-modshield {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: calc(30 * var(--g));
+  height: calc(30 * var(--g));
+  padding: 0;
+  border: 1px solid rgba(216, 180, 254, .16);
+  border-radius: calc(8 * var(--g));
+  background: rgba(255, 255, 255, .055);
+  color: #d8c8e7;
+  cursor: pointer;
+}
+.jdm-modshield:hover,
+.jdm-modshield:focus-visible { border-color: rgba(192, 132, 252, .65); outline: 0; color: #fff; }
+.jdm-modshield__icon { width: calc(17 * var(--g)); height: calc(17 * var(--g)); }
+.mobile .jdm-modshield { width: calc(36 * var(--g)); height: calc(36 * var(--g)); }
+/* En-tête étroit (téléphone, panneau) : le bouclier prend la place de l'icône décorative du titre, qui s'efface ; le
+   titre, le « ? » d'un module (Bonk) et le solde gardent la leur. */
+@media (max-width: 400px) {
+  .jdm-module__screen-head:has(.jdm-modshield) .jdm-module__screen-icon { display: none; }
+  .jdm-module__screen-head .jdm-modshield { width: calc(32 * var(--g)); }
+}
