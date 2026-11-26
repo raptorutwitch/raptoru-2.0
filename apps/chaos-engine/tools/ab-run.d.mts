@@ -1,7 +1,7 @@
 // Types du déroulé A/B (ab-run.mjs), pour les tests de Studio écrits en TypeScript.
 export interface AbApi {
-  get(path: string): Promise<{ status: number; body: any }>;
-  post(path: string, body: unknown): Promise<{ status: number; body: any }>;
+  get(path: string): Promise<{ status: number; body: unknown }>;
+  post(path: string, body: unknown): Promise<{ status: number; body: unknown }>;
 }
 export interface AbResult {
   done: number;

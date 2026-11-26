@@ -8,7 +8,7 @@ import {
   effectById,
 } from '../extension/modules/interactions/catalog.js';
 
-const flush = () => new Promise((r) => setTimeout(r, 0));
+const flush = () => new Promise((r) => globalThis.setTimeout(r, 0));
 const STATE = {
   enabled: true,
   status: 'open',
@@ -73,7 +73,7 @@ const STATE = {
 function backend(over = {}) {
   const client = {
     chaosState: vi.fn(async () => STATE),
-    chaosQuote: vi.fn(async ({ effect, choice }) => ({
+    chaosQuote: vi.fn(async ({ choice }) => ({
       price: 12345,
       choice,
       outcome: { kind: 'queue', position: 2, eta_s: 20 },

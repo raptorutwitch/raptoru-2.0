@@ -1,5 +1,6 @@
 // Synthèse du banc OBS isolé (phase B) : node analyse-b.mjs b-report.json > b-synthese.json ; tableau sur stderr.
 import { readFileSync } from 'node:fs';
+import process from 'node:process';
 const rep = JSON.parse(
   readFileSync(process.argv[2] ?? 'b-report.json', 'utf8').replace(
     /^\uFEFF/,

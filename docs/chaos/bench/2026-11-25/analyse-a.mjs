@@ -1,5 +1,6 @@
 // Synthèse du banc par phases (phase A) : node analyse-a.mjs a-phases.jsonl > a-synthese.json ; tableau sur stderr.
 import { readFileSync } from 'node:fs';
+import process from 'node:process';
 const lines = readFileSync(process.argv[2] ?? 'a-phases.jsonl', 'utf8')
   .split('\n')
   .filter(Boolean)
