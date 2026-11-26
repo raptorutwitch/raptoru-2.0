@@ -872,24 +872,95 @@ export function* reachableSettings(
     }
 }
 
-const maxSeverityMemo = new Map<string, number>();
-/** The effect's most severe setting (under the absolute 60 s ceiling): the one that costs the maximum. */
-export function maxSeverity(e: Effect) {
-  if (!maxSeverityMemo.has(e.id)) {
-    let m = 0;
-    for (const c of reachableSettings(e)) m = Math.max(m, severity(e, c));
-    maxSeverityMemo.set(e.id, m);
+const severityMemo = new Map<string, [number, number]>();
+/** The effect's mildest and most severe settings (under the absolute 60 s ceiling): the ones that cost min and max. */
+function severityBounds(e: Effect) {
+  if (!severityMemo.has(e.id)) {
+    let lo = Infinity;
+    let hi = 0;
+    for (const c of reachableSettings(e)) {
+      const s = severity(e, c);
+      lo = Math.min(lo, s);
+      hi = Math.max(hi, s);
+    }
+    severityMemo.set(e.id, [lo, hi]);
   }
-  return maxSeverityMemo.get(e.id)!;
+  return severityMemo.get(e.id)!;
+}
+export const minSeverity = (e: Effect) => severityBounds(e)[0];
+export const maxSeverity = (e: Effect) => severityBounds(e)[1];
+
+/** Place of a setting in its effect's range: 0 = the mildest and shortest setting, 1 = the most severe and longest. */
+export function priceShare(e: Effect, c: Choice) {
+  const [lo, hi] = severityBounds(e);
+  return hi > lo
+    ? Math.min(1, Math.max(0, (severity(e, c) - lo) / (hi - lo)))
+    : 0;
 }
 
-/** Price by range: min + (max − min) × S, S = severity / the effect's maximum severity (0 < S ≤ 1), rounded to 50. */
-export function rangePrice(e: Effect, c: Choice) {
-  const [lo, hi] = PRICE_RANGES[e.id]!;
-  const share = Math.min(1, severity(e, c) / maxSeverity(e));
+/** Rounded like every Chaos price: to 50 Jetons (bounds that are multiples of 50 stay reachable exactly). */
+export const roundPrice = (lo: number, hi: number, share: number) =>
+  Math.round((lo + (hi - lo) * share) / 50) * 50;
+
+/**
+ * Price by range: min + (max − min) × S, S = the setting's severity normalized between the effect's mildest and most
+ * severe settings (0 ≤ S ≤ 1), rounded to 50. `range` = the channel's range (Studio › Chaos › Tarifs), else the default.
+ */
+export function rangePrice(
+  e: Effect,
+  c: Choice,
+  range: readonly [number, number] = PRICE_RANGES[e.id]!,
+) {
+  const [lo, hi] = range;
+  const share = priceShare(e, c);
   return {
-    total: Math.round((lo + (hi - lo) * share) / 50) * 50,
+    total: roundPrice(lo, hi, share),
     share,
     range: [lo, hi] as [number, number],
   };
+}
+
+export interface PreviewLine {
+  style: string | null;
+  level: string | null;
+  durations: number[];
+  /** Place in the range at each duration (fine controls at their defaults): price = roundPrice(min, max, share). */
+  shares: number[];
+}
+const previewMemo = new Map<string, PreviewLine[]>();
+/** Studio › Chaos › Tarifs: every preset × level over its whole duration range (absolute 60 s ceiling). */
+export function pricePreview(e: Effect): PreviewLine[] {
+  if (!previewMemo.has(e.id)) {
+    const lines: PreviewLine[] = [];
+    for (const style of e.presets?.map((x) => x.id) ?? [null])
+      for (const level of e.levels?.map((l) => l.id) ?? [null]) {
+        const c0 = normalizeChoice(e, { style, level }, ENGINE.maxDurationS, {
+          reset: true,
+        });
+        const r = durationRange(e, c0, ENGINE.maxDurationS);
+        const durations: number[] = [];
+        if (r.fixed) durations.push(r.def);
+        else for (let d = r.min; d <= r.max; d += r.step) durations.push(d);
+        lines.push({
+          style,
+          level,
+          durations,
+          shares: durations.map((d) =>
+            priceShare(
+              e,
+              normalizeChoice(e, { ...c0, duration: d }, ENGINE.maxDurationS),
+            ),
+          ),
+        });
+      }
+    previewMemo.set(e.id, lines);
+  }
+  return previewMemo.get(e.id)!;
+}
+
+/** The highest place in the range a viewer can reach under this Safety ceiling (the range's max needs 60 s). */
+export function capShare(e: Effect, capS: number) {
+  let m = 0;
+  for (const c of reachableSettings(e, capS)) m = Math.max(m, priceShare(e, c));
+  return m;
 }

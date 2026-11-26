@@ -421,9 +421,9 @@ const TEST_LAB_PRODUCTION_ACTIONS = new Set([
   'stop-all',
   'logs/clear',
 ]);
-/** The paths served by the relay chain (relays to the profile's Core). */
+/** The paths served by the relay chain (relays to the profile's Core). Chaos › Tarifs: module-settings/relay.ts. */
 const RELAYED =
-  /^\/api\/(mini-games\/|casino\/|module-settings$|daily\/config$|modules(\/|$))/;
+  /^\/api\/(mini-games\/|casino\/|module-settings$|chaos-prices$|daily\/config$|modules(\/|$))/;
 
 /** Several relays behind one handler slot: the first that knows the path answers. */
 export function chainRelays(

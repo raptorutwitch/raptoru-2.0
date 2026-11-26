@@ -315,7 +315,8 @@ describe('prix (fictifs) : la gêne mesurée sur les vraies valeurs, jamais sur 
     expect(p('blink', { style: 'ferme', duration: 10 })).toBeGreaterThan(
       p('blink', { style: 'naturel' }) * 3,
     );
-    expect(p('flip')).toBeGreaterThan(p('color') * 3);
+    // Fourchettes du 28/11, minimum au réglage le plus doux (Studio › Tarifs) : Écran retourné 10 s ≈ 3 × Couleur.
+    expect(p('flip')).toBeGreaterThan(p('color') * 2.5);
     expect(p('fog', { level: 'extreme' })).toBeGreaterThan(
       p('color', { style: 'inversion' }) * 2,
     );

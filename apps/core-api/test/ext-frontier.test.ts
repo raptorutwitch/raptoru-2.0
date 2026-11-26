@@ -1331,6 +1331,113 @@ describe('Chaos V2 in Production (CHAOS_EXTENSION + chaos.enabled, lot 2)', () =
     expect(state.body.mine[0]).toMatchObject({ id: a.body.request.id });
   });
 
+  it('Tarifs: the paired Studio reads and sets a range through its cockpit (its channel only), the extension follows; no one else reaches it', async () => {
+    const { ext, send, studio, core } = await fixture(undefined, {
+      CHAOS_EXTENSION: 'testers:4242',
+    });
+    await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 1, 'test');
+    await ready(core);
+    const path = `/v1/studio/cockpit/chaos/${CHANNEL}/prices`;
+    const read = await studio(path);
+    expect(read.status).toBe(200);
+    expect(read.body.effects).toHaveLength(13);
+    const old = await ext('/chaos/quote', tester, {
+      effect: 'color',
+      choice: { style: 'sepia' },
+    });
+    const set = await studio(path, {
+      effect: 'color',
+      min: 10_000,
+      max: 30_000,
+    });
+    expect(set.status).toBe(200);
+    expect(
+      set.body.effects.find((e: { id: string }) => e.id === 'color'),
+    ).toMatchObject({ min: 10_000, max: 30_000, custom: true });
+    expect(
+      (await studio(path, { effect: 'color', min: 30_000, max: 10_000 })).body,
+    ).toMatchObject({ code: 'min_above_max' });
+    expect((await studio(path, { effect: 'color', min: 'x' })).status).toBe(
+      400,
+    );
+    // The extension: the new range in the state, quoted by the Core; the old quote is refused, nothing debited.
+    expect((await ext('/chaos/state', tester)).body.prices.color).toEqual([
+      10_000, 30_000,
+    ]);
+    const q = await ext('/chaos/quote', tester, {
+      effect: 'color',
+      choice: { style: 'sepia' },
+    });
+    expect(q.body.price).toBeGreaterThan(old.body.price);
+    await editWallet(
+      core.db,
+      core.clock.now(),
+      CHANNEL,
+      '4242',
+      'set',
+      { tokens: 100_000 },
+      'test',
+    );
+    const stale = await ext('/chaos/buy', tester, {
+      effect: 'color',
+      choice: { style: 'sepia' },
+      expected_price: old.body.price,
+    });
+    expect([stale.status, stale.body.code, stale.body.price]).toEqual([
+      409,
+      'price_changed',
+      q.body.price,
+    ]);
+    // Nobody else: another channel, the other chaos routes, the Studio secret alone, no credential, the viewer door,
+    // the Lab route on the public server.
+    expect(
+      (await studio('/v1/studio/cockpit/chaos/900100/prices')).status,
+    ).toBe(403);
+    for (const tail of ['state', 'quote', 'summary', 'moderation'])
+      expect(
+        (await studio(`/v1/studio/cockpit/chaos/${CHANNEL}/${tail}`)).status,
+        tail,
+      ).toBe(404);
+    expect(
+      (
+        await studio(`/v1/studio/cockpit/chaos/${CHANNEL}/heartbeat`, {
+          studio_instance_id: 'x',
+        })
+      ).status,
+    ).toBe(404);
+    const headers = {
+      authorization: 'Bearer studio-test-secret',
+      [STUDIO_PROTOCOL_HEADER]: '1',
+    };
+    expect((await send(path, { headers })).status).toBe(401);
+    expect(
+      (await send(path, { headers, body: { effect: 'color', reset: true } }))
+        .status,
+    ).toBe(401);
+    expect(
+      (await send(path, { headers: { [STUDIO_PROTOCOL_HEADER]: '1' } })).status,
+    ).toBe(401);
+    expect((await send(path)).status).toBe(426);
+    expect((await ext('/chaos/prices', tester)).status).toBe(404);
+    expect(
+      (
+        await ext('/chaos/prices', tester, {
+          effect: 'color',
+          min: 50,
+          max: 50,
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await send(`/v1/lab/chaos/${CHANNEL}/prices`, { headers })).status,
+    ).toBe(404);
+    expect(
+      (await studio(path)).body.effects.find(
+        (e: { id: string }) => e.id === 'color',
+      ),
+    ).toMatchObject({ min: 10_000, max: 30_000 });
+  });
+
   it('on: an anonymous viewer reads but cannot buy; a purchase needs its Idempotency-Key', async () => {
     const { ext, send, core } = await fixture(undefined, {
       CHAOS_EXTENSION: 'on',

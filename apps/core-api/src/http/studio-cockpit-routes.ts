@@ -16,6 +16,8 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 /** Allowed Lab sub-paths: `<prefix>/<channel>/…` (channel checked) or a channel-less route. */
 const CHANNEL_ROUTES =
   /^(moderation|raffle|wallet|commands|word-game|mini-games|module-settings|modules|casino)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
+/** Chaos V2: Studio › Chaos › Tarifs only (its execution has its own routes, /v1/studio/chaos/*; the rest is the extension's). */
+const CHAOS_ROUTES = /^(chaos)\/(\d{1,32})(\/prices)$/;
 /**
  * Never through the cockpit: the executor side of the chat answers belongs to the bot; a module's VIEWER action belongs
  * to the extension's door (the viewer from the verified Twitch token) — through here a Studio installation could spend
@@ -39,7 +41,7 @@ export function studioCockpitRoutes(
   const target = (rest: string, search: string) => {
     if (BOT_ONLY.test(rest)) throw new HttpError(404, { error: 'not_found' });
     if (o.lab) return `/v1/lab/${rest}${search}`;
-    const channel = CHANNEL_ROUTES.exec(rest);
+    const channel = CHANNEL_ROUTES.exec(rest) ?? CHAOS_ROUTES.exec(rest);
     if (channel) {
       if (channel[2] !== channelId)
         throw new HttpError(403, { error: 'wrong_channel' });

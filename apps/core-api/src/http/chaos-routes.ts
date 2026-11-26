@@ -9,6 +9,7 @@ import {
 import { z } from 'zod';
 import { ChaosError, type ChaosService } from '../chaos/service.js';
 import { LabWalletError } from '../lab-moderation/store.js';
+import { ModuleSettingsError } from '../module-settings/service.js';
 import { HttpError, parse, type Route } from './server.js';
 
 // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md § 2.4) — the Lab routes `/v1/lab/chaos/<channel>/…` (STUDIO_SECRET): the
@@ -36,9 +37,24 @@ export async function mappedChaos<T>(fn: () => Promise<T>): Promise<T> {
         error: error.code,
         code: error.code,
       });
+    if (error instanceof ModuleSettingsError)
+      throw new HttpError(error.status, {
+        error: error.code,
+        code: error.code,
+      });
     throw error;
   }
 }
+
+/** Studio › Chaos › Tarifs: one effect's range, or back to its default (the Core checks the amounts). */
+const PricesRequest = z.union([
+  z.strictObject({ effect: z.string().max(32), reset: z.literal(true) }),
+  z.strictObject({
+    effect: z.string().max(32),
+    min: z.number(),
+    max: z.number(),
+  }),
+]);
 
 const viewerOf = (url: URL) => {
   const id = url.searchParams.get('viewer_id');
@@ -69,6 +85,11 @@ export function chaosLabRoutes(chaos: ChaosService): Route[] {
     route('GET', '\\/state', (c, { url }) => chaos.state(c, viewerOf(url))),
     route('GET', '\\/summary', (c) => chaos.summary(c)),
     route('GET', '\\/moderation', (c) => chaos.moderationView(c)),
+    // Studio › Chaos › Tarifs (Lab Studio; Production: the paired installation's cockpit, studio-cockpit-routes.ts).
+    route('GET', '\\/prices', (c) => chaos.prices(c)),
+    route('POST', '\\/prices', (c, { body }) =>
+      chaos.setPrices(c, parse(PricesRequest, body), 'Studio'),
+    ),
     route('POST', '\\/quote', (c, { body }) => {
       const req = parse(ChaosLabQuoteRequest, body);
       return chaos.quote(c, req.viewer ?? null, req);

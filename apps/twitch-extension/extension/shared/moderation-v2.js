@@ -106,6 +106,7 @@ const ACTION = {
   cancel: 'Retiré',
   purge: 'File purgée',
   refund: 'Remboursement',
+  chaos_prices: 'Tarifs Chaos modifiés',
   allow: 'Laissé passer',
   block_viewer: 'Blocage',
   unblock_viewer: 'Déblocage',

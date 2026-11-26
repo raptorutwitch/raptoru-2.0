@@ -3,7 +3,7 @@
 // 2 s et après chaque achat), `quote()` (DEVIS DU CORE : tant qu'il n'est pas arrivé, l'achat est bloqué « Calcul du
 // prix… » ; l'estimation locale n'est jamais payée), `buy()` (POST /v1/ext/chaos/buy avec `expected_price` = le devis
 // du Core et une clé d'idempotence par intention ; le Core revérifie tout). Rien n'est décidé dans le navigateur.
-import { EFFECTS, ENGINE, effectById, minPrice, normalizeChoice, priceOf } from './catalog.js';
+import { EFFECTS, ENGINE, effectById, minPrice, normalizeChoice, priceOf, usePriceRanges } from './catalog.js';
 import { BURST, QUEUE_MAX, mmss } from './rules.js';
 
 const STATUS = { queued: 'queued', claimed: 'queued', started: 'active', ended: 'done', failed: 'failed', canceled: 'cancelled', expired: 'expired' };
@@ -95,14 +95,17 @@ export function createCoreBackend(ctx, getState = () => ctx.state) {
   async function refresh() {
     try {
       state = await client.chaosState();
-      // La file, ce qui joue, mes demandes ou les disponibilités ont bougé : les devis sont recalculés (un effet qui
-      // démarre, finit ou attend change ce que le Core répond : « Le tien joue », délai, file…).
+      // Les fourchettes de la chaîne (Studio › Chaos › Tarifs) : « dès … » et le détail du prix les suivent.
+      usePriceRanges(state?.prices);
+      // La file, ce qui joue, mes demandes, les disponibilités ou les tarifs ont bougé : les devis sont recalculés (un
+      // effet qui démarre, finit ou attend change ce que le Core répond : « Le tien joue », délai, file, prix…).
       const sig = JSON.stringify([
         state?.status,
         state?.cap_s,
         state?.effects,
         [state?.active, state?.queue, state?.burst, state?.mine].map((l) => (l ?? []).map((r) => [r.id, r.status])),
         state?.credits?.map((c) => c.id),
+        state?.prices,
       ]);
       if (sig !== lastSig) stale();
       lastSig = sig;

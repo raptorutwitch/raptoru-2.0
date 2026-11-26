@@ -5,7 +5,15 @@
 import type { LabActor } from '@raptoru/schemas';
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EFFECTS } from '../src/chaos/catalog.js';
+import {
+  EFFECTS,
+  effectById,
+  normalizeChoice,
+  PRICE_RANGES,
+  pricePreview,
+  rangePrice,
+  reachableSettings,
+} from '../src/chaos/catalog.js';
 import { CHAOS_RULES, ChaosError, ChaosService } from '../src/chaos/service.js';
 import { labEconomy } from '../src/economy/economy.js';
 import { ModuleSettings } from '../src/module-settings/service.js';
@@ -869,5 +877,232 @@ describe('chaos — effect credits and charges', () => {
     l.core.clock.advance(CHAOS_RULES.burst.gapMs);
     await l.hb();
     expect((await l.claim()).item).not.toBeNull();
+  });
+});
+
+describe('chaos — Studio › Chaos › Tarifs: ranges set in Studio, checked, stored and applied by the Core', () => {
+  const blurC = (choice = {}) =>
+    normalizeChoice(effectById('blur')!, choice, 60);
+
+  it('the price engine: for any range, the mildest shortest setting costs the minimum, the most severe on 60 s the maximum, nothing outside; never cheaper when longer or stronger', () => {
+    for (const e of EFFECTS) {
+      for (const range of [
+        PRICE_RANGES[e.id]!,
+        [10_000, 75_000] as const,
+        [50, 50] as const,
+        [100, 1_000_000] as const,
+      ]) {
+        let lo = Infinity;
+        let hi = 0;
+        for (const c of reachableSettings(e)) {
+          const t = rangePrice(e, c, range).total;
+          expect(t % 50, e.id).toBe(0);
+          lo = Math.min(lo, t);
+          hi = Math.max(hi, t);
+        }
+        expect([lo, hi], `${e.id} ${range.join('-')}`).toEqual([...range]);
+      }
+      // Longer, same setting: never cheaper. Flat only where the engine plays the same thing longer (Zoom pulses
+      // spread over the duration) or where the gêne model rates 5 s and 10 s alike (Somnolence).
+      for (const l of pricePreview(e))
+        l.shares.forEach((x, i) => {
+          if (!i) return;
+          expect(x, `${e.id} ${l.style} ${l.level}`).toBeGreaterThanOrEqual(
+            l.shares[i - 1]!,
+          );
+          const flatOk =
+            (e.id === 'zoom' &&
+              ['pulsations', 'aller_retour', 'intermittent'].includes(
+                l.style!,
+              )) ||
+            (e.id === 'blink' &&
+              l.style === 'fatigue' &&
+              l.durations[i] === 10);
+          if (!flatOk)
+            expect(x, `${e.id} ${l.style} ${l.durations[i]} s`).toBeGreaterThan(
+              l.shares[i - 1]!,
+            );
+        });
+      // Stronger, same preset and duration: dearer.
+      if (e.levels)
+        for (const style of e.presets?.map((p) => p.id) ?? [null]) {
+          const at = pricePreview(e).filter((l) => l.style === style);
+          for (let k = 1; k < at.length; k++)
+            expect(at[k]!.shares[0]!, `${e.id} ${style}`).toBeGreaterThan(
+              at[k - 1]!.shares[0]!,
+            );
+        }
+    }
+    // Short by nature (Un clignement, Impact, Flash court): low in their own range, never at an absurd price.
+    const share = (id: string, choice: Record<string, unknown>) =>
+      rangePrice(effectById(id)!, normalizeChoice(effectById(id)!, choice, 60))
+        .share;
+    expect(share('blink', { style: 'ponctuel' })).toBeLessThan(0.05);
+    expect(share('shake', { style: 'impact' })).toBeLessThan(0.1);
+    expect(share('flash', { style: 'court', duration: 3 })).toBe(0);
+  });
+
+  it('defaults: the 13 effects with the retained ranges; Flou set to 10 000 – 75 000 is stored, quoted, in the state, survives a restart; reset restores it', async () => {
+    const l = await lab();
+    const p0 = await l.chaos.prices(CH);
+    expect(p0.effects.map((e) => e.id)).toEqual(EFFECTS.map((e) => e.id));
+    for (const e of p0.effects) {
+      expect([e.min, e.max], e.id).toEqual([...PRICE_RANGES[e.id]!]);
+      expect(e.custom).toBe(false);
+      expect(e.preview.length).toBeGreaterThan(0);
+    }
+    const before = (await l.quote('blur')).price;
+    const p1 = await l.chaos.setPrices(
+      CH,
+      { effect: 'blur', min: 10_000, max: 75_000 },
+      'Studio',
+    );
+    expect(p1.effects.find((e) => e.id === 'blur')).toMatchObject({
+      min: 10_000,
+      max: 75_000,
+      default_min: 15_000,
+      default_max: 100_000,
+      custom: true,
+      updated_by: 'Studio',
+    });
+    const q = await l.quote('blur');
+    expect(q.price).toBe(
+      rangePrice(effectById('blur')!, blurC(), [10_000, 75_000]).total,
+    );
+    expect(q.price).not.toBe(before);
+    expect(q.range).toEqual([10_000, 75_000]);
+    expect((await l.chaos.state(CH, V1)).prices).toMatchObject({
+      blur: [10_000, 75_000],
+      fog: [...PRICE_RANGES.fog!],
+    });
+    // The Core restarted: a new service over the same database applies the same range.
+    const again = new ChaosService(
+      l.core.db,
+      l.core.clock,
+      labEconomy,
+      new ModuleSettings(l.core.db, l.core.clock),
+    );
+    expect(
+      (await again.quote(CH, V1, { effect: 'blur', choice: {} })).price,
+    ).toBe(q.price);
+    // Never through the generic « Paramètres des modules » (the pair is checked together).
+    expect(
+      (await l.core.moduleSettings.list(CH)).some((s) =>
+        s.key.startsWith('chaos.price_'),
+      ),
+    ).toBe(false);
+    await expect(
+      l.core.moduleSettings.set(CH, 'chaos.price_blur_min', 90_000, 'x'),
+    ).rejects.toMatchObject({ code: 'unknown_setting' });
+    // Back to the default.
+    const p2 = await l.chaos.setPrices(
+      CH,
+      { effect: 'blur', reset: true },
+      'Studio',
+    );
+    expect(p2.effects.find((e) => e.id === 'blur')).toMatchObject({
+      min: 15_000,
+      max: 100_000,
+      custom: false,
+    });
+    expect((await l.quote('blur')).price).toBe(before);
+    expect(
+      (
+        await l.core.db.query<{ after: { min: number } }>(
+          "select after from lab_moderation_audit where module_id = 'chaos' and action = 'chaos_prices' order by id",
+        )
+      ).map((r) => r.after.min),
+    ).toEqual([10_000, 15_000]);
+  });
+
+  it('refused, nothing changed: min above max, not a multiple of 50, out of bounds, not whole Jetons, unknown effect', async () => {
+    const l = await lab();
+    const code = (input: Record<string, unknown>) =>
+      l.chaos
+        .setPrices(CH, input as never, 'Studio')
+        .then(notRefused, (e: ChaosError) => [e.status, e.code]);
+    expect(await code({ effect: 'blur', min: 80_000, max: 20_000 })).toEqual([
+      400,
+      'min_above_max',
+    ]);
+    expect(await code({ effect: 'blur', min: 10_025, max: 20_000 })).toEqual([
+      400,
+      'price_not_rounded',
+    ]);
+    expect(await code({ effect: 'blur', min: 0, max: 20_000 })).toEqual([
+      400,
+      'price_out_of_bounds',
+    ]);
+    expect(await code({ effect: 'blur', min: 50, max: 2_000_000 })).toEqual([
+      400,
+      'price_out_of_bounds',
+    ]);
+    expect(await code({ effect: 'blur', min: 10_000.5, max: 20_000 })).toEqual([
+      400,
+      'invalid_price',
+    ]);
+    expect(await code({ effect: 'blur', min: '10000', max: 20_000 })).toEqual([
+      400,
+      'invalid_price',
+    ]);
+    expect(await code({ effect: 'nope', min: 1_000, max: 2_000 })).toEqual([
+      404,
+      'unknown_effect',
+    ]);
+    expect(
+      (await l.chaos.prices(CH)).effects.find((e) => e.id === 'blur'),
+    ).toMatchObject({ min: 15_000, max: 100_000, custom: false });
+    expect(
+      await l.core.db.query(
+        "select 1 from module_settings where key like 'chaos.price%'",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('a quote at the old price is refused at purchase (price_changed, nothing debited); bought at the new quote; already bought keeps its price; a refund gives back what was debited', async () => {
+    const l = await lab();
+    // Bought before the change: queued at its price.
+    const a = await l.buy('fog', { level: 'extreme', duration: 30 });
+    const paid = a.request.price;
+    const old = await l.quote('mirror', {}, V2);
+    await l.chaos.setPrices(
+      CH,
+      { effect: 'mirror', min: 30_000, max: 90_000 },
+      'Studio',
+    );
+    await l.chaos.setPrices(
+      CH,
+      { effect: 'fog', min: 50_000, max: 200_000 },
+      'Studio',
+    );
+    const balance = await l.tokens(V2);
+    const stale = await l.chaos
+      .buy(CH, {
+        viewer: V2,
+        idempotency_key: randomUUID(),
+        effect: 'mirror',
+        choice: {},
+        expected_price: old.price,
+      })
+      .then(notRefused, (x: ChaosError) => x);
+    const fresh = await l.quote('mirror', {}, V2);
+    expect([stale.code, stale.details.price]).toEqual([
+      'price_changed',
+      fresh.price,
+    ]);
+    expect(fresh.price).toBeGreaterThan(old.price);
+    expect(await l.tokens(V2)).toBe(balance);
+    const b = await l.buy('mirror', {}, V2);
+    expect(b.request.price).toBe(fresh.price);
+    expect(balance - (await l.tokens(V2))).toBe(fresh.price);
+    // The request bought before keeps its price; refused by the engine → refunded exactly what was debited.
+    const { item } = await l.claim();
+    expect(item!.id).toBe(a.request.id);
+    await l.ack(item!, 'failed', { code: 'exclusive_fullscreen' });
+    expect(await l.ledger(a.request.id)).toEqual([
+      ['debit', -paid],
+      ['refund', paid],
+    ]);
+    expect(await l.tokens()).toBe(5_000_000);
   });
 });

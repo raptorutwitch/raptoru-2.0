@@ -38,6 +38,7 @@ import {
 } from './chaos-effects.js';
 import { mountObsPanel, obsChip, type ObsStatus } from './chaos-obs.js';
 import { mountPerfLab } from './chaos-perf.js';
+import { mountPricesPanel } from './chaos-prices.js';
 
 /** Aperçu rendu par le moteur (POST /api/chaos/preview) : grille d'images JPEG, deux séquences (début, fin). */
 interface Anim {
@@ -267,6 +268,7 @@ export function mountChaosPage(root: HTMLElement) {
     <div class="cx__main">
       <section class="cx-card cx-obs" aria-label="Diffusion OBS" data-z="obs" hidden></section>
       <section class="cx-card cx-perf" aria-label="Performance Lab" data-z="perf" hidden></section>
+      <section class="cx-card cx-prices" aria-label="Tarifs des effets" data-z="prices" hidden></section>
       <section class="cx-card cx-catcard" aria-label="Catalogue des effets">
         <header><h2>Effets</h2><span class="d-faint" data-z="catsub"></span><span class="d-sp"></span><label class="cx-inline">${sw(false, 'data-diag', 'Afficher les effets de diagnostic')}<span class="d-faint">Diagnostic</span></label></header>
         <div data-z="catalog"></div>
@@ -369,7 +371,7 @@ export function mountChaosPage(root: HTMLElement) {
     patch(p.state, chip);
     patch(
       p.actions,
-      `<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-obs-open title="Chaos sur ton écran et sur la source gameplay d’OBS (mode C)">${ic('layers')}Diffusion OBS${obsChip(obsSt)}</button><button type="button" class="d-btn ghost" data-perf-open title="Mesurer le coût des effets : banc hors écran, puis validation en jeu">${ic('pulse')}Performance Lab</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
+      `<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-obs-open title="Chaos sur ton écran et sur la source gameplay d’OBS (mode C)">${ic('layers')}Diffusion OBS${obsChip(obsSt)}</button><button type="button" class="d-btn ghost" data-perf-open title="Mesurer le coût des effets : banc hors écran, puis validation en jeu">${ic('pulse')}Performance Lab</button><button type="button" class="d-btn ghost" data-prices-open title="Prix minimum et maximum de chaque effet acheté depuis l’extension">${ic('coin')}Tarifs</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
     );
   }
 
@@ -916,6 +918,9 @@ export function mountChaosPage(root: HTMLElement) {
         .map((x) => ({ id: x.id, label: x.label })),
   });
 
+  // Tarifs (chaos-prices.ts) : la fourchette de chaque effet, enregistrée et appliquée par le Core.
+  const prices = mountPricesPanel(z('prices'));
+
   // ---------- Interactions ----------
   const sheetEffect = () => current()?.id ?? '';
   root.addEventListener('click', (e) => {
@@ -923,6 +928,7 @@ export function mountChaosPage(root: HTMLElement) {
     const b = t.closest<HTMLElement>('button');
     if (!b) return;
     if (b.matches('[data-perf-open]')) return perfLab.toggle();
+    if (b.matches('[data-prices-open]')) return prices.toggle();
     if (b.matches('[data-obs-open]')) return obsPanel.toggle();
     if (b.matches('[data-stopall]'))
       void run(

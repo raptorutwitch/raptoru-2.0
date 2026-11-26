@@ -383,6 +383,73 @@ describe.skipIf(!isLocal)('chaos, real Postgres, two Cores', () => {
     expect(await tokens(W)).toBe(START);
   });
 
+  it('Tarifs: purchases racing a price change from the other Core are debited exactly the quoted price or refused (price_changed, nothing debited); concurrent edits never mix two ranges', async () => {
+    const viewers = Array.from({ length: 8 }, (_, i) => v(81 + i));
+    await fund(...viewers);
+    const choice = { style: 'ponctuel' };
+    const old = await priceOf('blink', choice, viewers[0]);
+    const out = await Promise.allSettled([
+      ...viewers
+        .slice(0, 4)
+        .map((V) => buy(A, 'blink', V, { choice, price: old })),
+      B.chaos.setPrices(
+        CH,
+        { effect: 'blink', min: 20_000, max: 120_000 },
+        'Studio',
+      ),
+      ...viewers
+        .slice(4)
+        .map((V) => buy(B, 'blink', V, { choice, price: old })),
+    ]);
+    expect(out[4]!.status).toBe('fulfilled');
+    const buys = out.filter((_, i) => i !== 4);
+    expect(
+      buys.map(codeOf).every((c) => c === 'ok' || c === 'price_changed'),
+    ).toBe(true);
+    for (const [i, V] of viewers.entries()) {
+      const ok = buys[i]!.status === 'fulfilled';
+      expect(await tokens(V), V.id).toBe(ok ? START - old : START);
+    }
+    const sold = await a.query<{ price: number; debited: number }>(
+      `select r.price, -l.amount as debited from chaos_requests r
+         join lab_wallet_ledger l on l.interaction_id = r.id and l.kind = 'debit'
+       where r.effect = 'blink' and r.viewer_id = any($1::text[])`,
+      [viewers.map((x) => x.id)],
+    );
+    expect(sold.length).toBe(
+      buys.filter((r) => r.status === 'fulfilled').length,
+    );
+    for (const s of sold) expect([s.price, s.debited]).toEqual([old, old]);
+    // Bought after the change: at the new price.
+    const now = await priceOf('blink', choice, viewers[0]);
+    expect(now).toBeGreaterThanOrEqual(20_000);
+    await buy(B, 'blink', viewers[0]!, { choice, price: now });
+    // Six edits at once from both Cores: the stored range is one of them, whole (min and max of the same edit).
+    const pairs = [
+      [5_000, 90_000],
+      [6_000, 60_000],
+      [7_000, 70_000],
+      [8_000, 80_000],
+      [9_000, 99_000],
+      [10_000, 100_000],
+    ];
+    await Promise.all(
+      pairs.map(([min, max], i) =>
+        (i % 2 ? A : B).chaos.setPrices(
+          CH,
+          { effect: 'blink', min: min!, max: max! },
+          'Studio',
+        ),
+      ),
+    );
+    const got = (await A.chaos.prices(CH)).effects.find(
+      (e) => e.id === 'blink',
+    )!;
+    expect(pairs).toContainEqual([got.min, got.max]);
+    await A.chaos.setPrices(CH, { effect: 'blink', reset: true }, 'Studio');
+    await settle();
+  });
+
   it('a Core restarted on the same database: its first sweep settles what the previous one left', async () => {
     const [V1, V2] = [v(71), v(72)];
     await fund(V1, V2);

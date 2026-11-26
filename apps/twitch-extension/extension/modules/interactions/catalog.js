@@ -494,25 +494,52 @@ export function* reachableSettings(e, capS = ENGINE.maxDurationS) {
     }
 }
 
-const maxSeverityMemo = new Map();
-/** Le réglage le plus sévère de l'effet (sous le plafond absolu de 60 s) : c'est lui qui coûte le maximum. */
-export function maxSeverity(e) {
-  if (!maxSeverityMemo.has(e.id)) {
-    let m = 0;
-    for (const c of reachableSettings(e)) m = Math.max(m, severity(e, c));
-    maxSeverityMemo.set(e.id, m);
+const severityMemo = new Map();
+/** Les réglages le plus doux et le plus sévère de l'effet (sous le plafond absolu de 60 s) : ils coûtent min et max. */
+function severityBounds(e) {
+  if (!severityMemo.has(e.id)) {
+    let lo = Infinity;
+    let hi = 0;
+    for (const c of reachableSettings(e)) {
+      const s = severity(e, c);
+      lo = Math.min(lo, s);
+      hi = Math.max(hi, s);
+    }
+    severityMemo.set(e.id, [lo, hi]);
   }
-  return maxSeverityMemo.get(e.id);
+  return severityMemo.get(e.id);
+}
+export const minSeverity = (e) => severityBounds(e)[0];
+export const maxSeverity = (e) => severityBounds(e)[1];
+
+/** Place d'un réglage dans sa fourchette : 0 = le plus doux et le plus court, 1 = le plus sévère et le plus long. */
+export function priceShare(e, c) {
+  const [lo, hi] = severityBounds(e);
+  return hi > lo ? Math.min(1, Math.max(0, (severity(e, c) - lo) / (hi - lo))) : 0;
 }
 
 /**
- * Prix par fourchette : min + (max − min) × S, S = sévérité du réglage / sévérité maximale de l'effet (0 < S ≤ 1).
- * Le maximum n'est atteint qu'au réglage le plus sévère sur la durée la plus longue de l'effet : pas de plateau (30 s
- * et 60 s ne coûtent pas pareil), et un effet court par nature (Flash, Un clignement) se place dans SA fourchette.
+ * Fourchettes de la chaîne, réglées par le streamer dans Studio › Chaos › Tarifs et données par l'état du Core
+ * (core-backend.js) ; une fourchette absente ou invalide garde celle par défaut. Le Core reste l'autorité : le prix
+ * payé est toujours celui de son devis, revérifié à l'achat.
  */
-export function rangePrice(e, c) {
-  const [lo, hi] = PRICE_RANGES[e.id];
-  const share = Math.min(1, severity(e, c) / maxSeverity(e));
+let ranges = PRICE_RANGES;
+export function usePriceRanges(next) {
+  const out = { ...PRICE_RANGES };
+  for (const [id, r] of Object.entries(next ?? {}))
+    if (id in out && Array.isArray(r) && Number.isInteger(r[0]) && Number.isInteger(r[1]) && r[0] > 0 && r[0] <= r[1]) out[id] = [r[0], r[1]];
+  ranges = Object.freeze(out);
+}
+
+/**
+ * Prix par fourchette : min + (max − min) × S, S = sévérité du réglage normalisée entre le réglage le plus doux et le
+ * plus sévère de l'effet (0 ≤ S ≤ 1). Le minimum est le prix du réglage le plus doux sur sa durée la plus courte ; le
+ * maximum n'est atteint qu'au réglage le plus sévère sur la durée la plus longue : pas de plateau (30 s et 60 s ne
+ * coûtent pas pareil), et un effet court par nature (Flash, Un clignement) se place dans SA fourchette.
+ */
+export function rangePrice(e, c, range = ranges[e.id]) {
+  const [lo, hi] = range;
+  const share = priceShare(e, c);
   return { total: Math.round((lo + (hi - lo) * share) / 50) * 50, share, range: [lo, hi] };
 }
 

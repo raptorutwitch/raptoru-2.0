@@ -39,8 +39,11 @@ import {
   durationRange,
   effectById,
   engineRequest,
+  capShare,
   normalizeChoice,
   presetOf,
+  pricePreview,
+  PRICE_RANGES,
   rangePrice,
   type Choice,
   type Effect,
@@ -97,6 +100,36 @@ export const CHAOS_SETTINGS: Record<string, SettingSpec> = {
     advanced: true,
   },
 };
+
+/** What Studio › Chaos › Tarifs may set: whole Jetons, multiples of 50 (every price is rounded to 50), min ≤ max. */
+export const CHAOS_PRICE_BOUNDS = Object.freeze({
+  min: 50,
+  max: 1_000_000,
+  step: 50,
+});
+const priceKeys = (effect: string) =>
+  [`chaos.price_${effect}_min`, `chaos.price_${effect}_max`] as const;
+/** Each effect's range (Studio › Chaos › Tarifs): two hidden module settings (`chaos.price_<effect>_min|max`, the table's `module.key` form), written together, checked here. */
+export const CHAOS_PRICE_SETTINGS: Record<string, SettingSpec> =
+  Object.fromEntries(
+    EFFECTS.flatMap((e) => {
+      const [lo, hi] = PRICE_RANGES[e.id]!;
+      const [kMin, kMax] = priceKeys(e.id);
+      const spec = (end: string, def: number): SettingSpec => ({
+        label: `Chaos : prix ${end} de ${e.label}`,
+        unit: 'Jetons',
+        default: def,
+        min: CHAOS_PRICE_BOUNDS.min,
+        max: CHAOS_PRICE_BOUNDS.max,
+        hidden: true,
+      });
+      return [
+        [kMin, spec('minimum', lo)],
+        [kMax, spec('maximum', hi)],
+      ];
+    }),
+  );
+type Ranges = Record<string, readonly [number, number]>;
 
 /** Engine / Studio ends that are breakdowns: the interruption policy applies (refunded under a share of the duration). */
 const BREAKDOWNS = new Set([
@@ -223,9 +256,27 @@ export class ChaosService {
     private readonly settings: ModuleSettings,
   ) {
     settings.register(CHAOS_SETTINGS);
+    settings.register(CHAOS_PRICE_SETTINGS);
   }
 
   // --- reads shared by the rules -------------------------------------------------------------------------------
+
+  /** The channel's price ranges (Studio › Chaos › Tarifs), the default ones where nothing (coherent) is stored. */
+  private async ranges(q: Queryable, channelId: string): Promise<Ranges> {
+    const v = await this.settings.getMany(
+      q,
+      channelId,
+      Object.keys(CHAOS_PRICE_SETTINGS),
+    );
+    const out: Ranges = {};
+    for (const e of EFFECTS) {
+      const [kMin, kMax] = priceKeys(e.id);
+      const lo = v.get(kMin)!;
+      const hi = v.get(kMax)!;
+      out[e.id] = lo <= hi ? [lo, hi] : PRICE_RANGES[e.id]!;
+    }
+    return out;
+  }
 
   /** The channel's row lock: every write of the module takes it first. Returns the purchases' state. */
   private async lock(q: Queryable, channelId: string) {
@@ -536,7 +587,8 @@ export class ChaosService {
       if (outcome.kind === 'queue' && waiting.length >= CHAOS_RULES.queueMax)
         refuse('queue_full');
     }
-    const priced = rangePrice(e, c);
+    // The range read in the caller's transaction: a purchase holds the channel lock, which a price change takes too.
+    const priced = rangePrice(e, c, (await this.ranges(q, channelId))[e.id]);
     const price = credit ? 0 : priced.total;
     if (o.balance && viewer && !credit && price > 0) {
       const tokens = (await this.economy.balances(q, channelId, viewer.id))
@@ -852,12 +904,13 @@ export class ChaosService {
     const q = this.db;
     const now = this.clock.now();
     const t = now.getTime();
-    const [enabled, cs, global, live, studio] = await Promise.all([
+    const [enabled, cs, global, live, studio, prices] = await Promise.all([
       this.enabled(q, channelId),
       this.channelState(q, channelId),
       globalState(q, channelId),
       liveForPaid(q, this.economy),
       this.studio(q, channelId),
+      this.ranges(q, channelId),
     ]);
     const status =
       cs === 'paused' || global.paused
@@ -984,7 +1037,108 @@ export class ChaosService {
       credits,
       credit_log: creditLog,
       charges,
+      // The ranges in force: the extension shows « dès … » from them and re-quotes when they change.
+      prices,
     };
+  }
+
+  // --- Studio › Chaos › Tarifs -----------------------------------------------------------------------------------
+
+  /**
+   * Each effect's range (in force, default, who changed it and when) and what Studio needs to preview a price with any
+   * range it is typing: the place in the range (share) of each preset × level × duration (fine controls at their
+   * defaults), and the highest share under this live's Safety ceiling. The price itself stays the Core's (quote).
+   */
+  async prices(channelId: string) {
+    const q = this.db;
+    const [ranges, rows, studio] = await Promise.all([
+      this.ranges(q, channelId),
+      this.settings.stored(q, channelId, Object.keys(CHAOS_PRICE_SETTINGS)),
+      this.studio(q, channelId),
+    ]);
+    const capS = this.capS(studio);
+    return {
+      bounds: CHAOS_PRICE_BOUNDS,
+      cap_s: capS,
+      effects: EFFECTS.map((e) => {
+        const keys: readonly string[] = priceKeys(e.id);
+        const mine = rows.filter((r) => keys.includes(r.key));
+        const last = mine
+          .map((r) => ({ at: new Date(r.updated_at), by: r.updated_by }))
+          .sort((a, b) => b.at.getTime() - a.at.getTime())[0];
+        const [lo, hi] = ranges[e.id]!;
+        const [dLo, dHi] = PRICE_RANGES[e.id]!;
+        return {
+          id: e.id,
+          label: e.label,
+          min: lo,
+          max: hi,
+          default_min: dLo,
+          default_max: dHi,
+          custom: mine.length > 0,
+          updated_at: last ? last.at.toISOString() : null,
+          updated_by: last?.by ?? null,
+          cap_share: capShare(e, capS),
+          preview: pricePreview(e),
+        };
+      }),
+    };
+  }
+
+  /**
+   * One effect's range set (or back to its default), checked here whatever Studio sent: known effect, whole Jetons,
+   * multiples of 50, within the bounds, min ≤ max. Under the channel lock, like a purchase: a purchase sees the old range
+   * or the new one, never half of each; one quoted at the old price is refused (`price_changed`, nothing debited) and
+   * requests already bought keep the price they paid (refunds give back what was debited).
+   */
+  async setPrices(
+    channelId: string,
+    input: { effect: string; min?: number; max?: number; reset?: boolean },
+    actor: string,
+  ) {
+    const e = effectById(input.effect);
+    if (!e) throw new ChaosError(404, 'unknown_effect', 'unknown effect');
+    const keys = priceKeys(e.id);
+    const { min, max } = input;
+    if (!input.reset) {
+      if (!Number.isInteger(min) || !Number.isInteger(max))
+        throw new ChaosError(400, 'invalid_price', 'whole Jetons only');
+      const b = CHAOS_PRICE_BOUNDS;
+      if (min! < b.min || max! > b.max)
+        throw new ChaosError(400, 'price_out_of_bounds', 'out of bounds', {
+          min: b.min,
+          max: b.max,
+        });
+      if (min! % b.step || max! % b.step)
+        throw new ChaosError(400, 'price_not_rounded', 'multiples of 50', {
+          step: b.step,
+        });
+      if (min! > max!)
+        throw new ChaosError(400, 'min_above_max', 'min above max');
+    }
+    await this.db.tx(async (q) => {
+      await this.lock(q, channelId);
+      const before = (await this.ranges(q, channelId))[e.id]!;
+      if (input.reset) await this.settings.clear(q, channelId, [...keys]);
+      else
+        await this.settings.write(
+          q,
+          channelId,
+          { [keys[0]]: min, [keys[1]]: max },
+          actor,
+        );
+      const after = (await this.ranges(q, channelId))[e.id]!;
+      await audit(q, this.clock.now(), {
+        channelId,
+        actor: { id: 'studio', role: 'broadcaster', via: 'studio' },
+        module: 'chaos',
+        action: 'chaos_prices',
+        reason: `${e.label} : ${input.reset ? 'valeurs par défaut' : 'fourchette modifiée'}`,
+        before: { effect: e.id, min: before[0], max: before[1] },
+        after: { effect: e.id, min: after[0], max: after[1] },
+      });
+    });
+    return this.prices(channelId);
   }
 
   /** The Hub's line: whether the module is offered and this live's ceiling. */

@@ -6,6 +6,9 @@ import { createCoreBackend } from '../extension/modules/interactions/core-backen
 import {
   defaultChoice,
   effectById,
+  minPrice,
+  PRICE_RANGES,
+  usePriceRanges,
 } from '../extension/modules/interactions/catalog.js';
 
 const flush = () => new Promise((r) => globalThis.setTimeout(r, 0));
@@ -229,5 +232,38 @@ describe('Interactions sur le Core', () => {
         key: 'k',
       }),
     ).toMatchObject({ ok: false });
+  });
+
+  it('tarifs de la chaîne (Studio › Chaos › Tarifs) : « dès » suit la fourchette du Core ; un changement de tarif relance chaque devis', async () => {
+    let prices = { ...PRICE_RANGES };
+    const { b, client } = backend({
+      chaosState: vi.fn(async () => ({ ...STATE, prices })),
+    });
+    try {
+      const stop = b.subscribe(() => {});
+      await flush();
+      const fogFrom = () =>
+        b.mock.snapshot().effects.find((x) => x.id === 'fog').minPrice;
+      expect(fogFrom()).toBe(PRICE_RANGES.fog[0]);
+      const e = effectById('fog');
+      b.mock.quote('fog', defaultChoice(e), Date.now());
+      await flush();
+      expect(client.chaosQuote).toHaveBeenCalledTimes(1);
+      // Prix modifiés dans Studio : l'état suivant les apporte, le devis est redemandé (le dernier reste affiché).
+      prices = { ...PRICE_RANGES, fog: [30_000, 150_000] };
+      b.changed();
+      await flush();
+      await flush();
+      expect(fogFrom()).toBe(30_000);
+      expect(minPrice(e)).toBe(30_000);
+      expect(
+        b.mock.quote('fog', defaultChoice(e), Date.now()).block,
+      ).toBeNull();
+      await flush();
+      expect(client.chaosQuote).toHaveBeenCalledTimes(2);
+      stop();
+    } finally {
+      usePriceRanges(null);
+    }
   });
 });

@@ -14,7 +14,12 @@ export function moduleSettingsRelay(core: LabCoreCall, channelId: string) {
     url: URL,
   ): Promise<boolean> {
     const p = url.pathname;
-    if (p !== '/api/module-settings' && p !== '/api/daily/config') return false;
+    if (
+      p !== '/api/module-settings' &&
+      p !== '/api/daily/config' &&
+      p !== '/api/chaos-prices'
+    )
+      return false;
     const reply = (status: number, body: unknown) => {
       res.writeHead(status, {
         'content-type': 'application/json',
@@ -24,10 +29,13 @@ export function moduleSettingsRelay(core: LabCoreCall, channelId: string) {
     };
     if (req.headers['x-raptoru-studio'] !== '1')
       return (reply(403, { error: 'forbidden' }), true);
+    // Chaos V2 › Tarifs: each effect's price range, on the Core's `chaos` module (it checks and stores them).
     const path =
       p === '/api/daily/config'
         ? '/v1/lab/daily/config'
-        : `/v1/lab/module-settings/${channelId}`;
+        : p === '/api/chaos-prices'
+          ? `/v1/lab/chaos/${channelId}/prices`
+          : `/v1/lab/module-settings/${channelId}`;
     try {
       if (req.method === 'GET') return (reply(200, await core(path)), true);
       if (req.method !== 'POST')
@@ -42,7 +50,11 @@ export function moduleSettingsRelay(core: LabCoreCall, channelId: string) {
       const body =
         p === '/api/daily/config'
           ? { steps: b.steps }
-          : { key: b.key, value: b.value };
+          : p === '/api/chaos-prices'
+            ? b.reset === true
+              ? { effect: b.effect, reset: true }
+              : { effect: b.effect, min: b.min, max: b.max }
+            : { key: b.key, value: b.value };
       return (reply(200, await core(path, body)), true);
     } catch (e) {
       const err = e as {

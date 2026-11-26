@@ -159,6 +159,45 @@ describe('Core ↔ extension: one catalogue', () => {
     }
   });
 
+  it('Studio › Chaos › Tarifs: with the channel’s own ranges, the same price and the same place in the range (minimum and maximum reached)', () => {
+    const ranges = {
+      blur: [10_000, 75_000],
+      blink: [50, 50],
+      flip: [100, 1_000_000],
+    };
+    ext.usePriceRanges(ranges);
+    try {
+      for (const e of ext.EFFECTS) {
+        const c = core.effectById(e.id);
+        const range = ranges[e.id] ?? ext.PRICE_RANGES[e.id];
+        let lo = Infinity;
+        let hi = 0;
+        for (const input of settings(e, 60)) {
+          const a = ext.normalizeChoice(e, input, 60);
+          const b = core.normalizeChoice(c, input, 60);
+          const x = ext.rangePrice(e, a);
+          const y = core.rangePrice(c, b, range);
+          expect([y.total, y.share], e.id).toEqual([x.total, x.share]);
+          lo = Math.min(lo, x.total);
+          hi = Math.max(hi, x.total);
+        }
+        expect([lo, hi], e.id).toEqual(range);
+        expect(core.minSeverity(c), e.id).toBe(ext.minSeverity(e));
+      }
+    } finally {
+      ext.usePriceRanges(null);
+    }
+    // An invalid range from a state is ignored (the default stays).
+    ext.usePriceRanges({ blur: [9000, 100], fog: ['x', 1], nope: [1, 2] });
+    expect(
+      ext.rangePrice(
+        ext.effectById('blur'),
+        ext.defaultChoice(ext.effectById('blur')),
+      ).range,
+    ).toEqual(ext.PRICE_RANGES.blur);
+    ext.usePriceRanges(null);
+  });
+
   it('the Core’s own reachable settings are the extension’s', () => {
     for (const e of ext.EFFECTS)
       expect([...core.reachableSettings(core.effectById(e.id))], e.id).toEqual([
