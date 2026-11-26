@@ -11,10 +11,11 @@ const FRAMES = [
   ['Composant vidéo', '651 × 434 (référence)', VIDEO, 651, 434],
   ['Appli Twitch Android', 'sous la vidéo, 393 × 484', MOBILE, 393, 484],
   ['Petit Android', 'sous la vidéo, 360 × 409', MOBILE, 360, 409],
+  ['iPhone (simulé)', 'sous la vidéo, 390 × 460', MOBILE, 390, 460],
   ['Panneau', '318 × 496', 'panel.html?anchor=panel', 318, 496],
   ['Plein écran', '1053 × 702', VIDEO, 1053, 702],
 ];
-const state = { ixTab: 'chaos', ixRole: 'viewer', ixScenario: 'normal', ixOpen: '', ixCap: '30' };
+const state = { ixTab: 'chaos', ixRole: 'viewer', ixScenario: 'normal', ixOpen: '', ixCap: '30', ixPlanned: '' };
 const base = new URL('../../', import.meta.url); // racine de l'extension servie
 
 const scen = document.querySelector('[data-k="ixScenario"]');
@@ -30,6 +31,11 @@ function draw() {
   open.value = state.ixOpen;
   const params = new URLSearchParams({ labModules: 'interactions', demoModule: 'interactions' });
   for (const [k, v] of Object.entries(state)) if (v) params.set(k, v);
+  // « Modération FX » : rôle modérateur et section FX ouverte.
+  if (state.ixRole === 'fx') {
+    params.set('ixRole', 'mod');
+    params.set('ixMod', '1');
+  }
   const main = document.getElementById('frames');
   main.replaceChildren();
   for (const [title, size, page, w, h] of FRAMES) {
@@ -50,7 +56,6 @@ document.addEventListener('click', (event) => {
   const b = event.target.closest('.seg button');
   if (!b) return;
   state[b.closest('.seg').dataset.k] = b.dataset.v;
-  if (b.dataset.v === 'regie') state.ixRole = 'mod';
   draw();
 });
 scen.addEventListener('change', () => {

@@ -1,30 +1,32 @@
 // LAB ONLY — vue du module « Interactions » (entrée : module.js ; spécification : docs/chaos/EXTENSION_INTERACTIONS.md).
-// Sous-modules, choisis dans l'en-tête de l'extension (sélecteur compact à la place du titre) : Chaos (effets de stream),
-// Bonk (le vrai écran Bonk, embarqué tel quel), Régie (équipe seulement).
-// Chaos : bandeau « en direct » (ce qui joue, la file, ma place, Mes effets), filtres + favoris, catalogue compact
-// réordonnable (appui long), fiche qui s'agrandit depuis sa carte (aperçu, styles, force, contrôles, durée, prix, achat).
+// Un conteneur et une navigation : Chaos (effets de stream, palette framboise) et Bonk (le vrai écran Bonk, embarqué tel
+// quel, avec ses couleurs), choisis dans l'en-tête de l'extension. La modération des effets n'est pas un onglet viewer :
+// c'est la section « FX » de la console de modération (moderation-fx.js), ouverte ici par l'équipe seulement.
+// Chaos : bandeau « en direct » (ce qui joue, la file, ma place, Mes effets, mes crédits), filtres + favoris, catalogue
+// compact réordonnable (appui long), fiche générique qui s'agrandit depuis sa carte (aperçu, préréglages, force,
+// contrôles, durée, paiement en Jetons ou avec un crédit). Tout est décrit par catalog.js : aucun cas par effet ici.
 // Données : faux Core (model.js) ; aucun appel réseau, aucun Jeton réel ; préférences : prefs.js (localStorage).
 import { everySecond } from '../../app/store.js';
 import { loadLazyView } from '../../app/lazy-views.js';
 import { moduleVariant } from '../../shared/module-registry.js';
-import { EFFECTS, ENGINE, GROUPS, SLOTS, controlsFor, defaultChoice, effectById, engineRequest, hueHex, maxDuration, normalizeChoice } from './catalog.js';
-import { SCENARIOS, createChaosMock, mmss } from './model.js';
+import { EFFECTS, ENGINE, GROUPS, PLANNED, SLOTS, controlsFor, defaultChoice, durationRange, effectById, engineRequest, hueHex, normalizeChoice } from './catalog.js';
+import { SCENARIOS, createChaosMock, creditTerms, mmss } from './model.js';
 import { glyph, token } from './glyphs.js';
 import { preview } from './preview.js';
 import { createPrefs } from './prefs.js';
 import { createReorder } from './reorder.js';
+import { createFxModeration } from './moderation-fx.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 const nth = (n) => (n === 1 ? '1er' : `${n}e`);
-const pct = (m) => `${m > 1 ? '+' : '−'}${Math.round(Math.abs(m - 1) * 100)} %`;
 const mult = (m) => `×${String(Math.round(m * 100) / 100).replace('.', ',')}`;
 const HUES = [[15, 'Rouge'], [40, 'Orange'], [60, 'Jaune'], [140, 'Vert'], [185, 'Cyan'], [225, 'Bleu'], [275, 'Violet'], [320, 'Rose'], [345, 'Framboise'], [361, 'Rouge']];
 const hueName = (h) => HUES.find(([max]) => h < max)?.[1] ?? 'Rouge';
 const TABS = [
   ['chaos', 'Chaos', 'chaos'],
   ['bonk', 'Bonk', 'bonk'],
-  ['regie', 'Régie', 'shield'],
 ];
+const SOURCE = { streamer: 'offert par le streamer', moderator: 'offert par la modération', reward: 'récompense' };
 
 export function view(ctx) {
   const { document } = ctx;
@@ -36,13 +38,13 @@ export function view(ctx) {
     // Rôle simulé : celui de la page (?ixRole), sinon celui de la session (modérateur de la démo). Le panneau Lab le
     // change ; le vrai Core vérifiera le rôle côté serveur (aucune protection ici).
     role: query.get('ixRole') ? (query.get('ixRole') === 'mod' ? 'mod' : 'viewer') : ctx.team === true ? 'mod' : 'viewer',
+    // Plafond Sécurité de Studio simulé : 30 s (réglage actuel), 60 s (s'il est relevé dans Studio).
     cap: query.get('ixCap') === '60' ? 60 : ENGINE.safetyDurationS,
-    open: false,
+    planned: query.get('ixPlanned') === '1',
   });
-  const fresh = () =>
-    createChaosMock({ scenario: lab.scenario, balance: Number(ctx.state?.wallet?.available) || 12000, simulate: lab.scenario !== 'calme', capS: lab.cap });
+  const fresh = () => createChaosMock({ scenario: lab.scenario, simulate: lab.scenario !== 'calme', capS: lab.cap });
   let mock = (memory.mock ??= fresh());
-  const prefs = createPrefs(EFFECTS.map((e) => e.id));
+  const prefs = createPrefs([...EFFECTS, ...PLANNED].map((e) => e.id));
   const choices = (memory.choices ??= {});
   let latest = ctx.state;
   let tab = TABS.some(([id]) => id === query.get('ixTab')) ? query.get('ixTab') : (memory.tab ?? 'chaos');
@@ -77,9 +79,8 @@ export function view(ctx) {
   const nextId = (p) => `ix-${p}-${++uid}`;
 
   // ---------------------------------------------------------------------------------------------------------------
-  // En-tête : sélecteur compact Chaos · Bonk · Régie, à la place du titre (posé par l'hôte via headAfter).
-  // Deux ou trois sous-modules : un sélecteur segmenté, pas un carrousel infini (qui n'aurait rien à faire défiler et
-  // perdrait le clavier et la lecture). Molette au survol, glissement du doigt, flèches du clavier : un cran, sans boucle.
+  // En-tête : sélecteur compact Chaos · Bonk à la place du titre (posé par l'hôte via headAfter). Deux sous-modules :
+  // un sélecteur segmenté (pas un carrousel infini). Molette au survol, glissement du doigt, flèches : un cran, sans boucle.
   const headbar = el('div', 'ix-headbar');
   const switcher = el('div', 'ix-switch');
   switcher.setAttribute('role', 'tablist');
@@ -96,13 +97,16 @@ export function view(ctx) {
     b.id = nextId(`tab-${id}`);
     b.title = label;
     b.setAttribute('role', 'tab');
-    if (id === 'regie') b.append(el('b', 'ix-switch__count'));
     tabButtons[id] = b;
     panelIds[id] = nextId(`panel-${id}`);
     b.setAttribute('aria-controls', panelIds[id]);
     switcher.append(b);
   }
   const headExtra = el('span', 'ix-headbar__extra');
+  // Équipe seulement : la section FX de la console de modération (jamais un onglet que le viewer ne peut pas ouvrir).
+  const modBtn = btn('ix-modbtn', 'FX', 'shield');
+  modBtn.title = 'Modération des effets (équipe)';
+  modBtn.setAttribute('aria-label', 'Modération des effets FX (équipe)');
   headbar.append(switcher, headExtra);
   const shownTabs = () => TABS.map(([id]) => id).filter((id) => !tabButtons[id].hidden);
   function placeThumb() {
@@ -116,6 +120,7 @@ export function view(ctx) {
     if (!id || id === tab) return;
     tab = memory.tab = id;
     closeSheet({ instant: true });
+    closeModeration();
     closePops();
     paint();
     if (focus) tabButtons[id].focus();
@@ -153,7 +158,7 @@ export function view(ctx) {
   );
   let swipe = null;
   switcher.addEventListener('pointerdown', (event) => {
-    swipe = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    swipe = { x: event.clientX, id: event.pointerId };
   });
   switcher.addEventListener('pointerup', (event) => {
     if (!swipe || swipe.id !== event.pointerId) return;
@@ -170,29 +175,34 @@ export function view(ctx) {
   const panes = el('div', 'ix-panes');
   const chaosPane = el('section', 'ix-pane ix-pane--chaos');
   const bonkPane = el('section', 'ix-pane ix-pane--bonk');
-  const regiePane = el('section', 'ix-pane ix-pane--regie');
-  for (const [id, pane] of [['chaos', chaosPane], ['bonk', bonkPane], ['regie', regiePane]]) {
+  for (const [id, pane] of [['chaos', chaosPane], ['bonk', bonkPane]]) {
     pane.id = panelIds[id];
     pane.setAttribute('role', 'tabpanel');
     pane.setAttribute('aria-labelledby', tabButtons[id].id);
   }
   const sheetLayer = el('div', 'ix-sheet');
   sheetLayer.hidden = true;
-  panes.append(chaosPane, bonkPane, regiePane, sheetLayer);
+  const modLayer = el('div', 'ix-modlayer');
+  modLayer.hidden = true;
+  panes.append(chaosPane, bonkPane, modLayer, sheetLayer);
   root.append(panes);
 
   // ---------------------------------------------------------------------------------------------------------------
-  // Chaos › bandeau « en direct » : ce qui joue, la file, ma demande ; Mes effets.
+  // Chaos › bandeau « en direct » : ce qui joue, la file, ma demande ; Mes effets ; mes crédits.
   const live = el('div', 'ix-live');
   const liveMain = btn('ix-live__main');
   liveMain.setAttribute('aria-expanded', 'false');
+  const creditBtn = btn('ix-live__credits', null, 'ticket');
+  creditBtn.setAttribute('aria-expanded', 'false');
+  const creditCount = el('b', 'ix-live__ccount');
+  creditBtn.append(creditCount);
   const histBtn = btn('ix-live__hist', null, 'history');
   histBtn.setAttribute('aria-label', 'Mes effets');
   histBtn.title = 'Mes effets';
   histBtn.setAttribute('aria-expanded', 'false');
   const histCount = el('b', 'ix-live__count');
   histBtn.append(histCount);
-  live.append(liveMain, histBtn);
+  live.append(liveMain, creditBtn, histBtn);
   const livePop = el('div', 'ix-pop ix-pop--live');
   livePop.id = nextId('pop-live');
   livePop.hidden = true;
@@ -201,6 +211,8 @@ export function view(ctx) {
   histPop.id = nextId('pop-mine');
   histPop.hidden = true;
   histBtn.setAttribute('aria-controls', histPop.id);
+  creditBtn.setAttribute('aria-controls', histPop.id);
+  let histTab = 'effects'; // 'effects' | 'credits'
   const banner = el('div', 'ix-banner');
   banner.hidden = true;
 
@@ -216,7 +228,7 @@ export function view(ctx) {
     filters.append(b);
   }
   const labBtn = btn('ix-labbtn', 'Lab', 'lab');
-  labBtn.title = 'Maquette : scénario, rôle, plafond de durée (Lab seulement)';
+  labBtn.title = 'Maquette : scénario, rôle, plafond de durée, effets à venir (Lab seulement)';
   labBtn.setAttribute('aria-expanded', 'false');
   const filterRow = el('div', 'ix-filterrow');
   filterRow.append(filters, labBtn);
@@ -238,14 +250,15 @@ export function view(ctx) {
   scroller.append(filterRow, tip, grid, empty);
   chaosPane.append(live, banner, scroller, livePop, histPop);
 
-  // Panneau Lab (jamais montré à un viewer) : scénario, rôle, plafond Sécurité, préférences.
+  // Panneau Lab (jamais montré à un viewer) : scénario, rôle, plafond Sécurité, effets à venir, préférences.
   const labPop = el('div', 'ix-pop ix-pop--lab');
   labPop.hidden = true;
-  labPop.innerHTML = '<p class="ix-lab__note"><b>Maquette Lab</b> · faux Core : prix, file, viewers et solde fictifs ; aucun Jeton, aucun appel au Core, aucune protection réelle des rôles.</p>';
-  const labRow = (label, node) => {
+  labPop.innerHTML = '<p class="ix-lab__note"><b>Maquette Lab</b> · faux Core : prix, file, viewers, solde et crédits fictifs ; aucun Jeton, aucun appel au Core, aucune protection réelle des rôles.</p>';
+  const labRow = (label, node, hint) => {
     const r = el('div', 'ix-lab__row');
     r.append(el('span', 'ix-lab__label', label), node);
     labPop.append(r);
+    if (hint) labPop.append(el('p', 'ix-lab__hint', hint));
   };
   const scenarioSelect = el('select', 'ix-lab__select');
   for (const [id, label] of Object.entries(SCENARIOS)) {
@@ -278,12 +291,20 @@ export function view(ctx) {
   };
   labRow('Rôle', labSeg([['viewer', 'Viewer'], ['mod', 'Modérateur']], () => lab.role, (v) => {
     lab.role = v;
-    if (v !== 'mod' && tab === 'regie') tab = 'chaos';
+    if (v !== 'mod') closeModeration();
   }));
-  labRow('Plafond', labSeg([[30, '30 s (défaut Studio)'], [60, '60 s (relevé)']], () => lab.cap, (v) => {
-    lab.cap = v;
-    mock.setCap(v);
-    if (sheet) sheet.rebuild();
+  labRow(
+    'Durée max',
+    labSeg([[30, '30 s · Sécurité actuelle'], [60, '60 s · simulé']], () => lab.cap, (v) => {
+      lab.cap = v;
+      mock.setCap(v);
+      if (sheet) sheet.rebuild();
+    }),
+    'Studio › Chaos › Sécurité borne toute activation (30 s aujourd’hui) ; « 60 s » simule ce plafond relevé. Le registre du moteur va jusqu’à 60 s.',
+  );
+  labRow('À venir', labSeg([[false, 'Masqués'], [true, 'Montrer']], () => lab.planned, (v) => {
+    lab.planned = v;
+    layoutGrid();
   }));
   const resetPrefs = btn('ix-mini', 'Effacer favoris, ordre et réglages');
   resetPrefs.addEventListener('click', () => {
@@ -298,14 +319,14 @@ export function view(ctx) {
 
   // --- Cartes du catalogue (créées une fois ; filtrer ou réordonner déplace les mêmes nœuds) ----------------------
   const tiles = new Map();
-  for (const e of EFFECTS) {
-    const node = el('div', 'ix-tile');
+  for (const e of [...EFFECTS, ...PLANNED]) {
+    const node = el('div', `ix-tile${e.planned ? ' is-planned' : ''}`);
     node.dataset.effect = e.id;
     node.setAttribute('role', 'listitem');
     const main = btn('ix-tile__main');
     const thumbBox = el('span', 'ix-tile__thumb');
     const pv = preview(document, e.id);
-    pv.set(e, defaultChoice(e));
+    if (!e.planned) pv.set(e, defaultChoice(e));
     const badge = el('span', 'ix-tile__badge');
     badge.hidden = true;
     thumbBox.append(pv.node, badge);
@@ -316,8 +337,15 @@ export function view(ctx) {
     main.append(thumbBox, text);
     const fav = btn('ix-tile__fav', null, 'star');
     fav.setAttribute('aria-label', `Favori : ${e.label}`);
-    node.append(main, fav);
-    main.addEventListener('click', () => openSheet(e.id, node));
+    const ribbon = el('span', 'ix-tile__credit');
+    ribbon.append(glyph(document, 'ticket'));
+    ribbon.hidden = true;
+    node.append(main, fav, ribbon);
+    if (e.planned) {
+      main.setAttribute('aria-disabled', 'true');
+      main.title = 'À venir : pas encore dans le moteur.';
+      meta.append(el('span', 'ix-tile__reason', 'À venir'));
+    } else main.addEventListener('click', () => openSheet(e.id, node));
     main.addEventListener('keydown', (event) => {
       if (!event.altKey || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
       event.preventDefault();
@@ -330,13 +358,15 @@ export function view(ctx) {
     });
     node.addEventListener('pointerenter', () => canHover() && !grid.classList.contains('is-dragging') && pv.live(true));
     node.addEventListener('pointerleave', () => pv.live(false));
-    tiles.set(e.id, { node, main, pv, badge, meta, fav, e, thumbBox });
+    tiles.set(e.id, { node, main, pv, badge, meta, fav, ribbon, e, thumbBox });
   }
   const visibleIds = () =>
     prefs.order().filter((id) => {
+      const e = effectById(id);
+      if (e.planned && !lab.planned) return false;
       if (group === 'all') return true;
       if (group === 'fav') return prefs.isFavorite(id);
-      return effectById(id).group === group;
+      return e.group === group;
     });
   function layoutGrid() {
     const ids = visibleIds();
@@ -384,16 +414,14 @@ export function view(ctx) {
   });
 
   // ---------------------------------------------------------------------------------------------------------------
-  // Fiche d'un effet : s'agrandit depuis sa carte (le contour de la carte devient le panneau, le contenu apparaît
-  // ensuite), occupe toute la zone du module ; ‹, Échap ou le ‹ de l'en-tête la referment vers sa carte.
+  // Contrôles génériques de la fiche (les mêmes pour tous les effets : catalog.js décrit lesquels).
   let sheet = null;
   const cap = () => lab.cap;
 
-  function chipRow({ label, options, current, onPick, meter = false, hintOf }) {
+  function chipRow({ label, options, current, onPick, meter = false, disabled = () => false }) {
     const row = el('div', 'ix-field');
     const head = el('div', 'ix-field__head');
-    const title = el('span', 'ix-field__label', label);
-    head.append(title);
+    head.append(el('span', 'ix-field__label', label));
     const group_ = el('div', `ix-opts${meter ? ' ix-opts--meter' : ''}`);
     group_.setAttribute('role', 'radiogroup');
     group_.setAttribute('aria-label', label);
@@ -408,34 +436,36 @@ export function view(ctx) {
         b.append(m);
       }
       b.append(el('span', 'ix-opt__label', o.label));
-      if (o.mult && o.mult !== 1) b.append(el('span', 'ix-opt__cost', pct(o.mult)));
       if (o.status === 'to_validate') {
         const flag = el('span', 'ix-opt__flag', 'à valider');
         flag.title = o.hint ?? '';
         b.append(flag);
       }
-      b.addEventListener('click', () => onPick(o.id));
+      b.addEventListener('click', () => {
+        if (b.getAttribute('aria-disabled') === 'true') return;
+        onPick(o.id);
+      });
       group_.append(b);
     });
-    // Flèches dans un groupe radio : choisir l'option voisine.
     group_.addEventListener('keydown', (event) => {
       const k = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
       if (!k) return;
       event.preventDefault();
-      const list = [...group_.children];
+      const list = [...group_.children].filter((b) => b.getAttribute('aria-disabled') !== 'true');
       const i = list.findIndex((b) => b.getAttribute('aria-checked') === 'true');
       const next = list[(i + k + list.length) % list.length];
-      next.click();
-      next.focus();
+      next?.click();
+      next?.focus();
     });
     row.append(head, group_, hint);
     const sync = (v) => {
       for (const b of group_.children) {
         const on = b.dataset.v === v;
         b.setAttribute('aria-checked', String(on));
+        b.setAttribute('aria-disabled', String(disabled(b.dataset.v)));
         b.tabIndex = on ? 0 : -1;
       }
-      const h = hintOf?.(v) ?? options.find((o) => o.id === v)?.hint ?? '';
+      const h = options.find((o) => o.id === v)?.hint ?? '';
       hint.textContent = h;
       hint.hidden = !h;
     };
@@ -443,7 +473,8 @@ export function view(ctx) {
     return { node: row, sync };
   }
 
-  function sliderRow({ label, icon, min, max, step: stepV, value, format, onInput, onCommit, sub, extraClass = '', ticks = true }) {
+  /** Glissière : continue (min/max/step) ou à crans (`stops`, valeurs choisies une à une). */
+  function sliderRow({ label, icon, min, max, step: stepV, stops, value, format, onInput, onCommit, sub, extraClass = '', ticks = true }) {
     const row = el('div', `ix-field ix-field--slider ${extraClass}`);
     const head = el('div', 'ix-field__head');
     const title = el('label', 'ix-field__label');
@@ -454,29 +485,33 @@ export function view(ctx) {
     const track = el('div', 'ix-range');
     const input = el('input', 'ix-range__input');
     input.type = 'range';
-    input.min = String(min);
-    input.max = String(max);
-    input.step = String(stepV);
-    input.value = String(value);
+    const lo = stops ? 0 : min;
+    const hi = stops ? stops.length - 1 : max;
+    input.min = String(lo);
+    input.max = String(hi);
+    input.step = String(stops ? 1 : stepV);
     input.id = nextId('range');
     title.htmlFor = input.id;
     const tickBox = el('div', 'ix-range__ticks');
     tickBox.setAttribute('aria-hidden', 'true');
-    if (ticks) for (let v = min; v <= max + 1e-9; v += stepV) tickBox.append(el('i'));
+    const count = stops ? stops.length : Math.round((max - min) / stepV) + 1;
+    if (ticks && count <= 24) for (let i = 0; i < count; i += 1) tickBox.append(el('i'));
     track.append(tickBox, input);
     const foot = el('div', 'ix-range__ends');
     const subEl = el('span', 'ix-range__sub');
-    foot.append(el('span', null, format(min)), subEl, el('span', null, format(max)));
+    foot.append(el('span', null, format(stops ? stops[0] : min)), subEl, el('span', null, format(stops ? stops.at(-1) : max)));
     row.append(head, track, foot);
+    const toValue = (raw) => (stops ? stops[Math.round(raw)] : raw);
+    const toRaw = (v) => (stops ? Math.max(0, stops.indexOf(v)) : v);
     const sync = (v) => {
-      input.value = String(v);
+      input.value = String(toRaw(v));
       out.textContent = format(v);
       input.setAttribute('aria-valuetext', format(v));
-      track.style.setProperty('--p', String(max > min ? (v - min) / (max - min) : 1));
+      track.style.setProperty('--p', String(hi > lo ? (toRaw(v) - lo) / (hi - lo) : 1));
       subEl.textContent = sub?.(v) ?? '';
     };
     input.addEventListener('input', () => {
-      const v = Number(input.value);
+      const v = toValue(Number(input.value));
       sync(v);
       onInput(v);
     });
@@ -486,19 +521,7 @@ export function view(ctx) {
   }
 
   function hueRow({ value, onInput, onCommit }) {
-    const r = sliderRow({
-      label: 'Teinte',
-      icon: 'color',
-      min: 0,
-      max: 359,
-      step: 1,
-      value,
-      format: (v) => hueName(v),
-      onInput,
-      onCommit,
-      extraClass: 'ix-field--hue',
-      ticks: false,
-    });
+    const r = sliderRow({ label: 'Teinte', icon: 'color', min: 0, max: 359, step: 1, value, format: (v) => hueName(v), onInput, onCommit, extraClass: 'ix-field--hue', ticks: false });
     r.node.querySelector('.ix-range__ends').hidden = true;
     const sw = el('i', 'ix-swatch');
     r.node.querySelector('.ix-field__head').append(sw);
@@ -517,8 +540,7 @@ export function view(ctx) {
     const row = el('div', 'ix-field ix-field--toggle');
     const b = btn('ix-switchrow');
     b.setAttribute('role', 'switch');
-    const knob = el('i', 'ix-toggle');
-    b.append(el('span', 'ix-switchrow__label', label), knob);
+    b.append(el('span', 'ix-switchrow__label', label), el('i', 'ix-toggle'));
     const h = el('p', 'ix-field__hint', hint);
     row.append(b, h);
     const sync = (v) => b.setAttribute('aria-checked', String(Boolean(v)));
@@ -580,10 +602,14 @@ export function view(ctx) {
     return { sync };
   }
 
-  function buildSheet(effectId, mode) {
+  // ---------------------------------------------------------------------------------------------------------------
+  // Fiche d'un effet : s'agrandit depuis sa carte, occupe toute la zone du module ; ‹, Échap ou le ‹ de l'en-tête la
+  // referment vers sa carte. `pay` : un crédit présélectionné (venu de « Mes crédits »).
+  function buildSheet(effectId, mode, { credit: preCredit = null } = {}) {
     const e = effectById(effectId);
     const saved = choices[effectId] ?? (mode === 'viewer' ? prefs.choice(effectId) : null);
     let choice = normalizeChoice(e, saved ?? defaultChoice(e), cap());
+    let payCredit = mode === 'viewer' ? preCredit : null; // id du crédit choisi pour payer
     const card = el('div', 'ix-sheet__card');
     card.dataset.effect = e.id;
     card.dataset.mode = mode;
@@ -592,19 +618,15 @@ export function view(ctx) {
     const content = el('div', 'ix-sheet__content');
     card.append(content);
 
-    // En-tête : retour au catalogue, nom, gêne, favori.
+    // En-tête : retour, nom, favori.
     const head = el('header', 'ix-sheet__head');
-    const back = btn('ix-sheet__back', mode === 'mod' ? 'Régie' : 'Effets', 'chevL');
-    back.setAttribute('aria-label', mode === 'mod' ? 'Retour à la Régie' : 'Retour au catalogue');
+    const back = btn('ix-sheet__back', mode === 'mod' ? 'FX' : 'Effets', 'chevL');
+    back.setAttribute('aria-label', mode === 'mod' ? 'Retour à la modération FX' : 'Retour au catalogue');
     const title = el('div', 'ix-sheet__title');
     const h = el('h3', null, e.label);
     h.id = nextId('title');
     card.setAttribute('aria-labelledby', h.id);
-    const gene = el('span', 'ix-gene');
-    gene.title = `Gêne pour le jeu : ${['faible', 'moyenne', 'forte'][e.gene - 1]}`;
-    gene.setAttribute('aria-label', gene.title);
-    for (let i = 1; i <= 3; i += 1) gene.append(el('i', i <= e.gene ? 'is-on' : null));
-    title.append(glyph(document, e.id), h, gene);
+    title.append(glyph(document, e.id), h);
     head.append(back, title);
     let favBtn = null;
     if (mode === 'viewer') {
@@ -629,14 +651,13 @@ export function view(ctx) {
     tag.title = 'Une approximation pour se faire une idée : le vrai rendu est celui du moteur, sur le stream.';
     pv.node.append(tag);
     visual.append(pv.node);
-    const pointCtl = e.controls.find((k) => k.kind === 'point');
     let picker = null;
-    if (pointCtl) {
+    if ((e.controls ?? []).some((k) => k.kind === 'point')) {
       // L'image du stream n'existe pas encore côté extension : chargement bref, puis image fictive annoncée comme telle.
       pv.node.dataset.source = 'loading';
-      const cap_ = el('p', 'ix-sheet__caption');
-      cap_.append(glyph(document, 'target'), el('span', null, 'Touche l’image pour choisir le point visé.'));
-      visual.append(cap_);
+      const caption = el('p', 'ix-sheet__caption');
+      caption.append(glyph(document, 'target'), el('span', null, 'Touche l’image pour choisir le point visé.'));
+      visual.append(caption);
       picker = attachPicker(
         pv.node,
         () => choice.opts.point,
@@ -655,30 +676,40 @@ export function view(ctx) {
     }
     const controls = el('div', 'ix-sheet__controls');
     controls.append(el('p', 'ix-sheet__pitch', e.pitch));
-    const rows = [];
-    if ((e.styles?.length ?? 0) > 1)
-      rows.push(chipRow({ label: 'Style', options: e.styles, current: choice.style, onPick: (v) => ((choice.style = v), changed(true, true)) }));
-    if (e.levels?.length)
-      rows.push(chipRow({ label: e.levelLabel ?? 'Intensité', options: e.levels, current: choice.level, meter: true, onPick: (v) => ((choice.level = v), changed(true)) }));
-    for (const r of rows) controls.append(r.node);
+    const creditOf = () => (payCredit ? mock.snapshot(now()).credits.find((c) => c.id === payCredit) ?? null : null);
+    const allowedLevel = (id) => {
+      const k = creditOf()?.constraints;
+      return !k?.levels?.length || k.levels.includes(id);
+    };
+    const presetRow =
+      (e.presets?.length ?? 0) > 1
+        ? chipRow({ label: e.presetLabel ?? 'Préréglage', options: e.presets, current: choice.style, onPick: (v) => ((choice.style = v), changed(true, true)), disabled: (id) => Boolean(creditOf()?.constraints?.presets?.length && !creditOf().constraints.presets.includes(id)) })
+        : null;
+    const levelRow = e.levels?.length
+      ? chipRow({ label: e.levelLabel ?? 'Intensité', options: e.levels, current: choice.level, meter: true, onPick: (v) => ((choice.level = v), changed(true, true)), disabled: (id) => !allowedLevel(id) })
+      : null;
+    for (const r of [presetRow, levelRow]) if (r) controls.append(r.node);
     const extra = el('div', 'ix-sheet__extra');
-    controls.append(extra);
+    const durBox = el('div', 'ix-sheet__duration');
+    controls.append(extra, durBox);
     let extraSync = [];
+    let durRow = null;
+    let durFixed = null; // la valeur affichée d'une durée fixe (elle suit le réglage, ex. « Un clignement »)
     function buildExtra() {
       extra.replaceChildren();
       extraSync = [];
       for (const k of controlsFor(e, choice)) {
         if (k.kind === 'point') continue;
         let r = null;
-        if (k.kind === 'choice')
-          r = chipRow({ label: k.label, options: k.options, current: choice.opts[k.id], onPick: (v) => ((choice.opts[k.id] = v), changed(true)) });
+        if (k.kind === 'choice') r = chipRow({ label: k.label, options: k.options, current: choice.opts[k.id], onPick: (v) => ((choice.opts[k.id] = v), changed(true, true)) });
         if (k.kind === 'slider')
           r = sliderRow({
             label: k.label,
-            icon: k.id === 'factor' ? 'zoom' : null,
+            icon: k.icon,
             min: k.min,
             max: k.max,
             step: k.step,
+            stops: k.stops,
             value: choice.opts[k.id],
             format: k.format,
             sub: k.hint,
@@ -686,28 +717,49 @@ export function view(ctx) {
             onCommit: () => changed(true),
           });
         if (k.kind === 'hue') r = hueRow({ value: choice.opts[k.id], onInput: (v) => ((choice.opts[k.id] = v), changed(false)), onCommit: () => changed(true) });
-        if (k.kind === 'toggle') r = toggleRow({ label: k.label, hint: k.hint, value: choice.opts[k.id], onToggle: (v) => ((choice.opts[k.id] = v), r.sync(v), changed(true)) });
+        if (k.kind === 'toggle') r = toggleRow({ label: k.label, hint: k.hint, value: choice.opts[k.id], onToggle: (v) => ((choice.opts[k.id] = v), changed(true, true)) });
         if (!r) continue;
         extra.append(r.node);
         extraSync.push(() => r.sync(choice.opts[k.id]));
       }
     }
+    // Durée : glissière bornée par l'effet, le préréglage, le plafond Sécurité (et le crédit) ; fixe pour certains préréglages.
+    function buildDuration() {
+      durBox.replaceChildren();
+      const range = durationRange(e, choice, cap());
+      const creditMax = creditOf()?.constraints?.maxS;
+      const max = creditMax ? Math.max(range.min, Math.min(range.max, creditMax)) : range.max;
+      if (range.fixed || max === range.min) {
+        const fixed = el('div', 'ix-field ix-field--fixed');
+        const head = el('div', 'ix-field__head');
+        const label = el('span', 'ix-field__label');
+        label.append(glyph(document, 'stopwatch'), el('span', null, 'Durée'));
+        durFixed = el('output', 'ix-field__value', `${choice.duration} s`);
+        head.append(label, durFixed);
+        fixed.append(head, el('p', 'ix-field__hint', range.fixed ? 'Fixée par le préréglage : juste le temps de l’effet.' : `Ce réglage dure ${range.min} s.`));
+        durBox.append(fixed);
+        durRow = null;
+        return;
+      }
+      durFixed = null;
+      const why = creditMax && creditMax < range.max ? `${creditMax} s au plus avec ton crédit` : range.max < Math.min(e.duration.max, ENGINE.maxDurationS) && range.max === cap() ? `${range.max} s au plus pendant ce live` : '';
+      durRow = sliderRow({
+        label: 'Durée',
+        icon: 'stopwatch',
+        min: range.min,
+        max,
+        step: range.step,
+        value: Math.min(choice.duration, max),
+        format: (v) => `${v} s`,
+        sub: () => why,
+        onInput: (v) => ((choice.duration = v), changed(false)),
+        onCommit: () => changed(true),
+        extraClass: 'ix-field--duration',
+      });
+      durBox.append(durRow.node);
+    }
     buildExtra();
-    const maxS = maxDuration(e, cap());
-    const durRow = sliderRow({
-      label: 'Durée',
-      icon: 'stopwatch',
-      min: e.duration.min,
-      max: maxS,
-      step: e.duration.step,
-      value: Math.min(choice.duration, maxS),
-      format: (v) => `${v} s`,
-      sub: () => (maxS < e.duration.max ? `${maxS} s au plus pendant ce live` : ''),
-      onInput: (v) => ((choice.duration = v), changed(false)),
-      onCommit: () => changed(true),
-      extraClass: 'ix-field--duration',
-    });
-    controls.append(durRow.node);
+    buildDuration();
     const info = el('div', 'ix-sheet__info');
     const infoLine = (icon, text) => {
       const p = el('p');
@@ -720,8 +772,9 @@ export function view(ctx) {
     controls.append(info);
     body.append(visual, controls);
 
-    // Pied : issue, détail du prix, bouton compact en deux temps.
+    // Pied : moyen de paiement (Jetons ou crédit), issue, détail du prix, bouton compact en deux temps.
     const foot = el('footer', 'ix-sheet__foot');
+    const payBox = el('div', 'ix-pay');
     const bill = el('div', 'ix-bill');
     bill.hidden = true;
     bill.id = nextId('bill');
@@ -738,12 +791,37 @@ export function view(ctx) {
     error.setAttribute('role', 'alert');
     const bar = el('div', 'ix-sheet__bar');
     bar.append(outcome, billBtn, cta);
-    foot.append(bill, bar, error);
+    foot.append(payBox, bill, bar, error);
     billBtn.addEventListener('click', () => {
       bill.hidden = !bill.hidden;
       billBtn.setAttribute('aria-expanded', String(!bill.hidden));
     });
     content.append(head, body, foot);
+
+    function paintPay(snap) {
+      payBox.replaceChildren();
+      const mine = mode === 'viewer' ? snap.credits.filter((c) => c.effect === e.id) : [];
+      if (payCredit && !mine.some((c) => c.id === payCredit)) payCredit = null;
+      payBox.hidden = !mine.length;
+      if (!mine.length) return;
+      const seg = el('div', 'ix-paywith');
+      seg.setAttribute('role', 'radiogroup');
+      seg.setAttribute('aria-label', 'Payer avec');
+      const opt = (id, label, icon) => {
+        const b = btn('ix-paywith__opt', label, icon);
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String((payCredit ?? 'jetons') === id));
+        b.addEventListener('click', () => {
+          payCredit = id === 'jetons' ? null : id;
+          choice = normalizeChoice(e, choice, cap());
+          changed(true, true);
+        });
+        return b;
+      };
+      seg.append(el('span', 'ix-paywith__label', 'Payer avec'), opt('jetons', 'Jetons', null));
+      for (const c of mine) seg.append(opt(c.id, `Mon crédit · ${creditTerms(c)}`, 'ticket'));
+      payBox.append(seg);
+    }
 
     let armed = false;
     let busy = false;
@@ -753,18 +831,29 @@ export function view(ctx) {
       armed = false;
       error.textContent = '';
       if (restructure) {
-        choice = normalizeChoice(e, choice, cap());
+        choice = normalizeChoice(e, choice, cap(), { reset: true });
+        const k = creditOf()?.constraints;
+        if (k?.maxS) choice.duration = Math.min(choice.duration, k.maxS);
+        if (k?.levels?.length && !k.levels.includes(choice.level)) choice.level = k.levels.at(-1);
         buildExtra();
+        buildDuration();
       }
+      const range = durationRange(e, choice, cap());
+      if (range.fixed) choice.duration = range.def;
+      if (durFixed) durFixed.textContent = `${choice.duration} s`;
       choices[e.id] = choice;
       if (commit && mode === 'viewer') prefs.saveChoice(e.id, choice);
       pv.set(e, choice);
-      for (const r of rows) r.sync(r === rows[0] && (e.styles?.length ?? 0) > 1 ? choice.style : choice.level);
+      presetRow?.sync(choice.style);
+      levelRow?.sync(choice.level);
+      if (durRow) durRow.sync(choice.duration);
       update();
     }
     function update() {
       const t = now();
-      q = mode === 'mod' ? { price: 0, lines: [], outcome: { kind: 'now' }, block: null } : mock.quote(e.id, choice, t);
+      const snap = mock.snapshot(t);
+      paintPay(snap);
+      q = mode === 'mod' ? { price: 0, fullPrice: 0, lines: [], outcome: { kind: 'now' }, block: null } : mock.quote(e.id, choice, t, undefined, payCredit ? { credit: payCredit } : {});
       outcome.replaceChildren();
       outcome.dataset.kind = q.block ? 'block' : q.outcome.kind;
       if (mode === 'mod') outcome.append(glyph(document, 'gift'), el('span', null, 'Offert · passe devant la file'));
@@ -773,25 +862,28 @@ export function view(ctx) {
       else outcome.append(glyph(document, 'queue'), el('span', null, `${nth(q.outcome.position)} dans la file · ~${mmss(q.outcome.eta)}`));
       cta.disabled = busy || Boolean(q.block);
       cta.dataset.state = busy ? 'busy' : armed ? 'armed' : 'idle';
-      ctaText.textContent = busy ? 'Envoi…' : armed ? 'Confirmer' : mode === 'mod' ? 'Offrir au stream' : q.outcome.kind === 'now' ? 'Lancer' : 'Réserver';
-      ctaPrice.replaceChildren(price(q.price, 'ix-price ix-price--cta'));
-      cta.setAttribute('aria-label', `${ctaText.textContent} ${e.label} pour ${q.price ? `${fmt(q.price)} Jetons` : 'rien (offert)'}`);
+      cta.dataset.pay = q.credit ? 'credit' : 'jetons';
+      ctaText.textContent = busy ? 'Envoi…' : armed ? 'Confirmer' : mode === 'mod' ? 'Offrir au stream' : q.credit ? 'Utiliser mon crédit' : q.outcome.kind === 'now' ? 'Lancer' : 'Réserver';
+      ctaPrice.replaceChildren(q.credit ? glyph(document, 'ticket') : price(q.price, 'ix-price ix-price--cta'));
+      cta.setAttribute('aria-label', `${ctaText.textContent} ${e.label}${q.credit ? ' avec ton crédit' : ` pour ${q.price ? `${fmt(q.price)} Jetons` : 'rien (offert)'}`}`);
       if (favBtn) favBtn.setAttribute('aria-pressed', String(prefs.isFavorite(e.id)));
-      // Détail du prix : chaque coefficient, le total, le solde après achat ; en Lab, la demande exacte au moteur.
+      // Détail du prix : chaque facteur (gêne mesurée sur le réglage réel, durée), le total, le solde après achat ; en
+      // Lab, la demande exacte envoyée au moteur.
       bill.replaceChildren();
       if (mode === 'viewer') {
         const list = el('dl', 'ix-bill__list');
         for (const line of q.lines) list.append(el('dt', null, line.label), el('dd', null, line.value != null ? fmt(line.value) : mult(line.mult)));
-        list.append(el('dt', 'ix-bill__total', 'Total'), el('dd', 'ix-bill__total', fmt(q.price)));
-        const snap = mock.snapshot(t);
-        const after = el('p', 'ix-bill__after', `Solde (fictif) ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`);
-        bill.append(list, after);
+        list.append(el('dt', 'ix-bill__total', 'Prix'), el('dd', 'ix-bill__total', fmt(q.fullPrice)));
+        if (q.credit) list.append(el('dt', 'ix-bill__credit', 'Payé avec ton crédit'), el('dd', 'ix-bill__credit', '0'));
+        bill.append(list, el('p', 'ix-bill__after', q.credit ? `Ton solde ne bouge pas (${fmt(snap.balance)} Jetons, fictifs). Le crédit est rendu si l’effet ne démarre pas.` : `Solde (fictif) ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`));
       }
       const req = el('details', 'ix-bill__engine');
       req.append(el('summary', null, 'Lab · demande envoyée au moteur'), el('code', null, JSON.stringify(engineRequest(e, choice))));
       bill.append(req);
       picker?.sync();
       for (const s of extraSync) s();
+      levelRow?.sync(choice.level);
+      presetRow?.sync(choice.style);
     }
     // Deux temps, comme shared/purchase.js : le prix, puis « Confirmer » (4 s pour confirmer).
     cta.addEventListener('click', () => {
@@ -813,34 +905,26 @@ export function view(ctx) {
         busy = false;
         if (destroyed || sheet?.card !== card) return;
         const t = now();
-        const out = mode === 'mod' ? mock.moderation.trigger(e.id, choice, t) : mock.buy(e.id, choice, q.price, t);
+        const out = mode === 'mod' ? mock.moderation.trigger(e.id, choice, t) : mock.buy(e.id, choice, q.price, t, undefined, payCredit ? { credit: payCredit } : {});
         if (!out.ok) {
           error.textContent = out.message;
           return update();
         }
-        if (mode === 'mod') regieFlash = `${e.label} offert au stream.`;
+        if (mode === 'mod') modView?.say?.(`${e.label} offert au stream.`);
         else toast = { id: out.request.id, until: now() + 5000 };
         closeSheet();
         paint();
       }, 350);
     });
     update();
-    return {
-      card,
-      content,
-      back,
-      update,
-      destroy: () => win.clearTimeout(armTimer),
-      e,
-      mode,
-    };
+    return { card, content, back, update, destroy: () => win.clearTimeout(armTimer), e, mode };
   }
 
-  function openSheet(effectId, fromNode, { mode = 'viewer' } = {}) {
+  function openSheet(effectId, fromNode, { mode = 'viewer', credit = null } = {}) {
     if (reorder.dragging()) return;
     closePops();
     closeSheet({ instant: true });
-    const s = buildSheet(effectId, mode);
+    const s = buildSheet(effectId, mode, { credit });
     s.from = fromNode ?? null;
     s.rebuild = () => openSheet(effectId, null, { mode });
     sheet = s;
@@ -874,7 +958,7 @@ export function view(ctx) {
       s.card.remove();
       sheetLayer.hidden = true;
     };
-    const target = tile?.node.isConnected ? tile.node.getBoundingClientRect() : null;
+    const target = tile?.node.isConnected && modLayer.hidden ? tile.node.getBoundingClientRect() : null;
     const box = s.card.getBoundingClientRect();
     if (!instant && !reduced() && target && box.width && typeof s.card.animate === 'function') {
       try {
@@ -885,11 +969,39 @@ export function view(ctx) {
         done();
       }
     } else done();
-    if (!instant) (tile?.main ?? (s.mode === 'mod' ? giftBtn : null))?.focus({ preventScroll: true });
+    if (!instant) (tile?.main ?? null)?.focus({ preventScroll: true });
   }
 
   // ---------------------------------------------------------------------------------------------------------------
-  // Popovers : en direct (ce qui joue et la file), Mes effets, Lab.
+  // Modération FX (équipe) : la section de la console de modération, par-dessus le module.
+  let modView = null;
+  function openModeration() {
+    if (!isTeam()) return;
+    closePops();
+    closeSheet({ instant: true });
+    modView ??= createFxModeration({
+      document,
+      getMock: () => mock,
+      now,
+      onClose: () => closeModeration(),
+      onGift: (effectId, from) => openSheet(effectId, from, { mode: 'mod' }),
+    });
+    modLayer.replaceChildren(modView.node);
+    modLayer.hidden = false;
+    root.classList.add('has-mod');
+    modView.paint();
+    modView.focus();
+  }
+  function closeModeration() {
+    if (modLayer.hidden) return;
+    modLayer.hidden = true;
+    root.classList.remove('has-mod');
+    modBtn.focus({ preventScroll: true });
+  }
+  modBtn.addEventListener('click', () => (modLayer.hidden ? openModeration() : closeModeration()));
+
+  // ---------------------------------------------------------------------------------------------------------------
+  // Popovers : en direct (ce qui joue et la file), Mes effets / Mes crédits, Lab.
   const pops = [
     [livePop, liveMain],
     [histPop, histBtn],
@@ -900,6 +1012,7 @@ export function view(ctx) {
       pop.hidden = true;
       trigger.setAttribute('aria-expanded', 'false');
     }
+    creditBtn.setAttribute('aria-expanded', 'false');
   }
   function togglePop(pop, trigger) {
     const open = pop.hidden;
@@ -909,11 +1022,26 @@ export function view(ctx) {
     if (open) paint();
   }
   liveMain.addEventListener('click', () => togglePop(livePop, liveMain));
-  histBtn.addEventListener('click', () => togglePop(histPop, histBtn));
+  histBtn.addEventListener('click', () => {
+    if (!histPop.hidden && histTab === 'effects') return closePops();
+    histTab = 'effects';
+    closePops();
+    histPop.hidden = false;
+    histBtn.setAttribute('aria-expanded', 'true');
+    paint();
+  });
+  creditBtn.addEventListener('click', () => {
+    if (!histPop.hidden && histTab === 'credits') return closePops();
+    histTab = 'credits';
+    closePops();
+    histPop.hidden = false;
+    creditBtn.setAttribute('aria-expanded', 'true');
+    paint();
+  });
   labBtn.addEventListener('click', () => togglePop(labPop, labBtn));
   const onDocDown = (event) => {
     if (pops.every(([p]) => p.hidden)) return;
-    if (pops.some(([p, t]) => p.contains(event.target) || t.contains(event.target))) return;
+    if (pops.some(([p, t]) => p.contains(event.target) || t.contains(event.target)) || creditBtn.contains(event.target)) return;
     closePops();
   };
   document.addEventListener('pointerdown', onDocDown, true);
@@ -927,19 +1055,24 @@ export function view(ctx) {
     } else if (sheet) {
       event.preventDefault();
       closeSheet();
+    } else if (!modLayer.hidden) {
+      event.preventDefault();
+      closeModeration();
     }
   });
 
   function describeMine(r) {
+    const back = r.credit ? 'crédit rendu' : `${fmt(r.price)} remboursés`;
     if (r.state === 'queued') return [`${nth(r.position)} dans la file · ~${mmss(r.eta)}`, 'queued'];
     if (r.state === 'active') return [`à l’écran · encore ${mmss(r.remaining)}`, 'active'];
-    if (r.state === 'done') return ['est passé', 'done'];
-    if (r.state === 'expired') return [`jamais démarré · ${fmt(r.price)} remboursés`, 'refunded'];
-    if (r.state === 'removed') return [`arrêté par la modération${r.refunded ? ` · ${fmt(r.price)} remboursés` : ''}`, 'removed'];
-    if (r.state === 'cancelled') return [`retiré par la modération${r.refunded ? ` · ${fmt(r.price)} remboursés` : ''}`, 'removed'];
+    if (r.state === 'done') return [r.refunded ? `est passé · ${back}` : 'est passé', 'done'];
+    if (r.state === 'expired') return [`jamais démarré · ${back}`, 'refunded'];
+    if (r.state === 'removed') return [`arrêté par la modération${r.refunded ? ` · ${back}` : ''}`, 'removed'];
+    if (r.state === 'cancelled') return [`retiré par la modération${r.refunded ? ` · ${back}` : ''}`, 'removed'];
     return [r.state, 'done'];
   }
   const who = (r) => (r.by === 'mod' ? 'Modération' : r.mine ? 'Toi' : r.buyer.name);
+  const LOG = { granted: 'reçu', used: 'utilisé', restored: 'rendu (l’effet n’a pas joué)', revoked: 'retiré par la modération' };
 
   let toast = null; // { id, until } : la confirmation qui suit un achat, dans le bandeau
   function paintLive(snap) {
@@ -949,8 +1082,7 @@ export function view(ctx) {
     const lead = mineActive ?? snap.active.at(-1) ?? null;
     live.dataset.status = snap.status;
     liveMain.replaceChildren();
-    const dot = el('i', 'ix-live__dot');
-    liveMain.append(dot);
+    liveMain.append(el('i', 'ix-live__dot'));
     const recent = toast && toast.until > t ? snap.mine.find((r) => r.id === toast.id) : null;
     if (recent) {
       liveMain.dataset.kind = 'toast';
@@ -965,7 +1097,7 @@ export function view(ctx) {
       if (snap.active.length > 1) liveMain.append(el('span', 'ix-live__more', `+${snap.active.length - 1}`));
     } else {
       liveMain.dataset.kind = 'idle';
-      liveMain.append(el('span', 'ix-live__idle', snap.status === 'open' ? 'Rien à l’écran' : snap.status === 'paused' ? 'En pause' : 'Hors live'));
+      liveMain.append(el('span', 'ix-live__idle', snap.status === 'open' ? 'Rien à l’écran' : snap.status === 'paused' ? 'Achats suspendus' : 'Hors live'));
     }
     const qn = el('span', 'ix-live__queue');
     qn.dataset.full = String(snap.queue.length >= snap.queueMax);
@@ -976,6 +1108,11 @@ export function view(ctx) {
     const pending = snap.mine.filter((r) => r.state === 'queued' || r.state === 'active').length;
     histCount.textContent = pending ? String(pending) : '';
     histCount.hidden = !pending;
+    creditBtn.hidden = !snap.credits.length && !snap.creditLog.length;
+    creditCount.textContent = snap.credits.length ? String(snap.credits.length) : '';
+    creditCount.hidden = !snap.credits.length;
+    creditBtn.title = snap.credits.length ? `Mes crédits d’effets : ${snap.credits.length}` : 'Mes crédits d’effets';
+    creditBtn.setAttribute('aria-label', creditBtn.title);
 
     if (!livePop.hidden) {
       livePop.replaceChildren();
@@ -1002,221 +1139,58 @@ export function view(ctx) {
       livePop.append(el('p', 'ix-pop__rules', `${snap.maxActive} effets à la fois au plus · le même effet passe l’un après l’autre · une demande en attente par viewer · jamais démarrée en 3 min : remboursée.`));
     }
     if (!histPop.hidden) {
-      histPop.replaceChildren(el('h4', 'ix-pop__title', 'Mes effets'));
-      if (!snap.mine.length) histPop.append(el('p', 'ix-pop__empty', 'Tes achats de ce live apparaîtront ici.'));
-      for (const r of snap.mine) {
-        const [text, kind] = describeMine(r);
-        const row = el('div', 'ix-line ix-line--mine');
-        row.dataset.kind = kind;
-        const main = el('span', 'ix-line__main');
-        main.append(el('strong', null, r.label), el('span', 'ix-line__sub', r.summary));
-        row.append(glyph(document, r.effect), main, el('span', 'ix-line__state', text), price(r.price, 'ix-price ix-price--sm'));
-        histPop.append(row);
+      histPop.replaceChildren();
+      const tabs = el('div', 'ix-pop__tabs');
+      tabs.setAttribute('role', 'tablist');
+      for (const [id, label] of [['effects', 'Mes effets'], ['credits', `Mes crédits${snap.credits.length ? ` · ${snap.credits.length}` : ''}`]]) {
+        const b = btn('ix-pop__tab', label);
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', String(histTab === id));
+        b.addEventListener('click', () => {
+          histTab = id;
+          paint();
+        });
+        tabs.append(b);
+      }
+      histPop.append(tabs);
+      if (histTab === 'effects') {
+        if (!snap.mine.length) histPop.append(el('p', 'ix-pop__empty', 'Tes achats de ce live apparaîtront ici.'));
+        for (const r of snap.mine) {
+          const [text, kind] = describeMine(r);
+          const row = el('div', 'ix-line ix-line--mine');
+          row.dataset.kind = kind;
+          const main = el('span', 'ix-line__main');
+          main.append(el('strong', null, r.label), el('span', 'ix-line__sub', r.summary));
+          row.append(glyph(document, r.effect), main, el('span', 'ix-line__state', text), r.credit ? el('span', 'ix-line__paid', 'crédit') : price(r.price, 'ix-price ix-price--sm'));
+          histPop.append(row);
+        }
+      } else {
+        histPop.append(el('p', 'ix-pop__intro', 'Un crédit lance un effet précis gratuitement, une seule fois. Rendu si l’effet ne démarre pas.'));
+        if (!snap.credits.length) histPop.append(el('p', 'ix-pop__empty', 'Aucun crédit pour l’instant.'));
+        for (const c of snap.credits) {
+          const e = effectById(c.effect);
+          const row = el('div', 'ix-line ix-line--credit');
+          const main = el('span', 'ix-line__main');
+          main.append(el('strong', null, e.label), el('span', 'ix-line__sub', `${creditTerms(c)} · ${SOURCE[c.source.kind] ?? ''} (${c.source.by}) · « ${c.reason} »`));
+          const use = btn('ix-mini ix-mini--use', 'Utiliser', 'ticket');
+          use.addEventListener('click', () => openSheet(c.effect, tiles.get(c.effect)?.node, { credit: c.id }));
+          row.append(glyph(document, c.effect), main, use);
+          histPop.append(row);
+        }
+        if (snap.creditLog.length) {
+          histPop.append(el('h4', 'ix-pop__title', 'Historique des crédits'));
+          for (const l of snap.creditLog.slice(0, 6)) {
+            const row = el('div', 'ix-line ix-line--log');
+            row.append(glyph(document, l.effect), el('span', 'ix-line__sub', `${effectById(l.effect).label} · ${LOG[l.kind] ?? l.kind}${l.reason ? ` · « ${l.reason} »` : ''}`), el('span', 'ix-line__state', new Date(l.at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })));
+            histPop.append(row);
+          }
+        }
       }
     }
   }
 
   // ---------------------------------------------------------------------------------------------------------------
-  // Régie (équipe) : pause, tout arrêter, offrir un effet ; à l'écran, file, historique, avec leurs actions.
-  const regieTools = el('div', 'ix-regie__tools');
-  const pauseBtn = btn('ix-tool', 'Pause', 'pause');
-  const stopBtn = btn('ix-tool ix-tool--danger', 'Tout arrêter', 'stop');
-  const giftBtn = btn('ix-tool', 'Offrir un effet', 'gift');
-  giftBtn.setAttribute('aria-expanded', 'false');
-  regieTools.append(pauseBtn, stopBtn, giftBtn);
-  const regieGift = el('div', 'ix-regie__gift');
-  regieGift.hidden = true;
-  for (const e of EFFECTS) {
-    const b = btn('ix-gift', null, e.id);
-    b.title = e.label;
-    b.setAttribute('aria-label', `Offrir ${e.label}`);
-    b.addEventListener('click', () => openSheet(e.id, b, { mode: 'mod' }));
-    regieGift.append(b);
-  }
-  const regieScroll = el('div', 'ix-scroll ix-regie');
-  const sec = (title) => {
-    const s = el('section', 'ix-sec');
-    const h = el('h4', 'ix-sec__title');
-    const count = el('b', 'ix-sec__count');
-    h.append(el('span', null, title), count);
-    const list = el('div', 'ix-sec__list');
-    s.append(h, list);
-    regieScroll.append(s);
-    return { count, list };
-  };
-  const secActive = sec('À l’écran');
-  const secQueue = sec('File d’attente');
-  const secHistory = sec('Historique récent');
-  regieScroll.prepend(regieGift);
-  regiePane.append(regieTools, regieScroll);
-  const confirmOpen = new Map(); // id → 'cancel' | 'remove' | 'refund' | 'stop'
-  let regieFlash = null;
-
-  pauseBtn.addEventListener('click', () => {
-    const snap = mock.snapshot(now());
-    mock.moderation.setPaused(snap.status === 'open');
-    regieFlash = snap.status === 'open' ? 'Chaos en pause : plus aucun achat, la file attend.' : 'Chaos repris.';
-    paint();
-  });
-  stopBtn.addEventListener('click', () => {
-    confirmOpen.set('__stop', 'stop');
-    paint();
-  });
-  giftBtn.addEventListener('click', () => {
-    regieGift.hidden = !regieGift.hidden;
-    giftBtn.setAttribute('aria-expanded', String(!regieGift.hidden));
-  });
-
-  function confirmBox(id, kind, r) {
-    const box = el('div', 'ix-confirm');
-    const reason = el('input', 'ix-confirm__reason');
-    reason.type = 'text';
-    reason.maxLength = 80;
-    reason.placeholder = 'Motif (obligatoire sans remboursement)';
-    reason.setAttribute('aria-label', 'Motif');
-    const close = () => {
-      confirmOpen.delete(id);
-      paint();
-    };
-    const done = (out, text) => {
-      if (!out.ok) {
-        reason.classList.add('is-required');
-        reason.focus();
-        regieFlash = out.message;
-        return paint();
-      }
-      confirmOpen.delete(id);
-      regieFlash = text;
-      paint();
-    };
-    const acts = el('div', 'ix-confirm__acts');
-    if (kind === 'stop') {
-      box.append(el('p', null, 'Tout arrêter ? Chaos passe en pause, la file attend. Remboursé d’office si l’effet a joué moins de 25 % de sa durée.'));
-      const yes = btn('ix-mini ix-mini--danger', 'Tout arrêter');
-      yes.addEventListener('click', () => done(mock.moderation.stopAll(now()), 'Tout est arrêté, Chaos en pause.'));
-      const no = btn('ix-mini', 'Retour');
-      no.addEventListener('click', close);
-      acts.append(yes, no);
-      box.append(acts);
-      return box;
-    }
-    const early = r?.state === 'active' && r.progress < 0.25;
-    const text =
-      kind === 'refund'
-        ? `Rembourser ${fmt(r.price)} Jetons à ${r.buyer.name} ?`
-        : kind === 'cancel'
-          ? `Retirer la demande de ${r.buyer.name} ? Jamais démarrée : remboursement intégral conseillé.`
-          : `Arrêter ${r.label} de ${r.buyer.name} ? Joué à ${Math.round((r.progress ?? 0) * 100)} %${early ? ' : remboursement conseillé.' : '.'}`;
-    box.append(el('p', null, text), reason);
-    if (kind === 'refund') {
-      reason.placeholder = 'Motif (obligatoire)';
-      const yes = btn('ix-mini ix-mini--ok', 'Rembourser');
-      yes.addEventListener('click', () => done(mock.moderation.refund(r.id, reason.value.trim(), now()), `${fmt(r.price)} Jetons rendus à ${r.buyer.name}.`));
-      acts.append(yes);
-    } else {
-      const op = kind === 'cancel' ? mock.moderation.cancel : mock.moderation.remove;
-      if (r.price) {
-        const withRefund = btn('ix-mini ix-mini--ok', kind === 'cancel' ? 'Retirer et rembourser' : 'Arrêter et rembourser');
-        withRefund.addEventListener('click', () => done(op(r.id, { refund: true, reason: reason.value.trim() || null }, now()), `${r.label} retiré, ${fmt(r.price)} Jetons rendus.`));
-        acts.append(withRefund);
-      }
-      const without = btn('ix-mini ix-mini--danger', r.price ? 'Sans rembourser' : kind === 'cancel' ? 'Retirer' : 'Arrêter');
-      without.addEventListener('click', () => done(op(r.id, { refund: false, reason: reason.value.trim() || null }, now()), `${r.label} retiré, sans remboursement.`));
-      acts.append(without);
-    }
-    const no = btn('ix-mini', 'Retour');
-    no.addEventListener('click', close);
-    acts.append(no);
-    box.append(acts);
-    return box;
-  }
-
-  const rowCache = new Map();
-  function regieRow(r, kind) {
-    const key = `${kind}:${r.id}`;
-    let row = rowCache.get(key);
-    if (!row) {
-      const node = el('div', 'ix-req');
-      node.dataset.kind = kind;
-      const ico = el('span', 'ix-req__ico');
-      ico.append(glyph(document, r.effect));
-      const main = el('div', 'ix-req__main');
-      const line1 = el('div', 'ix-req__line');
-      const line2 = el('div', 'ix-req__sub');
-      main.append(line1, line2);
-      const action = btn('ix-mini');
-      const barEl = el('i', 'ix-req__bar');
-      node.append(ico, main, action, barEl);
-      action.addEventListener('click', () => {
-        const k = kind === 'queue' ? 'cancel' : kind === 'active' ? 'remove' : 'refund';
-        if (confirmOpen.get(r.id)) confirmOpen.delete(r.id);
-        else confirmOpen.set(r.id, k);
-        paint();
-      });
-      row = { node, line1, line2, action, bar: barEl, confirm: null };
-      rowCache.set(key, row);
-    }
-    row.line1.replaceChildren(el('strong', null, r.label), el('span', 'ix-req__tier', r.summary), price(r.price, 'ix-price ix-price--sm'));
-    if (kind === 'queue') row.line2.textContent = `${who(r)} · ${nth(r.position)} · départ ~${mmss(r.eta)} · expire dans ${mmss(r.expiresIn)}`;
-    else if (kind === 'active') row.line2.textContent = `${who(r)} · encore ${mmss(r.remaining)}`;
-    else {
-      const what = { done: 'joué', expired: 'jamais démarré', removed: 'arrêté', cancelled: 'retiré' }[r.state] ?? r.state;
-      row.line2.textContent = `${who(r)} · ${what}${r.actor ? ` par ${r.actor}` : ''}${r.refunded ? ' · remboursé' : ''}${r.reason ? ` · « ${r.reason} »` : ''}`;
-    }
-    row.node.dataset.state = r.state;
-    row.node.classList.toggle('is-refunded', r.refunded);
-    if (r.progress != null) row.bar.style.setProperty('--p', String(r.progress));
-    row.action.replaceChildren(el('span', null, kind === 'queue' ? 'Retirer' : kind === 'active' ? 'Arrêter' : 'Rembourser'));
-    row.action.hidden = kind === 'history' && (r.refunded || !r.price);
-    row.action.setAttribute('aria-expanded', String(confirmOpen.has(r.id)));
-    const want = confirmOpen.get(r.id);
-    if (want && !row.confirm) {
-      row.confirm = confirmBox(r.id, want, r);
-      row.node.append(row.confirm);
-    } else if (!want && row.confirm) {
-      row.confirm.remove();
-      row.confirm = null;
-    }
-    return row.node;
-  }
-  function paintList(target, items, kind, emptyText) {
-    const nodes = items.map((r) => regieRow(r, kind));
-    if (!nodes.length) nodes.push(el('p', 'ix-empty', emptyText));
-    target.list.replaceChildren(...nodes);
-  }
-  let stopBox = null;
-  let flashNode = null;
-  function paintRegie(snap) {
-    pauseBtn.replaceChildren(glyph(document, snap.status === 'paused' ? 'play' : 'pause'), el('span', null, snap.status === 'paused' ? 'Reprendre' : 'Pause'));
-    pauseBtn.disabled = snap.status === 'offline';
-    stopBtn.disabled = !snap.active.length;
-    paintList(secActive, snap.active, 'active', 'Rien à l’écran.');
-    paintList(secQueue, snap.queue, 'queue', 'Personne n’attend.');
-    paintList(secHistory, snap.history.slice(0, 12), 'history', 'Aucun effet récemment.');
-    secActive.count.textContent = `${snap.active.length}/${snap.maxActive}`;
-    secQueue.count.textContent = `${snap.queue.length}/${snap.queueMax}`;
-    if (confirmOpen.get('__stop') && !stopBox) {
-      stopBox = confirmBox('__stop', 'stop');
-      regieTools.after(stopBox);
-    } else if (!confirmOpen.get('__stop') && stopBox) {
-      stopBox.remove();
-      stopBox = null;
-    }
-    const keep = new Set([...snap.active.map((r) => `active:${r.id}`), ...snap.queue.map((r) => `queue:${r.id}`), ...snap.history.slice(0, 12).map((r) => `history:${r.id}`)]);
-    for (const k of rowCache.keys()) if (!keep.has(k)) rowCache.delete(k);
-    if (regieFlash) {
-      flashNode?.remove();
-      flashNode = el('p', 'ix-flash', regieFlash);
-      flashNode.setAttribute('role', 'status');
-      regieTools.after(flashNode);
-      const shown = flashNode;
-      regieFlash = null;
-      win.setTimeout(() => shown.remove(), 3500);
-    }
-  }
-
-  // ---------------------------------------------------------------------------------------------------------------
-  // Bonk : le vrai écran Bonk (shared/bonk-view.js), embarqué tel quel dans le sous-module.
+  // Bonk : le vrai écran Bonk (shared/bonk-view.js), embarqué tel quel, avec ses couleurs (thème du conteneur).
   let bonk = null;
   let bonkLoading = false;
   const bonkModule = (state) => (state?.modules ?? []).find((m) => m.id === 'bonk') ?? null;
@@ -1254,14 +1228,12 @@ export function view(ctx) {
     bonk.body.replaceChildren();
     bonk.def.rendered?.(bonk.view, c);
     if (bonk.view.node) bonk.body.append(bonk.view.node);
-    // Le « ? » du tutoriel Bonk : à droite du sélecteur, comme dans son propre en-tête.
     const help = bonk.def.headAfter?.(bonk.view, c);
     headExtra.replaceChildren();
     if (help && tab === 'bonk') headExtra.append(help);
   }
 
   // ---------------------------------------------------------------------------------------------------------------
-  /** [état, pastille sur l’aperçu (un temps, court), raison à la place du prix (blocage), aide]. */
   function tileState(info) {
     const b = info.block;
     if (!b) return info.playing ? ['playing', mmss(info.playing.remaining), null, `À l’écran, lancé par ${info.playing.mine ? 'toi' : info.playing.by}. Le tien passera juste après.`] : ['ok', null, null, null];
@@ -1276,32 +1248,31 @@ export function view(ctx) {
     const t = now();
     const snap = mock.snapshot(t);
     const team = isTeam();
-    if (!team && tab === 'regie') tab = 'chaos';
-    tabButtons.regie.hidden = !team;
     tabButtons.bonk.hidden = !bonkModule(latest);
     if (tabButtons[tab].hidden) tab = 'chaos';
     root.dataset.tab = tab;
+    headbar.dataset.tab = tab;
     root.dataset.status = snap.status;
     for (const [id, b] of Object.entries(tabButtons)) {
       b.setAttribute('aria-selected', String(id === tab));
       b.tabIndex = id === tab ? 0 : -1;
     }
-    const count = tabButtons.regie.querySelector('.ix-switch__count');
-    count.textContent = snap.queue.length ? String(snap.queue.length) : '';
-    count.hidden = !snap.queue.length;
-    switcher.dataset.count = String(shownTabs().length);
     placeThumb();
     chaosPane.hidden = tab !== 'chaos';
     bonkPane.hidden = tab !== 'bonk';
-    regiePane.hidden = tab !== 'regie';
-    if (tab !== 'bonk') headExtra.replaceChildren();
+    if (tab === 'chaos') {
+      headExtra.replaceChildren(...(team ? [modBtn] : []));
+      modBtn.setAttribute('aria-expanded', String(!modLayer.hidden));
+      modBtn.dataset.count = snap.queue.length ? String(snap.queue.length) : '';
+    }
+    if (!team && !modLayer.hidden) closeModeration();
 
     // Bandeau d'état : ce qui concerne tout le module, en une phrase.
     const bannerText =
       snap.status === 'offline'
         ? ['offline', 'clock', 'Hors live : les effets reviennent au prochain live.']
         : snap.status === 'paused'
-          ? ['paused', 'pause', 'Le streamer a mis les effets en pause. Ta place en file est gardée.']
+          ? ['paused', 'pause', 'Les achats d’effets sont suspendus. Ta place en file est gardée.']
           : snap.exclusive
             ? ['info', 'shield', `${snap.game} est en plein écran exclusif : seuls Brouillard, Paupières et Flash passent.`]
             : snap.safe
@@ -1328,19 +1299,26 @@ export function view(ctx) {
       tile.badge.textContent = badge ?? '';
       if (reason) tile.meta.replaceChildren(el('span', 'ix-tile__reason', reason));
       else tile.meta.replaceChildren(el('span', 'ix-from', 'dès'), price(info.minPrice));
-      const fav = prefs.isFavorite(info.id);
+      tile.ribbon.hidden = !info.credits;
+      tile.ribbon.title = info.credits ? `Tu as ${info.credits === 1 ? 'un crédit' : `${info.credits} crédits`} pour cet effet` : '';
+      tile.node.classList.toggle('has-credit', info.credits > 0);
+      tile.main.title = help ?? '';
+      tile.main.setAttribute('aria-label', `${tile.e.label}, dès ${fmt(info.minPrice)} Jetons${info.credits ? ', crédit disponible' : ''}${badge ? `, ${badge}` : ''}${reason ? `, ${reason}` : ''}${help ? `. ${help}` : ''}`);
+    }
+    for (const id of prefs.order()) {
+      const tile = tiles.get(id);
+      const fav = prefs.isFavorite(id);
       tile.node.classList.toggle('is-fav', fav);
       tile.fav.setAttribute('aria-pressed', String(fav));
-      tile.main.title = help ?? '';
-      tile.main.setAttribute('aria-label', `${tile.e.label}, dès ${fmt(info.minPrice)} Jetons${badge ? `, ${badge}` : ''}${reason ? `, ${reason}` : ''}${help ? `. ${help}` : ''}`);
     }
     if (!reorder.dragging()) sheet?.update();
-    if (tab === 'regie') paintRegie(snap);
+    if (!modLayer.hidden) modView?.paint();
     if (tab === 'bonk') void showBonk();
   }
 
   layoutGrid();
   const askOpen = query.get('ixOpen');
+  const askMod = query.get('ixMod') === '1';
 
   return {
     node: root,
@@ -1355,12 +1333,17 @@ export function view(ctx) {
         paint();
       });
       paint();
-      if (askOpen && effectById(askOpen) && tab === 'chaos') win.requestAnimationFrame?.(() => openSheet(askOpen, tiles.get(askOpen)?.node));
+      if (askOpen && effectById(askOpen) && !effectById(askOpen).planned && tab === 'chaos') win.requestAnimationFrame?.(() => openSheet(askOpen, tiles.get(askOpen)?.node));
+      else if (askMod && isTeam()) win.requestAnimationFrame?.(() => openModeration());
     },
-    /** Le ‹ de l'en-tête referme d'abord ce qui est ouvert (fiche, détail) avant de revenir au Hub. */
+    /** Le ‹ de l'en-tête referme d'abord ce qui est ouvert (fiche, modération, détail) avant de revenir au Hub. */
     back() {
       if (sheet) {
         closeSheet();
+        return true;
+      }
+      if (!modLayer.hidden) {
+        closeModeration();
         return true;
       }
       if (pops.some(([p]) => !p.hidden)) {
@@ -1383,6 +1366,7 @@ export function view(ctx) {
       stopClock?.();
       stopClock = null;
       sheet?.destroy();
+      modView?.destroy();
       reorder.destroy();
       resize?.disconnect();
       document.removeEventListener('pointerdown', onDocDown, true);

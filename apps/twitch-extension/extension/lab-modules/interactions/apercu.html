@@ -30,14 +30,15 @@
 </head>
 <body>
   <header>
-    <h1>Interactions <small>· Chaos V2, Bonk, Régie · maquette, données fictives</small></h1>
-    <div class="ctl"><span>Onglet</span><div class="seg" data-k="ixTab"><button data-v="chaos">Chaos</button><button data-v="bonk">Bonk</button><button data-v="regie">Régie</button></div></div>
-    <div class="ctl"><span>Rôle</span><div class="seg" data-k="ixRole"><button data-v="viewer">Viewer</button><button data-v="mod">Modérateur</button></div></div>
+    <h1>Interactions <small>· Chaos V2 et Bonk · maquette, données fictives</small></h1>
+    <div class="ctl"><span>Onglet</span><div class="seg" data-k="ixTab"><button data-v="chaos">Chaos</button><button data-v="bonk">Bonk</button></div></div>
+    <div class="ctl"><span>Rôle</span><div class="seg" data-k="ixRole"><button data-v="viewer">Viewer</button><button data-v="mod">Modérateur</button><button data-v="fx">Modération FX</button></div></div>
     <div class="ctl"><span>Scénario</span><select data-k="ixScenario"></select></div>
     <div class="ctl"><span>Fiche ouverte</span><select data-k="ixOpen"></select></div>
-    <div class="ctl"><span>Durée max</span><div class="seg" data-k="ixCap"><button data-v="30">30 s</button><button data-v="60">60 s</button></div></div>
+    <div class="ctl"><span>Durée max</span><div class="seg" data-k="ixCap"><button data-v="30">30 s · Sécurité actuelle</button><button data-v="60">60 s · simulé</button></div></div>
+    <div class="ctl"><span>À venir</span><div class="seg" data-k="ixPlanned"><button data-v="">Masqués</button><button data-v="1">Montrés</button></div></div>
   </header>
   <main id="frames"></main>
-  <p class="note">Chaque cadre est la vraie extension (shell v2, mode démo) à la taille que Twitch lui donne. Clique dedans comme un viewer : fiche d'un effet, réglages, achat en deux temps, file, Mes effets, favoris (☆), réordonnancement (appui long), Régie… Favoris, ordre et derniers réglages sont gardés dans ce navigateur. Aucun appel au Core, à Twitch ni au Studio installé ; les aperçus sont des simulations CSS, pas le rendu du moteur.</p>
+  <p class="note">Chaque cadre est la vraie extension (shell v2, mode démo) à la taille que Twitch lui donne. Clique dedans comme un viewer : fiche d'un effet, réglages, achat en deux temps, crédits d'effets, file, Mes effets, favoris (☆), réordonnancement (appui long)… « Modération FX » : la section de la console de modération (équipe). Le cadre iPhone est une simulation (taille, toucher), pas Safari. Favoris, ordre et derniers réglages sont gardés dans ce navigateur. Aucun appel au Core, à Twitch ni au Studio installé ; les aperçus sont des simulations CSS, pas le rendu du moteur.</p>
 </body>
 </html>

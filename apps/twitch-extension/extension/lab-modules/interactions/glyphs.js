@@ -35,6 +35,9 @@ const P = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.4"/>',
   target: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
   lab: '<path d="M9 3h6M10 3v6l-5.5 9.5A1.6 1.6 0 0 0 5.9 21h12.2a1.6 1.6 0 0 0 1.4-2.5L14 9V3"/><path d="M7.5 15h9"/>',
+  ticket: '<path d="M4 7.5h16v3a1.5 1.5 0 0 0 0 3v3H4v-3a1.5 1.5 0 0 0 0-3Z"/><path d="M14 7.5v9" stroke-dasharray="1.6 2"/>',
+  confetti: '<path d="M4 20 9 9l6 6Z"/><path d="M14 4v2M19 9h2M17 6l1.5-1.5M12 8c1-1 1-3 3-3M16 12c1-1 3-1 3 1"/>',
+  emote_rain: '<circle cx="12" cy="10" r="5"/><path d="M10 9h.01M14 9h.01M10 12c1 1 3 1 4 0M6 19l1-2M12 21l1-2M18 19l1-2"/>',
   grip: '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/>',
 };
 
