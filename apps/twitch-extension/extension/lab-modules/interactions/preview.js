@@ -50,6 +50,9 @@ export function blinkTimeline(p) {
   return { period, keys: pts.map(([t, c]) => ({ offset: clamp(t / period, 0, 1), c })) };
 }
 
+/** Assombrissement de la partie visible pour une fermeture c (shader « eyelids » : dim × c²). */
+const dimOf = (c) => Math.round(0.55 * c * c * 1000) / 1000;
+
 /** Bords de l'amande pour une fermeture c (0..1) : paupière haute (c), basse (c^1,8), largeur qui se resserre (shader « eyelids »). */
 export function eyeBox(c) {
   const lower = Math.pow(c, 1.8);
@@ -64,29 +67,39 @@ export function preview(document, effectId, { big = false } = {}) {
   node.innerHTML =
     '<div class="ix-pv__world"><div class="ix-pv__scene"></div><div class="ix-pv__ghost"></div></div>' +
     '<div class="ix-pv__veil"></div>' +
-    (effectId === 'fog' ? '<div class="ix-pv__fog"><i></i><i></i><i></i></div>' : '') +
+    (effectId === 'fog' ? '<div class="ix-pv__fog"><i class="ix-pv__fogf"></i><i class="ix-pv__fogn"></i></div>' : '') +
     (effectId === 'blink' ? '<i class="ix-pv__eye"></i>' : '') +
     (effectId === 'zoom' ? '<i class="ix-pv__frame"></i>' : '') +
     (effectId === 'vhs' ? '<i class="ix-pv__track"></i>' : '') +
     (effectId === 'confetti' || effectId === 'emote_rain' ? '<i class="ix-pv__rain"></i><i class="ix-pv__rain ix-pv__rain--b"></i>' : '');
   const eye = node.querySelector('.ix-pv__eye');
+  const veil = node.querySelector('.ix-pv__veil');
   let params = null;
   let live = false;
   let anim = null;
+  let dimAnim = null;
   const reduced = () => Boolean(document.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   const v = (k, x) => node.style.setProperty(k, String(x));
 
   function animateEye() {
     anim?.cancel();
+    dimAnim?.cancel();
     anim = null;
+    dimAnim = null;
     if (!eye || !params) return;
     // Image figée : yeux à moitié fermés (catalogue, mouvement réduit) ; la fiche montre la vraie chronologie.
-    const still = eyeBox(Math.min(1, params.intensity) * 0.55);
-    Object.assign(eye.style, still);
+    const c0 = Math.min(1, params.intensity) * 0.55;
+    Object.assign(eye.style, eyeBox(c0));
+    veil.style.opacity = String(dimOf(c0));
     if (!live || reduced() || typeof eye.animate !== 'function') return;
     const { period, keys } = blinkTimeline(params);
     anim = eye.animate(
       keys.map((k) => ({ offset: k.offset, ...eyeBox(k.c), easing: 'ease-in-out' })),
+      { duration: period, iterations: Infinity },
+    );
+    // Comme le shader : la partie encore visible s'assombrit à mesure que les paupières se ferment (c²).
+    dimAnim = veil.animate(
+      keys.map((k) => ({ offset: k.offset, opacity: dimOf(k.c), easing: 'ease-in-out' })),
       { duration: period, iterations: Infinity },
     );
   }
@@ -107,9 +120,14 @@ export function preview(document, effectId, { big = false } = {}) {
     node.dataset.entry = o.entry ?? '';
     node.dataset.rhythm = o.rhythm ?? '';
     switch (e.id) {
-      case 'shake': // amplitude réelle (% de l'écran) et rythme réel (fréquence du préréglage)
+      case 'shake': // amplitudes réelles par axe (% de l'écran), roulis (°), fréquence, intervalle des rafales
         v('--a', `${Math.max(p.amp_x, p.amp_y) * p.intensity}%`);
-        v('--period', `${clamp(1.6 / p.frequency, 0.05, 0.45)}s`);
+        v('--ax', `${p.amp_x * p.intensity}%`);
+        v('--ay', `${p.amp_y * p.intensity}%`);
+        v('--rot', `${p.rotation * p.intensity}deg`);
+        // Huit positions irrégulières par cycle : un cycle = 8 / fréquence (le moteur suit un bruit, pas une oscillation).
+        v('--period', `${clamp(8 / p.frequency, 0.3, 2.4)}s`);
+        v('--burst', `${clamp(p.interval_ms / 1000, 0.6, 4)}s`);
         break;
       case 'zoom':
         v('--zf', p.factor);
@@ -119,12 +137,19 @@ export function preview(document, effectId, { big = false } = {}) {
         v('--double', clamp(p.double * p.intensity * 1.2, 0, 0.8));
         v('--dblur', `${p.blur * p.intensity}cqw`);
         break;
-      case 'tunnel':
-        v('--r', p.radius);
+      case 'tunnel': {
+        // Shader « tunnel » : zone nette de rayon r (hauteurs d'écran), puis l'obscurité croît sur la largeur du dégradé
+        // jusqu'à son maximum ; ellipse étirée (`stretch`, 1 pour le cercle). Le voile mesure 4 × l'aperçu (16:9).
+        const stretch = p.shape === 'cercle' ? 1 : p.stretch;
+        const outer = p.radius + 0.6 * p.gradient;
+        v('--ry', `${(outer * 100) / 4}%`);
+        v('--rx', `${(outer * stretch * (9 / 16) * 100) / 4}%`);
+        v('--stop', `${(p.radius / outer) * 100}%`);
         v('--d', p.darkness);
         v('--tz', p.zoom);
         v('--shrink', p.shrink);
         break;
+      }
       case 'fog':
         v('--fog', clamp(0.25 + (p.density * p.opacity * (0.6 + 0.4 * p.thickness)) * 0.85, 0, 1));
         v('--haze', clamp(p.haze * p.opacity * 0.5, 0, 0.6));
