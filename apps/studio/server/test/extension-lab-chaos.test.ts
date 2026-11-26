@@ -15,6 +15,9 @@ describe('Extension Lab → Lab Core: Chaos', () => {
     const calls: { path: string; body: Json | undefined }[] = [];
     const core = (async (path: string, body?: unknown) => {
       calls.push({ path, body: body as Json | undefined });
+      // Only Chaos answers here: every other Lab Core read fails (the EBS keeps its defaults).
+      if (!path.includes('/chaos/'))
+        throw Object.assign(new Error('core_unavailable'), { status: 503 });
       if (path.endsWith('/buy') && (body as Json).expected_price === 1)
         throw Object.assign(new Error('price_changed'), {
           status: 409,
@@ -25,20 +28,27 @@ describe('Extension Lab → Lab Core: Chaos', () => {
             price: 8000,
           },
         });
+      if (path.endsWith('/summary')) return { enabled: true, cap_s: 30 };
       return path.includes('/state') ? { enabled: true } : { price: 8000 };
     }) as LabCoreCall;
     const lab = await LabEbs.create(EXTENSION_DIR);
     lab.connectLab(core);
     const viewer = token('viewer');
+    // The Hub offers Interactions only while the Lab Core opens Chaos (as the Production session does).
+    expect(
+      (await lab.handle('GET', '/session', undefined, viewer)).body,
+    ).toMatchObject({
+      chaos: { enabled: true, cap_s: 30 },
+    });
 
     const state = await lab.handle('GET', '/chaos/state', undefined, viewer);
     expect(state).toMatchObject({
       status: 200,
       body: { ok: true, enabled: true },
     });
-    expect(calls.find((c) => c.path.includes('/chaos/'))!.path).toMatch(
-      /^\/v1\/lab\/chaos\/\d+\/state\?viewer_id=\d+&viewer_name=/,
-    );
+    expect(
+      calls.find((c) => c.path.includes('/chaos/900100/state'))!.path,
+    ).toMatch(/^\/v1\/lab\/chaos\/\d+\/state\?viewer_id=\d+&viewer_name=/);
 
     const body = { effect: 'color', choice: {}, expected_price: 8000 };
     expect((await lab.handle('POST', '/chaos/buy', body, viewer)).status).toBe(

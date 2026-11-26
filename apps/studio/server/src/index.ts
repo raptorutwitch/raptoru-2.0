@@ -1678,7 +1678,7 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       : null,
   });
   // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md § 3): the viewers' effects sold by the profile's Core, played by the
-  // engine. Only with a Core and an engine (the loop never starts the engine: it says « not ready » until it runs).
+  // engine. Only with a Core and an engine; the loop starts the engine itself only while the Core says Chaos is open.
   if (chaosRef?.client.available() && alertsCore && alertsEnv)
     chaosCoreRef = await ChaosCoreLoop.open({
       runtime: chaosRef,

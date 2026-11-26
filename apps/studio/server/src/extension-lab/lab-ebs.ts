@@ -331,6 +331,9 @@ export class LabEbs {
     string
   > | null = null;
   private coreModulesAt = 0;
+  /** Chaos V2 (Lab Core): whether the module is offered and this live's ceiling, as the Production session says it. */
+  private chaosSummary: { enabled: boolean; cap_s: number | null } | null =
+    null;
   /** Live name of the Tombola V2 module (Core: running round's frozen name, else Studio's label). */
   private raffleName: string | null = null;
   private raffleOpenWord: string | null = null;
@@ -396,6 +399,19 @@ export class LabEbs {
       );
     if (Date.now() - this.coreModulesAt >= 1000) {
       this.coreModulesAt = Date.now();
+      tasks.push(
+        this.labCore<{ enabled: boolean; cap_s: number | null }>(
+          `/v1/lab/chaos/${LAB_CHANNEL.id}/summary`,
+          undefined,
+          { timeoutMs: 1500 },
+        )
+          .then((c) => {
+            this.chaosSummary = c;
+          })
+          .catch(() => {
+            this.chaosSummary = null;
+          }),
+      );
       tasks.push(
         this.labCore<{
           tts: { module_state: string };
@@ -2267,6 +2283,8 @@ export class LabEbs {
       commands_public: Boolean(this.labCore),
       // Roue du Sub V2 (R8): « Roue du Sub » in the Hub (own tours; the team's part for moderators).
       sub_wheel: Boolean(this.labCore),
+      // Chaos V2: « Interactions » in the Hub only while the Lab Core opens it (chaos.enabled), like Production.
+      chaos: this.chaosSummary ?? { enabled: false, cap_s: null },
       // Halloween shop: « Événements » in the Hub only while the Lab Core says the event is open.
       event_shop: this.labCore
         ? {
