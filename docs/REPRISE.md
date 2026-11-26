@@ -201,6 +201,10 @@ Lab seulement, faux Core ; branche locale `feat/ext-interactions` (worktree `age
 `apps/twitch-extension/Apercu Effets live.cmd`. Décisions d'Antoni (§ 14 : prix, plafond 30/60 s, préréglage du
 streamer vs style du viewer) avant le lot 2 (Core `chaos`, Jetons). Chaos V2 lui-même : branche `feat/chaos-studio`.
 
+**C ter. Trois correctifs extension (26/11)** — [extension/CORRECTIFS_2026-11-26.md](extension/CORRECTIFS_2026-11-26.md) :
+solde Mini-jeux à 4 chiffres (`0d295667`), raccourci « Tombola ouverte » partout (`6d894bbc`), « conditions » = écran de
+Twitch (mentions avant publication listée), aucun code. Même branche locale, non poussée ; aucun ZIP construit.
+
 **D. Soundboard : ajouter un son depuis Studio (23/11)** — [SOUNDBOARD.md](SOUNDBOARD.md) § 3. PR #126 fusionnée
 (`408f201a`). **Core `408f201a` déployé le 23/11 (déploiement lancé à 16:44 UTC)** (migration `20261205130000_sound_files.sql` appliquée,
 sauvegarde Coolify 16:43:40 UTC, retour arrière `deploy core 2a41e06e… --rollback --go`) ; la réaction blackjack r6
