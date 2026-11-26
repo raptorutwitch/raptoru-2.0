@@ -16,7 +16,7 @@ OBS fermé, aucun stream.
 | Prix falsifié par le navigateur                                   | 409 `price_changed`, rien débité                                                                                                                                                                                 |
 | Deux viewers en même temps (Couleur + Zoom)                       | chacun débité et joué ; délai personnel appliqué                                                                                                                                                                 |
 | Clin d'œil ponctuel ×3 sans confirmation                          | 3 achats (charges), 3 effets, 24 000 débités ; renvoi de la 1re clé = doublon                                                                                                                                    |
-| STOP ALL Studio pendant un Brouillard 20 s                        | fin `stopped_by_studio`, **remboursé** (joué < 50 %)                                                                                                                                                             |
+| STOP ALL Studio pendant un Brouillard 20 s                        | fin `stopped_by_studio`, **remboursé** (joué < 25 %, règle de l'arrêt)                                                                                                                                           |
 | Redémarrage du moteur pendant Écran retourné 20 s                 | fin `shutdown`, **remboursé**                                                                                                                                                                                    |
 | Modération (extension)                                            | viewer « stop » → 403 ; modérateur stop + rembourser → remboursé ; 2e remboursement → `already_refunded` ; suspendre → « Suspendu » ; reprendre ; offrir → joué sans débit ; crédit accordé → acheté à 0 et joué |
 | Console FX (bouclier)                                             | s'ouvre sur FX avec les données du Core (récents, Rembourser, offrir, crédit, Tout arrêter)                                                                                                                      |
@@ -103,3 +103,17 @@ Twitch n'a pas été validé par Antoni, et les tarifs ne sont pas validés. Rie
 - **Testé** (automatique, et banc isolé dans un vrai navigateur : vraie page Studio › Chaos, vrai relais, Core Lab en
   mémoire) : Flou 15 000 – 100 000 → 10 000 – 75 000, aperçu = devis du Core (25 100 → 17 700 à 10 s), valeurs
   retrouvées après rechargement, « Par défaut » confirmé. Pas encore dans le Studio installé ni sur le vrai Core.
+
+## 9. PR #130 (27/11) — poussée, CI verte, non fusionnée
+
+- Branche poussée et PR #130 ouverte vers `main` sur GO d'Antoni (push + PR seulement). CI : 11 / 11 verts au commit
+  `33ec9861` ; fusion sans conflit.
+- Correctifs trouvés par la CI : `7d62d4c9` (formatage : GUIDE_STUDIO_CHAOS.md en fins de ligne CR seules, JSON du
+  banc — données identiques) ; `33ec9861` (**vrai défaut** du curseur OBS, lot précédent : à la fin d'un effet, la
+  capture du curseur pouvait rester coupée jusqu'à l'effet suivant quand le minuteur sonnait un peu avant l'horloge ;
+  test à horloge figée qui échoue sans le correctif). E2E « Overlay musique » : coupure de connexion au simulateur
+  Spotify, 3 / 3 en local, contrôle relancé seul → vert.
+- Fusion simulée (commit non référencé) : arbre identique à la branche, dernier commit de l'extension `2e2d664208a9`
+  (56 commits) → l'inventaire reste exact après une fusion en « Create a merge commit ».
+- Ordre, valeurs réelles de Production, essai fermé, retour arrière et décisions avant l'ouverture :
+  DEPLOIEMENT_CHAOS.md § 3 à § 8.
