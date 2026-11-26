@@ -1,13 +1,13 @@
-// LAB ONLY — faux Core de Chaos V2 pour la maquette « Effets live » : file, emplacements du moteur, délais, remboursements,
-// modération, scénarios. Il tient le rôle du futur module `chaos` du Core (lot 2) : la vue lit `snapshot()` et `quote()`,
-// elle ne calcule rien elle-même. Règles par défaut proposées : docs/chaos/EXTENSION_EFFETS_LIVE.md § 4.
-// Pur (horloge et hasard injectés) : testé par test/effets-live-model.test.js.
-import { EFFECTS, SLOTS, defaultDuration, defaultTier, effectById, minPrice, mockPrice } from './catalog.js';
+// LAB ONLY — faux Core de Chaos V2 pour la maquette « Interactions » : file, emplacements et sécurité du moteur,
+// délais, remboursements, modération, scénarios. Il tient le rôle du futur module `chaos` du Core (lot 2) : la vue lit
+// `snapshot()` et `quote()`, elle ne calcule ni prix ni règle. Règles provisoires : docs/chaos/EXTENSION_INTERACTIONS.md § 5.
+// Pur (horloge et hasard injectés) : testé par test/interactions-model.test.js. Les rôles simulés ne protègent rien.
+import { EFFECTS, ENGINE, SLOTS, defaultChoice, describeChoice, effectById, maxDuration, minPrice, normalizeChoice, priceOf } from './catalog.js';
 
-export const QUEUE_MAX = 3; // Q5 : 3 demandes en attente au plus
-export const QUEUE_TTL_S = 180; // Q5 : une demande non jouée après 3 min est remboursée
+export const QUEUE_MAX = 3; // 3 demandes en attente au plus
+export const QUEUE_TTL_S = 180; // une demande jamais démarrée après 3 min est remboursée intégralement
 export const VIEWER_COOLDOWN_S = 60; // un viewer ne relance pas le même effet avant 1 min après sa fin
-export const REFUND_BEFORE = 0.25; // Q3/Q4 : arrêté avant 25 % de sa durée → remboursé d'office
+export const REFUND_BEFORE = 0.25; // proposition : arrêté avant 25 % de sa durée → remboursement proposé d'office
 
 export const SCENARIOS = Object.freeze({
   normal: 'Live animé',
@@ -28,8 +28,9 @@ export function seeded(seed = 7) {
   return () => ((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 2 ** 32);
 }
 
+export const mmss = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 const slotOf = (r) => effectById(r.effect).slot;
-const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+const hasReason = (reason) => String(reason ?? '').trim().length >= 3;
 
 export function createChaosMock({
   scenario = 'normal',
@@ -38,6 +39,8 @@ export function createChaosMock({
   now = Date.now(),
   random = seeded(7),
   simulate = true,
+  capS = ENGINE.safetyDurationS, // Sécurité › durée maximale (Studio)
+  maxActive = ENGINE.safetyMaxActive, // Sécurité › effets actifs en même temps (Studio)
 } = {}) {
   let seq = 0;
   const s = {
@@ -53,17 +56,20 @@ export function createChaosMock({
     globalCd: new Map(), // effet → fin (ms), effets photosensibles
     simulate,
     nextBot: now + 9000,
+    capS,
+    maxActive,
   };
 
-  function make(effect, tier, duration, buyer, t, { price, by = 'viewer' } = {}) {
+  function make(effect, choice, buyer, t, { price, by = 'viewer' } = {}) {
     const e = effectById(effect);
     return {
       id: `r${++seq}`,
       effect,
       label: e.label,
-      tier,
-      duration,
-      price: price ?? mockPrice(e, tier, duration),
+      choice,
+      summary: describeChoice(e, choice),
+      duration: choice.duration,
+      price: price ?? priceOf(e, choice).total,
       buyer,
       by,
       state: 'queued',
@@ -76,9 +82,15 @@ export function createChaosMock({
     };
   }
 
+  // Un effet démarre si son emplacement a de la place, si le même effet ne joue pas déjà et si le plafond Sécurité
+  // d'effets simultanés (4 par défaut) n'est pas atteint.
   const canStart = (r) => {
     const e = effectById(r.effect);
-    return s.active.filter((a) => slotOf(a) === e.slot).length < SLOTS[e.slot].capacity && !s.active.some((a) => a.effect === r.effect);
+    return (
+      s.active.length < s.maxActive &&
+      s.active.filter((a) => slotOf(a) === e.slot).length < SLOTS[e.slot].capacity &&
+      !s.active.some((a) => a.effect === r.effect)
+    );
   };
 
   function start(r, t) {
@@ -124,112 +136,114 @@ export function createChaosMock({
     }
     lanes.sort((a, b) => a - b);
     let wait = lanes[0];
-    const same = [...s.active, ...ahead].filter((x) => x.effect === effect);
-    for (const x of same) wait = Math.max(wait, (x.ends ?? t + x.duration * 1000) - t);
+    for (const x of [...s.active, ...ahead].filter((y) => y.effect === effect)) wait = Math.max(wait, (x.ends ?? t + x.duration * 1000) - t);
+    if (s.active.length >= s.maxActive) wait = Math.max(wait, Math.min(...s.active.map((a) => a.ends - t)));
     return Math.max(0, Math.ceil(wait / 1000));
   }
 
-  /** Ce qui empêche CE viewer d'acheter cet effet maintenant (indépendant du palier et de la durée), ou null. */
+  /** Ce qui empêche CE viewer d'acheter cet effet maintenant (indépendant du réglage), ou null. */
   function blockFor(e, t, viewer = me) {
     if (s.status === 'offline') return { code: 'offline', label: 'Hors live', detail: 'Les effets s’achètent pendant le live.' };
     if (s.status === 'paused') return { code: 'paused', label: 'En pause', detail: 'Le streamer a mis les effets en pause.' };
-    if (s.exclusive && e.capture) return { code: 'incompatible', label: 'Pas sur ce jeu', detail: `${s.game} est en plein écran exclusif : seuls les calques (Brouillard, Clignement, Flash) passent.` };
+    if (s.exclusive && e.capture) return { code: 'incompatible', label: 'Pas sur ce jeu', detail: `${s.game} est en plein écran exclusif : seuls Brouillard, Paupières et Flash passent.` };
     if (s.safe && e.photosensitive) return { code: 'safe_mode', label: 'Mode doux', detail: 'Effet lumineux désactivé pendant ce live.' };
     const cd = s.cooldowns.get(`${viewer.id}:${e.id}`);
-    if (cd && cd > t) return { code: 'cooldown', label: mmss(Math.ceil((cd - t) / 1000)), detail: `Tu pourras relancer ${e.label} dans ${mmss(Math.ceil((cd - t) / 1000))}.`, until: cd };
+    if (cd && cd > t) {
+      const left = Math.ceil((cd - t) / 1000);
+      return { code: 'cooldown', label: mmss(left), detail: `Tu pourras relancer ${e.label} dans ${mmss(left)}.`, until: cd };
+    }
     const mine = [...s.queue, ...s.active].find((r) => r.effect === e.id && r.buyer.id === viewer.id);
-    if (mine) return { code: mine.state === 'active' ? 'mine_active' : 'mine_queued', label: mine.state === 'active' ? 'Le tien, en cours' : 'Le tien, en file', detail: 'Ton effet est déjà en route.' };
+    if (mine) return { code: mine.state === 'active' ? 'mine_active' : 'mine_queued', label: mine.state === 'active' ? 'Le tien joue' : 'Le tien attend', detail: 'Ton effet est déjà en route.' };
     const g = s.globalCd.get(e.id);
-    if (g && g > t) return { code: 'global_cooldown', label: mmss(Math.ceil((g - t) / 1000)), detail: `Un ${e.label} vient d’être joué : prochain possible dans ${mmss(Math.ceil((g - t) / 1000))}.`, until: g };
+    if (g && g > t) {
+      const left = Math.ceil((g - t) / 1000);
+      return { code: 'global_cooldown', label: mmss(left), detail: `Un ${e.label} vient de passer : prochain possible dans ${mmss(left)}.`, until: g };
+    }
     return null;
   }
 
   /** Prix et issue pour un réglage précis : ce que le Core répondra avant la confirmation. */
-  function quote(effect, tier, duration, t) {
+  function quote(effect, choice, t, viewer = me) {
     const e = effectById(effect);
-    const price = mockPrice(e, tier, duration);
-    const block = blockFor(e, t);
+    const c = normalizeChoice(e, choice, s.capS);
+    const { total, lines } = priceOf(e, c);
+    const block = blockFor(e, t, viewer);
     const startsNow = canStart({ effect }) && !s.queue.some((q) => slotOf(q) === e.slot);
     const outcome = startsNow ? { kind: 'now' } : { kind: 'queue', position: s.queue.length + 1, eta: eta(effect, s.queue, t) };
     let refuse = block;
     if (!refuse && outcome.kind === 'queue' && s.queue.length >= QUEUE_MAX)
       refuse = { code: 'queue_full', label: 'File pleine', detail: `${QUEUE_MAX} effets attendent déjà. Réessaie dans un instant, ou choisis un effet qui part tout de suite.` };
-    if (!refuse && outcome.kind === 'queue' && s.queue.some((q) => q.buyer.id === me.id))
+    if (!refuse && outcome.kind === 'queue' && s.queue.some((q) => q.buyer.id === viewer.id))
       refuse = { code: 'one_waiting', label: '1 en attente', detail: 'Tu as déjà un effet dans la file : attends qu’il passe.' };
-    if (!refuse && s.balance < price)
-      refuse = { code: 'insufficient_funds', label: 'Solde', detail: `Il te manque ${(price - s.balance).toLocaleString('fr-FR')} Jetons.` };
-    return { price, outcome, block: refuse };
+    if (!refuse && viewer === me && s.balance < total)
+      refuse = { code: 'insufficient_funds', label: 'Solde', detail: `Il te manque ${(total - s.balance).toLocaleString('fr-FR')} Jetons.` };
+    return { price: total, lines, choice: c, outcome, block: refuse };
   }
 
-  function buy(effect, tier, duration, expectedPrice, t, buyer = me) {
+  function buy(effect, choice, expectedPrice, t, buyer = me) {
     const e = effectById(effect);
-    if (!e || !e.tiers.includes(tier) || !e.durations.includes(duration)) return { ok: false, code: 'invalid_request', message: 'Réglage inconnu.' };
-    const q = buyer === me ? quote(effect, tier, duration, t) : quoteFor(e, tier, duration, t, buyer);
+    if (!e) return { ok: false, code: 'invalid_request', message: 'Effet inconnu.' };
+    const max = maxDuration(e, s.capS);
+    if (Number(choice?.duration) > max) return { ok: false, code: 'duration_out_of_range', message: `${max} s au plus pendant ce live.` };
+    const q = quote(effect, choice, t, buyer);
     if (q.block) return { ok: false, code: q.block.code, message: q.block.detail };
     if (expectedPrice !== q.price) return { ok: false, code: 'price_changed', message: 'Le prix a changé : vérifie avant de confirmer.' };
     if (buyer.id === me.id) s.balance -= q.price;
-    const r = make(effect, tier, duration, buyer, t, { price: q.price });
+    const r = make(effect, q.choice, buyer, t, { price: q.price });
     if (q.outcome.kind === 'now') start(r, t);
     else s.queue.push(r);
     return { ok: true, request: r, outcome: q.outcome };
   }
 
-  /** Achat simulé d'un autre viewer (mêmes règles, sans solde). */
-  function quoteFor(e, tier, duration, t, viewer) {
-    const price = mockPrice(e, tier, duration);
-    const block = blockFor(e, t, viewer);
-    const now = canStart({ effect: e.id }) && !s.queue.some((q) => slotOf(q) === e.slot);
-    const full = !now && s.queue.length >= QUEUE_MAX;
-    const waiting = !now && s.queue.some((q) => q.buyer.id === viewer.id);
-    return { price, outcome: now ? { kind: 'now' } : { kind: 'queue' }, block: block ?? (full || waiting ? { code: 'queue_full', detail: '' } : null) };
-  }
-
   function tick(t) {
     for (const r of [...s.active]) if (r.ends <= t) finish(r, 'done', t);
     for (const r of [...s.queue])
-      if (t - r.created > QUEUE_TTL_S * 1000) finish(r, 'expired', t, { refund: true, reason: 'Pas joué en 3 min : remboursé.' });
+      if (t - r.created > QUEUE_TTL_S * 1000) finish(r, 'expired', t, { refund: true, reason: 'Jamais démarré en 3 min : remboursé.' });
     for (const r of [...s.queue]) if (s.status === 'open' && canStart(r)) start(r, t);
     if (s.simulate && s.status === 'open' && t >= s.nextBot) {
       s.nextBot = t + 14000 + Math.floor(random() * 10000);
       const e = EFFECTS[Math.floor(random() * EFFECTS.length)];
       const viewer = { id: `bot-${Math.floor(random() * OTHERS.length)}`, name: OTHERS[Math.floor(random() * OTHERS.length)] };
-      const tier = e.tiers[Math.floor(random() * e.tiers.length)];
-      const duration = e.durations[Math.min(1, e.durations.length - 1)];
-      buy(e.id, tier, duration, mockPrice(e, tier, duration), t, viewer);
+      const c = defaultChoice(e);
+      if (e.styles?.length) c.style = e.styles[Math.floor(random() * e.styles.length)].id;
+      buy(e.id, c, priceOf(e, normalizeChoice(e, c, s.capS)).total, t, viewer);
     }
   }
 
-  // --- Modération (Régie) -------------------------------------------------------------------------------------------
+  // --- Modération (Régie). Le vrai Core vérifiera le rôle côté serveur ; ici, aucun contrôle. -----------------------
   const find = (id) => [...s.active, ...s.queue, ...s.done].find((r) => r.id === id) ?? null;
   const moderation = {
-    /** Retire une demande de la file, avec ou sans remboursement (motif obligatoire si pas de remboursement). */
-    cancel(id, { refund, reason }, t) {
+    /** Retire une demande de la file : jamais démarrée, donc remboursée intégralement sauf choix contraire motivé. */
+    cancel(id, { refund = true, reason = null } = {}, t) {
       const r = s.queue.find((q) => q.id === id);
       if (!r) return { ok: false, message: 'Cette demande n’est plus dans la file.' };
+      if (!refund && r.price && !hasReason(reason)) return { ok: false, message: 'Un motif est obligatoire sans remboursement.' };
       finish(r, 'cancelled', t, { refund, actor: 'Modération', reason });
       return { ok: true };
     },
     /** Arrête un effet en cours ; sans choix explicite, remboursé s'il a joué moins de 25 % de sa durée. */
-    remove(id, { refund, reason }, t) {
+    remove(id, { refund, reason = null } = {}, t) {
       const r = s.active.find((a) => a.id === id);
       if (!r) return { ok: false, message: 'Cet effet est déjà terminé.' };
       const early = (t - r.started) / (r.duration * 1000) < REFUND_BEFORE;
+      if (refund === false && r.price && !hasReason(reason)) return { ok: false, message: 'Un motif est obligatoire sans remboursement.' };
       finish(r, 'removed', t, { refund: refund ?? early, actor: 'Modération', reason });
       return { ok: true, refunded: r.refunded };
     },
-    /** Rembourse après coup une demande terminée (une seule fois). */
+    /** Rembourse après coup une demande terminée (une seule fois, motif obligatoire). */
     refund(id, reason, t) {
       const r = find(id);
       if (!r || r.state === 'queued' || r.state === 'active') return { ok: false, message: 'Seule une demande terminée se rembourse après coup.' };
+      if (!hasReason(reason)) return { ok: false, message: 'Un motif est obligatoire.' };
       if (!credit(r)) return { ok: false, message: r.refunded ? 'Déjà remboursée.' : 'Rien à rembourser (effet offert).' };
       r.refundReason = reason;
       r.refundedAt = t;
       return { ok: true };
     },
-    /** STOP ALL : tout ce qui joue s'arrête (remboursé selon la règle des 25 %) et Chaos passe en pause ; la file attend. */
+    /** STOP ALL : tout ce qui joue s'arrête (règle des 25 %), Chaos passe en pause ; la file attend. */
     stopAll(t) {
       for (const r of [...s.active]) moderation.remove(r.id, { refund: undefined, reason: 'Tout arrêter' }, t);
-      s.status = 'paused';
+      if (s.status !== 'offline') s.status = 'paused';
       return { ok: true };
     },
     setPaused(on) {
@@ -237,8 +251,9 @@ export function createChaosMock({
       return { ok: true };
     },
     /** Effet offert par la modération : gratuit, passe devant la file. */
-    trigger(effect, tier, duration, t) {
-      const r = make(effect, tier, duration, { id: 'mod', name: 'Modération' }, t, { price: 0, by: 'mod' });
+    trigger(effect, choice, t) {
+      const e = effectById(effect);
+      const r = make(effect, normalizeChoice(e, choice, s.capS), { id: 'mod', name: 'Modération' }, t, { price: 0, by: 'mod' });
       if (canStart(r)) start(r, t);
       else s.queue.unshift(r);
       return { ok: true, request: r };
@@ -263,55 +278,65 @@ export function createChaosMock({
       game: s.game,
       balance: s.balance,
       queueMax: QUEUE_MAX,
+      capS: s.capS,
+      maxActive: s.maxActive,
       active: s.active.map(view),
       queue: s.queue.map(view),
       history: s.done.map(view),
-      mine: [...s.active, ...s.queue, ...s.done].filter((r) => r.buyer.id === me.id).map(view).slice(0, 6),
+      mine: [...s.active, ...s.queue, ...s.done].filter((r) => r.buyer.id === me.id).map(view).slice(0, 8),
       effects: EFFECTS.map((e) => {
         // La carte dit ce qui bloque avant tout réglage : règles du viewer, puis file (au réglage par défaut), puis solde.
-        const q = quote(e.id, defaultTier(e), defaultDuration(e), t);
+        const q = quote(e.id, defaultChoice(e), t);
         const queueBlock = q.block && ['queue_full', 'one_waiting'].includes(q.block.code) ? q.block : null;
         const block = blockFor(e, t) ?? queueBlock;
         const playing = s.active.find((a) => a.effect === e.id);
+        const low = minPrice(e);
         return {
           id: e.id,
-          block: block ?? (s.balance < minPrice(e) ? { code: 'insufficient_funds', label: 'Solde', detail: 'Pas assez de Jetons.' } : null),
-          playing: playing ? { by: playing.buyer.name, remaining: Math.max(0, Math.ceil((playing.ends - t) / 1000)) } : null,
+          block: block ?? (s.balance < low ? { code: 'insufficient_funds', label: 'Solde', detail: 'Pas assez de Jetons.' } : null),
+          playing: playing ? { by: playing.buyer.name, mine: playing.buyer.id === me.id, remaining: Math.max(0, Math.ceil((playing.ends - t) / 1000)) } : null,
           startsNow: q.outcome.kind === 'now',
-          minPrice: minPrice(e),
+          minPrice: low,
         };
       }),
     };
   }
 
+  /** Lab : plafond Sécurité changé dans Studio (30 s par défaut, 60 s au plus). */
+  function setCap(cap) {
+    s.capS = Math.min(ENGINE.maxDurationS, Math.max(5, cap));
+  }
+
   // --- Scénarios (Lab) ----------------------------------------------------------------------------------------------
   function seed(t) {
     const other = (i) => ({ id: `bot-${i}`, name: OTHERS[i] });
-    const past = (effect, tier, duration, i, agoS, state, extra = {}) => {
-      const r = make(effect, tier, duration, i === 'me' ? me : other(i), t - agoS * 1000);
-      Object.assign(r, { state, started: t - agoS * 1000, finished: t - (agoS - duration) * 1000 }, extra);
+    const pick = (effect, patch = {}) => {
+      const e = effectById(effect);
+      const d = defaultChoice(e);
+      return normalizeChoice(e, { ...d, ...patch, opts: { ...d.opts, ...patch.opts } }, s.capS);
+    };
+    const past = (effect, patch, i, agoS, state, extra = {}) => {
+      const c = pick(effect, patch);
+      const r = make(effect, c, i === 'me' ? me : other(i), t - agoS * 1000);
+      Object.assign(r, { state, started: t - agoS * 1000, finished: t - (agoS - c.duration) * 1000 }, extra);
       s.done.push(r);
     };
     if (scenario === 'calme') {
       s.simulate = false;
-      past('blur', 'marque', 10, 'me', 400, 'done');
+      past('blur', {}, 'me', 400, 'done');
       return;
     }
     // Un live animé : deux effets à l'écran, un en file, un historique varié.
-    const fog = make('fog', 'marque', 20, other(2), t - 6000);
-    start(fog, t - 6000);
-    const flip = make('flip', 'marque', 30, other(5), t - 18000);
-    start(flip, t - 18000);
-    s.queue.push(make('mirror', 'horizontal', 10, other(1), t - 20000));
+    start(make('fog', pick('fog', { duration: 20 }), other(2), t - 6000), t - 6000);
+    start(make('flip', pick('flip', { duration: 30 }), other(5), t - 18000), t - 18000);
+    s.queue.push(make('mirror', pick('mirror'), other(1), t - 20000));
     s.cooldowns.set(`${me.id}:shake`, t + 41000);
-    past('shake', 'extreme', 10, 'me', 30, 'done');
-    past('vhs', 'abimee', 10, 3, 95, 'done');
-    past('zoom', 'leger', 10, 4, 150, 'removed', { actor: 'Modération', reason: 'Combat de boss', refunded: true });
-    past('pixelate', 'marque', 20, 0, 260, 'expired', { refunded: true, reason: 'Pas joué en 3 min : remboursé.' });
-    past('color', 'nb', 10, 'me', 330, 'done');
-    if (scenario === 'file_pleine') {
-      s.queue.push(make('flip', 'marque', 20, other(3), t - 9000), make('mirror', 'vertical', 10, other(4), t - 4000));
-    }
+    past('shake', { level: 'extreme' }, 'me', 30, 'done');
+    past('vhs', {}, 3, 95, 'done');
+    past('zoom', { opts: { factor: 4, point: [0.3, 0.4] } }, 4, 150, 'removed', { actor: 'Modération', reason: 'Combat de boss', refunded: true });
+    past('pixelate', { duration: 20 }, 0, 260, 'expired', { refunded: true, reason: 'Jamais démarré en 3 min : remboursé.' });
+    past('color', { style: 'sepia' }, 'me', 330, 'done');
+    if (scenario === 'file_pleine') s.queue.push(make('flip', pick('flip', { duration: 20 }), other(3), t - 9000), make('mirror', pick('mirror', { style: 'alterne' }), other(4), t - 4000));
     if (scenario === 'pause') s.status = 'paused';
     if (scenario === 'hors_live') {
       s.status = 'offline';
@@ -324,11 +349,9 @@ export function createChaosMock({
       s.active = s.active.filter((r) => !effectById(r.effect).capture);
       s.queue = [];
     }
-    if (scenario === 'solde_bas') s.balance = 1800;
+    if (scenario === 'solde_bas') s.balance = 1500;
   }
   seed(now);
 
-  return { snapshot, quote, buy, tick, moderation, me, scenario };
+  return { snapshot, quote, buy, tick, moderation, setCap, me, scenario };
 }
-
-export { mmss };

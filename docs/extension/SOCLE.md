@@ -84,9 +84,10 @@ lui, **aucune ligne** dans `app/lazy-views.js`, `app/styles.js` ou `app/panel.js
 L'entrée s'importe à une seule place : la liste des modules de session en tête de `app/panel.js` (l'ordre d'import est
 l'ordre du Hub). Un module seulement pour le Lab va dans `extension/lab-modules/` : aucun paquet ne l'embarque
 (`package.mjs` le retire, `verify-package.mjs` le refuse) et il ne se charge que si le runtime l'autorise (Lab, banc) **et**
-que la page le demande (`?labModules=1` pour la démo, `?labModules=effets` pour la maquette « Effets live » :
-[chaos/EXTENSION_EFFETS_LIVE.md](../chaos/EXTENSION_EFFETS_LIVE.md)). Un module qui en montre d'autres dans sa vue les
-nomme dans `groups` (Effets live : `['bonk']`) : leurs cartes quittent le Hub tant qu'il est proposé.
+que la page le demande (`?labModules=1` pour la démo, `?labModules=interactions` pour la maquette « Interactions » :
+[chaos/EXTENSION_INTERACTIONS.md](../chaos/EXTENSION_INTERACTIONS.md)). Un module qui en montre d'autres dans sa vue les
+nomme dans `groups` (Interactions : `['bonk']`) : leurs cartes quittent le Hub tant qu'il est proposé. Un écran
+hébergé qui expose `back()` prend le ‹ de l'en-tête en premier (il renvoie `true` s'il a refermé quelque chose).
 
 Cycle de vie garanti par l'hôte (`app/panel.js`) :
 

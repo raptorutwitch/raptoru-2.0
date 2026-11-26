@@ -10,9 +10,9 @@ const labAsked = new URLSearchParams(window.location.search).get('labModules');
 if (RUNTIME.labModules === true && labAsked === '1') {
   await import('../lab-modules/demo/module.js').catch(() => {});
 }
-// Maquette « Effets live » (Chaos V2 + Bonk, faux Core), seule : ?labModules=effets (docs/chaos/EXTENSION_EFFETS_LIVE.md).
-if (RUNTIME.labModules === true && labAsked === 'effets') {
-  await import('../lab-modules/effets/module.js').catch(() => {});
+// Maquette « Interactions » (Chaos V2, Bonk, Régie, faux Core), seule : ?labModules=interactions (docs/chaos/EXTENSION_INTERACTIONS.md).
+if (RUNTIME.labModules === true && labAsked === 'interactions') {
+  await import('../lab-modules/interactions/module.js').catch(() => {});
 }
 
 const layout = startLayout();

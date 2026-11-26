@@ -124,8 +124,8 @@ const HUB_MODULE_STYLES = Object.freeze({
   music: { icon: 'music', color: '#16a34a', color2: '#0f766e' },
   // Mini-jeux V3: crimson to wine — an arcade at night, apart from Tombola's pink-violet and the TTS violet.
   random_ban_ext: { icon: 'games', color: '#ff2f55', color2: '#6d0d2a' },
-  // Effets live (Chaos V2 + Bonk, maquette Lab) : fuchsia vers cyan, l’écart RVB d’un glitch.
-  effets_live: { icon: 'chaos', color: '#d946ef', color2: '#0e7490' },
+  // Interactions (Chaos V2, Bonk, Régie ; maquette Lab) : framboise désaturée vers ardoise, à part du cramoisi des Mini-jeux.
+  interactions: { icon: 'chaos', color: '#9e2941', color2: '#2c3a44' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 const MODERATION_MODULE = Object.freeze({
@@ -1569,9 +1569,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       back.title = 'Retour au Hub';
       // Chevron seul, carré compact (même forme que la Tombola V2) : module-back.css.
       back.append(hubIcon(document, 'chevL', 'jdm-back__icon'));
-      // A module-host view may take the ‹ first (a casino game goes back to the Mini-jeux catalogue).
+      // A hosted view may take the ‹ first (a casino game goes back to the Mini-jeux catalogue; a session module closes
+      // what it has open, e.g. the Interactions effect sheet). Views without back() are unchanged.
       back.addEventListener('click', () => {
-        if (hostedView && !registered && hostView?.back?.()) return renderPreservingViewport();
+        if (hostedView && hostView?.back?.()) return renderPreservingViewport();
         navigateTo(null);
       });
       headLeft.append(back);

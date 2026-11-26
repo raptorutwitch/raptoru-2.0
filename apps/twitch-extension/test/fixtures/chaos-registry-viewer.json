@@ -1,0 +1,1134 @@
+{
+ "source": "packages/schemas/src/chaos-registry.json (branche feat/chaos-studio, registre v3, relevé le 26/11/2026)",
+ "engine_limits": {
+  "min_duration_ms": 1000,
+  "max_duration_ms": 60000,
+  "max_active_effects": 8,
+  "max_queue": 16,
+  "queue_ttl_ms": 180000,
+  "max_rotation_deg_per_s": 520,
+  "max_transition_ms": 3000
+ },
+ "safety_default_max_duration_ms": 30000,
+ "effects": {
+  "flip": {
+   "slot": "transform",
+   "cursor": "follow",
+   "input": "invert_xy",
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "rotate180"
+   ],
+   "levels": [],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "angle": {
+     "type": "number",
+     "min": -180,
+     "max": 180,
+     "exposed": false
+    },
+    "fill": {
+     "type": "enum",
+     "values": [
+      "mirror",
+      "black",
+      "cover"
+     ],
+     "exposed": true
+    }
+   }
+  },
+  "mirror": {
+   "slot": "transform",
+   "cursor": "follow",
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "horizontal",
+    "vertical",
+    "alterne",
+    "instant"
+   ],
+   "levels": [],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "axis": {
+     "type": "enum",
+     "values": [
+      "horizontal",
+      "vertical",
+      "alterne"
+     ],
+     "exposed": true
+    },
+    "interval_ms": {
+     "type": "number",
+     "min": 1000,
+     "max": 10000,
+     "exposed": true
+    }
+   }
+  },
+  "shake": {
+   "slot": "camera",
+   "cursor": "follow",
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "leger",
+    "secousse",
+    "impact",
+    "rafales",
+    "seisme",
+    "vibration"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "mode": {
+     "type": "enum",
+     "values": [
+      "continu",
+      "impact",
+      "rafales",
+      "seisme"
+     ],
+     "exposed": true
+    },
+    "intensity": {
+     "type": "number",
+     "min": 0.05,
+     "max": 1,
+     "exposed": true
+    },
+    "amp_x": {
+     "type": "number",
+     "min": 0,
+     "max": 8,
+     "exposed": true
+    },
+    "amp_y": {
+     "type": "number",
+     "min": 0,
+     "max": 8,
+     "exposed": true
+    },
+    "rotation": {
+     "type": "number",
+     "min": 0,
+     "max": 6,
+     "exposed": true
+    },
+    "frequency": {
+     "type": "number",
+     "min": 1,
+     "max": 30,
+     "exposed": true
+    },
+    "decay_ms": {
+     "type": "number",
+     "min": 100,
+     "max": 4000,
+     "exposed": true
+    },
+    "interval_ms": {
+     "type": "number",
+     "min": 400,
+     "max": 6000,
+     "exposed": true
+    },
+    "irregularity": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "fill": {
+     "type": "enum",
+     "values": [
+      "cover",
+      "mirror",
+      "clamp"
+     ],
+     "exposed": true
+    }
+   }
+  },
+  "zoom": {
+   "slot": "camera",
+   "cursor": "follow",
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "progressif",
+    "brutal",
+    "aller_retour",
+    "pulsations",
+    "intermittent",
+    "extreme"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "mode": {
+     "type": "enum",
+     "values": [
+      "progressif",
+      "brutal",
+      "pulsations"
+     ],
+     "exposed": true
+    },
+    "factor": {
+     "type": "number",
+     "min": 1.1,
+     "max": 8,
+     "exposed": true
+    },
+    "focus_x": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "focus_y": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "recenter": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "pulses": {
+     "type": "number",
+     "min": 1,
+     "max": 12,
+     "exposed": true
+    },
+    "attack_ms": {
+     "type": "number",
+     "min": 40,
+     "max": 3000,
+     "exposed": true
+    },
+    "hold_ms": {
+     "type": "number",
+     "min": 0,
+     "max": 5000,
+     "exposed": true
+    },
+    "release_ms": {
+     "type": "number",
+     "min": 40,
+     "max": 3000,
+     "exposed": true
+    },
+    "jitter": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    }
+   }
+  },
+  "drunk": {
+   "slot": "camera",
+   "cursor": "follow",
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "pompette",
+    "ivre",
+    "ivre_mort",
+    "vertige"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "intensity": {
+     "type": "number",
+     "min": 0.05,
+     "max": 1,
+     "exposed": true
+    },
+    "progression": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "sway": {
+     "type": "number",
+     "min": 0,
+     "max": 20,
+     "exposed": true
+    },
+    "drift": {
+     "type": "number",
+     "min": 0,
+     "max": 12,
+     "exposed": true
+    },
+    "stagger": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "breathing": {
+     "type": "number",
+     "min": 0,
+     "max": 20,
+     "exposed": true
+    },
+    "warp": {
+     "type": "number",
+     "min": 0,
+     "max": 2,
+     "exposed": true
+    },
+    "double": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "blur": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "vignette": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "speed": {
+     "type": "number",
+     "min": 0.2,
+     "max": 3,
+     "exposed": true
+    }
+   }
+  },
+  "tunnel": {
+   "slot": "camera",
+   "cursor": "follow",
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "focus",
+    "dramatique",
+    "cinema",
+    "derive"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "focus_x": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "focus_y": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "mode": {
+     "type": "enum",
+     "values": [
+      "fixe",
+      "retrecit",
+      "derive"
+     ],
+     "exposed": true
+    },
+    "radius": {
+     "type": "number",
+     "min": 0.04,
+     "max": 0.8,
+     "exposed": true
+    },
+    "darkness": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "gradient": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "zoom": {
+     "type": "number",
+     "min": 1,
+     "max": 6,
+     "exposed": true
+    },
+    "shape": {
+     "type": "enum",
+     "values": [
+      "cercle",
+      "ellipse",
+      "rectangle"
+     ],
+     "exposed": true
+    },
+    "stretch": {
+     "type": "number",
+     "min": 1,
+     "max": 3,
+     "exposed": true
+    },
+    "feather": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "inner": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "recenter": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "shrink": {
+     "type": "number",
+     "min": 0.1,
+     "max": 1,
+     "exposed": true
+    },
+    "drift": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "color": {
+     "type": "color",
+     "exposed": true
+    }
+   }
+  },
+  "blink": {
+   "slot": "overlay",
+   "cursor": null,
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "naturel",
+    "rapide",
+    "lent",
+    "ferme",
+    "serie",
+    "fatigue",
+    "resistance",
+    "irregulier"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "mode": {
+     "type": "enum",
+     "values": [
+      "naturel",
+      "serie",
+      "ferme",
+      "somnolence",
+      "resistance"
+     ],
+     "exposed": true
+    },
+    "intensity": {
+     "type": "number",
+     "min": 0.3,
+     "max": 1,
+     "exposed": true
+    },
+    "interval_ms": {
+     "type": "number",
+     "min": 300,
+     "max": 8000,
+     "exposed": true
+    },
+    "close_ms": {
+     "type": "number",
+     "min": 40,
+     "max": 2000,
+     "exposed": true
+    },
+    "hold_ms": {
+     "type": "number",
+     "min": 0,
+     "max": 5000,
+     "exposed": true
+    },
+    "open_ms": {
+     "type": "number",
+     "min": 40,
+     "max": 2000,
+     "exposed": true
+    },
+    "count": {
+     "type": "number",
+     "min": 1,
+     "max": 6,
+     "exposed": true
+    },
+    "irregularity": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "curvature": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "softness": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "lashes": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "asymmetry": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "glow": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "tint": {
+     "type": "color",
+     "exposed": true
+    }
+   }
+  },
+  "flash": {
+   "slot": "overlay",
+   "cursor": null,
+   "input": null,
+   "photosensitive": true,
+   "cooldown_ms": 4000,
+   "variants": [
+    "court",
+    "intense",
+    "longue"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "intensity": {
+     "type": "number",
+     "min": 0.3,
+     "max": 1,
+     "exposed": true
+    },
+    "blind_ms": {
+     "type": "number",
+     "min": 100,
+     "max": 4000,
+     "exposed": true
+    },
+    "recovery_ms": {
+     "type": "number",
+     "min": 300,
+     "max": 8000,
+     "exposed": true
+    },
+    "ghost": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "ghost_ms": {
+     "type": "number",
+     "min": 300,
+     "max": 10000,
+     "exposed": true
+    },
+    "persistence": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "rise_ms": {
+     "type": "number",
+     "min": 30,
+     "max": 400,
+     "exposed": true
+    },
+    "blur": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "desat": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "drift": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "tint": {
+     "type": "color",
+     "exposed": true
+    }
+   }
+  },
+  "fog": {
+   "slot": "overlay",
+   "cursor": null,
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "nappes",
+    "bancs",
+    "passages",
+    "arrivee",
+    "dissipe"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "dense",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "mode": {
+     "type": "enum",
+     "values": [
+      "stable",
+      "montee",
+      "intermittent",
+      "dissipation"
+     ],
+     "exposed": true
+    },
+    "density": {
+     "type": "number",
+     "min": 0.05,
+     "max": 1,
+     "exposed": true
+    },
+    "opacity": {
+     "type": "number",
+     "min": 0.1,
+     "max": 1,
+     "exposed": true
+    },
+    "thickness": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "masses": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "direction": {
+     "type": "number",
+     "min": 0,
+     "max": 360,
+     "exposed": true
+    },
+    "size": {
+     "type": "number",
+     "min": 0.2,
+     "max": 2,
+     "exposed": true
+    },
+    "turbulence": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "contrast": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "depth": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "ground": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "banks": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "relief": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "haze": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "color": {
+     "type": "color",
+     "exposed": true
+    },
+    "quality": {
+     "type": "enum",
+     "values": [
+      "economie",
+      "normale",
+      "haute"
+     ],
+     "exposed": true
+    }
+   }
+  },
+  "blur": {
+   "slot": "filter",
+   "cursor": null,
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "constant",
+    "pulse",
+    "progressif",
+    "vague"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "mode": {
+     "type": "enum",
+     "values": [
+      "constant",
+      "pulsation",
+      "vague",
+      "progressif"
+     ],
+     "exposed": true
+    },
+    "amount": {
+     "type": "number",
+     "min": 1,
+     "max": 100,
+     "exposed": true
+    },
+    "minimum": {
+     "type": "number",
+     "min": 0,
+     "max": 100,
+     "exposed": true
+    },
+    "period_ms": {
+     "type": "number",
+     "min": 400,
+     "max": 8000,
+     "exposed": true
+    }
+   }
+  },
+  "pixelate": {
+   "slot": "filter",
+   "cursor": null,
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "constante",
+    "progressive",
+    "intermittente",
+    "retro"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "mode": {
+     "type": "enum",
+     "values": [
+      "constant",
+      "progressif",
+      "intermittent"
+     ],
+     "exposed": true
+    },
+    "block": {
+     "type": "number",
+     "min": 2,
+     "max": 160,
+     "exposed": true
+    },
+    "grid": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "palette": {
+     "type": "number",
+     "min": 0,
+     "max": 16,
+     "exposed": true
+    },
+    "interval_ms": {
+     "type": "number",
+     "min": 400,
+     "max": 5000,
+     "exposed": true
+    }
+   }
+  },
+  "color": {
+   "slot": "filter",
+   "cursor": null,
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "nb",
+    "film_noir",
+    "sepia",
+    "inversion",
+    "delave",
+    "sature",
+    "rouge"
+   ],
+   "levels": [],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "mode": {
+     "type": "enum",
+     "values": [
+      "nb",
+      "sepia",
+      "inversion",
+      "desature",
+      "sature",
+      "teinte"
+     ],
+     "exposed": true
+    },
+    "amount": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "contrast": {
+     "type": "number",
+     "min": 0.5,
+     "max": 2,
+     "exposed": true
+    },
+    "saturation": {
+     "type": "number",
+     "min": 0,
+     "max": 3,
+     "exposed": true
+    },
+    "tint": {
+     "type": "color",
+     "exposed": true
+    }
+   }
+  },
+  "vhs": {
+   "slot": "filter",
+   "cursor": null,
+   "input": null,
+   "photosensitive": false,
+   "cooldown_ms": null,
+   "variants": [
+    "legere",
+    "abimee",
+    "tracking",
+    "glitch_bref",
+    "glitch_violent"
+   ],
+   "levels": [
+    "leger",
+    "marque",
+    "extreme"
+   ],
+   "transitions": {
+    "in": [
+     "ramp",
+     "cut"
+    ],
+    "out": [
+     "ramp",
+     "cut"
+    ]
+   },
+   "params": {
+    "intensity": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "tracking": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "glitch": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "glitch_rate": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "jitter": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "noise": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "chroma": {
+     "type": "number",
+     "min": 0,
+     "max": 2,
+     "exposed": true
+    },
+    "dropouts": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "fade": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    },
+    "roll": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "exposed": true
+    }
+   }
+  }
+ }
+}

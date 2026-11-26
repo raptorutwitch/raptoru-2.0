@@ -1,15 +1,20 @@
-// LAB ONLY — page apercu.html : la maquette « Effets live » dans les tailles réelles de l'extension, côte à côte.
+// LAB ONLY — page apercu.html : la maquette « Interactions » dans les tailles réelles de l'extension, côte à côte.
+// Tailles et adresses : celles du banc Casino (test/responsive/casino-compose.mjs), dont l'adresse réelle de l'appli
+// Twitch mobile (mobile.html?platform=mobile&anchor=component, correctif du 24/11).
 import { EFFECTS } from './catalog.js';
 import { SCENARIOS } from './model.js';
 
+const VIDEO = 'video_component.html?anchor=component';
+const MOBILE = 'mobile.html?platform=mobile&anchor=component&mode=viewer';
 const FRAMES = [
-  ['Composant vidéo', '651 × 434 (référence)', 'video_component.html?anchor=component', 651, 434],
-  ['Appli Twitch mobile', 'zone sous la vidéo, 393 × 484', 'mobile.html?anchor=panel&platform=mobile', 393, 484],
-  ['Petit Android', 'zone 360 × 409', 'mobile.html?anchor=panel&platform=mobile', 360, 409],
+  ['Lecteur Twitch normal', '563 × 376 (défaut)', VIDEO, 563, 376],
+  ['Composant vidéo', '651 × 434 (référence)', VIDEO, 651, 434],
+  ['Appli Twitch Android', 'sous la vidéo, 393 × 484', MOBILE, 393, 484],
+  ['Petit Android', 'sous la vidéo, 360 × 409', MOBILE, 360, 409],
   ['Panneau', '318 × 496', 'panel.html?anchor=panel', 318, 496],
-  ['Composant vidéo plein écran', '1053 × 702', 'video_component.html?anchor=component', 1053, 702],
+  ['Plein écran', '1053 × 702', VIDEO, 1053, 702],
 ];
-const state = { ixDir: 'a', ixTab: 'chaos', ixRole: 'viewer', ixScenario: 'normal', ixOpen: '' };
+const state = { ixTab: 'chaos', ixRole: 'viewer', ixScenario: 'normal', ixOpen: '', ixCap: '30' };
 const base = new URL('../../', import.meta.url); // racine de l'extension servie
 
 const scen = document.querySelector('[data-k="ixScenario"]');
@@ -23,7 +28,7 @@ function draw() {
     for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === state[seg.dataset.k]));
   scen.value = state.ixScenario;
   open.value = state.ixOpen;
-  const params = new URLSearchParams({ labModules: 'effets', demoModule: 'effets_live' });
+  const params = new URLSearchParams({ labModules: 'interactions', demoModule: 'interactions' });
   for (const [k, v] of Object.entries(state)) if (v) params.set(k, v);
   const main = document.getElementById('frames');
   main.replaceChildren();
@@ -48,6 +53,13 @@ document.addEventListener('click', (event) => {
   if (b.dataset.v === 'regie') state.ixRole = 'mod';
   draw();
 });
-scen.addEventListener('change', () => { state.ixScenario = scen.value; draw(); });
-open.addEventListener('change', () => { state.ixOpen = open.value; if (open.value) state.ixTab = 'chaos'; draw(); });
+scen.addEventListener('change', () => {
+  state.ixScenario = scen.value;
+  draw();
+});
+open.addEventListener('change', () => {
+  state.ixOpen = open.value;
+  if (open.value) state.ixTab = 'chaos';
+  draw();
+});
 draw();
