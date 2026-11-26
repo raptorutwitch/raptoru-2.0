@@ -959,10 +959,14 @@ export function view(ctx) {
       for (const line of q.lines) list.append(el('dt', null, line.label), el('dd', null, line.value != null ? fmt(line.value) : line.pct != null ? `${line.pct} %` : line.mult != null ? mult(line.mult) : ''));
       list.append(el('dt', 'ix-bill__total', 'Prix'), el('dd', 'ix-bill__total', fmt(q.fullPrice)));
       if (q.credit) list.append(el('dt', 'ix-bill__credit', 'Payé avec ton crédit'), el('dd', 'ix-bill__credit', '0'));
-      bill.append(list, el('p', 'ix-bill__after', q.credit ? `Ton solde ne bouge pas (${fmt(snap.balance)} Jetons, fictifs). Le crédit est rendu si l’effet ne démarre pas.` : `Solde (fictif) ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`));
-      const req = el('details', 'ix-bill__engine');
-      req.append(el('summary', null, 'Lab · demande envoyée au moteur'), el('code', null, JSON.stringify(engineRequest(e, choice))));
-      bill.append(req);
+      // Jetons réels hors Lab : jamais « fictif » ; la demande au moteur n'est montrée qu'au Lab.
+      const fake = backend.lab ? ', fictifs' : '';
+      bill.append(list, el('p', 'ix-bill__after', q.credit ? `Ton solde ne bouge pas (${fmt(snap.balance)} Jetons${fake}). Le crédit est rendu si l’effet ne démarre pas.` : `Solde${backend.lab ? ' (fictif)' : ''} ${fmt(snap.balance)} → ${fmt(Math.max(0, snap.balance - q.price))} après l’achat. Arrondi à 50 Jetons.`));
+      if (backend.lab) {
+        const req = el('details', 'ix-bill__engine');
+        req.append(el('summary', null, 'Lab · demande envoyée au moteur'), el('code', null, JSON.stringify(engineRequest(e, choice))));
+        bill.append(req);
+      }
     }
     quickBox.addEventListener('change', () => {
       prefs.setQuickBuy(quickBox.checked);

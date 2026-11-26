@@ -89,7 +89,7 @@ registerModerationSection({
     let gone = false;
     void Promise.all([loadStyles(['modules/interactions/moderation-fx.css']), import('../../modules/interactions/moderation-fx.js')]).then(([, m]) => {
       if (gone) return;
-      view = m.createFxModeration({ document, getMock, capS: () => lab.cap, repaint });
+      view = m.createFxModeration({ document, getMock, capS: () => lab.cap, repaint, lab: true });
       host.replaceChildren(view.node);
       view.paint();
       // Chaque seconde (temps restant, file) : seulement le contenu de la section, et seulement s'il est affiché.

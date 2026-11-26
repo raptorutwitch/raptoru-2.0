@@ -144,6 +144,46 @@ describe('Interactions sur le Core', () => {
     expect(q.price).toBe(12345);
     expect(q.outcome).toMatchObject({ kind: 'queue', position: 2 });
     expect(client.chaosQuote).toHaveBeenCalledTimes(1);
+    // Recalcul (après un achat, ou devis expiré) : le dernier prix du serveur reste affiché, le bouton ne se bloque pas.
+    client.chaosQuote.mockImplementation(async ({ choice }) => ({
+      price: 13000,
+      choice,
+      block: null,
+    }));
+    await b.mock.buy('fog', defaultChoice(e), 12345, Date.now(), undefined, {
+      key: 'intent-q',
+    });
+    const during = b.mock.quote('fog', defaultChoice(e), Date.now());
+    expect(during).toMatchObject({ price: 12345, block: null });
+    await flush();
+    expect(b.mock.quote('fog', defaultChoice(e), Date.now()).price).toBe(13000);
+    expect(client.chaosQuote).toHaveBeenCalledTimes(2);
+  });
+
+  it('refus du Core : libellé court et phrase de la maquette validée, délais en compte à rebours', async () => {
+    const { b } = backend({
+      chaosState: vi.fn(async () => ({
+        ...STATE,
+        effects: { mirror: { available: false, reason: 'global_pause' } },
+      })),
+      chaosQuote: vi.fn(async ({ choice }) => ({
+        price: 22600,
+        choice,
+        block: { code: 'cooldown', retry_after_ms: 65_000 },
+      })),
+    });
+    const stop = b.subscribe(() => {});
+    await flush();
+    expect(
+      b.mock.snapshot().effects.find((x) => x.id === 'mirror').block,
+    ).toMatchObject({ label: 'Suspendu' });
+    stop();
+    const e = effectById('fog');
+    b.mock.quote('fog', defaultChoice(e), Date.now());
+    await flush();
+    const q = b.mock.quote('fog', defaultChoice(e), Date.now());
+    expect(q.block).toMatchObject({ code: 'cooldown', label: '1:05' });
+    expect(q.block.detail).toContain('Brouillard');
   });
 
   it('achat : le prix du devis et la clé de l’intention partent au Core ; refus lisible ; réseau coupé : rien d’affirmé', async () => {

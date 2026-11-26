@@ -18,7 +18,7 @@ const STATUS = { open: ['active', 'Ouverts'], paused: ['paused', 'Suspendus'], o
 export const FX_COLOR = '#b8405c';
 
 /** `getMock()` : le faux Core partagé ; `capS()` : plafond Sécurité simulé ; `repaint()` : redessiner la console. */
-export function createFxModeration({ document, getMock, capS, now = Date.now, repaint = () => {} }) {
+export function createFxModeration({ document, getMock, capS, now = Date.now, repaint = () => {}, lab = false }) {
   const win = document.defaultView;
   const node = document.createElement('div');
   node.className = 'ix-fxmod';
@@ -101,7 +101,7 @@ export function createFxModeration({ document, getMock, capS, now = Date.now, re
     let b = '';
     if (note) b += `<div class="statenote ixm-note ixm-note--${note.tone}" role="status">${esc(note.text)}</div>`;
     if (snap.status === 'paused') b += `<div class="statenote statenote--paused">${icon('pause')}Achats suspendus · file conservée</div>`;
-    b += '<p class="ixm-lab">Lab · faux Core : aucune action ne touche le live.</p>';
+    if (lab) b += '<p class="ixm-lab">Lab · faux Core : aucune action ne touche le live.</p>';
     b += askHtml(snap);
     b += sec(`À l’écran · ${snap.active.length}/${snap.maxActive}`);
     b += snap.active.length
