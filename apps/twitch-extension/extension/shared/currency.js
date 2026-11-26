@@ -39,6 +39,19 @@ export function formatCompactAmount(value, { digits = 3 } = {}) {
   return `${text}\u202f${unit}`;
 }
 
+/**
+ * Precise compact balance (Mini-jeux header, Antoni 26/11): up to 4 digits, comma and unit excluded \u2014 1,234 K \u00b7
+ * 12,34 K \u00b7 123,4 K \u00b7 1 M \u00b7 2,656 M \u00b7 12,34 M. Same rule as formatCompactAmount (truncated, useless zeros dropped);
+ * a round thousand under 10 000 stays written in full (1 000), as in the examples asked for.
+ */
+export function formatCompactAmountPrecise(value) {
+  const numeric = Number(value);
+  const amount = Math.max(0, Math.trunc(numeric));
+  if (Number.isFinite(numeric) && amount >= 1_000 && amount < 10_000 && amount % 1_000 === 0)
+    return amount.toLocaleString('fr-FR').replace(/[\u00a0 ]/g, '\u202f');
+  return formatCompactAmount(value, { digits: 4 });
+}
+
 // Jetons coin, as in the wallet; sized on the unit's own font size.
 const TOKEN_ICON = '<svg viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-0.18em"><circle cx="12" cy="12" r="8"/><path d="M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4M12 7.5v1.5M12 15.5V17"/></svg>';
 

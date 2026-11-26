@@ -89,6 +89,10 @@
 .rl-cswitch--label .rl-cswitch__val {
   width: calc(52 * var(--g));
 }
+/* Mini-jeux : solde abrégé à 4 chiffres (« 2,656 M », « 12,34 K ») : case plus large, même dessin. */
+.rl-cswitch--precise .rl-cswitch__val {
+  width: calc(58 * var(--g));
+}
 .rl-cswitch__v {
   position: absolute;
   inset: 0;

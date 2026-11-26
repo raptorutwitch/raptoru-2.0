@@ -16,6 +16,7 @@ import {
 } from '../shared/notifications.js';
 import { createEmoteAccess } from '../shared/emote-access.js';
 import { walletPaymentMethods } from '../shared/wallet-payment.js';
+import { formatCompactAmountPrecise } from '../shared/currency.js';
 import {
   createWalletFace,
   createCurrencySwitch,
@@ -1187,12 +1188,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const informativeView = !paymentView && !consultView && !moderationView;
     const updatedWalletView = paymentView || raffleView;
     let changeWalletMethod = null;
+    // Mini-jeux (mises au Jeton près) : solde abrégé précis, 4 chiffres (Antoni 26/11) ; ailleurs, 2 chiffres.
+    const preciseBalance = openModule === 'random_ban_ext';
     const headerSwitch = paymentView || consultView || informativeView
       ? createCurrencySwitch({
         variant: 'balance',
-        className: 'rl-cswitch--header',
+        className: `rl-cswitch--header${preciseBalance ? ' rl-cswitch--precise' : ''}`,
         ariaLabel: consultView ? 'Soldes' : informativeView ? 'Solde de jetons' : 'Monnaie de paiement',
         onChange: () => changeWalletMethod?.(),
+        ...(preciseBalance ? { format: formatCompactAmountPrecise } : {}),
       })
       : null;
     const walletRow = headerSwitch
