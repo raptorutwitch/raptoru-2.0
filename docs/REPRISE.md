@@ -241,9 +241,13 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     image du jeu sur sept ou huit (50,7–52,5 présentées pour 58,5–59,1 captures) ; corrigé (`ddbe54bd`, captures rendues
     dès leur arrivée), simulation 25,5 % → 0 % d'images perdues. Version de test 0.1.44-chaos.10 ; manipulations
     Windows/NVIDIA/Overwatch réversibles au § 9.5, à faire par Antoni.
+  - **Validation en jeu arrêtée après la référence (26/11, chaos.10 installée)** : Miroir 10 / 40 / 10 s ; le moteur
+    validait la phase « effet » contre la durée maximale des effets du stream (Sécurité, 30 s) et refusait 40 s.
+    Corrigé (`ec7406c0`) : phase « effet » d’une mesure bornée par le registre (60 s), refus montré aussitôt ; tests
+    chaos-unit 39/39 et `chaos-perf-phases` (10 / 40 / 10 simulé). Version de test 0.1.44-chaos.11 (PERFORMANCE_LAB.md).
   - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
   - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
-    phase C. La version installée est chaos.8 ; le relais a été validé par Antoni dans son OBS le 25/11.
+    phase C. Version installée : chaos.10 (26/11) ; le relais a été validé par Antoni dans son OBS le 25/11 (chaos.8).
 - **Flash noir de la bascule du curseur d'OBS (24/11 soir)** : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md) § 5.
   - **Cause** : OBS détruit puis recrée la duplication DXGI partagée de l'écran à chaque changement de réglage de sa
     seule capture.

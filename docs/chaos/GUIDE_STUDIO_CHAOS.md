@@ -94,11 +94,23 @@ Rien à écrire dans Studio pour un effet ordinaire : sa carte et sa fiche vienn
 Le paquet de Studio embarque le moteur : `stage.mjs` le compile depuis le même commit (`build.cmd`, compilateur C#
 de Windows) et le place dans `apps/chaos-engine/bin/ChaosEngine.exe` du paquet, là où le serveur le démarre.
 
-Studio installé aujourd'hui : **0.1.44-chaos.9** (mesures en jeu du 25/11). La 0.1.44-chaos.8 avait été validée par
+Studio installé aujourd'hui : **0.1.44-chaos.10** (26/11). La 0.1.44-chaos.8 avait été validée par
 Antoni le 25/11 dans son OBS réel : Miroir, Écran retourné, relais anti-coupure, curseur transformé ; aucun flash noir
 perceptible, un seul curseur.
 
-Version de test **0.1.44-chaos.10** (25/11 soir), construite en local, **ni publiée ni installée** :
+Version de test **0.1.44-chaos.11** (26/11), construite en local, **ni publiée ni installée** :
+
+- `C:UsersAntoniDocumentsRaptoru 2.0 - Worktreeschaos-v2appsstudiodesktopeleaseRaptoru Studio Setup 0.1.44-chaos.11.exe`
+- 126 764 330 o, SHA-256 `bdee527e3c5fc3bbc5fb24ccbbcd2f1f02a2cb13a6d81fc5ffec58428e061640`
+- contenu : tout ce que contenait 0.1.44-chaos.10 (correctif de cadence de Miroir compris), plus la mesure en jeu du
+  Performance Lab avec une phase « effet » de plus de 30 s : elle s'arrêtait à la fin de la référence, le moteur
+  refusant une durée au-delà de la durée maximale des effets du stream ([PERFORMANCE_LAB.md](PERFORMANCE_LAB.md)) ;
+- inchangés : capture directe vers OBS, curseur unique et sa transformation, relais anti-écran noir ;
+- commit `ec7406c0` de `feat/chaos-studio` (local) ; aucun `.env` dans le paquet (vérifié) ;
+- vérification : Performance Lab › Validation en jeu, Miroir, 10 / 40 / 10 s : les trois phases s'enchaînent seules ;
+- retour arrière : relancer `Raptoru Studio Setup 0.1.44-chaos.10.exe` (SHA-256 `4d895264…`).
+
+Version de test **0.1.44-chaos.10** (25/11 soir), installée par Antoni le 26/11 :
 
 - `C:\Users\Antoni\Documents\Raptoru 2.0 - Worktrees\chaos-v2\apps\studio\desktop\release\Raptoru Studio Setup 0.1.44-chaos.10.exe`
 - 126 764 181 o, SHA-256 `4d8952649c6e26a4933d0ed55d09023f3f334e1bf90b60f516759c24a65f5b08`
