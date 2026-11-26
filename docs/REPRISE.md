@@ -26,6 +26,10 @@ CHATBOX RAPTORU : EN SERVICE MASQUÉE le 22/11 (Core + bot df3adb5e, CHATBOX_REL
 OBS « Chatbox Raptoru — … » ajoutées MASQUÉES au-dessus des anciennes). Reste : Antoni installe 0.1.43, essai en live,
 bascule scène par scène SUR SON GO (docs/CHATBOX.md § 12.2). Ne rendre aucune source visible, ne toucher à aucune source
 StreamElements sans GO. Chantier suivant : KO Overlay = Chaos V2 (§ C).
+CHAOS V2 LOT 2 (26/11, LOCAL, rien de poussé ni déployé) : branche feat/chaos-integration (worktree « agent »), achats
+réels sur le Core (devis, débit atomique, file, boucle Studio, remboursements automatiques, modération FX) ; parcours
+Lab réel extension → Core Lab → Studio → moteur → écran vérifié par l'agent. Ordre et GO : docs/chaos/DEPLOIEMENT_CHAOS.md ;
+état : docs/chaos/LIVRAISON_CHAOS_2026-11-26.md. Inventaire ZIP a4fd2972be05 à valider par Antoni (aucun ZIP écrit).
 Niveaux : restauration WizeBot du 20/11 définitive (NE JAMAIS LA REJOUER).
 Suspendu : personnalité IA de LeCroupier_ (ne rien proposer). Méthode : docs/AGENT_WORKFLOW.md § 0.
 ```
@@ -247,6 +251,13 @@ viewers en live (il retire l'extension aux non-testeurs, [CASINO.md](CASINO.md) 
     chaos-unit 39/39 et `chaos-perf-phases` (10 / 40 / 10 simulé). Version de test 0.1.44-chaos.11 (PERFORMANCE_LAB.md).
   - **26/11 : chaos.11 installée et validée par Antoni** (Miroir fluide, Brouillard sans lag, 10 / 40 / 10, curseur
     unique, aucun flash noir). Stabilisation des performances close. Suite : lot 2 (ROADMAP_CHAOS_V2.md, état en tête).
+  - **Lot 2 (26/11, branche locale `feat/chaos-integration`, non poussée)** : Core `chaos` (migrations jumelles
+    `20261206120000_chaos_lab.sql` / `20261206130000_chaos.sql`), boucle Studio `chaos/core-loop.ts`, extension
+    `modules/interactions` sur le Core. Fermé par défaut (`chaos.enabled = 0`, `CHAOS_EXTENSION = off`). Contrat :
+    [chaos/CONTRAT_LOT2.md](chaos/CONTRAT_LOT2.md) ; tarifs à valider : [chaos/TARIFS.md](chaos/TARIFS.md) ; déploiement :
+    [chaos/DEPLOIEMENT_CHAOS.md](chaos/DEPLOIEMENT_CHAOS.md) ; état et tests :
+    [chaos/LIVRAISON_CHAOS_2026-11-26.md](chaos/LIVRAISON_CHAOS_2026-11-26.md). Banc Lab réel : lanceur bonk-lab avec
+    `CHAOS_ENGINE_EXE` (moteur installé) et `chaos.enabled = 1` dans la base isolée `raptoru_bonk_lab` (remis à 0).
   - **Commits** `de06ee91`, `733cf5fa`, `9ba0e2e0`, `f7dc31a4` (locaux).
   - **Version de test** `0.1.44-chaos.9` (non installée) : chaos.8 plus la lecture seule des compteurs d'OBS pour la
     phase C. Version installée : chaos.10 (26/11) ; le relais a été validé par Antoni dans son OBS le 25/11 (chaos.8).
