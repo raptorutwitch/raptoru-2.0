@@ -1542,3 +1542,11 @@
   .ix-pop__log,
   .ix-live__dot::after { animation: none !important; }
 }
+
+/* --- Lab : « Jouer sur mon PC » (page servie par Studio Lab seulement) ------------------------------------------- */
+.ix-localplay { display: flex; align-items: center; gap: calc(8 * var(--g)); padding-top: calc(4 * var(--g)); border-top: 1px dashed rgba(233, 189, 122, .4); color: var(--ix-amber); font-size: var(--fs-11); }
+.ix-localplay > .ix-ico { width: calc(13 * var(--g)); height: calc(13 * var(--g)); }
+.ix-localplay__toggle { flex: 1 1 auto; display: inline-flex; align-items: center; gap: calc(6 * var(--g)); cursor: pointer; }
+.ix-localplay__toggle input { width: calc(15 * var(--g)); height: calc(15 * var(--g)); margin: 0; accent-color: var(--ix-amber); }
+.ix-localplay__stop { display: inline-flex; align-items: center; gap: calc(4 * var(--g)); min-height: calc(26 * var(--g)); padding: 0 calc(9 * var(--g)); border: 1px solid rgba(255, 122, 138, .55); border-radius: 999px; background: rgba(255, 122, 138, .12); color: #ffc2cb; font-size: var(--fs-11); font-weight: 700; }
+.ix-localplay__stop .ix-ico { width: calc(12 * var(--g)); height: calc(12 * var(--g)); }

@@ -16,6 +16,7 @@ import { glyph, token } from './glyphs.js';
 import { preview } from './preview.js';
 import { createPrefs } from './prefs.js';
 import { createReorder } from './reorder.js';
+import { createLocalPlay } from './local-play.js';
 
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 const nth = (n) => (n === 1 ? '1er' : `${n}e`);
@@ -36,6 +37,8 @@ export function view(ctx) {
   // Faux Core et réglages Lab (scénario, rôle, plafond Sécurité 30 / 60 s, effets à venir) : store.js, partagés avec la
   // section FX de la console de modération ; il avance seul chaque seconde et survit à un rechargement.
   let mock = getMock();
+  // « Jouer sur mon PC » (Lab servi par Studio seulement) : coupé à chaque ouverture, jamais déclenché tout seul.
+  const localPlay = createLocalPlay({ win });
   const prefs = createPrefs([...EFFECTS, ...PLANNED].map((e) => e.id));
   const choices = (memory.choices ??= {});
   let latest = ctx.state;
@@ -818,6 +821,25 @@ export function view(ctx) {
     const bar = el('div', 'ix-sheet__bar');
     bar.append(gauge, outcome, quick, billBtn, cta);
     foot.append(payBox, bill, bar, error);
+    if (localPlay.isAvailable()) {
+      const row = el('div', 'ix-localplay');
+      const lab = el('label', 'ix-localplay__toggle');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = localPlay.isOn();
+      box.addEventListener('change', () => (box.checked = localPlay.setOn(box.checked)));
+      lab.append(box, el('span', null, 'Jouer sur mon PC (Studio Lab)'));
+      const stop = btn('ix-localplay__stop', 'Tout arrêter', 'stop');
+      stop.title = 'STOP ALL du moteur Chaos';
+      stop.addEventListener('click', async () => {
+        const ok = await localPlay.stopAll();
+        done = { text: ok ? 'Moteur : tout est arrêté.' : 'Studio ne répond pas.', until: now() + 3000, kind: ok ? 'ok' : 'refunded' };
+        lastKey = '';
+        update();
+      });
+      row.append(glyph(document, 'lab'), lab, stop);
+      foot.append(row);
+    }
     billBtn.addEventListener('click', () => {
       bill.hidden = !bill.hidden;
       billBtn.setAttribute('aria-expanded', String(!bill.hidden));
@@ -971,6 +993,15 @@ export function view(ctx) {
           ? { text: `Pas démarré (${(out.request.reason ?? 'panne').toLowerCase()}) : ${out.request.credit ? 'crédit rendu' : `${fmt(out.request.price)} Jetons rendus`}`, until: now() + 4000, kind: 'refunded' }
           : { text: o.kind === 'now' ? `${e.label} : c’est parti !` : o.kind === 'burst' ? `Clignement envoyé (${nth(o.position)} en attente)` : `Réservé : ${nth(o.position)} dans la file`, until: now() + 2600 };
         toast = { id: out.request.id, until: now() + 5000 };
+        if (!failed && localPlay.isOn()) {
+          const shown = done;
+          void localPlay.play(engineRequest(e, sent.choice)).then((r) => {
+            if (!r || destroyed || sheet?.card !== card) return;
+            done = { text: `${shown.text} · Studio : ${r.text}`, until: now() + 4500, kind: r.ok ? 'ok' : 'refunded' };
+            lastKey = '';
+            update();
+          });
+        }
         mockChanged(); // solde, file, modération : à jour partout tout de suite
         ctx.host.refresh?.(); // le solde de l'en-tête (Lab : celui du faux Core)
         win.clearTimeout(doneTimer);
@@ -1495,6 +1526,7 @@ export function view(ctx) {
     start() {
       // Le faux Core avance seul (store.js) : la vue se repeint à chaque seconde et après chaque achat ou action.
       stopClock = subscribe(() => paint());
+      void localPlay.probe();
       paint();
       if (askOpen && effectById(askOpen) && !effectById(askOpen).planned && tab === 'chaos') win.requestAnimationFrame?.(() => openSheet(askOpen, tiles.get(askOpen)?.node));
       // Lab (?ixMod=1) : le bouclier de l'en-tête, comme un modérateur le toucherait.
