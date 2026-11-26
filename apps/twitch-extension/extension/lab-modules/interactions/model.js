@@ -20,6 +20,27 @@ export const REFUND_BEFORE = 0.25; // proposition : arrêté avant 25 % de sa du
 export const BURST = Object.freeze({ maxPending: 10, gapS: 0.5, perMinute: 20 });
 const RECEIPTS_MAX = 50; // clés d'idempotence retenues (le Core les garde en base)
 
+/**
+ * Remboursements (EXTENSION_INTERACTIONS.md § 10 bis). Jamais démarré, quelle qu'en soit la raison : TOUT est rendu
+ * (Jetons, ou le crédit utilisé, ou la charge). Démarré puis interrompu par une panne : politique distincte,
+ * réglable et tracée (rendu s'il a joué moins de `interruptedBelow` de sa durée). Arrêté par la modération : rendu
+ * d'office avant `stoppedBelow`, sinon au choix du modérateur.
+ */
+export const REFUND_POLICY = Object.freeze({ notStarted: 'full', interruptedBelow: 0.5, stoppedBelow: REFUND_BEFORE });
+/** Studio déconnecté : les demandes en attente sont rendues s'il ne revient pas dans ce délai. */
+export const STUDIO_GRACE_S = 30;
+/** Échecs avant démarrage que le Core devra reconnaître (codes du moteur / de Studio) : tous remboursés intégralement. */
+export const FAILURES = Object.freeze({
+  studio_offline: 'Studio déconnecté',
+  engine_unavailable: 'Moteur indisponible',
+  effect_refused: 'Effet refusé par le moteur',
+  capture_unavailable: 'Image du jeu indisponible',
+  trigger_error: 'Erreur au déclenchement',
+  network: 'Liaison perdue avec Studio',
+  no_ack: 'Démarrage jamais confirmé',
+  queue_expired: 'Jamais démarré en 3 min',
+});
+
 export const SCENARIOS = Object.freeze({
   normal: 'Live animé',
   calme: 'Live calme',
@@ -29,7 +50,8 @@ export const SCENARIOS = Object.freeze({
   desactive: 'Chaos désactivé',
   studio_coupe: 'Studio ou moteur interrompu',
   mode_doux: 'Mode doux',
-  plein_ecran: 'Jeu en plein écran exclusif',
+  capture_ko: 'Image du jeu indisponible (Studio)',
+  echecs: 'Pannes au démarrage (remboursements)',
   solde_bas: 'Solde bas',
 });
 
@@ -77,11 +99,10 @@ export function conditionsFor(e, c, capS = ENGINE.safetyDurationS) {
   const capped = !r.fixed && r.max === capS && capS < Math.min(e.duration.max, ENGINE.maxDurationS);
   out.push(['stopwatch', r.fixed ? `Durée fixe : ${r.def} s.` : `De ${r.min} à ${r.max} s${capped ? ' (plafond de ce live)' : ''}.`]);
   out.push(['layers', `${SLOTS[e.slot].rule}. Le même effet ne joue jamais deux fois à la fois : le tien passe juste après.`]);
-  if (e.capture) out.push(['shield', 'Impossible pendant un jeu en plein écran exclusif.']);
   if (charges)
     out.push(['bolt', `${charges.max} charges ; une revient toutes les ${charges.rechargeS} s. Les clignements passent l’un après l’autre, ${BURST.perMinute} par minute au plus pour tout le chat.`]);
   else out.push(['queue', `File de ${QUEUE_MAX} demandes, une seule en attente par viewer. ${VIEWER_COOLDOWN_S / 60} min avant de relancer le même effet.`]);
-  out.push(['refund', `Jamais démarré en ${QUEUE_TTL_S / 60} min : remboursé. Arrêté par la modération avant ${REFUND_BEFORE * 100} % de sa durée : remboursé. Payé avec un crédit : le crédit est rendu.`]);
+  out.push(['refund', `Pas démarré (panne de Studio ou du moteur, refus, file de plus de ${QUEUE_TTL_S / 60} min) : tout est rendu. Interrompu par une panne : rendu s’il a joué moins de la moitié. Arrêté par la modération avant ${REFUND_BEFORE * 100} % : rendu. Payé avec un crédit : le crédit revient.`]);
   if (e.note) out.push(['info', e.note]);
   return out.map(([icon, text]) => ({ icon, text }));
 }
@@ -96,13 +117,20 @@ export function createChaosMock({
   capS = ENGINE.safetyDurationS, // Sécurité › durée maximale (Studio)
   maxActive = ENGINE.safetyMaxActive, // Sécurité › effets actifs en même temps (Studio)
   restore = null, // état exporté (exportState) : le faux Core survit à un rechargement de la page (Lab)
+  policy = REFUND_POLICY,
 } = {}) {
   let seq = 0;
   let cseq = 0;
   const s = {
     status: 'open', // open | paused (achats suspendus) | offline | disabled (Chaos coupé) | engine_down (Studio / moteur)
     safe: false, // mode doux : effets photosensibles refusés
-    exclusive: false, // jeu en plein écran exclusif : seuls les calques restent possibles
+    // Studio ne peut pas capturer l'image du jeu (le moteur le constate : vrai plein écran exclusif de Windows, fenêtre
+    // introuvable…) : les effets qui transforment l'image attendent ; les calques restent possibles. Jamais déduit du
+    // mode d'affichage choisi dans le jeu.
+    captureDown: false,
+    downSince: null, // Studio déconnecté depuis… (ms)
+    failQueue: [], // Lab : échecs à appliquer aux prochains démarrages (scénario « Pannes au démarrage »)
+    ledger: [], // journal des transactions : débits, remboursements, crédits utilisés et rendus (le plus récent d'abord)
     game: 'Overwatch 2',
     balance,
     active: [],
@@ -157,6 +185,13 @@ export function createChaosMock({
     );
   };
 
+  /** Démarre, ou constate un échec avant démarrage (Lab : file d'échecs) : alors tout est rendu. */
+  function startOrFail(r, t) {
+    const code = s.failQueue.shift();
+    if (code) return finish(r, 'failed', t, { refund: true, actor: 'Studio', reason: FAILURES[code], code });
+    return start(r, t);
+  }
+
   function start(r, t) {
     s.queue = s.queue.filter((q) => q !== r);
     s.burst = s.burst.filter((q) => q !== r);
@@ -172,18 +207,18 @@ export function createChaosMock({
     s.creditLog.length = Math.min(s.creditLog.length, 40);
   }
 
-  function finish(r, state, t, { refund = false, actor = null, reason = null } = {}) {
+  function finish(r, state, t, { refund = false, actor = null, reason = null, code = null } = {}) {
     s.active = s.active.filter((a) => a !== r);
     s.queue = s.queue.filter((q) => q !== r);
-    const wasBurst = s.burst.includes(r);
     s.burst = s.burst.filter((q) => q !== r);
     r.state = state;
     r.finished = t;
     r.actor = actor;
     r.reason = reason;
-    if (refund) credit(r, t);
+    r.code = code;
+    if (refund) credit(r, t, reason);
     // Un achat à charges qui n'a jamais joué rend aussi sa charge.
-    if (refund && wasBurst) giveCharge(r.buyer, effectById(r.effect), r.choice, t);
+    if (refund && r.charged && !r.started) giveCharge(r.buyer, effectById(r.effect), r.choice, t);
     s.done.unshift(r);
     s.done.length = Math.min(s.done.length, 30);
     if ((state === 'done' || state === 'removed') && !r.charged) {
@@ -193,8 +228,16 @@ export function createChaosMock({
     }
   }
 
-  /** Rembourse une demande : les Jetons débités, ou le crédit utilisé (rendu utilisable), une seule fois. */
-  function credit(r, t = now) {
+  /** Une ligne du journal des transactions, une seule fois par clé (rejouer un remboursement n'en crée pas un second). */
+  function ledger(entry) {
+    if (s.ledger.some((x) => x.key === entry.key)) return false;
+    s.ledger.unshift(entry);
+    s.ledger.length = Math.min(s.ledger.length, 200);
+    return true;
+  }
+
+  /** Rembourse une demande : les Jetons débités, ou le crédit utilisé (rendu utilisable), une seule fois (clé refund:id). */
+  function credit(r, t = now, reason = null) {
     if (r.refunded) return false;
     if (r.credit) {
       const c = s.credits.find((x) => x.id === r.credit);
@@ -204,9 +247,11 @@ export function createChaosMock({
       c.request = null;
       r.refunded = true;
       log('restored', c, t, { request: r.id });
+      ledger({ key: `refund:${r.id}`, kind: 'credit_restored', viewer: r.buyer.id, request: r.id, amount: 0, at: t, reason });
       return true;
     }
     if (!r.price) return false;
+    if (!ledger({ key: `refund:${r.id}`, kind: 'refund', viewer: r.buyer.id, request: r.id, amount: r.price, at: t, reason })) return false;
     r.refunded = true;
     if (r.buyer.id === me.id) s.balance += r.price;
     return true;
@@ -234,7 +279,7 @@ export function createChaosMock({
     if (s.status === 'disabled') return { code: 'disabled', label: 'Désactivé', detail: 'Chaos est désactivé pendant ce live.' };
     if (s.status === 'engine_down') return { code: 'engine_down', label: 'Indisponible', detail: 'Studio ne répond plus : rien n’est débité, les achats reprennent dès son retour.' };
     if (s.status === 'paused') return { code: 'paused', label: 'Suspendu', detail: 'Les achats d’effets sont suspendus pour le moment.' };
-    if (s.exclusive && e.capture) return { code: 'incompatible', label: 'Pas sur ce jeu', detail: `${s.game} est en plein écran exclusif : seuls Brouillard, Paupières et Flash passent.` };
+    if (s.captureDown && e.capture) return { code: 'capture_unavailable', label: 'Indisponible', detail: 'Studio ne capte pas l’image du jeu en ce moment : cet effet revient dès qu’elle est de retour. Brouillard, Paupières et Flash restent possibles.' };
     if (s.safe && e.photosensitive) return { code: 'safe_mode', label: 'Mode doux', detail: 'Effet lumineux désactivé pendant ce live.' };
     return null;
   }
@@ -350,6 +395,7 @@ export function createChaosMock({
     if (expectedPrice !== q.price) return { ok: false, code: 'price_changed', message: 'Le prix a changé : vérifie avant de confirmer.' };
     if (buyer.id === me.id && !q.credit) s.balance -= q.price;
     const r = make(effect, q.choice, buyer, t, { price: q.price, credit: q.credit?.id ?? null, charged: Boolean(q.charges) });
+    ledger({ key: `buy:${pay.key ?? r.id}`, kind: q.credit ? 'credit_used' : 'debit', viewer: buyer.id, request: r.id, amount: q.credit ? 0 : q.price, at: t, reason: null });
     if (q.credit) {
       q.credit.state = 'used';
       q.credit.usedAt = t;
@@ -357,7 +403,7 @@ export function createChaosMock({
       log('used', q.credit, t, { request: r.id });
     }
     if (q.charges) takeCharge(buyer, e, q.choice, t);
-    if (q.outcome.kind === 'now') start(r, t);
+    if (q.outcome.kind === 'now') startOrFail(r, t);
     else if (q.charges) s.burst.push(r);
     else s.queue.push(r);
     return { ok: true, request: r, outcome: q.outcome };
@@ -366,13 +412,16 @@ export function createChaosMock({
   function tick(t) {
     for (const r of [...s.active]) if (r.ends <= t) finish(r, 'done', t);
     for (const r of [...s.queue, ...s.burst])
-      if (t - r.created > QUEUE_TTL_S * 1000) finish(r, 'expired', t, { refund: true, reason: 'Jamais démarré en 3 min : remboursé.' });
-    for (const r of [...s.queue]) if (s.status === 'open' && canStart(r)) start(r, t);
+      if (t - r.created > QUEUE_TTL_S * 1000) finish(r, 'expired', t, { refund: true, reason: 'Jamais démarré en 3 min : remboursé.', code: 'queue_expired' });
+    // Studio déconnecté plus de STUDIO_GRACE_S : ce qui attendait est rendu (il ne démarrera pas de sitôt).
+    if (s.status === 'engine_down' && s.downSince != null && t - s.downSince >= STUDIO_GRACE_S * 1000)
+      for (const r of [...s.queue, ...s.burst]) finish(r, 'failed', t, { refund: true, actor: 'Studio', reason: FAILURES.studio_offline, code: 'studio_offline' });
+    for (const r of [...s.queue]) if (s.status === 'open' && canStart(r)) startOrFail(r, t);
     // Achats à charges : un à la fois, dans l'ordre, BURST.gapS après la fin du précédent du même effet.
     const next = s.burst[0];
     if (next && s.status === 'open' && canStart(next) && !s.queue.some((q) => q.effect === next.effect)) {
       const last = s.done.find((d) => d.effect === next.effect && d.started)?.finished ?? 0;
-      if (t - last >= BURST.gapS * 1000) start(next, t);
+      if (t - last >= BURST.gapS * 1000) startOrFail(next, t);
     }
     s.burstStarts = s.burstStarts.filter((x) => t - x < 60_000);
     if (s.simulate && s.status === 'open' && t >= s.nextBot) {
@@ -410,7 +459,7 @@ export function createChaosMock({
     remove(id, { refund, reason = null } = {}, t) {
       const r = s.active.find((a) => a.id === id);
       if (!r) return { ok: false, message: 'Cet effet est déjà terminé.' };
-      const early = (t - r.started) / (r.duration * 1000) < REFUND_BEFORE;
+      const early = (t - r.started) / (r.duration * 1000) < policy.stoppedBelow;
       if (refund === false && (r.price || r.credit) && !hasReason(reason)) return { ok: false, message: 'Un motif est obligatoire sans remboursement.' };
       finish(r, 'removed', t, { refund: refund ?? early, actor: 'Modération', reason });
       return { ok: true, refunded: r.refunded };
@@ -479,7 +528,8 @@ export function createChaosMock({
       burstMax: BURST.maxPending,
       status: s.status,
       safe: s.safe,
-      exclusive: s.exclusive,
+      captureDown: s.captureDown,
+      ledger: s.ledger.filter((l) => l.viewer === me.id).slice(0, 20),
       game: s.game,
       balance: s.balance,
       queueMax: QUEUE_MAX,
@@ -587,14 +637,25 @@ export function createChaosMock({
     }
     if (scenario === 'studio_coupe') {
       // Le moteur s'est arrêté : ce qui jouait est interrompu et rendu ; la file attend son retour (remboursée après 3 min).
-      for (const r of [...s.active]) finish(r, 'interrupted', t, { refund: true, actor: 'Studio', reason: 'Studio interrompu : remboursé.' });
+      // Politique des effets démarrés puis interrompus : rendus s'ils ont joué moins de la moitié (réglable, tracé).
+      for (const r of [...s.active]) {
+        const played = (t - r.started) / (r.duration * 1000);
+        const refund = played < policy.interruptedBelow;
+        finish(r, 'interrupted', t, { refund, actor: 'Studio', reason: `Studio interrompu à ${Math.round(played * 100)} % : ${refund ? 'remboursé' : 'non remboursé (joué plus de la moitié)'}.`, code: 'interrupted' });
+      }
       s.status = 'engine_down';
+      s.downSince = t;
     }
     if (scenario === 'mode_doux') s.safe = true;
-    if (scenario === 'plein_ecran') {
-      s.exclusive = true;
+    if (scenario === 'capture_ko') {
+      s.captureDown = true;
       s.active = s.active.filter((x) => !effectById(x.effect).capture);
       s.queue = [];
+    }
+    // Lab : les prochains démarrages échouent, une raison après l'autre (tous remboursés), puis tout redevient normal.
+    if (scenario === 'echecs') {
+      s.simulate = false;
+      s.failQueue = ['studio_offline', 'engine_unavailable', 'effect_refused', 'capture_unavailable', 'trigger_error', 'network', 'no_ack'];
     }
     if (scenario === 'solde_bas') s.balance = 1500;
   }
@@ -617,6 +678,9 @@ export function createChaosMock({
   }
   if (!restored) seed(now);
 
-  return { snapshot, quote, buy, tick, moderation, setCap, exportState, me, scenario, restored };
+  /** Lab : le prochain démarrage échoue avec ce code (tests, scénario « Pannes au démarrage »). */
+  const failNext = (code) => s.failQueue.push(code);
+
+  return { snapshot, quote, buy, tick, moderation, setCap, exportState, failNext, me, scenario, restored };
 }
 

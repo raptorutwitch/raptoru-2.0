@@ -22,9 +22,13 @@ import {
   resolveParams,
 } from '../extension/lab-modules/interactions/catalog.js';
 import {
+  FAILURES,
+  REFUND_POLICY,
+  STUDIO_GRACE_S,
   QUEUE_MAX,
   QUEUE_TTL_S,
   VIEWER_COOLDOWN_S,
+  conditionsFor,
   createChaosMock,
 } from '../extension/lab-modules/interactions/model.js';
 import { blinkTimeline } from '../extension/lab-modules/interactions/preview.js';
@@ -788,7 +792,12 @@ describe('parcours : achats simultanés, file, incompatibilités', () => {
       .snapshot(T0)
       .history.filter((r) => r.state === 'interrupted');
     expect(interrupted.length).toBeGreaterThan(0);
-    expect(interrupted.every((r) => r.refunded)).toBe(true);
+    // Politique des interruptions : rendu s'il a joué moins de la moitié, sinon non ; tracé dans le motif.
+    for (const r of interrupted) {
+      const played = (T0 - r.started) / (r.duration * 1000);
+      expect(r.refunded).toBe(played < REFUND_POLICY.interruptedBelow);
+      expect(r.reason).toMatch(/Studio interrompu à [0-9]+ %/);
+    }
   });
 });
 
@@ -840,5 +849,136 @@ describe('Flou et Pixelisation : une glissière sur le vrai paramètre', () => {
     const pix = effectById('pixelate');
     expect(pix.levels).toBeNull();
     expect(pix.controls.filter((x) => x.kind === 'slider')).toHaveLength(1);
+  });
+});
+
+describe('remboursements : jamais démarré = tout rendu ; idempotents ; journal des transactions', () => {
+  it('chaque échec avant démarrage rend intégralement les Jetons, une seule fois, avec sa raison', () => {
+    for (const code of Object.keys(FAILURES).filter(
+      (c) => c !== 'queue_expired',
+    )) {
+      const m = calm();
+      const before = m.snapshot(T0).balance;
+      m.failNext(code);
+      const out = buy(m, 'fog');
+      expect(out.ok).toBe(true);
+      const r = m.snapshot(T0).history.find((x) => x.id === out.request.id);
+      expect(r).toMatchObject({
+        state: 'failed',
+        refunded: true,
+        code,
+        reason: FAILURES[code],
+      });
+      expect(m.snapshot(T0).balance).toBe(before);
+      // Rembourser encore (modération, nouvel envoi) : refusé, aucun second remboursement au journal.
+      expect(m.moderation.refund(r.id, 'essai double', T0 + 10).ok).toBe(false);
+      const refunds = m
+        .snapshot(T0 + 10)
+        .ledger.filter((l) => l.request === r.id && l.kind === 'refund');
+      expect(refunds).toHaveLength(1);
+      expect(m.snapshot(T0 + 10).balance).toBe(before);
+    }
+  });
+
+  it('payé avec un crédit : c’est le crédit qui revient ; un clignement : sa charge aussi', () => {
+    const m = calm();
+    const c = m.snapshot(T0).credits.find((x) => x.effect === 'flip');
+    m.failNext('engine_unavailable');
+    const choiceFlip = choice('flip', { duration: 10 });
+    const out = m.buy('flip', choiceFlip, 0, T0, undefined, { credit: c.id });
+    expect(out.ok).toBe(true);
+    expect(m.snapshot(T0).credits.map((x) => x.id)).toContain(c.id);
+    expect(
+      m
+        .snapshot(T0)
+        .ledger.find(
+          (l) => l.request === out.request.id && l.kind === 'credit_restored',
+        ),
+    ).toBeTruthy();
+    const b = calm({ balance: 100_000 });
+    const once = choice('blink', { style: 'ponctuel' });
+    b.failNext('no_ack');
+    b.buy('blink', once, b.quote('blink', once, T0).price, T0);
+    expect(b.quote('blink', once, T0).charges.n).toBe(10);
+  });
+
+  it('réponse réseau perdue : le renvoi de la même intention ne débite pas deux fois ; le journal a un seul débit', () => {
+    const m = calm();
+    const c = choice('vhs');
+    const p = m.quote('vhs', c, T0).price;
+    const before = m.snapshot(T0).balance;
+    const first = m.buy('vhs', c, p, T0, undefined, { key: 'intent-42' });
+    const retry = m.buy('vhs', c, p, T0 + 2000, undefined, {
+      key: 'intent-42',
+    });
+    expect(retry).toMatchObject({ ok: true, duplicate: true });
+    expect(retry.request.id).toBe(first.request.id);
+    expect(m.snapshot(T0 + 2000).balance).toBe(before - p);
+    expect(
+      m.snapshot(T0 + 2000).ledger.filter((l) => l.kind === 'debit'),
+    ).toHaveLength(1);
+  });
+
+  it(`Studio déconnecté : la file attend ${STUDIO_GRACE_S} s, puis tout ce qui attendait est rendu`, () => {
+    const m = createChaosMock({
+      scenario: 'studio_coupe',
+      now: T0,
+      simulate: false,
+    });
+    const waiting = m.snapshot(T0).queue;
+    expect(waiting.length).toBeGreaterThan(0);
+    m.tick(T0 + (STUDIO_GRACE_S - 1) * 1000);
+    expect(m.snapshot(T0 + (STUDIO_GRACE_S - 1) * 1000).queue).toHaveLength(
+      waiting.length,
+    );
+    m.tick(T0 + STUDIO_GRACE_S * 1000);
+    const s = m.snapshot(T0 + STUDIO_GRACE_S * 1000);
+    expect(s.queue).toHaveLength(0);
+    for (const w of waiting)
+      expect(s.history.find((r) => r.id === w.id)).toMatchObject({
+        state: 'failed',
+        code: 'studio_offline',
+        refunded: true,
+      });
+  });
+
+  it('image du jeu indisponible (signalée par Studio) : seuls les effets qui la transforment attendent ; aucun « plein écran » supposé', () => {
+    const m = createChaosMock({
+      scenario: 'capture_ko',
+      now: T0,
+      simulate: false,
+    });
+    expect(buy(m, 'blur')).toMatchObject({
+      ok: false,
+      code: 'capture_unavailable',
+    });
+    expect(buy(m, 'fog').ok).toBe(true);
+    for (const e of EFFECTS)
+      for (const line of conditionsFor(e, defaultChoice(e)))
+        expect(line.text).not.toMatch(/plein écran/u);
+  });
+});
+
+describe('durées jusqu’à 60 s : l’extension ne bride rien en dessous du plafond de Studio', () => {
+  it('plafond Sécurité à 60 s : chaque effet atteint 60 s, sauf les variantes courtes par nature', () => {
+    const SHORT = new Set([
+      'flash',
+      'shake:impact',
+      'blink:ponctuel',
+      'blink:ferme',
+      'zoom:pulsations',
+      'zoom:aller_retour',
+      'zoom:intermittent',
+    ]);
+    for (const e of EFFECTS)
+      for (const p of e.presets ?? [null]) {
+        const c = normalizeChoice(e, { style: p?.id ?? null }, 60, {
+          reset: true,
+        });
+        const r = durationRange(e, c, 60);
+        if (SHORT.has(e.id) || SHORT.has(`${e.id}:${p?.id}`))
+          expect(r.max).toBeLessThan(60);
+        else expect(r.max, `${e.id} ${p?.id ?? ''}`).toBe(60);
+      }
   });
 });

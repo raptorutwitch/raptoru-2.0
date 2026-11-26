@@ -890,8 +890,8 @@ export function view(ctx) {
       lastKey = key;
       paintPay(snap);
       outcome.replaceChildren();
-      outcome.dataset.kind = flash ? 'ok' : q.block ? 'block' : q.outcome.kind;
-      if (flash) outcome.append(glyph(document, 'check'), el('span', null, flash.text));
+      outcome.dataset.kind = flash ? (flash.kind ?? 'ok') : q.block ? 'block' : q.outcome.kind;
+      if (flash) outcome.append(glyph(document, flash.kind === 'refunded' ? 'refund' : 'check'), el('span', null, flash.text));
       else if (q.block) outcome.append(glyph(document, q.block.code === 'no_charge' ? 'bolt' : 'clock'), el('span', null, q.block.detail));
       else if (q.outcome.kind === 'now') outcome.append(glyph(document, 'play'), el('span', null, 'Démarre tout de suite'));
       else if (q.outcome.kind === 'burst') outcome.append(glyph(document, 'queue'), el('span', null, `Après ${q.outcome.position - 1} clignement${q.outcome.position > 2 ? 's' : ''} · ~${mmss(q.outcome.eta)}`));
@@ -956,7 +956,11 @@ export function view(ctx) {
         error.textContent = '';
         if (sent.credit) payCredit = null;
         const o = out.outcome;
-        done = { text: o.kind === 'now' ? `${e.label} : c’est parti !` : o.kind === 'burst' ? `Clignement envoyé (${nth(o.position)} en attente)` : `Réservé : ${nth(o.position)} dans la file`, until: now() + 2600 };
+        // Échec au démarrage (Studio, moteur…) : déjà remboursé par le Core ; la fiche le dit au lieu de « c'est parti ».
+        const failed = out.request.state === 'failed';
+        done = failed
+          ? { text: `Pas démarré (${(out.request.reason ?? 'panne').toLowerCase()}) : ${out.request.credit ? 'crédit rendu' : `${fmt(out.request.price)} Jetons rendus`}`, until: now() + 4000, kind: 'refunded' }
+          : { text: o.kind === 'now' ? `${e.label} : c’est parti !` : o.kind === 'burst' ? `Clignement envoyé (${nth(o.position)} en attente)` : `Réservé : ${nth(o.position)} dans la file`, until: now() + 2600 };
         toast = { id: out.request.id, until: now() + 5000 };
         mockChanged(); // solde, file, modération : à jour partout tout de suite
         ctx.host.refresh?.(); // le solde de l'en-tête (Lab : celui du faux Core)
@@ -1154,6 +1158,7 @@ export function view(ctx) {
     if (r.state === 'removed') return [`arrêté par la modération${r.refunded ? ` · ${back}` : ''}`, 'removed'];
     if (r.state === 'cancelled') return [`retiré par la modération${r.refunded ? ` · ${back}` : ''}`, 'removed'];
     if (r.state === 'interrupted') return [`interrompu (Studio)${r.refunded ? ` · ${back}` : ''}`, 'refunded'];
+    if (r.state === 'failed') return [`n’a pas pu démarrer (${(r.reason ?? 'panne').toLowerCase()})${r.refunded ? ` · ${back}` : ''}`, 'refunded'];
     return [r.state, 'done'];
   }
   const who = (r) => (r.by === 'mod' ? 'Modération' : r.mine ? 'Toi' : r.buyer.name);
@@ -1421,8 +1426,8 @@ export function view(ctx) {
             ? ['paused', 'pause', 'Studio ne répond plus : rien n’est débité, les achats reprennent dès son retour.']
             : snap.status === 'paused'
           ? ['paused', 'pause', 'Les achats d’effets sont suspendus. Ta place en file est gardée.']
-          : snap.exclusive
-            ? ['info', 'shield', `${snap.game} est en plein écran exclusif : seuls Brouillard, Paupières et Flash passent.`]
+          : snap.captureDown
+            ? ['info', 'shield', 'Studio ne capte pas l’image du jeu en ce moment : seuls Brouillard, Paupières et Flash passent.']
             : snap.safe
               ? ['info', 'shield', 'Mode doux ce soir : les effets lumineux sont coupés.']
               : null;

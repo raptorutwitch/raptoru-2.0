@@ -1471,6 +1471,7 @@
 
 /* --- Achat : confirmation dans la fiche, « Ne plus demander » ------------------------------------------------- */
 .ix-outcome[data-kind="ok"] { color: var(--ix-sage); font-weight: 700; }
+.ix-outcome[data-kind="refunded"] { color: var(--ix-amber); font-weight: 700; }
 .ix-outcome[data-kind="burst"] { color: var(--ix-rose); }
 /* « Ne plus demander confirmation » : toujours visible ; dans la barre sur une fiche large, sur sa ligne au-dessus sinon. */
 .ix-sheet__bar { flex-wrap: wrap; row-gap: calc(4 * var(--g)); }

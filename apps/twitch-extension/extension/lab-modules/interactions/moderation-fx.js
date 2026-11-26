@@ -13,7 +13,7 @@ import { glyph } from './glyphs.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 const hhmm = (t) => new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-const ST = { done: 'joué', expired: 'jamais démarré', removed: 'arrêté', cancelled: 'retiré', interrupted: 'interrompu' };
+const ST = { done: 'joué', expired: 'jamais démarré', removed: 'arrêté', cancelled: 'retiré', interrupted: 'interrompu', failed: 'pas démarré' };
 const STATUS = { open: ['active', 'Ouverts'], paused: ['paused', 'Suspendus'], offline: ['disabled', 'Hors live'], disabled: ['disabled', 'Chaos coupé'], engine_down: ['disabled', 'Studio coupé'] };
 export const FX_COLOR = '#b8405c';
 

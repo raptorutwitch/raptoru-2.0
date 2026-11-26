@@ -263,7 +263,7 @@ export const EFFECTS = Object.freeze([
     presets: [
       { id: 'naturel', label: 'Naturel', default: true, hint: 'Des clignements naturels pendant toute la durée.' },
       { id: 'ponctuel', variant: 'naturel', label: 'Un clignement', hint: 'Une fermeture, puis la réouverture. Chaque achat utilise une charge.', duration: { fixed: (c) => Math.max(2, Math.ceil((c.opts.shut ?? 0.4) + 1.6)) }, charges: { max: 10, rechargeS: 6 } },
-      { id: 'serie', label: 'Répétés', hint: 'Des séries de clignements, avec une pause entre chaque série.', duration: { min: 5, max: 30, step: 5, def: 10 } },
+      { id: 'serie', label: 'Répétés', hint: 'Des séries de clignements, avec une pause entre chaque série.', duration: { min: 5, max: 60, step: 5, def: 10 } },
       { id: 'lent', label: 'Lent', hint: 'Les paupières tombent lentement et se rouvrent lentement.' },
       { id: 'fatigue', label: 'Somnolence', hint: 'Paupières lourdes qui tombent peu à peu, deux micro-sommeils, réveil en sursaut.' },
       { id: 'resistance', label: 'Lutte contre le sommeil', hint: 'Fermés, ils s’entrouvrent, retombent… et se rouvrent enfin à la fin.' },
@@ -282,7 +282,7 @@ export const EFFECTS = Object.freeze([
       { kind: 'slider', id: 'pause', label: 'Pause entre deux séries', min: 1.5, max: 8, step: 0.5, def: 2, when: (c) => c.style === 'serie', apply: (v) => ({ interval_ms: Math.round(v * 1000) }), format: (v) => `${num(v, 1)} s` },
       { kind: 'slider', id: 'slowness', label: 'Lenteur des paupières', min: 0.3, max: 1.5, step: 0.1, def: 0.5, when: (c) => c.style === 'lent', apply: (v) => ({ close_ms: Math.round(v * 1000), open_ms: Math.round(v * 900) }), format: (v) => `${num(v, 1)} s` },
     ],
-    duration: DUR(10, 30),
+    duration: DUR(10),
     // Part du temps où les yeux sont (presque) fermés, d'après les vrais temps de fermeture, maintien, ouverture et
     // intervalle du mode, × profondeur de la fermeture. Référence (gêne 1) : yeux fermés tout du long.
     gene: (p, c) => {
