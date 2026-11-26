@@ -367,8 +367,13 @@ export class PerfLab {
           request_id: `studio-perf-${Date.now().toString(36)}`,
           source: { kind: 'studio', ref: 'Studio › Chaos › Performance Lab' },
         }).catch((e: Error) => {
+          // Refus arrivé après la fin de cette mesure : il ne doit jamais arrêter la suivante.
+          if (this.live !== st || st.status !== 'running') return;
           st.status = 'failed';
-          st.error = { code: 'activate_failed', message: e.message };
+          st.error = {
+            code: 'activate_failed',
+            message: `${st.label ?? o.effect} n’a pas été activé par le moteur, mesure arrêtée : ${e.message}`,
+          };
           this.endLive();
         });
       });

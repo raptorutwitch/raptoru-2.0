@@ -89,7 +89,12 @@ environ.
 - **Effet** : déclenché à ce moment-là seulement, par le clic de l'utilisateur, sur l'écran et avec les réglages de sa
   fiche (`effect.activate` avec la durée de la phase).
 - **Retour** à la normale.
-- Chaque phase dure 5 à 60 s.
+- Chaque phase dure 5 à 60 s. La phase « effet » va jusqu’à 60 s même si la **durée maximale d’un effet**
+  (Sécurité, 30 s par défaut) est plus courte : cette limite vise les effets du stream, pas une mesure lancée à la main
+  (`Protocol.ActivationSafety`). Avant le 26/11 (0.1.44-chaos.10 et avant), une phase « effet » de plus de 30 s était
+  refusée par le moteur et la mesure s’arrêtait à la fin de la référence.
+- Si le moteur refuse l’effet, la mesure s’arrête aussitôt avec la raison (« Miroir n’a pas été activé par le moteur,
+  mesure arrêtée : … ») ; aucun effet ni télémétrie ne reste.
 - **Arrêter tout de suite** arrête l'effet et la télémétrie ; la mesure partielle n'est pas gardée.
 
 **Résultats, par effet** (50 gardés, `perf/live-results.json`) :

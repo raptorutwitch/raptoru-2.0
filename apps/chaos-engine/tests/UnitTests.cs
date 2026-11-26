@@ -497,6 +497,28 @@ namespace Raptoru.Chaos
                 var ev = Protocol.Event("effect.started", 5, J.Map("request_id", "r"));
                 True((int)ev["v"] == 2 && (string)ev["type"] == "event" && (string)ev["event"] == "effect.started", "événement normalisé");
             });
+            Case("Performance Lab : la phase « effet » d'une mesure (Studio, durée imposée) va jusqu'à la borne du registre ; la durée maximale du stream reste pour le reste", () =>
+            {
+                var cfg = new ConfigStore(reg, null);
+                Func<Dictionary<string, object>, EffectDef, bool, TargetRef> target = (t, d, o) => new TargetRef { Key = "screen:x", Kind = "screen" };
+                Func<string, int, Dictionary<string, object>> body = (src, ms) => J.Map("request_id", "studio-perf-1", "effect", "mirror", "kind", "manual",
+                    "duration_ms", ms, "source", J.Map("kind", src, "ref", "Studio › Chaos › Performance Lab"));
+                Func<Dictionary<string, object>, string, EffectRequest> build = (b, kind) => Protocol.BuildRequest(b, reg, cfg, target, Protocol.ActivationSafety(b, kind, reg, cfg.Safety));
+                Eq(30000, cfg.Safety.MaxDurationMs, "durée maximale des effets par défaut");
+                Eq(60000, reg.Limits.MaxDurationMs, "borne du registre");
+                // Le bug du 26/11 : Miroir 10 / 40 / 10 refusé à la fin de la référence avec la sécurité de la configuration.
+                Eq("duration_out_of_range", Throws<ParamError>(() => Protocol.BuildRequest(body("studio", 40000), reg, cfg, target)), "ancienne règle : 40 s refusées");
+                Eq(40000, build(body("studio", 40000), "manual").Resolved.DurationMs, "mesure Miroir de 40 s acceptée");
+                Eq(60000, build(body("studio", 60000), "manual").Resolved.DurationMs, "60 s (maximum de la page) acceptées");
+                Eq("duration_out_of_range", Throws<ParamError>(() => build(body("studio", 61000), "manual")), "au-delà du registre : refusé");
+                Eq("duration_out_of_range", Throws<ParamError>(() => build(body("core", 40000), "manual")), "source communautaire : durée maximale du stream");
+                var plain = J.Map("request_id", "s", "effect", "mirror", "source", J.Map("kind", "studio"));
+                True(Protocol.ActivationSafety(plain, "manual", reg, cfg.Safety) == cfg.Safety, "« Activer » sans durée imposée : sécurité de la configuration");
+                True(Protocol.ActivationSafety(body("studio", 40000), "test", reg, cfg.Safety) == cfg.Safety, "« Tester » : sécurité de la configuration");
+                var safe = new SafetyConfig { MaxDurationMs = 20000, MaxActiveEffects = 2, SafeMode = true };
+                var m = Protocol.ActivationSafety(body("studio", 40000), "manual", reg, safe);
+                True(m.SafeMode && m.MaxActiveEffects == 2 && m.MaxDurationMs == 60000 && safe.MaxDurationMs == 20000, "mode sûr et nombre d'effets gardés, configuration intacte");
+            });
             Case("capture directe par OBS : la sortie OBS est transmise à la résolution de cible ; calque exclu seulement s'il se capturerait", () =>
             {
                 var cfg = new ConfigStore(reg, null);

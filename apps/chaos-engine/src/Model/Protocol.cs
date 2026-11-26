@@ -57,8 +57,20 @@ namespace Raptoru.Chaos
             return new Command { Id = id, Name = name, Body = d };
         }
 
+        /// Sécurité d'une activation Studio (effect.activate). La phase « effet » d'une mesure du Performance Lab (durée
+        /// imposée, lancée à la main par le streamer, arrêtée par Studio à la fin de la phase) va jusqu'à la borne du
+        /// registre (60 s) : la durée maximale des effets du stream (Sécurité, 30 s par défaut) vise les activations
+        /// ordinaires. Avant le 26/11, une phase de plus de 30 s était refusée (« durée hors bornes ») et la mesure
+        /// s'arrêtait à la fin de la référence. Mode sûr et nombre d'effets simultanés inchangés.
+        public static SafetyConfig ActivationSafety(Dictionary<string, object> b, string kind, Registry reg, SafetyConfig safety)
+        {
+            if (kind != "manual" || !J.Has(b, "duration_ms") || J.Str(J.Obj(b, "source"), "kind", null) != "studio") return safety;
+            return new SafetyConfig { MaxDurationMs = reg.Limits.MaxDurationMs, MaxActiveEffects = safety.MaxActiveEffects, SafeMode = safety.SafeMode };
+        }
+
         /// Construit une demande validée. resolveTarget transforme la cible demandée en cible réelle (ou lève ProtocolError).
-        public static EffectRequest BuildRequest(Dictionary<string, object> b, Registry reg, ConfigStore cfg, Func<Dictionary<string, object>, EffectDef, bool, TargetRef> resolveTarget)
+        /// safety : sécurité de cette demande (défaut : celle de la configuration ; voir ActivationSafety).
+        public static EffectRequest BuildRequest(Dictionary<string, object> b, Registry reg, ConfigStore cfg, Func<Dictionary<string, object>, EffectDef, bool, TargetRef> resolveTarget, SafetyConfig safety = null)
         {
             string rid = J.Str(b, "request_id", null);
             if (rid == null || !IdRe.IsMatch(rid)) throw new ProtocolError("bad_request_id", "request_id obligatoire (1 à 80 caractères A-Z a-z 0-9 _ . : -)");
@@ -78,7 +90,7 @@ namespace Raptoru.Chaos
             int? dur = J.Has(b, "duration_ms") ? (int?)(int)J.Num(b, "duration_ms", -1) : null;
             // Les sources externes (Core, extension, points de chaîne) ne règlent jamais un paramètre non exposé.
             bool trusted = kind == "studio" || kind == "test";
-            var resolved = Params.Resolve(def, J.Str(b, "variant", null), preset, J.Obj(b, "params"), dur, J.Obj(b, "transition"), reg.Limits, cfg.Safety, trusted, J.Str(b, "level", null));
+            var resolved = Params.Resolve(def, J.Str(b, "variant", null), preset, J.Obj(b, "params"), dur, J.Obj(b, "transition"), reg.Limits, safety ?? cfg.Safety, trusted, J.Str(b, "level", null));
             // Sorties : ["screen"] par défaut ; "obs" demande la sortie OBS (taille de la source obligatoire).
             var outs = J.Strs(b, "outputs");
             bool outScreen = true, outObs = false;

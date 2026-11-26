@@ -940,6 +940,7 @@ namespace Raptoru.Chaos
             if (def == null) throw new ProtocolError("unknown_effect", "effet inconnu : " + (id ?? "?"));
             string rid = J.Str(b, "request_id", null), kind = J.Str(b, "kind", "manual");
             if (kind != "manual" && kind != "test") throw new ProtocolError("invalid_request", "kind : manual ou test");
+            var safety = Protocol.ActivationSafety(b, kind, reg, cfg.Safety);
             var es = cfg.Effect(id);
             string err;
             var screens = ScreenLayout.Resolve(es.Screen, Targets.Screens(), out err);
@@ -967,9 +968,9 @@ namespace Raptoru.Chaos
                     var preset = cfg.GetPreset(id, "default");
                     body["duration_ms"] = Math.Min(TestMs, preset != null && preset.DurationMs.HasValue ? preset.DurationMs.Value : def.DefaultDurationMs);
                 }
-                // Durée imposée (Performance Lab : la phase « effet » d'une mesure en jeu), validée comme toute demande.
+                // Durée imposée (Performance Lab : la phase « effet » d'une mesure en jeu), bornée par le registre (ActivationSafety).
                 else if (J.Has(b, "duration_ms")) body["duration_ms"] = (int)J.Num(b, "duration_ms", 0);
-                var req = Protocol.BuildRequest(body, reg, cfg, (spec, d, obsOut) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, d, cfg.Engine.InputEffects, obsOut));
+                var req = Protocol.BuildRequest(body, reg, cfg, (spec, d, obsOut) => Targets.Resolve(spec, cfg.Engine.DefaultMode, selfPid, d, cfg.Engine.InputEffects, obsOut), safety);
                 CheckAllowed(req);
                 reqs.Add(req);
             }
