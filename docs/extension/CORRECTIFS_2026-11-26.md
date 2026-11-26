@@ -42,6 +42,14 @@ est inchangé. Rien n'est publié : un nouveau ZIP et la revue Twitch restent à
   raccourci (les 2 chevauchements et la coupure relevés à 360 × 269 concernent l'intérieur de Soundboard, Bonk et TTS).
 - Limites : pas d'essai sur téléphone réel ; le raccourci suit la session, donc apparaît au plus 5 s (sondage) après
   l'ouverture si le signal Twitch n'arrive pas.
+- **28/11, badge compact** (demande d'Antoni) : « Tombola ouverte » devient un petit badge **« Tombola »** — contour
+  framboise, point vert « ouverte » entouré d'une onde très discrète (coupée si le viewer réduit les animations) ;
+  le nom s'affiche aussi sur téléphone et dans le panneau (il est court) ; seul un en-tête étroit (≤ 400 px) qui porte le
+  bouclier des modérateurs le réduit au point + billet. Même code, même état, même navigation qu'en B2 : apparaît à
+  l'arrivée si la tombola est ouverte, quand elle s'ouvre pendant un autre module, disparaît à l'inscription et à la
+  fermeture, ne rejoue pas d'animation à chaque navigation. En Lab, l'état vient de la session de démo ; le badge et
+  le clic passent par le vrai code du shell. Vérifié : Hub 393, modules (Interactions, Soundboard, Bonk), 318 / 360 /
+  563 / 651, clic → vraie Tombola, badge absent dedans ; matrice v2 identique.
 
 ## B3. « Conditions d'utilisation » à chaque ouverture : ce n'est pas un écran de Raptoru
 
