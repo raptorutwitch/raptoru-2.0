@@ -276,8 +276,12 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
     if (!xsecs.has(m)) xsecs.set(m, xdef(m).mount({ document, client, repaint: () => render(), overview: () => overview }));
     return xsecs.get(m);
   };
-  // Opened from a module's shield (app/panel.js): straight to that module's section.
-  if (section && navKeys().includes(section)) nav.stack = mode() === 'compact' ? [{ v: 'home' }, { v: 'module', m: section }] : [{ v: 'module', m: section }];
+  // Opened from a module's shield (app/panel.js): straight to that module's section. An extra section that depends on
+  // the Core's overview (FX: `overview.chaos`) is applied when the overview arrives, unless the moderator moved meanwhile.
+  const openSection = (m) => (nav.stack = mode() === 'compact' ? [{ v: 'home' }, { v: 'module', m }] : [{ v: 'module', m }]);
+  let pendingSection = null;
+  if (section && navKeys().includes(section)) openSection(section);
+  else if (section && xdef(section)) pendingSection = { m: section, stack: JSON.stringify(nav.stack) };
   const top = () => nav.stack[nav.stack.length - 1];
   const push = (s) => {
     nav.stack.push(s);
@@ -375,6 +379,10 @@ export function createModerationV2View({ document, client, onChange, onBack, onC
       if (destroyed) return;
       overview = o;
       me = o.me ?? me;
+      if (pendingSection) {
+        if (navKeys().includes(pendingSection.m) && JSON.stringify(nav.stack) === pendingSection.stack) openSection(pendingSection.m);
+        pendingSection = null;
+      }
       render();
     } catch (e) {
       if (!overview) L.innerHTML = `<div class="empty">${esc(errorText(e))}</div>`;
