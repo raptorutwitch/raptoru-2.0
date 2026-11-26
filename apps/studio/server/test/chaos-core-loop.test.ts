@@ -180,6 +180,10 @@ async function fakeCore(items: Item[] = [], opts: { enabled?: boolean } = {}) {
             },
         ),
     calls: (suffix: string) => log.filter((l) => l.path === suffix),
+    order: () =>
+      log.map((l) =>
+        l.path.endsWith('/ack') ? `ack:${String(l.body.event)}` : l.path,
+      ),
   };
 }
 
@@ -501,6 +505,10 @@ describe('Chaos lot 2 : boucle du Core', () => {
       id,
       code: 'engine_exit',
     });
+    // Une panne : la fin (politique d'interruption, 50 %) arrive au Core avant le STOP ALL (arrêt voulu, 25 %).
+    const order = core.order();
+    expect(order.indexOf('ack:ended')).toBeGreaterThan(-1);
+    expect(order.indexOf('ack:ended')).toBeLessThan(order.indexOf('/stop-all'));
   });
 
   it('redémarrage de Studio : rien n’est rejoué, les comptes rendus en attente sont renvoyés', async () => {

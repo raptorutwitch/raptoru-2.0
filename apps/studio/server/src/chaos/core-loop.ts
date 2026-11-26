@@ -290,6 +290,10 @@ export class ChaosCoreLoop {
         : Math.min(CHAOS_CORE.maxBackoffMs, hb * 2 ** this.fails);
       if (this.now() - this.lastBeat >= every) await this.heartbeat();
       if (!this.coreOk) return;
+      // Sortie du moteur (une panne) : ses fins `engine_exit` partent AVANT le STOP ALL, pour que le Core applique la
+      // politique d'interruption (remboursé sous 50 % joué) et non celle d'un arrêt voulu par l'équipe (25 %). Un STOP
+      // ALL voulu (page, arrêt d'urgence) part en premier : c'est l'arrêt par l'équipe qui compte.
+      if (this.stopAllPending === 'engine_exit') await this.flushAcks();
       if (this.stopAllPending) await this.sendStopAll();
       await this.flushAcks();
       await this.claim();

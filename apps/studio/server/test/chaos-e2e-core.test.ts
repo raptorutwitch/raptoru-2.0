@@ -135,8 +135,8 @@ async function world(env: Record<string, string>) {
       code: string | null;
     }[];
   // Studio prêt (le moteur démarre de lui-même : Chaos ouvert par le Core) : le devis n'est plus bloqué.
-  const quote = async (effect: string) =>
-    core.chaos.quote(CH, VIEWER, { effect, choice: {} } as never) as Promise<{
+  const quote = async (effect: string, choice: Record<string, unknown> = {}) =>
+    core.chaos.quote(CH, VIEWER, { effect, choice } as never) as Promise<{
       price: number;
       block?: { code: string } | null;
       choice: unknown;
@@ -184,10 +184,12 @@ describe('Chaos V2 bout à bout : Core ↔ boucle Studio ↔ moteur (faux)', () 
   it('moteur arrêté pendant l’effet : fin signalée (engine_exit), politique d’interruption appliquée, remboursé (joué < 50 %)', async () => {
     const w = await world({
       FAKE_CHAOS_EFFECTS: 'flip',
-      FAKE_CHAOS_PLAY_MS: '8000',
+      FAKE_CHAOS_PLAY_MS: '20000',
     });
+    // 20 s : arrêté bien avant la moitié, même sous la charge de la suite complète (marge de 10 s).
     const before = await w.tokens();
-    const q = await w.quote('flip');
+    const q = await w.quote('flip', { duration: 20 });
+    expect(q.choice).toMatchObject({ duration: 20 });
     const out = (await w.core.chaos.buy(CH, {
       viewer: VIEWER,
       idempotency_key: `intent-${randomUUID()}`,
@@ -195,20 +197,24 @@ describe('Chaos V2 bout à bout : Core ↔ boucle Studio ↔ moteur (faux)', () 
       choice: q.choice,
       expected_price: q.price,
     } as never)) as { request: { id: string } };
-    await until(async () =>
-      (await w.mine()).find(
-        (r) => r.id === out.request.id && r.status === 'started',
-      ),
+    await until(
+      async () =>
+        (await w.mine()).find(
+          (r) => r.id === out.request.id && r.status === 'started',
+        ),
+      20_000,
     );
     await sleep(300);
     await w.rt.client.stop();
-    const ended = await until(async () =>
-      (await w.mine()).find(
-        (r) =>
-          r.id === out.request.id &&
-          r.status === 'ended' &&
-          r.refund_status === 'refunded',
-      ),
+    const ended = await until(
+      async () =>
+        (await w.mine()).find(
+          (r) =>
+            r.id === out.request.id &&
+            r.status === 'ended' &&
+            r.refund_status === 'refunded',
+        ),
+      20_000,
     );
     expect(ended.code).toBe('engine_exit');
     expect(await w.tokens()).toBe(before);
