@@ -71,8 +71,7 @@ redéployé), dernière sauvegarde automatique 26/11 04:00 UTC, hors live. API C
    (réglage `chaos.enabled` = 1, confirmation demandée). Liste au § 5. À la fin : `chaos.enabled` = 0.
 6. **Tarifs** : fourchettes du 28/11 par défaut ([TARIFS.md](TARIFS.md)), validées ou ajustées par Antoni dans
    Studio › Chaos › Tarifs (le Core les applique au devis suivant, l'extension suit en ~2 s, sans redéploiement).
-7. **Ouverture publique** (dernier GO explicite, après les décisions du § 8) : revue Twitch de la version, puis
-   `CHAOS_EXTENSION=on` + redémarrage du Core.
+7. **Ouverture publique** (dernier GO explicite, après les décisions du § 8) : procédure complète au **§ 9**.
 
 ## 4. OBS (rien à modifier)
 
@@ -138,3 +137,74 @@ Voir `docs/chaos/LIVRAISON_CHAOS_2026-11-26.md` (ZIP, SHA, tests, verdict).
    extension ensemble, test de parité) ; l'extension suit au prochain ZIP, le Core au prochain déploiement.
 3. **Tarifs** : fourchettes du 28/11 conservées par défaut, éditables dans Studio › Chaos › Tarifs ; aucun changement
    de l'économie réelle sans Antoni.
+
+## 9. Ouverture publique : procédure prête (préparée le 27/11, rien n'est changé)
+
+Objectif d'Antoni : **tous les viewers** de l'extension achètent des effets avec leurs Jetons. Le mode testeurs n'était
+que pour l'essai fermé. Aucun code n'est à écrire : il ne reste qu'à livrer, puis à changer une variable.
+
+### 9.1 Qui peut acheter (déjà en place, testé)
+
+| `CHAOS_EXTENSION` (Core) | « Autoriser les achats Chaos » (Studio) | Résultat                                                                         |
+| ------------------------ | --------------------------------------- | -------------------------------------------------------------------------------- |
+| `off`                    | coché ou non                            | personne ; l'extension ne montre pas Interactions                                |
+| `testers:83603689`       | coché                                   | le seul compte d'Antoni (état au 27/11)                                          |
+| `on`                     | décoché                                 | **personne** : refus `409 disabled` avant tout débit, Interactions masqué au Hub |
+| `on`                     | coché                                   | **tout viewer** qui partage son identité Twitch, avec ses Jetons                 |
+
+En mode `on`, un viewer anonyme voit l'état mais ne peut pas acheter (`identity_required`). Les prix, plafonds, files,
+cooldowns, la modération FX et les remboursements sont **exactement** ceux de l'essai fermé : le même code, seule la
+porte de l'extension change. Preuve : `apps/core-api/test/ext-frontier.test.ts`, « Chaos V2 in Production » (dont
+« public opening (CHAOS_EXTENSION=on) »).
+
+Tombola et Casino n'ont **aucune** restriction testeur :
+
+- la bulle Tombola (« Rejoindre », retour au module) est dans la coque v2 pour tous les viewers, dès que la version de
+  l'extension est en Release ;
+- le Casino est ouvert au public au Core depuis le 20/11 (`CASINO_EXTENSION=on`, relevé le 27/11) ;
+- « Dernières parties » par joueur est un écran de Studio.
+
+### 9.2 Prérequis (chacun sur GO, dans cet ordre)
+
+1. PR #132 fusionnée (**merge commit**), CI de `main` verte.
+2. Core déployé sur ce commit (aucune migration) : les décisions du § 8 sont actives.
+3. Studio publiée depuis ce commit puis installée par Antoni (pour « Dernières parties » par joueur). L'interrupteur
+   Chaos est déjà dans 0.1.45.
+4. Extension :
+   - Antoni écrit « Validé par Antoni : oui » dans `release-inventory/INVENTAIRE-094c4c52508f.md` ;
+   - ZIP construit (artefact de la CI de `main` si la PR #133 est fusionnée, sinon `package.mjs --target production --shell v2`) ;
+   - Hosted Test, revue Twitch, puis **Release** dans la console Twitch (Antoni).
+
+   **Sans cette Release, le public n'a ni Interactions ni la bulle Tombola**, quelle que soit la variable. La Release
+   peut précéder l'ouverture sans risque : tant que `CHAOS_EXTENSION=testers:…`, Interactions reste invisible aux
+   autres viewers.
+
+5. Hors live (le redémarrage du Core coupe ~1 à 2 min).
+
+### 9.3 Ouvrir (GO explicite « ouvrir Chaos au public »)
+
+1. Studio › Chaos : « Autoriser les achats Chaos » **décoché**. Le moment de l'ouverture reste ainsi décidé par
+   l'interrupteur, pas par le redémarrage.
+2. Coolify (`https://dashboard.raptoru.fr`) › application Core › Environment Variables :
+   - mettre `CHAOS_EXTENSION` à `on`, sur l'entrée de Production (pas la copie « preview ») ;
+   - puis **Restart**.
+
+   L'agent peut le faire par l'API sur ce GO, comme pour `testers:83603689` le 27/11 : une seule variable, valeur non
+   secrète, puis attente de `running:healthy` et `/ready`.
+
+3. Vérifier :
+   - `/ready` répond 200 ;
+   - Studio › Chaos affiche la pastille « Ouverts au public » ;
+   - « État de la livraison » est sain et les journaux du Core sont sans erreur ;
+   - un compte non testeur voit Interactions masqué tant que l'interrupteur est décoché.
+4. Quand Antoni le décide : cocher « Autoriser les achats Chaos » (confirmation renforcée en mode public). Suivre les
+   premiers achats dans la console FX et le journal Studio.
+
+### 9.4 Refermer
+
+| Quoi                    | Comment                                                                                       | Délai    |
+| ----------------------- | --------------------------------------------------------------------------------------------- | -------- |
+| Suspendre les achats    | décocher « Autoriser les achats Chaos » : plus aucun achat, la file en attente est remboursée | immédiat |
+| Revenir à l'essai fermé | `CHAOS_EXTENSION=testers:83603689` + Restart du Core                                          | ~2 min   |
+| Fermer Chaos au Core    | `CHAOS_EXTENSION=off` + Restart                                                               | ~2 min   |
+| Code, Studio, extension | § 6                                                                                           | —        |
