@@ -255,13 +255,13 @@ crée ni table de monnaie ni seconde économie. L'event-shop d'Halloween reste f
 
 ### 10.2 Remboursements (règle proposée, à valider par Antoni)
 
-| Situation                    | Exemple                                                                                                 | Remboursement                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Jamais démarré               | lecteur absent, plein écran exclusif sans repli possible, file expirée, Studio fermé, refus du mode sûr | **automatique, intégral, une fois**                                     |
-| Démarré puis panne **tôt**   | le lecteur plante avant 25 % de la durée                                                                | **automatique** (proposition)                                           |
-| Démarré puis panne tardive   | après 25 %                                                                                              | aucun ; remboursement manuel possible par un modérateur                 |
-| Arrêt volontaire (STOP ALL)  | Antoni coupe l'effet                                                                                    | **question ouverte** ; V1 : aucun remboursement                         |
-| Fin inconnue (aucun rapport) | Studio tué pendant l'effet                                                                              | aucun automatique (il a pu être vu) ; signalé dans Studio pour décision |
+| Situation                    | Exemple                                                                                                 | Remboursement                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Jamais démarré               | lecteur absent, plein écran exclusif sans repli possible, file expirée, Studio fermé, refus du mode sûr | **automatique, intégral, une fois**                                               |
+| Démarré puis panne **tôt**   | le lecteur plante avant 25 % de la durée                                                                | **automatique** (proposition)                                                     |
+| Démarré puis panne tardive   | après 25 %                                                                                              | aucun ; remboursement manuel possible par un modérateur                           |
+| Arrêt volontaire (STOP ALL)  | Antoni coupe l'effet                                                                                    | **question ouverte** ; V1 : aucun remboursement                                   |
+| Fin inconnue (aucun rapport) | Studio tué pendant l'effet                                                                              | panne (27/11) : joué jusqu'au dernier signe de vie de Studio, remboursé sous 50 % |
 
 Le Core ne sait **jamais** si un effet a été vu : il ne fait confiance qu'aux rapports `started` / `ended` du lecteur.
 

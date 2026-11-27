@@ -72,6 +72,24 @@ test('Studio › Casino: open, the live, a round recorded, a refusal counted; St
     timeout: 10_000,
   });
   await expect(tab.locator('[data-z="day"]')).toContainText('Machine');
+  // « Dernières parties » by player: two more rounds of the same viewer → still one line; opened, their whole history.
+  expect((await spin(page, 'e2e-casino-ok-2', 100)).status()).toBe(200);
+  expect((await spin(page, 'e2e-casino-ok-3', 200)).status()).toBe(200);
+  const players = tab.locator('[data-z="list"] .cz-pl');
+  await expect(players).toHaveCount(1, { timeout: 10_000 });
+  await expect(players.first()).toContainText('3 parties récentes', {
+    timeout: 10_000,
+  });
+  await players.first().locator('.cz-pl__row').click();
+  await expect(players.first().locator('.cz-op')).toHaveCount(3, {
+    timeout: 10_000,
+  });
+  await expect(players.first()).toContainText('3 parties au total');
+  await expect(players.first()).toContainText('mise −200');
+  await page.screenshot({
+    path: test.info().outputPath('studio-casino-players.png'),
+    fullPage: true,
+  });
   await page.screenshot({
     path: test.info().outputPath('studio-casino.png'),
     fullPage: true,

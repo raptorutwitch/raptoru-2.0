@@ -32,9 +32,9 @@ OBS fermé, aucun stream.
 - Panne Studio **avant** la prise en charge, expiration, redémarrage du Core : tests automatiques (PostgreSQL réel),
   pas provoqués sur le banc.
 - Tarifs : calculés, **non validés** ; réglables dans Studio › Chaos › Tarifs (§ 8).
-- Décision à prendre (Antoni) : un effet démarré dont Studio ne confirme jamais la fin (Studio coupé plus longtemps que
-  la durée de l'effet + 15 s) finit en « fin inconnue », compté joué, **non remboursé automatiquement** (la modération
-  peut rembourser). Alternative : rembourser d'office si Studio a disparu avant la moitié de l'effet.
+- Décidé par Antoni le 27/11 (branche `feat/chaos-decisions`, non déployée) : un effet démarré dont Studio ne confirme
+  jamais la fin est une panne, joué jusqu'au dernier signe de vie de Studio, remboursé sous 50 % ; « Somnolence » à
+  partir de 10 s.
 
 ## 3. Commits (branche locale)
 
@@ -117,3 +117,21 @@ Twitch n'a pas été validé par Antoni, et les tarifs ne sont pas validés. Rie
   (56 commits) → l'inventaire reste exact après une fusion en « Create a merge commit ».
 - Ordre, valeurs réelles de Production, essai fermé, retour arrière et décisions avant l'ouverture :
   DEPLOIEMENT_CHAOS.md § 3 à § 8.
+
+## 10. Livraison fermée (27/11, nuit, GO d'Antoni au point de décision unique)
+
+- **PR #130 fusionnée** en commit de fusion : `main` = `9836008e` (arbre identique à la branche) ; CI de `main` verte.
+- **Core Production déployé** `9836008e` : sauvegarde « Backup now » 01:53:59 UTC (17 385 688 octets, ×0,999 de la
+  précédente), plan PRÊT, `applied: 20261206130000_chaos.sql`, 144 s, sain ; bot `df3adb5e` inchangé. Les erreurs
+  « chaos_requests does not exist » du balayage au démarrage précèdent la migration post-déploiement et cessent ensuite.
+  Modules existants vérifiés (santé, portes de l'extension, classements Jeu des mots et Tombola).
+- **Essai fermé préparé** : variable Core `CHAOS_EXTENSION=testers:83603689` + redémarrage (02:02:55 UTC, sain) ;
+  `chaos.enabled` = 0 : aucun achat possible tant qu'Antoni ne le passe pas à 1 dans Studio.
+- **Studio 0.1.44 publié** (workflow officiel, source `9836008e`, étiquette `studio-v0.1.44`, moteur Chaos compilé et
+  vérifié dans le paquet) ; Studio installé : 0.1.44-chaos.11, mise à jour à faire par Antoni.
+- **ZIP Twitch** `raptoru-live-PRODUCTION-9836008ee957-depuis-be1744e-56-commits-shell-v2.zip` (SHA-256 `4d9df99e…`),
+  inventaire `2e2d664208a9` validé ; contenu contrôlé (Interactions, 13 effets, FX, aucun `lab-modules/`) ; Hosted Test
+  par Antoni.
+- Retour arrière du Core : `COOLIFY_URL=https://dashboard.raptoru.fr node scripts/coolify-deploy.mjs deploy core
+408f201a07cec89db0db3fd9bc3b4b7254b02940 --rollback --go` ; couper Chaos : `chaos.enabled` = 0 (immédiat) ou
+  supprimer `CHAOS_EXTENSION` + redémarrage.

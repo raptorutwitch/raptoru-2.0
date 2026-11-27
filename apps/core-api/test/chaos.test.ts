@@ -493,7 +493,7 @@ describe('chaos — execution: claim, lease, ACK', () => {
     expect(r[0]!.reason).toContain('75 %');
   });
 
-  it('sweep: never claimed in 180 s → expired refunded; lease over without start → failed no_ack refunded; started without end → unknown_end kept', async () => {
+  it('sweep: never claimed in 180 s → expired refunded; lease over without start → failed no_ack refunded; started without end → unknown_end, a breakdown: played up to Studio’s last sign of life', async () => {
     const l = await lab();
     const expired = await l.buy('color', {}, V1);
     l.core.clock.advance(CHAOS_RULES.queueTtlMs + 1);
@@ -512,6 +512,7 @@ describe('chaos — execution: claim, lease, ACK', () => {
       code: 'no_ack',
       refund_status: 'refunded',
     });
+    // Studio vanished right after the start (no heartbeat since): played 0 % → refunded (interruption policy).
     const lost = await l.buy('zoom', {}, V3);
     const { item } = await l.claim();
     await l.ack(item!, 'started');
@@ -520,11 +521,44 @@ describe('chaos — execution: claim, lease, ACK', () => {
     expect(await l.row(lost.request.id)).toMatchObject({
       status: 'ended',
       code: 'unknown_end',
-      refund_status: 'none',
-      played_ms: item!.duration_ms,
+      refund_status: 'refunded',
+      played_ms: 0,
     });
-    for (const x of [V1, V2]) expect(await l.tokens(x)).toBe(5_000_000);
+    for (const x of [V1, V2, V3]) expect(await l.tokens(x)).toBe(5_000_000);
     expect(await l.chaos.sweepExpired()).toBe(0);
+    // Studio alive past the end (only the end's ACK was lost): played, not refunded.
+    await l.hb();
+    const acked = await l.buy('shake', {}, V4);
+    const { item: b } = await l.claim();
+    await l.ack(b!, 'started');
+    for (let t = 0; t < b!.duration_ms + 5_000; t += 5_000) {
+      l.core.clock.advance(5_000);
+      await l.hb();
+    }
+    l.core.clock.advance(CHAOS_RULES.startedMarginMs);
+    expect(await l.chaos.sweepExpired()).toBe(1);
+    expect(await l.row(acked.request.id)).toMatchObject({
+      status: 'ended',
+      code: 'unknown_end',
+      refund_status: 'none',
+      played_ms: b!.duration_ms,
+    });
+    expect(await l.tokens(V4)).toBe(5_000_000 - acked.request.price);
+    // Studio gone at 40 % (last heartbeat), under the 50 % policy: refunded once.
+    await l.hb();
+    const half = await l.buy('mirror', { duration: 20 }, V1);
+    const { item: h } = await l.claim();
+    await l.ack(h!, 'started');
+    l.core.clock.advance(8_000);
+    await l.hb();
+    l.core.clock.advance(h!.duration_ms + CHAOS_RULES.startedMarginMs);
+    expect(await l.chaos.sweepExpired()).toBe(1);
+    expect(await l.row(half.request.id)).toMatchObject({
+      code: 'unknown_end',
+      refund_status: 'refunded',
+      played_ms: 8_000,
+    });
+    expect(await l.tokens(V1)).toBe(5_000_000);
   });
 
   it('heartbeat: in-flight leases extended (bounded), stop list for what moderation removed; Studio STOP ALL', async () => {
@@ -903,7 +937,7 @@ describe('chaos — Studio › Chaos › Tarifs: ranges set in Studio, checked, 
         expect([lo, hi], `${e.id} ${range.join('-')}`).toEqual([...range]);
       }
       // Longer, same setting: never cheaper. Flat only where the engine plays the same thing longer (Zoom pulses
-      // spread over the duration) or where the gêne model rates 5 s and 10 s alike (Somnolence).
+      // spread over the duration; Somnolence starts at 10 s since 27/11).
       for (const l of pricePreview(e))
         l.shares.forEach((x, i) => {
           if (!i) return;
@@ -911,13 +945,8 @@ describe('chaos — Studio › Chaos › Tarifs: ranges set in Studio, checked, 
             l.shares[i - 1]!,
           );
           const flatOk =
-            (e.id === 'zoom' &&
-              ['pulsations', 'aller_retour', 'intermittent'].includes(
-                l.style!,
-              )) ||
-            (e.id === 'blink' &&
-              l.style === 'fatigue' &&
-              l.durations[i] === 10);
+            e.id === 'zoom' &&
+            ['pulsations', 'aller_retour', 'intermittent'].includes(l.style!);
           if (!flatOk)
             expect(x, `${e.id} ${l.style} ${l.durations[i]} s`).toBeGreaterThan(
               l.shares[i - 1]!,

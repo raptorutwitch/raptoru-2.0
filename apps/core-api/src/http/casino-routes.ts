@@ -309,5 +309,18 @@ export function casinoRoutes(
       handle: ({ params }) =>
         mapped(() => casino.adminRound(params[0]!, params[1]!)),
     },
+    // Studio › Casino, « Dernières parties » grouped by player: one player's full history, by pages.
+    {
+      method: 'GET',
+      pattern: at('admin\\/players\\/(\\d{1,32})\\/rounds'),
+      auth: 'studio',
+      handle: ({ params, url }) =>
+        mapped(() =>
+          casino.adminPlayer(params[0]!, params[1]!, {
+            before: url.searchParams.get('before'),
+            limit: Number(url.searchParams.get('limit')) || undefined,
+          }),
+        ),
+    },
   ];
 }

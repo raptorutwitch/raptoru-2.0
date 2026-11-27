@@ -68,8 +68,10 @@ Charge : retirée dans la même transaction, rendue si la demande ne démarre ja
   `unknown_end`) → politique d'interruption : remboursé si `played_ms < 0,5 × duration_ms` (réglable :
   `chaos.interrupted_refund_below`, défaut 0,5), motif tracé. `ended` par arrêt de modération : remboursé selon le choix
   du modérateur (`stop_refund`), d'office avant 25 %.
-- `started` sans `ended` après `duration_ms + 15 s` : `ended` avec `code='unknown_end'`, `played_ms = duration_ms`, pas
-  de remboursement automatique (il a démarré), remboursable par la modération.
+- `started` sans `ended` après `duration_ms + 15 s` : `ended` avec `code='unknown_end'`, une **panne** (décision
+  d'Antoni, 27/11) : `played_ms` = temps entre le début et le dernier signe de vie de son Studio (dernier heartbeat),
+  borné à la durée ; politique d'interruption (remboursé sous 50 %). Studio encore vivant après la fin (seul l'ACK
+  perdu) → compté joué, non remboursé ; remboursable par la modération.
 - Balayage (`sweep`, toutes les 5 s, et au démarrage du Core) : expirations, baux expirés sans `started` (→ `failed`
   `no_ack`, remboursé), `started` sans fin. Une erreur de communication ne fait jamais perdre de Jetons : tout ce qui n'a
   pas de `started` confirmé est rendu.

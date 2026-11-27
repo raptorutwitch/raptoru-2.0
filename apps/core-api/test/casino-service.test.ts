@@ -685,7 +685,17 @@ describe('casino — shares, history, spectators, rights', () => {
           url: url('casino/42/admin/state'),
         } as never))(),
     ).rejects.toMatchObject({ status: 403 });
-    expect(calls).toEqual([`/v1/lab/casino/${CH}/admin/state`]);
+    // « Dernières parties » by player: one player's history (read only), its paging kept.
+    const player = `casino/${CH}/admin/players/${ALICE.id}/rounds`;
+    await get.handle({
+      params: [player],
+      body: undefined,
+      url: new URL(`http://c/v1/studio/cockpit/${player}?limit=30`),
+    } as never);
+    expect(calls).toEqual([
+      `/v1/lab/casino/${CH}/admin/state`,
+      `/v1/lab/casino/${CH}/admin/players/${ALICE.id}/rounds?limit=30`,
+    ]);
   });
 });
 
@@ -733,5 +743,95 @@ describe('casino — Production (canonical Wallet)', () => {
     expect(
       await code(c.spinSlot(CH, ALICE, { key: 'prod-4-xxxx', bet: 10_000 })),
     ).toBe('insufficient_tokens');
+  });
+});
+
+describe('casino — Studio « Dernières parties » by player (read only)', () => {
+  it('one player’s whole history by pages: newest first, no duplicate, nobody else’s rounds, totals as recorded; nothing written', async () => {
+    const core = await lab();
+    await liveOn(core);
+    const c = core.casino;
+    for (let i = 0; i < 7; i++) {
+      await c.spinSlot(CH, ALICE, {
+        key: `k-alice-${i}-0001`,
+        bet: 100 + i * 20,
+      });
+      core.clock.advance(5_000);
+      if (i < 3) {
+        await c.spinRoulette(CH, BOB, {
+          key: `k-bob-${i}-00001`,
+          bets: { red: 100 },
+        });
+        core.clock.advance(5_000);
+      }
+    }
+    const before = [
+      await tokens(core),
+      await tokens(core, BOB.id),
+      await rounds(core),
+    ];
+    const ids: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    let totals: {
+      rounds: number;
+      staked: number;
+      won: number;
+      net: number;
+    } | null;
+    do {
+      const page = await c.adminPlayer(CH, ALICE.id, {
+        before: cursor,
+        limit: 3,
+      });
+      expect(page.viewer_name).toBe('Alice');
+      for (const r of page.rounds) expect(r.round_id).not.toBe('');
+      ids.push(...page.rounds.map((r) => r.round_id));
+      totals = page.totals;
+      cursor = page.next_before;
+      pages += 1;
+    } while (cursor && pages < 10);
+    expect(pages).toBe(3);
+    expect(new Set(ids).size).toBe(7);
+    const db = await core.db.query<{
+      round_id: string;
+      bet: number;
+      payout: number;
+    }>(
+      'select round_id, bet, payout from casino_rounds where channel_id = $1 and viewer_id = $2 order by created_at desc, round_id desc',
+      [CH, ALICE.id],
+    );
+    expect(ids).toEqual(db.map((r) => r.round_id));
+    const staked = db.reduce((s, r) => s + Number(r.bet), 0);
+    const won = db.reduce((s, r) => s + Number(r.payout), 0);
+    expect(totals).toEqual({ rounds: 7, staked, won, net: won - staked });
+    // Each round as recorded: bet, gross payout, net = payout − bet (never recomputed).
+    const first = await c.adminPlayer(CH, ALICE.id, { limit: 100 });
+    for (const r of first.rounds) {
+      const d = db.find((x) => x.round_id === r.round_id)!;
+      expect([r.bet, r.payout, r.net]).toEqual([
+        Number(d.bet),
+        Number(d.payout),
+        Number(d.payout) - Number(d.bet),
+      ]);
+    }
+    expect(first.next_before).toBeNull();
+    // Bob's rounds never in Alice's history; an unknown player: empty; a malformed cursor: the first page.
+    expect((await c.adminPlayer(CH, BOB.id)).rounds).toHaveLength(3);
+    expect(await c.adminPlayer(CH, '424242')).toMatchObject({
+      rounds: [],
+      totals: { rounds: 0 },
+      next_before: null,
+    });
+    expect(
+      (
+        await c.adminPlayer(CH, ALICE.id, { before: 'nope', limit: 2 })
+      ).rounds.map((r) => r.round_id),
+    ).toEqual(ids.slice(0, 2));
+    expect([
+      await tokens(core),
+      await tokens(core, BOB.id),
+      await rounds(core),
+    ]).toEqual(before);
   });
 });

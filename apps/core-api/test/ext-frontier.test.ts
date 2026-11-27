@@ -1543,6 +1543,66 @@ describe('Chaos V2 in Production (CHAOS_EXTENSION + chaos.enabled, lot 2)', () =
     expect(noKey.body).toMatchObject({ code: 'idempotency_key_required' });
   });
 
+  it('public opening (CHAOS_EXTENSION=on): any viewer with a shared identity buys once Studio allows it; switch off: nobody buys, the Hub hides Interactions', async () => {
+    const { ext, core } = await fixture(undefined, {
+      CHAOS_EXTENSION: 'on',
+    });
+    await ready(core);
+    // « other » is in no tester list: in public mode only Studio's switch and the Core's usual rules decide.
+    await editWallet(
+      core.db,
+      core.clock.now(),
+      CHANNEL,
+      '5555',
+      'set',
+      { tokens: 100_000 },
+      'test',
+    );
+    const quote = async () =>
+      (
+        await ext('/chaos/quote', other, {
+          effect: 'color',
+          choice: { style: 'sepia' },
+        })
+      ).body;
+    const buy = async (price: number) =>
+      ext(
+        '/chaos/buy',
+        other,
+        { effect: 'color', choice: { style: 'sepia' }, expected_price: price },
+        randomUUID(),
+      );
+    // Switch off (the default): the Hub offers nothing and the Core refuses, before any debit.
+    expect((await ext('/session', other)).body.chaos).toMatchObject({
+      enabled: false,
+    });
+    const closed = await buy(8000);
+    expect([closed.status, closed.body.code]).toEqual([409, 'disabled']);
+    expect(closed.body.request).toBeUndefined();
+    // Studio's « Autoriser les achats Chaos »: the same viewer, no tester, buys with its own Jetons.
+    await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 1, 'test');
+    expect((await ext('/session', other)).body.chaos).toEqual({
+      enabled: true,
+      cap_s: 30,
+    });
+    const q = await quote();
+    const bought = await buy(q.price);
+    expect(bought.status).toBe(200);
+    expect(bought.body.request).toMatchObject({
+      effect: 'color',
+      price: q.price,
+      mine: true,
+    });
+    // Switch off again: closed for everyone at once, the session says so.
+    await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 0, 'test');
+    expect((await ext('/session', other)).body.chaos).toMatchObject({
+      enabled: false,
+    });
+    const again = await buy(q.price);
+    expect([again.status, again.body.code]).toEqual([409, 'disabled']);
+    expect(again.body.request).toBeUndefined();
+  });
+
   it('the paired Studio plays through /v1/studio/chaos/* with its own installation only', async () => {
     const { studio, core, installation } = await fixture();
     await core.moduleSettings.set(CHANNEL, 'chaos.enabled', 1, 'test');

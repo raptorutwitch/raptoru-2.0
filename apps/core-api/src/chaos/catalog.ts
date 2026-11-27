@@ -368,7 +368,7 @@ const DEFS: EffectDef[] = [
       },
       { id: 'serie', duration: { min: 5, max: 60, step: 5, def: 10 } },
       { id: 'lent' },
-      { id: 'fatigue' },
+      { id: 'fatigue', duration: { min: 10, max: 60, step: 5, def: 10 } },
       { id: 'resistance' },
       { id: 'ferme', duration: { min: 3, max: 15, step: 1, def: 5 } },
     ],

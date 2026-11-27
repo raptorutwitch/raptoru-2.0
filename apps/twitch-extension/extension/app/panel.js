@@ -41,6 +41,7 @@ import '../modules/music/module.js';
 import '../modules/interactions/module.js';
 // Tombola V1 for the sessions without V2 (its « open » rule is also the Hub's and the header's).
 import { raffleIsActive } from '../shared/tombola-v1.js';
+import { createRaffleBubble } from './raffle-bubble.js';
 // The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
 import { hostModules, loadHostModules, moderationSections, moduleVariant, sessionModule, sessionModules, viewerModuleView } from '../shared/module-registry.js';
 import { createModuleModerationPanel } from '../shared/module-moderation.js';
@@ -577,6 +578,11 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   // A module's shield (moderators): the console opens at that module's section, its way back returns to the module.
   let navIntent = null;
   let returnTo = null;
+  /**
+   * A module left for a quick visit (the Tombola bubble, `intent.park`): its view is kept as it was (game, sheet, tab,
+   * scroll) and given back when the visitor returns to it; any other way out destroys it. One place only: never a stack.
+   */
+  let parked = null;
   function navigateTo(moduleId, intent = null) {
     navIntent = intent;
     returnTo = intent?.from ?? null;
@@ -585,11 +591,24 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     if (moduleId !== null) notificationCenterOpen = false;
     if (moduleId !== openModule) emoteAccess.leaveVisit();
     if (moduleId !== hostViewId) {
-      hostView?.destroy?.();
+      if (intent?.park && hostView && hostViewId === openModule && hostViewId !== moduleId) {
+        parked?.view.destroy?.();
+        if (hostView.node?.isConnected) hostView.detaching?.();
+        parked = { id: hostViewId, view: hostView, variant: hostVariant, def: hostDef };
+      } else hostView?.destroy?.();
       hostView = null;
       hostViewId = null;
       hostVariant = null;
       hostDef = null;
+    }
+    if (parked && !intent?.park) {
+      if (moduleId === parked.id && moduleById(moduleId)) {
+        hostView = parked.view;
+        hostViewId = parked.id;
+        hostVariant = parked.variant;
+        hostDef = parked.def;
+      } else parked.view.destroy?.();
+      parked = null;
     }
     captureScrollPositions();
     if (moduleId !== openModule) restrictionsSeen = new Set();
@@ -602,34 +621,29 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     restoreScrollPositions();
   }
 
-  // Badge « Tombola » (point vert = ouverte) : un raccourci vers la Tombola depuis le Hub et chaque module, tant qu'elle est ouverte et que
-  // le viewer n'y est pas inscrit (état de la session : state.raffle, lu par le sondage du socle et par le signal
-  // Twitch). Le même bouton est gardé d'un rendu à l'autre ; il ne s'anime qu'à l'ouverture d'une nouvelle tombola.
-  // Jamais une notification (experience.js : raffle.open est un état du direct).
-  let raffleChip = null;
-  let raffleChipWindow = null;
+  // Bulle « Tombola » (point vert = ouverte, app/raffle-bubble.js) : depuis le Hub et chaque module, tant qu'elle est
+  // ouverte et que le viewer n'y est pas inscrit (état de la session : state.raffle, lu par le sondage du socle et par
+  // le signal Twitch). « Tombola » ouvre sa page, dont le retour rend le module tel qu'il était ; « Rejoindre » inscrit
+  // sur place (la même action que la page). Jamais une notification (experience.js : raffle.open est un état du direct).
+  const raffleBubble = createRaffleBubble({
+    document,
+    icon: (name, className) => hubIcon(document, name, className),
+    join: () => client.joinRaffle(),
+    open: () => {
+      const from = openModule ? moduleById(openModule) : null;
+      navigateTo('raffle_join', from ? { from: from.id, park: true, backLabel: `Retour à ${visibleModuleLabel(from)}` } : null);
+    },
+    changed: () => renderPreservingViewport(),
+    refreshed: () => onRefresh?.(),
+  });
   function raffleShortcut() {
-    const raffle = state?.raffle;
-    const offered = (state?.modules ?? []).some((mod) => mod.id === 'raffle_join');
-    if (!offered || !raffleIsActive(raffle) || raffle?.joined === true || openModule === 'raffle_join') return null;
-    if (!raffleChip) {
-      raffleChip = el('button', 'jdm-raffle-chip');
-      raffleChip.type = 'button';
-      raffleChip.setAttribute('aria-label', 'Tombola ouverte : la rejoindre');
-      raffleChip.title = 'Tombola ouverte : la rejoindre';
-      const dot = el('span', 'jdm-raffle-chip__dot');
-      dot.setAttribute('aria-hidden', 'true');
-      // Le billet ne se montre que si l'en-tête manque de place (panneau étroit avec le bouclier des modérateurs).
-      raffleChip.append(dot, hubIcon(document, 'raffle_join', 'jdm-raffle-chip__icon'), el('span', 'jdm-raffle-chip__label', 'Tombola'));
-      raffleChip.addEventListener('click', () => navigateTo('raffle_join'));
-    }
-    const windowId = String(raffle?.window_id ?? raffle?.token ?? 'open');
-    if (raffleChipWindow !== windowId) {
-      raffleChipWindow = windowId;
-      raffleChip.classList.add('is-new');
-      raffleChip.addEventListener('animationend', () => raffleChip.classList.remove('is-new'), { once: true });
-    }
-    return raffleChip;
+    return raffleBubble.render({
+      raffle: state?.raffle,
+      offered: (state?.modules ?? []).some((mod) => mod.id === 'raffle_join'),
+      active: raffleIsActive(state?.raffle),
+      onRaffle: openModule === 'raffle_join',
+      identityShared: identityShared(),
+    });
   }
 
   // Moderators only: a shield in a module's header opens that module's section of the moderation console (D4)
@@ -1645,9 +1659,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       back.append(hubIcon(document, 'chevL', 'jdm-back__icon'));
       // A hosted view may take the ‹ first (a casino game goes back to the Mini-jeux catalogue; a session module closes
       // what it has open, e.g. the Interactions effect sheet). Views without back() are unchanged.
+      // The Tombola opened from its bubble: back to that module as it was (raffle-bubble.js), else the Hub.
+      const raffleReturn = isRaffle && returnTo && moduleById(returnTo) ? returnTo : null;
+      if (raffleReturn && navIntent?.backLabel) {
+        back.setAttribute('aria-label', navIntent.backLabel);
+        back.title = navIntent.backLabel;
+      }
       back.addEventListener('click', () => {
         if (hostedView && hostView?.back?.()) return renderPreservingViewport();
-        navigateTo(null);
+        navigateTo(raffleReturn);
       });
       headLeft.append(back);
       const raffleChipNode = raffleShortcut();

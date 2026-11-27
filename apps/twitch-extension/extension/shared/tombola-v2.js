@@ -76,11 +76,11 @@ const REFUSAL = {
 /** Refusals after which the chat command still works (the others refuse the chat too). */
 const CHAT_STILL_WORKS = new Set(['identity_required', 'extension_join_disabled']);
 
-export function createTombolaV2View({ document, client, onBack, onJoined }) {
+export function createTombolaV2View({ document, client, onBack, onJoined, backLabel = 'Retour au Hub' }) {
   const win = document.defaultView;
   const node = document.createElement('div');
   node.className = 'tmbx';
-  node.innerHTML = `<div class="head"><button class="ib" type="button" data-act="back" title="Retour au Hub" aria-label="Retour au Hub">${ic('chevL')}</button><span class="ttl">${ic('ticket')}<span data-slot="hname"></span></span><span class="grow"></span>
+  node.innerHTML = `<div class="head"><button class="ib" type="button" data-act="back" title="${esc(backLabel)}" aria-label="${esc(backLabel)}">${ic('chevL')}</button><span class="ttl">${ic('ticket')}<span data-slot="hname"></span></span><span class="grow"></span>
       <button class="ib" type="button" data-act="history" title="Historique du stream" aria-label="Historique du stream">${ic('history')}</button>
       <span class="wallet" data-slot="wallet">${ic('coin')}<span>—</span></span></div><div class="body"></div>`;
   const body = node.querySelector('.body');
@@ -614,8 +614,10 @@ registerModuleVariant({
   ownHeader: true,
   bodyData: { tmbV2: '1' },
   screenClass: 'jdm-module-screen--tmbv2',
-  view: ({ document, client, host }) =>
-    createTombolaV2View({ document, client, onBack: () => host.home(), onJoined: () => host.refresh() }),
+  // Its way back: the module it was opened from (the Tombola bubble, app/raffle-bubble.js), else the Hub (the legacy
+  // shell has no host.back: the Hub, as before).
+  view: ({ document, client, host, intent }) =>
+    createTombolaV2View({ document, client, onBack: () => (host.back ?? host.home)(), onJoined: () => host.refresh(), backLabel: intent?.backLabel }),
   rendered: (view, { module, state, host }) => {
     view.update(state);
     // Its own header (the host's is hidden): the restriction chips go after its way back.

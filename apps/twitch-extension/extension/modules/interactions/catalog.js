@@ -265,7 +265,7 @@ export const EFFECTS = Object.freeze([
       { id: 'ponctuel', variant: 'naturel', label: 'Un clignement', hint: 'Une fermeture, puis la réouverture. Chaque achat utilise une charge.', duration: { fixed: (c) => Math.max(2, Math.ceil((c.opts.shut ?? 0.4) + 1.6)) }, charges: { max: 10, rechargeS: 6 } },
       { id: 'serie', label: 'Répétés', hint: 'Des séries de clignements, avec une pause entre chaque série.', duration: { min: 5, max: 60, step: 5, def: 10 } },
       { id: 'lent', label: 'Lent', hint: 'Les paupières tombent lentement et se rouvrent lentement.' },
-      { id: 'fatigue', label: 'Somnolence', hint: 'Paupières lourdes qui tombent peu à peu, deux micro-sommeils, réveil en sursaut.' },
+      { id: 'fatigue', label: 'Somnolence', hint: 'Paupières lourdes qui tombent peu à peu, deux micro-sommeils, réveil en sursaut.', duration: { min: 10, max: 60, step: 5, def: 10 } },
       { id: 'resistance', label: 'Lutte contre le sommeil', hint: 'Fermés, ils s’entrouvrent, retombent… et se rouvrent enfin à la fin.' },
       { id: 'ferme', label: 'Yeux fermés', hint: 'Fermés pendant presque toute la durée. Très gênant : 15 s au plus.', duration: { min: 3, max: 15, step: 1, def: 5 } },
     ],
