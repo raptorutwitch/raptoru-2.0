@@ -1320,6 +1320,57 @@ export class CasinoService {
     };
   }
 
+  /**
+   * Studio › Casino, one player opened in « Dernières parties »: all their rounds, newest first, by pages (`before` =
+   * the previous page's last `created_at|round_id`), with their totals. Read only: what the rounds recorded (bet, gross
+   * payout, net), nothing recomputed.
+   */
+  async adminPlayer(
+    channelId: string,
+    viewerId: string,
+    o: { before?: string | null; limit?: number } = {},
+  ) {
+    const limit = Math.min(Math.max(o.limit ?? 30, 1), 100);
+    const [at, id] = (o.before ?? '').split('|');
+    const cursor =
+      at && id && !Number.isNaN(Date.parse(at)) && /^[0-9a-f-]{36}$/.test(id)
+        ? [new Date(at), id]
+        : [null, null];
+    const rows = await this.db.query<RoundRow>(
+      `select * from casino_rounds where channel_id = $1 and viewer_id = $2
+         and ($3::timestamptz is null or (created_at, round_id) < ($3::timestamptz, $4::uuid))
+       order by created_at desc, round_id desc limit $5`,
+      [channelId, viewerId, cursor[0], cursor[1], limit + 1],
+    );
+    const page = rows.slice(0, limit);
+    const t = (
+      await this.db.query<{ n: string; staked: string; won: string }>(
+        `select count(*) as n, coalesce(sum(bet), 0) as staked, coalesce(sum(payout), 0) as won
+         from casino_rounds where channel_id = $1 and viewer_id = $2`,
+        [channelId, viewerId],
+      )
+    )[0]!;
+    const last = page.at(-1);
+    return {
+      viewer_id: viewerId,
+      viewer_name: page[0]?.viewer_name ?? null,
+      rounds: page.map((r) => ({
+        ...lightView(r),
+        finished: !!r.finished_at,
+      })),
+      totals: {
+        rounds: Number(t.n),
+        staked: Number(t.staked),
+        won: Number(t.won),
+        net: Number(t.won) - Number(t.staked),
+      },
+      next_before:
+        rows.length > limit && last
+          ? `${last.created_at.toISOString()}|${last.round_id}`
+          : null,
+    };
+  }
+
   /** One round as Studio sees it (technical detail: the whole outcome, the Wallet keys). */
   async adminRound(channelId: string, roundId: string) {
     const r = await this.round(channelId, roundId, null);

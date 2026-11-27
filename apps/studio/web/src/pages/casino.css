@@ -63,3 +63,79 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* « Dernières parties » par joueur (pages/casino-players.ts) : une ligne par joueur, son historique déplié dessous. */
+.cz-pl.is-open > .cz-pl__row {
+  background: var(--fill);
+}
+.cz-pl__d {
+  margin: 2px 0 8px 34px;
+  padding: 6px 0 4px 10px;
+  border-left: 1px solid var(--hair);
+}
+.cz-pl__t {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+.cz-pl__ops {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cz-op__b {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.cz-op__b:hover {
+  background: var(--fill);
+}
+.cz-op__w,
+.cz-op__n {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cz-op__w b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.cz-op__w small,
+.cz-op__m small,
+.cz-op__n small {
+  color: var(--ink3);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cz-op__n {
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.cz-op__n b.neg,
+.cz-pl__t b.neg {
+  color: var(--red);
+}
+.cz-pl__more {
+  margin-top: 6px;
+}
+.cz-pl__end {
+  margin: 6px 0 0;
+  font-size: 11px;
+}

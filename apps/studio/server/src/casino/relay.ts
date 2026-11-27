@@ -7,6 +7,9 @@ import { LAB_CHANNEL_ID, type LabCoreCall } from '../lab-moderation/proxy.js';
 // cockpit refuses every casino path but `admin/…` (a Studio installation never plays for a viewer).
 
 const ROUND = /^\/rounds\/([0-9a-f-]{36})$/;
+/** One player's history (« Dernières parties » grouped by player), by pages: `before` = `<ISO date>|<round id>`. */
+const PLAYER = /^\/players\/(\d{1,32})\/rounds$/;
+const BEFORE = /^[0-9T:.\-+Z]{10,40}\|[0-9a-f-]{36}$/;
 
 /** `channelId`: the Lab channel, or the main Core's channel through the production cockpit. */
 export function casinoRelay(core: LabCoreCall, channelId = LAB_CHANNEL_ID) {
@@ -36,6 +39,25 @@ export function casinoRelay(core: LabCoreCall, channelId = LAB_CHANNEL_ID) {
       const m = ROUND.exec(p);
       if (req.method === 'GET' && m)
         return (reply(200, await core(`${base}/rounds/${m[1]}`)), true);
+      const player = PLAYER.exec(p);
+      if (req.method === 'GET' && player) {
+        const q = new URLSearchParams();
+        const before = url.searchParams.get('before');
+        if (before && BEFORE.test(before)) q.set('before', before);
+        const limit = Number(url.searchParams.get('limit'));
+        if (Number.isInteger(limit) && limit > 0)
+          q.set('limit', String(Math.min(limit, 100)));
+        const qs = q.toString();
+        return (
+          reply(
+            200,
+            await core(
+              `${base}/players/${player[1]}/rounds${qs ? `?${qs}` : ''}`,
+            ),
+          ),
+          true
+        );
+      }
       reply(404, { error: 'not_found' });
     } catch (e) {
       const err = e as {

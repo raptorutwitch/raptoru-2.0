@@ -21,6 +21,7 @@ import {
 } from '../ds/ds.js';
 import { getJson, postJson, tryGetJson } from '../http.js';
 import { openViewer } from '../mod/mod.js';
+import { createCasinoPlayers, type CasinoRound } from './casino-players.js';
 
 // Casino (docs/CASINO.md § 8) : la machine à sous (et son Coffre) et la roulette de l'extension. Le Core tire, paie et
 // garde chaque partie ; ici on ouvre ou ferme, on règle les limites économiques (préparées, puis « Appliquer »), et on lit
@@ -199,12 +200,18 @@ export function mountCasinoPage(root: HTMLElement) {
     <aside class="mg-feed">
       <h2 class="d-lb">En cours</h2>
       <div class="mg-list" data-z="active"></div>
-      <h2 class="d-lb">Dernières parties</h2>
+      <h2 class="d-lb" title="Un joueur par ligne : clique pour voir tout son historique">Dernières parties · par joueur</h2>
       <div class="mg-list d-scroll" data-z="list"></div>
     </aside>
   </div>`;
   const z = (k: string) =>
     p.body.querySelector<HTMLElement>(`[data-z="${k}"]`)!;
+  // « Dernières parties » : un joueur par ligne, son historique complet à la demande (casino-players.ts).
+  const players = createCasinoPlayers({
+    host: z('list'),
+    gameLabel,
+    outcome: (r: CasinoRound) => outcome(r as unknown as Round),
+  });
 
   let state: CasinoAdmin | null = null;
   let readError = '';
@@ -336,14 +343,8 @@ export function mountCasinoPage(root: HTMLElement) {
       })),
       '<div class="d-empty">Aucune partie en cours.</div>',
     );
-    keyed(
-      z('list'),
-      (state?.recent ?? []).map((x) => ({
-        key: x.round_id,
-        html: `<button type="button" class="mg-r d-in" data-round="${esc(x.round_id)}" title="Détail technique de la partie">${pp(x.viewer_name, 26)}
-          <span class="mg-r__w"><b>${esc(x.viewer_name)}</b><small>${gameLabel(x.game)} · mise ${fmt(x.bet)}${outcome(x) ? ` · ${esc(outcome(x))}` : ''}${x.capped ? ' · plafonné' : ''}${x.shared ? ' · partagé' : ''}</small></span>
-          <span class="mg-r__g"><b class="d-num ${x.payout > x.bet ? 'win' : ''}">${x.payout ? `+${fmt(x.payout)}` : `−${fmt(x.bet)}`}</b><small>${hhmm(x.created_at)}</small></span></button>`,
-      })),
+    players.update(
+      (state?.recent ?? []) as unknown as CasinoRound[],
       `<div class="d-empty">${!state && readError ? esc(readError) : 'Aucune partie pour l’instant.'}</div>`,
     );
   }
