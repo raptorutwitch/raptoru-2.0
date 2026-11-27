@@ -308,6 +308,8 @@ export class ChaosService {
    * on the canonical economy, whatever `chaos.enabled` says. The Lab test wallet is never gated by it.
    */
   productionApproved = false;
+  /** Who the canonical economy sells to (CHAOS_EXTENSION, set by the public frontier): shown to Studio, never set by it. */
+  audience: { mode: 'off' | 'testers' | 'on'; testers: number } | null = null;
 
   /** Chaos open on this channel: `chaos.enabled` = 1 (and, on the canonical economy, CHAOS_EXTENSION ≠ off). */
   async enabled(q: Queryable, channelId: string) {
@@ -1148,6 +1150,26 @@ export class ChaosService {
       this.studio(this.db, channelId),
     ]);
     return { enabled, cap_s: this.capS(studio) };
+  }
+
+  /**
+   * Studio › Chaos header (« Autoriser les achats Chaos »): Studio's switch `chaos.enabled` as stored, who the extension's
+   * door sells to (CHAOS_EXTENSION off / testers / on — a count of testers, never their ids; no door = a Lab Core: `lab`)
+   * and whether purchases are open now. Read only: the switch is written through the module settings, CHAOS_EXTENSION
+   * never (Coolify only).
+   */
+  async access(channelId: string) {
+    const [setting, enabled] = await Promise.all([
+      this.settings.get(this.db, channelId, 'chaos.enabled'),
+      this.enabled(this.db, channelId),
+    ]);
+    const audience = this.audience?.mode ?? ('lab' as const);
+    return {
+      setting,
+      open: enabled && audience !== 'off',
+      audience,
+      testers: this.audience?.testers ?? 0,
+    };
   }
 
   /** Views of the open requests with their position, estimated wait, remaining time and progress. */

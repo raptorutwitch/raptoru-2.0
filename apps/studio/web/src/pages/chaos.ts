@@ -36,6 +36,7 @@ import {
   side,
   viewerNote,
 } from './chaos-effects.js';
+import { createChaosAccess } from './chaos-access.js';
 import { mountObsPanel, obsChip, type ObsStatus } from './chaos-obs.js';
 import { mountPerfLab } from './chaos-perf.js';
 import { mountPricesPanel } from './chaos-prices.js';
@@ -291,6 +292,8 @@ export function mountChaosPage(root: HTMLElement) {
   </div>`;
   const z = (k: string) =>
     p.body.querySelector<HTMLElement>(`[data-z="${k}"]`)!;
+  // « Autoriser les achats Chaos » (chaos-access.ts) : le réglage chaos.enabled du Core, dans l'en-tête.
+  const access = createChaosAccess(p.actions, () => paintHead());
 
   let st: State | null = null;
   let readError = '';
@@ -371,7 +374,7 @@ export function mountChaosPage(root: HTMLElement) {
     patch(p.state, chip);
     patch(
       p.actions,
-      `<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-obs-open title="Chaos sur ton écran et sur la source gameplay d’OBS (mode C)">${ic('layers')}Diffusion OBS${obsChip(obsSt)}</button><button type="button" class="d-btn ghost" data-perf-open title="Mesurer le coût des effets : banc hors écran, puis validation en jeu">${ic('pulse')}Performance Lab</button><button type="button" class="d-btn ghost" data-prices-open title="Prix minimum et maximum de chaque effet acheté depuis l’extension">${ic('coin')}Tarifs</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
+      `${access.html()}<button type="button" class="d-btn danger" data-stopall ${e?.status === 'ready' ? '' : 'disabled'} title="Arrête tous les effets tout de suite (raccourci partout : Ctrl+Maj+F11)">${ic('stop')}STOP ALL</button><button type="button" class="d-btn ghost" data-obs-open title="Chaos sur ton écran et sur la source gameplay d’OBS (mode C)">${ic('layers')}Diffusion OBS${obsChip(obsSt)}</button><button type="button" class="d-btn ghost" data-perf-open title="Mesurer le coût des effets : banc hors écran, puis validation en jeu">${ic('pulse')}Performance Lab</button><button type="button" class="d-btn ghost" data-prices-open title="Prix minimum et maximum de chaque effet acheté depuis l’extension">${ic('coin')}Tarifs</button><button type="button" class="d-btn ghost" data-panel>${ic('sliders')}Réglages</button>`,
     );
   }
 
@@ -1211,10 +1214,12 @@ export function mountChaosPage(root: HTMLElement) {
       if (on) {
         poll.start();
         pollScreens.start();
+        access.start();
         void refresh().then(loadScreens);
       } else {
         poll.stop();
         pollScreens.stop();
+        access.stop();
         clearInterval(animTick);
         animKey = '';
       }

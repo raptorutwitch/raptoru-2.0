@@ -220,8 +220,16 @@ export function createPublicFrontier(
   core.casino.productionApproved = casinoAudience.mode !== 'off';
   core.casino.labEnvironment = lab;
   // Chaos V2: the same hard switch inside the service (nothing sold on the canonical economy while CHAOS_EXTENSION=off).
-  core.chaos.productionApproved =
-    parseMusicAudience(config.CHAOS_EXTENSION).mode !== 'off';
+  const chaosAudience = parseMusicAudience(config.CHAOS_EXTENSION);
+  core.chaos.productionApproved = chaosAudience.mode !== 'off';
+  // Shown in Studio › Chaos (who may buy): a count of testers, never their ids. The Lab door lets everyone in: `lab`.
+  core.chaos.audience = lab
+    ? null
+    : {
+        mode: chaosAudience.mode,
+        testers:
+          chaosAudience.mode === 'testers' ? chaosAudience.testers.size : 0,
+      };
   const facade = new ExtFacade(
     call,
     new TwitchNames(app),

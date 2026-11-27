@@ -1331,6 +1331,90 @@ describe('Chaos V2 in Production (CHAOS_EXTENSION + chaos.enabled, lot 2)', () =
     expect(state.body.mine[0]).toMatchObject({ id: a.body.request.id });
   });
 
+  it('« Autoriser les achats Chaos »: the paired Studio reads who may buy and turns chaos.enabled on / off through the module settings; testers only; never CHAOS_EXTENSION; no one else', async () => {
+    const { ext, send, studio, core } = await fixture(undefined, {
+      CHAOS_EXTENSION: 'testers:4242',
+    });
+    await ready(core);
+    const access = `/v1/studio/cockpit/chaos/${CHANNEL}/access`;
+    const settings = `/v1/studio/cockpit/module-settings/${CHANNEL}`;
+    // Off by default: the switch reads 0, purchases closed, testers only at the Core (a count, never the ids).
+    const before = await studio(access);
+    expect(before.status).toBe(200);
+    expect(before.body).toEqual({
+      setting: 0,
+      open: false,
+      audience: 'testers',
+      testers: 1,
+    });
+    expect(JSON.stringify(before.body)).not.toContain('4242');
+    expect((await ext('/session', tester)).body.chaos).toMatchObject({
+      enabled: false,
+    });
+    // On, through the existing module-settings door of the paired installation.
+    expect(
+      (await studio(settings, { key: 'chaos.enabled', value: 1 })).status,
+    ).toBe(200);
+    expect((await studio(access)).body).toMatchObject({
+      setting: 1,
+      open: true,
+      audience: 'testers',
+    });
+    expect((await ext('/session', tester)).body.chaos).toMatchObject({
+      enabled: true,
+    });
+    expect((await ext('/session', other)).body.chaos).toEqual({
+      enabled: false,
+      cap_s: null,
+    });
+    // Off again at once: nothing can be bought.
+    expect(
+      (await studio(settings, { key: 'chaos.enabled', value: 0 })).status,
+    ).toBe(200);
+    expect((await studio(access)).body).toMatchObject({
+      setting: 0,
+      open: false,
+    });
+    expect((await ext('/session', tester)).body.chaos).toMatchObject({
+      enabled: false,
+    });
+    // Read only, own channel, paired installation only; the viewer door never sees it.
+    expect((await studio(access, {})).status).toBe(404);
+    expect(
+      (await studio('/v1/studio/cockpit/chaos/900100/access')).status,
+    ).toBe(403);
+    const headers = {
+      authorization: 'Bearer studio-test-secret',
+      [STUDIO_PROTOCOL_HEADER]: '1',
+    };
+    expect((await send(access, { headers })).status).toBe(401);
+    expect(
+      (
+        await send(settings, {
+          headers,
+          body: { key: 'chaos.enabled', value: 1 },
+        })
+      ).status,
+    ).toBe(401);
+    expect((await ext('/chaos/access', tester)).status).toBe(404);
+    // Out of bounds refused (0 / 1 only).
+    expect(
+      (await studio(settings, { key: 'chaos.enabled', value: 2 })).body,
+    ).toMatchObject({ error: 'out_of_bounds' });
+  });
+
+  it('« Autoriser les achats Chaos » with CHAOS_EXTENSION off: the switch can be on, the Core keeps purchases closed and says so', async () => {
+    const { studio, core } = await fixture();
+    await ready(core);
+    await studio(`/v1/studio/cockpit/module-settings/${CHANNEL}`, {
+      key: 'chaos.enabled',
+      value: 1,
+    });
+    expect(
+      (await studio(`/v1/studio/cockpit/chaos/${CHANNEL}/access`)).body,
+    ).toEqual({ setting: 1, open: false, audience: 'off', testers: 0 });
+  });
+
   it('Tarifs: the paired Studio reads and sets a range through its cockpit (its channel only), the extension follows; no one else reaches it', async () => {
     const { ext, send, studio, core } = await fixture(undefined, {
       CHAOS_EXTENSION: 'testers:4242',
