@@ -93,3 +93,6 @@ par écrit, pour cet inventaire précis).
 - 91839307 2026-11-17 feat(casino): extension, Studio and Lab — the slot machine with the Coffre, the roulette, spectators
 
 <!-- Ligne de validation : à inscrire par Antoni seulement (ou par l'agent sur son autorisation écrite), après lecture. -->
+<!-- Ligne inscrite par l'agent le 27/11/2026 sur autorisation écrite d'Antoni (GO de livraison du 27/11) : « Je valide le contenu fonctionnel de cette livraison et son inventaire, sous réserve qu'il corresponde exactement aux modifications déjà présentées et validées. » Vérifié : les 56 commits de l'inventaire 2e2d664208a9 (validé le 27/11) + 6a791f17 (décisions Chaos : fin non confirmée = panne, Somnolence ≥ 10 s) + 094c4c52 (bulle Tombola), rien d'autre ; exact sur main 35cd4bd9 (fusion de la PR #132 en commit de fusion). -->
+
+Validé par Antoni : oui

@@ -36,11 +36,15 @@ const GLOBAL = [
   /^\.dockerignore$/,
   /^\.github\//,
 ];
-const DOC = (f) => /^docs\//.test(f) || /\.md$/i.test(f);
+// An extension inventory is Markdown but not documentation: validating it is what lets main's CI build the Twitch
+// production archive (ci.yml, extension job) — a « docs only » push would skip that job.
+const INVENTORY = (f) => /^apps\/twitch-extension\/release-inventory\//.test(f);
+const DOC = (f) => (/^docs\//.test(f) || /\.md$/i.test(f)) && !INVENTORY(f);
 
 /** The parts a single file touches. */
 function partsOf(f) {
   if (DOC(f)) return [];
+  if (INVENTORY(f)) return ['extension'];
   if (/^packages\/schemas\//.test(f))
     return ['code', 'core', 'bot', 'studio', 'extension', 'e2e', 'images'];
   if (/^(apps\/core-api|supabase)\//.test(f))
