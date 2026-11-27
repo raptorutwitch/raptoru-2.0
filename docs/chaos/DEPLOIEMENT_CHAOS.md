@@ -67,8 +67,8 @@ redéployé), dernière sauvegarde automatique 26/11 04:00 UTC, hors live. API C
    **Hosted Test par Antoni** (console Twitch : nouvelle version, ZIP, Hosted Test ; l'automatisation de la console est
    exclue).
 5. **Essai fermé sur le seul compte d'Antoni** (id Twitch `83603689`) : variable Core
-   `CHAOS_EXTENSION=testers:83603689` + redémarrage du Core (~2 min), puis Studio › Paramètres des modules ›
-   `chaos.enabled` = 1. Liste au § 5. À la fin : `chaos.enabled` = 0.
+   `CHAOS_EXTENSION=testers:83603689` + redémarrage du Core (~2 min), puis Studio › Chaos › en-tête « Autoriser les achats Chaos »
+   (réglage `chaos.enabled` = 1, confirmation demandée). Liste au § 5. À la fin : `chaos.enabled` = 0.
 6. **Tarifs** : fourchettes du 28/11 par défaut ([TARIFS.md](TARIFS.md)), validées ou ajustées par Antoni dans
    Studio › Chaos › Tarifs (le Core les applique au devis suivant, l'extension suit en ~2 s, sans redéploiement).
 7. **Ouverture publique** (dernier GO explicite, après les décisions du § 8) : revue Twitch de la version, puis
@@ -102,14 +102,14 @@ l'en-tête de l'extension et sur raptoru.fr après chaque étape.
    affiché change en ~2 s, sans redéploiement ; confirmer l'ancien prix → refusé « le prix a changé », rien débité.
 8. **60 s** : Studio › Chaos › Sécurité › Durée maximale 60 000 ms → l'extension propose jusqu'à 60 s ; acheter un effet
    de 60 s → joué jusqu'au bout ; remettre 30 000 ms si voulu.
-9. **Désactivation immédiate** : Studio › Paramètres des modules › `chaos.enabled` = 0 → la carte Interactions disparaît
+9. **Désactivation immédiate** : Studio › Chaos › décocher « Autoriser les achats Chaos » (`chaos.enabled` = 0) → la carte Interactions disparaît
    au rafraîchissement, tout achat est refusé, rien débité.
 
 ## 6. Retour arrière
 
 | Quoi                       | Comment                                                                                                                                                                                                                      | Délai    |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Couper Chaos tout de suite | Studio › Paramètres des modules › `chaos.enabled` = 0 (ou console FX › suspendre) : plus aucun achat ; ce qui attendait est remboursé par le balayage                                                                        | immédiat |
+| Couper Chaos tout de suite | Studio › Chaos › décocher « Autoriser les achats Chaos » (ou console FX › suspendre) : plus aucun achat ; ce qui attendait est remboursé par le balayage                                                                     | immédiat |
 | Fermer Chaos au Core       | variable `CHAOS_EXTENSION=off` (ou supprimée) + redémarrage du Core                                                                                                                                                          | ~2 min   |
 | Code du Core               | `COOLIFY_URL=https://dashboard.raptoru.fr node scripts/coolify-deploy.mjs deploy core 408f201a07cec89db0db3fd9bc3b4b7254b02940 --rollback --go` ; migration additive conservée (tables `chaos_*` ignorées par l'ancien code) | ~2 min   |
 | Studio                     | réinstaller l'installateur précédent (0.1.44-chaos.11 ou 0.1.43, OPERATIONS.md § 4) : la boucle Core disparaît, le Core refuse les achats sans débit                                                                         | ~5 min   |

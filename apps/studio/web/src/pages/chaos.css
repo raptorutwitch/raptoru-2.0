@@ -821,3 +821,19 @@ kbd {
     grid-column: 1 / -1;
   }
 }
+
+/* « Autoriser les achats Chaos » (pages/chaos-access.ts) : dans l'en-tête, avant STOP ALL. */
+.cx-buy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--hair);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cx-buy__l {
+  font-size: 13px;
+  font-weight: 600;
+}

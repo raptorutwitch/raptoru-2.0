@@ -17,7 +17,8 @@ export function moduleSettingsRelay(core: LabCoreCall, channelId: string) {
     if (
       p !== '/api/module-settings' &&
       p !== '/api/daily/config' &&
-      p !== '/api/chaos-prices'
+      p !== '/api/chaos-prices' &&
+      p !== '/api/chaos-access'
     )
       return false;
     const reply = (status: number, body: unknown) => {
@@ -29,16 +30,19 @@ export function moduleSettingsRelay(core: LabCoreCall, channelId: string) {
     };
     if (req.headers['x-raptoru-studio'] !== '1')
       return (reply(403, { error: 'forbidden' }), true);
-    // Chaos V2 › Tarifs: each effect's price range, on the Core's `chaos` module (it checks and stores them).
+    // Chaos V2 › Tarifs: each effect's price range, on the Core's `chaos` module (it checks and stores them). The header's
+    // purchase state (`chaos-access`) is read only: the switch `chaos.enabled` is written as a module setting.
     const path =
       p === '/api/daily/config'
         ? '/v1/lab/daily/config'
         : p === '/api/chaos-prices'
           ? `/v1/lab/chaos/${channelId}/prices`
-          : `/v1/lab/module-settings/${channelId}`;
+          : p === '/api/chaos-access'
+            ? `/v1/lab/chaos/${channelId}/access`
+            : `/v1/lab/module-settings/${channelId}`;
     try {
       if (req.method === 'GET') return (reply(200, await core(path)), true);
-      if (req.method !== 'POST')
+      if (req.method !== 'POST' || p === '/api/chaos-access')
         return (reply(405, { error: 'method_not_allowed' }), true);
       let raw = '';
       for await (const chunk of req) {

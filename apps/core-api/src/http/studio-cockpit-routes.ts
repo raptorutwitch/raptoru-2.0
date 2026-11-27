@@ -16,8 +16,11 @@ const STUDIO_ACTOR = { id: 'studio', role: 'broadcaster', via: 'studio' };
 /** Allowed Lab sub-paths: `<prefix>/<channel>/…` (channel checked) or a channel-less route. */
 const CHANNEL_ROUTES =
   /^(moderation|raffle|wallet|commands|word-game|mini-games|module-settings|modules|casino)\/(\d{1,32})(\/[A-Za-z0-9/_-]*)?$/;
-/** Chaos V2: Studio › Chaos › Tarifs only (its execution has its own routes, /v1/studio/chaos/*; the rest is the extension's). */
-const CHAOS_ROUTES = /^(chaos)\/(\d{1,32})(\/prices)$/;
+/**
+ * Chaos V2: Studio › Chaos › Tarifs and the header's purchase state only (its execution has its own routes,
+ * /v1/studio/chaos/*; the rest is the extension's). The switch itself is a module setting (module-settings/<channel>).
+ */
+const CHAOS_ROUTES = /^(chaos)\/(\d{1,32})(\/(?:prices|access))$/;
 /**
  * Never through the cockpit: the executor side of the chat answers belongs to the bot; a module's VIEWER action belongs
  * to the extension's door (the viewer from the verified Twitch token) — through here a Studio installation could spend

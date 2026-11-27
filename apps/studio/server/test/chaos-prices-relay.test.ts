@@ -49,8 +49,12 @@ async function chain() {
     });
     const url = await listen(server);
     cleanups.push(() => server.close());
-    return async (body?: unknown, headers = { 'x-raptoru-studio': '1' }) => {
-      const res = await fetch(`${url}/api/chaos-prices`, {
+    return async (
+      body?: unknown,
+      headers: Record<string, string> = { 'x-raptoru-studio': '1' },
+      path = '/api/chaos-prices',
+    ) => {
+      const res = await fetch(`${url}${path}`, {
         method: body === undefined ? 'GET' : 'POST',
         headers: { 'content-type': 'application/json', ...headers },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -132,5 +136,38 @@ describe('Studio › Chaos › Tarifs — real Lab chain (Studio relay + Lab Cor
     const down = await studio({ effect: 'blur', min: 10_000, max: 75_000 });
     expect(down.status).toBeGreaterThanOrEqual(500);
     expect(down.body.effects).toBeUndefined();
+  });
+
+  it('« Autoriser les achats Chaos »: the header reads chaos.enabled and who may buy (Lab), turns it on and off through the module settings; the state is read only; Core down → no value claimed', async () => {
+    const { startCore, startStudio } = await chain();
+    const core = await startCore();
+    const studio = await startStudio(core.url);
+    const H = { 'x-raptoru-studio': '1' };
+    const access = () => studio(undefined, H, '/api/chaos-access');
+    expect((await access()).body).toEqual({
+      setting: 0,
+      open: false,
+      audience: 'lab',
+      testers: 0,
+    });
+    const on = await studio(
+      { key: 'chaos.enabled', value: 1 },
+      H,
+      '/api/module-settings',
+    );
+    expect(on.status).toBe(200);
+    expect((await access()).body).toMatchObject({ setting: 1, open: true });
+    await studio({ key: 'chaos.enabled', value: 0 }, H, '/api/module-settings');
+    expect((await access()).body).toMatchObject({ setting: 0, open: false });
+    // The state is read only; the Studio header is required.
+    expect((await studio({ setting: 1 }, H, '/api/chaos-access')).status).toBe(
+      405,
+    );
+    expect((await studio(undefined, {}, '/api/chaos-access')).status).toBe(403);
+    expect((await access()).body.setting).toBe(0);
+    core.server.close();
+    const down = await access();
+    expect(down.status).toBeGreaterThanOrEqual(500);
+    expect(down.body.setting).toBeUndefined();
   });
 });

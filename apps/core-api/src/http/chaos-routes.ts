@@ -87,6 +87,8 @@ export function chaosLabRoutes(chaos: ChaosService): Route[] {
     route('GET', '\\/moderation', (c) => chaos.moderationView(c)),
     // Studio › Chaos › Tarifs (Lab Studio; Production: the paired installation's cockpit, studio-cockpit-routes.ts).
     route('GET', '\\/prices', (c) => chaos.prices(c)),
+    // Studio › Chaos header: the purchase switch's state and who may buy (read only).
+    route('GET', '\\/access', (c) => chaos.access(c)),
     route('POST', '\\/prices', (c, { body }) =>
       chaos.setPrices(c, parse(PricesRequest, body), 'Studio'),
     ),
