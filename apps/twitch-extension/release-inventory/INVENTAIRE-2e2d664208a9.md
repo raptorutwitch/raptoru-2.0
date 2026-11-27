@@ -85,3 +85,6 @@ tarifs dynamique dans Studio »). **Aucun ZIP n'est
 - 91839307 2026-11-17 feat(casino): extension, Studio and Lab — the slot machine with the Coffre, the roulette, spectators
 
 <!-- Ligne de validation : à inscrire par Antoni seulement (ou par l'agent sur son autorisation écrite), après lecture. -->
+<!-- Ligne inscrite par l'agent le 27/11/2026 sur autorisation écrite d'Antoni, point de décision unique de la livraison Chaos V2 : « Je t'autorise à l'inscrire » (inventaire 2e2d664208a9, 56 commits, exact après fusion de la PR #130 en commit de fusion). -->
+
+Validé par Antoni : oui
