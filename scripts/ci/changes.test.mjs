@@ -57,6 +57,17 @@ describe('CI change detection', () => {
     );
   });
 
+  it('an extension inventory is not documentation: its validation runs the extension job (the production archive on main)', () => {
+    const inv =
+      'apps/twitch-extension/release-inventory/INVENTAIRE-094c4c52508f.md';
+    assert.deepEqual(on(pr(inv)), ['extension']);
+    assert.equal(
+      classify([inv], { event: 'push', base: BASE }).extension,
+      true,
+    );
+    assert.deepEqual(on(pr('apps/twitch-extension/README.md')), []);
+  });
+
   it('main, manual runs, shared configuration and an unknown base: everything', () => {
     const everything = PARTS;
     assert.deepEqual(
