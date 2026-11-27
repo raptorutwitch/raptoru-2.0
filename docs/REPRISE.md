@@ -15,12 +15,19 @@ conversation ChatGPT : [REPRISE_CHATGPT.md](REPRISE_CHATGPT.md).
 >   « Autoriser les achats Chaos » = `chaos.enabled` ; retour arrière `9836008e` puis `408f201a`), bot `df3adb5e`,
 >   Studio 0.1.45 publiée et installée, extension publique `be1744e75f63` (ZIP `9836008ee957` remis pour Hosted Test).
 >   Ouverture publique de Chaos : dernier GO d'Antoni.
-> - PR #132 `release/chaos-decisions-qol` : décisions Chaos (fin non confirmée = panne, Somnolence ≥ 10 s), bulle
->   Tombola « Rejoindre » / retour intelligent, Studio › Casino par joueur ; inventaire `094c4c52508f` (58 commits) **à
->   valider par Antoni**. Fusion, Core, Studio, ZIP : chacun sur GO.
-> - PR #133 `feat/delivery-pipeline` (brouillon) : « À livrer » dans l'État de la livraison, `--backup-now`, archive
->   Twitch construite par la CI de `main`, « Nouveautés » et vérification toutes les 6 h dans Studio. **Procédure
->   standard : [CICD.md § 0](CICD.md).** `--backup-now` n'a pas encore tourné contre le vrai Coolify.
+> - **`main` = `457f3a60`** (27/11, PR #134 → #133 → #132 fusionnées, CI verte), **rien de déployé** :
+>   - #132 : décisions Chaos (fin non confirmée = panne, Somnolence ≥ 10 s), bulle Tombola « Rejoindre » / retour
+>     intelligent, Studio › Casino par joueur, test et procédure d'ouverture publique ([chaos/DEPLOIEMENT_CHAOS.md](chaos/DEPLOIEMENT_CHAOS.md) § 9) ;
+>   - #133 : « À livrer » dans l'État de la livraison, `--backup-now` (pas encore éprouvé contre le vrai Coolify),
+>     archive Twitch construite par la CI de `main` une fois l'inventaire validé, « Nouveautés » et vérification toutes
+>     les 6 h dans Studio ; **procédure standard : [CICD.md § 0](CICD.md)** ;
+>   - #134 : la Soundboard ne répond plus « déjà publié » à une double publication simultanée du même son.
+> - **À livrer, chacun sur GO d'Antoni** : Core (`main`, aucune migration ; le bot n'est pas concerné), Studio
+>   (release depuis `main`), extension (ligne de validation d'Antoni dans `INVENTAIRE-094c4c52508f.md`, 58 commits →
+>   archive de la CI, Hosted Test, revue, **Release** Twitch), puis ouverture publique de Chaos (§ 9 :
+>   `CHAOS_EXTENSION=on` + interrupteur Studio).
+> - Autonomie (27/11) : l'agent fusionne seul une PR dont la CI est verte ; GO toujours requis pour un déploiement en
+>   Production, l'ouverture publique de Chaos, l'économie Twitch et toute dépense.
 
 ```text
 Raptoru 2.0 — checkpoint du 22/11/2026 (source : docs/REPRISE.md, dépôt public raptorutwitch/raptoru-2.0, branche main)
