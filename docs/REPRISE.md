@@ -22,8 +22,10 @@ conversation ChatGPT : [REPRISE_CHATGPT.md](REPRISE_CHATGPT.md).
 >   dans `Worktrees/agent/apps/twitch-extension/release/ci-30c1775e/`). **À téléverser par Antoni** dans la console Twitch
 >   (Hosted Test, revue, Release ; console non automatisable). **Après la Release : `PUBLISHED` = `30c1775e…`** (commit
 >   à faire, avec la note de version).
-> - Chaos : **inchangé** — `CHAOS_EXTENSION=testers:83603689`, `chaos.enabled` = 1 (essai fermé d'Antoni).
->   Ouverture publique sur GO séparé : [chaos/DEPLOIEMENT_CHAOS.md](chaos/DEPLOIEMENT_CHAOS.md) § 9.
+> - Chaos (GO d'ouverture d'Antoni, 27/11 15:35 UTC) : **mode public prêt, achats FERMÉS** — `CHAOS_EXTENSION=on` (entrée
+>   de Production ; copie Preview inchangée), Core redémarré sain, Studio voit « ouvert au public » ; `chaos.enabled` = **0**
+>   tant que la version de l'extension avec Interactions n'est pas en Release chez Twitch (non vérifiable d'ici).
+>   **Après la Release : cocher « Autoriser les achats Chaos » dans Studio** (ou demander à l'agent) — [chaos/DEPLOIEMENT_CHAOS.md](chaos/DEPLOIEMENT_CHAOS.md) § 9.
 > - PR fusionnées le 27/11 : #134, #133, #132, #135, #136 (inventaire validé + la CI de `main` construit l'archive quand
 >   l'inventaire change). Procédure standard : [CICD.md § 0](CICD.md). Autonomie : l'agent fusionne seul une PR verte ;
 >   GO pour Production, ouverture publique de Chaos, économie Twitch, dépenses.
