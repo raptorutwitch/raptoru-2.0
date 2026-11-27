@@ -506,9 +506,15 @@ export class SoundLabService {
         ],
       );
     } catch (e) {
-      if (isUniqueViolation(e))
+      if (!isUniqueViolation(e)) throw e;
+      // ON CONFLICT arbitrates the sound id only: the same request sent twice at once can lose on the live-file index
+      // (sound_lab_sounds_live_file) instead. The twin's row is then this very sound: the same answer, no 409.
+      const twin = await this.db.query<{ file_id: string | null }>(
+        'select file_id from sound_lab_sounds where sound_id = $1 and deleted_at is null',
+        [req.id],
+      );
+      if (twin[0]?.file_id !== req.file_id)
         throw new SoundLabError409('duplicate_file', 'already published');
-      throw e;
     }
     const mine = await this.db.query<{ file_id: string | null }>(
       'select file_id from sound_lab_sounds where sound_id = $1',
