@@ -193,6 +193,12 @@ button {
   --ft: rgba(52, 211, 153, 0.1);
   --fa: rgba(52, 211, 153, 0.18);
 }
+/* Chaos V2 : magenta, seule teinte libre entre Subgift et Follow. */
+.f-chaos {
+  --fc: #ff4fb0;
+  --ft: rgba(255, 79, 176, 0.1);
+  --fa: rgba(255, 79, 176, 0.18);
+}
 .f-other {
   --fc: #a3adbf;
   --ft: rgba(163, 173, 191, 0.08);

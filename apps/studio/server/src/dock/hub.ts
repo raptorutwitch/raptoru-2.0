@@ -58,8 +58,19 @@ export class DockHub {
       channelId: string;
       sleep?: (ms: number) => Promise<void>;
       now?: () => number;
+      /** Adds display data to an activity as it arrives (Chaos: the choice in one line, chaos-summary.ts). */
+      decorate?: (a: DockActivity) => DockActivity;
     },
   ) {}
+
+  /** The activity as docks get it; a decorator that fails leaves it as the Core sent it. */
+  private dress(a: DockActivity): DockActivity {
+    try {
+      return this.d.decorate?.(a) ?? a;
+    } catch {
+      return a;
+    }
+  }
 
   private get base() {
     return `${this.d.environment === 'production' ? '/v1/studio/dock' : '/v1/lab/dock'}/${this.d.channelId}`;
@@ -119,7 +130,8 @@ export class DockHub {
   /** Keeps the newest cacheMax by time (a change of an older row still replaces it while it is kept). */
   private put(rows: DockActivity[]) {
     const changed: DockActivity[] = [];
-    for (const r of rows) {
+    for (const raw of rows) {
+      const r = this.dress(raw);
       const cur = this.cache.get(r.activity_key);
       if (cur && cur.seq >= r.seq) continue; // an older copy (overlap of snapshot and changes)
       this.cache.set(r.activity_key, r);
@@ -202,14 +214,15 @@ export class DockHub {
   }
 
   /** An older page of history, straight from the Core (never cached). */
-  history(before: { at: string; seq: number }, limit = 50) {
-    return this.d.core<{
+  async history(before: { at: string; seq: number }, limit = 50) {
+    const r = await this.d.core<{
       cursor: number;
       activities: DockActivity[];
       more: boolean;
     }>(
       `${this.base}/activity?limit=${limit}&before=${encodeURIComponent(before.at)}&before_seq=${before.seq}`,
     );
+    return { ...r, activities: r.activities.map((a) => this.dress(a)) };
   }
 
   /** A visual replay of an alert (Core decides; never the event again). */

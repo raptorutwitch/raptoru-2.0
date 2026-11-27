@@ -333,6 +333,91 @@ describe('states (icons with a tooltip) and the one-click replay', () => {
   });
 });
 
+describe('Chaos purchases: one compact line per purchase', () => {
+  const blink = (state = {}, data = {}) =>
+    ix(
+      'chaos',
+      0,
+      'Ana',
+      {
+        effect: { id: 'blink', label: 'Paupières' },
+        setting: 'Somnolence · Complètement',
+        duration_s: 10,
+        price: 2400,
+        payment: 'jetons',
+        ...data,
+      },
+      { status: 'chaos_queued', ...state },
+    );
+
+  it('its own family and filter, among Raptoru’s interactions (shown by default)', () => {
+    expect(familyOf({ type: 'chaos' })).toBe('chaos');
+    expect(FAMILIES.chaos.label).toBe('Chaos');
+    expect(FILTER_GROUPS.find((g) => g.id === 'raptoru').filters).toContain(
+      'chaos',
+    );
+    expect(filterLabel('chaos')).toMatch(/^Chaos/);
+    expect(shownBy(DEFAULT_PREFS, blink())).toBe(true);
+    // Older stored preferences (before Chaos) keep it shown.
+    expect(readPrefs({ v: 2, hidden: ['tts'] }).hidden).not.toContain('chaos');
+  });
+
+  it('the effect’s name on the main line; duration and price first in the note (never cut), then its setting', () => {
+    expect(labelOf(blink())).toEqual({
+      label: 'Paupières',
+      named: true,
+      note: expect.stringMatching(
+        /^10 s · 2\s400 Jetons · Somnolence · Complètement$/,
+      ),
+    });
+    // Without Studio's setting (catalogue missing): the duration and the price, never an empty note.
+    expect(labelOf(blink({}, { setting: undefined })).note).toMatch(
+      /^10 s · 2\s400 Jetons$/,
+    );
+    expect(labelOf(blink({}, { payment: 'gift', price: 0 })).note).toMatch(
+      /^10 s · offert · Somnolence/,
+    );
+    const html = rowHtml(one(blink()));
+    expect(html).toContain('class="row f-chaos');
+    expect(html).toContain('Paupières');
+    expect(html).toContain('Ana');
+  });
+
+  it('its real state on the same line: waiting, playing, played, interrupted (refunded), refunded, not played', () => {
+    const st = (status, refund_status = 'none') =>
+      stateOf(blink({ status, refund_status }));
+    expect(st('chaos_queued')).toEqual({ label: 'En attente', tone: 'wait' });
+    expect(st('chaos_playing')).toEqual({ label: 'En cours', tone: 'wait' });
+    expect(st('chaos_played')).toEqual({ label: 'Terminé', tone: 'ok' });
+    expect(st('chaos_interrupted', 'refunded')).toEqual({
+      label: 'Interrompu · remboursé',
+      tone: 'muted',
+    });
+    expect(st('chaos_interrupted').label).toBe('Interrompu');
+    expect(st('chaos_unplayed', 'refunded')).toEqual({
+      label: 'Remboursé',
+      tone: 'muted',
+    });
+    expect(st('chaos_unplayed')).toEqual({ label: 'Non joué', tone: 'bad' });
+  });
+
+  it('the effect, its setting and the viewer are text, never HTML', () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    const html = rowHtml(
+      one(
+        ix(
+          'chaos',
+          0,
+          evil,
+          { effect: { id: 'x', label: evil }, setting: evil, price: 1 },
+          { status: 'chaos_played' },
+        ),
+      ),
+    );
+    expect(html).not.toContain('<img');
+  });
+});
+
 describe('viewer text is never HTML', () => {
   const evil = '<img src=x onerror=alert(1)>"\'`&';
   it('pseudos, messages, reward and sound names, recipients, TTS, panels: escaped everywhere', () => {
@@ -572,7 +657,7 @@ describe('grouping: Bonks only', () => {
 });
 
 describe('preferences', () => {
-  it('defaults: everything shown, costs hidden; the 15 filters in 4 groups (Halloween: its own; Musique: Music Hub V2)', () => {
+  it('defaults: everything shown, costs hidden; the 16 filters in 4 groups (Halloween: its own; Musique: Music Hub V2; Chaos V2)', () => {
     expect(readPrefs(null)).toEqual(DEFAULT_PREFS);
     expect(FILTERS).toEqual([
       'follow',
@@ -586,6 +671,7 @@ describe('preferences', () => {
       'tts',
       'soundboard',
       'bonk',
+      'chaos',
       'random_ban',
       'raffle',
       'music',
