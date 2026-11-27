@@ -53,7 +53,7 @@ Cette section remplace, pour l'interface, les règles V1.1 qui la contredisent (
   | Subgift | cadeau        | fuchsia      | Bonk             | marteau         | cuivre    |
   | Bits    | diamant       | cyan         | Random Ban       | marteau de juge | rouge     |
   | Raid    | fusée         | orange       | Tombola          | ticket          | turquoise |
-  | Don     | pièces        | vert         |                  |                 |           |
+  | Don     | pièces        | vert         | Chaos            | éclair          | magenta   |
 
 - Hiérarchie : **[avatar] [icône + LIBELLÉ] [pseudo] … [état] [rejeu]**, puis une ligne discrète **[temps · note]**
   (tier, mois, nom du son, emote, cible, coût si demandé), puis le texte du viewer sur une ligne s'il y en a un.
@@ -212,6 +212,7 @@ Cette section remplace, pour l'interface, les règles V1.1 qui la contredisent (
 | Soundboard (turquoise)       | `soundboard` (nom exact du son)                                     | `sound_lab_interactions` (sauf son payé en points)      |
 | Bonk (corail)                | `bonk` (emote, salve)                                               | `bonk_lab_interactions` (un tir = une ligne source)     |
 | Tombola et Random Ban (gris) | `raffle`, `random_ban` (`!rb` du chat)                              | `lab_raffle_entries`, `rb_requests` (`source = 'chat'`) |
+| Chaos (magenta)              | `chaos` (effet, réglage, durée, prix)                               | `chaos_requests` (un achat = une ligne)                 |
 
 - Clés `ix:<type>:<id>`, `kind = 'interaction'` : migration additive `20261111130000_obs_dock_interactions.sql`
   (jumelle Lab `20261111120000_obs_dock_interactions_lab.sql`) qui élargit le check de `dock_activity.kind`. Retour :
@@ -220,6 +221,15 @@ Cette section remplace, pour l'interface, les règles V1.1 qui la contredisent (
   remboursement) met à jour **la même** activité (version `status|refund_status[|review_status]`), jamais un second
   événement.
 - Ce que les points de chaîne ont payé (un son, un Random Ban) reste **une** activité : la rédemption.
+- **Chaos V2** (27/11) : un achat d'effet depuis l'extension = **une** ligne, jamais groupée. Libellé : le nom de
+  l'effet (catalogue du Core) ; note : **durée · prix** (Jetons, « crédit d'effet » ou « offert ») **· réglage**, dans cet
+  ordre pour que durée et prix restent visibles dans un dock étroit (le réglage se coupe en premier, entier au survol).
+  Le réglage est rédigé par Studio avec le catalogue de l'extension qu'il embarque (`describeChoice`,
+  `apps/studio/server/src/dock/chaos-summary.ts`), comme le suivi de l'extension le montre ; sans catalogue, durée et
+  prix seuls. État (icône habituelle, libellé au survol) : **En attente** (`queued`, `claimed`), **En cours**
+  (`started`), **Terminé** (fin moteur `duration`), **Interrompu** (toute autre fin : panne, STOP ALL, modération),
+  **Non joué** (`failed`, `canceled`, `expired`) ; « remboursé » s'ajoute quand les Jetons sont rendus (un achat jamais
+  joué et rendu = **Remboursé**). Lecture seule : ni tarifs, ni économie, ni moteur touchés.
 - Bonk : `emote.glyph` pour une emote Unicode, sinon `emote.url` affichée en image **uniquement** en https depuis
   `static-cdn.jtvnw.net`, `cdn.7tv.app`, `cdn.betterttv.net`, `cdn.frankerfacez.com` (même liste dans la CSP `img-src`
   du serveur du dock).

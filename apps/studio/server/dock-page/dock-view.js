@@ -46,6 +46,8 @@ const PATHS = {
   ticket:
     '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/>',
   dot: '<circle cx="12" cy="12" r="4"/>',
+  // Chaos V2: an effect on the streamer's screen.
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   // Music Hub V2: a double note.
   note: '<path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
@@ -93,6 +95,7 @@ export const FAMILIES = {
   raffle: { icon: 'ticket', label: 'Tombola' },
   halloween: { icon: 'bat', label: 'Halloween' },
   music: { icon: 'note', label: 'Musique' },
+  chaos: { icon: 'zap', label: 'Chaos' },
   other: { icon: 'dot', label: 'Événement' },
 };
 
@@ -114,6 +117,7 @@ const FAMILY_OF = {
   raffle: 'raffle',
   halloween: 'halloween',
   music: 'music',
+  chaos: 'chaos',
 };
 /** The family of an activity — also its filter. */
 export const familyOf = (a) => FAMILY_OF[a.type] ?? 'other';
@@ -129,7 +133,15 @@ export const FILTER_GROUPS = [
   {
     id: 'raptoru',
     label: 'Interactions Raptoru',
-    filters: ['tts', 'soundboard', 'bonk', 'random_ban', 'raffle', 'music'],
+    filters: [
+      'tts',
+      'soundboard',
+      'bonk',
+      'chaos',
+      'random_ban',
+      'raffle',
+      'music',
+    ],
   },
   { id: 'event', label: 'Événements', filters: ['halloween'] },
 ];
@@ -150,6 +162,7 @@ const FILTER_LABEL = {
   raffle: 'Tombola',
   halloween: 'Halloween (effets achetés)',
   music: 'Musique (demandes depuis l’extension)',
+  chaos: 'Chaos (effets achetés depuis l’extension)',
 };
 export const filterLabel = (id) => FILTER_LABEL[id] ?? id;
 
@@ -443,6 +456,24 @@ export function labelOf(a, prefs = DEFAULT_PREFS) {
           .filter(Boolean)
           .join(' · '),
       };
+    case 'chaos':
+      // The short facts first (duration, price: never cut in a narrow dock), then the setting (cut first, whole in the
+      // tooltip).
+      return {
+        label: d.effect?.label || 'Chaos',
+        named: true,
+        note: joined(
+          typeof d.duration_s === 'number' ? `${nf(d.duration_s)} s` : '',
+          d.payment === 'gift'
+            ? 'offert'
+            : d.payment === 'credit'
+              ? 'crédit d’effet'
+              : typeof d.price === 'number'
+                ? plural(d.price, 'Jeton', 'Jetons')
+                : '',
+          d.setting,
+        ),
+      };
     default:
       return { label: FAMILIES.other.label };
   }
@@ -498,6 +529,12 @@ const IX = {
   music_skipped: ['Passée', 'muted'],
   music_unknown: ['À vérifier', 'bad'],
   music_failed: ['Échec', 'bad'],
+  // Chaos V2: one row per purchase, its state following the request (the refund is added after it).
+  chaos_queued: ['En attente', 'wait'],
+  chaos_playing: ['En cours', 'wait'],
+  chaos_played: ['Terminé', 'ok'],
+  chaos_interrupted: ['Interrompu', 'muted'],
+  chaos_unplayed: ['Non joué', 'bad'],
 };
 
 /**
@@ -527,10 +564,16 @@ export function stateOf(a) {
   if (a.kind === 'interaction') {
     const [label, tone] = IX[s.status] ?? [s.status ?? '', 'muted'];
     const review = s.review_status === 'pending';
+    const refunded = s.refund_status === 'refunded';
+    // Chaos: an effect (« remboursé »); one that never played and came back in full is simply « Remboursé ».
+    if (a.type === 'chaos')
+      return s.status === 'chaos_unplayed' && refunded
+        ? { label: 'Remboursé', tone: 'muted' }
+        : { label: joined(label, refunded ? 'remboursé' : ''), tone };
     return {
       label: joined(
         review ? 'En attente de validation' : label,
-        s.refund_status === 'refunded' ? 'remboursée' : '',
+        refunded ? 'remboursée' : '',
       ),
       tone: review ? 'wait' : tone,
       reason: s.error,

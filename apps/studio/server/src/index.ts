@@ -92,6 +92,7 @@ import {
   type Signal,
 } from './supervision/signals.js';
 import { Supervisor } from './supervision/supervisor.js';
+import { loadChaosSummary } from './dock/chaos-summary.js';
 import { DockHub } from './dock/hub.js';
 import { DockKey, DockServer } from './dock/server.js';
 import { dockStudioApi, type DockRuntime } from './dock/studio-api.js';
@@ -1508,6 +1509,18 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
           core: alertsCore,
           environment: alertsEnv,
           channelId: cockpitChannel,
+          // Chaos purchases: the choice worded by the extension's catalogue (shipped with Studio).
+          decorate: await loadChaosSummary(
+            join(
+              REPO_ROOT,
+              'apps',
+              'twitch-extension',
+              'extension',
+              'modules',
+              'interactions',
+              'catalog.js',
+            ),
+          ),
         })
       : null;
   const dock: DockRuntime | null = dockHub

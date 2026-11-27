@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Clock } from '../clock.js';
+import { effectById } from '../chaos/catalog.js';
 import type { Db, Queryable } from '../db/db.js';
 
 // Dock OBS V1 (docs/OBS_DOCK.md) — a READ-ONLY projection of what Raptoru already recorded, for the OBS dock:
@@ -101,6 +102,25 @@ const HALLOWEEN_SOURCE = `         union all
          where p.channel_id = $1 and p.started_at is not null and p.started_at >= $2
            and p.started_at <= $3::timestamptz
              - coalesce((es.rules->>'dock_reveal_ms')::bigint, 5000) * interval '1 millisecond'
+`;
+
+/**
+ * Chaos V2 (docs/chaos/CONTRAT_LOT2.md): an effect bought from the extension — ONE row per purchase, its state following
+ * the real request (waiting, playing, played, interrupted, not played), the refund on top. The engine ends a full
+ * effect with the code `duration`; any other end (a breakdown, STOP ALL, moderation) is an interruption. Read only.
+ */
+const CHAOS_SOURCE = `         union all
+         select 'ix:chaos:' || c.id, 'chaos', c.created_at, c.viewer_id, c.viewer_name,
+           case
+             when c.status in ('queued', 'claimed') then 'chaos_queued'
+             when c.status = 'started' then 'chaos_playing'
+             when c.status = 'ended' and coalesce(c.code, 'duration') = 'duration' then 'chaos_played'
+             when c.status = 'ended' then 'chaos_interrupted'
+             else 'chaos_unplayed' end,
+           c.refund_status, null, c.effect,
+           jsonb_build_object('choice', c.choice, 'duration_ms', c.duration_ms, 'price', c.price, 'payment', c.payment),
+           concat_ws('|', c.status, coalesce(c.code, '-'), c.refund_status)
+         from chaos_requests c where c.channel_id = $1 and c.created_at >= $2
 `;
 
 export class DockActivityService {
@@ -363,17 +383,19 @@ export class DockActivityService {
    * Soundboard (the sound's name), TTS (its text, cut, and its review), Tombola entries, `!rb` Random Bans. What channel
    * points paid (a sound, a Random Ban) is already its redemption: never a second activity. Read only, like the rest of the projection.
    */
-  /** The Halloween purchases exist (its migration may land just after a deploy starts): checked until they do. */
-  private eventShop = false;
-  private async hasEventShop(q: Queryable) {
-    if (!this.eventShop)
-      this.eventShop =
-        (
-          await q.query<{ t: string | null }>(
-            "select to_regclass('event_shop_purchases')::text as t",
-          )
-        )[0]?.t != null;
-    return this.eventShop;
+  /** A module's table exists (its migration may land just after a deploy starts): checked until it does. */
+  private readonly present = new Set<string>();
+  private async has(q: Queryable, table: string) {
+    if (!this.present.has(table)) {
+      const t = (
+        await q.query<{ t: string | null }>(
+          'select to_regclass($1)::text as t',
+          [table],
+        )
+      )[0]?.t;
+      if (t != null) this.present.add(table);
+    }
+    return this.present.has(table);
   }
 
   private async interactionChanges(
@@ -381,7 +403,10 @@ export class DockActivityService {
     channelId: string,
     since: Date,
   ) {
-    const halloween = (await this.hasEventShop(q)) ? HALLOWEEN_SOURCE : '';
+    const halloween = (await this.has(q, 'event_shop_purchases'))
+      ? HALLOWEEN_SOURCE
+      : '';
+    const chaos = (await this.has(q, 'chaos_requests')) ? CHAOS_SOURCE : '';
     const rows = await q.query<{
       key: string;
       type: string;
@@ -438,7 +463,7 @@ export class DockActivityService {
            jsonb_build_object('artists', m.track->'artists', 'price', m.price_tokens, 'reason', m.reason),
            concat_ws('|', m.state, coalesce(m.refund_status, '-'), coalesce(m.track->>'id', '-'))
          from spotify_requests m where m.channel_id = $1 and m.source = 'extension' and m.received_at >= $2
-${halloween}       )
+${halloween}${chaos}       )
        select src.key, src.type, src.created_at, src.viewer_id, src.viewer_name, src.status, src.refund_status,
          src.review_status, src.detail, src.extra, av.url as avatar,
          concat_ws('|', src.version, coalesce(av.url, '-')) as version
@@ -491,20 +516,32 @@ ${halloween}       )
                       ...(r.detail ? { target: r.detail } : {}),
                       streamer_mute: !!x.streamer_mute,
                     }
-                  : r.type === 'music'
+                  : r.type === 'chaos'
                     ? {
                         actor,
-                        track: r.detail
-                          ? {
-                              title: r.detail,
-                              artists: Array.isArray(x.artists)
-                                ? x.artists
-                                : [],
-                            }
-                          : null,
+                        effect: {
+                          id: r.detail,
+                          label: effectById(r.detail ?? '')?.label ?? r.detail,
+                        },
+                        choice: x.choice ?? {},
+                        duration_s: Number(x.duration_ms ?? 0) / 1000,
                         price: typeof x.price === 'number' ? x.price : null,
+                        payment: x.payment ?? null,
                       }
-                    : { actor };
+                    : r.type === 'music'
+                      ? {
+                          actor,
+                          track: r.detail
+                            ? {
+                                title: r.detail,
+                                artists: Array.isArray(x.artists)
+                                  ? x.artists
+                                  : [],
+                              }
+                            : null,
+                          price: typeof x.price === 'number' ? x.price : null,
+                        }
+                      : { actor };
       return {
         activity_key: r.key,
         kind: 'interaction',
