@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- LAB ONLY — page de comparaison de la maquette « Interactions » : l'extension en mode démo, dans ses vraies tailles,
+     côte à côte. Servie par test/responsive/server.mjs (« Apercu Effets live.cmd ») ; jamais embarquée dans un paquet. -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aperçu Interactions</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0f0a10; --card: #1e1319; --line: rgba(238, 176, 188, .18); --ink: #f6edef; --muted: #bcaab0; --acc: #9e2941; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at 8% 0, rgba(158, 41, 65, .35), transparent 38%), var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); background: rgba(15, 10, 16, .93); backdrop-filter: blur(8px); }
+    h1 { margin: 0; font-size: 16px; }
+    h1 small { color: var(--muted); font-weight: 500; }
+    .ctl { display: flex; align-items: center; gap: 6px; }
+    .ctl > span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .seg { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; }
+    .seg button { padding: 5px 11px; border: 0; border-radius: 999px; background: none; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+    .seg button[aria-pressed="true"] { background: var(--acc); color: #fff; }
+    select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-size: 13px; }
+    main { display: flex; flex-wrap: wrap; gap: 22px; padding: 18px; align-items: flex-start; }
+    figure { margin: 0; display: grid; gap: 6px; }
+    figcaption { color: var(--muted); font-size: 12px; }
+    figcaption b { color: var(--ink); }
+    iframe { display: block; border: 1px solid var(--line); border-radius: 14px; background: #000; }
+    .note { padding: 0 18px 18px; color: var(--muted); font-size: 12px; max-width: 980px; }
+  </style>
+  <script type="module" src="apercu.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Interactions <small>· Chaos V2 et Bonk · maquette, données fictives</small></h1>
+    <div class="ctl"><span>Onglet</span><div class="seg" data-k="ixTab"><button data-v="chaos">Chaos</button><button data-v="bonk">Bonk</button></div></div>
+    <div class="ctl"><span>Rôle</span><div class="seg" data-k="ixRole"><button data-v="viewer">Viewer</button><button data-v="mod">Modérateur</button><button data-v="fx">Modération FX</button></div></div>
+    <div class="ctl"><span>Scénario</span><select data-k="ixScenario"></select></div>
+    <div class="ctl"><span>Fiche ouverte</span><select data-k="ixOpen"></select></div>
+    <div class="ctl"><span>Durée max</span><div class="seg" data-k="ixCap"><button data-v="30">30 s · Sécurité actuelle</button><button data-v="60">60 s · simulé</button></div></div>
+    <div class="ctl"><span>Tarifs</span><div class="seg" data-k="ixPrices"><button data-v="">Fourchettes</button><button data-v="proposee">Proposition</button><button data-v="maquette">Maquette</button></div></div>
+    <div class="ctl"><span>À venir</span><div class="seg" data-k="ixPlanned"><button data-v="">Masqués</button><button data-v="1">Montrés</button></div></div>
+  </header>
+  <main id="frames"></main>
+  <p class="note">Chaque cadre est la vraie extension (shell v2, mode démo) à la taille que Twitch lui donne. Clique dedans comme un viewer : fiche d'un effet, « Conditions », achats répétés (la fiche reste ouverte), « Ne plus demander », charges d'« Un clignement », crédits d'effets (billet du bandeau), favoris (☆), réordonnancement (appui long)… « Modérateur » : le bouclier de l'en-tête ouvre la vraie console de modération sur la bonne section (FX sur Chaos, Bonk sur Bonk) ; « Modération FX » l'ouvre au chargement. Les commandes de la console autres que FX sont refusées (Lab). Le cadre iPhone est une simulation (taille, toucher), pas Safari. Le faux Core survit au rechargement d'un cadre ; favoris, ordre et réglages sont gardés dans ce navigateur. Aucun appel au Core, à Twitch ni au Studio installé ; les aperçus sont des simulations CSS, pas le rendu du moteur.</p>
+</body>
+</html>

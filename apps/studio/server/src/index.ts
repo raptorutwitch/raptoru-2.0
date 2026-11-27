@@ -99,6 +99,8 @@ import { HalloweenRuntime } from './halloween/runtime.js';
 import { CosmeticsRelay } from './cosmetics/relay.js';
 import { ChallengesRelay } from './challenges/relay.js';
 import { LevelUpRuntime } from './level-up/runtime.js';
+import { ChaosRuntime } from './chaos/runtime.js';
+import { ChaosCoreLoop } from './chaos/core-loop.js';
 import { createChatboxHost, type ChatboxHost } from './chatbox/host.js';
 import { ProgressionRelay } from './progression/relay.js';
 import {
@@ -419,9 +421,9 @@ const TEST_LAB_PRODUCTION_ACTIONS = new Set([
   'stop-all',
   'logs/clear',
 ]);
-/** The paths served by the relay chain (relays to the profile's Core). */
+/** The paths served by the relay chain (relays to the profile's Core). Chaos › Tarifs: module-settings/relay.ts. */
 const RELAYED =
-  /^\/api\/(mini-games\/|casino\/|module-settings$|daily\/config$|modules(\/|$))/;
+  /^\/api\/(mini-games\/|casino\/|module-settings$|chaos-prices$|daily\/config$|modules(\/|$))/;
 
 /** Several relays behind one handler slot: the first that knows the path answers. */
 export function chainRelays(
@@ -520,6 +522,8 @@ export interface StudioServerOptions {
   labPanel?: CoreLabPanel | null;
   /** Level Up V2 (docs/LEVEL_UP_V2.md): its own OBS source (the viewers' level-ups), apart from every other overlay. */
   levelUp?: LevelUpRuntime | null;
+  /** Chaos V2 (docs/chaos/ARCHITECTURE_MOTEUR.md): the native engine's local API (Studio › Chaos). */
+  chaos?: ChaosRuntime | null;
   /** Chatbox Raptoru (docs/CHATBOX.md): the OBS chat pages, their editor and the simulator. */
   chatbox?: ChatboxHost | null;
 }
@@ -553,6 +557,7 @@ export function createStudioServer(o: StudioServerOptions) {
     labFrontier = null,
     labPanel = null,
     levelUp = null,
+    chaos = null,
     chatbox = null,
   } = o;
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -639,16 +644,31 @@ export function createStudioServer(o: StudioServerOptions) {
       }
       // Halloween: overlay page / media (its key), Electron main (screens), Studio's panel and the shop relay.
       if (halloween && (await halloween.handle(req, res, url))) return;
-      // Security (architecture audit S2): these relays answered without the same-host check (DNS rebinding).
+      // Security (architecture audit S2): these relays answered without the same-host check (DNS rebinding). Chaos V2
+      // lot 2: the engine's local API too (it plays effects on the streamer's screen).
       if (
-        /^\/api\/(progression|cosmetics|challenges)(\/|$)/.test(url.pathname) &&
+        /^\/api\/(progression|cosmetics|challenges|chaos)(\/|$)/.test(
+          url.pathname,
+        ) &&
         !sameHost(req)
       )
         return send(res, 403, { error: 'forbidden_host' });
+      // Chaos V2 lot 2: the Lab Interactions « Jouer sur mon PC » exists in the Lab profile only (as the Extension Lab).
+      if (
+        url.pathname.startsWith('/api/chaos/lab/') &&
+        profile?.plan.effective === 'production'
+      )
+        return send(res, 409, {
+          ok: false,
+          error: 'production_profile',
+          code: 'production_profile',
+          message: PRODUCTION_NO_EXT_LAB,
+        });
       if (progression && (await progression.handle(req, res, url))) return;
       if (cosmetics && (await cosmetics.handle(req, res, url))) return;
       if (challenges && (await challenges.handle(req, res, url))) return;
       if (levelUp && (await levelUp.handle(req, res, url))) return;
+      if (chaos && (await chaos.handle(req, res, url))) return;
       // Chatbox Raptoru: its OBS pages (token) and its editor's API (same host + Studio header, checked by the host).
       if (chatbox && (await chatbox.handle(req, res, url))) return;
       // Twitch alerts V1: Core queues; Studio serves the OBS source / preview and relays the claims / reports.
@@ -978,6 +998,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
   let dockRef: DockRuntime | null = null;
   let halloweenRef: HalloweenRuntime | null = null;
   let levelUpRef: LevelUpRuntime | null = null;
+  let chaosRef: ChaosRuntime | null = null;
+  let chaosCoreRef: ChaosCoreLoop | null = null;
   let chatboxRef: ChatboxHost | null = null;
   let pointsRef: ChannelPointsRuntime | null = null;
   let twitchConnectionsRef: TwitchConnections | null = null;
@@ -1006,6 +1028,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
     seRef?.close();
     void dockRef?.server.close();
     halloweenRef?.stop();
+    // Before the engine stops: nothing claimed while Studio leaves (the journal keeps the reports to send).
+    chaosCoreRef?.stop();
     levelUpRef?.stop();
     chatboxRef?.stop();
     pointsRef?.stop();
@@ -1019,6 +1043,8 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
       {
         // The Lab chat ingress (bot child process) is awaited like the others before exiting.
         labchat: ingress ? () => ingress.stop() : undefined,
+        // Chaos: STOP ALL then exit, awaited (the cursor is shown again before Studio's server leaves).
+        chaos: chaosRef ? () => chaosRef!.stop() : undefined,
         twitchOAuth: twitchConnectionsRef
           ? () => twitchConnectionsRef!.stop()
           : undefined,
@@ -1602,6 +1628,17 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
               : {}),
           })
         : null),
+    // Chaos V2: the native engine (separate process, started on the page's first call). Absent from a package that
+    // does not ship it (the page says so); its configuration and presets live per profile (labModuleDir).
+    chaos: (chaosRef = new ChaosRuntime({
+      exe:
+        process.env.CHAOS_ENGINE_EXE ??
+        join(REPO_ROOT, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe'),
+      stateDir: labModuleDir('chaos'),
+      log: (line) => lab.logs.add('studio', line),
+      // Diffusion OBS (mode C) : la seule connexion OBS de Studio (celle du Bonk), comme Halloween.
+      obs: () => bonk?.obs ?? null,
+    })),
     // Chatbox Raptoru (docs/CHATBOX.md): the Lab keeps its own settings; the real channel's emotes (public catalogues).
     chatbox: (chatboxRef = await createChatboxHost({
       dir:
@@ -1640,6 +1677,31 @@ if (process.env.STUDIO_SERVER_NO_LISTEN !== '1') {
         }
       : null,
   });
+  // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md § 3): the viewers' effects sold by the profile's Core, played by the
+  // engine. Only with a Core and an engine; the loop starts the engine itself only while the Core says Chaos is open.
+  if (chaosRef?.client.available() && alertsCore && alertsEnv)
+    chaosCoreRef = await ChaosCoreLoop.open({
+      runtime: chaosRef,
+      core: alertsCore,
+      environment: alertsEnv,
+      channelId: cockpitChannel,
+      studioId:
+        (plan.production?.installation ?? mainLab?.installation)
+          ?.installationId ?? 'studio-lab-chaos',
+      journal:
+        alertsEnv === 'production'
+          ? join(paths.runtimeDir, 'production', 'chaos', 'core-journal.json')
+          : join(labModuleDir('chaos'), 'core-journal.json'),
+      log: (line) => lab.logs.add('studio', line),
+    }).catch((e: Error) => {
+      lab.logs.add(
+        'studio',
+        `Chaos : boucle du Core indisponible (${lab.deps.redact(e.message)})`,
+        'error',
+      );
+      return null;
+    });
+  chaosCoreRef?.start();
   supervisor.start();
   if (dock)
     dock.server.listen().then(

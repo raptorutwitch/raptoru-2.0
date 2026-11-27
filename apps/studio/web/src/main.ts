@@ -13,6 +13,7 @@ import './pages/commands.css';
 import './pages/word-game.css';
 import './pages/mini-games.css';
 import './pages/casino.css';
+import './pages/chaos.css';
 import './pages/regie.css';
 import './pages/centre.css';
 import './pages/hubs.css';
@@ -47,6 +48,7 @@ import { mountCommandsPage } from './pages/commands.js';
 import { mountWordGamePage } from './pages/word-game.js';
 import { mountMiniGamesPage } from './pages/mini-games.js';
 import { mountCasinoPage } from './pages/casino.js';
+import { mountChaosPage } from './pages/chaos.js';
 import { mountSimulation } from './simulation.js';
 import { mountSimulationPage } from './pages/simulation.js';
 import { mountAlerts } from './pages/alerts.js';
@@ -112,6 +114,7 @@ if (app) {
     'music-overlay': mountMusicOverlayPage(el('music-overlay')),
     'sub-wheel': mountSubWheelPage(el('sub-wheel')),
     bonk: mountBonkPage(el('bonk')),
+    chaos: mountChaosPage(el('chaos')),
     modules: mountModuleHost(el('modules')),
     chatbox: mountChatboxPage(el('chatbox')),
   };

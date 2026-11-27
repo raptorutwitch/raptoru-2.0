@@ -56,6 +56,11 @@ export interface SettingSpec {
   help?: string;
   /** Shown under « Paramètres avancés » in Studio. */
   advanced?: boolean;
+  /**
+   * Owned by its module's own editor (Studio › Chaos › Tarifs: a min / max pair checked together): never listed in
+   * « Paramètres des modules », refused by the generic set; the module writes it with `write`, in its own transaction.
+   */
+  hidden?: boolean;
 }
 
 export class ModuleSettingsError extends Error {
@@ -142,8 +147,9 @@ export class ModuleSettings {
         channelId,
       ]))
         stored.set(r.key, Number(r.value));
-    return [...this.specs.entries()].map(([key, d]) => {
-      return {
+    return [...this.specs.entries()]
+      .filter(([, d]) => !d.hidden)
+      .map(([key, d]) => ({
         key,
         label: d.label,
         unit: d.unit,
@@ -153,13 +159,13 @@ export class ModuleSettings {
         max: d.max,
         ...('help' in d ? { help: d.help } : {}),
         ...(d.advanced ? { advanced: true } : {}),
-      };
-    });
+      }));
   }
 
   /** Validated here (integer, bounds, known key), whatever Studio sent; applied to the next purchases only. */
   async set(channelId: string, key: string, value: unknown, actor: string) {
     const d = this.spec(key);
+    if (d.hidden) throw new ModuleSettingsError(400, 'unknown_setting');
     if (
       typeof value !== 'number' ||
       !Number.isInteger(value) ||
@@ -175,6 +181,60 @@ export class ModuleSettings {
       [channelId, key, value, this.clock.now(), actor.slice(0, 64)],
     );
     return this.list(channelId);
+  }
+
+  /** A module's own editor: several values validated (integer, bounds, known key), written in ITS transaction. */
+  async write(
+    q: Queryable,
+    channelId: string,
+    values: Record<string, unknown>,
+    actor: string,
+  ) {
+    for (const [key, value] of Object.entries(values)) {
+      const d = this.spec(key);
+      if (
+        typeof value !== 'number' ||
+        !Number.isInteger(value) ||
+        value < d.min ||
+        value > d.max
+      )
+        throw new ModuleSettingsError(400, 'out_of_bounds');
+    }
+    if (!(await this.ready(q)))
+      throw new ModuleSettingsError(503, 'module_settings_unavailable');
+    for (const [key, value] of Object.entries(values))
+      await q.query(
+        `insert into module_settings (channel_id, key, value, updated_at, updated_by) values ($1, $2, $3, $4, $5)
+         on conflict (channel_id, key) do update set value = $3, updated_at = $4, updated_by = $5`,
+        [channelId, key, value, this.clock.now(), actor.slice(0, 64)],
+      );
+  }
+
+  /** Back to the defaults (the rows removed), in the module's transaction. */
+  async clear(q: Queryable, channelId: string, keys: string[]) {
+    for (const k of keys) this.spec(k);
+    if (!(await this.ready(q)))
+      throw new ModuleSettingsError(503, 'module_settings_unavailable');
+    await q.query(
+      'delete from module_settings where channel_id = $1 and key = any($2::text[])',
+      [channelId, keys],
+    );
+  }
+
+  /** The stored rows of these keys (a default has none): value, when and by whom. */
+  async stored(q: Queryable, channelId: string, keys: string[]) {
+    if (!keys.length || !(await this.ready(q))) return [];
+    return (
+      await q.query<{
+        key: string;
+        value: number | string;
+        updated_at: Date | string;
+        updated_by: string | null;
+      }>(
+        'select key, value, updated_at, updated_by from module_settings where channel_id = $1 and key = any($2::text[])',
+        [channelId, keys],
+      )
+    ).map((r) => ({ ...r, value: Number(r.value) }));
   }
 
   /** `!rb` / `!fxcam` prices from here (the reader prices.ts announced for Studio's setting). */

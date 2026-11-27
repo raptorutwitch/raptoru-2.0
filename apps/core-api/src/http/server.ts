@@ -43,6 +43,8 @@ import {
 } from '../wallet/wallet-service.js';
 import { walletRoutes } from './wallet-routes.js';
 import { studioTransportRoutes } from './studio-transport-routes.js';
+import { chaosLabRoutes } from './chaos-routes.js';
+import type { ChaosService } from '../chaos/service.js';
 import { alertsRoutes } from './alerts-routes.js';
 import { channelPointsRoutes } from './channel-points-routes.js';
 import { randomBanRoutes } from './random-ban-routes.js';
@@ -114,6 +116,8 @@ export interface AppDeps {
   soundLab?: SoundLabService;
   /** TTS V2 Lab slice (test only). */
   ttsLab?: TtsLabService;
+  /** Chaos V2 lot 2: /v1/studio/chaos/* (paired Studio, with studioInstallations) and /v1/lab/chaos/* (Lab routes). */
+  chaos?: ChaosService;
   /**
    * Moderation V2 + Lab test wallet + TTS configuration: never set by the production Core (only the
    * Lab Core process and tests expose these routes).
@@ -277,6 +281,7 @@ function routes({
   bonkLab,
   soundLab,
   ttsLab,
+  chaos,
   labModeration,
   raffleLab,
   studioInstallations,
@@ -310,7 +315,7 @@ function routes({
     ...(db ? publicStatsRoutes(db) : []),
     ...(studioInstallations
       ? studioTransportRoutes(
-          { bonk: bonkLab, sound: soundLab, tts: ttsLab },
+          { bonk: bonkLab, sound: soundLab, tts: ttsLab, chaos },
           cockpit?.channelId,
         )
       : []),
@@ -405,6 +410,7 @@ function routes({
     ...(labRoutes && bonkLab ? bonkLabRoutes(bonkLab) : []),
     ...(labRoutes && soundLab ? soundLabRoutes(soundLab) : []),
     ...(labRoutes && ttsLab ? ttsLabRoutes(ttsLab) : []),
+    ...(labRoutes && chaos ? chaosLabRoutes(chaos) : []),
     ...(labRoutes && ttsLab && labModeration && raffleLab
       ? labModerationRoutes(labModeration, ttsLab, raffleLab)
       : []),

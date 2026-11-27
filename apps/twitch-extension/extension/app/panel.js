@@ -16,6 +16,7 @@ import {
 } from '../shared/notifications.js';
 import { createEmoteAccess } from '../shared/emote-access.js';
 import { walletPaymentMethods } from '../shared/wallet-payment.js';
+import { formatCompactAmountPrecise } from '../shared/currency.js';
 import {
   createWalletFace,
   createCurrencySwitch,
@@ -35,10 +36,13 @@ import '../shared/events-shop.js';
 import '../shared/tombola-v2.js';
 // Music Hub (docs/music/MUSIC_HUB_STATE.md): the song requests' entry — a tiny file; its view and sheet load on opening.
 import '../modules/music/module.js';
+// Interactions (Chaos V2, docs/chaos/EXTENSION_INTERACTIONS.md): its entry — proposed only when the session says
+// `chaos.enabled`; its view and sheets load on opening.
+import '../modules/interactions/module.js';
 // Tombola V1 for the sessions without V2 (its « open » rule is also the Hub's and the header's).
 import { raffleIsActive } from '../shared/tombola-v1.js';
 // The module host (architecture socle): viewer modules register themselves; ui.js only hosts them.
-import { hostModules, loadHostModules, moduleVariant, sessionModule, sessionModules, viewerModuleView } from '../shared/module-registry.js';
+import { hostModules, loadHostModules, moderationSections, moduleVariant, sessionModule, sessionModules, viewerModuleView } from '../shared/module-registry.js';
 import { createModuleModerationPanel } from '../shared/module-moderation.js';
 import '../shared/coffre-mystere.js';
 import '../shared/random-ban-view.js';
@@ -124,6 +128,8 @@ const HUB_MODULE_STYLES = Object.freeze({
   music: { icon: 'music', color: '#16a34a', color2: '#0f766e' },
   // Mini-jeux V3: crimson to wine — an arcade at night, apart from Tombola's pink-violet and the TTS violet.
   random_ban_ext: { icon: 'games', color: '#ff2f55', color2: '#6d0d2a' },
+  // Interactions (Chaos V2, Bonk, Régie ; maquette Lab) : framboise désaturée vers ardoise, à part du cramoisi des Mini-jeux.
+  interactions: { icon: 'chaos', color: '#9e2941', color2: '#2c3a44' },
 });
 const HUB_DEFAULT_STYLE = Object.freeze({ icon: 'module', color: '#8b5cf6', color2: '#6366f1' });
 const MODERATION_MODULE = Object.freeze({
@@ -132,6 +138,8 @@ const MODERATION_MODULE = Object.freeze({
   icon: '⚔',
   description: 'Valide les messages TTS et consulte l’activité du stream.',
 });
+/** The moderation console's (D4) section of each module that has one; a session module says its own (moderationSection). */
+const MODERATION_SECTION = Object.freeze({ tts: 'tts', soundboard: 'soundboard', bonk: 'bonk', raffle_join: 'raffle' });
 
 function homeModuleDescription(mod) {
   return modulePresentation(mod?.id).homeDescription || String(mod?.description || '').trim();
@@ -278,8 +286,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       /** The module body of this draw (rendered only): views that draw into the host's container (Soundboard). */
       body,
       team: canModerate(),
+      /** How this module was opened: { section, from, backLabel } from a module's shield, else null. */
+      intent: navIntent,
       host: {
         home: () => navigateTo(null),
+        /** Back where the module was opened from (the module of the shield), else the Hub. */
+        back: () => navigateTo(returnTo && moduleById(returnTo) ? returnTo : null),
         refresh: () => onRefresh?.(),
         payment: {
           get: () => paymentChoice[mod?.id] ?? 'tokens',
@@ -562,7 +574,12 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
   }
 
 
-  function navigateTo(moduleId) {
+  // A module's shield (moderators): the console opens at that module's section, its way back returns to the module.
+  let navIntent = null;
+  let returnTo = null;
+  function navigateTo(moduleId, intent = null) {
+    navIntent = intent;
+    returnTo = intent?.from ?? null;
     hubAllOpen = false; // a module opened (or the Hub again): the list starts closed
     if (moduleId !== null && !moduleById(moduleId)) return;
     if (moduleId !== null) notificationCenterOpen = false;
@@ -583,6 +600,60 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     }
     render();
     restoreScrollPositions();
+  }
+
+  // Badge « Tombola » (point vert = ouverte) : un raccourci vers la Tombola depuis le Hub et chaque module, tant qu'elle est ouverte et que
+  // le viewer n'y est pas inscrit (état de la session : state.raffle, lu par le sondage du socle et par le signal
+  // Twitch). Le même bouton est gardé d'un rendu à l'autre ; il ne s'anime qu'à l'ouverture d'une nouvelle tombola.
+  // Jamais une notification (experience.js : raffle.open est un état du direct).
+  let raffleChip = null;
+  let raffleChipWindow = null;
+  function raffleShortcut() {
+    const raffle = state?.raffle;
+    const offered = (state?.modules ?? []).some((mod) => mod.id === 'raffle_join');
+    if (!offered || !raffleIsActive(raffle) || raffle?.joined === true || openModule === 'raffle_join') return null;
+    if (!raffleChip) {
+      raffleChip = el('button', 'jdm-raffle-chip');
+      raffleChip.type = 'button';
+      raffleChip.setAttribute('aria-label', 'Tombola ouverte : la rejoindre');
+      raffleChip.title = 'Tombola ouverte : la rejoindre';
+      const dot = el('span', 'jdm-raffle-chip__dot');
+      dot.setAttribute('aria-hidden', 'true');
+      // Le billet ne se montre que si l'en-tête manque de place (panneau étroit avec le bouclier des modérateurs).
+      raffleChip.append(dot, hubIcon(document, 'raffle_join', 'jdm-raffle-chip__icon'), el('span', 'jdm-raffle-chip__label', 'Tombola'));
+      raffleChip.addEventListener('click', () => navigateTo('raffle_join'));
+    }
+    const windowId = String(raffle?.window_id ?? raffle?.token ?? 'open');
+    if (raffleChipWindow !== windowId) {
+      raffleChipWindow = windowId;
+      raffleChip.classList.add('is-new');
+      raffleChip.addEventListener('animationend', () => raffleChip.classList.remove('is-new'), { once: true });
+    }
+    return raffleChip;
+  }
+
+  // Moderators only: a shield in a module's header opens that module's section of the moderation console (D4)
+  // directly, and the console's way back returns to the module. The section comes from the module definition
+  // (`moderationSection(view)` of a session module, read at click time: Interactions → FX or Bonk) or the console's
+  // own modules (MODERATION_SECTION). No shield where the console has no section for the module, nor without the D4
+  // console. Core checks the permissions of every read and command (the shield only saves navigation).
+  function moderationShortcut(mod, def) {
+    if (!canModerate() || state?.moderation_v2 !== true || !client?.modV2) return null;
+    const known = (key) => Boolean(key) && (Object.values(MODERATION_SECTION).includes(key) || moderationSections().some((d) => d.key === key));
+    const sectionOf = () => (def?.moderationSection ? def.moderationSection(hostViewId === mod.id ? hostView : null) : MODERATION_SECTION[mod.id]);
+    if (!known(sectionOf())) return null;
+    const b = el('button', 'jdm-modshield');
+    b.type = 'button';
+    const label = `Modération : ${visibleModuleLabel(mod)}`;
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.append(hubIcon(document, 'moderation', 'jdm-modshield__icon'));
+    b.addEventListener('click', () => {
+      const section = sectionOf();
+      if (!known(section)) return;
+      navigateTo(MODERATION_MODULE.id, { section, from: mod.id, backLabel: `Retour à ${visibleModuleLabel(mod)}` });
+    });
+    return b;
   }
 
   function flash(node, message, kind = 'error') {
@@ -1185,12 +1256,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
     const informativeView = !paymentView && !consultView && !moderationView;
     const updatedWalletView = paymentView || raffleView;
     let changeWalletMethod = null;
+    // Mini-jeux (mises au Jeton près) : solde abrégé précis, 4 chiffres (Antoni 26/11) ; ailleurs, 2 chiffres.
+    const preciseBalance = openModule === 'random_ban_ext';
     const headerSwitch = paymentView || consultView || informativeView
       ? createCurrencySwitch({
         variant: 'balance',
-        className: 'rl-cswitch--header',
+        className: `rl-cswitch--header${preciseBalance ? ' rl-cswitch--precise' : ''}`,
         ariaLabel: consultView ? 'Soldes' : informativeView ? 'Solde de jetons' : 'Monnaie de paiement',
         onChange: () => changeWalletMethod?.(),
+        ...(preciseBalance ? { format: formatCompactAmountPrecise } : {}),
       })
       : null;
     const walletRow = headerSwitch
@@ -1427,8 +1501,10 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
 
       // Modules du carousel : les vrais modules (Historique reste un accès secondaire).
       const raffleOpen = raffleIsActive(state?.raffle ?? {});
+      // A session module that groups others (its `groups`) shows them inside its own view: their cards leave the Hub.
+      const grouped = new Set(sessionModules().filter((s) => s.groups && modules.some((m) => m.id === s.id)).flatMap((s) => s.groups));
       const hubModules = modules
-        .filter((candidate) => candidate.id !== ACTIONS_MODULE.id)
+        .filter((candidate) => candidate.id !== ACTIONS_MODULE.id && !grouped.has(candidate.id))
         .map((mod) => {
           const style = HUB_MODULE_STYLES[mod.id] ?? HUB_DEFAULT_STYLE;
           const off = state?.module_states?.[mod.id]?.enabled === false;
@@ -1480,6 +1556,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       tutorial.title = 'Tutoriel';
       tutorial.append(el('span', 'rh-tuto__q', '?'));
       tutorial.addEventListener('click', openTutorial);
+      const hubRaffleChip = raffleShortcut();
+      if (hubRaffleChip) utilLeft.append(hubRaffleChip);
       util.append(utilLeft, launcherHost, utilRight, tutorial);
       dock.append(rail, util);
       hub.append(top, stage, dock, allModules);
@@ -1565,12 +1643,15 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
       back.title = 'Retour au Hub';
       // Chevron seul, carré compact (même forme que la Tombola V2) : module-back.css.
       back.append(hubIcon(document, 'chevL', 'jdm-back__icon'));
-      // A module-host view may take the ‹ first (a casino game goes back to the Mini-jeux catalogue).
+      // A hosted view may take the ‹ first (a casino game goes back to the Mini-jeux catalogue; a session module closes
+      // what it has open, e.g. the Interactions effect sheet). Views without back() are unchanged.
       back.addEventListener('click', () => {
-        if (hostedView && !registered && hostView?.back?.()) return renderPreservingViewport();
+        if (hostedView && hostView?.back?.()) return renderPreservingViewport();
         navigateTo(null);
       });
       headLeft.append(back);
+      const raffleChipNode = raffleShortcut();
+      if (raffleChipNode) headLeft.append(raffleChipNode);
       if (isRaffle) {
         const raffleHeader = state?.raffle ?? {};
         const raffleOpen = raffleIsActive(raffleHeader);
@@ -1606,6 +1687,8 @@ export function createModulePanel({ root, client, onRefresh, initialModule = nul
         if (registered?.walletClass) walletRow.classList.add(registered.walletClass);
       }
 
+      const shield = isModeration ? null : moderationShortcut(mod, registered);
+      if (shield) headRight.append(shield);
       if (!isModeration) headRight.append(walletRow);
       // Active restrictions: chips on the left of the header (next to the way back), not by the wallet.
       const restrictions = restrictionsOf(mod.id);

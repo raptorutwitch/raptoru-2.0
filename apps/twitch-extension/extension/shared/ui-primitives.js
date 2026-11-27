@@ -395,6 +395,7 @@ export const formatCompactBalance = (value) => formatCompactAmount(value, { digi
  * laisse apparaître l'autre, le clic termine le mouvement ; le montant reste immobile dans sa
  * case (fondu seul). Infobulle du solde exact au survol / focus clavier, fermée au clic, absente
  * au tactile. Purement visuel : onChange(nouvelle, précédente) ; aucune règle métier.
+ * `format` : le solde abrégé de la case (2 chiffres par défaut ; Mini-jeux : formatCompactAmountPrecise, case élargie).
  */
 export function createCurrencySwitch({
   document: documentRef = globalThis.document,
@@ -403,6 +404,7 @@ export function createCurrencySwitch({
   ariaLabel = 'Monnaie de paiement',
   tipPlacement = 'below',
   onChange = null,
+  format = formatCompactBalance,
 } = {}) {
   const document = requireDocument(documentRef);
   const mode = variant === 'balance' ? 'balance' : 'label';
@@ -511,7 +513,7 @@ export function createCurrencySwitch({
     chip.setAttribute('aria-disabled', String(locked));
     for (const candidate of ['tokens', 'credits']) {
       texts[candidate].textContent = mode === 'balance'
-        ? (known(amounts[candidate]) ? formatCompactBalance(amounts[candidate]) : '—')
+        ? (known(amounts[candidate]) ? format(amounts[candidate]) : '—')
         : CURRENCY_SWITCH_LABELS[candidate];
       if (mode !== 'balance' || !known(amounts[candidate])) continue;
       const value = Math.max(0, Math.trunc(Number(amounts[candidate])));

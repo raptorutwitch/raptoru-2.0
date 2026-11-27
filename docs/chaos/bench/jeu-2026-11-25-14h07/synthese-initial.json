@@ -1,0 +1,2265 @@
+{
+  "meta": {
+    "game": "Overwatch.exe",
+    "studio": "http://127.0.0.1:4100",
+    "engine": "C:\\Users\\Antoni\\AppData\\Local\\Programs\\Raptoru Studio\\resources\\app\\apps\\chaos-engine\\bin\\ChaosEngine.exe",
+    "presentmon": "C:\\Users\\Antoni\\Documents\\Raptoru 2.0 - Worktrees\\chaos-v2\\.tools\\presentmon\\PresentMon-2.6.0-x64.exe",
+    "started": "2026-11-25T13:07:21.287Z",
+    "qpc_ms": 3531224088.4901
+  },
+  "exclusions_hors_premier_plan": [
+    {
+      "a": 3531224421.8,
+      "b": 3531259732.9
+    },
+    {
+      "a": 3531291218.3,
+      "b": 3531299612.7
+    },
+    {
+      "a": 3531301022.5,
+      "b": 3531303711.6
+    },
+    {
+      "a": 3531303528.2,
+      "b": 3531312913.8
+    },
+    {
+      "a": 3531347901.7,
+      "b": 3531363365.8
+    },
+    {
+      "a": 3531364686.9,
+      "b": 3531377142.5
+    },
+    {
+      "a": 3531377522.8,
+      "b": 3531400057.9
+    },
+    {
+      "a": 3531473858.9,
+      "b": 3531482887.7
+    },
+    {
+      "a": 3531493443.4,
+      "b": 3531538213.6
+    },
+    {
+      "a": 3531670623.5,
+      "b": 3531749064.4
+    },
+    {
+      "a": 3531778556.5,
+      "b": 3531785289.3
+    },
+    {
+      "a": 3531796849.5,
+      "b": 3531807955.2
+    },
+    {
+      "a": 3531833977.5,
+      "b": 3531842431.5
+    },
+    {
+      "a": 3531886305.4,
+      "b": 3531899325.2
+    },
+    {
+      "a": 3531913294.1,
+      "b": 3531931271.6
+    },
+    {
+      "a": 3532026347.3,
+      "b": 3532028618.7
+    },
+    {
+      "a": 3532029723.4,
+      "b": 3532045682.1
+    }
+  ],
+  "segments": [
+    {
+      "step": "overwatch-seul",
+      "kind": "etape",
+      "a": 3531258505.2,
+      "b": 3531398713.2,
+      "secondes": 117.78,
+      "images": 4039,
+      "fps_moyen": 34.29,
+      "fps_1pct_bas": 50.89,
+      "fps_01pct_bas": 46.41,
+      "image_ms_p50": 17.23,
+      "image_ms_p95": 18.22,
+      "image_ms_p99": 19.01,
+      "image_ms_max": 22.65,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 7.52,
+      "cpu_jeu_ms_p50": 17.12,
+      "modes_presentation": {
+        "Hardware: Independent Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 5.71,
+          "vram_mb": 1511.5
+        },
+        "chaos": null,
+        "dwm": {
+          "gpu_pct": 4.93,
+          "cpu_pct": 0.95,
+          "vram_mb": 39692.2
+        },
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 37.94,
+        "nvenc_pct": 0,
+        "freq_mhz": 1236.73,
+        "puissance_w": 66.36,
+        "vram_mb": 4010
+      },
+      "obs": null
+    },
+    {
+      "step": "obs-sans-chaos",
+      "kind": "etape",
+      "a": 3531398713.2,
+      "b": 3531537017.9,
+      "secondes": 93.38,
+      "images": 4756,
+      "fps_moyen": 50.93,
+      "fps_1pct_bas": 13.94,
+      "fps_01pct_bas": 1.6,
+      "image_ms_p50": 17.22,
+      "image_ms_p95": 18.67,
+      "image_ms_p99": 19.75,
+      "image_ms_max": 2434.34,
+      "saccades": 1,
+      "saccades_par_min": 0.64,
+      "gpu_jeu_ms_p50": 9.31,
+      "cpu_jeu_ms_p50": 17.1,
+      "modes_presentation": {
+        "Hardware: Independent Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.01,
+          "vram_mb": 1513.1
+        },
+        "chaos": null,
+        "dwm": {
+          "gpu_pct": 6.53,
+          "cpu_pct": 1.83,
+          "vram_mb": 39628.2
+        },
+        "obs": {
+          "gpu_pct": 17.31,
+          "cpu_pct": 1.49,
+          "vram_mb": 356.8
+        }
+      },
+      "carte": {
+        "charge_pct": 53.31,
+        "nvenc_pct": 0,
+        "freq_mhz": 1149.83,
+        "puissance_w": 69.74,
+        "vram_mb": 4173
+      },
+      "obs": {
+        "images_rendu": 2063,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.91,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.67
+      }
+    },
+    {
+      "step": "chaos-repos",
+      "kind": "etape",
+      "a": 3531537017.9,
+      "b": 3531736826.1,
+      "secondes": 132.4,
+      "images": 7680,
+      "fps_moyen": 58.01,
+      "fps_1pct_bas": 49.09,
+      "fps_01pct_bas": 44.18,
+      "image_ms_p50": 17.23,
+      "image_ms_p95": 18.73,
+      "image_ms_p99": 19.63,
+      "image_ms_max": 25.02,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 9.73,
+      "cpu_jeu_ms_p50": 17.13,
+      "modes_presentation": {
+        "Hardware: Independent Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.01,
+          "vram_mb": 1514.1
+        },
+        "chaos": {
+          "gpu_pct": 0,
+          "cpu_pct": 0.03,
+          "vram_mb": 10.5
+        },
+        "dwm": {
+          "gpu_pct": 19.42,
+          "cpu_pct": 2.19,
+          "vram_mb": 39639.4
+        },
+        "obs": {
+          "gpu_pct": 17.82,
+          "cpu_pct": 1.48,
+          "vram_mb": 365.2
+        }
+      },
+      "carte": {
+        "charge_pct": 61.29,
+        "nvenc_pct": 0,
+        "freq_mhz": 1123.28,
+        "puissance_w": 70.93,
+        "vram_mb": 4068
+      },
+      "obs": {
+        "images_rendu": 11903,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.85,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.45
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "repos",
+      "a": 3531739326.1,
+      "b": 3531747798.2,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 39.63,
+        "nvenc_pct": 0,
+        "freq_mhz": 1893.75,
+        "puissance_w": 108.54,
+        "vram_mb": 4037
+      },
+      "obs": {
+        "images_rendu": 423,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.8,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.27
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "flip",
+      "phase": "entree",
+      "a": 3531755260,
+      "b": 3531755810,
+      "secondes": 0.55,
+      "images": 33,
+      "fps_moyen": 60.35,
+      "fps_1pct_bas": 53.51,
+      "fps_01pct_bas": 53.51,
+      "image_ms_p50": 16.44,
+      "image_ms_p95": 18.34,
+      "image_ms_p99": 18.69,
+      "image_ms_max": 18.69,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.08,
+      "cpu_jeu_ms_p50": 16.34,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 33,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 114.75,
+        "vram_mb": 4144
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "flip",
+      "phase": "maintien",
+      "a": 3531755810,
+      "b": 3531764747.1,
+      "secondes": 8.93,
+      "images": 521,
+      "fps_moyen": 58.32,
+      "fps_1pct_bas": 29.38,
+      "fps_01pct_bas": 29.16,
+      "image_ms_p50": 16.71,
+      "image_ms_p95": 18.35,
+      "image_ms_p99": 33.38,
+      "image_ms_max": 34.29,
+      "saccades": 5,
+      "saccades_par_min": 33.58,
+      "gpu_jeu_ms_p50": 4.36,
+      "cpu_jeu_ms_p50": 16.63,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.02,
+          "vram_mb": 1513.5
+        },
+        "chaos": {
+          "gpu_pct": 5.79,
+          "cpu_pct": 1.84,
+          "vram_mb": 151.4
+        },
+        "dwm": {
+          "gpu_pct": 19.14,
+          "cpu_pct": 2.21,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 4.1,
+          "cpu_pct": 1.48,
+          "vram_mb": 373.6
+        }
+      },
+      "carte": {
+        "charge_pct": 45.59,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 121.7,
+        "vram_mb": 4146
+      },
+      "obs": {
+        "images_rendu": 487,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.9,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.5
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "flip",
+      "phase": "sortie",
+      "a": 3531764747.1,
+      "b": 3531765521,
+      "secondes": 0.78,
+      "images": 43,
+      "fps_moyen": 54.97,
+      "fps_1pct_bas": 29.92,
+      "fps_01pct_bas": 29.92,
+      "image_ms_p50": 16.51,
+      "image_ms_p95": 33.26,
+      "image_ms_p99": 33.42,
+      "image_ms_max": 33.42,
+      "saccades": 4,
+      "saccades_par_min": 306.8,
+      "gpu_jeu_ms_p50": 4.29,
+      "cpu_jeu_ms_p50": 16.37,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 45,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.83,
+        "vram_mb": 4147
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "fog",
+      "phase": "entree",
+      "a": 3531747798.2,
+      "b": 3531750298.2,
+      "secondes": 1.23,
+      "images": 74,
+      "fps_moyen": 60.1,
+      "fps_1pct_bas": 52,
+      "fps_01pct_bas": 52,
+      "image_ms_p50": 16.66,
+      "image_ms_p95": 17.61,
+      "image_ms_p99": 19.23,
+      "image_ms_max": 19.23,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.47,
+      "cpu_jeu_ms_p50": 16.52,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 5.92,
+          "vram_mb": 1513.2
+        },
+        "chaos": {
+          "gpu_pct": 11.18,
+          "cpu_pct": 1.54,
+          "vram_mb": 71.3
+        },
+        "dwm": {
+          "gpu_pct": 7.58,
+          "cpu_pct": 2.31,
+          "vram_mb": 39686.3
+        },
+        "obs": {
+          "gpu_pct": 3.75,
+          "cpu_pct": 1.08,
+          "vram_mb": 365.2
+        }
+      },
+      "carte": {
+        "charge_pct": 42.8,
+        "nvenc_pct": 0,
+        "freq_mhz": 1908,
+        "puissance_w": 115,
+        "vram_mb": 4089
+      },
+      "obs": {
+        "images_rendu": 121,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.89,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.63
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "fog",
+      "phase": "maintien",
+      "a": 3531750298.2,
+      "b": 3531767862.5,
+      "secondes": 17.57,
+      "images": 1024,
+      "fps_moyen": 58.29,
+      "fps_1pct_bas": 29.52,
+      "fps_01pct_bas": 28.82,
+      "image_ms_p50": 16.7,
+      "image_ms_p95": 18.37,
+      "image_ms_p99": 33.41,
+      "image_ms_max": 34.69,
+      "saccades": 11,
+      "saccades_par_min": 37.57,
+      "gpu_jeu_ms_p50": 4.35,
+      "cpu_jeu_ms_p50": 16.6,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 6.87,
+          "vram_mb": 1513.7
+        },
+        "chaos": {
+          "gpu_pct": 6.07,
+          "cpu_pct": 1.97,
+          "vram_mb": 151.5
+        },
+        "dwm": {
+          "gpu_pct": 15.05,
+          "cpu_pct": 2.31,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 4.05,
+          "cpu_pct": 1.5,
+          "vram_mb": 365.2
+        }
+      },
+      "carte": {
+        "charge_pct": 43.79,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.15,
+        "vram_mb": 4147
+      },
+      "obs": {
+        "images_rendu": 973,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.9,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.51
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "fog",
+      "phase": "sortie",
+      "a": 3531767862.5,
+      "b": 3531770747.9,
+      "secondes": 2.88,
+      "images": 164,
+      "fps_moyen": 56.91,
+      "fps_1pct_bas": 28.76,
+      "fps_01pct_bas": 28.76,
+      "image_ms_p50": 16.66,
+      "image_ms_p95": 30.7,
+      "image_ms_p99": 34.26,
+      "image_ms_max": 34.77,
+      "saccades": 3,
+      "saccades_par_min": 62.46,
+      "gpu_jeu_ms_p50": 5.56,
+      "cpu_jeu_ms_p50": 16.56,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.62,
+          "vram_mb": 1513.8
+        },
+        "chaos": {
+          "gpu_pct": 9.99,
+          "cpu_pct": 1.92,
+          "vram_mb": 86.4
+        },
+        "dwm": {
+          "gpu_pct": 14.71,
+          "cpu_pct": 2.6,
+          "vram_mb": 39685.7
+        },
+        "obs": {
+          "gpu_pct": 4.23,
+          "cpu_pct": 2,
+          "vram_mb": 365.2
+        }
+      },
+      "carte": {
+        "charge_pct": 47.83,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.61,
+        "vram_mb": 4077
+      },
+      "obs": {
+        "images_rendu": 121,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.9,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.81
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "repos",
+      "a": 3531773247.9,
+      "b": 3531803550.3,
+      "secondes": 23.6,
+      "images": 957,
+      "fps_moyen": 40.55,
+      "fps_1pct_bas": 16.35,
+      "fps_01pct_bas": 4.29,
+      "image_ms_p50": 17.19,
+      "image_ms_p95": 18.77,
+      "image_ms_p99": 20.69,
+      "image_ms_max": 233.31,
+      "saccades": 3,
+      "saccades_par_min": 7.63,
+      "gpu_jeu_ms_p50": 9.36,
+      "cpu_jeu_ms_p50": 17.09,
+      "modes_presentation": {
+        "Hardware: Independent Flip": 97.49,
+        "Composed: Flip": 2.51
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 5.93,
+          "vram_mb": 1513.6
+        },
+        "chaos": {
+          "gpu_pct": -0.02,
+          "cpu_pct": -1.95,
+          "vram_mb": 75.9
+        },
+        "dwm": {
+          "gpu_pct": 16.58,
+          "cpu_pct": 2.04,
+          "vram_mb": 39640.8
+        },
+        "obs": {
+          "gpu_pct": 16.14,
+          "cpu_pct": 1.74,
+          "vram_mb": 390.5
+        }
+      },
+      "carte": {
+        "charge_pct": 59.29,
+        "nvenc_pct": 0,
+        "freq_mhz": 1187.29,
+        "puissance_w": 70.48,
+        "vram_mb": 4139
+      },
+      "obs": {
+        "images_rendu": 1758,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.8,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.76
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "blink",
+      "phase": "maintien",
+      "a": 3531805446,
+      "b": 3531809597,
+      "secondes": 1.65,
+      "images": 87,
+      "fps_moyen": 52.7,
+      "fps_1pct_bas": 28.84,
+      "fps_01pct_bas": 28.84,
+      "image_ms_p50": 16.85,
+      "image_ms_p95": 33.5,
+      "image_ms_p99": 34.67,
+      "image_ms_max": 34.67,
+      "saccades": 4,
+      "saccades_par_min": 145.38,
+      "gpu_jeu_ms_p50": 4.91,
+      "cpu_jeu_ms_p50": 16.74,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 10.55,
+          "vram_mb": 1513.4
+        },
+        "chaos": {
+          "gpu_pct": 6.47,
+          "cpu_pct": 0.72,
+          "vram_mb": 191.2
+        },
+        "dwm": {
+          "gpu_pct": 11.87,
+          "cpu_pct": 2.1,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 3.92,
+          "cpu_pct": 1.3,
+          "vram_mb": 399
+        }
+      },
+      "carte": {
+        "charge_pct": 47.38,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.93,
+        "vram_mb": 4267
+      },
+      "obs": {
+        "images_rendu": 242,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.78,
+        "fps_obs": 60,
+        "cpu_obs_pct": 2.34
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "blink",
+      "phase": "sortie",
+      "a": 3531809597,
+      "b": 3531809849.8,
+      "secondes": 0.25,
+      "images": 15,
+      "fps_moyen": 60.18,
+      "fps_1pct_bas": 56.25,
+      "fps_01pct_bas": 56.25,
+      "image_ms_p50": 16.54,
+      "image_ms_p95": 17.78,
+      "image_ms_p99": 17.78,
+      "image_ms_max": 17.78,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.89,
+      "cpu_jeu_ms_p50": 16.45,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 47,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.53,
+        "vram_mb": 4231
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "flash",
+      "phase": "maintien",
+      "a": 3531804881.3,
+      "b": 3531810115.2,
+      "secondes": 2.17,
+      "images": 118,
+      "fps_moyen": 54.44,
+      "fps_1pct_bas": 28.84,
+      "fps_01pct_bas": 28.84,
+      "image_ms_p50": 16.83,
+      "image_ms_p95": 33.5,
+      "image_ms_p99": 34.24,
+      "image_ms_max": 34.67,
+      "saccades": 4,
+      "saccades_par_min": 110.72,
+      "gpu_jeu_ms_p50": 4.89,
+      "cpu_jeu_ms_p50": 16.7,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 11.09,
+          "vram_mb": 1513.4
+        },
+        "chaos": {
+          "gpu_pct": 7.45,
+          "cpu_pct": 0.51,
+          "vram_mb": 191.2
+        },
+        "dwm": {
+          "gpu_pct": 12.75,
+          "cpu_pct": 2.21,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 4.48,
+          "cpu_pct": 1.13,
+          "vram_mb": 399
+        }
+      },
+      "carte": {
+        "charge_pct": 46.9,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.75,
+        "vram_mb": 4267
+      },
+      "obs": {
+        "images_rendu": 242,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.78,
+        "fps_obs": 60,
+        "cpu_obs_pct": 2.34
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "flash",
+      "phase": "sortie",
+      "a": 3531810115.2,
+      "b": 3531810638.1,
+      "secondes": 0.52,
+      "images": 31,
+      "fps_moyen": 60.09,
+      "fps_1pct_bas": 50.4,
+      "fps_01pct_bas": 50.4,
+      "image_ms_p50": 16.68,
+      "image_ms_p95": 18.27,
+      "image_ms_p99": 19.84,
+      "image_ms_max": 19.84,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.81,
+      "cpu_jeu_ms_p50": 16.59,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 47,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.26,
+        "vram_mb": 4234
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "drunk",
+      "phase": "entree",
+      "a": 3531803550.3,
+      "b": 3531805550.3,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 45.25,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 116.49,
+        "vram_mb": 4207
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "drunk",
+      "phase": "maintien",
+      "a": 3531805550.3,
+      "b": 3531818410.1,
+      "secondes": 10.45,
+      "images": 569,
+      "fps_moyen": 54.45,
+      "fps_1pct_bas": 28.67,
+      "fps_01pct_bas": 28.18,
+      "image_ms_p50": 16.76,
+      "image_ms_p95": 33.41,
+      "image_ms_p99": 34.35,
+      "image_ms_max": 35.48,
+      "saccades": 22,
+      "saccades_par_min": 126.32,
+      "gpu_jeu_ms_p50": 4.5,
+      "cpu_jeu_ms_p50": 16.65,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 8.55,
+          "vram_mb": 1513.4
+        },
+        "chaos": {
+          "gpu_pct": 6.33,
+          "cpu_pct": 0.43,
+          "vram_mb": 171
+        },
+        "dwm": {
+          "gpu_pct": 9.79,
+          "cpu_pct": 2.24,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 5.06,
+          "cpu_pct": 1.32,
+          "vram_mb": 399
+        }
+      },
+      "carte": {
+        "charge_pct": 44.24,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.23,
+        "vram_mb": 4267
+      },
+      "obs": {
+        "images_rendu": 726,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.74,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.7
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "drunk",
+      "phase": "sortie",
+      "a": 3531818410.1,
+      "b": 3531820517.4,
+      "secondes": 2.12,
+      "images": 126,
+      "fps_moyen": 59.51,
+      "fps_1pct_bas": 28.94,
+      "fps_01pct_bas": 28.94,
+      "image_ms_p50": 16.68,
+      "image_ms_p95": 17.83,
+      "image_ms_p99": 18.19,
+      "image_ms_max": 34.55,
+      "saccades": 1,
+      "saccades_par_min": 28.34,
+      "gpu_jeu_ms_p50": 4.29,
+      "cpu_jeu_ms_p50": 16.58,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 6.4,
+          "vram_mb": 1513.6
+        },
+        "chaos": {
+          "gpu_pct": 4.85,
+          "cpu_pct": 0.42,
+          "vram_mb": 171
+        },
+        "dwm": {
+          "gpu_pct": 19.75,
+          "cpu_pct": 2.31,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 3.84,
+          "cpu_pct": 1.63,
+          "vram_mb": 407.4
+        }
+      },
+      "carte": {
+        "charge_pct": 43,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.06,
+        "vram_mb": 4208
+      },
+      "obs": {
+        "images_rendu": 60,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.7,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.47
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "color",
+      "phase": "entree",
+      "a": 3531806733.9,
+      "b": 3531807433.9,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 55,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.75,
+        "vram_mb": 4267
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "color",
+      "phase": "maintien",
+      "a": 3531807433.9,
+      "b": 3531821563.9,
+      "secondes": 13.62,
+      "images": 758,
+      "fps_moyen": 55.66,
+      "fps_1pct_bas": 28.77,
+      "fps_01pct_bas": 28.18,
+      "image_ms_p50": 16.74,
+      "image_ms_p95": 33.13,
+      "image_ms_p99": 34.24,
+      "image_ms_max": 35.48,
+      "saccades": 25,
+      "saccades_par_min": 110.15,
+      "gpu_jeu_ms_p50": 4.5,
+      "cpu_jeu_ms_p50": 16.65,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 8.11,
+          "vram_mb": 1513.6
+        },
+        "chaos": {
+          "gpu_pct": 5.79,
+          "cpu_pct": 0.41,
+          "vram_mb": 171
+        },
+        "dwm": {
+          "gpu_pct": 12.1,
+          "cpu_pct": 2.3,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 4.9,
+          "cpu_pct": 1.39,
+          "vram_mb": 399
+        }
+      },
+      "carte": {
+        "charge_pct": 44,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 118.99,
+        "vram_mb": 4257
+      },
+      "obs": {
+        "images_rendu": 787,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.73,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.41
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "color",
+      "phase": "sortie",
+      "a": 3531821563.9,
+      "b": 3531822347.2,
+      "secondes": 0.78,
+      "images": 46,
+      "fps_moyen": 59.31,
+      "fps_1pct_bas": 33.08,
+      "fps_01pct_bas": 33.08,
+      "image_ms_p50": 16.59,
+      "image_ms_p95": 17.96,
+      "image_ms_p99": 30.23,
+      "image_ms_max": 30.23,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 5.75,
+      "cpu_jeu_ms_p50": 16.4,
+      "modes_presentation": {
+        "Composed: Flip": 86.96,
+        "Hardware: Independent Flip": 13.04
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 9.86,
+          "vram_mb": 1513.5
+        },
+        "chaos": {
+          "gpu_pct": 2.68,
+          "cpu_pct": 1.12,
+          "vram_mb": 171
+        },
+        "dwm": {
+          "gpu_pct": 28.56,
+          "cpu_pct": 2.98,
+          "vram_mb": 39730.8
+        },
+        "obs": {
+          "gpu_pct": 13.11,
+          "cpu_pct": 1.12,
+          "vram_mb": 399
+        }
+      },
+      "carte": {
+        "charge_pct": 47,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.67,
+        "vram_mb": 4210
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "repos",
+      "a": 3531824847.2,
+      "b": 3531835716.7,
+      "secondes": 9.14,
+      "images": 530,
+      "fps_moyen": 57.99,
+      "fps_1pct_bas": 48.41,
+      "fps_01pct_bas": 42.31,
+      "image_ms_p50": 17.23,
+      "image_ms_p95": 18.75,
+      "image_ms_p99": 19.69,
+      "image_ms_max": 23.64,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 11.78,
+      "cpu_jeu_ms_p50": 17.12,
+      "modes_presentation": {
+        "Hardware: Independent Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.72,
+          "vram_mb": 1513.7
+        },
+        "chaos": {
+          "gpu_pct": 0,
+          "cpu_pct": 0.06,
+          "vram_mb": 126
+        },
+        "dwm": {
+          "gpu_pct": 32.2,
+          "cpu_pct": 2,
+          "vram_mb": 39640.8
+        },
+        "obs": {
+          "gpu_pct": 22.1,
+          "cpu_pct": 1.57,
+          "vram_mb": 399
+        }
+      },
+      "carte": {
+        "charge_pct": 78.76,
+        "nvenc_pct": 0,
+        "freq_mhz": 880.71,
+        "puissance_w": 58.29,
+        "vram_mb": 4174
+      },
+      "obs": {
+        "images_rendu": 543,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.83,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.59
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "tunnel",
+      "phase": "entree",
+      "a": 3531835716.7,
+      "b": 3531836616.7,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 42,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 107.78,
+        "vram_mb": 4178
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "tunnel",
+      "phase": "maintien",
+      "a": 3531836616.7,
+      "b": 3531841991.2,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 47.36,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 117.67,
+        "vram_mb": 4229
+      },
+      "obs": {
+        "images_rendu": 302,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.76,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.55
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "tunnel",
+      "phase": "sortie",
+      "a": 3531841991.2,
+      "b": 3531842762.3,
+      "secondes": 0.33,
+      "images": 19,
+      "fps_moyen": 56.97,
+      "fps_1pct_bas": 30.86,
+      "fps_01pct_bas": 30.86,
+      "image_ms_p50": 16.75,
+      "image_ms_p95": 32.4,
+      "image_ms_p99": 32.4,
+      "image_ms_max": 32.4,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.46,
+      "cpu_jeu_ms_p50": 16.65,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 50,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.75,
+        "vram_mb": 4226
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "vhs",
+      "phase": "entree",
+      "a": 3531838363.4,
+      "b": 3531838663.4,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": null,
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "vhs",
+      "phase": "maintien",
+      "a": 3531838663.4,
+      "b": 3531843291.6,
+      "secondes": 0.85,
+      "images": 50,
+      "fps_moyen": 58.82,
+      "fps_1pct_bas": 30.86,
+      "fps_01pct_bas": 30.86,
+      "image_ms_p50": 16.73,
+      "image_ms_p95": 17.98,
+      "image_ms_p99": 32.4,
+      "image_ms_max": 32.4,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.37,
+      "cpu_jeu_ms_p50": 16.59,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 47.89,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.19,
+        "vram_mb": 4229
+      },
+      "obs": {
+        "images_rendu": 242,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.73,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.49
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "vhs",
+      "phase": "sortie",
+      "a": 3531843291.6,
+      "b": 3531843796.5,
+      "secondes": 0.52,
+      "images": 29,
+      "fps_moyen": 55.72,
+      "fps_1pct_bas": 29.96,
+      "fps_01pct_bas": 29.96,
+      "image_ms_p50": 17.1,
+      "image_ms_p95": 32.75,
+      "image_ms_p99": 33.38,
+      "image_ms_max": 33.38,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.5,
+      "cpu_jeu_ms_p50": 16.99,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 45,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.93,
+        "vram_mb": 4220
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "shake",
+      "phase": "entree",
+      "a": 3531840433.5,
+      "b": 3531840583.5,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": null,
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "shake",
+      "phase": "maintien",
+      "a": 3531840583.5,
+      "b": 3531844319,
+      "secondes": 1.88,
+      "images": 110,
+      "fps_moyen": 58.36,
+      "fps_1pct_bas": 29.96,
+      "fps_01pct_bas": 29.96,
+      "image_ms_p50": 16.73,
+      "image_ms_p95": 18.94,
+      "image_ms_p99": 32.75,
+      "image_ms_max": 33.38,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.52,
+      "cpu_jeu_ms_p50": 16.6,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 8.29,
+          "vram_mb": 1513.7
+        },
+        "chaos": {
+          "gpu_pct": 5.04,
+          "cpu_pct": 1.1,
+          "vram_mb": 186
+        },
+        "dwm": {
+          "gpu_pct": 24.39,
+          "cpu_pct": 3.8,
+          "vram_mb": 39729.7
+        },
+        "obs": {
+          "gpu_pct": 4.19,
+          "cpu_pct": 1.69,
+          "vram_mb": 407.4
+        }
+      },
+      "carte": {
+        "charge_pct": 46.86,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.43,
+        "vram_mb": 4229
+      },
+      "obs": {
+        "images_rendu": 181,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.74,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.49
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "shake",
+      "phase": "sortie",
+      "a": 3531844319,
+      "b": 3531844833.2,
+      "secondes": 0.52,
+      "images": 31,
+      "fps_moyen": 60.16,
+      "fps_1pct_bas": 56.11,
+      "fps_01pct_bas": 56.11,
+      "image_ms_p50": 16.67,
+      "image_ms_p95": 17.71,
+      "image_ms_p99": 17.82,
+      "image_ms_max": 17.82,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 5.21,
+      "cpu_jeu_ms_p50": 16.56,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 49,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 120.46,
+        "vram_mb": 4217
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "pixelate",
+      "phase": "entree",
+      "a": 3531836797.6,
+      "b": 3531837297.6,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": null,
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "pixelate",
+      "phase": "maintien",
+      "a": 3531837297.6,
+      "b": 3531844833.2,
+      "secondes": 2.4,
+      "images": 141,
+      "fps_moyen": 58.75,
+      "fps_1pct_bas": 29.96,
+      "fps_01pct_bas": 29.96,
+      "image_ms_p50": 16.71,
+      "image_ms_p95": 18.47,
+      "image_ms_p99": 32.75,
+      "image_ms_max": 33.38,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 4.63,
+      "cpu_jeu_ms_p50": 16.6,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.6,
+          "vram_mb": 1513.5
+        },
+        "chaos": {
+          "gpu_pct": 3.74,
+          "cpu_pct": 0.69,
+          "vram_mb": 186
+        },
+        "dwm": {
+          "gpu_pct": 21.55,
+          "cpu_pct": 2.93,
+          "vram_mb": 39729.7
+        },
+        "obs": {
+          "gpu_pct": 3.78,
+          "cpu_pct": 1.6,
+          "vram_mb": 407.4
+        }
+      },
+      "carte": {
+        "charge_pct": 47.13,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.01,
+        "vram_mb": 4229
+      },
+      "obs": {
+        "images_rendu": 362,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.74,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.51
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "pixelate",
+      "phase": "sortie",
+      "a": 3531844833.2,
+      "b": 3531845350.8,
+      "secondes": 0.51,
+      "images": 30,
+      "fps_moyen": 58.32,
+      "fps_1pct_bas": 29.86,
+      "fps_01pct_bas": 29.86,
+      "image_ms_p50": 16.64,
+      "image_ms_p95": 18.06,
+      "image_ms_p99": 33.49,
+      "image_ms_max": 33.49,
+      "saccades": 1,
+      "saccades_par_min": 116.64,
+      "gpu_jeu_ms_p50": 5.02,
+      "cpu_jeu_ms_p50": 16.08,
+      "modes_presentation": {
+        "Composed: Flip": 66.67,
+        "Hardware: Independent Flip": 33.33
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 45,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 122.57,
+        "vram_mb": 4242
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "repos",
+      "a": 3531847850.8,
+      "b": 3531925649.9,
+      "secondes": 65.46,
+      "images": 3000,
+      "fps_moyen": 45.83,
+      "fps_1pct_bas": 22.58,
+      "fps_01pct_bas": 5.49,
+      "image_ms_p50": 17.23,
+      "image_ms_p95": 18.87,
+      "image_ms_p99": 20.52,
+      "image_ms_max": 330.71,
+      "saccades": 8,
+      "saccades_par_min": 7.33,
+      "gpu_jeu_ms_p50": 10.5,
+      "cpu_jeu_ms_p50": 17.13,
+      "modes_presentation": {
+        "Hardware: Independent Flip": 98.57,
+        "Composed: Flip": 1.43
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.28,
+          "vram_mb": 1513.7
+        },
+        "chaos": {
+          "gpu_pct": 0,
+          "cpu_pct": 0.03,
+          "vram_mb": 161.2
+        },
+        "dwm": {
+          "gpu_pct": 20.23,
+          "cpu_pct": 2.34,
+          "vram_mb": 39640.9
+        },
+        "obs": {
+          "gpu_pct": 16.86,
+          "cpu_pct": 1.45,
+          "vram_mb": 432.7
+        }
+      },
+      "carte": {
+        "charge_pct": 63.63,
+        "nvenc_pct": 0,
+        "freq_mhz": 1149.24,
+        "puissance_w": 74.11,
+        "vram_mb": 4209
+      },
+      "obs": {
+        "images_rendu": 4613,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.84,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.49
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "zoom",
+      "phase": "entree",
+      "a": 3531926892.5,
+      "b": 3531927492.5,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 45,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 116.49,
+        "vram_mb": 4190
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "zoom",
+      "phase": "maintien",
+      "a": 3531927492.5,
+      "b": 3531934991.3,
+      "secondes": 3.72,
+      "images": 192,
+      "fps_moyen": 51.67,
+      "fps_1pct_bas": 28.8,
+      "fps_01pct_bas": 28.8,
+      "image_ms_p50": 16.86,
+      "image_ms_p95": 33.73,
+      "image_ms_p99": 34.61,
+      "image_ms_max": 34.72,
+      "saccades": 10,
+      "saccades_par_min": 161.46,
+      "gpu_jeu_ms_p50": 4.69,
+      "cpu_jeu_ms_p50": 16.77,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 6.88,
+          "vram_mb": 1513.5
+        },
+        "chaos": {
+          "gpu_pct": 4.07,
+          "cpu_pct": 0.47,
+          "vram_mb": 186
+        },
+        "dwm": {
+          "gpu_pct": 18.58,
+          "cpu_pct": 2.52,
+          "vram_mb": 39715.9
+        },
+        "obs": {
+          "gpu_pct": 3.96,
+          "cpu_pct": 1.54,
+          "vram_mb": 432.7
+        }
+      },
+      "carte": {
+        "charge_pct": 45.33,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 118.38,
+        "vram_mb": 4212
+      },
+      "obs": {
+        "images_rendu": 423,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.78,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.53
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "zoom",
+      "phase": "sortie",
+      "a": 3531934991.3,
+      "b": 3531935771.2,
+      "secondes": 0.78,
+      "images": 46,
+      "fps_moyen": 58.69,
+      "fps_1pct_bas": 30,
+      "fps_01pct_bas": 30,
+      "image_ms_p50": 16.52,
+      "image_ms_p95": 18.43,
+      "image_ms_p99": 33.33,
+      "image_ms_max": 33.33,
+      "saccades": 1,
+      "saccades_par_min": 76.56,
+      "gpu_jeu_ms_p50": 4.95,
+      "cpu_jeu_ms_p50": 16.42,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 46,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 118.76,
+        "vram_mb": 4198
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "mirror",
+      "phase": "entree",
+      "a": 3531925649.9,
+      "b": 3531926099.9,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 36,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 111.44,
+        "vram_mb": 4160
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "mirror",
+      "phase": "maintien",
+      "a": 3531926099.9,
+      "b": 3531935771.2,
+      "secondes": 4.5,
+      "images": 238,
+      "fps_moyen": 52.89,
+      "fps_1pct_bas": 28.85,
+      "fps_01pct_bas": 28.8,
+      "image_ms_p50": 16.8,
+      "image_ms_p95": 33.47,
+      "image_ms_p99": 34.54,
+      "image_ms_max": 34.72,
+      "saccades": 10,
+      "saccades_par_min": 133.34,
+      "gpu_jeu_ms_p50": 4.78,
+      "cpu_jeu_ms_p50": 16.71,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7,
+          "vram_mb": 1513.5
+        },
+        "chaos": {
+          "gpu_pct": 4,
+          "cpu_pct": 0.48,
+          "vram_mb": 186
+        },
+        "dwm": {
+          "gpu_pct": 18.95,
+          "cpu_pct": 2.42,
+          "vram_mb": 39715.9
+        },
+        "obs": {
+          "gpu_pct": 3.88,
+          "cpu_pct": 1.5,
+          "vram_mb": 449.6
+        }
+      },
+      "carte": {
+        "charge_pct": 46,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 117.79,
+        "vram_mb": 4212
+      },
+      "obs": {
+        "images_rendu": 484,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.83,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.59
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "mirror",
+      "phase": "sortie",
+      "a": 3531935771.2,
+      "b": 3531936286.6,
+      "secondes": 0.52,
+      "images": 31,
+      "fps_moyen": 60,
+      "fps_1pct_bas": 55.44,
+      "fps_01pct_bas": 55.44,
+      "image_ms_p50": 16.52,
+      "image_ms_p95": 17.94,
+      "image_ms_p99": 18.04,
+      "image_ms_max": 18.04,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 5.09,
+      "cpu_jeu_ms_p50": 16.41,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 43,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 119.27,
+        "vram_mb": 4200
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "blur",
+      "phase": "entree",
+      "a": 3531930554.9,
+      "b": 3531931154.9,
+      "secondes": 0,
+      "images": 0,
+      "fps_moyen": null,
+      "fps_1pct_bas": null,
+      "fps_01pct_bas": null,
+      "image_ms_p50": null,
+      "image_ms_p95": null,
+      "image_ms_p99": null,
+      "image_ms_max": null,
+      "saccades": 0,
+      "saccades_par_min": null,
+      "gpu_jeu_ms_p50": null,
+      "cpu_jeu_ms_p50": null,
+      "modes_presentation": {},
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 47,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 118.2,
+        "vram_mb": 4212
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "blur",
+      "phase": "maintien",
+      "a": 3531931154.9,
+      "b": 3531938604.3,
+      "secondes": 7.33,
+      "images": 404,
+      "fps_moyen": 55.1,
+      "fps_1pct_bas": 28.91,
+      "fps_01pct_bas": 28.8,
+      "image_ms_p50": 16.75,
+      "image_ms_p95": 33.06,
+      "image_ms_p99": 34.38,
+      "image_ms_max": 34.72,
+      "saccades": 11,
+      "saccades_par_min": 90.01,
+      "gpu_jeu_ms_p50": 4.89,
+      "cpu_jeu_ms_p50": 16.64,
+      "modes_presentation": {
+        "Composed: Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.22,
+          "vram_mb": 1513.6
+        },
+        "chaos": {
+          "gpu_pct": 3.42,
+          "cpu_pct": 0.42,
+          "vram_mb": 206.2
+        },
+        "dwm": {
+          "gpu_pct": 22.04,
+          "cpu_pct": 2.15,
+          "vram_mb": 39715.9
+        },
+        "obs": {
+          "gpu_pct": 3.79,
+          "cpu_pct": 1.48,
+          "vram_mb": 441.1
+        }
+      },
+      "carte": {
+        "charge_pct": 44.27,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 118.48,
+        "vram_mb": 4217
+      },
+      "obs": {
+        "images_rendu": 365,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.76,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.47
+      }
+    },
+    {
+      "step": "effets",
+      "kind": "effet",
+      "effect": "blur",
+      "phase": "sortie",
+      "a": 3531938604.3,
+      "b": 3531939380.7,
+      "secondes": 0.78,
+      "images": 45,
+      "fps_moyen": 57.79,
+      "fps_1pct_bas": 29.28,
+      "fps_01pct_bas": 29.28,
+      "image_ms_p50": 16.56,
+      "image_ms_p95": 17.84,
+      "image_ms_p99": 34.15,
+      "image_ms_max": 34.15,
+      "saccades": 1,
+      "saccades_par_min": 77.05,
+      "gpu_jeu_ms_p50": 4.55,
+      "cpu_jeu_ms_p50": 16.37,
+      "modes_presentation": {
+        "Composed: Flip": 82.22,
+        "Hardware: Independent Flip": 17.78
+      },
+      "processus": {
+        "jeu": null,
+        "chaos": null,
+        "dwm": null,
+        "obs": null
+      },
+      "carte": {
+        "charge_pct": 42,
+        "nvenc_pct": 0,
+        "freq_mhz": 1920,
+        "puissance_w": 115.29,
+        "vram_mb": 4211
+      },
+      "obs": null
+    },
+    {
+      "step": "effets",
+      "kind": "repos",
+      "a": 3531941880.7,
+      "b": 3532045212.6,
+      "secondes": 87.83,
+      "images": 4963,
+      "fps_moyen": 56.51,
+      "fps_1pct_bas": 49.86,
+      "fps_01pct_bas": 47.22,
+      "image_ms_p50": 17.22,
+      "image_ms_p95": 18.61,
+      "image_ms_p99": 19.48,
+      "image_ms_max": 21.34,
+      "saccades": 0,
+      "saccades_par_min": 0,
+      "gpu_jeu_ms_p50": 9.58,
+      "cpu_jeu_ms_p50": 17.12,
+      "modes_presentation": {
+        "Hardware: Independent Flip": 100
+      },
+      "processus": {
+        "jeu": {
+          "gpu_pct": 0,
+          "cpu_pct": 7.21,
+          "vram_mb": 1513.9
+        },
+        "chaos": {
+          "gpu_pct": 0,
+          "cpu_pct": 0.03,
+          "vram_mb": 176.2
+        },
+        "dwm": {
+          "gpu_pct": 17.26,
+          "cpu_pct": 2.04,
+          "vram_mb": 39646.7
+        },
+        "obs": {
+          "gpu_pct": 17.91,
+          "cpu_pct": 1.5,
+          "vram_mb": 441.1
+        }
+      },
+      "carte": {
+        "charge_pct": 66.79,
+        "nvenc_pct": 0,
+        "freq_mhz": 949.78,
+        "puissance_w": 63.36,
+        "vram_mb": 4185
+      },
+      "obs": {
+        "images_rendu": 6174,
+        "manquees_rendu": 0,
+        "images_sortie": 0,
+        "sautees_encodage": 0,
+        "rendu_ms_moy": 0.84,
+        "fps_obs": 60,
+        "cpu_obs_pct": 1.5
+      }
+    }
+  ]
+}

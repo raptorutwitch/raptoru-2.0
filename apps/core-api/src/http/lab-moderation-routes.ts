@@ -13,6 +13,7 @@ import {
 } from '@raptoru/schemas';
 import { z } from 'zod';
 import { BonkLabError409 } from '../bonk-lab/bonk-lab-service.js';
+import { ChaosError } from '../chaos/service.js';
 import {
   LabModerationError,
   type LabModerationService,
@@ -60,6 +61,12 @@ export async function mappedModeration<T>(fn: () => Promise<T>): Promise<T> {
       throw new HttpError(error.status, { error: error.code });
     if (error instanceof LabWalletError)
       throw new HttpError(409, { error: error.code, ...error.details });
+    if (error instanceof ChaosError)
+      throw new HttpError(error.status, {
+        ...error.details,
+        error: error.code,
+        message: error.message,
+      });
     if (error instanceof TtsLabError409)
       throw new HttpError(409, {
         error: error.code,

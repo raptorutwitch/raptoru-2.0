@@ -133,6 +133,8 @@ export const PROD_MIGRATIONS: readonly string[] = Object.freeze([
   '20261204130000_casino_v1.sql',
   // Soundboard: sounds added or re-cut in Studio (sound_files, file / added / deleted columns); Lab twin 20261205120000.
   '20261205130000_sound_files.sql',
+  // Chaos V2 lot 2: requests, Studios, effect credits, charges, D4 restrictions with `chaos`; Lab twin 20261206120000.
+  '20261206130000_chaos.sql',
 ]);
 
 /** Lab schema, in order (dedicated Lab database only). */
@@ -267,6 +269,8 @@ export const LAB_MIGRATIONS: readonly string[] = Object.freeze([
   '20261204120000_casino_v1_lab.sql',
   // Soundboard sounds added in Studio: the Lab twin of 20261205130000_sound_files.sql (same content).
   '20261205120000_sound_files_lab.sql',
+  // Chaos V2 lot 2: the Lab twin of 20261206130000_chaos.sql (same content).
+  '20261206120000_chaos_lab.sql',
 ]);
 
 /**

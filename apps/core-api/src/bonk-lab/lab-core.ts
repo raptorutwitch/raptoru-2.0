@@ -28,6 +28,8 @@ import { SoundLabService } from '../sound-lab/sound-lab-service.js';
 import { TtsLabService } from '../tts-lab/tts-lab-service.js';
 import { ttsLabRoutes } from '../http/tts-lab-routes.js';
 import { labModerationRoutes } from '../http/lab-moderation-routes.js';
+import { chaosLabRoutes } from '../http/chaos-routes.js';
+import { ChaosService } from '../chaos/service.js';
 import { LabModerationService } from '../lab-moderation/service.js';
 import { RaffleLabService } from '../raffle-lab/raffle-lab-service.js';
 import { HttpError, STREAMED } from '../http/server.js';
@@ -132,6 +134,8 @@ export function createLabCore({
   challenges: { tick: () => Promise<unknown> };
   /** The module host (its periodic jobs run by the Lab process). */
   modules: ModuleHost;
+  /** Chaos V2: its sweep (every 5 s and at the start, the Lab process's timer). */
+  chaos: ChaosService;
 } {
   if (secret.length < 32) throw new Error('bonk_secret_required');
   // Twitch viewer catalog (read-only user:read:emotes), only when the launcher passes the app.
@@ -283,6 +287,8 @@ export function createLabCore({
   modules.add(randomBanExtModule(randomBan, { lab: true }));
   modules.add(wordGameModule(wordGame));
   modules.add(eventShopModule);
+  // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md): the same module as the main Core, on the Lab economy.
+  const chaos = new ChaosService(db, systemClock, economy, moduleSettings);
   const alertsService = new AlertsService(db, systemClock);
   alertsService.attachListener('event_shop', (q, e) => eventShop.onAlert(q, e));
   const routes = [
@@ -302,6 +308,8 @@ export function createLabCore({
         bonk,
         raffle,
         economy,
+        null,
+        chaos,
       ),
       tts,
       raffle,
@@ -359,6 +367,8 @@ export function createLabCore({
     }),
     // The module host (architecture socle).
     ...modulesRoutes(modules),
+    // Chaos V2 lot 2: Studio's execution loop and the Extension Lab's state, quote and purchase (Lab secret).
+    ...chaosLabRoutes(chaos),
   ];
   const server = createServer(async (req, res) => {
     const send = (status: number, body: unknown) => {
@@ -423,5 +433,6 @@ export function createLabCore({
     spotify,
     challenges: { tick: () => challenges.tick(LAB_PROGRESSION_CHANNEL) },
     modules,
+    chaos,
   };
 }

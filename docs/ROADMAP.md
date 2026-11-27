@@ -30,11 +30,22 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 
 ### 0.2 Ensuite (déjà décidé ou demandé)
 
-0. **KO Overlay : prochain chantier après les Chatbox** (décision d'Antoni du 22/11). Aucun contexte trouvé le 22/11
-   (dépôt, docs, collection OBS active, dossiers d'overlays, mémoire) : à la reprise, demander à Antoni ce que fait
-   l'overlay, ses scènes, son déclencheur et les fichiers ou sources existants, avant toute conception.
-1. **Chaos V2, lot 0** (mesures, sans code), puis lot 1 (lecteur natif, flip seul) : § 2.0. Priorité majeure décidée
-   le 10/11, non commencée.
+1. **Chaos V2 (« Chaos Overlay », que tu appelles « KO Overlay »)** : moteur, curseur retourné et **catalogue d'effets** de Studio construits les 22
+   et 23/11 en local (`apps/chaos-engine`, branche `feat/chaos-studio`, `npm run chaos:lab`). Retournement essayé par
+   Antoni dans Studio installé (`0.1.44-chaos.1`). **24/11 : 12 effets de plus** (miroir, tremblement, zoom, ivre,
+   tunnel, clignement, flash, brouillard, flou, pixelisation, couleur, VHS), fiches Studio, études OBS Wasted et Replay ;
+   version de test commune `0.1.44-chaos.2`, essayée par Antoni (retours positifs). 24/11 : mode C (écran + OBS)
+   construit, version de test `0.1.44-chaos.4` non installée.
+   **Polissage du 24/11** :
+   - effets sur tout l'écran (mode E) ;
+   - clignement fermé à 100 %, brouillard occultant, tunnel en dégradé, flash, ivre ;
+   - intensités Léger / Marqué / Extrême ;
+   - Chaos Performance Lab ;
+   - version de test `0.1.44-chaos.3` non installée ([chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md) § 0 bis).
+
+   **Essais d'Antoni attendus**, puis lot 2 (achat par les viewers).
+   Le lot 0 (mesures PresentMon) reste à faire : § 2.0.
+
 2. **Validations réelles en attente** (temps d'Antoni, en live) : premier vrai tirage de la Roue du Sub V3 ; « Envoyer
    une vraie annonce test » de Level Up ; commande d'Aouh (expressions, latence, édition déléguée) ; parcours viewer de
    Music Hub ; effets OBS après OBS 33.
@@ -49,7 +60,7 @@ live**. Un Hosted Test n'est pas une publication ; une CI verte ne valide rien.
 | **En Production, public, validation réelle restante**    | extension `be1744e75f63` (Level Up V2 et son interrupteur de son, mini-profil, Commandes V2.1 « Mes commandes modifiables », Mini-jeux V5, Music Hub) · Roue du Sub V3 · progression restaurée · Studio 0.1.42                                                                            |
 | **Déployé côté Core, prêt à publier, pas encore public** | **Casino V1** : Core `a94d1081` ; ZIP `d09fd03aa844` construit et vérifié, **téléversement non prouvé** ; revue Twitch et essai réel à faire (§ 0.4)                                                                                                                                      |
 | **Recherche faite, à concevoir**                         | **Chatbox Raptoru** (remplacement des 3 chatbox StreamElements) : § 2.4, [CHATBOX.md](CHATBOX.md)                                                                                                                                                                                         |
-| **Étudié, prêt à implémenter**                           | Chaos V2 lots 0 et 1 ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md))                                                                                                                                                                                                             |
+| **Étudié, prêt à implémenter**                           | Chaos V2 lot 0 (mesures) et lots 2 à 5 ; **moteur et page Studio livrés en local, test réel d'Antoni attendu** ([chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md))                                                                                                                   |
 | **Backlog**                                              | finitions Studio (§ 2.2) · dettes (§ 3) · idées XP et modules (§ 4)                                                                                                                                                                                                                       |
 | **Bloqué par du contenu d'Antoni**                       | Défis (catalogue) · cosmétiques (catalogue vide)                                                                                                                                                                                                                                          |
 | **En pause ou suspendu** (ne pas relancer sans demande)  | § 6                                                                                                                                                                                                                                                                                       |
@@ -105,7 +116,7 @@ Colonnes : état réel · ce qui reste · document. « Public » = dans l'extens
 | **TTS et `!tts`**                                                                                                   | En Production, rétabli après OBS 33 (Antoni)                                                                                                                                                                                 | lecture avant la fin du reveal (dette) ; second lecteur `Navigateur web 2`                                                                            | —                                                                                                                                        |
 | **Tombola V2**                                                                                                      | En Production ; annonce groupée validée (23/10)                                                                                                                                                                              | Tombola V1 inaccessible (`raffle_v2` forcé)                                                                                                           | [tombola-v2-parity.md](tombola-v2-parity.md)                                                                                             |
 | **Notifications et activité** (Studio, alertes Twitch V2)                                                           | En Production (`ALERTS_MODE`) ; notifications de Studio                                                                                                                                                                      | vrai don et sous-types réels ; Studio : textes qui se chevauchent, notifications répétitives à regrouper, états normaux présentés comme des incidents | [TWITCH_ALERTS_PARITY_2026-10.md](TWITCH_ALERTS_PARITY_2026-10.md)                                                                       |
-| **Overlays OBS et Chaos**                                                                                           | Lecteurs d'overlays de Studio en Production ; **Chaos V1** fermé avec Halloween (02/11) ; **Chaos V2 en conception**, rien construit                                                                                         | Chaos V2 lots 0 à 5 (§ 2.0) ; couper les fenêtres plein écran permanentes                                                                             | [chaos/ARCHITECTURE_CHAOS_V2.md](chaos/ARCHITECTURE_CHAOS_V2.md), [chaos/AUDIT_CHAOS_V1.md](chaos/AUDIT_CHAOS_V1.md)                     |
+| **Overlays OBS et Chaos**                                                                                           | Lecteurs d'overlays de Studio en Production ; **Chaos V1** fermé avec Halloween (02/11) ; **Chaos V2** : prototype du lot 1 en local (22/11), hors Studio                                                                    | Chaos V2 lots 0 à 5 (§ 2.0) ; couper les fenêtres plein écran permanentes                                                                             | [chaos/ARCHITECTURE_CHAOS_V2.md](chaos/ARCHITECTURE_CHAOS_V2.md), [chaos/AUDIT_CHAOS_V1.md](chaos/AUDIT_CHAOS_V1.md)                     |
 | **Chatbox OBS** (Just Chatting, React, Dessin)                                                                      | En service chez **StreamElements** (3 overlays : `Boîte de chat`, `ChatReact`, `Chatbox Dessin`) ; reconnaissance faite le 20/11 ; **priorité de développement** depuis le 22/11, rien de spécifié                           | revue des caractéristiques avec Antoni, spécification, moteur partagé + 3 profils (§ 2.4)                                                             | [CHATBOX.md](CHATBOX.md) (+ rapport privé hors Git)                                                                                      |
 | **Mini-jeux et arcade** (Random Ban V5, Sniper, Jeu des mots, Roulette, Slot, Duel du chat)                         | En Production ; Mini-jeux V5 et anti-spoil (PR #67, 13–14/11) **publics** ; jeux du chat en live seulement                                                                                                                   | Duel : annonce et soldes réels non revérifiés ; 6 anciennes rédemptions Random Ban non régularisées                                                   | [mini-jeux/LIVRAISON_V5.md](mini-jeux/LIVRAISON_V5.md), [RANDOM_BAN_V2.md](RANDOM_BAN_V2.md), [WORD_GAME_PARITY.md](WORD_GAME_PARITY.md) |
 | **Casino V1** (machine à fruits + Coffre du Raptor, roulette, machine à émotes, blackjack multijoueur, spectateurs) | **Terminé, Core `a94d1081` déployé, ouvert par réglage** (`CASINO_EXTENSION=on`, `casino.open=1`, 4 jeux), refusé hors live ; **pas dans l'extension publique** ; ZIP `d09fd03aa844` prêt, non téléversé ; fonctions : § 0.4 | § 0.4 ; aucun essai réel avec de vrais viewers                                                                                                        | [CASINO_V1_INTEGRATION.md](CASINO_V1_INTEGRATION.md), [CASINO.md](CASINO.md) § 12–18                                                     |
@@ -123,19 +134,79 @@ Colonnes : état réel · ce qui reste · document. « Public » = dans l'extens
 
 ### 2.0 Chaos V2 : priorité majeure suivante, après les Chatbox (en conception)
 
-La recherche est terminée, et rien n'est construit ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Un retournement local
-propre, avec un seul vrai curseur, est **possible pour le curseur Windows** grâce à une capture native WGC ; le rendu
-de bout en bout n'est pas encore prouvé. Architecture recommandée : un lecteur natif qui ne vit que pendant un effet,
-vu par la capture d'écran d'OBS, et un module `chaos` du socle payé en Jetons.
+**24/11 : bibliothèque d'effets.** 13 effets publics développés et intégrés à Studio, vérifiés hors écran, jamais vus
+en vrai (garde de jeu) ; état, techniques et limites : [chaos/ETUDE_EFFETS_V2.md](chaos/ETUDE_EFFETS_V2.md). Restes :
 
-| Lot | Contenu                                                                                   | Prérequis                   |
-| --- | ----------------------------------------------------------------------------------------- | --------------------------- |
-| 0   | mesures PresentMon ; couper les fenêtres V1 permanentes ; choisir la fréquence de l'écran | GO d'Antoni, 45 min         |
-| 1   | lecteur natif, flip seul, bouton de test (Rust, CI)                                       | lot 0 ; GO ; outillage Rust |
-| 2   | module `chaos` payant dans le Lab (file, remboursements, extension, Studio)               | lot 1 accepté ; prix (Q2)   |
-| 3   | catalogue enrichi                                                                         | lot 2                       |
-| 4   | Production                                                                                | GO dédiés                   |
-| 5   | repère placé par un viewer                                                                | lots 1–4                    |
+- essais d'Antoni effet par effet (le brouillard ne compte comme réussi qu'après son avis en mouvement) ;
+- banc des 13 effets ([chaos/BENCH_EFFETS.md](chaos/BENCH_EFFETS.md)) : phases A et B mesurées le 25/11 (moteur hors
+  écran à 1440p, OBS isolé : aucune image perdue). Phase C : première mesure en jeu analysée le 25/11 (§ 8 : le calque
+  fait passer Overwatch en composition à 60 Hz, 4,9 % d'images de 33 ms) ; reste le test A/B de confirmation
+  (`mesure-jeu.mjs --ab`, par Antoni), puis, seulement s'il confirme, l'étude d'un calque qui laisse le jeu en
+  Independent Flip. Optimisations possibles de Brouillard, Écran ivre et VHS décrites, non faites sans besoin démontré ;
+- images/s du jeu dans le Performance Lab : intégration de PresentMon (droits d'administrateur) si la lecture à la
+  main ne suffit pas ;
+- mode E : barre des tâches figée pendant un effet qui lit l'image (horloge, survol) ; « barre vivante » possible
+  plus tard par une seconde surface exclue des captures ([chaos/ECRAN_ENTIER.md](chaos/ECRAN_ENTIER.md) § 4) ;
+- flou : sous-échantillonnage à 13 lectures si le flou très fort ondule en mouvement ;
+- point visé : miniature capturée du vrai écran, si l'écran miniature ne suffit pas ;
+- lot 2 : prix par durée et par palier au Core (le registre porte déjà durées, paliers et aperçu) ;
+- **curseur d'OBS et VHS animé** (24/11 soir : [chaos/CURSEUR_OBS.md](chaos/CURSEUR_OBS.md)), construits et testés hors
+  écran. Restes :
+  - flash noir de la bascule : relais anti-coupure, **validé par Antoni le 25/11** dans son OBS avec `0.1.44-chaos.8`
+    (CURSEUR_OBS.md § 5) ;
+  - validation d'Antoni avec `0.1.44-chaos.7`, qui inclut le correctif de la fenêtre protégée
+    ([chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md) § 6) : VHS au maintien, un seul curseur, coupure visible ou
+    non, Miroir et Écran retourné avec Discord ouvert ;
+  - si la coupure d'OBS gêne : étudier un curseur transformé sans changer le réglage d'OBS ;
+- **capture directe par « Écran »** (24/11 soir, priorité d'Antoni après la sonde DXGI, Miroir validé en chaos.5 : [chaos/CAPTURE_DIRECTE.md](chaos/CAPTURE_DIRECTE.md)) :
+  - construite et testée hors écran ; Studio part en « Écran uniquement » ;
+  - reste la validation visible d'Antoni (Miroir, Clignement, Brouillard, Zoom ; version de test `0.1.44-chaos.5`) ;
+  - reste aussi la mesure à l'écran du coût de composition du mode E ;
+- **mode C** (écran + OBS, choisi par Antoni, construit le 24/11, **alternative** depuis la capture directe :
+  [chaos/MODE_C.md](chaos/MODE_C.md)). Restes :
+  - test d'exclusion visible ;
+  - GO puis préparation des filtres dans l'OBS réel et essai contrôlé ;
+  - banc 1440p (écran et OBS) ;
+  - flash dans OBS (Source Clone + Freeze, sur GO) ;
+  - parité en 1440p et sur scène animée ;
+  - brouillard à demi-résolution dans OBS si le banc le demande ;
+- OBS : prototype isolé « replay » puis « Wasted », sur GO ([chaos/ETUDE_OBS_REPLAY.md](chaos/ETUDE_OBS_REPLAY.md),
+  [chaos/ETUDE_OBS_WASTED.md](chaos/ETUDE_OBS_WASTED.md)).
+
+La recherche est terminée ([chaos/](chaos/ARCHITECTURE_CHAOS_V2.md)). Un retournement local propre, avec un seul vrai
+curseur, est **possible pour le curseur Windows** grâce à une capture native WGC. Architecture recommandée : un lecteur
+natif qui ne vit que pendant un effet, vu par la capture d'écran d'OBS, et un module `chaos` du socle payé en Jetons.
+
+**22/11 : le moteur existe** ([apps/chaos-engine](../apps/chaos-engine/README.md),
+[chaos/ARCHITECTURE_MOTEUR.md](chaos/ARCHITECTURE_MOTEUR.md)). Il réutilise le prototype du lot 1, testé par Antoni
+(retournement et curseur bons ; ancien écran visible pendant la rotation, corrigé).
+
+- Il contient :
+  - le registre partagé et la configuration versionnée ;
+  - l'ordonnanceur et les transitions ;
+  - la capture partagée, le rendu par passes et les calques ;
+  - le runtime isolé des effets ;
+  - la télémétrie, le gardien et l'arrêt d'urgence ;
+  - la page Studio › Chaos et le banc Chaos Lab.
+- Un seul effet réel : le retournement.
+  - Par défaut : le calque sur la fenêtre du jeu.
+  - L'écran entier retourné par Windows (souris inversée) est **expérimental et coupé** depuis l'incident du 22/11 :
+    Overwatch à 17 images/s pendant les bascules
+    ([chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md](chaos/ETUDE_PERFORMANCES_RETOURNEMENT.md)).
+  - Décision attendue d'Antoni sur le candidat sans bascule (curseur affiché par le calque).
+- Tests : 23 unitaires ; 51 d'intégration avant l'incident (17 sans écran depuis) ; 10 côté Studio ; 11 de bout en
+  bout. Un banc de comparaison existe, jamais lancé.
+- **Pas encore prouvé en jeu**, ni dans un Studio installé (aucune release) : test réel d'Antoni
+  ([chaos/PROCEDURE_TESTS.md](chaos/PROCEDURE_TESTS.md) § 2).
+
+| Lot | Contenu                                                                                   | Prérequis                  |
+| --- | ----------------------------------------------------------------------------------------- | -------------------------- |
+| 0   | mesures PresentMon ; couper les fenêtres V1 permanentes ; choisir la fréquence de l'écran | GO d'Antoni, 45 min        |
+| 1   | lecteur natif, flip seul — **moteur et page Studio livrés en local le 22/11 (C#)**        | test réel d'Antoni (R1–R6) |
+| 2   | module `chaos` payant dans le Lab (file, remboursements, extension, Studio)               | lot 1 accepté ; prix (Q2)  |
+| 3   | catalogue enrichi                                                                         | lot 2                      |
+| 4   | Production                                                                                | GO dédiés                  |
+| 5   | repère placé par un viewer                                                                | lots 1–4                   |
 
 Critères et risques : [chaos/ROADMAP_CHAOS_V2.md](chaos/ROADMAP_CHAOS_V2.md). Arbitrages :
 [chaos/QUESTIONS_OUVERTES_CHAOS_V2.md](chaos/QUESTIONS_OUVERTES_CHAOS_V2.md).

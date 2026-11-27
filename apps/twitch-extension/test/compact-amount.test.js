@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { formatCompactAmount } from '../extension/shared/currency.js';
+import {
+  formatCompactAmount,
+  formatCompactAmountPrecise,
+} from '../extension/shared/currency.js';
 import {
   formatCompactBalance,
   formatWalletValue,
@@ -38,6 +41,42 @@ describe('abbreviated balances (12/11 report: « 6000 K » instead of « 6 M »)
     expect(formatCompactAmount(undefined)).toBe('—');
     expect(formatCompactAmount('x')).toBe('—');
     expect(formatCompactAmount(-5)).toBe('0');
+  });
+});
+
+describe('Mini-jeux header: precise compact balance, up to 4 digits (Antoni 26/11)', () => {
+  it('the examples asked for', () => {
+    expect(formatCompactAmountPrecise(1_000)).toBe(`1${N}000`);
+    expect(formatCompactAmountPrecise(1_234)).toBe(`1,234${N}K`);
+    expect(formatCompactAmountPrecise(12_345)).toBe(`12,34${N}K`);
+    expect(formatCompactAmountPrecise(123_456)).toBe(`123,4${N}K`);
+    expect(formatCompactAmountPrecise(1_000_000)).toBe(`1${N}M`);
+    expect(formatCompactAmountPrecise(2_656_500)).toBe(`2,656${N}M`);
+    expect(formatCompactAmountPrecise(12_345_678)).toBe(`12,34${N}M`);
+  });
+
+  it('truncated (never above the real balance), useless zeros dropped, unit changes at the thresholds', () => {
+    expect(formatCompactAmountPrecise(999)).toBe('999');
+    expect(formatCompactAmountPrecise(1_999)).toBe(`1,999${N}K`);
+    expect(formatCompactAmountPrecise(9_999)).toBe(`9,999${N}K`);
+    expect(formatCompactAmountPrecise(10_000)).toBe(`10${N}K`);
+    expect(formatCompactAmountPrecise(12_300)).toBe(`12,3${N}K`);
+    expect(formatCompactAmountPrecise(99_999)).toBe(`99,99${N}K`);
+    expect(formatCompactAmountPrecise(999_999)).toBe(`999,9${N}K`);
+    expect(formatCompactAmountPrecise(1_000_001)).toBe(`1${N}M`);
+    expect(formatCompactAmountPrecise(1_230_000)).toBe(`1,23${N}M`);
+    expect(formatCompactAmountPrecise(2_656_999)).toBe(`2,656${N}M`);
+    expect(formatCompactAmountPrecise(999_999_999)).toBe(`999,9${N}M`);
+  });
+
+  it('unknown / negative values, as the other formats', () => {
+    expect(formatCompactAmountPrecise(0)).toBe('0');
+    expect(formatCompactAmountPrecise(undefined)).toBe('—');
+    expect(formatCompactAmountPrecise(-5)).toBe('0');
+  });
+
+  it('the other headers keep their 2 digits', () => {
+    expect(formatCompactBalance(2_656_500)).toBe(`2,6${N}M`);
   });
 });
 

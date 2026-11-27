@@ -4,6 +4,7 @@ import { moduleFacade } from '@raptoru/schemas';
 import { commandsMine, commandsPublic, commandsTeam } from './commands-ext.js';
 import { subWheelExt } from './sub-wheel-ext.js';
 import { casinoExt } from './casino-ext.js';
+import { chaosExt } from './chaos-ext.js';
 import { musicExt } from './music-ext.js';
 import {
   BONK_LAB_RULES,
@@ -89,6 +90,8 @@ export interface ExtConfig {
   music?: MusicAudience;
   /** Casino in Production (CASINO_EXTENSION): who gets the casino. Absent: closed (the Lab: open). */
   casino?: MusicAudience;
+  /** Chaos V2 in Production (CHAOS_EXTENSION): who gets the Interactions. Absent: closed (the Lab: open). */
+  chaos?: MusicAudience;
 }
 
 /** Module descriptions when the payment is real (the canonical Wallet): what pays, never a price. */
@@ -313,6 +316,25 @@ export class ExtFacade {
           : null,
         idempotencyKey,
       );
+    // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md): the Interactions — the Lab, or Production for the audience of
+    // CHAOS_EXTENSION (closed by default); the Core's `chaos.enabled` closes the purchases on top. The Core decides.
+    if (path.startsWith('/chaos/')) {
+      if (!this.chaosOpen(who))
+        return method === 'GET' && path === '/chaos/state'
+          ? ok({ enabled: false })
+          : fail(404, 'not_available');
+      return chaosExt(
+        this.core,
+        this.C,
+        method,
+        path,
+        body as Record<string, unknown> | undefined,
+        who.viewer
+          ? { id: who.viewer.id, display_name: who.viewer.display_name }
+          : null,
+        idempotencyKey,
+      );
+    }
     // Halloween shop (docs/HALLOWEEN.md): its state, a purchase, a conversion — the JWT's viewer, never a body field.
     if (method === 'GET' && path === '/events/state')
       return ok((await this.eventShop(who)) ?? { enabled: false });
@@ -500,6 +522,28 @@ export class ExtFacade {
         userId: who.viewer?.id ?? who.caller.userId,
       },
     );
+  }
+
+  /** Chaos for this caller: the Lab always; Production per CHAOS_EXTENSION (closed by default). */
+  private chaosOpen(who: Who): boolean {
+    return musicOpenTo(
+      this.config.chaos ?? { mode: 'off' },
+      !!this.config.lab,
+      {
+        role: who.caller.role,
+        userId: who.viewer?.id ?? who.caller.userId,
+      },
+    );
+  }
+
+  /** The Hub's Interactions card: offered only when CHAOS_EXTENSION lets this viewer in AND `chaos.enabled` = 1. */
+  private async chaosSession(who: Who): Promise<Json> {
+    const s = this.chaosOpen(who)
+      ? await this.core<{ enabled: boolean; cap_s: number }>(
+          `/v1/lab/chaos/${this.C}/summary`,
+        ).catch(() => null)
+      : null;
+    return { enabled: s?.enabled === true, cap_s: s?.cap_s ?? null };
   }
 
   private async session(who: Who): Promise<Json> {
@@ -743,6 +787,7 @@ export class ExtFacade {
       // Halloween: shown by the extension as its « Halloween » module only while the event is open.
       event_shop: eventShop,
       music,
+      chaos: await this.chaosSession(who),
     };
   }
 
@@ -767,6 +812,7 @@ export class ExtFacade {
         'event_shop',
         'music',
         'commands_editable',
+        'chaos',
       ].map((k) => [k, s[k]]),
     );
   }

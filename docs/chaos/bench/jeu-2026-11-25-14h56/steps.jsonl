@@ -1,0 +1,5 @@
+{"qpc_ms":3534358120.6,"step":"ab-preparation"}
+{"qpc_ms":3534368144,"step":"ab-1-diag.watermark"}
+{"qpc_ms":3534414590.5,"step":"ab-2-mirror"}
+{"qpc_ms":3534414592.3,"step":"ab-erreur","effect":"mirror","error":{"error":"busy","message":"une mesure en jeu est déjà en cours"}}
+{"qpc_ms":3534414592.6,"step":"fin"}

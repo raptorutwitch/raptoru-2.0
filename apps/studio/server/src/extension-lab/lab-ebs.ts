@@ -331,6 +331,9 @@ export class LabEbs {
     string
   > | null = null;
   private coreModulesAt = 0;
+  /** Chaos V2 (Lab Core): whether the module is offered and this live's ceiling, as the Production session says it. */
+  private chaosSummary: { enabled: boolean; cap_s: number | null } | null =
+    null;
   /** Live name of the Tombola V2 module (Core: running round's frozen name, else Studio's label). */
   private raffleName: string | null = null;
   private raffleOpenWord: string | null = null;
@@ -397,6 +400,19 @@ export class LabEbs {
     if (Date.now() - this.coreModulesAt >= 1000) {
       this.coreModulesAt = Date.now();
       tasks.push(
+        this.labCore<{ enabled: boolean; cap_s: number | null }>(
+          `/v1/lab/chaos/${LAB_CHANNEL.id}/summary`,
+          undefined,
+          { timeoutMs: 1500 },
+        )
+          .then((c) => {
+            this.chaosSummary = c;
+          })
+          .catch(() => {
+            this.chaosSummary = null;
+          }),
+      );
+      tasks.push(
         this.labCore<{
           tts: { module_state: string };
           soundboard: { module_state: string };
@@ -453,6 +469,59 @@ export class LabEbs {
   }
 
   /** Free Tombola entry, decided by Core (open round, module state, block, global pause). */
+  private async chaosViaCore(
+    method: string,
+    path: string,
+    body: unknown,
+    caller: { identity: LabIdentity; identityShared: boolean },
+    key: string | undefined,
+  ): Promise<Reply> {
+    const viewer = caller.identityShared
+      ? {
+          id: caller.identity.twitchUserId,
+          display_name: caller.identity.displayName,
+        }
+      : null;
+    const base = `/v1/lab/chaos/${LAB_CHANNEL.id}`;
+    const extra =
+      body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+    try {
+      if (method === 'GET' && path === '/chaos/state') {
+        const q = viewer
+          ? `?viewer_id=${encodeURIComponent(viewer.id)}&viewer_name=${encodeURIComponent(viewer.display_name)}`
+          : '';
+        return this.ok(
+          await this.labCore!<Json>(`${base}/state${q}`, undefined, {
+            timeoutMs: 2500,
+          }),
+        );
+      }
+      if (method === 'POST' && path === '/chaos/quote')
+        return this.ok(
+          await this.labCore!<Json>(`${base}/quote`, { ...extra, viewer }),
+        );
+      if (method === 'POST' && path === '/chaos/buy') {
+        if (!viewer) return this.fail(403, 'identity_required');
+        if (!key) return this.fail(400, 'idempotency_key_required');
+        return this.ok(
+          await this.labCore!<Json>(`${base}/buy`, {
+            ...extra,
+            viewer,
+            idempotency_key: key,
+          }),
+        );
+      }
+      return this.fail(404, 'not_found');
+    } catch (e) {
+      // The Core's refusal goes back as it is (code, message, details): the extension says why.
+      const err = e as { status?: number; message: string; body?: Json };
+      return {
+        status: err.status ?? 503,
+        body: err.body ?? { ok: false, error: err.message },
+      };
+    }
+  }
+
   private async joinRaffleCore(
     caller: { identity: LabIdentity; identityShared: boolean },
     key: string | undefined,
@@ -1201,6 +1270,16 @@ export class LabEbs {
       );
       if (out) return out;
     }
+    // Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md § 2.4): state, quotes and purchases decided by the Lab Core (the same
+    // service as the Production façade, simulated Jetons); the caller's verified identity, never the page's.
+    if (this.labCore && path.startsWith('/chaos/'))
+      return this.chaosViaCore(
+        method,
+        path,
+        body,
+        caller,
+        headers.idempotencyKey,
+      );
     // The module host (architecture socle): the SAME door as the Production façade (@raptoru/schemas moduleFacade).
     if (this.labCore && path.startsWith('/modules/v3')) {
       const out = await moduleFacade({
@@ -2204,6 +2283,8 @@ export class LabEbs {
       commands_public: Boolean(this.labCore),
       // Roue du Sub V2 (R8): « Roue du Sub » in the Hub (own tours; the team's part for moderators).
       sub_wheel: Boolean(this.labCore),
+      // Chaos V2: « Interactions » in the Hub only while the Lab Core opens it (chaos.enabled), like Production.
+      chaos: this.chaosSummary ?? { enabled: false, cap_s: null },
       // Halloween shop: « Événements » in the Hub only while the Lab Core says the event is open.
       event_shop: this.labCore
         ? {

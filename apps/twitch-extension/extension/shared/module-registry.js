@@ -74,7 +74,9 @@ const sessionDefs = new Map();
  * `def` = { id, card(state) → { id, label, icon, description }, available({ state, client, document }) → boolean,
  * view({ document, client, module, team }) → { node, start(), attached?(), destroy?() }, hubFirst?: boolean (top of the
  * Hub), intro?: boolean (the host's intro above the view, default true), headLabel?: string (the open module's header
- * title, when it should say more than the Hub card's label), bodyData?: { [key]: value } (body dataset) }.
+ * title, when it should say more than the Hub card's label), bodyData?: { [key]: value } (body dataset), groups?: [id]
+ * (other modules this one shows inside its own view — Effets live holds Bonk: their cards leave the Hub while it is
+ * offered; they stay openable by id) }.
  * Shell v2 only — `lazy: { load: () => import('./view.js'), styles?: [href], prefetch?: boolean }` in place of `view`:
  * the entry file stays tiny (card + availability), the view file (exporting `view`) and its sheets are loaded when
  * the module is opened (app/lazy-views.js). The legacy panel (ui.js) never imports such a module.
@@ -113,4 +115,34 @@ export function registerModuleVariant(def) {
 
 export function moduleVariant(env) {
   return variantDefs.find((d) => d.id === env.module?.id && d.match(env)) ?? null;
+}
+
+// --- Extra sections of the moderation console (D4) ------------------------------------------------------------------
+// A module whose moderation is not one of the console's own (TTS, Soundboard, Bonk, Tombola) adds a section here: one
+// more line in the console's navigation, its view drawn in the console's pane (same styles). Lab today (FX of Chaos V2,
+// lab-modules/interactions); a production section registers the same way once its Core read models exist.
+//   def = { key, label, icon (inline SVG), color?, available?(overview) → boolean, summary(overview) → { st, text },
+//           mount({ document, client, repaint(), overview() }) → { node, headEnd?() → HTML, action?(name, el), paint?(), destroy?() } }
+// Buttons of `headEnd()` carry `data-xact="<name>"`: the console hands their clicks to `action(name, el)`.
+const moderationDefs = new Map();
+
+export function registerModerationSection(def) {
+  moderationDefs.set(def.key, def);
+}
+
+export function moderationSections() {
+  return [...moderationDefs.values()];
+}
+
+// --- Demo source (Lab) --------------------------------------------------------------------------------------------------
+// Demo mode only (shared/api.js): a Lab module may answer some routes in place of the built-in demo, or adjust its
+// answers. `handler(method, path, body, next)` → a Promise, or `next()` for the built-in demo. Never used outside demo.
+let demoHandler = null;
+
+export function registerDemoSource(handler) {
+  demoHandler = handler;
+}
+
+export function demoSource() {
+  return demoHandler;
 }

@@ -4,6 +4,7 @@
 // restent exclusivement côté serveur.
 
 import { createDemoSession } from './demo-data.js';
+import { demoSource } from './module-registry.js';
 import { RUNTIME } from './runtime-config.js';
 import { isAllowedApiBase } from './runtime-guard.js';
 import { traceTimeoutDebug } from './timeout-debug.js';
@@ -115,7 +116,10 @@ export function createClient({
   async function call(method, path, { body, idempotencyKey, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
     if (demoMode) {
       // The intent's key goes along (a local Lab demo source keys its purchases like the real EBS; the fixtures ignore it).
-      const responsePayload = await (fixtureCall ?? demoCall)(method, path, body, idempotencyKey);
+      const base = fixtureCall ?? demoCall;
+      // A Lab module may answer some routes itself (module-registry.js registerDemoSource), the built-in demo otherwise.
+      const lab = demoSource();
+      const responsePayload = await (lab ? lab(method, path, body, () => base(method, path, body, idempotencyKey)) : base(method, path, body, idempotencyKey));
       if (sessionRoute(path) === '/session') rememberSession(responsePayload);
       return responsePayload;
     }
@@ -524,6 +528,10 @@ export function createClient({
       idempotencyKey,
     }),
     /** Moderation V2 (D4): Core read models (overview, whoami, search, viewer card, audit). */
+    // Chaos V2 (docs/chaos/CONTRAT_LOT2.md § 2.4) : état, devis et achat décidés par le Core ; une clé par intention.
+    chaosState: () => call('GET', '/chaos/state'),
+    chaosQuote: (body) => call('POST', '/chaos/quote', { body }),
+    chaosBuy: (body, key = newIdempotencyKey()) => call('POST', '/chaos/buy', { body, idempotencyKey: key }),
     modV2: (path) => call('GET', `/moderation/v2/${path}`),
     /** Moderation V2 command, executed and audited by Core with the caller's permissions. */
     modV2Act: (command, key) => call('POST', '/moderation/v2/actions', { body: { command }, idempotencyKey: key ?? newIdempotencyKey() }),

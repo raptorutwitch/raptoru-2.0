@@ -124,6 +124,8 @@ export function createMainServer(
     bonkLab: core.bonkLab,
     soundLab: core.soundLab,
     ttsLab: core.ttsLab,
+    // Chaos V2 lot 2: the paired Studio's execution routes (/v1/studio/chaos/*); purchases closed by default.
+    chaos: core.chaos,
     studioInstallations: core.studioInstallations,
     // Twitch alerts V1 (§ 22): served to the paired Studio for the configured channel only.
     alerts: core.alerts,

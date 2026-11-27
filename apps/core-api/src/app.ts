@@ -9,6 +9,7 @@ import { MODULES } from './modules/index.js';
 import { casinoModule } from './modules/casino.js';
 import { CasinoService } from './casino/service.js';
 import { BlackjackService } from './casino/blackjack/service.js';
+import { ChaosService } from './chaos/service.js';
 import { randomBanExtModule, randomBanModule } from './modules/random-ban.js';
 import { RandomBanModeration } from './random-ban/moderation.js';
 import { randomBanPricing } from './random-ban/pricing.js';
@@ -106,6 +107,8 @@ export interface Core {
   blackjack: BlackjackService;
   /** The module host (modules/host.ts): the modules of modules/index.ts. */
   modules: ModuleHost;
+  /** Chaos V2 lot 2 (docs/chaos/CONTRAT_LOT2.md): effects bought from the extension, played by Studio. Closed by default. */
+  chaos: ChaosService;
 }
 
 export function createCore(
@@ -282,7 +285,10 @@ export function createCore(
   const casino = new CasinoService(db, clock, economy, moduleSettings);
   modules.add(casinoModule(casino));
   const blackjack = new BlackjackService(db, clock, economy, casino);
+  // Chaos V2: its purchases on this Core's economy; `chaos.enabled` (0 by default) in the module settings.
+  const chaos = new ChaosService(db, clock, economy, moduleSettings);
   return {
+    chaos,
     credits,
     daily: new DailyService(db, clock, credits),
     streams: new StreamSessions(db, clock),

@@ -42,6 +42,8 @@ const PREFIXES = [
   '/v1/lab/dock/',
   // Halloween: the event shop (Studio's overlay executor and panel, docs/HALLOWEEN.md).
   '/v1/lab/events/',
+  // Chaos V2 lot 2: the viewers' effects (Studio's heartbeat, claim, reports, STOP ALL; docs/chaos/CONTRAT_LOT2.md § 2.4).
+  '/v1/lab/chaos/',
   // Progression native: XP, levels, titles and badges (Studio's panel, docs/PROGRESSION.md).
   '/v1/lab/progression/',
   // Boutique cosmétique V1: Studio's editor (docs/COSMETIC_SHOP.md) and the looks' stylesheet (public, read only).

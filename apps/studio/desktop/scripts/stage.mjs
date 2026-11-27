@@ -78,6 +78,20 @@ for (const path of copies) {
   cpSync(from, join(app, path), { recursive: true });
 }
 
+// Chaos V2: the native engine, compiled from this commit by Windows' own C# compiler (apps/chaos-engine/build.cmd,
+// nothing to install), at the path the Studio server starts it from. Only the engine: its tests and bench stay out.
+const chaosBuild = join(stage, 'chaos-build');
+execFileSync(
+  'cmd.exe',
+  ['/d', '/c', join(repo, 'apps', 'chaos-engine', 'build.cmd')],
+  { env: { ...process.env, CHAOS_OUT: chaosBuild }, stdio: 'inherit' },
+);
+mkdirSync(join(app, 'apps', 'chaos-engine', 'bin'), { recursive: true });
+cpSync(
+  join(chaosBuild, 'ChaosEngine.exe'),
+  join(app, 'apps', 'chaos-engine', 'bin', 'ChaosEngine.exe'),
+);
+
 // Files the local runtime needs at run time (standalone Studio: no repository next to it).
 const runtimeFiles = [
   'apps/core-api/dist/bonk-lab/local-server.js',
@@ -118,6 +132,7 @@ const runtimeFiles = [
   'tools/smtc-probe/SmtcProbe.cs',
   'apps/studio/web/dist/index.html',
   'apps/studio/desktop/static/status.html',
+  'apps/chaos-engine/bin/ChaosEngine.exe',
   'apps/twitch-extension/extension/panel.html',
   'supabase/migrations/20261003120000_sound_lab_custom_label.sql',
   'supabase/migrations/20261004120000_tts_lab.sql',

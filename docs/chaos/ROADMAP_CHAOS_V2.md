@@ -1,7 +1,19 @@
 # Roadmap Chaos V2
 
 10/11/2026. Lots verticaux, chacun testable dans le Lab puis en vrai par Antoni. Aucun lot ne démarre sans son GO.
-Architecture : [ARCHITECTURE_CHAOS_V2.md](ARCHITECTURE_CHAOS_V2.md). Effets : [CATALOGUE](CATALOGUE_EFFETS_CHAOS_V2.md).
+
+> **État au 26/11** (le plan ci-dessous est l'historique du 10/11) :
+>
+> - **Lot 0** : fait autrement. Fenêtres permanentes d'Halloween coupées (« Overlay actif » off), mesures en jeu
+>   PresentMon et A/B du 25/11 ([BENCH_EFFETS.md](BENCH_EFFETS.md) § 8 et 9). Écran principal laissé à 59,94 Hz (Q10).
+> - **Lot 1** : dépassé et **validé** (moteur C#, 13 effets, capture directe vers OBS, curseur unique, relais, Performance
+>   Lab ; 0.1.44-chaos.11 validée le 26/11 sur Overwatch). Non essayés : Dofus (R2), un autre jeu (R4).
+> - **Lot 2** : non commencé. Prêts : registre (durées, paliers, aperçu, `viewer`), sources `core` / `extension` /
+>   `channel_points` et file du moteur. Manquent : module `chaos` du Core (Jetons, file, remboursements), boucle
+>   Studio ↔ Core, module de l'extension, prix (Q2 à Q8).
+> - **Lot 3** : en partie avancé (VHS, pixelisation, couleur, flou déjà là) ; le reste non développé.
+> - **Lots 4 et 5** : non commencés. Tout Chaos V2 est sur la branche locale `feat/chaos-studio`, hors `main`.
+>   Architecture : [ARCHITECTURE_CHAOS_V2.md](ARCHITECTURE_CHAOS_V2.md). Effets : [CATALOGUE](CATALOGUE_EFFETS_CHAOS_V2.md).
 
 ## Lot 0 — Mesurer avant de construire (aucun code ; 45 min d'Antoni)
 
@@ -24,6 +36,47 @@ quelle cadence réelle avait la copie V1 (E5).
 
 **But** : prouver sur le vrai PC le point le plus risqué. Un retournement à 180°, un seul vrai curseur, aucun carré,
 une fluidité intacte.
+
+> **23/11** : calque GPU = technologie principale ; curseur retourné intégré au moteur
+> ([ETUDE_CURSEUR.md](ETUDE_CURSEUR.md)) ; moteur optimisé ([PERFORMANCES_MOTEUR.md](PERFORMANCES_MOTEUR.md)) ; page
+> Studio › Chaos refaite en catalogue d'effets ([GUIDE_STUDIO_CHAOS.md](GUIDE_STUDIO_CHAOS.md)).
+>
+> **Mise à jour du 22/11, mandat « architecture »** : le prototype est devenu le **moteur**
+> ([`apps/chaos-engine`](../../apps/chaos-engine/README.md), branche locale `feat/chaos-engine`,
+> [ARCHITECTURE_MOTEUR.md](ARCHITECTURE_MOTEUR.md)).
+>
+> - Il est intégré à Studio (page Chaos) et dispose d'un banc Chaos Lab.
+> - Le retour d'Antoni sur le lot 1 est traité : l'ancien écran n'apparaît plus pendant la rotation, et le panneau
+>   Windows a été remplacé par la page Studio.
+> - Le lot 2 (module payant) n'est pas commencé.
+> - **Correctif de conception du 22/11** : le retournement vise l'écran entier. Windows retourne l'affichage (vrai
+>   curseur unique, souris inversée, clic sous le curseur) ; la couche Entrées est séparée du moteur visuel
+>   ([COUCHE_ENTREES.md](COUCHE_ENTREES.md), compatibilité et restauration). La fenêtre seule devient un diagnostic.
+>   Reste ouvert : les spectateurs (capture d'écran d'OBS) verraient la bascule sans les rotations animées, à
+>   vérifier (R5). Sur un écran à 144 Hz, les rotations tournent à environ 60 images/s (calées sur l'écran principal) :
+>   à revoir seulement si Antoni les trouve saccadées.
+> - **Incident du 22/11 au soir** : chaque bascule d'orientation a fait tomber Overwatch, sur l'autre écran, à environ
+>   17 images/s. La méthode Windows est **expérimentale et coupée** ; le défaut redevient le calque sur la fenêtre.
+>   Candidat sans bascule (calque + curseur affiché par le calque), banc de comparaison et décision attendue :
+>   [ETUDE_PERFORMANCES_RETOURNEMENT.md](ETUDE_PERFORMANCES_RETOURNEMENT.md).
+> - Le texte ci-dessous décrit le prototype du lot 1 (`apps/chaos-presenter`, branche `feat/chaos-presenter-lot1`).
+>
+> **État au 22/11/2026 : prototype livré, test réel d'Antoni attendu.**
+>
+> - **Livré** : lecteur autonome (mode D, et mode C en secours) et panneau de test avec les raccourcis
+>   `Ctrl+Maj+F10` / `F11`, à la place du bouton Studio prévu plus bas.
+> - **26 contrôles automatiques verts sur le PC** : aucun flash, clic traversant, focus intact, arrêt mesuré à l'écran en
+>   10 à 35 ms, tous les chemins d'arrêt.
+> - **Mesuré en 2560×1440** : 0,15 à 0,21 ms de GPU par image, 0,3 à 0,4 ms de traitement (médiane), 0,2 à 0,4 % de
+>   CPU.
+> - **Écarts au plan** :
+>   - le lecteur est en **C# (.NET Framework 4.8, compilateur fourni par Windows)**, pas en Rust : l'installation de
+>     Rust a été refusée par le garde-fou de l'agent ;
+>   - il n'est pas encore branché à Studio ;
+>   - seul le 180° existe (pas de miroir ni de vertical) ;
+>   - la bascule animée dure 0,55 s pour respecter le plafond de 520°/s.
+> - **Reste à prouver**, uniquement par Antoni : R1 à R5 (curseur unique en jeu, Dofus, Overwatch, jeu d'horreur, OBS)
+>   et les critères de fluidité ci-dessous avec PresentMon.
 
 - **Outillage** : Rust + `windows-rs`, build dans la CI Windows, exécutable embarqué par `studio:release`.
 - **Lecteur** :

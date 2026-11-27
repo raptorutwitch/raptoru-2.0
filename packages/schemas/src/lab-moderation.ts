@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { ChaosModerationCommand } from './chaos-core.js';
+
+// Chaos V2 lot 2: the Core's `chaos` API schemas, exported with the moderation ones (index.ts re-exports this file).
+export * from './chaos-core.js';
 
 // Moderation V2 (Lab, parity D4) — commands sent by Studio (the broadcaster's cockpit) or by the
 // extension (moderators), executed by Core, which is the only source of truth and decides every
@@ -120,6 +124,7 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
       'bonk',
       'raffle',
       'random_ban',
+      'chaos',
     ]),
     /** null = until unblocked (addition to D4, sensitive sanction). */
     duration_s: z
@@ -140,6 +145,7 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
       'bonk',
       'raffle',
       'random_ban',
+      'chaos',
     ]),
     reason: Reason,
   }),
@@ -147,7 +153,7 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
   z.strictObject({
     action: z.literal('set_cooldown'),
     viewer_id: Id,
-    module: z.enum(['tts', 'soundboard', 'bonk', 'random_ban']),
+    module: z.enum(['tts', 'soundboard', 'bonk', 'random_ban', 'chaos']),
     delay_s: z.number().int().min(1).max(86_400),
     span: CooldownSpan,
     reason: Reason,
@@ -156,7 +162,7 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
   z.strictObject({
     action: z.literal('clear_cooldown'),
     viewer_id: Id,
-    module: z.enum(['tts', 'soundboard', 'bonk', 'random_ban']),
+    module: z.enum(['tts', 'soundboard', 'bonk', 'random_ban', 'chaos']),
     reason: Reason,
   }),
   z.strictObject({
@@ -214,6 +220,11 @@ export const LabModerationCommand = z.discriminatedUnion('action', [
   }),
   z.strictObject({ action: z.literal('raffle_close'), reason: Reason }),
   z.strictObject({ action: z.literal('raffle_draw'), reason: Reason }),
+  /** Chaos V2 (docs/chaos/CONTRAT_LOT2.md): the FX section's commands, in the Tombola's envelope. */
+  z.strictObject({
+    action: z.literal('chaos'),
+    command: ChaosModerationCommand,
+  }),
 ]);
 export type LabModerationCommand = z.infer<typeof LabModerationCommand>;
 
