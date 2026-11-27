@@ -118,14 +118,14 @@ l'en-tête de l'extension et sur raptoru.fr après chaque étape.
 
 Jetons : toute demande `queued` / `claimed` sans démarrage confirmé est remboursée par le balayage du Core (au démarrage
 et toutes les 5 s) ; un remboursement ne peut pas avoir lieu deux fois (mise à jour conditionnelle + clé Wallet). Un
-effet démarré sans fin confirmée est traité comme une panne (§ 8, une fois le lot `feat/chaos-decisions` déployé) ;
+effet démarré sans fin confirmée est traité comme une panne (§ 8, une fois la PR `release/chaos-decisions-qol` fusionnée et le Core déployé) ;
 sinon il reste « fin inconnue », remboursable à la main par la console FX.
 
 ## 7. Livrables locaux (rien n'est publié)
 
 Voir `docs/chaos/LIVRAISON_CHAOS_2026-11-26.md` (ZIP, SHA, tests, verdict).
 
-## 8. Décisions avant l'ouverture publique (retenues par Antoni le 27/11, branche `feat/chaos-decisions`, non déployées)
+## 8. Décisions avant l'ouverture publique (retenues par Antoni le 27/11, PR `release/chaos-decisions-qol`, non déployées)
 
 1. **Fin d'effet inconnue** (Studio ne confirme jamais la fin) — recommandé : la traiter comme une panne et appliquer
    la politique d'interruption (remboursé sous 50 % joué), en comptant comme « joué » le temps entre le début et le
