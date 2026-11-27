@@ -8,6 +8,20 @@ conversation ChatGPT : [REPRISE_CHATGPT.md](REPRISE_CHATGPT.md).
 
 ## 0. Résumé compact
 
+> **Mise à jour du 27/11/2026** (mandat « Finalisation et automatisation des prochaines mises à jour ») — prime sur le
+> bloc ci-dessous pour ces points :
+>
+> - Production : Core `9f5efcd2` (Chaos V2 fermé aux testeurs `CHAOS_EXTENSION=testers:83603689`, interrupteur Studio
+>   « Autoriser les achats Chaos » = `chaos.enabled` ; retour arrière `9836008e` puis `408f201a`), bot `df3adb5e`,
+>   Studio 0.1.45 publiée et installée, extension publique `be1744e75f63` (ZIP `9836008ee957` remis pour Hosted Test).
+>   Ouverture publique de Chaos : dernier GO d'Antoni.
+> - PR #132 `release/chaos-decisions-qol` : décisions Chaos (fin non confirmée = panne, Somnolence ≥ 10 s), bulle
+>   Tombola « Rejoindre » / retour intelligent, Studio › Casino par joueur ; inventaire `094c4c52508f` (58 commits) **à
+>   valider par Antoni**. Fusion, Core, Studio, ZIP : chacun sur GO.
+> - PR #133 `feat/delivery-pipeline` (brouillon) : « À livrer » dans l'État de la livraison, `--backup-now`, archive
+>   Twitch construite par la CI de `main`, « Nouveautés » et vérification toutes les 6 h dans Studio. **Procédure
+>   standard : [CICD.md § 0](CICD.md).** `--backup-now` n'a pas encore tourné contre le vrai Coolify.
+
 ```text
 Raptoru 2.0 — checkpoint du 22/11/2026 (source : docs/REPRISE.md, dépôt public raptorutwitch/raptoru-2.0, branche main)
 Plateforme de stream auto-hébergée du streamer Twitch raptoru_ (id 83603689). Antoni décide seul.
