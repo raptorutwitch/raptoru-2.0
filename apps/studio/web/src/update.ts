@@ -18,6 +18,7 @@ interface UpdateState {
   latestVersion: string | null;
   percent: number | null;
   message: string | null;
+  notes?: string | null;
 }
 
 interface RaptoruStudioUpdateApi {
@@ -63,6 +64,19 @@ export function mountUpdateWidget(root: HTMLElement): void {
     return button;
   }
 
+  /** « Nouveautés » of the offered version: plain text (desktop notesText), never HTML. */
+  function notes(state: UpdateState): HTMLElement[] {
+    if (!state.notes) return [];
+    const details = document.createElement('details');
+    details.className = 'up-notes';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Nouveautés';
+    const body = document.createElement('div');
+    body.textContent = state.notes;
+    details.append(summary, body);
+    return [details];
+  }
+
   function render(state: UpdateState): void {
     currentEl.textContent = state.currentVersion;
     checkBtn.disabled =
@@ -92,6 +106,7 @@ export function mountUpdateWidget(root: HTMLElement): void {
         statusEl.append(
           document.createTextNode(`Nouvelle version : ${state.latestVersion} `),
           actionButton('Mettre à jour', () => void api!.download()),
+          ...notes(state),
         );
         break;
       case 'downloading':
@@ -101,6 +116,7 @@ export function mountUpdateWidget(root: HTMLElement): void {
         statusEl.append(
           document.createTextNode(`Version ${state.latestVersion} prête. `),
           actionButton('Redémarrer et installer', () => void api!.install()),
+          ...notes(state),
         );
         break;
     }

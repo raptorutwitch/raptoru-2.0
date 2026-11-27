@@ -606,3 +606,17 @@ body {
 .up-status.error {
   color: var(--red);
 }
+/* « Nouveautés » de la version proposée : texte brut, une ligne par changement. */
+.up-notes summary {
+  color: var(--ink3);
+  cursor: pointer;
+}
+.up-notes div {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 4px;
+  color: var(--ink2);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-line;
+}

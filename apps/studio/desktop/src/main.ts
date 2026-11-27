@@ -557,6 +557,8 @@ void app.whenReady().then(async () => {
   // Silent: only ever surfaces 'available' (renderer shows the button) — never downloads,
   // never installs without the user clicking "Mettre à jour" / "Redémarrer et installer".
   setTimeout(() => updater.checkSilently(), 3000);
+  // Then every 6 h, so a Studio left open for days still learns of a new version (same silent check).
+  setInterval(() => updater.checkSilently(), 6 * 3600_000);
 
   // Smoke test: STUDIO_SCREENSHOT=path.png captures the window after load, then quits.
   const shot = process.env.STUDIO_SCREENSHOT;
