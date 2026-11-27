@@ -22,6 +22,31 @@ branche ──► Pull Request ──► CI (verdict automatique) ──► fusi
                                                                           └─► État de la livraison  (ce qui tourne vraiment)
 ```
 
+## 0. Procédure standard d'une livraison (27/11/2026)
+
+Une seule chaîne, toujours dans cet ordre. Chaque étape qui touche la Production demande le GO d'Antoni **pour cette
+étape** : un GO passé ne vaut pas pour la livraison suivante.
+
+| #   | Étape                                    | Comment                                                                                                                                                                                                                       | Automatique ?                                                  |
+| --- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 1   | Vérifier                                 | PR vers `main` ; la CI teste ce que la branche touche (§ 1)                                                                                                                                                                   | oui                                                            |
+| 2   | Fusionner                                | après validation (« validé » = testé à la main par Antoni) ; la CI repasse en entier sur `main`                                                                                                                               | non : GO                                                       |
+| 3   | Savoir quoi livrer                       | Actions › **État de la livraison** : section « À livrer » (Core, bot, Studio, extension, migrations)                                                                                                                          | oui (lecture seule)                                            |
+| 4   | Core, puis bot                           | Actions › **Déployer Core / bot** : `plan`, puis `deploy` (§ 2) ; avec une migration, `backup_now` fait et vérifie la sauvegarde juste avant (§ 7)                                                                            | non : GO ; garde-fous, vérification et retour arrière intégrés |
+| 5   | Studio                                   | Actions › **Studio — construire / publier** : `none` → `draft` → `public` (§ 3). Le Studio installé le voit (au démarrage puis toutes les 6 h), montre « Nouveautés », le streamer clique « Mettre à jour »                   | non : GO                                                       |
+| 6   | Extension (seulement si son code change) | l'inventaire de l'écart, validé par Antoni (sa ligne) ; la CI de `main` construit alors l'archive de Production et son SHA-256 (artefact `extension-production-<sha>`) ; Hosted Test, revue et Release Twitch restent manuels | archive oui ; Twitch non : GO                                  |
+| 7   | Contrôler                                | « État de la livraison » de nouveau : tout « OK », ou la raison                                                                                                                                                               | oui                                                            |
+
+Ce qui ne demande **aucune** livraison : prix, réglages, catalogues et contenus servis par le Core (Studio les change en
+direct, l'extension les lit au Core) — ni ZIP, ni release.
+
+Compatibilité : le Core refuse un Studio d'un protocole qu'il ne connaît pas (`426 protocol_incompatible`) et le
+Studio l'affiche « Mise à jour requise » ; le Core garde le protocole des Studio publiés tant qu'ils sont installés.
+Un Core se déploie donc avant le Studio qui en a besoin, jamais l'inverse.
+
+Coupure rapide de Chaos : Studio › Chaos › « Autoriser les achats Chaos » (réglage `chaos.enabled`, immédiat) ; plus
+fort, la variable `CHAOS_EXTENSION=off` du Core (redémarrage). Détail : [chaos/DEPLOIEMENT_CHAOS.md](chaos/DEPLOIEMENT_CHAOS.md) § 6.
+
 ## 1. Livrer une modification
 
 1. Travailler sur une branche, la pousser, ouvrir une Pull Request vers `main`.
@@ -39,7 +64,7 @@ Ce que la CI vérifie (`.github/workflows/ci.yml`) :
 | core      | toute la suite du Core, dont les tests d'intégration sur un vrai PostgreSQL 17                                                           |
 | bot       | suite du bot                                                                                                                             |
 | studio    | serveur et desktop de Studio                                                                                                             |
-| extension | tests + archive ZIP de production vérifiée, en artefact (jamais envoyée à Twitch par la CI)                                              |
+| extension | tests, archive staging en artefact ; sur `main`, archive de Production + SHA-256 si l'inventaire est validé (jamais envoyée à Twitch)    |
 | e2e       | navigateur (Playwright) sur une pile Lab isolée : lecteurs OBS, alertes, effets, commandes — aucun service réel                          |
 | tooling   | outils de livraison (déploiement, garde-fous, CI) avec Coolify, Core, GitHub et PostgreSQL simulés ; actionlint                          |
 | images    | les images Docker du Core et du bot, construites comme Coolify les construit (jamais poussées)                                           |
@@ -56,6 +81,7 @@ Actions → **Déployer Core / bot** → Run workflow :
 | sha                      | le commit exact de `main` (40 caractères, bouton « copy full SHA » du commit)                            |
 | mode                     | `plan` d'abord (lecture seule), puis `deploy`                                                            |
 | migrations               | `none` ; `preapplied` si le SQL a déjà été appliqué à la main ; `post-deploy` (voir § 7)                 |
+| backup_now               | avec une migration : « Backup now » de la base juste avant d'écrire, attendue et vérifiée (taille)       |
 | rollback                 | coché seulement pour revenir à un commit plus ancien                                                     |
 | auto_rollback            | coché par défaut                                                                                         |
 | allow_single_live_source | décoché (arbitrage, voir § 6)                                                                            |
@@ -205,7 +231,7 @@ Aucune opération SQL sur la Production n'est faite par la CI/CD sans mode expli
 - `preapplied` : le SQL a été appliqué **avant** par Antoni (terminal de la base dans Coolify), comme pour Spotify V2.
   Le nouveau conteneur vérifie sur la vraie base que chaque objet existe avec la bonne définition, puis le migrateur
   les enregistre ; tout écart = `ÉCHEC`. Des fichiers qui dépendent l'un de l'autre (appliqués en un seul paquet) sont
-  vérifiés ensemble, dans l'ordre (Roue du Sub V2, 26/10 : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7). Exige une sauvegarde de moins de 60 min et le droit `read:sensitive` ;
+  vérifiés ensemble, dans l'ordre (Roue du Sub V2, 26/10 : [SUB_WHEEL_V2_DELIVERY.md](SUB_WHEEL_V2_DELIVERY.md) § 7). Exige le droit `read:sensitive` et une sauvegarde de moins de 60 min — ou `backup_now`, qui la fait juste avant la première écriture, attend une **nouvelle** sauvegarde réussie, refuse une taille inférieure à la moitié de la précédente, et sinon n'écrit rien ;
 - `post-deploy` : le migrateur s'exécute après le déploiement (commande post-déploiement de Coolify). Attention : Coolify
   bascule le trafic **avant** cette commande (≈ 50 s observées le 24/10) — à réserver aux migrations dont le nouveau
   code n'a pas besoin pour démarrer.
@@ -231,7 +257,9 @@ Actions → **État de la livraison** (ou `node scripts/delivery/status.mjs`) :
 - pour le Core et le bot : le commit déployé selon Coolify **et** selon le service lui-même, le précédent (retour
   arrière) et le retard sur `main` ;
 - les migrations à venir ;
-- la dernière version publique de Studio, et le Studio installé (sur le PC).
+- la dernière version publique de Studio, et le Studio installé (sur le PC) ;
+- l'extension : version publiée (`PUBLISHED`), commits de l'extension depuis, état de leur inventaire ;
+- « À livrer » : pour chaque composant, ce que `main` apporte (sans docs ni tests) et l'étape suivante.
 
 Les documents (REPRISE, ROADMAP) résument ; en cas d'écart, l'état constaté fait foi.
 
