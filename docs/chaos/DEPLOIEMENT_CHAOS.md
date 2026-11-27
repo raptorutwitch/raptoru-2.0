@@ -118,21 +118,23 @@ l'en-tête de l'extension et sur raptoru.fr après chaque étape.
 
 Jetons : toute demande `queued` / `claimed` sans démarrage confirmé est remboursée par le balayage du Core (au démarrage
 et toutes les 5 s) ; un remboursement ne peut pas avoir lieu deux fois (mise à jour conditionnelle + clé Wallet). Un
-effet démarré sans fin connue reste « fin inconnue » (voir § 8), remboursable à la main par la console FX.
+effet démarré sans fin confirmée est traité comme une panne (§ 8, une fois le lot `feat/chaos-decisions` déployé) ;
+sinon il reste « fin inconnue », remboursable à la main par la console FX.
 
 ## 7. Livrables locaux (rien n'est publié)
 
 Voir `docs/chaos/LIVRAISON_CHAOS_2026-11-26.md` (ZIP, SHA, tests, verdict).
 
-## 8. Décisions avant l'ouverture publique (recommandations, rien n'est appliqué)
+## 8. Décisions avant l'ouverture publique (retenues par Antoni le 27/11, branche `feat/chaos-decisions`, non déployées)
 
 1. **Fin d'effet inconnue** (Studio ne confirme jamais la fin) — recommandé : la traiter comme une panne et appliquer
    la politique d'interruption (remboursé sous 50 % joué), en comptant comme « joué » le temps entre le début et le
-   dernier signe de vie de Studio (heartbeat) ; sans aucun signe de vie après le début → remboursé. Petit lot Core +
-   tests (PostgreSQL réel), sur GO, avant `CHAOS_EXTENSION=on`.
+   dernier signe de vie de Studio (heartbeat) ; sans aucun signe de vie après le début → remboursé ; Studio vivant
+   après la fin (seul l'ACK perdu) → joué. **Fait** (Core, tests PGlite et PostgreSQL réel) ; déploiement sur GO, avant
+   `CHAOS_EXTENSION=on`.
 2. **Paupières « Somnolence »** (même prix à 5 et 10 s) — recommandé : durée minimale 10 s pour ce préréglage (la
    variante du moteur est conçue pour ~12 s ; à 5 s les paupières restent fermées tout du long, c'est « Yeux fermés »).
-   Les prix de 10 à 60 s ne changent pas et la progression devient strictement croissante. Catalogues Core et extension
-   ensemble (test de parité), sur GO.
+   Les prix de 10 à 60 s ne changent pas et la progression devient strictement croissante. **Fait** (catalogues Core et
+   extension ensemble, test de parité) ; l'extension suit au prochain ZIP, le Core au prochain déploiement.
 3. **Tarifs** : fourchettes du 28/11 conservées par défaut, éditables dans Studio › Chaos › Tarifs ; aucun changement
    de l'économie réelle sans Antoni.

@@ -27,8 +27,8 @@ ci-dessous sont ceux des **fourchettes par défaut**.
 - le **maximum** n'est atteint qu'au réglage le plus sévère sur la durée la plus longue de l'effet (60 s, ou moins pour
   un effet court par nature) : jamais de plateau (30 s coûte toujours moins que 60 s, testé) ; plus long ne coûte
   jamais moins ; exceptions plates, voulues par le modèle de gêne : Zoom « Pulsations », « Zoom et dézoom »,
-  « Intermittent » (le moteur joue le même nombre de pulsations, plus espacées) et Paupières « Somnolence » à 5 s et
-  10 s (même gêne calculée) ;
+  « Intermittent » (le moteur joue le même nombre de pulsations, plus espacées) ; Paupières « Somnolence » commence à
+  10 s depuis le 27/11 (à 5 s, les paupières restaient fermées tout du long, au même prix que 10 s) ;
 - Flash, Impact et « Un clignement » ont des durées courtes par nature : ils se placent dans le bas de LEUR fourchette.
 
 Les tableaux donnent le prix aux **réglages par défaut** de chaque préréglage / force ; pousser un contrôle (zoom ×6,
@@ -98,29 +98,29 @@ si la Sécurité de Studio est relevée à 60 s.
 
 ### Paupières — fourchette 5 000 à 90 000 (dès 5 000)
 
-| Préréglage              | Force        | Durée min    | 10 s   | 30 s   | 60 s   | Durée max     |
-| ----------------------- | ------------ | ------------ | ------ | ------ | ------ | ------------- |
-| Naturel                 | Mi-closes    | 5 550 (5 s)  | 5 950  | 8 150  | 11 600 | 11 600 (60 s) |
-| Naturel                 | Presque      | 6 300 (5 s)  | 6 900  | 10 300 | 15 650 | 15 650 (60 s) |
-| Naturel                 | Complètement | 6 700 (5 s)  | 7 400  | 11 350 | 17 650 | 17 650 (60 s) |
-| Un clignement           | Mi-closes    | 5 850 (2 s)  | —      | —      | —      | fixe          |
-| Un clignement           | Presque      | 6 800 (2 s)  | —      | —      | —      | fixe          |
-| Un clignement           | Complètement | 7 250 (2 s)  | —      | —      | —      | fixe          |
-| Répétés                 | Mi-closes    | 5 850 (5 s)  | 6 800  | 10 400 | 15 800 | 15 800 (60 s) |
-| Répétés                 | Presque      | 6 800 (5 s)  | 8 200  | 13 750 | 22 100 | 22 100 (60 s) |
-| Répétés                 | Complètement | 7 250 (5 s)  | 8 900  | 15 450 | 25 300 | 25 300 (60 s) |
-| Lent                    | Mi-closes    | 7 200 (5 s)  | 7 650  | 12 550 | 18 950 | 18 950 (60 s) |
-| Lent                    | Presque      | 8 850 (5 s)  | 9 550  | 17 100 | 27 050 | 27 050 (60 s) |
-| Lent                    | Complètement | 9 700 (5 s)  | 10 500 | 19 350 | 31 050 | 31 050 (60 s) |
-| Somnolence              | Mi-closes    | 13 000 (5 s) | 13 000 | 16 650 | 23 500 | 23 500 (60 s) |
-| Somnolence              | Presque      | 17 800 (5 s) | 17 800 | 23 450 | 34 050 | 34 050 (60 s) |
-| Somnolence              | Complètement | 20 200 (5 s) | 20 200 | 26 850 | 39 300 | 39 300 (60 s) |
-| Lutte contre le sommeil | Mi-closes    | 10 800 (5 s) | 14 350 | 28 600 | 49 950 | 49 950 (60 s) |
-| Lutte contre le sommeil | Presque      | 14 400 (5 s) | 19 900 | 41 900 | 74 850 | 74 850 (60 s) |
-| Lutte contre le sommeil | Complètement | 16 200 (5 s) | 22 650 | 48 550 | 87 350 | 87 350 (60 s) |
-| Yeux fermés             | Mi-closes    | 10 200 (3 s) | 17 200 | —      | —      | 22 000 (15 s) |
-| Yeux fermés             | Presque      | 13 450 (3 s) | 24 300 | —      | —      | 31 700 (15 s) |
-| Yeux fermés             | Complètement | 15 100 (3 s) | 27 850 | —      | —      | 36 550 (15 s) |
+| Préréglage              | Force        | Durée min     | 10 s   | 30 s   | 60 s   | Durée max     |
+| ----------------------- | ------------ | ------------- | ------ | ------ | ------ | ------------- |
+| Naturel                 | Mi-closes    | 5 550 (5 s)   | 5 950  | 8 150  | 11 600 | 11 600 (60 s) |
+| Naturel                 | Presque      | 6 300 (5 s)   | 6 900  | 10 300 | 15 650 | 15 650 (60 s) |
+| Naturel                 | Complètement | 6 700 (5 s)   | 7 400  | 11 350 | 17 650 | 17 650 (60 s) |
+| Un clignement           | Mi-closes    | 5 850 (2 s)   | —      | —      | —      | fixe          |
+| Un clignement           | Presque      | 6 800 (2 s)   | —      | —      | —      | fixe          |
+| Un clignement           | Complètement | 7 250 (2 s)   | —      | —      | —      | fixe          |
+| Répétés                 | Mi-closes    | 5 850 (5 s)   | 6 800  | 10 400 | 15 800 | 15 800 (60 s) |
+| Répétés                 | Presque      | 6 800 (5 s)   | 8 200  | 13 750 | 22 100 | 22 100 (60 s) |
+| Répétés                 | Complètement | 7 250 (5 s)   | 8 900  | 15 450 | 25 300 | 25 300 (60 s) |
+| Lent                    | Mi-closes    | 7 200 (5 s)   | 7 650  | 12 550 | 18 950 | 18 950 (60 s) |
+| Lent                    | Presque      | 8 850 (5 s)   | 9 550  | 17 100 | 27 050 | 27 050 (60 s) |
+| Lent                    | Complètement | 9 700 (5 s)   | 10 500 | 19 350 | 31 050 | 31 050 (60 s) |
+| Somnolence              | Mi-closes    | 13 000 (10 s) | 13 000 | 16 650 | 23 500 | 23 500 (60 s) |
+| Somnolence              | Presque      | 17 800 (10 s) | 17 800 | 23 450 | 34 050 | 34 050 (60 s) |
+| Somnolence              | Complètement | 20 200 (10 s) | 20 200 | 26 850 | 39 300 | 39 300 (60 s) |
+| Lutte contre le sommeil | Mi-closes    | 10 800 (5 s)  | 14 350 | 28 600 | 49 950 | 49 950 (60 s) |
+| Lutte contre le sommeil | Presque      | 14 400 (5 s)  | 19 900 | 41 900 | 74 850 | 74 850 (60 s) |
+| Lutte contre le sommeil | Complètement | 16 200 (5 s)  | 22 650 | 48 550 | 87 350 | 87 350 (60 s) |
+| Yeux fermés             | Mi-closes    | 10 200 (3 s)  | 17 200 | —      | —      | 22 000 (15 s) |
+| Yeux fermés             | Presque      | 13 450 (3 s)  | 24 300 | —      | —      | 31 700 (15 s) |
+| Yeux fermés             | Complètement | 15 100 (3 s)  | 27 850 | —      | —      | 36 550 (15 s) |
 
 ### Flash — fourchette 8 000 à 25 000 (dès 8 000)
 

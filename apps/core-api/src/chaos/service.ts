@@ -1660,8 +1660,10 @@ export class ChaosService {
 
   /**
    * Overdue work, under the channel lock: never claimed in 180 s → expired, refunded; claimed, lease over, never started
-   * → failed `no_ack`, refunded; started, no end after its duration + 15 s → ended `unknown_end` (it played: not
-   * refunded automatically, moderation can). A communication error never costs Jetons.
+   * → failed `no_ack`, refunded; started, no end after its duration + 15 s → ended `unknown_end`, a breakdown (Antoni,
+   * 27/11): played up to its Studio's last sign of life (last heartbeat), refunded under the interruption policy
+   * (`chaos.interrupted_refund_below`); a Studio still alive past the end (only the ACK was lost) → played, not
+   * refunded. A communication error never costs Jetons.
    */
   private async sweep(q: Queryable, channelId: string) {
     const now = this.clock.now();
@@ -1679,12 +1681,16 @@ export class ChaosService {
       [channelId, now],
     ))
       await deferrableRefund(q, () => this.refund(q, r.id, SYSTEM, 'no_ack'));
-    await q.query(
-      `update chaos_requests set status = 'ended', code = 'unknown_end', reason = 'Fin jamais confirmée',
-         ended_at = $2, played_ms = duration_ms, updated_at = $2
-       where channel_id = $1 and status = 'started' and lease_expires_at < $2`,
+    for (const r of await q.query<Row>(
+      `update chaos_requests c set status = 'ended', code = 'unknown_end', reason = 'Fin jamais confirmée',
+         ended_at = $2, updated_at = $2,
+         played_ms = greatest(0, least(c.duration_ms, coalesce((
+           select floor(extract(epoch from (s.last_seen - c.started_at)) * 1000)::int
+           from chaos_studios s where s.studio_instance_id = c.studio_instance_id), 0)))
+       where c.channel_id = $1 and c.status = 'started' and c.lease_expires_at < $2 returning c.*`,
       [channelId, now],
-    );
+    ))
+      await this.interrupted(q, r, Number(r.played_ms), 'unknown_end');
   }
 
   /** Time-driven (every 5 s, and at the Core's start): every channel with overdue work, each under its own lock. */

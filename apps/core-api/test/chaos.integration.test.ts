@@ -477,11 +477,13 @@ describe.skipIf(!isLocal)('chaos, real Postgres, two Cores', () => {
       [[playing.request.id, waiting.request.id]],
     );
     const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+    // No sign of life from Studio after the start: a breakdown at 0 % (Antoni, 27/11) → refunded, once.
     expect(byId[playing.request.id]).toMatchObject({
       status: 'ended',
       code: 'unknown_end',
-      refund_status: 'none',
+      refund_status: 'refunded',
     });
+    expect(await tokens(V1)).toBe(START);
     expect(byId[waiting.request.id]).toMatchObject({
       status: 'expired',
       refund_status: 'refunded',

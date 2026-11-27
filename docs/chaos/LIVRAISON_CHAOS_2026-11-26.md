@@ -32,9 +32,9 @@ OBS fermé, aucun stream.
 - Panne Studio **avant** la prise en charge, expiration, redémarrage du Core : tests automatiques (PostgreSQL réel),
   pas provoqués sur le banc.
 - Tarifs : calculés, **non validés** ; réglables dans Studio › Chaos › Tarifs (§ 8).
-- Décision à prendre (Antoni) : un effet démarré dont Studio ne confirme jamais la fin (Studio coupé plus longtemps que
-  la durée de l'effet + 15 s) finit en « fin inconnue », compté joué, **non remboursé automatiquement** (la modération
-  peut rembourser). Alternative : rembourser d'office si Studio a disparu avant la moitié de l'effet.
+- Décidé par Antoni le 27/11 (branche `feat/chaos-decisions`, non déployée) : un effet démarré dont Studio ne confirme
+  jamais la fin est une panne, joué jusqu'au dernier signe de vie de Studio, remboursé sous 50 % ; « Somnolence » à
+  partir de 10 s.
 
 ## 3. Commits (branche locale)
 
