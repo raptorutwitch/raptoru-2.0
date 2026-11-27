@@ -1114,10 +1114,40 @@ html:where([data-mq~="m19"]):has(body.component-view){
   font-size: var(--fs-11);
   font-weight: 750;
   white-space: nowrap;
+}
+.jdm-raffle-chip:has(.jdm-raffle-chip__open:hover) { border-color: #f0708c; background: rgba(158, 41, 65, .28); color: #fff; }
+/* « Tombola » (ouvre la page) et « Rejoindre » (inscrit sur place, app/raffle-bubble.js) : deux boutons dans la bulle. */
+.jdm-raffle-chip__open,
+.jdm-raffle-chip__join {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--g));
+  min-height: inherit;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
 }
-.jdm-raffle-chip:hover { border-color: #f0708c; background: rgba(158, 41, 65, .28); color: #fff; }
-.jdm-raffle-chip:focus-visible { outline: 2px solid #f9a8b8; outline-offset: 2px; }
+.jdm-raffle-chip__open:focus-visible,
+.jdm-raffle-chip__join:focus-visible { outline: 2px solid #f9a8b8; outline-offset: 2px; border-radius: 999px; }
+.jdm-raffle-chip__join {
+  min-height: calc(18 * var(--g));
+  margin-left: calc(2 * var(--g));
+  padding: 0 calc(7 * var(--g));
+  border-radius: 999px;
+  background: rgba(52, 211, 153, .16);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, .45);
+  color: #c9f7e1;
+  font-size: var(--fs-10, var(--fs-11));
+}
+.jdm-raffle-chip__join:hover:not(:disabled) { background: rgba(52, 211, 153, .3); color: #fff; }
+.jdm-raffle-chip__join:disabled { cursor: progress; opacity: .75; }
+.jdm-raffle-chip__msg { color: #fecdd3; font-weight: 650; font-size: var(--fs-10, var(--fs-11)); }
+.jdm-raffle-chip__done { display: inline-flex; align-items: center; gap: calc(6 * var(--g)); }
+.jdm-raffle-chip.is-joined { border-color: rgba(52, 211, 153, .55); background: rgba(16, 80, 60, .2); color: #c9f7e1; }
 .jdm-raffle-chip__dot {
   position: relative;
   flex: none;
@@ -1145,6 +1175,7 @@ html:where([data-mq~="m19"]):has(body.component-view){
 .jdm-module__screen-head:has(.jdm-module__screen-side--left .jdm-raffle-chip) { grid-template-columns: auto minmax(0, 1fr) auto; }
 :root:not([data-surface="video"]) .jdm-module__screen-side--left .jdm-raffle-chip { padding: 0 calc(8 * var(--g)) 0 calc(7 * var(--g)); }
 .mobile .jdm-raffle-chip { min-height: calc(32 * var(--g)); }
+.mobile .jdm-raffle-chip__join { min-height: calc(24 * var(--g)); padding: 0 calc(9 * var(--g)); }
 .jdm-raffle-chip__icon { display: none; width: calc(15 * var(--g)); height: calc(15 * var(--g)); flex: none; }
 /* En-tête étroit (téléphone, panneau) avec le bouclier des modérateurs : le point et le billet seuls, le nom reste lu
    (aria-label, infobulle) ; le sélecteur ou le titre gardent leur place. */
@@ -1152,6 +1183,14 @@ html:where([data-mq~="m19"]):has(body.component-view){
   .jdm-module__screen-head:has(.jdm-modshield) .jdm-raffle-chip__label { display: none; }
   .jdm-module__screen-head:has(.jdm-modshield) .jdm-raffle-chip__icon { display: block; }
   .jdm-module__screen-head:has(.jdm-modshield) .jdm-raffle-chip { gap: calc(4 * var(--g)); padding: 0 calc(6 * var(--g)); }
+  .jdm-module__screen-head:has(.jdm-modshield) .jdm-raffle-chip__msg { display: none; }
+}
+/* Barre du bas du Hub et en-tête d'un module, étroits (panneau, téléphone) : avec « Rejoindre », le billet
+   remplace le mot « Tombola » (lu par l'infobulle et l'aria-label) pour que rien ne sorte de l'écran. */
+@media (max-width: 460px) {
+  :is(.rh-util__side--left, .jdm-module__screen-side--left) .jdm-raffle-chip:has(.jdm-raffle-chip__join) .jdm-raffle-chip__label { display: none; }
+  :is(.rh-util__side--left, .jdm-module__screen-side--left) .jdm-raffle-chip:has(.jdm-raffle-chip__join) .jdm-raffle-chip__icon { display: block; }
+  :is(.rh-util__side--left, .jdm-module__screen-side--left) .jdm-raffle-chip:has(.jdm-raffle-chip__join) { gap: calc(4 * var(--g)); padding: 0 calc(5 * var(--g)) 0 calc(7 * var(--g)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .jdm-raffle-chip,
