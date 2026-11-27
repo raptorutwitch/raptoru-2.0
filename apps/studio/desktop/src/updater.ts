@@ -4,13 +4,15 @@ import electronUpdaterPkg from 'electron-updater';
 import {
   initialUpdateState,
   nextUpdateState,
+  notesText,
+  shouldAutoCheck,
   updateBlockReason,
   type UpdateEvent,
   type UpdateState,
 } from './update-state.js';
 
-// One update channel, driven entirely by explicit renderer action (IPC), except a single silent
-// check on startup (never downloads, never installs on its own — see checkSilently below).
+// One update channel, driven entirely by explicit renderer action (IPC), except a silent check on
+// startup and every few hours (never downloads, never installs on its own — see checkSilently below).
 // The renderer never talks to electron-updater directly: it only sees `UpdateState` snapshots.
 
 const { autoUpdater } = electronUpdaterPkg;
@@ -18,7 +20,10 @@ const { autoUpdater } = electronUpdaterPkg;
 const STATE_CHANNEL = 'studio:update:state';
 
 export interface Updater {
-  /** Silent, once at startup: only ever moves to 'available' or 'not-available'/'error'. Never downloads. */
+  /**
+   * Silent (startup, then periodic): only ever moves to 'available' or 'not-available'/'error'. Never downloads; skipped
+   * while a version is offered, downloading or ready (shouldAutoCheck).
+   */
   checkSilently(): void;
 }
 
@@ -47,7 +52,11 @@ export function setupUpdater(deps: {
 
   autoUpdater.on('checking-for-update', () => apply({ type: 'checking' }));
   autoUpdater.on('update-available', (info) =>
-    apply({ type: 'available', version: info.version }),
+    apply({
+      type: 'available',
+      version: info.version,
+      notes: notesText(info.releaseNotes),
+    }),
   );
   autoUpdater.on('update-not-available', () =>
     apply({ type: 'not-available' }),
@@ -56,7 +65,11 @@ export function setupUpdater(deps: {
     apply({ type: 'progress', percent: Math.round(p.percent) }),
   );
   autoUpdater.on('update-downloaded', (info) =>
-    apply({ type: 'downloaded', version: info.version }),
+    apply({
+      type: 'downloaded',
+      version: info.version,
+      notes: notesText(info.releaseNotes),
+    }),
   );
   autoUpdater.on('error', (error) =>
     apply({ type: 'error', message: error.message }),
@@ -93,7 +106,7 @@ export function setupUpdater(deps: {
 
   return {
     checkSilently() {
-      void check();
+      if (shouldAutoCheck(state)) void check();
     },
   };
 }

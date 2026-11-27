@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   initialUpdateState,
   nextUpdateState,
+  notesText,
+  shouldAutoCheck,
   updateBlockReason,
   type UpdateState,
 } from '../src/update-state.js';
@@ -19,7 +21,54 @@ describe('update-state', () => {
       latestVersion: null,
       percent: null,
       message: null,
+      notes: null,
     });
+  });
+
+  it('notes: the GitHub release body (HTML) becomes short plain text, changes only, never markup', () => {
+    const html =
+      '<p>Raptoru Studio 0.1.46 (source abc).</p><p>Changements Studio depuis la release précédente :</p><ul>' +
+      '<li>feat(studio): Casino « Dernières parties » grouped by player &amp; history</li>' +
+      '<li>fix(chaos): an unconfirmed end is a breakdown</li>' +
+      '<li>merge: feat/x into main</li><li>test(chaos): end to end</li>' +
+      '<li>feat(ext): <img src=x onerror=alert(1)>Tombola bubble</li></ul>';
+    expect(notesText(html)).toBe(
+      [
+        '• Casino « Dernières parties » grouped by player & history',
+        '• An unconfirmed end is a breakdown',
+        '• Tombola bubble',
+      ].join('\n'),
+    );
+    expect(notesText('Changements :\n- fix(a): one\n- feat: two', 1)).toBe(
+      '• One\n… et 1 autre(s)',
+    );
+    expect(notesText([{ note: '- feat(x): arr' }])).toBe('• Arr');
+    expect(notesText('Mise à jour Raptoru Studio.')).toBeNull();
+    expect(notesText(null)).toBeNull();
+  });
+
+  it('available carries the notes; downloaded keeps them; the periodic check leaves an offered version alone', () => {
+    const offered = apply(initialUpdateState('1.2.3'), [
+      { type: 'checking' },
+      { type: 'available', version: '1.3.0', notes: '• A' },
+    ]);
+    expect(offered.notes).toBe('• A');
+    expect(shouldAutoCheck(offered)).toBe(false);
+    const ready = apply(offered, [
+      { type: 'progress', percent: 50 },
+      { type: 'downloaded', version: '1.3.0' },
+    ]);
+    expect(ready.notes).toBe('• A');
+    expect(shouldAutoCheck(ready)).toBe(false);
+    expect(
+      shouldAutoCheck(
+        apply(ready, [{ type: 'checking' }, { type: 'not-available' }]),
+      ),
+    ).toBe(true);
+    expect(shouldAutoCheck(initialUpdateState('1.2.3'))).toBe(true);
+    expect(
+      shouldAutoCheck(apply(ready, [{ type: 'error', message: 'x' }])),
+    ).toBe(true);
   });
 
   it('checking then not-available: no version, no message', () => {
@@ -45,6 +94,7 @@ describe('update-state', () => {
       latestVersion: '1.3.0',
       percent: null,
       message: null,
+      notes: null,
     });
   });
 
@@ -62,6 +112,7 @@ describe('update-state', () => {
       latestVersion: '1.3.0',
       percent: 100,
       message: null,
+      notes: null,
     });
   });
 
@@ -80,6 +131,7 @@ describe('update-state', () => {
       latestVersion: '1.3.0',
       percent: 50,
       message: 'ECONNREFUSED',
+      notes: null,
     });
   });
 

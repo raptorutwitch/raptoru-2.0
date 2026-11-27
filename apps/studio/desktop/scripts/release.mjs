@@ -444,12 +444,29 @@ function verifyArtifacts(version) {
 // --- 6/7. publish and public verification ----------------------------------------------------------------
 function releaseNotes(version) {
   const head = git('rev-parse', '--short', 'HEAD');
-  const lastRelease = git(
-    'log',
-    '--grep=^chore: release Raptoru Studio',
-    '--format=%h',
-    '-1',
-  );
+  // Since 0.1.7 the CI builds releases without a « chore: release » commit: the base is the previous studio-v* tag
+  // (set on the source commit by studio-release.yml), otherwise the old release commit — the notes of 0.1.45 still
+  // listed every Studio change since 0.1.6 (355 lines).
+  let lastRelease;
+  try {
+    lastRelease = git(
+      'describe',
+      '--tags',
+      '--abbrev=0',
+      '--match',
+      'studio-v*',
+      '--exclude',
+      `studio-v${version}`,
+      'HEAD',
+    );
+  } catch {
+    lastRelease = git(
+      'log',
+      '--grep=^chore: release Raptoru Studio',
+      '--format=%h',
+      '-1',
+    );
+  }
   const changes = lastRelease
     ? git(
         'log',
