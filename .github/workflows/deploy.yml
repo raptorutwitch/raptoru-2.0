@@ -29,6 +29,10 @@ on:
         type: choice
         options: [none, preapplied, post-deploy]
         default: none
+      backup_now:
+        description: Avec une migration — « Backup now » de la base juste avant d'écrire, vérifié (sinon une sauvegarde de moins de 60 min faite à la main est exigée)
+        type: boolean
+        default: false
       rollback:
         description: Revenir à un commit plus ancien (les migrations ne sont jamais annulées)
         type: boolean
@@ -105,6 +109,7 @@ jobs:
       MODE: ${{ inputs.mode }}
       MIGRATIONS: ${{ inputs.migrations }}
       ROLLBACK: ${{ inputs.rollback }}
+      BACKUP_NOW: ${{ inputs.backup_now }}
       AUTO_ROLLBACK: ${{ inputs.auto_rollback }}
       SINGLE_SOURCE: ${{ inputs.allow_single_live_source }}
     steps:
@@ -148,6 +153,7 @@ jobs:
           [ "$MIGRATIONS" = preapplied ] && args+=(--migrations-preapplied)
           [ "$MIGRATIONS" = post-deploy ] && args+=(--migrations-approved)
           [ "$ROLLBACK" = true ] && args+=(--rollback)
+          [ "$BACKUP_NOW" = true ] && args+=(--backup-now)
           [ "$AUTO_ROLLBACK" = true ] && args+=(--auto-rollback)
           [ "$SINGLE_SOURCE" = true ] && args+=(--allow-single-live-source)
           set -o pipefail

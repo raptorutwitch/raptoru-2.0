@@ -72,6 +72,10 @@ const reset = () => {
     verifierLine: null,
     truncate: false,
     backupAt: new Date().toISOString(),
+    backupSize: 1,
+    // --backup-now: what the « Backup now » execution ends with (null: it never appears).
+    backupNow: { status: 'success', size: 1000 },
+    newBackups: [],
     healthy: true,
     busy: false,
     live: { session: false, helix: false },
@@ -284,9 +288,28 @@ const server = createServer(async (req, res) => {
   if (path === `/databases/${DB}/backups`)
     return send(200, [
       {
-        executions: [{ status: 'success', created_at: st.backupAt, size: 1 }],
+        uuid: 'cfg-1',
+        executions: [
+          ...st.newBackups,
+          {
+            uuid: 'exec-old',
+            status: 'success',
+            created_at: st.backupAt,
+            size: st.backupSize,
+          },
+        ],
       },
     ]);
+  if (path === `/databases/${DB}/backups/cfg-1` && req.method === 'PATCH') {
+    if (st.backupNow)
+      st.newBackups.unshift({
+        uuid: 'exec-new',
+        created_at: new Date().toISOString(),
+        message: st.backupNow.status === 'failed' ? 'pg_dump: disk full' : null,
+        ...st.backupNow,
+      });
+    return send(200, { message: 'Backup started' });
+  }
   if (path === '/deploy' && req.method === 'POST') {
     const { uuid } = JSON.parse(body);
     const a = st.apps[uuid];
@@ -329,6 +352,7 @@ function run(...args) {
         COOLIFY_HEALTH_TIMEOUT_MS: '200',
         BOT_VERIFY_TIMEOUT_MS: '200',
         OPS_URL: `${base}/ops/status`,
+        COOLIFY_BACKUP_POLL_MS: '5',
         OPS_TOKEN,
         TWITCH_CLIENT_ID: '',
         OBS_WS_URL: '',
@@ -448,6 +472,79 @@ describe('Core with a migration in the range', () => {
     assert.equal(verdict(r.out), 'BLOQUÉ');
     assert.match(r.out, /sauvegarde de la base trop ancienne/);
     assert.deepEqual(writes(), []);
+  });
+
+  it('--backup-now: the stale backup is no blocker; Backup now first, a NEW verified backup, then the deployment', async () => {
+    st.logsHidden = false;
+    st.backupAt = new Date(Date.now() - 2 * 3600_000).toISOString();
+    st.verifierLine = `RAPTORU-MIGRATIONS ${JSON.stringify({ ok: true, recorded: [], conforming: ['b.sql'], applied: ['b.sql'], problems: [] })}`;
+    const dry = await run(
+      'deploy',
+      'core',
+      NEW,
+      '--migrations-preapplied',
+      '--backup-now',
+    );
+    assert.equal(verdict(dry.out), 'PRÊT', dry.out);
+    assert.match(dry.out, /backup_now: true/);
+    assert.deepEqual(writes(), []);
+    const r = await run(
+      'deploy',
+      'core',
+      NEW,
+      '--migrations-preapplied',
+      '--backup-now',
+      '--go',
+    );
+    assert.equal(verdict(r.out), 'DÉPLOYÉ', r.out);
+    assert.match(r.out, /\(1000 octets ; précédente 1\) — vérifiée/);
+    const w = writes().map((c) => `${c.method} ${c.path}`);
+    assert.deepEqual(w.slice(0, 2), [
+      `PATCH /databases/${DB}/backups/cfg-1`,
+      `PATCH /applications/${CORE}`,
+    ]);
+    assert.ok(!r.out.includes(COOLIFY_TOKEN));
+  });
+
+  it('--backup-now: a failed backup or a suspicious size: BLOQUÉ, the application untouched', async () => {
+    st.logsHidden = false;
+    st.backupNow = { status: 'failed', size: 0 };
+    let r = await run(
+      'deploy',
+      'core',
+      NEW,
+      '--migrations-approved',
+      '--backup-now',
+      '--go',
+    );
+    assert.equal(verdict(r.out), 'BLOQUÉ', r.out);
+    assert.match(
+      r.out,
+      /sauvegarde en échec \(pg_dump: disk full\).*rien déployé/s,
+    );
+    assert.deepEqual(
+      writes().map((c) => c.path),
+      [`/databases/${DB}/backups/cfg-1`],
+    );
+    reset();
+    st.logsHidden = false;
+    st.backupSize = 50_000;
+    st.backupNow = { status: 'success', size: 100 };
+    r = await run(
+      'deploy',
+      'core',
+      NEW,
+      '--migrations-approved',
+      '--backup-now',
+      '--go',
+    );
+    assert.equal(verdict(r.out), 'BLOQUÉ', r.out);
+    assert.match(r.out, /taille suspecte : 100 octets contre 50000/);
+    assert.ok(
+      !writes().some(
+        (c) => c.path.startsWith('/applications') || c.path === '/deploy',
+      ),
+    );
   });
 
   it('both migration options: BLOQUÉ', async () => {

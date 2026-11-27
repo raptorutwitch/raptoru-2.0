@@ -192,6 +192,43 @@ jobs:
           path: apps/twitch-extension/release/raptoru-live-STAGING-*
           if-no-files-found: error
           retention-days: 30
+      # Le livrable Twitch, sans geste local : sur main, dès que l'inventaire de l'écart est validé par Antoni (sa ligne
+      # « Validé par Antoni : oui »), l'archive de Production (coque v2) et son SHA-256 en artefact. Sinon rien n'est
+      # construit et le résumé le dit. Le téléversement chez Twitch (Hosted Test, revue, Release) reste manuel.
+      - name: Archive de Production (coque v2) si l'inventaire est validé
+        id: prod
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: apps/twitch-extension
+        run: |
+          node scripts/package.mjs --target production --shell v2 --check | tee check.txt
+          if grep -q 'inventory .*: valid' check.txt; then
+            node scripts/package.mjs --target production --shell v2 | tee build.txt
+            echo "built=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Extension : archive de Production prête"
+              echo
+              grep -E 'zip |sha256|commits since|inventory' build.txt | sed 's/^/    /'
+              echo
+              echo "Artefact « extension-production-${GITHUB_SHA} » : Hosted Test, revue Twitch puis Release, à la main."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Extension : aucune archive de Production"
+              echo
+              grep -E 'commits since|inventory|line' check.txt | sed 's/^/    /'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Archive de Production en artefact (avec son SHA-256)
+        if: steps.prod.outputs.built == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: extension-production-${{ github.sha }}
+          path: |
+            apps/twitch-extension/release/raptoru-live-PRODUCTION-*.zip
+            apps/twitch-extension/release/raptoru-live-PRODUCTION-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 90
 
   e2e:
     name: e2e

@@ -5,6 +5,8 @@
 //   previous finished deployment (rollback target), the migrations main would bring and whether the bot lags;
 // - Studio: the latest public release and draft of raptoru-studio-releases, the studio-v* tags of this repository,
 //   and on this PC the installed version (build-info.json);
+// - the extension: its commits since PUBLISHED and their inventory (apps/twitch-extension/scripts/package.mjs);
+// - « À livrer »: what main brings to each component and the step to take (release-plan.mjs);
 // - the live state.
 //   node scripts/delivery/status.mjs            (GITHUB_TOKEN / gh login, COOLIFY_TOKEN / ~/.raptoru, OPS_TOKEN / ~/.raptoru)
 // Writes Markdown to $GITHUB_STEP_SUMMARY when set. No dependency, no write anywhere.
@@ -15,7 +17,9 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
+import { productionGate } from '../../apps/twitch-extension/scripts/package.mjs';
 import { describeSources, liveCheck } from './live-guard.mjs';
+import { releasePlan } from './release-plan.mjs';
 
 const { fetch, AbortSignal } = globalThis;
 const HOME = join(homedir(), '.raptoru');
@@ -168,12 +172,25 @@ const published = Array.isArray(releases)
   : [];
 const drafts = Array.isArray(releases) ? releases.filter((r) => r.draft) : [];
 const tags = await github(`/repos/${REPO}/git/matching-refs/tags/studio-v`);
+const semver = (t) =>
+  t
+    .replace(/^studio-v/, '')
+    .split('.')
+    .map(Number);
+const studioTags = (Array.isArray(tags) ? tags : [])
+  .map((t) => t.ref.replace('refs/tags/', ''))
+  .sort((a, b) => {
+    const [x, y] = [semver(a), semver(b)];
+    for (let i = 0; i < 3; i++)
+      if (x[i] !== y[i]) return (y[i] ?? 0) - (x[i] ?? 0);
+    return 0;
+  });
 say();
 say(
   `- **Studio publié** : ${published[0] ? `${published[0].tag_name} (${published[0].published_at?.slice(0, 10)})` : (releases.error ?? 'aucun')}${drafts.length ? ` · brouillon(s) : ${drafts.map((r) => r.tag_name).join(', ')}` : ''}`,
 );
 say(
-  `- **Studio construit par la CI** (étiquettes studio-v*) : ${Array.isArray(tags) && tags.length ? tags.map((t) => t.ref.replace('refs/tags/', '')).join(', ') : 'aucune'}`,
+  `- **Studio construit par la CI** (étiquettes studio-v*, les 3 dernières) : ${Array.isArray(tags) && tags.length ? studioTags.slice(0, 3).join(', ') : 'aucune'}`,
 );
 const local = join(
   process.env.LOCALAPPDATA || '',
@@ -192,6 +209,74 @@ if (process.platform === 'win32' && existsSync(local)) {
   say(
     '- **Studio installé** : visible seulement sur le PC (lancer ce script sur le PC, ou Studio → À propos)',
   );
+
+// --- the extension (Twitch): commits since the published version, their inventory ----------------------------
+const extRoot = join(process.cwd(), 'apps', 'twitch-extension');
+const extension = (() => {
+  try {
+    return productionGate({
+      root: extRoot,
+      git: (...a) =>
+        execFileSync('git', ['-C', extRoot, ...a], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim(),
+    });
+  } catch {
+    return null;
+  }
+})();
+say();
+say(
+  extension
+    ? `- **Extension** : version publiée \`${short(extension.published)}\` (PUBLISHED) · ${extension.commits.length} commit(s) de l'extension depuis · inventaire ${extension.inventoryName} : ${extension.ok ? 'validé' : extension.problems.join(' ; ')}`
+    : '- **Extension** : état illisible (PUBLISHED ou git)',
+);
+
+// --- « À livrer » -------------------------------------------------------------------------------------------------
+const diff = (from) =>
+  from && main
+    ? git('diff', '--name-only', from, main).split('\n').filter(Boolean)
+    : null;
+// The base is the PUBLIC release (a CI-built draft is not delivered): v0.1.45 → studio-v0.1.45.
+const studioTag = published[0]?.tag_name
+  ? published[0].tag_name.replace(/^v/, 'studio-v')
+  : (studioTags[0] ?? null);
+const studioSha = studioTag ? git('rev-parse', `${studioTag}^{commit}`) : '';
+const plan = releasePlan({
+  coreFiles: diff(deployed.core),
+  migrations: deployed.core
+    ? git(
+        'diff',
+        '--name-only',
+        '--diff-filter=A',
+        deployed.core,
+        main,
+        '--',
+        'supabase/migrations',
+      )
+        .split('\n')
+        .filter(Boolean)
+        .map((x) => x.split('/').pop())
+    : [],
+  botFiles: diff(deployed.bot),
+  studioFiles: studioSha ? diff(studioSha) : null,
+  studioTag,
+  extension: extension
+    ? {
+        commits: extension.commits.length,
+        ok: extension.ok,
+        problems: extension.problems,
+        inventoryName: extension.inventoryName,
+      }
+    : null,
+});
+say();
+say('### À livrer (main → ce qui tourne ou est publié)');
+say();
+for (const p of plan)
+  say(`- ${p.todo ? '**À faire**' : 'OK'} · **${p.component}** : ${p.text}`);
+if (!plan.some((p) => p.todo)) say('- Rien à livrer : main est déjà partout.');
 
 const text = lines.join('\n');
 console.log(text);

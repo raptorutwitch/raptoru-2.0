@@ -16,6 +16,9 @@
 //                            migration and the channel is not live
 //   --allow-single-live-source  accept « offline » from one source when the others are unknown (explicit arbitration)
 //   --skip-ci-gate           local emergencies only (refused in GitHub Actions)
+//   --backup-now             with a migration: « Backup now » of the database right before the first write, then wait
+//                            for that NEW backup to succeed with a plausible size (else nothing is written) — instead
+//                            of requiring a backup < 60 min made by hand (docs/BACKUPS.md § 2)
 //
 // Before any write: an exact 40-character SHA on origin/<branch>; the CI proved it on main (scripts/delivery/
 // ci-gate.mjs) — unless Coolify's history shows it already ran in Production (a rollback); no deployment in progress;
@@ -67,6 +70,9 @@ const JOURNAL =
   process.env.COOLIFY_DEPLOY_JOURNAL ?? join(HOME, 'deploy-journal.log');
 const SUMMARY = process.env.DELIVERY_SUMMARY_FILE;
 const POLL_MS = Number(process.env.COOLIFY_POLL_MS ?? 5_000);
+/** --backup-now: polls of the database's backups (10 s × 60 = 10 min at most). */
+const BACKUP_POLL_MS = Number(process.env.COOLIFY_BACKUP_POLL_MS ?? 10_000);
+const BACKUP_POLLS = 60;
 const DEPLOY_TIMEOUT_MS = Number(
   process.env.COOLIFY_DEPLOY_TIMEOUT_MS ?? 20 * 60_000,
 );
@@ -394,7 +400,8 @@ async function plan(key, sha, opts) {
       );
     const backup = await lastBackup(app);
     p.backup = backup;
-    if (
+    if (opts.backupNow) p.backupNow = true;
+    else if (
       !backup ||
       Date.now() - Date.parse(backup.created_at) > BACKUP_MAX_AGE_MS
     )
@@ -470,6 +477,51 @@ function selection(scopes, key) {
   ]);
 }
 
+/**
+ * --backup-now: « Backup now » of the application's database (the Coolify API of docs/BACKUPS.md § 2), then wait for a
+ * NEW execution to succeed, its size at least half the previous one's. Never restores nor deletes anything. Throws (the
+ * deployment then writes nothing) on a refusal, a failed or missing backup, or a suspicious size.
+ */
+async function backupNow(app) {
+  const executions = (configs) =>
+    (Array.isArray(configs) ? configs : [])
+      .flatMap((c) => c.executions ?? [])
+      .sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at));
+  const configs = await api('GET', `/databases/${app.database}/backups`);
+  const config = (Array.isArray(configs) ? configs : []).find((c) => c.uuid);
+  if (!config)
+    throw new Error('aucune configuration de sauvegarde pour cette base');
+  const before =
+    executions(configs).filter((e) => e.status === 'success')[0] ?? null;
+  const known = new Set(executions(configs).map((e) => e.uuid ?? e.created_at));
+  await api('PATCH', `/databases/${app.database}/backups/${config.uuid}`, {
+    backup_now: true,
+  });
+  for (let i = 0; i < BACKUP_POLLS; i++) {
+    await sleep(BACKUP_POLL_MS);
+    const fresh = executions(
+      await api('GET', `/databases/${app.database}/backups`),
+    ).find((e) => !known.has(e.uuid ?? e.created_at));
+    if (!fresh || !['success', 'failed'].includes(fresh.status)) continue;
+    if (fresh.status === 'failed')
+      throw new Error(
+        `sauvegarde en échec (${String(fresh.message ?? '').slice(0, 160)})`,
+      );
+    if (before?.size && Number(fresh.size) < Number(before.size) / 2)
+      throw new Error(
+        `taille suspecte : ${fresh.size} octets contre ${before.size} pour la précédente`,
+      );
+    return {
+      created_at: fresh.created_at,
+      size: fresh.size,
+      previous: before?.size ?? null,
+    };
+  }
+  throw new Error(
+    `aucune nouvelle sauvegarde réussie en ${(BACKUP_POLLS * BACKUP_POLL_MS) / 60_000} min`,
+  );
+}
+
 async function lastBackup(app) {
   if (!app.database) return null;
   const configs = await api('GET', `/databases/${app.database}/backups`);
@@ -498,7 +550,9 @@ function printPlan(p) {
     `Migrations   : ${p.migrations.length ? p.migrations.join(', ') : 'aucune'}`,
   );
   if (p.backup)
-    out(`Sauvegarde   : ${p.backup.created_at} (${p.backup.size} octets)`);
+    out(
+      `Sauvegarde   : ${p.backup.created_at} (${p.backup.size} octets)${p.backupNow ? ' — une nouvelle sera faite juste avant l’écriture (--backup-now)' : ''}`,
+    );
   if (p.coreMigrations?.length)
     out(
       `Migrations : celles du Core dans la plage (${p.coreMigrations.join(', ')}) — portées par le Core, déployé avant`,
@@ -643,6 +697,11 @@ async function deploy(key, sha, opts) {
         ? (process.env.COOLIFY_TEST_POST_COMMAND ?? null)
         : null;
   const calls = [
+    ...(p.backupNow
+      ? [
+          `PATCH /databases/${app.database}/backups/<configuration> {backup_now: true}, puis attente d'une NOUVELLE sauvegarde réussie (taille vérifiée)`,
+        ]
+      : []),
     ...(postCommand
       ? [
           `PATCH /applications/${app.uuid} {post_deployment_command: "${verify ? `<vérificateur des migrations préappliquées : ${p.migrations.join(', ')}, ${postCommand.length} caractères>` : postCommand}"} (relu ensuite)`,
@@ -678,6 +737,21 @@ async function deploy(key, sha, opts) {
     throw blocked(
       `live juste avant d'écrire : ${now.verdict} — ${now.reason} (${describeSources(now.sources)})`,
     );
+  if (p.backupNow) {
+    out('\nSauvegarde de la base (--backup-now)…');
+    let b;
+    try {
+      b = await backupNow(app);
+    } catch (e) {
+      throw blocked(
+        `sauvegarde avant migration impossible : ${e.message} — rien déployé`,
+      );
+    }
+    out(
+      `Sauvegarde   : ${b.created_at} (${b.size} octets ; précédente ${b.previous ?? '—'}) — vérifiée`,
+    );
+    journal({ app: app.name, backup: b.created_at, size: b.size });
+  }
   const t0 = Date.now();
   let dep;
   let started = false;
@@ -952,11 +1026,12 @@ const opts = {
   autoRollback: rest.includes('--auto-rollback'),
   allowSingle: rest.includes('--allow-single-live-source'),
   skipCiGate: rest.includes('--skip-ci-gate'),
+  backupNow: rest.includes('--backup-now'),
 };
 const unknown = rest.filter(
   (x) =>
     x.startsWith('--') &&
-    !/^--(go|rollback|migrations-approved|migrations-preapplied|redeploy|auto-rollback|allow-single-live-source|skip-ci-gate)$/.test(
+    !/^--(go|rollback|migrations-approved|migrations-preapplied|redeploy|auto-rollback|allow-single-live-source|skip-ci-gate|backup-now)$/.test(
       x,
     ),
 );
@@ -1006,7 +1081,7 @@ try {
     if (!['DÉPLOYÉ', 'PRÊT'].includes(r)) process.exitCode = 1;
   } else {
     out(
-      'usage : status <app> | plan <app> <sha> | deploy <app> <sha> [--go] [--rollback] [--migrations-approved | --migrations-preapplied] [--redeploy] [--auto-rollback] [--allow-single-live-source] [--skip-ci-gate]   (app : core | bot | core+bot | core-staging)',
+      'usage : status <app> | plan <app> <sha> | deploy <app> <sha> [--go] [--rollback] [--migrations-approved | --migrations-preapplied] [--redeploy] [--auto-rollback] [--allow-single-live-source] [--skip-ci-gate] [--backup-now]   (app : core | bot | core+bot | core-staging)',
     );
     process.exitCode = 2;
   }
