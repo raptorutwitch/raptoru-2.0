@@ -8,14 +8,16 @@ conversation ChatGPT : [REPRISE_CHATGPT.md](REPRISE_CHATGPT.md).
 
 ## 0. Résumé compact
 
-> **Livraison du 27/11/2026 (fin d'après-midi)** — prime sur le bloc ci-dessous pour ces points :
+> **Livraison du 27/11/2026 (soir)** — prime sur le bloc ci-dessous pour ces points :
 >
-> - **Core `35cd4bd9` DÉPLOYÉ** le 27/11 à 14:52 UTC (aucune migration, sauvegarde fraîche juste avant ; retour arrière
->   `node scripts/coolify-deploy.mjs deploy core 9f5efcd28f8a4b458882eb1583a175a6be533265 --rollback --go`) ; bot
->   `df3adb5e` inchangé. Vérifié après coup : santé, frontière des viewers (Tombola, Casino, Chaos), Studio 0.1.45 ↔ Core
->   « Connecté ».
-> - **Studio 0.1.46 PUBLIÉE** (étiquette `studio-v0.1.46` sur `35cd4bd9`) : Casino par joueur, « Nouveautés », vérification
->   toutes les 6 h. Installée par Antoni (Studio › « Mettre à jour ») ; 0.1.45 installée en attendant.
+> - **Core `8312a535` DÉPLOYÉ** le 27/11 à 18:54 UTC (Chaos dans le Dock OBS, PR #139 ; aucune migration ; retour
+>   arrière `node scripts/coolify-deploy.mjs deploy core 35cd4bd937936a0725658ee8c8cfebf1bd9847e6 --rollback --go`) ; bot
+>   `df3adb5e` inchangé. Vérifié après coup : santé, journaux propres, frontière des viewers (Tombola, Casino, Chaos),
+>   réglages Chaos inchangés.
+> - **Studio 0.1.47 PUBLIÉE** (Latest, étiquette `studio-v0.1.47` sur `8312a535`) : achats Chaos dans le Dock OBS (une
+>   ligne par achat, état mis à jour sur la même ligne). À installer par Antoni (Studio › « Mettre à jour ») ; tant que
+>   l'ancienne version tourne, ces achats y apparaissent en lignes génériques « Événement ». Le Dock n'a pas encore été vu dans le vrai OBS.
+> - Avant : Core `35cd4bd9` (14:52 UTC), Studio 0.1.46 (Casino par joueur, « Nouveautés », vérification toutes les 6 h).
 > - **Extension** : inventaire `094c4c52508f` validé (GO écrit d'Antoni du 27/11), archive de Production construite par la
 >   CI de `main` `30c1775e` : `raptoru-live-PRODUCTION-30c1775e245b-depuis-be1744e-58-commits-shell-v2.zip`, SHA-256
 >   `9f7f3fb2f1acb8fde9d3557bede1035e640b0def24575b634ba4c8d6e10c5396` (artefact `extension-production-30c1775e…`, copie
